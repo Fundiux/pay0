@@ -1,0 +1,24 @@
+{
+  "version": "H4-D67-A4",
+  "currentRegression": [
+    "qa:pay0:h4-d64-a6",
+    "qa:pay0:h4-d65-a0",
+    "qa:pay0:h4-d65-a2",
+    "qa:pay0:h4-d66-a1",
+    "qa:pay0:h4-d66-a2",
+    "qa:pay0:h4-d66-a4",
+    "qa:pay0:h4-d66-a5",
+    "qa:pay0:h4-d66-a6",
+    "qa:pay0:h4-d66-a11",
+    "qa:pay0:h4-d67-a0",
+    "qa:pay0:h4-d67-a4"
+  ],
+  "historicalSuperseded": {
+    "qa:pay0:h4-d65-a1": "Auditoria historica previa a H4-D65-A2; esperaba cinco hallazgos que fueron corregidos.",
+    "qa:pay0:h4-d66-a3": "Contrato estructural anterior a la extraccion de la base canonica A33/A36.",
+    "qa:pay0:h4-d66-a7": "Revisaba deposito y diagnostico dentro de iqBrowser antes de la extraccion modular.",
+    "qa:pay0:h4-d66-a8": "Dependia del orden textual de depositSelector dentro de iqBrowser.",
+    "qa:pay0:h4-d66-a9": "Dependia del orden textual de asociadoName y depositSelector antes de A33.",
+    "qa:pay0:h4-d66-a10": "Buscaba DEPOSITO y FACTURA en el mismo archivo antes de iqApplicationBaseFields."
+  }
+}

@@ -1,0 +1,23 @@
+node_modules/
+.next/
+.env.local
+.wwebjs_auth/
+.wwebjs_cache/
+*.log
+*.tsbuildinfo
+__untracked_archive/
+tools/
+*.before-*
+functions/lib/
+functions/node_modules/
+.firebase/
+test-results/
+qa/reports/playwright-html/
+qa/.auth/
+
+# PAY0 WhatsApp QR connector
+tools/whatsapp-qr-connector/.env
+tools/whatsapp-qr-connector/.wwebjs_auth/
+tools/whatsapp-qr-connector/.wwebjs_cache/
+tools/whatsapp-qr-connector/service-account*.json
+qa/.auth/

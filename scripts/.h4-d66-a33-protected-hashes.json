@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-07-16T21:17:38.835Z",
+  "protectedFunctions": {
+    "selectOptionFromTaggedControl": "9b40a12751be26fc802fd59b9c86bd72004f8fc6542b4d62c55f86fb643bdb4a",
+    "appendApplicationItem": "bc642529dcf172e633e198daf47532ede04f7e901189554b0e8a971662da419f",
+    "clickFinalSubmitAction": "338249bb852d9d0e56ac5fdac14fdebc2f1ea750918d1adffd72752cd5c6ab5e"
+  },
+  "adapterSha256": "c1f6acd6c50d1a1c860a72072a07ec7a40942b6e4347d3361b8a243705642b05"
+}

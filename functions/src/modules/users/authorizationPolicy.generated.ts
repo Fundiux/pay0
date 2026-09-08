@@ -1,0 +1,51 @@
+// GENERATED FROM config/authorization-policy.json. DO NOT EDIT BY HAND.
+export const AUTHORIZATION_POLICY_SCHEMA_VERSION = 1;
+export const AUTHORIZATION_POLICY_ID = "PAY0-USERS-PERMISSIONS";
+
+export const ROLE_DEFAULT_MODULES = {
+  "superadmin": {
+    "dashboard": { "view": true },
+    "reportes": { "view": true },
+    "materialidad": { "view": true, "sync": true, "alerts": true },
+    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": true, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "conciliate": true },
+    "clientes": { "view": true, "create": true, "edit": true, "costs": true },
+    "despachos": { "view": true, "costs": true },
+    "empresas": { "view": true },
+    "usuarios": { "view": true, "create": true, "activate": true, "permissions": true, "costs": true, "clientDelegations": true },
+    "modulos": { "view": true, "edit": true },
+    "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
+    "telegram": { "view": true, "link": true },
+    "actividad": { "view": true }
+  },
+  "admin": {
+    "dashboard": { "view": true },
+    "reportes": { "view": true },
+    "materialidad": { "view": false, "sync": false, "alerts": false },
+    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": true, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "conciliate": false },
+    "clientes": { "view": true, "create": true, "edit": true, "costs": true },
+    "despachos": { "view": true, "costs": true },
+    "empresas": { "view": true },
+    "usuarios": { "view": true, "create": true, "activate": true, "permissions": true, "costs": true, "clientDelegations": true },
+    "modulos": { "view": true, "edit": true },
+    "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
+    "telegram": { "view": true, "link": true },
+    "actividad": { "view": true }
+  },
+  "operador": {
+    "dashboard": { "view": true },
+    "reportes": { "view": true },
+    "materialidad": { "view": false, "sync": false, "alerts": false },
+    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": false, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "conciliate": false },
+    "clientes": { "view": true, "create": true, "edit": false, "costs": false },
+    "despachos": { "view": true, "costs": false },
+    "empresas": { "view": true },
+    "usuarios": { "view": false, "create": false, "activate": false, "permissions": false, "costs": false, "clientDelegations": false },
+    "modulos": { "view": false, "edit": false },
+    "wallet": { "view": false, "saldos": false, "adelantos": false, "dispersiones": false, "beneficiarios": false, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
+    "telegram": { "view": true, "link": true },
+    "actividad": { "view": true }
+  }
+} as const;

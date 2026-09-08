@@ -1,0 +1,449 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "clients",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "clients",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "clients",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "clients",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "createdBy",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "folio",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "companies",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "despachoId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "despachos",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "nombre",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "despachos",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdBy",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "nombre",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "ledgerEvents",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "relatedId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "ledgerEvents",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "activityLog",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "activityLog",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "activityLog",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "createdBy",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "users",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "role",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "email",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "pagoAplicaciones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "solicitudId",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "oculto",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "companies",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "nombre",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceAccounts",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceAccounts",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceAccounts",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "operadorId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "operadorId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "holderType",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "clienteId",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "iqCreateJobs",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "nextRunAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}

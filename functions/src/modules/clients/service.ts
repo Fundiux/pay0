@@ -1,0 +1,7 @@
+import type { CanonicalClientIdentity } from "./domain";
+export type ClientRole = "superadmin" | "admin" | "operador" | string;
+export function resolveClientSaveAdminId(input: { role: ClientRole; callerUid: string; callerAdminId?: unknown; requestedAdminId?: unknown }): string { const requested=String(input.requestedAdminId ?? "").trim(); if(input.role==="superadmin")return requested||input.callerUid;if(input.role==="admin")return input.callerUid;return String(input.callerAdminId ?? requested).trim(); }
+export function resolveClientToggleAdminId(input: { role: ClientRole; callerUid: string; callerAdminId?: unknown; requestedAdminId?: unknown }): string { if(input.role==="superadmin")return String(input.requestedAdminId ?? input.callerUid).trim();if(input.role==="admin")return input.callerUid;return String(input.callerAdminId ?? "").trim(); }
+export function buildClientIdentityPatch(identity: CanonicalClientIdentity){return { name:identity.name,rfc:identity.rfc,email:identity.email,whatsapp:identity.whatsapp };}
+export function buildClientActivePatch(input:{nextActive:boolean;updatedAt:unknown;updatedBy:string}){return {active:Boolean(input.nextActive),updatedAt:input.updatedAt,updatedBy:String(input.updatedBy||"")};}
+export function buildClientSequenceFields(input:{number:number;adminId:string;counterPath:string}){return {numeroCliente:input.number,clientNumber:input.number,sequenceNumber:input.number,sequenceScope:`clients:${input.adminId}`,sequenceCounterPath:input.counterPath};}

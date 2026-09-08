@@ -1,0 +1,577 @@
+rules_version = "2";
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && (
+        userDoc().role == "superadmin"
+        || userDoc().role == "SUPER_ADMIN"
+      );
+    }
+
+    function myRootId() {
+      return (
+        signedIn()
+        && userDoc().rootId != null
+      )
+        ? userDoc().rootId
+        : request.auth.uid;
+    }
+
+    function hasClientBasicAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("viewBasic" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.viewBasic == true
+          )
+          || (
+            !("viewBasic" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("view" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.view != false
+            )
+          )
+        );
+    }
+
+    function hasClientSolicitudAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operateSolicitudes" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operateSolicitudes == true
+          )
+          || (
+            !("operateSolicitudes" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
+    }
+
+    function hasClientPagoAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operatePagos" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operatePagos == true
+          )
+          || (
+            !("operatePagos" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
+    }
+
+    function hasClientDispersionAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operateDispersiones" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operateDispersiones == true
+          )
+          || (
+            !("operateDispersiones" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
+    }
+
+    function ownsDocument(data) {
+      return (
+        (("adminId" in data) && data.adminId == request.auth.uid)
+        || (("operadorId" in data) && data.operadorId == request.auth.uid)
+        || (("createdBy" in data) && data.createdBy == request.auth.uid)
+      );
+    }
+
+    function solicitudAccessFromData(data) {
+      return (
+        (("clientId" in data) && hasClientSolicitudAccess(data.clientId))
+        || (("clienteId" in data) && hasClientSolicitudAccess(data.clienteId))
+      );
+    }
+
+    function pagoAccessFromData(data) {
+      return (
+        (("clientId" in data) && hasClientPagoAccess(data.clientId))
+        || (("clienteId" in data) && hasClientPagoAccess(data.clienteId))
+      );
+    }
+
+    function dispersionAccessFromData(data) {
+      return (
+        (("clientId" in data) && hasClientDispersionAccess(data.clientId))
+        || (("clienteId" in data) && hasClientDispersionAccess(data.clienteId))
+      );
+    }
+
+    // Cada evaluacion de Storage puede consultar como maximo dos documentos
+    // de Firestore. El documento de la operacion cuenta como uno y el acceso
+    // delegado como el segundo; por eso aqui no se vuelve a leer users/{uid}.
+    function canAccessSolicitudDocument(rootId, data) {
+      return signedIn()
+        && ("rootId" in data)
+        && data.rootId == rootId
+        && (
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || solicitudAccessFromData(data)
+        );
+    }
+
+    function canAccessPagoDocument(rootId, data) {
+      return signedIn()
+        && ("rootId" in data)
+        && data.rootId == rootId
+        && (
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || pagoAccessFromData(data)
+        );
+    }
+
+    function canAccessDispersionDocument(rootId, data) {
+      return signedIn()
+        && ("rootId" in data)
+        && data.rootId == rootId
+        && (
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || dispersionAccessFromData(data)
+        );
+    }
+
+    function canAccessSolicitud(rootId, solicitudId) {
+      return firestore.exists(
+        /databases/(default)/documents/solicitudes/$(solicitudId)
+      )
+      && canAccessSolicitudDocument(
+        rootId,
+        firestore.get(
+          /databases/(default)/documents/solicitudes/$(solicitudId)
+        ).data
+      );
+    }
+
+    function canAccessPago(rootId, pagoId) {
+      return firestore.exists(
+        /databases/(default)/documents/pagos/$(pagoId)
+      )
+      && canAccessPagoDocument(
+        rootId,
+        firestore.get(
+          /databases/(default)/documents/pagos/$(pagoId)
+        ).data
+      );
+    }
+
+    function canAccessDispersion(rootId, dispersionId) {
+      return firestore.exists(
+        /databases/(default)/documents/clientDispersions/$(dispersionId)
+      )
+      && canAccessDispersionDocument(
+        rootId,
+        firestore.get(
+          /databases/(default)/documents/clientDispersions/$(dispersionId)
+        ).data
+      );
+    }
+
+    // Cloud Storage normaliza las claves X-Goog-Meta-* a minusculas en
+    // uploads resumibles. Se acepta tambien camelCase para compatibilidad.
+    function hasPreparedUploadId() {
+      return request.resource != null
+        && request.resource.metadata != null
+        && (
+          (
+            ("uploadid" in request.resource.metadata)
+            && request.resource.metadata.uploadid != ""
+          )
+          || (
+            ("uploadId" in request.resource.metadata)
+            && request.resource.metadata.uploadId != ""
+          )
+        );
+    }
+
+    function preparedUploadMatchesById(
+      uploadId,
+      rootId,
+      storageModule,
+      entityType,
+      entityId,
+      documentType,
+      fileName
+    ) {
+      return uploadId != ""
+        && firestore.exists(
+          /databases/(default)/documents/uploads/$(uploadId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.rootId == rootId
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.entityType == entityType
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.entityId == entityId
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.createdBy == request.auth.uid
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.status == "PENDING"
+        && firestore.get(
+          /databases/(default)/documents/uploads/$(uploadId)
+        ).data.storagePath
+          == "roots/"
+            + rootId
+            + "/"
+            + storageModule
+            + "/"
+            + entityId
+            + "/docs/"
+            + documentType
+            + "/"
+            + fileName;
+    }
+
+    function preparedUploadMatches(
+      rootId,
+      storageModule,
+      entityType,
+      entityId,
+      documentType,
+      fileName
+    ) {
+      return hasPreparedUploadId()
+        && (
+          (
+            ("uploadid" in request.resource.metadata)
+            && preparedUploadMatchesById(
+              request.resource.metadata.uploadid,
+              rootId,
+              storageModule,
+              entityType,
+              entityId,
+              documentType,
+              fileName
+            )
+          )
+          || (
+            ("uploadId" in request.resource.metadata)
+            && preparedUploadMatchesById(
+              request.resource.metadata.uploadId,
+              rootId,
+              storageModule,
+              entityType,
+              entityId,
+              documentType,
+              fileName
+            )
+          )
+        );
+    }
+
+    function isEntityDocumentStorageSizeAllowed(documentType) {
+      return (
+        documentType == "ACTA_CONSTITUTIVA"
+        && request.resource.size <= 25 * 1024 * 1024
+      ) || (
+        documentType != "ACTA_CONSTITUTIVA"
+        && request.resource.size <= 10 * 1024 * 1024
+      );
+    }
+
+    function hasPreparedEntityDocumentId() {
+      return request.resource != null
+        && request.resource.metadata != null
+        && (
+          (
+            ("documentid" in request.resource.metadata)
+            && request.resource.metadata.documentid != ""
+          )
+          || (
+            ("documentId" in request.resource.metadata)
+            && request.resource.metadata.documentId != ""
+          )
+        );
+    }
+
+    function preparedEntityDocumentMatchesById(
+      documentId,
+      rootId,
+      entityType,
+      entityId,
+      documentType,
+      fileName
+    ) {
+      return documentId != ""
+        && firestore.exists(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.rootId == rootId
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.entityType == entityType
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.entityId == entityId
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.documentType == documentType
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.createdBy == request.auth.uid
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.uploadStatus == "PENDING_UPLOAD"
+        && firestore.get(
+          /databases/(default)/documents/entityDocuments/$(documentId)
+        ).data.storagePath
+          == "roots/"
+            + rootId
+            + "/entityDocuments/"
+            + entityType
+            + "/"
+            + entityId
+            + "/"
+            + documentType
+            + "/"
+            + fileName;
+    }
+
+    function preparedEntityDocumentMatches(
+      rootId,
+      entityType,
+      entityId,
+      documentType,
+      fileName
+    ) {
+      return hasPreparedEntityDocumentId()
+        && (
+          (
+            ("documentid" in request.resource.metadata)
+            && preparedEntityDocumentMatchesById(
+              request.resource.metadata.documentid,
+              rootId,
+              entityType,
+              entityId,
+              documentType,
+              fileName
+            )
+          )
+          || (
+            ("documentId" in request.resource.metadata)
+            && preparedEntityDocumentMatchesById(
+              request.resource.metadata.documentId,
+              rootId,
+              entityType,
+              entityId,
+              documentType,
+              fileName
+            )
+          )
+        );
+    }
+
+    match /roots/{rootId}/solicitudes/{solicitudId}/docs/{documentType}/{fileName} {
+      allow read: if canAccessSolicitud(rootId, solicitudId);
+
+      allow create: if resource == null
+                    && request.resource.size <= 1 * 1024 * 1024
+                    && signedIn()
+                    && preparedUploadMatches(
+                      rootId,
+                      "solicitudes",
+                      "solicitudes",
+                      solicitudId,
+                      documentType,
+                      fileName
+                    );
+
+      allow update, delete: if false;
+    }
+
+    match /roots/{rootId}/pagos/{pagoId}/docs/{documentType}/{fileName} {
+      allow read: if canAccessPago(rootId, pagoId);
+
+      allow create: if resource == null
+                    && request.resource.size <= 1 * 1024 * 1024
+                    && signedIn()
+                    && preparedUploadMatches(
+                      rootId,
+                      "pagos",
+                      "pagos",
+                      pagoId,
+                      documentType,
+                      fileName
+                    );
+
+      allow update, delete: if false;
+    }
+
+    match /roots/{rootId}/dispersiones/{dispersionId}/docs/{documentType}/{fileName} {
+      allow read: if canAccessDispersion(rootId, dispersionId);
+
+      allow create: if resource == null
+                    && request.resource.size <= 1 * 1024 * 1024
+                    && signedIn()
+                    && preparedUploadMatches(
+                      rootId,
+                      "dispersiones",
+                      "clientDispersions",
+                      dispersionId,
+                      documentType,
+                      fileName
+                    );
+
+      allow update, delete: if false;
+    }
+
+    match /roots/{rootId}/entityDocuments/{entityType}/{entityId}/{documentType}/{fileName} {
+      allow read: if signedIn() && request.auth.uid == rootId;
+
+      allow create: if resource == null
+                    && signedIn()
+                    && isEntityDocumentStorageSizeAllowed(documentType)
+                    && preparedEntityDocumentMatches(
+                      rootId,
+                      entityType,
+                      entityId,
+                      documentType,
+                      fileName
+                    );
+
+      allow update, delete: if false;
+    }
+
+    // Compatibilidad de lectura para archivos legacy creados antes de /docs/.
+    // Las escrituras legacy quedan cerradas.
+    match /roots/{rootId}/solicitudes/{solicitudId}/{fileName} {
+      allow read: if canAccessSolicitud(rootId, solicitudId);
+      allow write: if false;
+    }
+
+    match /roots/{rootId}/pagos/{pagoId}/{fileName} {
+      allow read: if canAccessPago(rootId, pagoId);
+      allow write: if false;
+    }
+
+    match /roots/{rootId}/dispersiones/{dispersionId}/{fileName} {
+      allow read: if canAccessDispersion(rootId, dispersionId);
+      allow write: if false;
+    }
+
+    match /roots/{rootId}/{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

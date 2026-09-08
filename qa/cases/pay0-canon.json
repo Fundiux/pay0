@@ -1,0 +1,19 @@
+{
+    "name":  "PAY0 Canon QA Matrix",
+    "version":  "QA-MODEL-1A",
+    "scope":  "technical-structure",
+    "rules":  {
+                  "noBusinessLogicChanges":  true,
+                  "noDeployRequired":  true,
+                  "noEmulatorRequired":  true,
+                  "utf8WithoutBom":  true,
+                  "auditReportRequired":  true,
+                  "materialityNoDispersionInFiscalExpedient":  true,
+                  "materialityPaymentProofFromPagos":  true,
+                  "materialityContractNotRequiredByDefault":  true,
+                  "materialityInternalNotSolicitudes":  true,
+                  "materialityDashboardInternal":  true,
+                  "materialityDetailInternal":  true,
+                  "materialityLocalPreviewSmoke":  true
+              }
+}

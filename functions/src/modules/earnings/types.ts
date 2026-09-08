@@ -1,0 +1,31 @@
+export interface EarningsDistributionDoc {
+  rootId: string;
+  depositId: string;
+  clienteId: string;
+  clienteNombre?: string | null;
+  empresaId?: string | null;
+  asociadoId?: string | null;
+  superadminId?: string | null;
+  adminId?: string | null;
+  operadorId?: string | null;
+  operationTypeKey: string;
+  saleTypeKey: string;
+  currency?: string | null;
+  grossAmount: number;
+  baseAmount: number;
+  despachoRate: number;
+  superadminFloorRate: number;
+  adminFloorRate: number;
+  operadorFloorRate: number;
+  finalClientRate: number;
+  despachoCostAmount: number;
+  superadminEarningAmount: number;
+  adminEarningAmount: number;
+  operadorEarningAmount: number;
+  totalEarningsAmount: number;
+  clientChargeAmount: number;
+  clientNetAmount: number;
+  status: "GENERATED" | "COMPENSATED";
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}

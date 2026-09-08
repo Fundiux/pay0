@@ -1,0 +1,661 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function authenticated() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function signedIn() {
+      return authenticated()
+        && userExists(me())
+        && userDoc(me()).get("isDeleted", false) != true
+        && userDoc(me()).get("isActive", true) != false
+        && userDoc(me()).get("active", true) != false;
+    }
+
+    function myRole() {
+      return userExists(me())
+        ? (
+            userDoc(me()).role == "operator"
+              ? "operador"
+              : userDoc(me()).role
+          )
+        : "";
+    }
+
+    function isSuperadmin() { return myRole() == "superadmin"; }
+    function isAdmin() { return myRole() == "admin"; }
+    function isOperador() { return myRole() == "operador"; }
+
+    // AUTHORIZATION_POLICY_GENERATED_START PAY0-USERS-PERMISSIONS@1
+    function roleDefaultAllows(moduleKey, actionKey) {
+      return isSuperadmin()
+        || (isAdmin() && (
+          (moduleKey == "dashboard" && actionKey == "view")
+          || (moduleKey == "reportes" && actionKey == "view")
+          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "cancel", "uploadDocs"])
+          || (moduleKey == "pagos" && actionKey in ["view", "create"])
+          || (moduleKey == "clientes" && actionKey in ["view", "create", "edit", "costs"])
+          || (moduleKey == "despachos" && actionKey in ["view", "costs"])
+          || (moduleKey == "empresas" && actionKey == "view")
+          || (moduleKey == "usuarios" && actionKey in ["view", "create", "activate", "permissions", "costs", "clientDelegations"])
+          || (moduleKey == "modulos" && actionKey in ["view", "edit"])
+          || (moduleKey == "wallet" && actionKey in ["view", "saldos", "adelantos", "dispersiones", "beneficiarios", "estadoCuentaCliente", "estadoCuentaUsuario", "configuracion"])
+          || (moduleKey == "telegram" && actionKey in ["view", "link"])
+          || (moduleKey == "actividad" && actionKey == "view")
+        ))
+        || (isOperador() && (
+          (moduleKey == "dashboard" && actionKey == "view")
+          || (moduleKey == "reportes" && actionKey == "view")
+          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "uploadDocs"])
+          || (moduleKey == "pagos" && actionKey in ["view", "create"])
+          || (moduleKey == "clientes" && actionKey in ["view", "create"])
+          || (moduleKey == "despachos" && actionKey == "view")
+          || (moduleKey == "empresas" && actionKey == "view")
+          || (moduleKey == "telegram" && actionKey in ["view", "link"])
+          || (moduleKey == "actividad" && actionKey == "view")
+        ));
+    }
+    // AUTHORIZATION_POLICY_GENERATED_END
+
+    function individualAllows(moduleKey, actionKey) {
+      return userDoc(me())
+        .get("modules", {})
+        .get(moduleKey, {})
+        .get(actionKey, true) == true;
+    }
+
+    function hasModuleAction(moduleKey, actionKey) {
+      return signedIn() && (
+        isSuperadmin()
+        || (
+          roleDefaultAllows(moduleKey, "view")
+          && individualAllows(moduleKey, "view")
+          && roleDefaultAllows(moduleKey, actionKey)
+          && individualAllows(moduleKey, actionKey)
+        )
+      );
+    }
+
+    function hasModuleView(moduleKey) {
+      return hasModuleAction(moduleKey, "view");
+    }
+
+    function myRootId() {
+      return userExists(me())
+        ? (userDoc(me()).rootId != null ? userDoc(me()).rootId : me())
+        : me();
+    }
+
+    function targetRootId(uid) {
+      return userExists(uid)
+        ? (userDoc(uid).rootId != null ? userDoc(uid).rootId : uid)
+        : uid;
+    }
+
+    function targetParentUserId(uid) {
+      return userExists(uid) ? userDoc(uid).parentUserId : null;
+    }
+
+    function targetParentRole(uid) {
+      return userExists(uid)
+        ? (
+            userDoc(uid).parentRole == "operator"
+              ? "operador"
+              : userDoc(uid).parentRole
+          )
+        : null;
+    }
+
+    function targetDespachoId(uid) {
+      return userExists(uid) ? userDoc(uid).despachoId : null;
+    }
+
+    function sameRoot(uid) {
+      return userExists(uid) && targetRootId(uid) == myRootId();
+    }
+
+    function iManageUser(uid) {
+      return isAdmin()
+        && userExists(uid)
+        && targetParentUserId(uid) == me()
+        && targetParentRole(uid) == "admin"
+        && sameRoot(uid);
+    }
+
+    function canReadUser(uid) {
+      return signedIn() && (
+        isSuperadmin()
+        || me() == uid
+        || (hasModuleView("usuarios") && iManageUser(uid))
+      );
+    }
+
+    function hasCompanyAccess(companyId) {
+      return exists(/databases/$(database)/documents/userCompanyAccess/$(me())/companies/$(companyId))
+        && get(/databases/$(database)/documents/userCompanyAccess/$(me())/companies/$(companyId)).data.active == true;
+    }
+
+    function clientDelegationIsCurrent(clientId) {
+      let path = /databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId);
+      let access = get(path).data;
+
+      return clientId != null
+        && exists(path)
+        && access.active == true
+        && access.get("revokedAt", null) == null
+        && (
+          access.get("expiresAt", null) == null
+          || (
+            access.expiresAt is timestamp
+            && access.expiresAt >= request.time
+          )
+        );
+    }
+
+    function hasClientBasicAccess(clientId) {
+      return clientId != null
+        && exists(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId))
+        && get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.active == true
+        && (
+          !("permissions" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data)
+          || (
+            ("viewBasic" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.viewBasic == true
+          )
+          || (
+            !("viewBasic" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && (
+              !("view" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+              || get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.view != false
+            )
+          )
+        );
+    }
+
+    function hasClientAccess(clientId) {
+      return hasClientBasicAccess(clientId);
+    }
+
+    function hasClientSolicitudAccess(clientId) {
+      return clientId != null
+        && exists(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId))
+        && get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.active == true
+        && (
+          !("permissions" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data)
+          || (
+            ("operateSolicitudes" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.operateSolicitudes == true
+          )
+          || (
+            !("operateSolicitudes" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && (
+              !("operate" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+              || get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.operate != false
+            )
+          )
+        );
+    }
+
+    function hasClientPagoAccess(clientId) {
+      return clientId != null
+        && clientDelegationIsCurrent(clientId)
+        && (
+          !("permissions" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data)
+          || (
+            ("operatePagos" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.operatePagos == true
+          )
+          || (
+            !("operatePagos" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+            && (
+              !("operate" in get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions)
+              || get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data.permissions.operate != false
+            )
+          )
+        );
+    }
+
+    function hasClientSolicitudAccessFromData(data) {
+      return (
+        (("clientId" in data) && hasClientSolicitudAccess(data.clientId))
+        || (("clienteId" in data) && hasClientSolicitudAccess(data.clienteId))
+      );
+    }
+
+    function hasClientPagoAccessFromData(data) {
+      return (
+        (("clientId" in data) && hasClientPagoAccess(data.clientId))
+        || (("clienteId" in data) && hasClientPagoAccess(data.clienteId))
+      );
+    }
+
+
+    function hasDespachoAccess(despachoId) {
+      return despachoId != null
+        && exists(/databases/$(database)/documents/userDespachoAccess/$(me())/despachos/$(despachoId))
+        && get(/databases/$(database)/documents/userDespachoAccess/$(me())/despachos/$(despachoId)).data.active == true;
+    }
+
+    function despachoAllowsCompany(despachoId, companyId) {
+      return despachoId != null
+        && exists(/databases/$(database)/documents/dispatchCompanyAccess/$(despachoId)/companies/$(companyId))
+        && get(/databases/$(database)/documents/dispatchCompanyAccess/$(despachoId)/companies/$(companyId)).data.active == true;
+    }
+
+    match /system/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /users/{uid} {
+      allow read: if canReadUser(uid);
+      allow create, update, delete: if false;
+
+      match /costos/{costId} {
+        allow read: if hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid));
+        allow write: if signedIn() && isSuperadmin();
+      }
+    }
+
+    match /despachos/{docId} {
+      allow read: if hasModuleView("despachos") && (
+        isSuperadmin()
+        || (isAdmin() && resource.data.rootId == myRootId())
+        || (isOperador() && resource.data.rootId == myRootId())
+      );
+      allow write: if signedIn() && isSuperadmin();
+      match /costos/{costId} {
+        allow read: if hasModuleAction("despachos", "costs") && (
+          isSuperadmin()
+          || (isAdmin() && resource.data.rootId == myRootId())
+          || (isOperador() && resource.data.rootId == myRootId())
+        );
+        allow write: if signedIn() && isSuperadmin();
+      }
+    }
+
+    match /operationTypes/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow read: if hasModuleView("empresas") && (
+        isSuperadmin()
+        || hasCompanyAccess(companyId)
+        || (("despachoId" in resource.data) && hasDespachoAccess(resource.data.despachoId))
+      );
+      allow write: if signedIn() && isSuperadmin();
+    }
+
+    match /clients/{docId} {
+      allow read: if hasModuleView("clientes") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("managedByUserId" in resource.data) && resource.data.managedByUserId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || hasClientAccess(docId)
+      );
+
+      allow create, update, delete: if false;
+
+      match /costos/{costId} {
+        allow read: if hasModuleAction("clientes", "costs") && (
+          isSuperadmin()
+          || (("adminId" in get(/databases/$(database)/documents/clients/$(docId)).data)
+              && get(/databases/$(database)/documents/clients/$(docId)).data.adminId == me())
+          || (("createdBy" in get(/databases/$(database)/documents/clients/$(docId)).data)
+              && get(/databases/$(database)/documents/clients/$(docId)).data.createdBy == me())
+          || (("managedByUserId" in get(/databases/$(database)/documents/clients/$(docId)).data)
+              && get(/databases/$(database)/documents/clients/$(docId)).data.managedByUserId == me())
+          || (("operadorId" in get(/databases/$(database)/documents/clients/$(docId)).data)
+              && get(/databases/$(database)/documents/clients/$(docId)).data.operadorId == me())
+        );
+        allow write: if false;
+      }
+    }
+
+    match /entityDocuments/{docId} {
+      allow read: if signedIn() && isSuperadmin();
+      allow create, update, delete: if false;
+    }
+    match /uploads/{docId} {
+      allow read: if signedIn() && (
+        isSuperadmin()
+        || resource.data.rootId == myRootId()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+      allow create, update, delete: if false;
+    }
+    match /solicitudes/{docId} {
+      allow read: if hasModuleView("solicitudes") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+        || hasClientSolicitudAccessFromData(resource.data)
+      );
+
+      allow create, update, delete: if false;
+
+      match /notas/{notaId} {
+        allow read: if hasModuleView("solicitudes") && (
+          isSuperadmin()
+          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
+          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
+          || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
+        );
+
+        allow create: if hasModuleAction("solicitudes", "comment") && (
+          isSuperadmin()
+          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
+          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
+          || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
+        );
+
+        allow update, delete: if signedIn() && isSuperadmin();
+      }
+    }
+    match /pagos/{pagoId} {
+      allow read: if hasModuleView("pagos") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+        || hasClientPagoAccessFromData(resource.data)
+      );
+
+      allow create, update, delete: if false;
+
+      match /notas/{notaId} {
+        allow read: if hasModuleView("pagos") && (
+          isSuperadmin()
+          || get(/databases/$(database)/documents/pagos/$(pagoId)).data.adminId == me()
+          || get(/databases/$(database)/documents/pagos/$(pagoId)).data.createdBy == me()
+          || hasClientPagoAccessFromData(get(/databases/$(database)/documents/pagos/$(pagoId)).data)
+        );
+
+        allow create, update, delete: if false;
+      }
+    }
+    match /pagoAplicaciones/{aplicacionId} {
+      allow read: if hasModuleAction("pagos", "create") && (
+        isSuperadmin()
+        || (
+          ("solicitudId" in resource.data)
+          && (
+            get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("adminId", null) == me()
+            || get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("createdBy", null) == me()
+            || hasClientPagoAccessFromData(
+              get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data
+            )
+          )
+        )
+      );
+
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || (
+          ("solicitudId" in resource.data)
+          && (
+            get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("adminId", null) == me()
+            || get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("createdBy", null) == me()
+            || hasClientPagoAccessFromData(
+              get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data
+            )
+          )
+        )
+      );
+
+      allow create, update, delete: if false;
+    }
+    match /pagoApplicationReservations/{reservationId} {
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+
+      allow create, update, delete: if false;
+    }
+    match /pagoApplicationIqPlans/{planId} {
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+      allow create, update, delete: if false;
+    }
+    match /pagoApplicationIqPlanItems/{itemId} {
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+      allow create, update, delete: if false;
+    }
+    match /pagoApplicationIqAttempts/{attemptId} {
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+      allow create, update, delete: if false;
+    }
+    match /pagoApplicationIqLocks/{lockId} {
+      allow read: if hasModuleAction("pagos", "conciliate") && (
+        isSuperadmin()
+        || resource.data.adminId == me()
+        || resource.data.createdBy == me()
+      );
+      allow create, update, delete: if false;
+    }
+    match /clientWallets/{docId} {
+      allow read: if hasModuleView("wallet") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+      );
+      allow create, update, delete: if false;
+    }
+    match /ledgerEvents/{docId} {
+      allow read: if hasModuleView("wallet") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+      );
+      allow create, update, delete: if false;
+    }
+    match /activityLog/{docId} {
+      allow read: if hasModuleView("actividad") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("actorUid" in resource.data) && resource.data.actorUid == me())
+        || (("actorId" in resource.data) && resource.data.actorId == me())
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /dispatchCompanyAccess/{despachoId} {
+      allow read: if hasModuleView("empresas") && (
+        isSuperadmin()
+        || hasDespachoAccess(despachoId)
+      );
+      allow write: if signedIn() && isSuperadmin();
+    }
+
+    match /dispatchCompanyAccess/{despachoId}/companies/{companyId} {
+      allow read: if hasModuleView("empresas") && (
+        isSuperadmin()
+        || hasDespachoAccess(despachoId)
+      );
+      allow create, update, delete: if signedIn() && isSuperadmin();
+    }
+
+    match /userClientAccess/{uid} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
+      allow write: if false;
+    }
+
+    match /userClientAccess/{uid}/clients/{clientId} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
+      allow create, update, delete: if false;
+    }
+
+    match /userCompanyAccess/{uid} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
+    }
+
+    match /userCompanyAccess/{uid}/companies/{companyId} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+
+      allow create, update, delete: if signedIn() && (
+        (isSuperadmin() && despachoAllowsCompany(targetDespachoId(uid), companyId))
+        ||
+        (iManageUser(uid)
+          && despachoAllowsCompany(targetDespachoId(uid), companyId)
+          && hasCompanyAccess(companyId)
+        )
+      );
+    }
+
+    match /userDespachoAccess/{uid} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
+    }
+
+    match /userDespachoAccess/{uid}/despachos/{despachoId} {
+      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+      allow create, update, delete: if signedIn() && (isSuperadmin() || iManageUser(uid));
+    }
+
+    match /balanceAccounts/{docId} {
+      allow read: if hasModuleView("wallet") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (
+          ("holderType" in resource.data)
+          && resource.data.holderType == "USER"
+          && ("holderId" in resource.data)
+          && resource.data.holderId == me()
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /balanceMovements/{docId} {
+      allow read: if hasModuleView("wallet") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (
+          ("holderType" in resource.data)
+          && resource.data.holderType == "USER"
+          && ("holderId" in resource.data)
+          && resource.data.holderId == me()
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /clientBeneficiaries/{docId} {
+      allow read: if hasModuleAction("wallet", "beneficiarios") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /clientDispersions/{docId} {
+      allow read: if hasModuleAction("wallet", "dispersiones") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+      );
+      allow create, update, delete: if false;
+      match /notas/{notaId} {
+        allow read: if hasModuleAction("wallet", "dispersiones") && (
+          isSuperadmin()
+          || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.adminId == me()
+          || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.operadorId == me()
+          || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.createdBy == me()
+          || hasClientAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clientId)
+          || hasClientAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clienteId)
+        );
+
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /clientBeneficiaryMethods/{docId} {
+      allow read: if hasModuleAction("wallet", "beneficiarios") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+      );
+      allow create, update, delete: if false;
+    }
+    match /clientAdvances/{docId} {
+      allow read: if hasModuleAction("wallet", "adelantos") && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("operadorId" in resource.data) && resource.data.operadorId == me())
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /telegramUpdates/{docId} {
+      allow read: if hasModuleView("telegram") && isSuperadmin();
+      allow create, update, delete: if false;
+    }
+
+    match /telegramUsers/{telegramUserId} {
+      allow read: if hasModuleView("telegram") && (
+        isSuperadmin()
+        || (("uid" in resource.data) && resource.data.uid == me())
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /telegramLinkTokens/{docId} {
+      allow read, write: if false;
+    }
+
+    match /telegramNotificationPrefs/{uid} {
+      allow read: if hasModuleView("telegram") && (isSuperadmin() || me() == uid);
+      allow create, update, delete: if false;
+    }
+
+    match /telegramOutbox/{docId} {
+      allow read: if hasModuleView("telegram") && isSuperadmin();
+      allow create, update, delete: if false;
+    }
+
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

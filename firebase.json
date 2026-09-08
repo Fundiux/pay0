@@ -1,0 +1,55 @@
+{
+    "functions":  {
+                      "source":  "functions",
+                      "runtime":  "nodejs22"
+                  },
+    "firestore":  {
+                      "rules":  "firestore.rules",
+                      "indexes":  "firestore.indexes.json"
+                  },
+    "storage":  {
+                    "rules":  "storage.rules"
+                },
+    "emulators":  {
+                      "functions":  {
+                                        "host":  "127.0.0.1",
+                                        "port":  5001
+                                    },
+                      "firestore":  {
+                                        "host":  "127.0.0.1",
+                                        "port":  8080
+                                    },
+                      "ui":  {
+                                 "enabled":  true,
+                                 "host":  "127.0.0.1",
+                                 "port":  4000
+                             },
+                      "storage":  {
+                                      "host":  "127.0.0.1",
+                                      "port":  9199
+                                  },
+                      "singleProjectMode":  true,
+                      "auth":  {
+                                   "host":  "127.0.0.1",
+                                   "port":  9099
+                               }
+                  },
+    "hosting":  {
+                    "ignore":  [
+                                   "firebase.json",
+                                   "**/.*",
+                                   "**/node_modules/**",
+                                   "functions/node_modules/**",
+                                   "functions/lib/**",
+                                   "audit/**",
+                                   "*.zip",
+                                   ".env",
+                                   ".env.*"
+                               ],
+                    "site":  "pay-0-system",
+                    "frameworksBackend":  {
+                                              "region":  "us-central1"
+                                          },
+                    "source":  "."
+                }
+}

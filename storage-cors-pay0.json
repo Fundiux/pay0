@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://pay-0-system.web.app",
+      "https://pay-0-system.firebaseapp.com",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Content-Disposition", "Content-Length", "x-goog-meta-*"],
+    "maxAgeSeconds": 3600
+  }
+]
