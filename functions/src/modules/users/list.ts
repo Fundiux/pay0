@@ -1,5 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldPath, getFirestore } from "firebase-admin/firestore";
 import { assertAuthorized } from "../../utils/authGuard";
 
 const db = getFirestore();
@@ -26,6 +26,8 @@ export const listUsers = onCall(
       }
 
       const data = request.data || {};
+      const limit = Math.min(Math.max(Math.trunc(Number(data.limit || 100)), 1), 200);
+      const cursor = String(data.cursor || "").trim();
       let targetRootId = data.rootId ? String(data.rootId) : myRootId;
 
       // admin: solo su root
@@ -33,8 +35,15 @@ export const listUsers = onCall(
         throw new HttpsError("permission-denied", "No autorizado.");
       }
 
-      const qs = await db.collection("users").where("rootId", "==", targetRootId).get();
-      const users = qs.docs.map(d => {
+      let usersQuery = db.collection("users")
+        .where("rootId", "==", targetRootId)
+        .orderBy(FieldPath.documentId())
+        .limit(limit + 1);
+      if (cursor) usersQuery = usersQuery.startAfter(cursor);
+      const qs = await usersQuery.get();
+      const pageDocs = qs.docs.slice(0, limit);
+      const hasMore = qs.docs.length > limit;
+      const users = pageDocs.map(d => {
         const x: any = d.data() || {};
         return {
           uid: d.id,
@@ -52,7 +61,7 @@ export const listUsers = onCall(
         };
       });
 
-      return { ok: true, users };
+      return { ok: true, users, hasMore, nextCursor: hasMore ? pageDocs[pageDocs.length - 1]?.id || null : null };
     } catch (e: any) {
       // si ya es HttpsError lo respetamos
       if (e?.httpErrorCode?.status) throw e;

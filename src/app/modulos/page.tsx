@@ -72,6 +72,8 @@ export default function ModulosPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [usersCursor, setUsersCursor] = useState<string | null>(null);
+  const [usersHasMore, setUsersHasMore] = useState(false);
   const [openPermsUid, setOpenPermsUid] = useState<string>("");
 
   const [q, setQ] = useState("");
@@ -107,13 +109,29 @@ export default function ModulosPage() {
         payload.email = meEmail;
       }
 
-      const res: any = await listUsers(payload);
+      const res: any = await listUsers({ ...payload, limit: 100 });
       setUsers((res?.users || []) as UserItem[]);
+      setUsersCursor(res?.nextCursor || null);
+      setUsersHasMore(res?.hasMore === true);
     } catch (e: any) {
       setMsg(`Error listando: ${e?.code || ""} ${e?.message || e}`);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadMoreUsers() {
+    if (!usersHasMore || !usersCursor) return;
+    setLoading(true);
+    try {
+      const payload: any = { limit: 100, cursor: usersCursor };
+      if (isSuper) { payload.rootId = meUid; payload.email = meEmail; }
+      const res: any = await listUsers(payload);
+      setUsers((current) => [...current, ...((res?.users || []) as UserItem[])]);
+      setUsersCursor(res?.nextCursor || null);
+      setUsersHasMore(res?.hasMore === true);
+    } catch (e: any) { setMsg(`Error listando: ${e?.code || ""} ${e?.message || e}`); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -179,6 +197,13 @@ export default function ModulosPage() {
           <div className="text-slate-400 text-sm mt-1">
           </div>
         </div>
+        {usersHasMore ? (
+          <div className="mt-3 text-right">
+            <button onClick={loadMoreUsers} disabled={loading} className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs text-slate-100 hover:bg-white/15 disabled:opacity-50">
+              {loading ? "Cargando..." : "Cargar más usuarios"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/10">
