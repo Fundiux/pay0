@@ -9,7 +9,7 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus } from "@/services/solicitudes";
-import { buildSustitucionSnapshot, buildSustitucionChain } from "@/lib/solicitudSustitucion";
+import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
@@ -114,7 +114,8 @@ const SolicitudRow = React.memo(({
   canCancel,
   canUploadDocs,
   showIqFolio,
-  allSolicitudes
+  allSolicitudes,
+  sustitucionIndex
 }: any) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
@@ -141,13 +142,13 @@ const SolicitudRow = React.memo(({
   const displayStatus = isIqCancellationPending ? "PENDIENTE CANCELACIÃƒÆ’Ã¢â‚¬Å“N" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
   const canApplyFromPagos = canApplyPagoFromPagos(s);
 
-  const sustitucionTrace = buildSustitucionSnapshot(s, allSolicitudes || []);
+  const sustitucionTrace = buildSustitucionSnapshot(s, allSolicitudes || [], sustitucionIndex);
   const traceOrigenFolio = String(sustitucionTrace?.origen?.folio || "").trim();
   const traceActualFolio = String(s?.folio || s?.id || "").trim();
   const traceSustitutaFolio = String(sustitucionTrace?.sustituta?.folio || "").trim();
   const hasTrace = !!traceOrigenFolio || !!traceSustitutaFolio || statusUpper === "EN_SUSTITUCION";
 
-  const sustitucionChain = buildSustitucionChain(s, allSolicitudes || []);
+  const sustitucionChain = buildSustitucionChain(s, allSolicitudes || [], sustitucionIndex);
   const traceVigenteFolio = String(sustitucionChain?.vigente?.folio || sustitucionChain?.vigente?.id || "").trim();
   const traceChainText = Array.isArray(sustitucionChain?.chainFolios) ? sustitucionChain.chainFolios.join(" -> ") : "";
   const isCurrentVigente = sustitucionChain?.currentIndex >= 0 && sustitucionChain?.currentIndex === sustitucionChain?.vigenteIndex;
@@ -974,6 +975,11 @@ export default function SolicitudesPage() {
     });
   }, [solicitudes, filter, sortConfig, range, viewMode]);
 
+  const sustitucionIndex = useMemo(
+    () => buildSustitucionIndex(filteredSortedData),
+    [filteredSortedData],
+  );
+
   const pagosDisponibles = useMemo(() => {
     if (!applyPagoFor) return [];
 
@@ -1538,16 +1544,8 @@ export default function SolicitudesPage() {
                   key={s.id}
                   s={{
                     ...s,
-                    _sustituyeFolio:
-                      filteredSortedData.find((x: any) =>
-                        String(x?.status || "").toUpperCase() === "EN_SUSTITUCION" &&
-                        (
-                          (String(x?.relatedSolicitudFolio || "").trim() !== "" &&
-                            String(x?.relatedSolicitudFolio || "").trim() === String(s?.folio || "").trim()) ||
-                          (String(x?.relatedSolicitudId || "").trim() !== "" &&
-                            String(x?.relatedSolicitudId || "").trim() === String(s?.id || "").trim())
-                        )
-                      )?.folio || null
+                    _sustituyeFolio: sustitucionIndex.replacementByCurrentKey.get(String(s?.id || "").trim())?.folio ||
+                      sustitucionIndex.replacementByCurrentKey.get(String(s?.folio || "").trim())?.folio || null
                   }}
                   onApplyPago={openApplyPagoModal}
                   onComment={setCommentFor}
@@ -1572,6 +1570,7 @@ export default function SolicitudesPage() {
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
                   allSolicitudes={filteredSortedData}
+                  sustitucionIndex={sustitucionIndex}
                 />
               ))
             )}

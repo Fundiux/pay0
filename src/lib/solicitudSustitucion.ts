@@ -11,8 +11,41 @@ export type SolicitudLite = {
   _sustituyeFolio?: string;
 };
 
+export type SustitucionIndex = {
+  byId: Map<string, SolicitudLite>;
+  byFolio: Map<string, SolicitudLite>;
+  originByCurrentKey: Map<string, SolicitudLite>;
+  replacementByCurrentKey: Map<string, SolicitudLite>;
+};
+
 function clean(v: any): string {
   return String(v || "").trim();
+}
+
+function keysFor(sol: SolicitudLite | null | undefined): string[] {
+  return [clean(sol?.id), clean(sol?.folio)].filter(Boolean);
+}
+
+export function buildSustitucionIndex(all: SolicitudLite[]): SustitucionIndex {
+  const byId = new Map<string, SolicitudLite>();
+  const byFolio = new Map<string, SolicitudLite>();
+  const originByCurrentKey = new Map<string, SolicitudLite>();
+  const replacementByCurrentKey = new Map<string, SolicitudLite>();
+
+  all.forEach((sol) => {
+    const id = clean(sol?.id);
+    const folio = clean(sol?.folio);
+    if (id) byId.set(id, sol);
+    if (folio) byFolio.set(folio, sol);
+  });
+  all.forEach((sol) => {
+    if (!isSolicitudEnSustitucion(sol)) return;
+    const related = byId.get(clean(sol.relatedSolicitudId)) || byFolio.get(clean(sol.relatedSolicitudFolio));
+    if (!related) return;
+    keysFor(sol).forEach((key) => originByCurrentKey.set(key, related));
+    keysFor(related).forEach((key) => replacementByCurrentKey.set(key, sol));
+  });
+  return { byId, byFolio, originByCurrentKey, replacementByCurrentKey };
 }
 
 export function isSolicitudEnSustitucion(sol: SolicitudLite | null | undefined): boolean {
@@ -35,8 +68,11 @@ export function getSolicitudRelacionObjetivo(sol: SolicitudLite | null | undefin
 
 export function findSolicitudSustitutaOf(
   base: SolicitudLite | null | undefined,
-  all: SolicitudLite[]
+  all: SolicitudLite[], index?: SustitucionIndex
 ): SolicitudLite | null {
+  if (index) {
+    return keysFor(base).map((key) => index.replacementByCurrentKey.get(key)).find(Boolean) || null;
+  }
   const baseId = clean(base?.id);
   const baseFolio = clean(base?.folio);
 
@@ -54,8 +90,11 @@ export function findSolicitudSustitutaOf(
 
 export function findSolicitudOrigenOf(
   current: SolicitudLite | null | undefined,
-  all: SolicitudLite[]
+  all: SolicitudLite[], index?: SustitucionIndex
 ): SolicitudLite | null {
+  if (index) {
+    return keysFor(current).map((key) => index.originByCurrentKey.get(key)).find(Boolean) || null;
+  }
   const relId = clean(current?.relatedSolicitudId);
   const relFolio = clean(current?.relatedSolicitudFolio);
 
@@ -72,10 +111,10 @@ export function findSolicitudOrigenOf(
 
 export function buildSustitucionSnapshot(
   current: SolicitudLite | null | undefined,
-  all: SolicitudLite[]
+  all: SolicitudLite[], index?: SustitucionIndex
 ) {
-  const origen = findSolicitudOrigenOf(current, all);
-  const sustituta = findSolicitudSustitutaOf(current, all);
+  const origen = findSolicitudOrigenOf(current, all, index);
+  const sustituta = findSolicitudSustitutaOf(current, all, index);
 
   return {
     current,
@@ -98,13 +137,13 @@ function sameSolicitud(a: SolicitudLite | null | undefined, b: SolicitudLite | n
 
 export function findSolicitudOrigenRaizOf(
   current: SolicitudLite | null | undefined,
-  all: SolicitudLite[]
+  all: SolicitudLite[], index?: SustitucionIndex
 ): SolicitudLite | null {
   let cursor = current || null;
   let guard = 0;
 
   while (cursor && guard < 20) {
-    const parent = findSolicitudOrigenOf(cursor, all);
+    const parent = findSolicitudOrigenOf(cursor, all, index);
     if (!parent) return cursor;
     if (sameSolicitud(parent, cursor)) return cursor;
     cursor = parent;
@@ -116,9 +155,9 @@ export function findSolicitudOrigenRaizOf(
 
 export function buildSustitucionChain(
   current: SolicitudLite | null | undefined,
-  all: SolicitudLite[]
+  all: SolicitudLite[], index?: SustitucionIndex
 ) {
-  const root = findSolicitudOrigenRaizOf(current, all) || current || null;
+  const root = findSolicitudOrigenRaizOf(current, all, index) || current || null;
   const chain: SolicitudLite[] = [];
   const seen = new Set<string>();
 
@@ -132,7 +171,7 @@ export function buildSustitucionChain(
     seen.add(key);
     chain.push(cursor);
 
-    const next = findSolicitudSustitutaOf(cursor, all);
+    const next = findSolicitudSustitutaOf(cursor, all, index);
     if (!next || sameSolicitud(next, cursor)) break;
 
     cursor = next;
