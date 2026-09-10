@@ -51,13 +51,14 @@ function userName(user: any): string {
 export const getWhatsAppQrDashboard = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
-    await requireSuperadminUser(request);
+    const { rootId } = await requireSuperadminUser(request);
 
     const connectorSnap = await db.collection("whatsappQrConnectors").doc("default").get();
     const connectorData = connectorSnap.exists ? connectorSnap.data() || {} : {};
 
     const jobsSnap = await db
       .collection("documentDeliveryJobs")
+      .where("rootId", "==", rootId)
       .orderBy("createdAt", "desc")
       .limit(300)
       .get();
@@ -253,6 +254,7 @@ export const getWhatsAppQrDashboard = onCall(
 
     const routesSnap = await db
       .collection("whatsappDeliveryRoutes")
+      .where("rootId", "==", rootId)
       .orderBy("updatedAt", "desc")
       .limit(200)
       .get();
@@ -515,6 +517,7 @@ export const saveWhatsAppDeliveryRoute = onCall(
 
     const recentJobsSnap = await db
       .collection("documentDeliveryJobs")
+      .where("rootId", "==", rootId)
       .orderBy("createdAt", "desc")
       .limit(100)
       .get();
