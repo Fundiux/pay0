@@ -52,9 +52,6 @@ import {
   isTsWithinRange,
   shiftBaseDate,
 } from "@/lib/dateScope";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { watchClientBeneficiaries, watchClientBeneficiaryMethods } from "@/services/beneficiaries";
 import { readClientOperationalBalanceSummary, type OperationalDispatchBalanceRow } from "@/services/ledger";
 
@@ -1084,7 +1081,7 @@ export default function WalletDispersionesPage() {
     );
   }
 
-  function handleExportDispersionesExcel() {
+  async function handleExportDispersionesExcel() {
     if (
       displayedRows.length === 0
     ) {
@@ -1095,6 +1092,7 @@ export default function WalletDispersionesPage() {
     }
 
     setError("");
+    const XLSX = await import("xlsx");
 
     const exportRows =
       getDispersionExportRows();
@@ -1132,7 +1130,7 @@ export default function WalletDispersionesPage() {
     );
   }
 
-  function handleExportDispersionesPdf() {
+  async function handleExportDispersionesPdf() {
     if (
       displayedRows.length === 0
     ) {
@@ -1143,6 +1141,10 @@ export default function WalletDispersionesPage() {
     }
 
     setError("");
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import("jspdf"),
+      import("jspdf-autotable"),
+    ]);
 
     const exportRows =
       getDispersionExportRows();
