@@ -583,6 +583,7 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
   const movementsSnap = await db
     .collection("balanceMovements")
     .where("holderType", "==", "CLIENT")
+    .where("holderId", "==", cleanClienteId)
     .where(scope.field, "==", scope.value)
     .orderBy("createdAt", "desc")
     .limit(1000)
@@ -590,10 +591,6 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
 
   const filteredMovements = movementsSnap.docs
     .map(mapClientDetailMovement)
-    .filter((item) => {
-      const currentId = cleanText((item as any).clienteId || (item as any).holderId);
-      return currentId === cleanClienteId;
-    })
     .sort((a, b) => Number(a.createdAtMillis || 0) - Number(b.createdAtMillis || 0));
 
   let legacyRunningBalance = 0;
@@ -609,18 +606,27 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
     };
   });
 
-  const advancesSnap = await db
-    .collection("clientAdvances")
-    .where(scope.field, "==", scope.value)
-    .limit(1000)
-    .get();
+  const [advancesByClienteIdSnap, advancesByClientIdSnap] = await Promise.all([
+    db
+      .collection("clientAdvances")
+      .where(scope.field, "==", scope.value)
+      .where("clienteId", "==", cleanClienteId)
+      .limit(1000)
+      .get(),
+    db
+      .collection("clientAdvances")
+      .where(scope.field, "==", scope.value)
+      .where("clientId", "==", cleanClienteId)
+      .limit(1000)
+      .get(),
+  ]);
+  const advanceDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+  [...advancesByClienteIdSnap.docs, ...advancesByClientIdSnap.docs].forEach((doc) => {
+    advanceDocs.set(doc.id, doc);
+  });
 
-  const advances = advancesSnap.docs
+  const advances = [...advanceDocs.values()]
     .map(mapClientDetailAdvance)
-    .filter((item) => {
-      const source = advancesSnap.docs.find((doc) => doc.id === item.id)?.data() || {};
-      return cleanText((source as any).clienteId || (source as any).clientId) === cleanClienteId;
-    })
     .sort((a, b) => Number(a.createdAtMillis || 0) - Number(b.createdAtMillis || 0));
 
   const pendingAmount = money2(
@@ -634,21 +640,30 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
       }
     : null;
 
-  const dispersionsSnap = await db
-    .collection("clientDispersions")
-    .where(scope.field, "==", scope.value)
-    .limit(1000)
-    .get();
+  const [dispersionsByClienteIdSnap, dispersionsByClientIdSnap] = await Promise.all([
+    db
+      .collection("clientDispersions")
+      .where(scope.field, "==", scope.value)
+      .where("clienteId", "==", cleanClienteId)
+      .limit(1000)
+      .get(),
+    db
+      .collection("clientDispersions")
+      .where(scope.field, "==", scope.value)
+      .where("clientId", "==", cleanClienteId)
+      .limit(1000)
+      .get(),
+  ]);
+  const dispersionDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+  [...dispersionsByClienteIdSnap.docs, ...dispersionsByClientIdSnap.docs].forEach((doc) => {
+    dispersionDocs.set(doc.id, doc);
+  });
 
   const dispersionLookup: Record<string, ReturnType<typeof mapClientDetailDispersion>> = {};
 
-  dispersionsSnap.docs.forEach((doc) => {
+  dispersionDocs.forEach((doc) => {
     const row = mapClientDetailDispersion(doc);
-    const currentClienteId = cleanText((row as any).clienteId || (row as any).clientId);
-
-    if (currentClienteId === cleanClienteId) {
-      dispersionLookup[doc.id] = row;
-    }
+    dispersionLookup[doc.id] = row;
   });
 
   return {

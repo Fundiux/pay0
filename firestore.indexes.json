@@ -431,6 +431,124 @@
             ]
         },
         {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "holderType", "order": "ASCENDING" },
+                { "fieldPath": "holderId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "holderType", "order": "ASCENDING" },
+                { "fieldPath": "holderId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "balanceMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "operadorId", "order": "ASCENDING" },
+                { "fieldPath": "holderType", "order": "ASCENDING" },
+                { "fieldPath": "holderId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "operadorId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientAdvances",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "operadorId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "operadorId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "clientDispersions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "operadorId", "order": "ASCENDING" },
+                { "fieldPath": "clientId", "order": "ASCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "iqCreateJobs",
             "queryScope": "COLLECTION",
             "fields": [

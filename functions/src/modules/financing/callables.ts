@@ -225,6 +225,7 @@ export const grantClientAdvance = onCall(
       tx.set(advanceRef, {
         rootId,
         clienteId,
+        clientId: clienteId,
         clienteNombre,
         adminId,
         operadorId,
