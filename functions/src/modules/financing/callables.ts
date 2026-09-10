@@ -102,6 +102,34 @@ async function getActiveClientDelegationAccess(uid: string, clientId: string) {
     data,
   };
 }
+
+export const listScopedClientDispersions = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const uid = String(request.auth?.uid || "").trim();
+    if (!uid) throw new HttpsError("unauthenticated", "Usuario no autenticado.");
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+    if (!userSnap.exists) throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
+
+    const profile: any = userSnap.data() || {};
+    assertAuthorized(request.auth, profile, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "wallet",
+      requiredAction: "dispersiones",
+    });
+    const rootId = String(profile.rootId || uid).trim();
+    const limit = Math.min(Math.max(Math.trunc(Number(request.data?.limit || 500)), 1), 500);
+    const snap = await db.collection("clientDispersions")
+      .where("rootId", "==", rootId)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    return { rows: snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })), limit };
+  }
+);
+
 export const grantClientAdvance = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {

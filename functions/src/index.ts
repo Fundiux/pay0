@@ -2344,7 +2344,7 @@ export { repairUserNumbersByRootCallable } from "./modules/users/repairNumbers";
 export { createCompany, toggleCompanyActive, setDispatchCompanies, listCompaniesCanonical, updateCompanyDepositIdentity } from "./modules/companies/callables";
 export { saveDespachoCallable, setUserDespachos, toggleDespachoActive } from "./modules/dispatches/callables";
 export { createManualAdjustment } from "./modules/balances/callables";
-export { createClientDispersion, createClientDispersionsMassive, grantClientAdvance } from "./modules/financing/callables";
+export { createClientDispersion, createClientDispersionsMassive, grantClientAdvance, listScopedClientDispersions } from "./modules/financing/callables";
 export { previewClientDispersionPricing } from "./modules/financing/dispersionFinancialCallables";
 export { createOperationType } from "./modules/rates/callables";
 export { setDespachoOperationCost } from "./modules/rates/callables";

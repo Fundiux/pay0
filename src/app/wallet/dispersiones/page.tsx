@@ -21,6 +21,7 @@ import {
   generateClientDispersionIq,
   createClientDispersion,
   previewClientDispersionPricing,
+  listScopedClientDispersions,
   createClientDispersionsMassive,
   requestClientDispersionIncident,
   resolveClientDispersionIncident,
@@ -871,144 +872,28 @@ export default function WalletDispersionesPage() {
       setRows([]);
       return;
     }
-
-    if (clients.length === 0) {
-      setRows([]);
-      return;
-    }
-
     let cancelled = false;
 
-    const unsubscribers: Array<() => void> = [];
-
-    // Cada listener conserva su propio snapshot.
-    // Esto evita que el mismo documento, presente por
-    // clientId y clienteId, pueda eliminarse accidentalmente
-    // del mapa general por un "removed" de la otra consulta.
-    const rowsBySource =
-      new Map<
-        string,
-        Map<string, DispersionRow>
-      >();
-
-    function publishRows() {
-      if (cancelled) return;
-
-      const merged =
-        new Map<string, DispersionRow>();
-
-      for (
-        const sourceRows of
-        rowsBySource.values()
-      ) {
-        for (
-          const [id, row] of
-          sourceRows.entries()
-        ) {
-          merged.set(id, row);
-        }
+    async function loadDispersions() {
+      try {
+        const result = await listScopedClientDispersions(500);
+        if (cancelled) return;
+        setRows((result.rows || []) as DispersionRow[]);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "No se pudieron cargar las dispersiones.");
       }
-
-      const nextRows =
-        Array.from(merged.values()).sort(
-          (a, b) =>
-            getTimestampValue(b.createdAt) -
-            getTimestampValue(a.createdAt),
-        );
-
-      setRows(nextRows);
     }
 
-    function listenClientDispersions(
-      scopedClientId: string,
-      fieldName: "clienteId" | "clientId",
-    ) {
-      const sourceKey =
-        `${fieldName}:${scopedClientId}`;
-
-      const sourceRows =
-        new Map<string, DispersionRow>();
-
-      rowsBySource.set(
-        sourceKey,
-        sourceRows,
-      );
-
-      const qRef = query(
-        collection(
-          db,
-          "clientDispersions",
-        ),
-        where(
-          fieldName,
-          "==",
-          scopedClientId,
-        ),
-      );
-
-      const unsubscribe = onSnapshot(
-        qRef,
-        (snap) => {
-          sourceRows.clear();
-
-          for (const doc of snap.docs) {
-            const data: any =
-              doc.data() || {};
-
-            sourceRows.set(
-              doc.id,
-              {
-                id: doc.id,
-                ...data,
-              },
-            );
-          }
-
-          publishRows();
-        },
-        (e) => {
-          console.error(
-            `[Dispersiones] clientDispersions snapshot error ${sourceKey}:`,
-            e,
-          );
-
-          setError(
-            e?.message ||
-              "No se pudieron cargar las dispersiones.",
-          );
-        },
-      );
-
-      unsubscribers.push(unsubscribe);
-    }
-
-    for (const client of clients) {
-      if (!client.id) continue;
-
-      // Compatibilidad con documentos historicos.
-      listenClientDispersions(
-        client.id,
-        "clienteId",
-      );
-
-      listenClientDispersions(
-        client.id,
-        "clientId",
-      );
-    }
+    loadDispersions();
 
     return () => {
       cancelled = true;
-
-      unsubscribers.forEach(
-        (unsubscribe) => unsubscribe(),
-      );
     };
   }, [
-    clients,
     profileLoading,
     uid,
     rootId,
+    balanceReloadKey,
   ]);
   const displayedRows = useMemo(() => {
     const term =

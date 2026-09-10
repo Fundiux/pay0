@@ -55,6 +55,11 @@ export async function grantClientAdvance(input: GrantClientAdvanceInput) {
   return result.data;
 }
 
+export async function listScopedClientDispersions(limit = 500): Promise<{ rows: any[]; limit: number }> {
+  const callable = httpsCallable<{ limit: number }, { rows: any[]; limit: number }>(functions, "listScopedClientDispersions");
+  return (await callable({ limit })).data;
+}
+
 export interface CreateClientDispersionInput {
   idempotencyKey?: string;
   clienteId: string;
