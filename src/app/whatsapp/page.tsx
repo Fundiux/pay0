@@ -1518,40 +1518,68 @@ export default function WhatsAppPage() {
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <div className="text-xs uppercase tracking-wider text-slate-500">
-            Sesion
+            Sesión
           </div>
           <div className="mt-1 font-semibold">
             {connector?.phoneLabel || "-"}
           </div>
         </div>
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-4">
+        <button
+          type="button"
+          aria-pressed={statusFilter === "PENDING"}
+          onClick={() => {
+            setStatusFilter(statusFilter === "PENDING" ? "ALL" : "PENDING");
+            setSelectedJobs(new Set());
+          }}
+          className={"rounded-xl border bg-amber-500/[0.05] p-4 text-left transition hover:bg-amber-500/10 " + (statusFilter === "PENDING" ? "border-amber-300 ring-1 ring-amber-300/40" : "border-amber-500/20")}
+        >
           <div className="text-xs uppercase tracking-wider text-amber-300/70">
             Pendientes
           </div>
           <div className="mt-1 text-xl font-bold text-amber-200">
             {periodPending}
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.05] p-4">
+        <button
+          type="button"
+          aria-pressed={statusFilter === "ERROR"}
+          onClick={() => {
+            setStatusFilter(statusFilter === "ERROR" ? "ALL" : "ERROR");
+            setSelectedJobs(new Set());
+          }}
+          className={"rounded-xl border bg-rose-500/[0.05] p-4 text-left transition hover:bg-rose-500/10 " + (statusFilter === "ERROR" ? "border-rose-300 ring-1 ring-rose-300/40" : "border-rose-500/20")}
+        >
           <div className="text-xs uppercase tracking-wider text-rose-300/70">
             Errores
           </div>
           <div className="mt-1 text-xl font-bold text-rose-200">
             {periodErrors}
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-4">
+        <button
+          type="button"
+          aria-pressed={statusFilter === "SENT"}
+          onClick={() => {
+            setStatusFilter(statusFilter === "SENT" ? "ALL" : "SENT");
+            setSelectedJobs(new Set());
+          }}
+          className={"rounded-xl border bg-emerald-500/[0.05] p-4 text-left transition hover:bg-emerald-500/10 " + (statusFilter === "SENT" ? "border-emerald-300 ring-1 ring-emerald-300/40" : "border-emerald-500/20")}
+        >
           <div className="text-xs uppercase tracking-wider text-emerald-300/70">
             Enviadas
           </div>
           <div className="mt-1 text-xl font-bold text-emerald-200">
             {periodSent}
           </div>
-        </div>
+        </button>
       </div>
+
+      <p className="-mt-2 text-xs text-slate-500">
+        Selecciona una tarjeta para filtrar; presiónala de nuevo para mostrar todos los estados.
+      </p>
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
 
@@ -1625,43 +1653,6 @@ export default function WhatsAppPage() {
               />
             </>
           ) : null}
-
-          <div className="mx-1 h-5 w-px bg-white/10" />
-
-          {
-            [
-              ["PENDING", "Pendientes"],
-              ["ERROR", "Errores"],
-              ["SENT", "Enviadas"],
-              ["ALL", "Todas"],
-            ].map(
-              ([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter(
-                      value as StatusFilter,
-                    );
-                    setSelectedJobs(
-                      new Set(),
-                    );
-                  }}
-                  className={
-                    "rounded-lg border px-3 py-1.5 text-xs font-bold " +
-                    (
-                      statusFilter ===
-                      value
-                        ? "border-violet-500/40 bg-violet-500/10 text-violet-100"
-                        : "border-white/10 bg-black/20 text-slate-400 hover:bg-white/5"
-                    )
-                  }
-                >
-                  {label}
-                </button>
-              ),
-            )
-          }
 
           <div className="relative ml-auto min-w-[230px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
