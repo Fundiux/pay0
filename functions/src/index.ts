@@ -2441,6 +2441,7 @@ export { getEarningsByClientReport } from "./modules/reports/callables";
 export { getPaymentsFinancialPostingIssuesReport } from "./modules/reports/callables";
 export { getOperationalIntelligenceReport } from "./modules/reports/callables";
 export { getOperationalMetricsReport } from "./modules/reports/callables";
+export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
