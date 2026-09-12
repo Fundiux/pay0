@@ -324,9 +324,20 @@ export const getEarningsByClientReport = onCall(
 
     assertDateRange(from, to);
 
-    const snap = await db
+    let earningsQuery = db
       .collection("earningsDistributions")
-      .where("rootId", "==", rootId)
+      .where("rootId", "==", rootId);
+
+    if (from.millis) {
+      earningsQuery = earningsQuery.where("createdAt", ">=", new Date(from.millis));
+    }
+
+    if (to.millis) {
+      earningsQuery = earningsQuery.where("createdAt", "<=", new Date(to.millis));
+    }
+
+    const snap = await earningsQuery
+      .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
 
@@ -432,7 +443,10 @@ export const getOperationalMetricsReport = onCall(
     const to = normalizeDateInput(request.data?.dateTo, true);
     assertDateRange(from, to);
 
-    const snap = await db.collection("operationalMetrics").where("rootId", "==", rootId).limit(5000).get();
+    let metricsQuery = db.collection("operationalMetrics").where("rootId", "==", rootId);
+    if (from.millis) metricsQuery = metricsQuery.where("createdAt", ">=", new Date(from.millis));
+    if (to.millis) metricsQuery = metricsQuery.where("createdAt", "<=", new Date(to.millis));
+    const snap = await metricsQuery.orderBy("createdAt", "asc").limit(5000).get();
     const events = snap.docs
       .map((doc) => ({ row: doc.data() || {}, createdAt: toMillis((doc.data() || {}).createdAt) }))
       .filter(({ row, createdAt }) => {
