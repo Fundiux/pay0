@@ -225,7 +225,7 @@ function isPending(job: WhatsAppQrJob) {
     return false;
   }
 
-  return !isSent(job);
+  return !isSent(job) && !isError(job);
 }
 
 function isActionable(
@@ -621,12 +621,11 @@ export default function WhatsAppPage() {
         if (isSent(job)) {
           row.sent += 1;
         }
+        else if (isError(job)) {
+          row.error += 1;
+        }
         else {
           row.pending += 1;
-        }
-
-        if (isError(job)) {
-          row.error += 1;
         }
 
         for (
