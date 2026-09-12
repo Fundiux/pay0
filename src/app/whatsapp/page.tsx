@@ -998,6 +998,9 @@ export default function WhatsAppPage() {
     );
 
     try {
+      const previousSyncMillis = new Date(
+        String(connector?.lastChatsSyncedAt || ""),
+      ).getTime();
       const command =
         await requestWhatsAppChatsSync();
 
@@ -1007,12 +1010,25 @@ export default function WhatsAppPage() {
           false,
         );
 
+      const nextSyncMillis = new Date(
+        String(next.connector.lastChatsSyncedAt || ""),
+      ).getTime();
+
+      if (
+        !Number.isFinite(nextSyncMillis) ||
+        (Number.isFinite(previousSyncMillis) && nextSyncMillis <= previousSyncMillis)
+      ) {
+        throw new Error(
+          "El conector terminó el comando, pero no confirmó una actualización nueva de contactos.",
+        );
+      }
+
       alert(
-        `WhatsApp actualizado. ${
+        `Contactos de WhatsApp actualizados. ${
           next.connector.chatsCount ||
           next.chats.length ||
           0
-        } chats/grupos activos.`,
+        } contactos/grupos activos. Última sincronización: ${formatDate(next.connector.lastChatsSyncedAt)}.`,
       );
 
       await load(true);
@@ -1459,7 +1475,7 @@ export default function WhatsAppPage() {
               }
             />
 
-            Sincronizar WhatsApp
+            Actualizar contactos
           </button>
 
           <button
@@ -2176,9 +2192,14 @@ export default function WhatsAppPage() {
 
       <details className="rounded-2xl border border-white/10 bg-white/[0.03]">
         <summary className="cursor-pointer px-4 py-3 hover:bg-white/[0.02]">
-          <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
-            <Users className="h-4 w-4" />
-            Contactos y grupos sincronizados ({chats.length})
+          <span className="flex flex-wrap items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
+              <Users className="h-4 w-4" />
+              Contactos y grupos sincronizados ({chats.length})
+            </span>
+            <span className="text-xs text-slate-500">
+              Última actualización: {formatDate(connector?.lastChatsSyncedAt)}
+            </span>
           </span>
         </summary>
 
@@ -2214,7 +2235,7 @@ export default function WhatsAppPage() {
                     Chat ID
                   </th>
                   <th className="px-3 py-2">
-                    Sync
+                    Actualizado
                   </th>
                 </tr>
               </thead>
