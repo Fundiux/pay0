@@ -2047,6 +2047,9 @@ export const createPago = onCall(
         ...buildPagoFoundationOnCreate(montoTotalNum),
         status: "CONCILIACION_PENDIENTE",
         fechaPago: fechaPagoValue,
+        // Fecha canónica para consultas de reportes. Si el usuario capturó la
+        // fecha del pago se conserva; de lo contrario se usa la creación real.
+        reportDateAt: fechaPagoValue || FieldValue.serverTimestamp(),
         referencia: referenciaValue || null,
         referenciaNormalized: referenciaNormalized || null,
         receiptDuplicateId: receiptDuplicateId || null,
