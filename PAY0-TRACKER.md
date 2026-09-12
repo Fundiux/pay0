@@ -81,11 +81,11 @@ explícita y una revisión final de cambios, índices y configuración.
 
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
-| Cerrado | 1 | `AUTH-01` tiene smoke de Emulator aprobado. |
+| Cerrado | 2 | `AUTH-01` tiene smoke de Emulator aprobado y `OPS-01` ya está desplegado con Node 22. |
 | Implementado / validación | 3 | `OPS-MET-01`, `IQ-01`, `IQ-02`: código construido; faltan pruebas de ciclo/sandbox indicadas en cada fila. |
 | Validación pendiente | 6 | `PERF-02`, `PERF-03`, `PERF-04`, `PERF-06`, `SOL-PERF-01`, `WAL-02`: requieren smoke local y, en Wallet, despliegue de índices. |
 | En curso | 2 | `SEC-01` y el diagnóstico global de rendimiento. |
-| Abierto | 32 | Trabajo funcional, de seguridad, diseño e integraciones que todavía no debe presentarse como terminado. |
+| Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones que todavía no debe presentarse como terminado. |
 
 ### Lote local listo para revisión previa a despliegue
 
@@ -107,9 +107,9 @@ cuenta sandbox; no se prueba contra IQ productivo.
 > `https://pay-0-system.web.app/login` respondió HTTP 200. No se ejecutaron
 > operaciones IQ, bancarias ni envíos reales durante la validación.
 >
-> Pendiente de plataforma: el despliegue SSR usa Node 20; Google indica que se
-> descontinuará el 2026-10-30. `OPS-01` continúa abierto para migrarlo y validar
-> el runtime de Hosting con Node 22. La Function histórica
+> Plataforma — 2026-09-12: el runtime SSR fue migrado y validado en `nodejs22`;
+> la Function `ssrpay0system` está `ACTIVE` y `/login` respondió HTTP 200.
+> `OPS-01` queda cerrado. La Function histórica
 > `debugPagoIqDepositHttpShadow` se conservó: impide un despliegue global no
 > interactivo, pero no bloqueó el despliegue dirigido del lote actual.
 
@@ -142,7 +142,7 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | SEC-02 | ABIERTO | P0 | Dependencias | Auditoría de producción: 31 vulnerabilidades en raíz (10 altas) y 16 en Functions (5 altas). `xlsx` tiene vulnerabilidades altas sin corrección disponible. | Plan de actualización probado; dependencia `xlsx` reemplazada, aislada o mitigada explícitamente. |
 | AUTH-01 | CERRADO | P0 | Operaciones / delegación | Las altas de Solicitudes y Pagos ya diferencian permisos de consulta de permisos operativos por cliente. Un usuario delegado debe tener el permiso específico para cada flujo. | Smoke de emulador aprobado: operador directo, delegado con solo vista bloqueado y delegado autorizado permitido. El rol independiente `cliente` continúa como alcance nuevo, sin reutilizar indebidamente el rol operador. |
 | OPS-MET-01 | IMPLEMENTADO / VALIDACIÓN | P1 | Operación / métricas | Se registran marcadores privados al crear y resolver Solicitudes/Pagos, al crear entregas WhatsApp y al recibir/responder Telegram. Reportes expone primera respuesta, tiempos promedio/mediano, comparativo por tipo y exportación, respetando el alcance del rol. | Completar asignación y entrega final; añadir WhatsApp entrante cuando el conector exponga webhook seguro; ejecutar ciclo local completo para línea base semanal. |
-| OPS-01 | ABIERTO | P0 | Runtime | Functions exige Node 22, pero el entorno local observado ejecuta Node 20. El SSR de Hosting también requiere revisión separada. | Node 22 queda estandarizado y el runtime SSR se valida en una tarea dedicada. |
+| OPS-01 | CERRADO | P0 | Runtime | El `package.json` raíz fija Node 22; el despliegue SSR fue validado en `nodejs22` con `ssrpay0system` activo y `/login` HTTP 200 (2026-09-12). | Cumplido: runtime SSR y Functions quedan estandarizados en Node 22. |
 | WA-A5 | ABIERTO | P1 | WhatsApp | Automatizar candidatos PDF+XML activos de solicitudes: crear/reutilizar job idempotente y enviar cuando exista ruta válida. Si un cliente no tiene destino, mostrar aviso accionable y dirigir a su configuración. | Smoke: envío automático, ruta DEFAULT, aviso de cliente sin ruta, navegación a configuración, `SENT` y repetición sin duplicado. |
 | WA-CONTACTS-01 | ABIERTO | P1 | WhatsApp | Verificar que “Actualizar WhatsApp” sincronice realmente los contactos del conector y no sólo refresque UI/estado local. | Prueba controlada: alta/cambio de contacto en conector se refleja en PAY0 con fecha de sincronización, conteo y errores visibles. |
 | WA-UI-01 | ABIERTO | P1 | WhatsApp | Las tarjetas de estado no son filtros; aún existe una fila duplicada de filtros. | Tarjetas clicables y filtro único, con estado predeterminado Pendientes. |
