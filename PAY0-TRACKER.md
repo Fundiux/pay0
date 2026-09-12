@@ -100,10 +100,18 @@ revisar el diff completo, desplegar Functions y frontend, y desplegar índices
 solamente con la aprobación correspondiente. La validación con IQ requiere
 cuenta sandbox; no se prueba contra IQ productivo.
 
-> Bloqueo de despliegue — 2026-09-11: Firebase rechazó la actualización de
-> Functions v2 porque `compute.googleapis.com` está deshabilitada en el proyecto
-> `pay-0-system`. Las Functions nuevas aún no aparecen en producción. No se
-> desplegó Hosting para evitar publicar un frontend dependiente de ese backend.
+> Despliegue — 2026-09-12: se habilitó `compute.googleapis.com` en
+> `pay-0-system`. Las Functions nuevas `getOperationalMetricsReport` y
+> `processIqCreateOnDemandTask`, junto con las Functions modificadas del lote,
+> están activas en producción. Hosting publicó la versión SSR y
+> `https://pay-0-system.web.app/login` respondió HTTP 200. No se ejecutaron
+> operaciones IQ, bancarias ni envíos reales durante la validación.
+>
+> Pendiente de plataforma: el despliegue SSR usa Node 20; Google indica que se
+> descontinuará el 2026-10-30. `OPS-01` continúa abierto para migrarlo y validar
+> el runtime de Hosting con Node 22. La Function histórica
+> `debugPagoIqDepositHttpShadow` se conservó: impide un despliegue global no
+> interactivo, pero no bloqueó el despliegue dirigido del lote actual.
 
 ## Cobertura total del sistema
 
