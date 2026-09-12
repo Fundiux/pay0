@@ -576,6 +576,20 @@
                 }
             ]
         },
+          {
+            "collectionGroup": "whatsappQrChats",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "lastSyncedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
         {
             "collectionGroup": "whatsappDeliveryRoutes",
             "queryScope": "COLLECTION",

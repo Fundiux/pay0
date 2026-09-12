@@ -226,6 +226,7 @@ export const getWhatsAppQrDashboard = onCall(
 
     const chatsSnap = await db
       .collection("whatsappQrChats")
+      .where("rootId", "==", rootId)
       .orderBy("lastSyncedAt", "desc")
       .limit(150)
       .get();
@@ -236,6 +237,7 @@ export const getWhatsAppQrDashboard = onCall(
 
         return {
           id: doc.id,
+          rootId: cleanText(data.rootId || ""),
           connectorId: cleanText(data.connectorId || ""),
           chatId: cleanText(data.chatId || ""),
           safeDocId: cleanText(data.safeDocId || doc.id),
@@ -249,7 +251,12 @@ export const getWhatsAppQrDashboard = onCall(
           updatedAt: toIso(data.updatedAt),
         };
       })
-      .filter((chat) => chat.connectorId === "default" && chat.active)
+      .filter(
+        (chat) =>
+          chat.rootId === rootId &&
+          chat.connectorId === "default" &&
+          chat.active
+      )
       .slice(0, 120);
 
     const routesSnap = await db
@@ -481,6 +488,13 @@ export const saveWhatsAppDeliveryRoute = onCall(
         throw new HttpsError("failed-precondition", "Uno de los chats no pertenece al conector default.");
       }
 
+      if (cleanText(data.rootId) !== rootId) {
+        throw new HttpsError(
+          "permission-denied",
+          "Uno de los chats no pertenece a tu root. Sincroniza los contactos para asignarles su alcance."
+        );
+      }
+
       if (data.active === false) {
         throw new HttpsError("failed-precondition", "Uno de los chats seleccionados ya no esta activo.");
       }
@@ -557,7 +571,7 @@ export const saveWhatsAppDeliveryRoute = onCall(
 export const resolveWhatsAppJobDestinations = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
-    const { uid, user } = await requireSuperadminUser(request);
+    const { uid, user, rootId } = await requireSuperadminUser(request);
     const jobId = cleanText(request.data?.jobId);
 
     if (!jobId) {
@@ -572,6 +586,9 @@ export const resolveWhatsAppJobDestinations = onCall(
     }
 
     const job = jobSnap.data() || {};
+    if (cleanText(job.rootId) !== rootId) {
+      throw new HttpsError("permission-denied", "El job WhatsApp no pertenece a tu root.");
+    }
     const result = await applyWhatsAppDestinationsToJob(db, jobRef, job, { uid, name: userName(user) });
     const { ok: _routeOk, ...routeResult } = result;
 
@@ -587,7 +604,7 @@ export const resolveWhatsAppJobDestinations = onCall(
 export const assignWhatsAppJobDestination = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
-    const { uid, user } = await requireSuperadminUser(request);
+    const { uid, user, rootId } = await requireSuperadminUser(request);
 
     const jobId = cleanText(request.data?.jobId);
     const chatDocId = cleanText(request.data?.chatDocId);
@@ -615,6 +632,14 @@ export const assignWhatsAppJobDestination = onCall(
 
     const job = jobSnap.data() || {};
     const chat = chatSnap.data() || {};
+
+    if (cleanText(job.rootId) !== rootId) {
+      throw new HttpsError("permission-denied", "El job WhatsApp no pertenece a tu root.");
+    }
+
+    if (cleanText(chat.rootId) !== rootId) {
+      throw new HttpsError("permission-denied", "El chat WhatsApp no pertenece a tu root.");
+    }
 
     if (cleanText(job.channel || "WHATSAPP") !== "WHATSAPP") {
       throw new HttpsError("failed-precondition", "El job no es de WhatsApp.");
