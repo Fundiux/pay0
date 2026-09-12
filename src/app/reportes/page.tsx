@@ -119,6 +119,7 @@ export default function ReportesPage() {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillError, setBackfillError] = useState("");
   const [backfillResult, setBackfillResult] = useState<PagoReportDateBackfillResult | null>(null);
+  const [backfillCursor, setBackfillCursor] = useState<string | null>(null);
 
   const [earningsResult, setEarningsResult] = useState<EarningsByClientReportResult | null>(null);
   const [issuesResult, setIssuesResult] = useState<PaymentsFinancialPostingIssuesReportResult | null>(null);
@@ -218,7 +219,9 @@ export default function ReportesPage() {
     setBackfillLoading(true);
     setBackfillError("");
     try {
-      setBackfillResult(await backfillPagoReportDates({ afterPagoId: backfillResult?.nextAfterPagoId || null, limit: 250, apply }));
+      const result = await backfillPagoReportDates({ afterPagoId: backfillCursor, limit: 250, apply });
+      setBackfillResult(result);
+      if (apply) setBackfillCursor(result.nextAfterPagoId);
     } catch (err: any) {
       setBackfillError(err?.message || "No se pudo procesar el lote de fechas.");
     } finally {
