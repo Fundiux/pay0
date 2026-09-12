@@ -605,6 +605,20 @@
             ]
         },
         {
+            "collectionGroup": "pagos",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "reportDateAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "whatsappQrChats",
             "queryScope": "COLLECTION",
             "fields": [

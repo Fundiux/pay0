@@ -527,9 +527,20 @@ export const getPaymentsFinancialPostingIssuesReport = onCall(
 
     assertDateRange(from, to);
 
-    const snap = await db
+    let pagosQuery = db
       .collection("pagos")
-      .where("rootId", "==", rootId)
+      .where("rootId", "==", rootId);
+
+    if (from.millis) {
+      pagosQuery = pagosQuery.where("reportDateAt", ">=", new Date(from.millis));
+    }
+
+    if (to.millis) {
+      pagosQuery = pagosQuery.where("reportDateAt", "<=", new Date(to.millis));
+    }
+
+    const snap = await pagosQuery
+      .orderBy("reportDateAt", "desc")
       .limit(limit)
       .get();
 
@@ -545,7 +556,7 @@ export const getPaymentsFinancialPostingIssuesReport = onCall(
         return;
       }
 
-      const createdMillis = toMillis(doc.createdAt || doc.fechaPago || doc.fecha || doc.updatedAt);
+      const createdMillis = toMillis(doc.reportDateAt);
 
       if ((from.millis || to.millis) && !createdMillis) {
         return;
