@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
+import { invalidateCompanyCatalog } from "@/services/companies";
 
 export async function createCompanyMutation(input: {
   despachoId: string;
@@ -8,6 +9,7 @@ export async function createCompanyMutation(input: {
 }) {
   const fn = httpsCallable(functions, "createCompany");
   const res: any = await fn(input);
+  invalidateCompanyCatalog();
   return res?.data;
 }
 
@@ -17,6 +19,7 @@ export async function toggleCompanyActiveMutation(input: {
 }) {
   const fn = httpsCallable(functions, "toggleCompanyActive");
   const res: any = await fn(input);
+  invalidateCompanyCatalog();
   return res?.data;
 }
 
@@ -27,6 +30,6 @@ export async function updateCompanyDepositIdentityMutation(input: {
 }) {
   const fn = httpsCallable(functions, "updateCompanyDepositIdentity");
   const res: any = await fn(input);
+  invalidateCompanyCatalog();
   return res?.data;
 }
-

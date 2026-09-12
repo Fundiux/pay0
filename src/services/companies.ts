@@ -9,6 +9,10 @@ type ListCompaniesParams = { uid: string; role: "superadmin" | "admin" | "operad
 const CACHE_MS = 30_000;
 const companyCache = new Map<string, { expiresAt: number; value: Company[]; pending?: Promise<Company[]> }>();
 
+export function invalidateCompanyCatalog() {
+  companyCache.clear();
+}
+
 function isPermissionDeniedError(error: any) {
   const value=String(error?.code || error?.message || "").toLowerCase(); return value.includes("permission-denied");
 }
