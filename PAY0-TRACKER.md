@@ -100,6 +100,11 @@ revisar el diff completo, desplegar Functions y frontend, y desplegar índices
 solamente con la aprobación correspondiente. La validación con IQ requiere
 cuenta sandbox; no se prueba contra IQ productivo.
 
+> Bloqueo de despliegue — 2026-09-11: Firebase rechazó la actualización de
+> Functions v2 porque `compute.googleapis.com` está deshabilitada en el proyecto
+> `pay-0-system`. Las Functions nuevas aún no aparecen en producción. No se
+> desplegó Hosting para evitar publicar un frontend dependiente de ese backend.
+
 ## Cobertura total del sistema
 
 El tracker cubre todos los dominios conocidos de PAY0. Una fila `PENDIENTE DE
