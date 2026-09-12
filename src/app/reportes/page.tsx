@@ -13,6 +13,7 @@ import {
   getOperationalIntelligenceReport,
   getOperationalMetricsReport,
   getPaymentsFinancialPostingIssuesReport,
+  backfillPagoReportDates,
   type EarningsByClientReportResult,
   type EarningsByClientReportRow,
   type OperationalAlertRow,
@@ -22,6 +23,7 @@ import {
   type OperationalUserActivityRow,
   type PaymentsFinancialPostingIssuesReportResult,
   type PaymentsFinancialPostingIssuesReportRow,
+  type PagoReportDateBackfillResult,
 } from "@/services/reports";
 
 type ReportTab = "earnings" | "operational" | "metrics" | "postingIssues";
@@ -114,6 +116,9 @@ export default function ReportesPage() {
   const [operationalError, setOperationalError] = useState("");
   const [metricsError, setMetricsError] = useState("");
   const [exportError, setExportError] = useState("");
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillError, setBackfillError] = useState("");
+  const [backfillResult, setBackfillResult] = useState<PagoReportDateBackfillResult | null>(null);
 
   const [earningsResult, setEarningsResult] = useState<EarningsByClientReportResult | null>(null);
   const [issuesResult, setIssuesResult] = useState<PaymentsFinancialPostingIssuesReportResult | null>(null);
@@ -207,6 +212,18 @@ export default function ReportesPage() {
     if (activeTab === "metrics") { await loadMetricsReport(); return; }
 
     await loadPostingIssuesReport();
+  }
+
+  async function runPagoDateBackfill(apply: boolean) {
+    setBackfillLoading(true);
+    setBackfillError("");
+    try {
+      setBackfillResult(await backfillPagoReportDates({ afterPagoId: backfillResult?.nextAfterPagoId || null, limit: 250, apply }));
+    } catch (err: any) {
+      setBackfillError(err?.message || "No se pudo procesar el lote de fechas.");
+    } finally {
+      setBackfillLoading(false);
+    }
   }
 
   async function exportActiveTab() {
@@ -442,6 +459,19 @@ export default function ReportesPage() {
           {formatDate(range.from.toISOString())} - {formatDate(range.to.toISOString())}
         </div>
       </div>
+
+      {String(profile?.role || "").toLowerCase() === "superadmin" ? (
+        <section className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Mantenimiento de reportes</p>
+          <p className="mt-1 text-sm text-amber-100">Completa la fecha canónica de pagos históricos. Primero simula; aplicar modifica sólo el lote mostrado.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => runPagoDateBackfill(false)} disabled={backfillLoading} className="rounded-xl border border-amber-300/40 px-3 py-2 text-xs font-bold text-amber-100 disabled:opacity-50">{backfillLoading ? "Procesando..." : "Simular lote"}</button>
+            <button type="button" onClick={() => runPagoDateBackfill(true)} disabled={backfillLoading || !backfillResult || backfillResult.candidates === 0} className="rounded-xl bg-amber-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">Aplicar lote simulado</button>
+          </div>
+          {backfillError ? <p className="mt-3 text-sm text-rose-200">{backfillError}</p> : null}
+          {backfillResult ? <p className="mt-3 text-sm text-amber-100">{backfillResult.dryRun ? "Simulación" : "Aplicado"}: {backfillResult.candidates} candidatos, {backfillResult.updated} actualizados, {backfillResult.skippedWithoutDate} sin fecha. {backfillResult.nextAfterPagoId ? "Hay otro lote disponible." : "No quedan más lotes."}</p> : null}
+        </section>
+      ) : null}
 
       <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#111827] p-2 sm:flex-row">
         <button

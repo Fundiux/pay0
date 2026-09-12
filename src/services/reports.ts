@@ -130,6 +130,22 @@ export async function getPaymentsFinancialPostingIssuesReport(input: {
   const response = await callable(input);
   return response.data;
 }
+
+export type PagoReportDateBackfillResult = {
+  ok: boolean;
+  dryRun: boolean;
+  rootId: string;
+  scanned: number;
+  candidates: number;
+  updated: number;
+  skippedWithoutDate: number;
+  nextAfterPagoId: string | null;
+};
+
+export async function backfillPagoReportDates(input: { afterPagoId?: string | null; limit?: number; apply?: boolean }) {
+  const callable = httpsCallable<typeof input, PagoReportDateBackfillResult>(functions, CALLABLES.backfillPagoReportDates);
+  return (await callable(input)).data;
+}
 export type OperationalIntelligenceReportSummary = {
   pagosCount: number;
   pagosAmount: number;

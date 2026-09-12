@@ -3,6 +3,7 @@ export const CALLABLES = {
   getOperationalMetricsReport: "getOperationalMetricsReport",
   getPaymentsFinancialPostingIssuesReport: "getPaymentsFinancialPostingIssuesReport",
   getEarningsByClientReport: "getEarningsByClientReport",
+  backfillPagoReportDates: "backfillPagoReportDates",
   upsertUser: "upsertUser",
   initUpload: "initUpload",
   finalizeUpload: "finalizeUpload",
