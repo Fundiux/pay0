@@ -31,6 +31,8 @@ import { normalizeSolicitudBackendStatus, canTransitionSolicitudBackendStatus, n
 import { canCancelSolicitudWithAbonos, needsUuidOrRelatedForSatCancel01, needsUuidOrRelatedForEnSustitucion, getSolicitudStatusEventMeta, getSolicitudRechazadaEventMeta } from "./utils/solicitudStatusHandlerRules";
 import { buildSolicitudCanceladaPatch, buildSolicitudEnSustitucionPatch, getSolicitudCanceladaEventMeta, getSolicitudEnSustitucionEventMeta } from "./utils/solicitudStatusPatches";
 import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } from "./modules/iq/solicitudCancellationService";
+import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
+import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -62,13 +64,18 @@ async function getRootId(uid: string) {
   return String(data.rootId || uid);
 }
 
-async function getActiveClientDelegationAccess(uid: string, clienteId: string) {
+async function getActiveClientDelegationAccess(
+  uid: string,
+  clienteId: string,
+  requiredPermission: "operateSolicitudes" | "operatePagos"
+) {
   const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
   if (!accessSnap.exists) return null;
 
   const data: any = accessSnap.data() || {};
   if (data?.active !== true) return null;
-  if (data?.permissions?.view === false) return null;
+  const permissions = normalizeClientAccessPermissions(data?.permissions, true);
+  if (permissions.view !== true || permissions[requiredPermission] !== true) return null;
 
   return {
     id: accessSnap.id,
@@ -198,7 +205,9 @@ export const createSolicitud = onCall(
     }
 
     const delegatedClientAccess =
-      role === "superadmin" ? null : await getActiveClientDelegationAccess(uid, clienteId);
+      role === "superadmin"
+        ? null
+        : await getActiveClientDelegationAccess(uid, clienteId, "operateSolicitudes");
     const hasDelegatedClientAccess = !!delegatedClientAccess;
 
     if (role === "admin" && !hasDelegatedClientAccess) {
@@ -367,7 +376,7 @@ export const createSolicitud = onCall(
     if (operationalOwnerData?.active === false) {
       throw new HttpsError(
         "failed-precondition",
-        "El propietario operativo del cliente estÃƒÆ’Ã‚Â¡ inactivo."
+        "El propietario operativo del cliente está inactivo."
       );
     }
 
@@ -381,7 +390,7 @@ export const createSolicitud = onCall(
     ) {
       throw new HttpsError(
         "permission-denied",
-        "El propietario operativo del cliente estÃƒÆ’Ã‚Â¡ fuera de la empresa raÃƒÆ’Ã‚Â­z."
+        "El propietario operativo del cliente está fuera de la empresa raíz."
       );
     }
 
@@ -543,6 +552,18 @@ export const createSolicitud = onCall(
     }
 
     await Promise.all(postCreateTasks);
+    await recordOperationalMetric({
+      rootId,
+      stage: "RECEIVED",
+      channel: "PAY0",
+      caseType: "SOLICITUD",
+      correlationId: solicitudRef.id,
+      adminId,
+      clientId: clienteId,
+      actorUid: uid,
+      source: "HUMAN",
+      outcome: "CREATED",
+    }).catch(() => undefined);
     __mark("post_create");
 
     const __perfTotalMs = Date.now() - __perfStartedAt;
@@ -1358,6 +1379,22 @@ const changeSolicitudStatusHandler = async (request: any) => {
     });
   }
 
+  const resolvedStatus = String(patch.status || "").trim();
+  if (["COMPLETADA", "RECHAZADA", "CANCELADA"].includes(resolvedStatus)) {
+    await recordOperationalMetric({
+      rootId,
+      stage: "RESOLVED",
+      channel: "PAY0",
+      caseType: "SOLICITUD",
+      correlationId: String(solicitudId),
+      adminId,
+      clientId: String(data.clienteId || data.clientId || ""),
+      actorUid: uid,
+      source: "HUMAN",
+      outcome: resolvedStatus,
+    }).catch(() => undefined);
+  }
+
   return { ok: true, ...responseMeta };
 }
 
@@ -1640,7 +1677,11 @@ export const createPago = onCall(
       db.doc(`companies/${companyId}`).get(),
       role === "superadmin"
         ? Promise.resolve(null)
-        : getActiveClientDelegationAccess(uid, String(clienteId || "").trim()),
+        : getActiveClientDelegationAccess(
+            uid,
+            String(clienteId || "").trim(),
+            "operatePagos"
+          ),
       role === "superadmin"
         ? Promise.resolve(null)
         : db.doc(`userCompanyAccess/${uid}/companies/${companyId}`).get(),
@@ -2068,6 +2109,19 @@ export const createPago = onCall(
 
     __mark("folio_transaction");
 
+    await recordOperationalMetric({
+      rootId,
+      stage: "RECEIVED",
+      channel: "PAY0",
+      caseType: "PAGO",
+      correlationId: ref.id,
+      adminId,
+      clientId: String(clienteId),
+      actorUid: uid,
+      source: "HUMAN",
+      outcome: "CREATED",
+    }).catch(() => undefined);
+
     const __perfTotalMs = Date.now() - __perfStartedAt;
 
     console.log("[PAY0_PERF_CREATE_PAGO]", JSON.stringify({
@@ -2213,6 +2267,20 @@ const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {}
         relatedEntityType: "pago",
         description: `Pago ${pagoId} cambio de ${currentStatus} a ${nextStatus}`,
       });
+      if (["CONCILIADO", "RECHAZADO", "CANCELADO"].includes(nextStatus)) {
+        await recordOperationalMetric({
+          rootId,
+          stage: "RESOLVED",
+          channel: "PAY0",
+          caseType: "PAGO",
+          correlationId: String(pagoId),
+          adminId,
+          clientId: String(data.clienteId || data.clientId || ""),
+          actorUid: uid,
+          source: "HUMAN",
+          outcome: nextStatus,
+        }).catch(() => undefined);
+      }
 return { ok: true };
   }
 );
@@ -2369,6 +2437,7 @@ export { setMaintenanceMode } from "./modules/system/maintenance";
 export { getEarningsByClientReport } from "./modules/reports/callables";
 export { getPaymentsFinancialPostingIssuesReport } from "./modules/reports/callables";
 export { getOperationalIntelligenceReport } from "./modules/reports/callables";
+export { getOperationalMetricsReport } from "./modules/reports/callables";
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
@@ -2396,6 +2465,7 @@ export {
 } from "./modules/iq/operatingCalendarCallables";
 export {
   enqueueSolicitudIqCreation,
+  processIqCreateOnDemandTask,
   processIqCreateQueue,
 } from "./modules/iq/solicitudCreateQueueCallables";
 export {

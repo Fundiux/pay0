@@ -371,7 +371,7 @@ export default function UsuariosPage() {
   async function softDeleteUser(target: UserItem) {
     if (!canActivateUsuarios) return;
     const ok = window.confirm(
-      `Seguro que deseas eliminar a ${target.displayName || target.email || target.uid}?` +
+      `Seguro que deseas eliminar a ${target.displayName || target.email || "este usuario"}?` +
       `\n\nEsto lo ocultara del flujo normal, pero NO borrara historial ni movimientos.`
     );
     if (!ok) return;
@@ -1147,7 +1147,6 @@ export default function UsuariosPage() {
     </main>
   );
 }
-
 
 
 

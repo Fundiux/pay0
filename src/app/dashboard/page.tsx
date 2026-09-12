@@ -5,7 +5,7 @@ import { useModuleAccess } from "@/lib/useModuleAccess";
 
 import ActivityLog from "../../components/ActivityLog";
 import React, { useMemo, useState, useEffect } from "react";
-import { collection, query, where, Timestamp, onSnapshot } from "firebase/firestore";
+import { collection, query, where, Timestamp, getCountFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebaseClient";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -164,24 +164,28 @@ export default function DashboardPage() {
       );
     }
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const docs = snap.docs.map((d) => d.data());
-        setCounts({
-          total: docs.length,
-          pendientes: docs.filter((d: any) => d.status === "PROCESANDO" || d.status === "CONCILIACION_PENDIENTE").length,
-          pagadas: docs.filter((d: any) => d.status === "COMPLETADA").length
-        });
-        setLoadingCounts(false);
-      },
-      (err) => {
-        console.error("[Dashboard] solicitudes snapshot error:", err);
-        setLoadingCounts(false);
-      }
-    );
+    let active = true;
+    const countForStatus = (status: string) =>
+      getCountFromServer(query(q, where("status", "==", status))).then((result) => result.data().count);
 
-    return () => unsub();
+    Promise.all([
+      getCountFromServer(q).then((result) => result.data().count),
+      countForStatus("PROCESANDO"),
+      countForStatus("CONCILIACION_PENDIENTE"),
+      countForStatus("COMPLETADA"),
+    ])
+      .then(([total, procesando, conciliacionPendiente, pagadas]) => {
+        if (!active) return;
+        setCounts({ total, pendientes: procesando + conciliacionPendiente, pagadas });
+      })
+      .catch((err) => {
+        console.error("[Dashboard] conteos de solicitudes error:", err);
+      })
+      .finally(() => {
+        if (active) setLoadingCounts(false);
+      });
+
+    return () => { active = false; };
   }, [uid, rootId, role, range, loadingProfile, canViewDashboard]);
 
   const calendarDays = useMemo(() => {
@@ -232,7 +236,7 @@ export default function DashboardPage() {
                   cursor: "pointer"
                 }}
               >
-                {m === "day" ? "DIA" : m === "week" ? "SEMANA" : m === "month" ? "MES" : "ANO"}
+                {m === "day" ? "DÍA" : m === "week" ? "SEMANA" : m === "month" ? "MES" : "AÑO"}
               </button>
             ))}
           </div>

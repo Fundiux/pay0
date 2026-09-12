@@ -269,7 +269,7 @@ export async function initSolicitudDocumentUploadCore(request: any) {
   }
 
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
-    throw new HttpsError("invalid-argument", "TamaÃ±o de archivo invalido.");
+    throw new HttpsError("invalid-argument", "Tamaño de archivo inválido.");
   }
 
   if (sizeBytes > MAX_SOLICITUD_DOCUMENT_SIZE_BYTES) {

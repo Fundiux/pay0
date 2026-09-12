@@ -982,7 +982,7 @@ export default function IqAutomationPage() {
 
         <section className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 className="text-lg font-semibold">Feriados / dÃ­as cerrados</h2>
+            <h2 className="text-lg font-semibold">Feriados / días cerrados</h2>
             <p className="mt-1 text-sm text-slate-400">
               Marca fechas completas en las que IQ no debe operar.
             </p>
@@ -1034,7 +1034,7 @@ export default function IqAutomationPage() {
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 className="text-lg font-semibold">Excepciones por fecha</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Cierra una fecha especÃ­fica sin alterar el horario semanal.
+              Cierra una fecha específica sin alterar el horario semanal.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -1070,7 +1070,7 @@ export default function IqAutomationPage() {
                       className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm"
                     >
                       <span>
-                        {date} Â· {override.closed ? "Cerrado" : "Ventana especial"}
+                        {date} · {override.closed ? "Cerrado" : "Ventana especial"}
                       </span>
                       <button
                         type="button"

@@ -39,7 +39,7 @@ export function assertAuthorized(
     const unauthenticated = decision.reason === "UNAUTHENTICATED";
     throw new functions.https.HttpsError(
       unauthenticated ? "unauthenticated" : "permission-denied",
-      unauthenticated ? "Debes iniciar sesiÃ³n." : "No tienes permisos para realizar esta acciÃ³n."
+      unauthenticated ? "Debes iniciar sesión." : "No tienes permisos para realizar esta acción."
     );
   }
 

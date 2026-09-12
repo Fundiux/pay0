@@ -103,6 +103,18 @@ export async function getEarningsByClientReport(input: {
   return response.data;
 }
 
+export type OperationalMetricsReportResult = {
+  ok: boolean;
+  docsScanned: number;
+  summary: { received: number; resolved: number; averageMs: number | null; medianMs: number | null; firstResponses: number; averageFirstResponseMs: number | null; medianFirstResponseMs: number | null };
+  byCaseType: Array<{ caseType: string; received: number; resolved: number; totalMs: number; averageMs: number | null; firstResponses: number; firstResponseTotalMs: number; averageFirstResponseMs: number | null }>;
+};
+
+export async function getOperationalMetricsReport(input: { dateFrom?: string | null; dateTo?: string | null } = {}) {
+  const callable = httpsCallable<typeof input, OperationalMetricsReportResult>(functions, CALLABLES.getOperationalMetricsReport);
+  return (await callable(input)).data;
+}
+
 export async function getPaymentsFinancialPostingIssuesReport(input: {
   dateFrom?: string | null;
   dateTo?: string | null;

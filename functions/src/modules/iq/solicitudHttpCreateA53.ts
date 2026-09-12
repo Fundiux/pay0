@@ -5,6 +5,7 @@ import {
   type IqHttpAuthSession,
   type IqHttpCredentials,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -143,10 +144,10 @@ async function jsonGet(
   session: IqHttpAuthSession,
   path: string,
 ): Promise<{ status: number; body: any }> {
-  const response = await fetch(new URL(path, session.apiOrigin), {
+  const response = await fetchIq(new URL(path, session.apiOrigin), {
     method: "GET",
     headers: await authHeaders(session),
-  });
+  }, { operation: `solicitud_catalog:${path}` });
   let body: any = null;
   try {
     body = await response.json();
@@ -299,11 +300,11 @@ async function postOnce(
   catalog: { clientId: number; companyId: number },
 ): Promise<{ status: number; bodyText: string }> {
   const form = await buildFormData(item, catalog);
-  const response = await fetch(new URL("/invoices", session.apiOrigin), {
+  const response = await fetchIq(new URL("/invoices", session.apiOrigin), {
     method: "POST",
     headers: await authHeaders(session),
     body: form,
-  });
+  }, { operation: "solicitud_create" });
 
   return {
     status: response.status,
@@ -366,10 +367,10 @@ async function recoverIqId(
       url.searchParams.set("order_by_field", "id");
       url.searchParams.set("order_by_direction", "asc");
 
-      const response = await fetch(url, {
+      const response = await fetchIq(url, {
         method: "GET",
         headers: await authHeaders(session),
-      });
+      }, { operation: "solicitud_recovery_search" });
       pagesFetched += 1;
 
       if (response.status !== 200) break;
@@ -551,7 +552,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
         result.outcome = "UNKNOWN";
         result.status = "IQ_SOLICITUD_CREATE_UNKNOWN";
         result.responseMessage =
-          "IQ renovÃƒÂ³ autenticaciÃƒÂ³n, pero el reintento autorizado del POST quedÃƒÂ³ con resultado desconocido.";
+          "IQ renovó autenticación, pero el reintento autorizado del POST quedó con resultado desconocido.";
         result.message = result.responseMessage;
         result.errors = [
           clean(error instanceof Error ? error.message : error) ||
@@ -585,7 +586,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
       result.outcome = "REJECTED";
       result.status = "IQ_SOLICITUD_CREATE_REJECTED";
       result.responseMessage =
-        clean(post.bodyText) || `IQ rechazÃƒÂ³ la solicitud con HTTP ${post.status}.`;
+        clean(post.bodyText) || `IQ rechazó la solicitud con HTTP ${post.status}.`;
       result.message = result.responseMessage;
       result.errors = [`IQ_SOLICITUD_HTTP_${post.status}`];
       return result;
@@ -608,7 +609,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
       result.resultPath = `/invoices/${recovery.iqId}`;
       result.finalPath = result.resultPath;
       result.responseMessage =
-        `IQ aceptÃƒÂ³ la solicitud (201) y PAY0 recuperÃƒÂ³ el folio ${recovery.iqId} por marcador exacto.`;
+        `IQ aceptó la solicitud (201) y PAY0 recuperó el folio ${recovery.iqId} por marcador exacto.`;
       result.message = result.responseMessage;
       return result;
     }
@@ -620,8 +621,8 @@ export async function runIqCreateInvoiceHttpA53(input: {
       ? "IQ_SOLICITUD_CREATE_UNKNOWN"
       : "IQ_SOLICITUD_CREATED_ID_MISSING";
     result.responseMessage = recovery.ambiguity
-      ? "IQ aceptÃƒÂ³ la solicitud (201), pero la relectura encontrÃƒÂ³ mÃƒÂ¡s de una coincidencia exacta. No repetir el POST."
-      : "IQ aceptÃƒÂ³ la solicitud (201). Folio pendiente de relectura; no repetir el POST.";
+      ? "IQ aceptó la solicitud (201), pero la relectura encontró más de una coincidencia exacta. No repetir el POST."
+      : "IQ aceptó la solicitud (201). Folio pendiente de relectura; no repetir el POST.";
     result.message = result.responseMessage;
 
     if (recovery.ambiguity) {

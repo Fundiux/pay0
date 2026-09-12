@@ -139,7 +139,7 @@ const SolicitudRow = React.memo(({
   const sustituyeFolio = String(s?._sustituyeFolio || "").trim();
   const sustitucionCompleta = statusUpper === "EN_SUSTITUCION" && (!!targetFolio || !!targetId) && !!uuidSustituto;
   const isIqCancellationPending = ["REQUESTED", "OUTCOME_UNKNOWN"].includes(String(s?.iqCancellationStatus || "").trim().toUpperCase());
-  const displayStatus = isIqCancellationPending ? "PENDIENTE CANCELACIÃƒÆ’Ã¢â‚¬Å“N" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
+  const displayStatus = isIqCancellationPending ? "PENDIENTE CANCELACIÓN" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
   const canApplyFromPagos = canApplyPagoFromPagos(s);
 
   const sustitucionTrace = buildSustitucionSnapshot(s, allSolicitudes || [], sustitucionIndex);
@@ -462,12 +462,12 @@ const SolicitudRow = React.memo(({
                     <td className="p-2 font-normal">Vigente / Sustituta</td>
                     <td className="p-2 font-normal">UUID sustituto</td>
                     <td className="p-2 font-normal">Estado</td>
-                    <td className="p-2 text-center font-normal">AcciÃ³n</td>
+                    <td className="p-2 text-center font-normal">Acción</td>
                   </tr>
 
                   <tr className="border-t border-violet-500/10 bg-violet-500/[0.02] text-[11px]">
                     <td className="p-2 pl-8 font-normal text-violet-300">
-                      SUSTITUCIÃ“N
+                      SUSTITUCIÓN
                     </td>
 
                     <td className="p-2 text-slate-400">
@@ -527,7 +527,7 @@ const SolicitudRow = React.memo(({
                   {children.length > 0 ? (
                     <>
                       <tr className="border-t border-white/5 bg-white/[0.02] text-[9px] uppercase text-slate-500">
-                        <td className="p-2 pl-8 font-normal">AplicaciÃƒÂ³n PAY0</td>
+                        <td className="p-2 pl-8 font-normal">Aplicación PAY0</td>
                         <td className="p-2 font-normal">Fecha</td>
                         <td className="p-2 text-center font-normal">Parcialidad</td>
                         <td className="p-2 text-center font-normal">Monto total</td>

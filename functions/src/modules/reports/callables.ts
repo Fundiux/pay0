@@ -419,6 +419,77 @@ export const getEarningsByClientReport = onCall(
   }
 );
 
+export const getOperationalMetricsReport = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const uid = requireAuth(request);
+    const user = await getMyUser(uid);
+    if (!user) throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
+    const role = requireRole(user, ["superadmin", "admin", "operador"]) as Pay0ReportRole;
+    assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "reportes", requiredAction: "view" });
+    const rootId = asText(user.rootId || uid) || uid;
+    const from = normalizeDateInput(request.data?.dateFrom, false);
+    const to = normalizeDateInput(request.data?.dateTo, true);
+    assertDateRange(from, to);
+
+    const snap = await db.collection("operationalMetrics").where("rootId", "==", rootId).limit(5000).get();
+    const events = snap.docs
+      .map((doc) => ({ row: doc.data() || {}, createdAt: toMillis((doc.data() || {}).createdAt) }))
+      .filter(({ row, createdAt }) => {
+        if (!isInsideReportRange(createdAt, from, to)) return false;
+        if (role === "admin") return asText(row.adminId) === uid;
+        if (role === "operador") return asText(row.actorUid) === uid;
+        return true;
+      })
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const received = new Map<string, number>();
+    const durations: number[] = [];
+    const firstResponseDurations: number[] = [];
+    const byCaseType: Record<string, { received: number; resolved: number; totalMs: number; firstResponses: number; firstResponseTotalMs: number }> = {};
+    let docsScanned = 0;
+
+    events.forEach(({ row, createdAt }) => {
+      docsScanned += 1;
+      const caseType = asText(row.caseType || "UNKNOWN").toUpperCase();
+      const key = `${caseType}:${asText(row.correlationId)}`;
+      const bucket = byCaseType[caseType] || (byCaseType[caseType] = { received: 0, resolved: 0, totalMs: 0, firstResponses: 0, firstResponseTotalMs: 0 });
+      if (row.stage === "RECEIVED" && createdAt) {
+        received.set(key, createdAt);
+        bucket.received += 1;
+      }
+      if (row.stage === "RESOLVED" && createdAt) {
+        bucket.resolved += 1;
+        const startedAt = received.get(key);
+        if (startedAt && createdAt >= startedAt) {
+          const elapsedMs = createdAt - startedAt;
+          durations.push(elapsedMs);
+          bucket.totalMs += elapsedMs;
+        }
+      }
+      if (row.stage === "FIRST_RESPONSE" && createdAt) {
+        const startedAt = received.get(key);
+        if (startedAt && createdAt >= startedAt) {
+          const elapsedMs = createdAt - startedAt;
+          firstResponseDurations.push(elapsedMs);
+          bucket.firstResponses += 1;
+          bucket.firstResponseTotalMs += elapsedMs;
+        }
+      }
+    });
+
+    durations.sort((a, b) => a - b);
+    firstResponseDurations.sort((a, b) => a - b);
+    const averageMs = durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null;
+    const medianMs = durations.length ? durations[Math.floor(durations.length / 2)] : null;
+    const averageFirstResponseMs = firstResponseDurations.length ? Math.round(firstResponseDurations.reduce((sum, value) => sum + value, 0) / firstResponseDurations.length) : null;
+    const medianFirstResponseMs = firstResponseDurations.length ? firstResponseDurations[Math.floor(firstResponseDurations.length / 2)] : null;
+    return { ok: true, scopeRole: role, rootId, dateFrom: from.raw, dateTo: to.raw, docsScanned,
+      summary: { received: Array.from(received).length, resolved: durations.length, averageMs, medianMs, firstResponses: firstResponseDurations.length, averageFirstResponseMs, medianFirstResponseMs },
+      byCaseType: Object.entries(byCaseType).map(([caseType, value]) => ({ caseType, ...value, averageMs: value.resolved ? Math.round(value.totalMs / value.resolved) : null, averageFirstResponseMs: value.firstResponses ? Math.round(value.firstResponseTotalMs / value.firstResponses) : null })),
+    };
+  }
+);
+
 export const getPaymentsFinancialPostingIssuesReport = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request): Promise<PaymentsFinancialPostingIssuesReportResult> => {

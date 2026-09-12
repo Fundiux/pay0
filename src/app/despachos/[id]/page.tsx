@@ -338,7 +338,7 @@ export default function DespachoDetallePage({ params }: { params: { id: string }
                   </div>
                   {(it.depositAlias || (it.depositClabes?.length || 0) > 0) && (
                     <div className="mt-1 text-[10px] text-slate-500">
-                      Alias: {it.depositAlias || "---"} Â· CLABEs: {it.depositClabes?.length || 0}
+                      Alias: {it.depositAlias || "---"} · CLABEs: {it.depositClabes?.length || 0}
                     </div>
                   )}
                 </div>

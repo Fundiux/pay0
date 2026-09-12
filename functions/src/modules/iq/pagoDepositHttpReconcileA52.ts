@@ -1,5 +1,6 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { loginIqHttpDirect } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 export interface PagoDepositHttpLookupItemA52 {
   key: string;
@@ -102,7 +103,7 @@ async function getRows(input: {
     url.searchParams.set("order_by_field", "id");
     url.searchParams.set("order_by_direction", "desc");
     url.searchParams.set("filter[id]", exactIqId);
-    const res = await fetch(url, { method: "GET", headers });
+    const res = await fetchIq(url, { method: "GET", headers }, { operation: "deposit_reconciliation_exact" });
     if (!res.ok) throw new Error(`IQ_DEPOSIT_HTTP_LOOKUP_${res.status}`);
     const payload = await res.json() as unknown;
     if (!Array.isArray(payload)) throw new Error("IQ_DEPOSIT_HTTP_LOOKUP_NON_ARRAY");
@@ -128,7 +129,7 @@ async function getRows(input: {
     url.searchParams.set("order_by_field", "id");
     url.searchParams.set("order_by_direction", "desc");
 
-    const res = await fetch(url, { method: "GET", headers });
+    const res = await fetchIq(url, { method: "GET", headers }, { operation: "deposit_reconciliation_search" });
     if (!res.ok) throw new Error(`IQ_DEPOSIT_HTTP_LOOKUP_${res.status}`);
     const payload = await res.json() as unknown;
     if (!Array.isArray(payload)) throw new Error("IQ_DEPOSIT_HTTP_LOOKUP_NON_ARRAY");

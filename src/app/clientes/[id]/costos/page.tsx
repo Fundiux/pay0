@@ -635,7 +635,7 @@ export default function ClienteCostosPage({ params }: Props) {
           <div className="text-slate-400 text-xs uppercase">Hereda de</div>
           <div className="text-slate-100 font-semibold mt-2">
             {useManagerCostsAsSource && managerUser
-              ? (managerUser.displayName || managerUser.nombreusuario || managerUser.email || managerUser.uid)
+              ? (managerUser.displayName || managerUser.nombreusuario || managerUser.email || "Usuario sin nombre")
               : "Despacho base"}
           </div>
           <div className="text-slate-400 text-sm mt-1">

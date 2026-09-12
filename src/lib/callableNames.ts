@@ -1,5 +1,6 @@
 export const CALLABLES = {
   getOperationalIntelligenceReport: "getOperationalIntelligenceReport",
+  getOperationalMetricsReport: "getOperationalMetricsReport",
   getPaymentsFinancialPostingIssuesReport: "getPaymentsFinancialPostingIssuesReport",
   getEarningsByClientReport: "getEarningsByClientReport",
   upsertUser: "upsertUser",

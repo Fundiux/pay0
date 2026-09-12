@@ -29,6 +29,7 @@ con pruebas focalizadas, revisión de diff y actualización de su resultado aqu�
 | F3 — WhatsApp A5 | PENDIENTE | Construir la bandeja de candidatos sin jobs previos, manteniendo envío manual. | Candidatos PDF+XML paginados; identidad de Cliente; job perezoso; estados excluyentes; tarjetas-filtro; ruta DEFAULT en Clientes; smoke completo. | `SEC-01` resuelto; automático permanece apagado. |
 | F4 — Integraciones y resiliencia | PENDIENTE | Reducir esperas externas y asegurar evidencia operativa. | `IQ-01`: wrapper HTTP; `IQ-02`: SLA/Cloud Tasks iniciales; `PERF-07`: consultas Telegram; validar Dispersiones IQ y adjuntos Telegram. | Pruebas end-to-end controladas, sin acciones productivas no autorizadas. |
 | F5 — Plataforma y calidad | PENDIENTE | Hacer sostenibles los cambios. | `SEC-02`, `OPS-01`, `QA-01`, `DOC-01`, `DOC-02`; CI, Node 22/SSR, dependencias y runbook. | Pipeline reproducible y checkpoint/ZIP canónico. |
+| F6 — Diseño, canónicos e integraciones financieras | ABIERTO | Unificar la experiencia visual y preparar capacidades financieras externas con controles. | `UX-01`: sistema visual canónico; `ARC-01`: carpeta/contratos canónicos; `AGT-007`: definir y crear Agente 007; `FAC-01`: Facturama; `BNK-01/02`: conciliación bancaria y dispersiones bancarias. | Diseño aprobado, contratos de integración, credenciales no versionadas y pruebas sandbox. |
 
 ### Próximo cambio propuesto
 
@@ -55,7 +56,49 @@ puede ser `IMPLEMENTADO`, `NO REPRODUCIDO`, `ALTERNATIVA`, `BLOQUEADO` o `CERRAD
 | 2026-09-10 | PERF-03 | IMPLEMENTADO / VALIDACIÓN | Clientes reemplazó polling de 30 segundos por caché compartida con deduplicación de llamadas y TTL de 30 segundos, separada por usuario, `rootId` y permiso. | Frontend build correcto. Falta smoke de altas/ediciones para confirmar la invalidación explícita de catálogos. |
 | 2026-09-10 | PERF-06 | IMPLEMENTADO / VALIDACIÓN | `listUsers` ahora retorna páginas estables por cursor; Usuarios y Módulos solicitan 100 filas y ofrecen “Cargar más usuarios” cuando existen más resultados. | Functions y frontend build correctos. Falta smoke con más de 100 usuarios y revisión de acceso por admin. |
 | 2026-09-10 | PERF-02 | IMPLEMENTADO / VALIDACIÓN | Dispersiones movió `xlsx`, `jspdf` y `jspdf-autotable` a importaciones dinámicas ejecutadas sólo al exportar Excel/PDF. | Frontend build correcto. Falta medir carga local y revisar separación adicional de modales operativos. |
+| 2026-09-10 | PERF-D01 | IMPLEMENTADO / VALIDACIÓN | Se creó un generador de fixtures exclusivo para Firestore Emulator: 101 usuarios, 501 dispersiones y 1,001 movimientos por raíz de prueba, con limpieza explícita y bloqueo contra producción. | Levantar Emulator, ejecutar seed y realizar smoke local de cursor/límites. |
+| 2026-09-10 | BNK-01 / BNK-02 | DECISIÓN DE ARQUITECTURA | Se usará una interfaz bancaria canónica con simulador local y adaptadores por proveedor. STP es candidato inicial por API de CLABEs por cliente, conciliación y SPEI; BBVA, Afirme y Banorte quedan como adaptadores futuros según las cuentas/contratos reales. | No se conectará ninguna cuenta ni se emitirán pagos sin sandbox, contrato, credenciales seguras y aprobaciones. |
+| 2026-09-11 | AUTH-01 | IMPLEMENTADO / VALIDADO | Se corrigió un bypass de delegación: crear Solicitud exige `operateSolicitudes` y crear Pago exige `operatePagos`; una delegación de solo consulta ya no puede registrar operaciones. Se añadió una prueba local repetible de roles y delegaciones. | Functions compiló correctamente. Smoke de emulador aprobado: operador dueño y delegado autorizado continúan; delegado con solo vista queda bloqueado. |
+
+## Registro de avance automático
+
+Cada bloque terminado debe actualizar esta sección con hora, ID, resultado y siguiente
+acción. La actualización programada de Codex depende de una automatización persistente
+configurada en la aplicación; mientras no exista, este agente actualiza el registro al
+cerrar cada bloque de trabajo verificable.
+
+| Hora local | Bloque activo | Estado | Último resultado | Siguiente acción |
+| --- | --- | --- | --- | --- |
+| 2026-09-10 | PERF-01 + PERF-D01 | EN VALIDACIÓN | Consultas de Pagos por periodo e índices declarados; fixtures creados en Emulator. | Ejecutar smoke local de filtros/rango y registrar resultado. |
+| 2026-09-10 | BNK-01 / BNK-02 | DISEÑO INICIAL | Se eligió arquitectura de adaptadores; STP es candidato sandbox inicial. | Crear contratos canónicos y simulador, sin credenciales externas. |
 | 2026-09-10 | REP-01 | PENDIENTE DE IMPLEMENTACIÓN | Mover rango/orden al query o introducir agregados, sin truncar reportes. | Tercera tarea de F1. |
+
+## Corte de despliegue y cierre
+
+Este cuadro distingue lo que ya existe en la rama local de lo que aún impide
+considerarlo cerrado. Un despliegue no se realizará hasta contar con aprobación
+explícita y una revisión final de cambios, índices y configuración.
+
+| Estado | Cantidad | Qué significa ahora |
+| --- | ---: | --- |
+| Cerrado | 1 | `AUTH-01` tiene smoke de Emulator aprobado. |
+| Implementado / validación | 3 | `OPS-MET-01`, `IQ-01`, `IQ-02`: código construido; faltan pruebas de ciclo/sandbox indicadas en cada fila. |
+| Validación pendiente | 6 | `PERF-02`, `PERF-03`, `PERF-04`, `PERF-06`, `SOL-PERF-01`, `WAL-02`: requieren smoke local y, en Wallet, despliegue de índices. |
+| En curso | 2 | `SEC-01` y el diagnóstico global de rendimiento. |
+| Abierto | 32 | Trabajo funcional, de seguridad, diseño e integraciones que todavía no debe presentarse como terminado. |
+
+### Lote local listo para revisión previa a despliegue
+
+1. Seguridad de delegaciones de Pagos/Solicitudes.
+2. Rendimiento: paginación de usuarios, caché de clientes, carga diferida de exportaciones, lectura de Wallet y optimizaciones de Solicitudes/Dispersiones.
+3. UX: login adaptable, copys/UIDs visibles corregidos y reporte de tiempos operativos.
+4. Automatización: métricas internas, Telegram, WhatsApp documental y creación IQ inmediata mediante Cloud Tasks.
+5. Resiliencia IQ: timeouts acotados en sus flujos principales.
+
+Antes de desplegar este lote: ejecutar smoke local de las pantallas afectadas,
+revisar el diff completo, desplegar Functions y frontend, y desplegar índices
+solamente con la aprobación correspondiente. La validación con IQ requiere
+cuenta sandbox; no se prueba contra IQ productivo.
 
 ## Cobertura total del sistema
 
@@ -84,8 +127,11 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | --- | --- | --- | --- | --- | --- |
 | SEC-01 | EN CURSO | P0 | WhatsApp / permisos | Jobs y rutas ya se consultan por `rootId`; los chats del conector aún no contienen un propietario de raíz. | Definir y persistir propiedad de chats; cada lectura queda limitada al `rootId` autorizado y existe prueba focalizada de aislamiento. |
 | SEC-02 | ABIERTO | P0 | Dependencias | Auditoría de producción: 31 vulnerabilidades en raíz (10 altas) y 16 en Functions (5 altas). `xlsx` tiene vulnerabilidades altas sin corrección disponible. | Plan de actualización probado; dependencia `xlsx` reemplazada, aislada o mitigada explícitamente. |
+| AUTH-01 | CERRADO | P0 | Operaciones / delegación | Las altas de Solicitudes y Pagos ya diferencian permisos de consulta de permisos operativos por cliente. Un usuario delegado debe tener el permiso específico para cada flujo. | Smoke de emulador aprobado: operador directo, delegado con solo vista bloqueado y delegado autorizado permitido. El rol independiente `cliente` continúa como alcance nuevo, sin reutilizar indebidamente el rol operador. |
+| OPS-MET-01 | IMPLEMENTADO / VALIDACIÓN | P1 | Operación / métricas | Se registran marcadores privados al crear y resolver Solicitudes/Pagos, al crear entregas WhatsApp y al recibir/responder Telegram. Reportes expone primera respuesta, tiempos promedio/mediano, comparativo por tipo y exportación, respetando el alcance del rol. | Completar asignación y entrega final; añadir WhatsApp entrante cuando el conector exponga webhook seguro; ejecutar ciclo local completo para línea base semanal. |
 | OPS-01 | ABIERTO | P0 | Runtime | Functions exige Node 22, pero el entorno local observado ejecuta Node 20. El SSR de Hosting también requiere revisión separada. | Node 22 queda estandarizado y el runtime SSR se valida en una tarea dedicada. |
-| WA-A5 | ABIERTO | P1 | WhatsApp | Construir candidatos desde PDF+XML activos de solicitudes, sin requerir un job previo; crear/reutilizar job sólo al enviar manualmente. | Smoke manual: candidato sin job, ruta DEFAULT, envío, `SENT` y repetición sin duplicado. |
+| WA-A5 | ABIERTO | P1 | WhatsApp | Automatizar candidatos PDF+XML activos de solicitudes: crear/reutilizar job idempotente y enviar cuando exista ruta válida. Si un cliente no tiene destino, mostrar aviso accionable y dirigir a su configuración. | Smoke: envío automático, ruta DEFAULT, aviso de cliente sin ruta, navegación a configuración, `SENT` y repetición sin duplicado. |
+| WA-CONTACTS-01 | ABIERTO | P1 | WhatsApp | Verificar que “Actualizar WhatsApp” sincronice realmente los contactos del conector y no sólo refresque UI/estado local. | Prueba controlada: alta/cambio de contacto en conector se refleja en PAY0 con fecha de sincronización, conteo y errores visibles. |
 | WA-UI-01 | ABIERTO | P1 | WhatsApp | Las tarjetas de estado no son filtros; aún existe una fila duplicada de filtros. | Tarjetas clicables y filtro único, con estado predeterminado Pendientes. |
 | WA-UI-02 | ABIERTO | P1 | WhatsApp | Errores también se contabilizan como pendientes. | Categorías Pendiente/Error/Enviado mutuamente excluyentes y conteos consistentes. |
 | WA-PERF-01 | ABIERTO | P1 | WhatsApp | El dashboard carga hasta 300 jobs y puede realizar una lectura de deliveries por job. | Listado paginado con read-model/resúmenes; detalles cargados bajo demanda. |
@@ -96,12 +142,19 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | PERF-06 | VALIDACIÓN | P2 | Usuarios | `listUsers` y sus dos pantallas consumidoras ya usan páginas de 100 filas con cursor y acción “Cargar más”. | Smoke con más de 100 usuarios y rol admin; la búsqueda seguirá sobre lo ya cargado hasta definir búsqueda de servidor. |
 | PERF-07 | ABIERTO | P2 | Telegram / documentos | Varias funciones Telegram leen 200–500 uploads del root y algunas resuelven solicitudes una por una. | Query selectiva por tipo/estado/solicitud y lecturas agrupadas o metadatos ya disponibles. |
 | SOL-PERF-01 | VALIDACIÓN | P1 | Solicitudes | Relaciones de sustitución se indexan una vez por lista y las filas consultan mapas, en lugar de recorrer todas las solicitudes durante cada render. | Smoke visual de origen/cadena/vigente; completar paginación de tabla. |
-| IQ-01 | ABIERTO | P1 | IQ / resiliencia | Varios clientes HTTP directos de IQ usan `fetch` sin `AbortController`/timeout local; una dependencia lenta puede consumir la ventana completa del callable. | Wrapper HTTP canónico con timeout, clasificación de error y reintento seguro donde corresponda. |
-| IQ-02 | ABIERTO | P1 | IQ / automatización | Varias colas IQ se procesan por scheduler cada cinco minutos y con concurrencia 1; por diseño no garantizan inicio inmediato después de una solicitud. | SLA definido; acción inicial encolada por Cloud Task/evento o UI informa la ventana real sin crear una arquitectura paralela. |
+| IQ-01 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / resiliencia | El wrapper HTTP canónico con timeout acotado protege Solicitudes, Depósitos y el POST de Dispersiones; también lectura, recuperación, conciliación, catálogos, descarga de factura y diagnósticos. Las llamadas restantes ya tenían `AbortController` acotado. No hace reintentos implícitos sobre creaciones potencialmente enviadas. | Definir tiempos por operación y probar timeout controlado contra sandbox/local antes de cerrar. |
+| IQ-02 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / automatización | La creación IQ de Solicitudes encola una Cloud Task inmediata e idempotente usando el mismo job, bloqueo por perfil y lógica de recuperación. Para automatización respeta la configuración activa de la raíz; solicitudes manuales autorizadas pueden iniciar sin esperar cinco minutos. El scheduler permanece como respaldo si Cloud Tasks falla. | Emulator validó descubrimiento, creación de cola y ejecución inocua del handler (14 ms); falta prueba con job real + IQ sandbox para medir cola→inicio y confirmar que tarea/scheduler no duplican POST. |
 | WAL-02 | VALIDACIÓN | P1 | Wallet / estado de cuenta | La lectura ya se acota por `scope` y cliente, evitando que los primeros 1,000 documentos de todo el scope oculten historial del cliente. Cada colección aún conserva un límite de 1,000 por cliente. | Desplegar índices y validar saldo/historial. Si un cliente puede superar 1,000 registros, añadir cursor/rango y prueba focalizada antes de cerrar. |
 | MAT-01 | ABIERTO | P2 | Materialidad | El dashboard limita folders, operaciones y contratos por root antes de agrupar/filtrar localmente; puede omitir operaciones al superar los topes. | Paginación o read-model por carpeta con resultados deterministas. |
 | REP-01 | ABIERTO | P1 | Reportes | Reportes aplican `limit` por `rootId` sin `orderBy` ni rango de fechas en Firestore, y filtran fechas después. Puede omitir registros del periodo y producir resultados no deterministas al crecer el historial. | Consultas deterministas por fecha/índices o agregados; resultado completo para el rango solicitado. |
 | PERF-03 | VALIDACIÓN | P2 | Frontend / catálogos | Clientes ya usa caché compartida sin polling. Empresas conserva el patrón anterior y se migrará al mismo modelo. | Smoke de altas/ediciones e invalidación explícita; aplicar caché a empresas antes de cerrar. |
+| UX-01 | ABIERTO | P1 | Diseño / frontend | Varias páginas difieren en espaciado, jerarquía, tablas, acciones y estados, lo que puede confundir la operación. | Inventario visual, tokens/componentes canónicos y migración por pantalla con revisión visual. |
+| ARC-01 | ABIERTO | P1 | Arquitectura | Falta una ubicación única y versionada para contratos, estados, copys, formatos visuales y decisiones canónicas que el sistema pueda reutilizar. | Carpeta `src/canonicos/` con esquema, ownership y primeros contratos consumidos por código, sin duplicar reglas financieras. |
+| AGT-007 | ABIERTO | P1 | Hugo Sánchez / Agente 007 | Una sola entidad: para clientes se presenta como Hugo o Hugito; internamente conserva el identificador Agente 007. Aprenderá de todos los módulos y de las decisiones humanas, incluyendo el rol, permiso y alcance que las autorizó. No responderá ni ejecutará acciones en esta etapa. | Especificación canónica, bitácora de observación con intención, decisión humana, resultado y contexto de autorización; métricas únicas por agente y pruebas locales sin acciones financieras ni mensajes autónomos. |
+| HUGO-REC-01 | ABIERTO | P1 | Hugo Sánchez / comprobantes | La lectura de comprobantes PDF/imagen no detecta pagos de forma confiable y obliga a captura manual. Hugo observará extracción, correcciones y conciliación para mejorar sugerencias antes de aplicar pagos automáticamente. | Medir precisión por banco/formato; extraer importe, fecha, referencia y emisor; propuesta vinculada a pago con confianza y revisión humana; automatización posterior sólo con reglas, límites y auditoría. |
+| FAC-01 | ABIERTO | P1 | Facturama | Emitir CFDI desde PAY0 requiere contrato API, credenciales sandbox/producción, manejo de certificados, idempotencia, cancelación y evidencia fiscal. | Cliente backend exclusivo, secretos fuera de Git, flujo sandbox de emitir/consultar/cancelar y bitácora auditable antes de producción. |
+| BNK-01 | ABIERTO | P0 | Banca / conciliación | Conciliar depósitos de cuentas propias exige un proveedor bancario/Open Banking con acceso autorizado y una identidad estable de transacción. | Selección de banco/proveedor y sandbox; ingestión sólo de lectura, reconciliación idempotente y aprobaciones operativas. |
+| BNK-02 | ABIERTO | P0 | Banca / dispersiones | Dispersar desde PAY0 requiere API bancaria/SPEI, beneficiarios verificados, límites, doble autorización, idempotencia y reversos/incidencias. | Contrato bancario/sandbox, flujo de aprobación segregado y pruebas de punta a punta; nunca se activa producción sin autorización explícita. |
 | QA-01 | ABIERTO | P1 | Calidad | No hay CI, `npm test` estándar ni lint funcional de Functions. La QA histórica está fragmentada y `qa:pay0` no es un gate confiable. | Pipeline reproducible: policy verifier, builds, lint funcional, pruebas de reglas y smoke estable. |
 | DOC-01 | ABIERTO | P2 | Operación | README no contiene runbook de entornos, despliegue, reversión, reconciliación ni incidentes. | Runbook revisado y versionado. |
 | DOC-02 | ABIERTO | P2 | Continuidad | Generar ZIP canónico y checkpoint actualizado después del siguiente hito estable. | ZIP excluye secretos/artefactos y el checkpoint refleja el estado validado. |

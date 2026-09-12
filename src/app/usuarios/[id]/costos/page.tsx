@@ -592,7 +592,7 @@ export default function UsuarioCostosPage({ params }: Props) {
         <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
           <div className="text-slate-400 text-xs uppercase">Usuario</div>
           <div className="text-slate-100 font-semibold mt-2">
-            {targetUser?.displayName || targetUser?.nombreusuario || targetUser?.email || targetUser?.uid || "-"}
+            {targetUser?.displayName || targetUser?.nombreusuario || targetUser?.email || "Usuario sin nombre"}
           </div>
           <div className="text-slate-400 text-sm mt-1">{targetUser?.email || "-"}</div>
         </div>
@@ -601,7 +601,7 @@ export default function UsuarioCostosPage({ params }: Props) {
           <div className="text-slate-400 text-xs uppercase">Hereda de</div>
           <div className="text-slate-100 font-semibold mt-2">
             {useParentCostsAsSource && parentUser
-              ? (parentUser.displayName || parentUser.nombreusuario || parentUser.email || parentUser.uid)
+              ? (parentUser.displayName || parentUser.nombreusuario || parentUser.email || "Usuario sin nombre")
               : "Despacho base"}
           </div>
           <div className="text-slate-400 text-sm mt-1">

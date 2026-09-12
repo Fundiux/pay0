@@ -1,5 +1,6 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { createHash } from "node:crypto";
+import { fetchIq } from "./iqHttpClient";
 
 export const IQ_DEPOSIT_HTTP_CREATE_FLAG =
   "PAY0_IQ_DEPOSIT_HTTP_CREATE_ENABLED";
@@ -259,11 +260,11 @@ async function dispatchDepositPost(
   });
 
   try {
-    const response = await fetch(apiUrl(input.auth, "/deposits"), {
+    const response = await fetchIq(apiUrl(input.auth, "/deposits"), {
       method: "POST",
       headers: authHeaders(input.auth),
       body: form,
-    });
+    }, { operation: "deposit_create" });
 
     const postAcknowledgedAt = new Date().toISOString();
     const body = (await response.json().catch(() => ({}))) as {
@@ -363,10 +364,10 @@ async function fetchRecoveryCandidates(
     url.searchParams.set("order_by_field", "id");
     url.searchParams.set("order_by_direction", "desc");
 
-    const response = await fetch(url, {
+    const response = await fetchIq(url, {
       method: "GET",
       headers: authHeaders(auth),
-    });
+    }, { operation: "deposit_recovery_search" });
 
     if (!response.ok) {
       throw new Error(
@@ -430,10 +431,10 @@ async function verifyByExactIqId(
   url.searchParams.set("order_by_direction", "asc");
   url.searchParams.set("filter[id]", String(expected.id));
 
-  const response = await fetch(url, {
+  const response = await fetchIq(url, {
     method: "GET",
     headers: authHeaders(auth),
-  });
+  }, { operation: "deposit_exact_verification" });
 
   if (!response.ok) {
     throw new Error(

@@ -4,6 +4,9 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint --ext .js,.ts .",
+    "seed:perf": "node scripts/seed-performance-fixtures.mjs",
+    "verify:operation-roles": "node scripts/verify-operation-role-access.mjs",
+    "verify:whatsapp-automation": "node scripts/verify-whatsapp-automation.mjs",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

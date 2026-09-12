@@ -11,18 +11,20 @@ import { CustomRange, DateScopeMode, getScopeRange, shiftBaseDate } from "@/lib/
 import {
   getEarningsByClientReport,
   getOperationalIntelligenceReport,
+  getOperationalMetricsReport,
   getPaymentsFinancialPostingIssuesReport,
   type EarningsByClientReportResult,
   type EarningsByClientReportRow,
   type OperationalAlertRow,
   type OperationalClientRankingRow,
   type OperationalIntelligenceReportResult,
+  type OperationalMetricsReportResult,
   type OperationalUserActivityRow,
   type PaymentsFinancialPostingIssuesReportResult,
   type PaymentsFinancialPostingIssuesReportRow,
 } from "@/services/reports";
 
-type ReportTab = "earnings" | "operational" | "postingIssues";
+type ReportTab = "earnings" | "operational" | "metrics" | "postingIssues";
 
 function money(value: number | null | undefined) {
   const amount = Number(value || 0);
@@ -104,16 +106,19 @@ export default function ReportesPage() {
   const [earningsLoading, setEarningsLoading] = useState(false);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [operationalLoading, setOperationalLoading] = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const [earningsError, setEarningsError] = useState("");
   const [issuesError, setIssuesError] = useState("");
   const [operationalError, setOperationalError] = useState("");
+  const [metricsError, setMetricsError] = useState("");
   const [exportError, setExportError] = useState("");
 
   const [earningsResult, setEarningsResult] = useState<EarningsByClientReportResult | null>(null);
   const [issuesResult, setIssuesResult] = useState<PaymentsFinancialPostingIssuesReportResult | null>(null);
   const [operationalResult, setOperationalResult] = useState<OperationalIntelligenceReportResult | null>(null);
+  const [metricsResult, setMetricsResult] = useState<OperationalMetricsReportResult | null>(null);
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
@@ -167,35 +172,6 @@ export default function ReportesPage() {
     setOperationalError("");
 
     try {
-      const isLocalhost =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-
-      if (isLocalhost) {
-        const localPreview = {
-          scopeRole: "local-preview",
-          docsScanned: 0,
-          summary: {
-            pagosCount: 0,
-            pagosAmount: 0,
-            dispersionesCount: 0,
-            dispersionesAmount: 0,
-            adelantosCount: 0,
-            adelantosAmount: 0,
-            activityEventsCount: 0,
-            alertsCount: 0,
-            pendingFinancialPostingsCount: 0,
-            openDispersionIncidentsCount: 0,
-          },
-          clientRanking: [],
-          userActivity: [],
-          alerts: [],
-        } as OperationalIntelligenceReportResult;
-
-        setOperationalResult(localPreview);
-        return;
-      }
-
       const data = await getOperationalIntelligenceReport({
         dateFrom: range.from.toISOString(),
         dateTo: range.to.toISOString(),
@@ -211,6 +187,13 @@ export default function ReportesPage() {
     }
   }
 
+  async function loadMetricsReport() {
+    setMetricsLoading(true); setMetricsError("");
+    try { setMetricsResult(await getOperationalMetricsReport({ dateFrom: range.from.toISOString(), dateTo: range.to.toISOString() })); }
+    catch (err: any) { setMetricsError(err?.message || "No se pudieron cargar las métricas."); }
+    finally { setMetricsLoading(false); }
+  }
+
   async function loadCurrentTab() {
     if (activeTab === "earnings") {
       await loadEarningsReport();
@@ -221,6 +204,7 @@ export default function ReportesPage() {
       await loadOperationalReport();
       return;
     }
+    if (activeTab === "metrics") { await loadMetricsReport(); return; }
 
     await loadPostingIssuesReport();
   }
@@ -299,6 +283,23 @@ export default function ReportesPage() {
         return;
       }
 
+      if (activeTab === "metrics") {
+        const rows = (metricsResult?.byCaseType || []).map((row) => ({
+          TipoDeCaso: row.caseType,
+          Recibidos: row.received,
+          Resueltos: row.resolved,
+          TiempoPromedioMinutos: row.averageMs === null ? "" : Math.round(row.averageMs / 60000),
+        }));
+
+        if (rows.length === 0) {
+          setExportError("No hay datos para exportar.");
+          return;
+        }
+
+        await exportToExcel(`pay0-tiempos-operativos-${from}-a-${to}.xlsx`, "Tiempos operativos", rows);
+        return;
+      }
+
       const rows = (issuesResult?.rows || []).map((row) => ({
         Pago: row.folio,
         PagoId: row.pagoId,
@@ -360,14 +361,22 @@ export default function ReportesPage() {
   const operationalAlertRows: OperationalAlertRow[] = operationalResult?.alerts || [];
 
   const currentLoading =
-    activeTab === "earnings" ? earningsLoading : activeTab === "operational" ? operationalLoading : issuesLoading;
+    activeTab === "earnings"
+      ? earningsLoading
+      : activeTab === "operational"
+        ? operationalLoading
+        : activeTab === "metrics"
+          ? metricsLoading
+          : issuesLoading;
 
   const activeRowsCount =
     activeTab === "earnings"
       ? earningsRows.length
       : activeTab === "operational"
         ? clientRankingRows.length + userActivityRows.length + operationalAlertRows.length
-        : issueRows.length;
+        : activeTab === "metrics"
+          ? (metricsResult?.byCaseType.length || 0)
+          : issueRows.length;
 
   return (
     <div className="mx-auto w-full max-w-[1600px] min-w-0 pb-10 text-white">
@@ -447,6 +456,10 @@ export default function ReportesPage() {
           Ganancias por cliente
         </button>
 
+        <button type="button" onClick={() => setActiveTab("metrics")} className={activeTab === "metrics" ? "h-11 flex-1 rounded-xl bg-violet-400/15 px-4 text-[11px] font-bold uppercase tracking-wide text-violet-300" : "h-11 flex-1 rounded-xl px-4 text-[11px] font-bold uppercase tracking-wide text-slate-400 hover:bg-white/5"}>
+          Tiempos operativos
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab("operational")}
@@ -478,7 +491,37 @@ export default function ReportesPage() {
         </div>
       ) : null}
 
-      {activeTab === "earnings" ? (
+      {activeTab === "metrics" ? (
+        <section className="mb-5">
+          {metricsError ? <div className="mb-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{metricsError}</div> : null}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+            {[["Casos recibidos", metricsResult?.summary.received || 0], ["Casos resueltos", metricsResult?.summary.resolved || 0], ["Primera respuesta", metricsResult?.summary.averageFirstResponseMs ? `${Math.round(metricsResult.summary.averageFirstResponseMs / 1000)} s` : "-"], ["Tiempo promedio", metricsResult?.summary.averageMs ? `${Math.round(metricsResult.summary.averageMs / 60000)} min` : "-"], ["Tiempo mediano", metricsResult?.summary.medianMs ? `${Math.round(metricsResult.summary.medianMs / 60000)} min` : "-"]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-[#111827] p-5"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-white">{metricsLoading ? "..." : value}</p></div>)}
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-[#111827] p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-300">Flujo por tipo de caso</p>
+                <p className="mt-1 text-sm text-slate-400">Comparación visual entre lo recibido y lo resuelto en el periodo.</p>
+              </div>
+              <p className="text-xs text-slate-500">Actualización manual para no sobrecargar la operación.</p>
+            </div>
+            <div className="mt-5 space-y-4">
+              {(metricsResult?.byCaseType || []).map((row) => {
+                const maximum = Math.max(row.received, row.resolved, 1);
+                return <div key={row.caseType} className="grid gap-2 md:grid-cols-[130px_minmax(0,1fr)_auto] md:items-center">
+                  <p className="text-xs font-bold text-slate-200">{row.caseType}</p>
+                  <div className="space-y-1.5">
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400" style={{ width: `${(row.received / maximum) * 100}%` }} /></div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-emerald-400" style={{ width: `${(row.resolved / maximum) * 100}%` }} /></div>
+                  </div>
+                  <p className="text-right text-xs text-slate-400"><span className="text-sky-300">{row.received} recibidos</span> · <span className="text-emerald-300">{row.resolved} resueltos</span></p>
+                </div>;
+              })}
+              {!metricsLoading && (metricsResult?.byCaseType.length || 0) === 0 ? <p className="py-5 text-center text-sm text-slate-500">Aún no hay ciclos completos de operación en este periodo.</p> : null}
+            </div>
+          </div>
+        </section>
+      ) : activeTab === "earnings" ? (
         <>
           {earningsError ? (
             <div className="mb-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">

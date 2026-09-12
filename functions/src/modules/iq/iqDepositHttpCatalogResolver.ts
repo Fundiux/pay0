@@ -1,5 +1,6 @@
 import type { IqHttpAuthSession } from "./iqHttpAuth";
 import { isIqAccessTokenUsable } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 interface CatalogRow {
   id?: unknown;
@@ -412,13 +413,13 @@ async function fetchCatalog(
     url.searchParams.set(key, cleanValue);
   }
 
-  const response = await fetch(url, {
+  const response = await fetchIq(url, {
     method: "GET",
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${session.accessToken}`,
     },
-  });
+  }, { operation: "deposit_catalog" });
 
   if (!response.ok) {
     const queryKeys =

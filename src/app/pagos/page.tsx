@@ -3222,7 +3222,7 @@ export default function PagosPage() {
                 {/* IQ2G_H4_D40C_NUEVO_PAGO_COMPROBANTE_UI */}
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <span className="uppercase tracking-[0.12em] text-slate-400">Comprobante de pago *</span>
-                  <span className="text-[10px] text-slate-500">PDF/JPG/PNG Â· MAX 1MB</span>
+                  <span className="text-[10px] text-slate-500">PDF/JPG/PNG · MAX 1 MB</span>
                 </div>
 
                 <input
@@ -3512,5 +3512,3 @@ export default function PagosPage() {
     </div>
   );
 }
-
-

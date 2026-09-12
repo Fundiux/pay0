@@ -1,6 +1,7 @@
 import {
   loginIqHttpDirect,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -156,14 +157,14 @@ export async function runIqDownloadInvoiceZipHttpA55(
     result.invoiceMetadataUrl = safePath(metadataUrl.toString());
     result.pagesInspected = 1;
 
-    const metadataResponse = await fetch(metadataUrl, {
+    const metadataResponse = await fetchIq(metadataUrl, {
       method: "GET",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${session.accessToken}`,
       },
       redirect: "follow",
-    });
+    }, { operation: "invoice_metadata" });
 
     result.finalPath = safePath(metadataResponse.url || metadataUrl.toString());
 
@@ -234,13 +235,13 @@ export async function runIqDownloadInvoiceZipHttpA55(
     result.downloadUrlResolved = true;
 
     // URL firmada de Active Storage: no reenviar Bearer IQ.
-    const downloadResponse = await fetch(parsedDownloadUrl, {
+    const downloadResponse = await fetchIq(parsedDownloadUrl, {
       method: "GET",
       headers: {
         Accept: "application/zip,application/octet-stream,*/*",
       },
       redirect: "follow",
-    });
+    }, { timeoutMs: 60_000, operation: "invoice_download" });
 
     result.finalPath = safePath(downloadResponse.url || parsedDownloadUrl.toString());
 

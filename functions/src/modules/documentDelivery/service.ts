@@ -1,4 +1,5 @@
 import { applyWhatsAppDestinationsToJob } from "./whatsappRoutes";
+import { recordOperationalMetric } from "../operationalMetrics/service";
 import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
@@ -384,6 +385,19 @@ export async function prepareDocumentDeliveryJobCore(
   };
 
   const ref = await db.collection("documentDeliveryJobs").add(payload);
+
+  await recordOperationalMetric({
+    rootId: actor.rootId,
+    stage: "ACTION_STARTED",
+    channel: "WHATSAPP",
+    caseType: "DOCUMENT_DELIVERY",
+    correlationId: ref.id,
+    adminId: actor.uid,
+    clientId: clienteId,
+    actorUid: actor.uid,
+    source: automatic ? "AUTOMATION" : "HUMAN",
+    outcome: "JOB_CREATED",
+  }).catch(() => undefined);
 
   // H4-D60-E6B_AUTO_ROUTE_AFTER_CREATE
   try {

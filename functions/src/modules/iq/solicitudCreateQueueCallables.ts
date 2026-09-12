@@ -8,6 +8,7 @@ import * as admin from "firebase-admin";
 import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onTaskDispatched } from "firebase-functions/tasks";
 import { defineSecret } from "firebase-functions/params";
 
 import {
@@ -22,6 +23,7 @@ import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
 
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -35,6 +37,7 @@ const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
 
 const DEFAULT_IQ_TIME_ZONE = "America/Mexico_City";
 const IQ_QUEUE_VERSION = "IQ-SOLICITUD-CREATE-QUEUE-1";
+const IQ_CREATE_ON_DEMAND_TASK = "processIqCreateOnDemandTask";
 const IQ_PREVALIDATION_VERSION = "IQ-SOLICITUD-PREVALIDATION-3";
 const MAX_JOBS_PER_RUN = 25;
 const MAX_QUEUE_SCAN_PER_RUN = 100;
@@ -514,7 +517,7 @@ async function revalidateIqCreateJobH4D82A4(
       job,
       status: "OMITTED_CURRENT_TERMINAL",
       message:
-        "La solicitud ya estÃƒÂ¡ terminal o ya tiene factura IQ; no se vuelve a crear.",
+        "La solicitud ya está terminal o ya tiene factura IQ; no se vuelve a crear.",
     });
   }
 
@@ -559,7 +562,7 @@ async function revalidateIqCreateJobH4D82A4(
       job,
       status: "REVIEW_REQUIRED_POST_ALREADY_SENT",
       message:
-        "Este intento pudo haber sido enviado a IQ; solo procede conciliaciÃƒÂ³n de lectura.",
+        "Este intento pudo haber sido enviado a IQ; solo procede conciliación de lectura.",
     });
   }
 
@@ -582,7 +585,7 @@ async function revalidateIqCreateJobH4D82A4(
     !currentOrder.orderUploadId ||
     currentOrder.orderUploadId !== cleanText(job.orderUploadId)
   ) {
-    mismatches.push("versiÃƒÂ³n de OC");
+    mismatches.push("versión de OC");
   }
   if (
     !currentOrder.orderStoragePath ||
@@ -597,7 +600,7 @@ async function revalidateIqCreateJobH4D82A4(
     mismatches.push("tipo de factura");
   }
   if (currentMarker && currentMarker !== cleanText(job.marker)) {
-    mismatches.push("marcador de conciliaciÃƒÂ³n");
+    mismatches.push("marcador de conciliación");
   }
 
   if (mismatches.length > 0) {
@@ -1174,6 +1177,34 @@ export async function enqueueIqCreationForSolicitud(input: {
       },
     });
 
+    // La tarea inmediata complementa al scheduler: conserva el mismo job y el
+    // mismo bloqueo por perfil, por lo que no crea un segundo POST a IQ.
+    let taskId: string | null = null;
+    let taskEnqueueError: string | null = null;
+    try {
+      const task = await enqueueIqOnDemandTaskH4D64({
+        functionName: IQ_CREATE_ON_DEMAND_TASK,
+        taskId: `iq-solicitud-create-${reservation.jobId}`,
+        data: {
+          jobId: reservation.jobId,
+          source: input.source || "AUTO",
+        },
+        dispatchDeadlineSeconds: 540,
+      });
+      taskId = task.taskId;
+    } catch (error) {
+      taskEnqueueError = safeErrorMessage(error);
+      // La cola programada conserva el trabajo como respaldo cuando Cloud Tasks
+      // no está configurado o está temporalmente indisponible.
+    }
+
+    await db.collection("iqCreateJobs").doc(reservation.jobId).set({
+      onDemandTaskId: taskId,
+      onDemandTaskRequestedAt: FieldValue.serverTimestamp(),
+      onDemandTaskEnqueueError: taskEnqueueError,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
     return {
       queued: true,
       jobId: reservation.jobId,
@@ -1212,6 +1243,50 @@ export async function enqueueIqCreationForSolicitud(input: {
     };
   }
 }
+
+export const processIqCreateOnDemandTask = onTaskDispatched(
+  {
+    region: "us-central1",
+    timeoutSeconds: 540,
+    memory: "2GiB",
+    maxInstances: 1,
+    concurrency: 1,
+    secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
+    retryConfig: { maxAttempts: 1, minBackoffSeconds: 60, maxBackoffSeconds: 300 },
+    rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
+  },
+  async (request) => {
+    const data = asRecord(request.data);
+    const jobId = cleanText(data.jobId);
+    if (!jobId) return;
+
+    const snap = await db.collection("iqCreateJobs").doc(jobId).get();
+    if (!snap.exists) return;
+    const row = asRecord(snap.data());
+    const status = cleanUpper(row.status);
+    if (!["QUEUED", "FAILED_RETRYABLE"].includes(status)) return;
+
+    const source = cleanUpper(data.source);
+    const isExplicitManualRequest = ["MANUAL_QUEUE", "MASS_UPLOAD"].includes(source);
+    if (!isExplicitManualRequest) {
+      const enabledRoots = await loadEnabledIqAutomationRoots({
+        process: "solicitudCreate",
+        purpose: "CREATION",
+        respectWindow: false,
+      });
+      if (!enabledRoots.has(cleanText(row.rootId))) return;
+    }
+
+    const job: IqCreateJob = {
+      ...(row as Omit<IqCreateJob, "id" | "ref">),
+      id: snap.id,
+      ref: snap.ref,
+      attemptCount: Number(row.attemptCount ?? 0) || 0,
+      batchId: cleanText(row.batchId),
+    };
+    await processProfileJobs(job.profileId, [job]);
+  },
+);
 
 export const enqueueSolicitudIqCreation = onCall(
   { cors: true, timeoutSeconds: 60, memory: "512MiB" },
@@ -1453,7 +1528,7 @@ async function finalizeJobFromResult(input: {
       solicitudPatch.iqCreationStatus =
         "REVIEW_REQUIRED_FOLIO_CONFLICT";
       solicitudPatch.iqCreationLastError =
-        "IQ devolviÃƒÂ³ un folio distinto, pero PAY0 ya conserva un folio inmutable para este intento.";
+        "IQ devolvió un folio distinto, pero PAY0 ya conserva un folio inmutable para este intento.";
     } else if (iqId) {
       solicitudPatch.iqId = iqId;
       solicitudPatch.iqFolio = iqId;

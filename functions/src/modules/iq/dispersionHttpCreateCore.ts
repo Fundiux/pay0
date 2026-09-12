@@ -1,4 +1,5 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
+import { fetchIq } from "./iqHttpClient";
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
 const IQ_TIME_ZONE = "America/Mexico_City";
@@ -1118,14 +1119,14 @@ export async function runIqCreateDispersionHttpH4D85A50(
     let response: Response;
 
     try {
-      response = await fetch(postUrl, {
+      response = await fetchIq(postUrl, {
         method: "POST",
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: form,
-      });
+      }, { operation: "dispersion_create" });
     } catch (error) {
       writeContract = {
         method: "POST",

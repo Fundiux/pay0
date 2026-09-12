@@ -45,6 +45,7 @@ import {
   type TelegramInlineKeyboardButton,
 } from "./service";
 import { TelegramUpdate } from "./types";
+import { recordOperationalMetric } from "../operationalMetrics/service";
 if (!admin.apps.length) admin.initializeApp();
 
 const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
@@ -146,6 +147,26 @@ export const telegramWebhook = onRequest(
       let inlineKeyboard: TelegramInlineKeyboardButton[][] | null = null;
       let handledByDirectSend = false;
       let directFilesSent = 0;
+
+      const metricsRootId = String(linkedUser?.rootId || linkedClient?.rootId || "").trim();
+      const metricsActorUid = String(linkedUser?.uid || "").trim() || null;
+      const metricsClientId = String(linkedClient?.clientId || "").trim() || null;
+      const metricsCorrelationId = `telegram:${ctx.updateId || ctx.telegramUserId}`;
+
+      if (metricsRootId) {
+        await recordOperationalMetric({
+          rootId: metricsRootId,
+          stage: "RECEIVED",
+          channel: "TELEGRAM",
+          caseType: "TELEGRAM_MESSAGE",
+          correlationId: metricsCorrelationId,
+          adminId: metricsActorUid,
+          clientId: metricsClientId,
+          actorUid: metricsActorUid,
+          source: "AUTOMATION",
+          outcome: ctx.command ? "COMMAND" : "MESSAGE",
+        }).catch(() => undefined);
+      }
 
       const startPayload = ctx.command === "/start" ? extractStartPayload(ctx.text) : "";
 
@@ -512,6 +533,21 @@ export const telegramWebhook = onRequest(
           directFilesSent,
           sendOk: Boolean(sendResult?.ok),
         });
+
+        if (metricsRootId && Boolean(sendResult?.ok)) {
+          await recordOperationalMetric({
+            rootId: metricsRootId,
+            stage: "FIRST_RESPONSE",
+            channel: "TELEGRAM",
+            caseType: "TELEGRAM_MESSAGE",
+            correlationId: metricsCorrelationId,
+            adminId: metricsActorUid,
+            clientId: metricsClientId,
+            actorUid: metricsActorUid,
+            source: "AUTOMATION",
+            outcome: "RESPONDED",
+          }).catch(() => undefined);
+        }
       } catch (sendError: any) {
         logger.error("Telegram send error", sendError);
 

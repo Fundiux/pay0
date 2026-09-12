@@ -851,7 +851,7 @@ export default function IqDiagnosticoPage() {
                           ? `filter[id]=${httpShadow.expectedIqFolio || "SIN FOLIO IQ"}`
                           : `start_date=${(httpShadow.createdAtLowerBoundIso || "").slice(0, 10)}`}
                       </div>
-                      <div>BÃºsqueda desde: {httpShadow.createdAtLowerBoundIso || "---"}</div>
+                      <div>Búsqueda desde: {httpShadow.createdAtLowerBoundIso || "---"}</div>
                       <div>URL final IQ: {httpShadow.shadow.finalRequestPath || "---"}</div>
                       <div>Cliente: {httpShadow.clientName || "---"}</div>
                       <div>Empresa: {httpShadow.companyName || "---"}</div>

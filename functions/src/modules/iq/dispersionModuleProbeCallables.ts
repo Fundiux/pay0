@@ -8,6 +8,7 @@ import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -358,7 +359,7 @@ async function probeGetJsonA56(
   body: Record<string, unknown>;
   contentType: string;
 }> {
-  const response = await fetch(
+  const response = await fetchIq(
     new URL(path, session.apiOrigin),
     {
       method: "GET",
@@ -368,6 +369,7 @@ async function probeGetJsonA56(
         Accept: "application/json",
       },
     },
+    { operation: `dispersion_probe:${path}` },
   );
 
   const contentType =

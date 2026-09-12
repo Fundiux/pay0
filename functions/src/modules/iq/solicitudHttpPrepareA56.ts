@@ -3,6 +3,7 @@ import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -44,12 +45,13 @@ async function jsonGet(
   status: number;
   body: JsonRecord;
 }> {
-  const response = await fetch(
+  const response = await fetchIq(
     new URL(path, session.apiOrigin),
     {
       method: "GET",
       headers: authHeaders(session),
     },
+    { operation: `solicitud_prepare_catalog:${path}` },
   );
 
   let body: JsonRecord = {};

@@ -3,6 +3,7 @@
   type IqHttpAuthSession,
   type IqHttpCredentials,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -43,10 +44,10 @@ async function putCancellationOnce(
   const path =
     `/invoices/pending_cancellation/${encodeURIComponent(iqFolio)}`;
 
-  const response = await fetch(new URL(path, session.apiOrigin), {
+  const response = await fetchIq(new URL(path, session.apiOrigin), {
     method: "PUT",
     headers: await authHeaders(session),
-  });
+  }, { operation: "solicitud_cancellation" });
 
   return {
     status: response.status,

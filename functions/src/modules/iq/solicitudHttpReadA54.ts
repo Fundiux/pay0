@@ -3,6 +3,7 @@ import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
 } from "./iqHttpAuth";
+import { fetchIq } from "./iqHttpClient";
 
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -336,13 +337,13 @@ async function getRows(
     url.searchParams.set("order_by_field", "id");
     url.searchParams.set("order_by_direction", "asc");
 
-    const response = await fetch(url, {
+    const response = await fetchIq(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${session.accessToken}`,
       },
-    });
+    }, { operation: "solicitud_read" });
 
     pages += 1;
 
