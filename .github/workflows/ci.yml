@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Verify authorization policy
+        run: node scripts/verify-authorization-policy.mjs
+      - name: Build frontend
+        run: npm run build
+      - name: Install Functions dependencies
+        run: npm ci
+        working-directory: functions
+      - name: Lint Functions
+        run: npm run lint
+        working-directory: functions
+      - name: Build Functions
+        run: npm run build
+        working-directory: functions
