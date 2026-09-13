@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { applyWhatsAppDestinationsToJob } from "./whatsappRoutes";
@@ -139,13 +140,13 @@ export async function releaseWhatsAppJobDeliveriesCore(input: {
           status: "PENDING_SEND",
 
           releasedAt:
-            admin.firestore.FieldValue.serverTimestamp(),
+            FieldValue.serverTimestamp(),
 
           releasedByUid: input.uid,
           releasedByName: input.actorName,
 
           updatedAt:
-            admin.firestore.FieldValue.serverTimestamp(),
+            FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
@@ -167,7 +168,7 @@ export async function releaseWhatsAppJobDeliveriesCore(input: {
       status: "READY_FOR_SEND",
 
       releasedAt:
-        admin.firestore.FieldValue.serverTimestamp(),
+        FieldValue.serverTimestamp(),
 
       releasedByUid: input.uid,
       releasedByName: input.actorName,
@@ -181,7 +182,7 @@ export async function releaseWhatsAppJobDeliveriesCore(input: {
         alreadySentCount,
 
       updatedAt:
-        admin.firestore.FieldValue.serverTimestamp(),
+        FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
@@ -253,10 +254,10 @@ export const retryWhatsAppJobErrors = onCall(
           doc.ref,
           {
             status: "PENDING_SEND",
-            retryRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+            retryRequestedAt: FieldValue.serverTimestamp(),
             retryRequestedByUid: uid,
             retryRequestedByName: userName(user),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
@@ -273,10 +274,10 @@ export const retryWhatsAppJobErrors = onCall(
       {
         status: "READY_FOR_SEND",
         releaseStatus: "RETRY_ERRORS",
-        retryRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        retryRequestedAt: FieldValue.serverTimestamp(),
         retryRequestedByUid: uid,
         retryRequestedByName: userName(user),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -334,11 +335,11 @@ export const omitWhatsAppJob = onCall(
           doc.ref,
           {
             status: "OMITTED",
-            omittedAt: admin.firestore.FieldValue.serverTimestamp(),
+            omittedAt: FieldValue.serverTimestamp(),
             omittedByUid: uid,
             omittedByName: userName(user),
             omitReason: reason,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
@@ -351,12 +352,12 @@ export const omitWhatsAppJob = onCall(
       {
         status: "OMITTED",
         releaseStatus: "OMITTED",
-        omittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        omittedAt: FieldValue.serverTimestamp(),
         omittedByUid: uid,
         omittedByName: userName(user),
         omitReason: reason,
         omittedDeliveriesCount: omittedDeliveries,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );

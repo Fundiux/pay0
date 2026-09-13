@@ -367,6 +367,19 @@ export const processWhatsAppInvoiceAutomation =
         return;
       }
 
+      if (
+        prepared.action === "CREATED" &&
+        Number(prepared.destinationsCount || 0) === 0
+      ) {
+        console.warn(
+          "[WHATSAPP AUTO] ESPERANDO DESTINO",
+          solicitudId,
+          prepared.jobId,
+          prepared.targetResolutionStatus || "ROUTE_NOT_CONFIGURED"
+        );
+        return;
+      }
+
       const released =
         await releaseWhatsAppJobDeliveriesCore({
           jobId: prepared.jobId,

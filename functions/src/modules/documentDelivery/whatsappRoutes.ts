@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { normalizeClientWhatsapp } from "../clients/domain";
 
 export type WhatsAppDestinationRoute = {
@@ -262,7 +263,7 @@ async function writeResolutionFailure(
       targetChatName: null,
       targetChatType: null,
       targetChatSafeDocId: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
@@ -279,11 +280,11 @@ async function writeResolutionFailure(
       doc.ref,
       {
         status: "OMITTED",
-        omittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        omittedAt: FieldValue.serverTimestamp(),
         omittedByUid: cleanText(actor?.uid),
         omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
         omitReason: "TARGET_RESOLUTION_REPLACED",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -334,10 +335,10 @@ async function writeDestinations(
       targetChatType: first.chatType,
       targetChatSafeDocId: first.safeDocId,
 
-      targetConfiguredAt: admin.firestore.FieldValue.serverTimestamp(),
+      targetConfiguredAt: FieldValue.serverTimestamp(),
       targetConfiguredByUid: cleanText(actor?.uid),
       targetConfiguredByName: cleanText(actor?.name || "AUTO_ROUTE"),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
@@ -360,11 +361,11 @@ async function writeDestinations(
       doc.ref,
       {
         status: "OMITTED",
-        omittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        omittedAt: FieldValue.serverTimestamp(),
         omittedByUid: cleanText(actor?.uid),
         omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
         omitReason: "DESTINATION_REPLACED",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -399,12 +400,12 @@ async function writeDestinations(
       destinationType:
         destination.destinationType || "ADDITIONAL",
       phone: destination.phone || null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (!existing) {
       payload.createdAt =
-        admin.firestore.FieldValue.serverTimestamp();
+        FieldValue.serverTimestamp();
     }
 
     batch.set(

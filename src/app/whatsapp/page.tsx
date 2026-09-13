@@ -1143,10 +1143,25 @@ export default function WhatsAppPage() {
       if (
         destinations === 0
       ) {
+        window.setTimeout(() => {
+          const routePanel = document.getElementById(
+            "whatsapp-route-configuration",
+          );
+
+          if (routePanel instanceof HTMLDetailsElement) {
+            routePanel.open = true;
+          }
+
+          routePanel?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 0);
+
         throw new Error(
           `${clientLabel(
             job,
-          )}: no tiene destino WhatsApp configurado.`,
+          )}: no tiene ruta ni WhatsApp de destino. Selecciona un contacto o grupo en Configurar rutas.`,
         );
       }
     }
@@ -2068,7 +2083,7 @@ export default function WhatsAppPage() {
             </table>
           </div>
 
-          <details className="border-t border-white/10">
+          <details id="whatsapp-route-configuration" className="scroll-mt-4 border-t border-white/10">
             <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-white/[0.02]">
               <span className="inline-flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />

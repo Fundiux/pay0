@@ -400,8 +400,9 @@ export async function prepareDocumentDeliveryJobCore(
   }).catch(() => undefined);
 
   // H4-D60-E6B_AUTO_ROUTE_AFTER_CREATE
+  let targetResolution: Awaited<ReturnType<typeof applyWhatsAppDestinationsToJob>> | null = null;
   try {
-    await applyWhatsAppDestinationsToJob(db, ref, payload, {
+    targetResolution = await applyWhatsAppDestinationsToJob(db, ref, payload, {
       uid: actor.uid,
       name: "AUTO_ROUTE_AFTER_CREATE",
     });
@@ -421,5 +422,7 @@ export async function prepareDocumentDeliveryJobCore(
     documentFingerprint,
     forceResend: payload.forceResend,
     resendOfJobId: payload.resendOfJobId,
+    targetResolutionStatus: targetResolution?.status || "ROUTE_RESOLUTION_ERROR",
+    destinationsCount: targetResolution?.destinationsCount || 0,
   };
 }
