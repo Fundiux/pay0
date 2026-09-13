@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
 import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
 import { useSearchParams } from "next/navigation";
@@ -29,6 +29,7 @@ import {
   applyPagoToSolicitudesAtomic,
   changePagoStatus,
   createPago,
+  listPagos,
   createPagoApplicationIdempotencyKey,
   executePagoApplicationIqPlan,
   diagnosePagoApplicationIqMethods,
@@ -350,6 +351,9 @@ export default function PagosPage() {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [pagoAplicaciones, setPagoAplicaciones] = useState<any[]>([]);
   const [loadingPagos, setLoadingPagos] = useState(true);
+  const [loadingMorePagos, setLoadingMorePagos] = useState(false);
+  const [hasMorePagos, setHasMorePagos] = useState(false);
+  const [pagoCursor, setPagoCursor] = useState<{ createdAt: number; id: string } | null>(null);
 
   const [filter, setFilter] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "createdAt", dir: "desc" });
@@ -1441,53 +1445,31 @@ export default function PagosPage() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
+  const loadPagosPage = useCallback(async (append = false) => {
     if (!canViewPagos || !rootId || !myUid) {
       setPagos([]);
       setLoadingPagos(false);
       return;
     }
-
-    setLoadingPagos(true);
-
-    let qy: Query<DocumentData>;
-    if (isSuperAdmin(role)) {
-      qy = query(collection(db, "pagos"), where("rootId", "==", rootId));
-    } else if (isOperador(role)) {
-      qy = query(collection(db, "pagos"), where("createdBy", "==", myUid));
-    } else if (isAdmin(role)) {
-      qy = query(collection(db, "pagos"), where("adminId", "==", myUid));
-    } else {
-      setPagos([]);
+    append ? setLoadingMorePagos(true) : setLoadingPagos(true);
+    try {
+      const page = await listPagos(append && pagoCursor ? {
+        limit: 100,
+        cursorCreatedAt: pagoCursor.createdAt,
+        cursorId: pagoCursor.id,
+      } : { limit: 100 });
+      setPagos((current) => append ? [...current, ...page.items] : page.items);
+      setPagoCursor(page.nextCursor);
+      setHasMorePagos(page.hasMore);
+    } catch {
+      setPageMsg("No se pudieron cargar pagos.");
+    } finally {
       setLoadingPagos(false);
-      return;
+      setLoadingMorePagos(false);
     }
+  }, [canViewPagos, rootId, myUid, pagoCursor]);
 
-    return onSnapshot(
-      qy,
-      (snap) => {
-        let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        if (isAdmin(role)) {
-          rows = rows.filter((x: any) => {
-            const pagoAdminId = String(x?.adminId || "").trim();
-            const clientAdminId = String(
-              clientesRef.current.find((c) => String(c?.id || "") === String(x?.clienteId || ""))?.adminId || ""
-            ).trim();
-
-            return pagoAdminId === myUid || clientAdminId === myUid;
-          });
-        }
-
-        setPagos(rows);
-        setLoadingPagos(false);
-      },
-      (err) => {
-        setPageMsg("No se pudieron cargar pagos.");
-        setLoadingPagos(false);
-      }
-    );
-  }, [canViewPagos, rootId, myUid, role]);
+  useEffect(() => { void loadPagosPage(false); }, [canViewPagos, rootId, myUid]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {
@@ -2906,6 +2888,19 @@ export default function PagosPage() {
           </tbody>
         </table>
       </div>
+
+      {hasMorePagos && (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadPagosPage(true)}
+            disabled={loadingMorePagos}
+            className="rounded-lg border border-sky-400/30 px-4 py-2 text-xs text-sky-200 hover:bg-sky-400/10 disabled:opacity-50"
+          >
+            {loadingMorePagos ? "Cargando pagos..." : "Cargar más pagos"}
+          </button>
+        </div>
+      )}
 
       {receiptBatchOpen && (
         <div className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">

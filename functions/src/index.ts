@@ -2146,6 +2146,52 @@ export const createPago = onCall(
   }
 );
 
+export const listPagos = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const uid = requireAuth(request);
+    const meSnap = await db.doc(`users/${uid}`).get();
+    if (!meSnap.exists) throw new HttpsError("not-found", "Usuario no encontrado.");
+
+    const me: any = meSnap.data() || {};
+    const rootId = String(me.rootId || uid);
+    assertAuthorized(request.auth, me, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "pagos",
+      requiredAction: "view",
+    });
+
+    const role = String(me.role || "").trim().toLowerCase();
+    const requestedLimit = Number(request.data?.limit || 100);
+    const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 100, 1), 100);
+    const cursorMillis = Number(request.data?.cursorCreatedAt || 0);
+    const cursorId = String(request.data?.cursorId || "").trim();
+
+    let queryRef: FirebaseFirestore.Query = db.collection("pagos").where("rootId", "==", rootId);
+    if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
+    if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
+
+    queryRef = queryRef.orderBy("createdAt", "desc").orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize + 1);
+    if (cursorMillis > 0 && cursorId) {
+      queryRef = queryRef.startAfter(admin.firestore.Timestamp.fromMillis(cursorMillis), cursorId);
+    }
+
+    const snap = await queryRef.get();
+    const docs = snap.docs.slice(0, pageSize);
+    const last = docs[docs.length - 1];
+    const lastCreatedAt: any = last?.get("createdAt");
+
+    return {
+      items: docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      hasMore: snap.docs.length > pageSize,
+      nextCursor: last ? {
+        createdAt: typeof lastCreatedAt?.toMillis === "function" ? lastCreatedAt.toMillis() : 0,
+        id: last.id,
+      } : null,
+    };
+  }
+);
+
 export const changePagoStatus = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
