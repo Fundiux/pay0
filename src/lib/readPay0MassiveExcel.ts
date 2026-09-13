@@ -1,4 +1,5 @@
 import type { Pay0MassiveRawRow } from "@/lib/pay0MassiveLayout";
+import { readSpreadsheetFile, type SpreadsheetSheet } from "@/lib/spreadsheetReader";
 
 type CanonicalMassiveHeader =
   | "NOMBRE"
@@ -116,8 +117,8 @@ function scoreHeaderRow(row: unknown[], requiredHeaders: CanonicalMassiveHeader[
   };
 }
 
-function selectSheet(workbook: any, preferredSheetNames: string[]) {
-  const sheetNames: string[] = Array.isArray(workbook?.SheetNames) ? workbook.SheetNames : [];
+function selectSheet(sheets: SpreadsheetSheet[], preferredSheetNames: string[]) {
+  const sheetNames = sheets.map((sheet) => sheet.name);
 
   if (sheetNames.length === 0) {
     throw new Error("El archivo no tiene hojas.");
@@ -127,34 +128,25 @@ function selectSheet(workbook: any, preferredSheetNames: string[]) {
     .map((name) => sheetNames.find((sheetName) => normalizeSheetName(sheetName) === normalizeSheetName(name)))
     .find(Boolean);
 
-  return preferred || sheetNames[0];
+  return sheets.find((sheet) => sheet.name === (preferred || sheetNames[0]));
 }
 
 export async function readPay0MassiveRowsFromFile(
   file: File,
   options: ReadPay0MassiveRowsOptions = {}
 ): Promise<Pay0MassiveRawRow[]> {
-  const XLSX: any = await import("xlsx");
-
   const preferredSheetNames = options.preferredSheetNames || ["ADMON"];
   const requiredHeaders = options.requiredHeaders || ["NOMBRE"];
   const maxHeaderScanRows = Math.max(1, Number(options.maxHeaderScanRows || 30));
 
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheetName = selectSheet(workbook, preferredSheetNames);
-  const sheet = workbook.Sheets[sheetName];
+  const sheets = await readSpreadsheetFile(file);
+  const sheet = selectSheet(sheets, preferredSheetNames);
 
   if (!sheet) {
     throw new Error("No se pudo leer la hoja del archivo.");
   }
 
-  const matrix = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: "",
-    raw: false,
-    blankrows: false,
-  }) as unknown[][];
+  const matrix = sheet.rows;
 
   if (!Array.isArray(matrix) || matrix.length === 0) {
     return [];

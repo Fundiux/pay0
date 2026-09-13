@@ -58,7 +58,7 @@ function formatMoney(value: unknown) {
 
 function isOcExcel(file: File) {
   const name = String(file.name || "").toLowerCase();
-  return name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv");
+  return name.endsWith(".xlsx") || name.endsWith(".csv");
 }
 
 function isFacturaXml(file: File) {
@@ -253,13 +253,13 @@ export default function OrdenCompraMasivaModal(props: {
                 conceptoPrincipal: "",
                 referencia: file.name,
                 operationTypeName: "Factura subtotal",
-                warnings: ["Archivo no es Excel .xls, .xlsx, .csv o XML."],
+                warnings: ["Archivo no es Excel .xlsx, .csv o XML."],
               },
               documentType: "ORDEN_COMPRA",
               clientOption: null,
               companyOption: null,
               operationOption: facturaSubtotalOperation,
-              errors: ["Archivo no es Excel .xls, .xlsx, .csv o XML."],
+              errors: ["Archivo no es Excel .xlsx, .csv o XML."],
               status: "ERROR",
             });
             continue;

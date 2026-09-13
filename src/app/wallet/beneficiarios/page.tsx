@@ -1096,7 +1096,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       const name = String(file?.name || "").toLowerCase();
       return Boolean(
         file &&
-          (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv"))
+          (name.endsWith(".xlsx") || name.endsWith(".csv"))
       );
     }
 
@@ -1140,7 +1140,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       }
 
       if (!isAllowedMassiveFile(file)) {
-        setError("Solo se permite Excel .xlsx/.xls o CSV para beneficiarios masivos.");
+        setError("Solo se permite Excel .xlsx o CSV para beneficiarios masivos.");
         return;
       }
 
@@ -1321,7 +1321,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                 <span className="sr-only">Seleccionar Excel</span>
                 <input
                   type="file"
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx,.csv"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null;
@@ -1928,5 +1928,4 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
     </div>
   );
 }
-
 

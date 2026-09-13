@@ -670,7 +670,7 @@ function safeTemporaryFileName(value: string): string {
 }
 
 function isExcelFileName(fileName: string): boolean {
-  return /\.(xls|xlsx)$/i.test(fileName);
+  return /\.xlsx$/i.test(fileName);
 }
 
 function isActiveUpload(upload: Record<string, unknown>): boolean {
@@ -898,7 +898,7 @@ async function prepareSolicitudForIqQueue(input: {
   const orderStoragePath = cleanText(activeOrder.data.storagePath);
 
   if (!orderFileName || !isExcelFileName(orderFileName) || !orderStoragePath) {
-    throw new HttpsError("failed-precondition", "La Orden de Compra debe ser .xls/.xlsx y tener storagePath.");
+    throw new HttpsError("failed-precondition", "La Orden de Compra debe ser .xlsx y tener storagePath.");
   }
 
   const existsResult = await admin.storage().bucket().file(orderStoragePath).exists();

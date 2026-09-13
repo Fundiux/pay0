@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { readSpreadsheetFile } from "./spreadsheetReader";
 
 export type OrdenCompraTotalConfidence = "ALTA" | "MEDIA" | "NINGUNA";
 
@@ -129,7 +129,14 @@ function parseMoney(value: unknown): number | null {
 }
 
 function cellAddress(rowIndex: number, columnIndex: number) {
-  return XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+  let column = columnIndex + 1;
+  let label = "";
+  while (column > 0) {
+    const remainder = (column - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    column = Math.floor((column - 1) / 26);
+  }
+  return `${label}${rowIndex + 1}`;
 }
 
 function classifyLabel(label: string): LabelHit["kind"] | null {
@@ -327,16 +334,7 @@ function componentContext(total: LabelHit, allHits: LabelHit[]) {
   };
 }
 
-function resolveSheet(
-  sheetName: string,
-  worksheet: XLSX.WorkSheet,
-): ResolvedOrdenCompraTotal {
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-    header: 1,
-    raw: true,
-    defval: null,
-    blankrows: true,
-  }) as unknown[][];
+function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompraTotal {
 
   const allHits = scanLabels(rows);
   const totals = allHits.filter((hit) => hit.kind === "TOTAL");
@@ -482,24 +480,14 @@ function resolveSheet(
 export async function resolveOrdenCompraTotalsFromFile(
   file: File,
 ): Promise<Map<string, ResolvedOrdenCompraTotal>> {
-  const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, {
-    type: "array",
-    cellFormula: true,
-    cellDates: true,
-    cellNF: true,
-    cellText: true,
-  });
+  const sheets = await readSpreadsheetFile(file);
 
   const result = new Map<string, ResolvedOrdenCompraTotal>();
 
-  for (const sheetName of workbook.SheetNames) {
-    const worksheet = workbook.Sheets[sheetName];
-    if (!worksheet) continue;
-
+  for (const sheet of sheets) {
     result.set(
-      normalizeOrdenCompraSheetKey(sheetName),
-      resolveSheet(sheetName, worksheet),
+      normalizeOrdenCompraSheetKey(sheet.name),
+      resolveSheet(sheet.name, sheet.rows),
     );
   }
 

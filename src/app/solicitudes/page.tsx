@@ -731,7 +731,7 @@ export default function SolicitudesPage() {
 
     function isMassiveSolicitudFile(file: File) {
       const name = file.name.toLowerCase();
-      return name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv") || name.endsWith(".xml");
+      return name.endsWith(".xlsx") || name.endsWith(".csv") || name.endsWith(".xml");
     }
 
     function handleWindowDragOver(event: DragEvent) {
@@ -759,7 +759,7 @@ export default function SolicitudesPage() {
       const sourceFiles = files.filter(isMassiveSolicitudFile);
 
       if (sourceFiles.length === 0) {
-        alert("Solo se permiten Ordenes de Compra Excel .xls, .xlsx, .csv o Facturas XML.");
+        alert("Solo se permiten Ordenes de Compra Excel .xlsx, .csv o Facturas XML.");
         return;
       }
 
@@ -1376,11 +1376,11 @@ export default function SolicitudesPage() {
         const files = Array.from(e.dataTransfer.files || []);
         const sourceFiles = files.filter((file) => {
           const name = file.name.toLowerCase();
-          return name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv") || name.endsWith(".xml");
+          return name.endsWith(".xlsx") || name.endsWith(".csv") || name.endsWith(".xml");
         });
 
         if (sourceFiles.length === 0) {
-          alert("Solo se permiten Ordenes de Compra Excel .xls, .xlsx, .csv o Facturas XML.");
+          alert("Solo se permiten Ordenes de Compra Excel .xlsx, .csv o Facturas XML.");
           return;
         }
 

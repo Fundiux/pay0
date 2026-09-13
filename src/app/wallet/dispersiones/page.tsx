@@ -1092,41 +1092,16 @@ export default function WalletDispersionesPage() {
     }
 
     setError("");
-    const XLSX = await import("xlsx");
+    const { downloadSpreadsheetFile } = await import("@/lib/spreadsheetReader");
 
     const exportRows =
       getDispersionExportRows();
 
-    const worksheet =
-      XLSX.utils.json_to_sheet(
-        exportRows,
-      );
-
-    worksheet["!cols"] = [
-      { wch: 18 },
-      { wch: 16 },
-      { wch: 20 },
-      { wch: 28 },
-      { wch: 32 },
-      { wch: 18 },
-      { wch: 20 },
-      { wch: 24 },
-      { wch: 16 },
-      { wch: 18 },
-    ];
-
-    const workbook =
-      XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      "Dispersiones",
-    );
-
-    XLSX.writeFile(
-      workbook,
+    await downloadSpreadsheetFile(
       `dispersiones_${dispersionExportClient()}_${dispersionExportDate()}.xlsx`,
+      "Dispersiones",
+      exportRows,
+      [18, 16, 20, 28, 32, 18, 20, 24, 16, 18],
     );
   }
 
@@ -2084,7 +2059,7 @@ export default function WalletDispersionesPage() {
       const name = String(file?.name || "").toLowerCase();
       return Boolean(
         file &&
-          (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv"))
+          (name.endsWith(".xlsx") || name.endsWith(".csv"))
       );
     }
 
@@ -2129,7 +2104,7 @@ export default function WalletDispersionesPage() {
       }
 
       if (!isAllowedMassiveFile(file)) {
-        setError("Solo se permite Excel .xlsx/.xls o CSV para dispersion masiva.");
+        setError("Solo se permite Excel .xlsx o CSV para dispersion masiva.");
         setSuccess("");
         return;
       }
@@ -2185,8 +2160,8 @@ export default function WalletDispersionesPage() {
         if (!file) return;
 
         const filename = file.name.toLowerCase();
-        if (!filename.endsWith(".xlsx") && !filename.endsWith(".xls") && !filename.endsWith(".csv")) {
-          setError("Solo se permite Excel .xlsx/.xls o CSV para dispersion masiva.");
+        if (!filename.endsWith(".xlsx") && !filename.endsWith(".csv")) {
+          setError("Solo se permite Excel .xlsx o CSV para dispersion masiva.");
           setSuccess("");
           return;
         }
@@ -2748,7 +2723,7 @@ export default function WalletDispersionesPage() {
             <span className="text-xs text-slate-500">Carga Excel para validar antes de crear dispersiones.</span>
             <input
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.csv"
               className="hidden"
               disabled={dispersionImportBusy || dispersionImportSaving}
               onChange={(e) => {

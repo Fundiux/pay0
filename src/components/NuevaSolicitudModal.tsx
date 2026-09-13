@@ -494,7 +494,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
   const isOrdenCompraFile = (file: File | null) => {
     if (!file) return false;
     const name = String(file.name || "").toLowerCase();
-    return name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv");
+    return name.endsWith(".xlsx") || name.endsWith(".csv");
   };
 
   const isFacturaXmlFile = (file: File | null) => {
@@ -813,7 +813,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div className="text-[12px] text-slate-200">Orden de Compra o Factura XML *</div>
-                <div className="text-[11px] text-slate-500">Excel .xls, .xlsx, .csv o XML - max 1 MB</div>
+                <div className="text-[11px] text-slate-500">Excel .xlsx, .csv o XML - max 1 MB</div>
               </div>
               <UploadCloud size={18} className="text-sky-300" />
             </div>
@@ -823,7 +823,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
               <input
                 type="file"
                 className="hidden"
-                accept=".xls,.xlsx,.csv,.xml,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/xml,application/xml"
+                accept=".xlsx,.csv,.xml,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/xml,application/xml"
                 disabled={isSubmitting}
                 onChange={(e) => {
                   setSolicitudSourceFromFile(e.target.files?.[0] || null);

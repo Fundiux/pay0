@@ -3,6 +3,7 @@ import {
   resolveOrdenCompraTotalsFromFile,
   type ResolvedOrdenCompraTotal,
 } from "./ordenCompraTotalResolver"; // H4_D83_A1_SEMANTIC_TOTAL_IMPORT
+import { readSpreadsheetFile } from "./spreadsheetReader";
 export type OrdenCompraTipoFactura = "PUE" | "PPD" | "";
 
 export interface ParsedOrdenCompra {
@@ -66,6 +67,7 @@ function toNumber(value: unknown): number {
 }
 
 function cellValue(sheet: any, address: string) {
+  if (typeof sheet?.cell === "function") return sheet.cell(address);
   const cell = sheet?.[address];
   if (!cell) return "";
   return cell.v ?? cell.w ?? "";
@@ -225,21 +227,13 @@ function parseSingleSheet(params: {
 }
 
 async function parseOrdenCompraWorkbookFileLegacyH4D83A1(file: File): Promise<ParsedOrdenCompra[]> {
-  const XLSX = await import("xlsx");
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const sheets = await readSpreadsheetFile(file);
 
   const results: ParsedOrdenCompra[] = [];
 
-  for (const sheetName of workbook.SheetNames || []) {
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) continue;
-
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      defval: "",
-      raw: false,
-    }) as any[][];
+  for (const sheet of sheets) {
+    const sheetName = sheet.name;
+    const rows = sheet.rows;
 
     const parsed = parseSingleSheet({
       sourceFileName: file.name,
@@ -408,4 +402,3 @@ export async function parseOrdenCompraWorkbookFile(
   >;
 }
 // H4_D83_A1_SEMANTIC_TOTAL_WRAPPER_END
-

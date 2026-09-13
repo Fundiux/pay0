@@ -8,7 +8,7 @@ export const MAX_SOLICITUD_DOCUMENT_SIZE_BYTES = 1024 * 1024;
 export const SOLICITUD_DOCUMENT_TYPES = [
   { value: "FACTURA_PDF", label: "Factura PDF", accept: "application/pdf,.pdf" },
   { value: "FACTURA_XML", label: "Factura XML", accept: ".xml,text/xml,application/xml" },
-  { value: "ORDEN_COMPRA", label: "Orden de Compra", accept: ".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" },
+  { value: "ORDEN_COMPRA", label: "Orden de Compra", accept: ".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" },
   { value: "PRESUPUESTO", label: "Presupuesto / Cotizacion", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.csv" },
   { value: "EVIDENCIA_OPERATIVA", label: "Evidencia Operativa", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.xls,.xlsx" },
   { value: "OTRO", label: "Otro", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xml,.xls,.xlsx,.csv,.doc,.docx,.txt" },

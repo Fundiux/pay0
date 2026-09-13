@@ -7,6 +7,7 @@ import DateScopeBar from "@/components/DateScopeBar";
 import NoAccess from "@/components/NoAccess";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
+import { downloadSpreadsheetFile } from "@/lib/spreadsheetReader";
 import { CustomRange, DateScopeMode, getScopeRange, shiftBaseDate } from "@/lib/dateScope";
 import {
   getEarningsByClientReport,
@@ -89,12 +90,7 @@ function statusClass(status: string) {
 }
 
 async function exportToExcel(filename: string, sheetName: string, rows: Record<string, unknown>[]) {
-  const XLSX = await import("xlsx");
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
-  XLSX.writeFile(workbook, filename);
+  await downloadSpreadsheetFile(filename, sheetName, rows);
 }
 
 export default function ReportesPage() {
