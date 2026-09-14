@@ -1,5 +1,6 @@
 export const MATERIALITY_REQUIRED_TYPES = [
   "ORDEN_COMPRA",
+  "COTIZACION",
   "PRESUPUESTO",
   "FACTURA_XML",
   "FACTURA_PDF",
@@ -8,7 +9,19 @@ export const MATERIALITY_REQUIRED_TYPES = [
 
 export const MATERIALITY_DOCUMENT_TYPES = [
   "CONTRATO_MARCO",
+  "CONTRATO_OPERACION",
+  "SOLICITUD_INTERNA",
+  "AUTORIZACION_OPERATIVA",
   ...MATERIALITY_REQUIRED_TYPES,
+  "COMPLEMENTO_PAGO_XML",
+  "COMPLEMENTO_PAGO_PDF",
+  "CFDI_GASTO_XML",
+  "CFDI_GASTO_PDF",
+  "SOLICITUD_GASTO_RELACIONADA",
+  "COMPROBANTE_TRANSFERENCIA",
+  "ESTADO_CUENTA",
+  "ACUSE_RECEPCION",
+  "EVIDENCIA_ENTREGA",
   "EVIDENCIA_OPERATIVA",
   "OTRO",
 ] as const;
@@ -54,8 +67,16 @@ export function getMaterialityDocumentLabel(type: unknown): string {
   switch (normalized) {
     case "CONTRATO_MARCO":
       return "Contrato marco";
+    case "CONTRATO_OPERACION":
+      return "Contrato de operacion";
+    case "SOLICITUD_INTERNA":
+      return "Solicitud interna";
+    case "AUTORIZACION_OPERATIVA":
+      return "Autorizacion operativa";
     case "ORDEN_COMPRA":
       return "Orden de Compra";
+    case "COTIZACION":
+      return "Cotizacion";
     case "PRESUPUESTO":
       return "Presupuesto / Cotizacion";
     case "FACTURA_XML":
@@ -64,6 +85,24 @@ export function getMaterialityDocumentLabel(type: unknown): string {
       return "Factura PDF";
     case "COMPROBANTE_PAGO":
       return "Comprobante de Pago";
+    case "COMPLEMENTO_PAGO_XML":
+      return "Complemento de Pago XML";
+    case "COMPLEMENTO_PAGO_PDF":
+      return "Complemento de Pago PDF";
+    case "CFDI_GASTO_XML":
+      return "CFDI de Gasto XML";
+    case "CFDI_GASTO_PDF":
+      return "CFDI de Gasto PDF";
+    case "SOLICITUD_GASTO_RELACIONADA":
+      return "Solicitud de Gasto Relacionada";
+    case "COMPROBANTE_TRANSFERENCIA":
+      return "Comprobante de Transferencia";
+    case "ESTADO_CUENTA":
+      return "Estado de Cuenta";
+    case "ACUSE_RECEPCION":
+      return "Acuse de Recepcion";
+    case "EVIDENCIA_ENTREGA":
+      return "Evidencia de Entrega";
     case "EVIDENCIA_OPERATIVA":
       return "Evidencia Operativa";
     case "OTRO":

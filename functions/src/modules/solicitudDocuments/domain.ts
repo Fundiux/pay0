@@ -4,7 +4,19 @@ export const SOLICITUD_DOCUMENT_TYPES = [
   "FACTURA_PDF",
   "FACTURA_XML",
   "ORDEN_COMPRA",
+  "COTIZACION",
   "PRESUPUESTO",
+  "CONTRATO_OPERACION",
+  "AUTORIZACION_OPERATIVA",
+  "COMPLEMENTO_PAGO_XML",
+  "COMPLEMENTO_PAGO_PDF",
+  "CFDI_GASTO_XML",
+  "CFDI_GASTO_PDF",
+  "SOLICITUD_GASTO_RELACIONADA",
+  "COMPROBANTE_TRANSFERENCIA",
+  "ESTADO_CUENTA",
+  "ACUSE_RECEPCION",
+  "EVIDENCIA_ENTREGA",
   "EVIDENCIA_OPERATIVA",
   "OTRO",
 ] as const;
@@ -31,8 +43,32 @@ export function getSolicitudDocumentTypeLabel(type: SolicitudDocumentType): stri
       return "Factura XML";
     case "ORDEN_COMPRA":
       return "Orden de Compra";
+    case "COTIZACION":
+      return "Cotizacion";
     case "PRESUPUESTO":
       return "Presupuesto / Cotizacion";
+    case "CONTRATO_OPERACION":
+      return "Contrato de operacion";
+    case "AUTORIZACION_OPERATIVA":
+      return "Autorizacion operativa";
+    case "COMPLEMENTO_PAGO_XML":
+      return "Complemento de Pago XML";
+    case "COMPLEMENTO_PAGO_PDF":
+      return "Complemento de Pago PDF";
+    case "CFDI_GASTO_XML":
+      return "CFDI de Gasto XML";
+    case "CFDI_GASTO_PDF":
+      return "CFDI de Gasto PDF";
+    case "SOLICITUD_GASTO_RELACIONADA":
+      return "Solicitud de Gasto Relacionada";
+    case "COMPROBANTE_TRANSFERENCIA":
+      return "Comprobante de Transferencia";
+    case "ESTADO_CUENTA":
+      return "Estado de Cuenta";
+    case "ACUSE_RECEPCION":
+      return "Acuse de Recepcion";
+    case "EVIDENCIA_ENTREGA":
+      return "Evidencia de Entrega";
     case "EVIDENCIA_OPERATIVA":
       return "Evidencia Operativa";
     case "OTRO":
