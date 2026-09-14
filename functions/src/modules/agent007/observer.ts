@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase-admin/firestore";
+import type { Firestore, Transaction, WriteBatch } from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
 
 const OBSERVED_EVENTS = new Set([
@@ -13,7 +13,10 @@ const OBSERVED_EVENTS = new Set([
   "PAGO_STATUS_ACTUALIZADO",
   "PAGO_APLICADO_A_SOLICITUD",
   "PAGO_FINANCIAL_POSTED",
+  "PAGO_MONTO_CORREGIDO_RECHAZO_IQ",
   "PAGO_POSTEO_FINANCIERO_PENDIENTE",
+  "DOCUMENTO_PAGO_SUBIDO",
+  "DOCUMENTO_PAGO_DESACTIVADO",
   "DISPERSION_REGISTRADA",
   "DISPERSION_INCIDENCIA_ABIERTA",
   "DISPERSION_INCIDENCIA_RESUELTA",
@@ -22,8 +25,14 @@ const OBSERVED_EVENTS = new Set([
   "IQ_SOLICITUD_CREACION_FALLIDA",
   "IQ_SOLICITUD_RESULTADO_INCIERTO",
   "IQ_PAGO_CREADO",
+  "IQ_PAGO_VINCULADO",
   "IQ_PAGO_CONCILIADO",
+  "IQ_PAGO_REQUIERE_REVISION",
   "IQ_PAGO_ERROR",
+  "IQ_PAGO_RECHAZADO",
+  "IQ_PAGO_CANCELADO",
+  "IQ_PAGO_NUEVO_COMPROBANTE",
+  "IQ_PAGO_MONTO_CORREGIDO",
   "FACTURA_BORRADOR_CREADO",
 ]);
 
@@ -48,24 +57,23 @@ function caseIdFromPayload(payload: Record<string, any>, activityId: string): st
   return clean(payload.referenceId || payload.entityId || payload.relatedEntityId || payload.referenceFolio || activityId, 160);
 }
 
-export async function observeActivityForAgent007(
-  db: Firestore,
+function buildObservationPayload(
   activityId: string,
   payload: Record<string, any>,
-) {
+): Record<string, any> | null {
   const event = clean(payload.event || payload.type, 120);
-  if (!OBSERVED_EVENTS.has(event)) return;
-  if (event === "AGENTE_007_OBSERVACION") return;
+  if (!OBSERVED_EVENTS.has(event)) return null;
+  if (event === "AGENTE_007_OBSERVACION") return null;
 
   const rootId = clean(payload.rootId, 128);
-  if (!rootId) return;
+  if (!rootId) return null;
 
   const caseType = caseTypeFromPayload(payload);
   const caseId = caseIdFromPayload(payload, activityId);
   const eventLabel = clean(payload.eventLabel || event, 200);
   const description = clean(payload.description || payload.text || eventLabel, 700);
 
-  await db.collection("agent007Observations").doc(`activity_${activityId}`).set({
+  return {
     rootId,
     agentId: "AGENTE_007",
     phase: "OBSERVATION",
@@ -95,5 +103,40 @@ export async function observeActivityForAgent007(
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     expiresAt: null,
-  }, { merge: true });
+  };
+}
+
+export async function observeActivityForAgent007(
+  db: Firestore,
+  activityId: string,
+  payload: Record<string, any>,
+) {
+  const observation = buildObservationPayload(activityId, payload);
+  if (!observation) return;
+
+  await db.collection("agent007Observations").doc(`activity_${activityId}`).set(observation, { merge: true });
+}
+
+export function observeActivityForAgent007Tx(
+  tx: Transaction,
+  db: Firestore,
+  activityId: string,
+  payload: Record<string, any>,
+) {
+  const observation = buildObservationPayload(activityId, payload);
+  if (!observation) return;
+
+  tx.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
+}
+
+export function observeActivityForAgent007Batch(
+  batch: WriteBatch,
+  db: Firestore,
+  activityId: string,
+  payload: Record<string, any>,
+) {
+  const observation = buildObservationPayload(activityId, payload);
+  if (!observation) return;
+
+  batch.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
 }

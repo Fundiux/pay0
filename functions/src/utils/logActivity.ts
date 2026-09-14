@@ -5,7 +5,11 @@ import type {
   WriteBatch,
 } from "firebase-admin/firestore";
 import { FieldValue as FirestoreFieldValue, getFirestore } from "firebase-admin/firestore";
-import { observeActivityForAgent007 } from "../modules/agent007/observer";
+import {
+  observeActivityForAgent007,
+  observeActivityForAgent007Batch,
+  observeActivityForAgent007Tx,
+} from "../modules/agent007/observer";
 import { getActivityEventMeta, normalizeActivityEventKey } from "../modules/activityLog/eventCatalog";
 
 export type ActivityLogParams = {
@@ -146,7 +150,9 @@ export function logActivityTx(
   ref?: DocumentReference,
 ) {
   const activityRef = ref || db.collection("activityLog").doc();
-  tx.set(activityRef, buildActivityPayload(params));
+  const payload = buildActivityPayload(params);
+  tx.set(activityRef, payload);
+  observeActivityForAgent007Tx(tx, db, activityRef.id, payload);
   return activityRef;
 }
 export function logActivityBatch(
@@ -156,6 +162,8 @@ export function logActivityBatch(
   ref?: DocumentReference,
 ) {
   const activityRef = ref || db.collection("activityLog").doc();
-  batch.set(activityRef, buildActivityPayload(params));
+  const payload = buildActivityPayload(params);
+  batch.set(activityRef, payload);
+  observeActivityForAgent007Batch(batch, db, activityRef.id, payload);
   return activityRef;
 }
