@@ -87,8 +87,8 @@ explícita y una revisión final de cambios, índices y configuración.
 
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
-| Cerrado y verificado | 2 | `AUTH-01` y `OPS-01`: cuentan con smoke o verificación productiva completa. |
-| Publicado / validación pendiente | 6 | `PERF-01`, `WAL-02`, `PERF-04`, `PERF-06`, `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
+| Cerrado y verificado | 6 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-04`, `PERF-06` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
+| Publicado / validación pendiente | 2 | `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
 | Implementado / dependencia externa | 5 | `SEC-01`, `WA-A5`, `WA-CONTACTS-01`, `IQ-01` e `IQ-02`: requieren conector WhatsApp o sandbox IQ para cierre verificable. |
 | Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones todavía pendiente de implementar o diagnosticar. |
 
@@ -156,7 +156,7 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | WA-PERF-01 | ABIERTO | P1 | WhatsApp | El dashboard carga hasta 300 jobs y puede realizar una lectura de deliveries por job. | Listado paginado con read-model/resúmenes; detalles cargados bajo demanda. |
 | PERF-01 | CERRADO | P1 | Frontend / Pagos | `/pagos` reemplazó la suscripción completa de pagos por `listPagos`, una callable autorizada y acotada por `rootId`, rol y cursor; la tabla carga 100 filas por página y permite continuar. `listPagos` está activa en producción y sus índices compuestos están `READY`; Hosting publicó la interfaz SSR `00387-yiy`. | Smoke de Emulator: 101 pagos por rango, 100 + 1 registros, sin duplicados y con cursor exacto. |
 | PERF-02 | VALIDACIÓN | P1 | Frontend | Dispersiones ya difiere librerías pesadas de Excel/PDF hasta la exportación. Pagos, Solicitudes y Beneficiarios siguen pendientes de división/medición específica. | Medición local de bundle/carga y separar modales o flujos restantes sin degradar operación. |
-| PERF-04 | VALIDACIÓN | P1 | Frontend / Dispersiones | La vista ahora usa una sola carga autorizada por `rootId`, en vez de dos listeners por cliente; se limita a 500 filas y se recarga tras mutaciones. | Smoke de filtros/operaciones y cursor por periodo para historiales superiores a 500. |
+| PERF-04 | CERRADO | P1 | Frontend / Dispersiones | La vista usa una sola callable autorizada por `rootId`, en vez de listeners por cliente; pagina en bloques de 100 y permite continuar el historial sin duplicados. | Smoke de Emulator: 501 dispersiones recuperadas en 500 + 1 con cursor exacto; compilación frontend y Functions correctas. |
 | PERF-05 | ABIERTO | P2 | Frontend / Dashboard | El dashboard descarga todas las solicitudes del rango elegido para calcular tres contadores en navegador. | Contadores agregados/consultas acotadas y medición de respuesta anual. |
 | PERF-06 | CERRADO | P2 | Usuarios | `listUsers` y sus dos pantallas consumidoras usan páginas de 100 filas con cursor y acción “Cargar más”. | Smoke de Emulator: 102 usuarios devueltos en 100 + 2, bajo superadmin de la raíz autorizada. |
 | PERF-07 | ABIERTO | P2 | Telegram / documentos | Varias funciones Telegram leen 200–500 uploads del root y algunas resuelven solicitudes una por una. | Query selectiva por tipo/estado/solicitud y lecturas agrupadas o metadatos ya disponibles. |
@@ -212,6 +212,7 @@ Estos puntos deben medirse antes de optimizar; no asumir que toda espera es de R
 | PERF-01 | 2026-09-14 | Pagos paginado por rango y cursor exacto. | Emulator: 101 pagos en 100 + 1, sin duplicados. |
 | PERF-06 | 2026-09-14 | Usuarios paginados por cursor. | Emulator: 102 usuarios en 100 + 2. |
 | WAL-02 | 2026-09-14 | Estado de cuenta sin límite silencioso de 1,000 registros. | Emulator: 1,001 movimientos completos para el cliente de prueba. |
+| PERF-04 | 2026-09-14 | Historial de dispersiones paginado sin límite de 500 registros. | Emulator: 501 dispersiones en 500 + 1, sin duplicados y con cursor exacto. |
 
 ## Evidencia de validación reciente
 

@@ -58,8 +58,25 @@ async function seedPagos() {
   }
 }
 
+async function seedDispersions() {
+  const existing = await db.collection("clientDispersions").where("rootId", "==", rootId).get();
+  if (existing.size >= 501) return;
+  const now = Date.now();
+  for (let offset = 0; offset < 501; offset += 450) {
+    const batch = db.batch();
+    for (let index = offset + 1; index <= Math.min(offset + 450, 501); index += 1) {
+      batch.set(db.doc(`clientDispersions/${rootId}-dispersion-${String(index).padStart(3, "0")}`), {
+        rootId, clienteId: "fixture-client", clientId: "fixture-client", createdBy: rootId,
+        folio: `PERF-${index}`, monto: index, createdAt: Timestamp.fromMillis(now - index * 1000),
+      });
+    }
+    await batch.commit();
+  }
+}
+
 await db.doc(`users/${rootId}`).set({ rootId, role: "superadmin", email, active: true }, { merge: true });
 await seedPagos();
+await seedDispersions();
 const token = await signIn();
 
 const usersFirst = await call("listUsers", token, { limit: 100 });
@@ -80,6 +97,19 @@ const pagosSecond = await call("listPagos", token, {
 assert.equal(pagosSecond.items.length, 1);
 assert.equal(pagosSecond.hasMore, false);
 assert.equal(new Set([...pagosFirst.items, ...pagosSecond.items].map((row) => row.id)).size, 101);
+
+const dispersionsFirst = await call("listScopedClientDispersions", token, { limit: 500 });
+assert.equal(dispersionsFirst.rows.length, 500);
+assert.equal(dispersionsFirst.hasMore, true);
+const dispersionsSecond = await call("listScopedClientDispersions", token, {
+  limit: 500,
+  cursorSeconds: dispersionsFirst.nextCursor.seconds,
+  cursorNanoseconds: dispersionsFirst.nextCursor.nanoseconds,
+  cursorId: dispersionsFirst.nextCursor.id,
+});
+assert.equal(dispersionsSecond.rows.length, 1);
+assert.equal(dispersionsSecond.hasMore, false);
+assert.equal(new Set([...dispersionsFirst.rows, ...dispersionsSecond.rows].map((row) => row.id)).size, 501);
 
 const wallet = await call("getClientWalletDetailOverview", token, { clienteId: "fixture-client" });
 assert.equal(wallet.movements.length, 1001);

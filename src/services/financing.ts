@@ -55,9 +55,9 @@ export async function grantClientAdvance(input: GrantClientAdvanceInput) {
   return result.data;
 }
 
-export async function listScopedClientDispersions(limit = 500): Promise<{ rows: any[]; limit: number }> {
-  const callable = httpsCallable<{ limit: number }, { rows: any[]; limit: number }>(functions, "listScopedClientDispersions");
-  return (await callable({ limit })).data;
+export async function listScopedClientDispersions(input: { limit?: number; cursorSeconds?: number; cursorNanoseconds?: number; cursorId?: string } = {}): Promise<{ rows: any[]; limit: number; hasMore: boolean; nextCursor: { seconds: number; nanoseconds: number; id: string } | null }> {
+  const callable = httpsCallable<typeof input, { rows: any[]; limit: number; hasMore: boolean; nextCursor: { seconds: number; nanoseconds: number; id: string } | null }>(functions, "listScopedClientDispersions");
+  return (await callable({ limit: 100, ...input })).data;
 }
 
 export interface CreateClientDispersionInput {

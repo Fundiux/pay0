@@ -1,7 +1,7 @@
 import {
   getApps,
   initializeApp } from "firebase-admin/app";
-import { FieldValue,
+import { FieldPath, FieldValue, Timestamp,
   getFirestore } from "firebase-admin/firestore";
 import { HttpsError,
   onCall } from "firebase-functions/v2/https";
@@ -119,14 +119,29 @@ export const listScopedClientDispersions = onCall(
       requiredAction: "dispersiones",
     });
     const rootId = String(profile.rootId || uid).trim();
-    const limit = Math.min(Math.max(Math.trunc(Number(request.data?.limit || 500)), 1), 500);
-    const snap = await db.collection("clientDispersions")
+    const limit = Math.min(Math.max(Math.trunc(Number(request.data?.limit || 100)), 1), 500);
+    const cursorSeconds = Number(request.data?.cursorSeconds || 0);
+    const cursorNanoseconds = Number(request.data?.cursorNanoseconds || 0);
+    const cursorId = String(request.data?.cursorId || "").trim();
+    let query = db.collection("clientDispersions")
       .where("rootId", "==", rootId)
       .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
+      .orderBy(FieldPath.documentId())
+      .limit(limit + 1);
+    if (cursorSeconds > 0 && cursorId) {
+      query = query.startAfter(new Timestamp(cursorSeconds, cursorNanoseconds), cursorId) as any;
+    }
+    const snap = await query.get();
+    const docs = snap.docs.slice(0, limit);
+    const last = docs[docs.length - 1];
+    const createdAt: any = last?.get("createdAt");
 
-    return { rows: snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })), limit };
+    return {
+      rows: docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      limit,
+      hasMore: snap.docs.length > limit,
+      nextCursor: last ? { seconds: createdAt?.seconds || 0, nanoseconds: createdAt?.nanoseconds || 0, id: last.id } : null,
+    };
   }
 );
 

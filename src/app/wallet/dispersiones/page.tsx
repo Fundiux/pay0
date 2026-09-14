@@ -5,6 +5,7 @@ import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pa
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -300,6 +301,9 @@ export default function WalletDispersionesPage() {
   const [pricingPreviewError, setPricingPreviewError] =
     useState("");
   const [rows, setRows] = useState<DispersionRow[]>([]);
+  const [dispersionCursor, setDispersionCursor] = useState<{ seconds: number; nanoseconds: number; id: string } | null>(null);
+  const [hasMoreDispersions, setHasMoreDispersions] = useState(false);
+  const [loadingMoreDispersions, setLoadingMoreDispersions] = useState(false);
   const [dispersionSearch, setDispersionSearch] = useState("");
 
   // H4_D87_A58_A47_DISPERSION_DATE_SCOPE
@@ -867,15 +871,19 @@ export default function WalletDispersionesPage() {
   useEffect(() => {
     if (profileLoading || !uid || !rootId) {
       setRows([]);
+      setDispersionCursor(null);
+      setHasMoreDispersions(false);
       return;
     }
     let cancelled = false;
 
     async function loadDispersions() {
       try {
-        const result = await listScopedClientDispersions(500);
+        const result = await listScopedClientDispersions({ limit: 100 });
         if (cancelled) return;
         setRows((result.rows || []) as DispersionRow[]);
+        setDispersionCursor(result.nextCursor);
+        setHasMoreDispersions(result.hasMore);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "No se pudieron cargar las dispersiones.");
       }
@@ -892,6 +900,30 @@ export default function WalletDispersionesPage() {
     rootId,
     balanceReloadKey,
   ]);
+  const loadMoreDispersions = useCallback(async () => {
+    if (!dispersionCursor || loadingMoreDispersions) return;
+
+    setLoadingMoreDispersions(true);
+    try {
+      const result = await listScopedClientDispersions({
+        limit: 100,
+        cursorSeconds: dispersionCursor.seconds,
+        cursorNanoseconds: dispersionCursor.nanoseconds,
+        cursorId: dispersionCursor.id,
+      });
+      const nextRows = (result.rows || []) as DispersionRow[];
+      setRows((current) => {
+        const seen = new Set(current.map((row) => row.id));
+        return [...current, ...nextRows.filter((row) => !seen.has(row.id))];
+      });
+      setDispersionCursor(result.nextCursor);
+      setHasMoreDispersions(result.hasMore);
+    } catch (e: any) {
+      setError(e?.message || "No se pudieron cargar más dispersiones.");
+    } finally {
+      setLoadingMoreDispersions(false);
+    }
+  }, [dispersionCursor, loadingMoreDispersions]);
   const displayedRows = useMemo(() => {
     const term =
       dispersionSearch
@@ -3058,6 +3090,18 @@ export default function WalletDispersionesPage() {
             </tbody>
           </table>
         </div>
+        {hasMoreDispersions ? (
+          <div className="border-t border-white/10 p-3 text-center">
+            <button
+              type="button"
+              onClick={loadMoreDispersions}
+              disabled={loadingMoreDispersions}
+              className="rounded-lg border border-emerald-500/40 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMoreDispersions ? "Cargando..." : "Cargar más dispersiones"}
+            </button>
+          </div>
+        ) : null}
       </div>
             {notesFor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
