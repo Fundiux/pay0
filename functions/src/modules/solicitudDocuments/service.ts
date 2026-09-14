@@ -5,6 +5,7 @@ import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, g
 import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallables";
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
+import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -523,6 +524,21 @@ logActivityTx(tx, db, {
           iqCreateQueueStatus: "NOT_ENQUEUED",
           iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
           iqSyncUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+
+    await ensureAutomaticFacturamaDraftForSolicitud({
+      auth: request.auth,
+      solicitudId,
+      source: "OC_UPLOAD",
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          facturamaAutoDraftStatus: "ERROR",
+          facturamaAutoDraftLastError: String(error?.message || error || "No se pudo preparar el borrador CFDI automatico desde la OC."),
+          facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );

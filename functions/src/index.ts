@@ -34,6 +34,7 @@ import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } f
 import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
+import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -562,6 +563,23 @@ export const createSolicitud = onCall(
             materialitySyncStatus: "ERROR",
             materialitySyncLastError: String(error?.message || error || "No se pudo crear el expediente de Materialidad."),
             materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      ),
+    );
+
+    postCreateTasks.push(
+      ensureAutomaticFacturamaDraftForSolicitud({
+        auth: request.auth,
+        solicitudId: solicitudRef.id,
+        source: "SOLICITUD_CREATE",
+      }).catch((error) =>
+        solicitudRef.set(
+          {
+            facturamaAutoDraftStatus: "ERROR",
+            facturamaAutoDraftLastError: String(error?.message || error || "No se pudo preparar el borrador CFDI automatico."),
+            facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         ),

@@ -4,6 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
+import { isOwnInvoiceIssuerCompany } from "./service";
 
 const FACTURAMA_SANDBOX_USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const FACTURAMA_SANDBOX_PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -108,6 +109,9 @@ export const saveFacturamaDraft = onCall(
     const company: any = companySnap.data() || {};
     if (text(company.rootId, 128) !== rootId || company.active === false) {
       throw new HttpsError("permission-denied", "Empresa emisora fuera de tu alcance o inactiva.");
+    }
+    if (!isOwnInvoiceIssuerCompany(company)) {
+      throw new HttpsError("failed-precondition", "Solo las empresas propias pueden emitir o preparar CFDI desde PAY0.");
     }
     const companyRfc = text(company.rfc, 13).toUpperCase();
     if (!companyRfc) throw new HttpsError("failed-precondition", "La empresa emisora no tiene RFC configurado.");
