@@ -353,7 +353,7 @@ export default function PagosPage() {
   const [loadingPagos, setLoadingPagos] = useState(true);
   const [loadingMorePagos, setLoadingMorePagos] = useState(false);
   const [hasMorePagos, setHasMorePagos] = useState(false);
-  const [pagoCursor, setPagoCursor] = useState<{ createdAt: number; id: string } | null>(null);
+  const [pagoCursor, setPagoCursor] = useState<{ seconds: number; nanoseconds: number; id: string } | null>(null);
 
   const [filter, setFilter] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "createdAt", dir: "desc" });
@@ -1455,9 +1455,12 @@ export default function PagosPage() {
     try {
       const page = await listPagos(append && pagoCursor ? {
         limit: 100,
-        cursorCreatedAt: pagoCursor.createdAt,
+        fromMillis: range.from.getTime(),
+        toMillis: range.to.getTime(),
+        cursorSeconds: pagoCursor.seconds,
+        cursorNanoseconds: pagoCursor.nanoseconds,
         cursorId: pagoCursor.id,
-      } : { limit: 100 });
+      } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() });
       setPagos((current) => append ? [...current, ...page.items] : page.items);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
@@ -1467,9 +1470,9 @@ export default function PagosPage() {
       setLoadingPagos(false);
       setLoadingMorePagos(false);
     }
-  }, [canViewPagos, rootId, myUid, pagoCursor]);
+  }, [canViewPagos, rootId, myUid, pagoCursor, range]);
 
-  useEffect(() => { void loadPagosPage(false); }, [canViewPagos, rootId, myUid]);
+  useEffect(() => { void loadPagosPage(false); }, [canViewPagos, rootId, myUid, range]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {

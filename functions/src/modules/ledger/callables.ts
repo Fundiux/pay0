@@ -3,6 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { resolveClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized } from "../../utils/authGuard";
+import { readLedgerQueryPages } from "./queryPages";
 import {
   buildCanonicalBalanceValues,
   readCanonicalBalanceSummary,
@@ -404,22 +405,18 @@ export const getUserWalletOverview = onCall(
 );
 
 async function readScopedClientWalletAccounts(scope: LedgerScope) {
-  const accountsSnap = await db
+  const accountDocs = await readLedgerQueryPages(db
     .collection("balanceAccounts")
     .where("holderType", "==", "CLIENT")
-    .where(scope.field, "==", scope.value)
-    .limit(500)
-    .get();
+    .where(scope.field, "==", scope.value));
 
   const advanceMap = new Map<string, { totalGranted: number; pendingAmount: number }>();
 
-  const advancesSnap = await db
+  const advanceDocs = await readLedgerQueryPages(db
     .collection("clientAdvances")
-    .where(scope.field, "==", scope.value)
-    .limit(1000)
-    .get();
+    .where(scope.field, "==", scope.value));
 
-  advancesSnap.forEach((doc) => {
+  advanceDocs.forEach((doc) => {
     const data = doc.data() || {};
     const clienteId = cleanText((data as any).clienteId || (data as any).clientId);
 
@@ -436,7 +433,7 @@ async function readScopedClientWalletAccounts(scope: LedgerScope) {
     advanceMap.set(clienteId, current);
   });
 
-  const accounts = accountsSnap.docs.map((doc) => {
+  const accounts = accountDocs.map((doc) => {
     const data = doc.data() || {};
     const holderId = cleanText((data as any).holderId);
     const advance = advanceMap.get(holderId) || {
@@ -580,16 +577,14 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
       }
     : null;
 
-  const movementsSnap = await db
+  const movementDocs = await readLedgerQueryPages(db
     .collection("balanceMovements")
     .where("holderType", "==", "CLIENT")
     .where("holderId", "==", cleanClienteId)
     .where(scope.field, "==", scope.value)
-    .orderBy("createdAt", "desc")
-    .limit(1000)
-    .get();
+    .orderBy("createdAt", "desc"));
 
-  const filteredMovements = movementsSnap.docs
+  const filteredMovements = movementDocs
     .map(mapClientDetailMovement)
     .sort((a, b) => Number(a.createdAtMillis || 0) - Number(b.createdAtMillis || 0));
 
@@ -606,22 +601,18 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
     };
   });
 
-  const [advancesByClienteIdSnap, advancesByClientIdSnap] = await Promise.all([
-    db
+  const [advancesByClienteId, advancesByClientId] = await Promise.all([
+    readLedgerQueryPages(db
       .collection("clientAdvances")
       .where(scope.field, "==", scope.value)
-      .where("clienteId", "==", cleanClienteId)
-      .limit(1000)
-      .get(),
-    db
+      .where("clienteId", "==", cleanClienteId)),
+    readLedgerQueryPages(db
       .collection("clientAdvances")
       .where(scope.field, "==", scope.value)
-      .where("clientId", "==", cleanClienteId)
-      .limit(1000)
-      .get(),
+      .where("clientId", "==", cleanClienteId)),
   ]);
   const advanceDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
-  [...advancesByClienteIdSnap.docs, ...advancesByClientIdSnap.docs].forEach((doc) => {
+  [...advancesByClienteId, ...advancesByClientId].forEach((doc) => {
     advanceDocs.set(doc.id, doc);
   });
 
@@ -640,22 +631,18 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
       }
     : null;
 
-  const [dispersionsByClienteIdSnap, dispersionsByClientIdSnap] = await Promise.all([
-    db
+  const [dispersionsByClienteId, dispersionsByClientId] = await Promise.all([
+    readLedgerQueryPages(db
       .collection("clientDispersions")
       .where(scope.field, "==", scope.value)
-      .where("clienteId", "==", cleanClienteId)
-      .limit(1000)
-      .get(),
-    db
+      .where("clienteId", "==", cleanClienteId)),
+    readLedgerQueryPages(db
       .collection("clientDispersions")
       .where(scope.field, "==", scope.value)
-      .where("clientId", "==", cleanClienteId)
-      .limit(1000)
-      .get(),
+      .where("clientId", "==", cleanClienteId)),
   ]);
   const dispersionDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
-  [...dispersionsByClienteIdSnap.docs, ...dispersionsByClientIdSnap.docs].forEach((doc) => {
+  [...dispersionsByClienteId, ...dispersionsByClientId].forEach((doc) => {
     dispersionDocs.set(doc.id, doc);
   });
 

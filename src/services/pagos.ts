@@ -27,12 +27,15 @@ export async function createPago(input: {
 export type PagosPageResult = {
   items: any[];
   hasMore: boolean;
-  nextCursor: { createdAt: number; id: string } | null;
+  nextCursor: { seconds: number; nanoseconds: number; id: string } | null;
 };
 
 export async function listPagos(input: {
   limit?: number;
-  cursorCreatedAt?: number;
+  fromMillis?: number;
+  toMillis?: number;
+  cursorSeconds?: number;
+  cursorNanoseconds?: number;
   cursorId?: string;
 }): Promise<PagosPageResult> {
   const fn = httpsCallable(functions, "listPagos");
@@ -157,4 +160,3 @@ export async function resumePagoApplicationIqPlan(params: {
   const res: any = await fn(params);
   return res?.data ?? res;
 }
-

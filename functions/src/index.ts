@@ -2164,16 +2164,21 @@ export const listPagos = onCall(
     const role = String(me.role || "").trim().toLowerCase();
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 100, 1), 100);
-    const cursorMillis = Number(request.data?.cursorCreatedAt || 0);
+    const fromMillis = Number(request.data?.fromMillis || 0);
+    const toMillis = Number(request.data?.toMillis || 0);
+    const cursorSeconds = Number(request.data?.cursorSeconds || 0);
+    const cursorNanoseconds = Number(request.data?.cursorNanoseconds || 0);
     const cursorId = String(request.data?.cursorId || "").trim();
 
     let queryRef: FirebaseFirestore.Query = db.collection("pagos").where("rootId", "==", rootId);
     if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
 
+    if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(fromMillis));
+    if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", admin.firestore.Timestamp.fromMillis(toMillis));
     queryRef = queryRef.orderBy("createdAt", "desc").orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize + 1);
-    if (cursorMillis > 0 && cursorId) {
-      queryRef = queryRef.startAfter(admin.firestore.Timestamp.fromMillis(cursorMillis), cursorId);
+    if (cursorSeconds > 0 && cursorId) {
+      queryRef = queryRef.startAfter(new admin.firestore.Timestamp(cursorSeconds, cursorNanoseconds), cursorId);
     }
 
     const snap = await queryRef.get();
@@ -2182,10 +2187,21 @@ export const listPagos = onCall(
     const lastCreatedAt: any = last?.get("createdAt");
 
     return {
-      items: docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      items: docs.map((doc) => {
+        const data: any = doc.data();
+        const createdAt: any = data.createdAt;
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: createdAt && typeof createdAt.seconds === "number"
+            ? { seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds || 0 }
+            : null,
+        };
+      }),
       hasMore: snap.docs.length > pageSize,
       nextCursor: last ? {
-        createdAt: typeof lastCreatedAt?.toMillis === "function" ? lastCreatedAt.toMillis() : 0,
+        seconds: typeof lastCreatedAt?.seconds === "number" ? lastCreatedAt.seconds : 0,
+        nanoseconds: typeof lastCreatedAt?.nanoseconds === "number" ? lastCreatedAt.nanoseconds : 0,
         id: last.id,
       } : null,
     };

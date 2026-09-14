@@ -196,6 +196,16 @@ export async function readPay0MassiveRowsFromFile(
 
       const currentValue = row[index];
 
+      if (
+        (canonical === "CLABE" || canonical === "CUENTA" || canonical === "NUMERO DE TARJETA") &&
+        typeof currentValue === "number" &&
+        !Number.isSafeInteger(currentValue)
+      ) {
+        throw new Error(
+          `La fila ${i + 1} tiene ${canonical} guardado como número sin precisión suficiente. Guárdalo como texto en Excel y vuelve a cargar el archivo.`
+        );
+      }
+
       if (out[canonical] === undefined || isEmptyCell(out[canonical])) {
         out[canonical] = currentValue ?? "";
       }

@@ -1,4 +1,5 @@
 import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { readLedgerQueryPages } from "./queryPages";
 import type {
   LedgerBalanceSummary,
   LedgerDirection,
@@ -82,10 +83,14 @@ function isPendingAdvanceStatus(status: unknown) {
 async function readPendingAdvanceAmount(db: Firestore, holderType: LedgerHolderType, holderId: string) {
   if (holderType !== "CLIENT") return 0;
 
-  const snap = await db.collection("clientAdvances").where("clienteId", "==", holderId).limit(250).get();
+  const [legacyDocs, canonicalDocs] = await Promise.all([
+    readLedgerQueryPages(db.collection("clientAdvances").where("clienteId", "==", holderId)),
+    readLedgerQueryPages(db.collection("clientAdvances").where("clientId", "==", holderId)),
+  ]);
+  const docs = [...new Map([...legacyDocs, ...canonicalDocs].map((doc) => [doc.id, doc])).values()];
 
   return money2(
-    snap.docs.reduce((sum, doc) => {
+    docs.reduce((sum, doc) => {
       const data = doc.data() || {};
       if (!isPendingAdvanceStatus((data as any).status)) return sum;
 
