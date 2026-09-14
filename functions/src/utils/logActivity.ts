@@ -1,10 +1,10 @@
-import * as admin from "firebase-admin";
 import type {
   DocumentReference,
   Firestore,
   Transaction,
   WriteBatch,
 } from "firebase-admin/firestore";
+import { FieldValue as FirestoreFieldValue, getFirestore } from "firebase-admin/firestore";
 import { getActivityEventMeta, normalizeActivityEventKey } from "../modules/activityLog/eventCatalog";
 
 export type ActivityLogParams = {
@@ -125,14 +125,14 @@ export function buildActivityPayload(params: ActivityLogParams) {
 
     createdBy: clean(params.createdBy || params.actorUid),
     createdByRole: clean(params.createdByRole || params.actorRole),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FirestoreFieldValue.serverTimestamp(),
   };
 
   return withDefinedExtra(payload, params.extra);
 }
 
 export async function logActivity(params: LogParams) {
-  const db = admin.firestore();
+  const db = getFirestore();
   await db.collection("activityLog").add(buildActivityPayload(params));
 }
 

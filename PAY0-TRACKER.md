@@ -87,7 +87,7 @@ explícita y una revisión final de cambios, índices y configuración.
 
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
-| Cerrado y verificado | 6 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-04`, `PERF-06` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
+| Cerrado y verificado | 7 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-03`, `PERF-04`, `PERF-06` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
 | Publicado / validación pendiente | 2 | `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
 | Implementado / dependencia externa | 5 | `SEC-01`, `WA-A5`, `WA-CONTACTS-01`, `IQ-01` e `IQ-02`: requieren conector WhatsApp o sandbox IQ para cierre verificable. |
 | Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones todavía pendiente de implementar o diagnosticar. |
@@ -166,7 +166,7 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | WAL-02 | CERRADO | P1 | Wallet / estado de cuenta | La lectura se acota por `scope` y cliente; las consultas internas recorren páginas completas y deduplican `clienteId`/`clientId`, por lo que el saldo no se calcula sobre un prefijo truncado. Sus índices están `READY` en producción. | Smoke de Emulator: estado de cuenta conserva 1,001 movimientos para un cliente sin mezclar otra raíz. |
 | MAT-01 | ABIERTO | P2 | Materialidad | El dashboard limita folders, operaciones y contratos por root antes de agrupar/filtrar localmente; puede omitir operaciones al superar los topes. | Paginación o read-model por carpeta con resultados deterministas. |
 | REP-01 | IMPLEMENTADO / VALIDACIÓN | P1 | Reportes | Ganancias por cliente y Tiempos operativos consultan por `rootId` + `createdAt`. Pagos nuevos guardan `reportDateAt`; `backfillPagoReportDates` está desplegada y el panel superadmin está compilado. La consulta de incidencias de Pagos ya quedó preparada localmente para filtrar y ordenar por `rootId + reportDateAt`, con su índice. Hosting no pudo publicar el panel: dos subidas consecutivas a Google Storage se reiniciaron (`ECONNRESET`) después de 28.5 MB y 9.5 MB. | Estabilizar la subida a Google Storage, publicar el panel, ejecutar simulación y backfill por root; después desplegar el índice y la consulta de Pagos, y validar rangos antes de cerrar. |
-| PERF-03 | IMPLEMENTADO / VALIDACIÓN | P2 | Frontend / catálogos | Clientes y Empresas usan caché compartida con TTL y deduplicación. Las mutaciones de Empresa invalidan explícitamente la caché para que el siguiente listado refleje el cambio sin esperar 30 segundos. | Ejecutar smoke autenticado de alta, edición bancaria y activación/desactivación antes de cerrar. |
+| PERF-03 | CERRADO | P2 | Frontend / catálogos | Clientes y Empresas usan caché compartida con TTL y deduplicación. Todas las mutaciones de Cliente y Empresa invalidan explícitamente sus catálogos para que el siguiente listado refleje el cambio sin esperar 30 segundos. | Smoke autenticado de Emulator: alta, edición y desactivación de Cliente se reflejan en el catálogo canónico; la desactivación elimina el cliente de la lista activa. |
 | UX-01 | ABIERTO | P1 | Diseño / frontend | Varias páginas difieren en espaciado, jerarquía, tablas, acciones y estados, lo que puede confundir la operación. | Inventario visual, tokens/componentes canónicos y migración por pantalla con revisión visual. |
 | ARC-01 | ABIERTO | P1 | Arquitectura | Falta una ubicación única y versionada para contratos, estados, copys, formatos visuales y decisiones canónicas que el sistema pueda reutilizar. | Carpeta `src/canonicos/` con esquema, ownership y primeros contratos consumidos por código, sin duplicar reglas financieras. |
 | AGT-007 | ABIERTO | P1 | Hugo Sánchez / Agente 007 | Una sola entidad: para clientes se presenta como Hugo o Hugito; internamente conserva el identificador Agente 007. Aprenderá de todos los módulos y de las decisiones humanas, incluyendo el rol, permiso y alcance que las autorizó. No responderá ni ejecutará acciones en esta etapa. | Especificación canónica, bitácora de observación con intención, decisión humana, resultado y contexto de autorización; métricas únicas por agente y pruebas locales sin acciones financieras ni mensajes autónomos. |
@@ -213,6 +213,7 @@ Estos puntos deben medirse antes de optimizar; no asumir que toda espera es de R
 | PERF-06 | 2026-09-14 | Usuarios paginados por cursor. | Emulator: 102 usuarios en 100 + 2. |
 | WAL-02 | 2026-09-14 | Estado de cuenta sin límite silencioso de 1,000 registros. | Emulator: 1,001 movimientos completos para el cliente de prueba. |
 | PERF-04 | 2026-09-14 | Historial de dispersiones paginado sin límite de 500 registros. | Emulator: 501 dispersiones en 500 + 1, sin duplicados y con cursor exacto. |
+| PERF-03 | 2026-09-14 | Catálogo de clientes se invalida después de sus mutaciones. | Emulator: alta, edición y desactivación se reflejan inmediatamente en el listado canónico. |
 
 ## Evidencia de validación reciente
 
