@@ -2,29 +2,11 @@ import { CALLABLES } from "@/lib/callableNames";
 import { httpsCallable } from "firebase/functions";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { functions, storage } from "@/lib/firebaseClient";
+import { MATERIALIDAD_CANONICAL_DOCUMENTS } from "@/canonicos/materialidad";
 
 export const MAX_SOLICITUD_DOCUMENT_SIZE_BYTES = 1024 * 1024;
 
-export const SOLICITUD_DOCUMENT_TYPES = [
-  { value: "FACTURA_PDF", label: "Factura PDF", accept: "application/pdf,.pdf" },
-  { value: "FACTURA_XML", label: "Factura XML", accept: ".xml,text/xml,application/xml" },
-  { value: "ORDEN_COMPRA", label: "Orden de Compra", accept: ".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" },
-  { value: "COTIZACION", label: "Cotizacion", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv" },
-  { value: "PRESUPUESTO", label: "Presupuesto / Cotizacion", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.csv" },
-  { value: "CONTRATO_OPERACION", label: "Contrato de operacion", accept: "application/pdf,.pdf,.doc,.docx" },
-  { value: "AUTORIZACION_OPERATIVA", label: "Autorizacion operativa", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.txt" },
-  { value: "COMPLEMENTO_PAGO_XML", label: "Complemento de Pago XML", accept: ".xml,text/xml,application/xml" },
-  { value: "COMPLEMENTO_PAGO_PDF", label: "Complemento de Pago PDF", accept: "application/pdf,.pdf" },
-  { value: "CFDI_GASTO_XML", label: "CFDI de Gasto XML", accept: ".xml,text/xml,application/xml" },
-  { value: "CFDI_GASTO_PDF", label: "CFDI de Gasto PDF", accept: "application/pdf,.pdf" },
-  { value: "SOLICITUD_GASTO_RELACIONADA", label: "Solicitud de Gasto Relacionada", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv" },
-  { value: "COMPROBANTE_TRANSFERENCIA", label: "Comprobante de Transferencia", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp" },
-  { value: "ESTADO_CUENTA", label: "Estado de Cuenta", accept: "application/pdf,.pdf,.csv,.xlsx" },
-  { value: "ACUSE_RECEPCION", label: "Acuse de Recepcion", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp" },
-  { value: "EVIDENCIA_ENTREGA", label: "Evidencia de Entrega", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.txt" },
-  { value: "EVIDENCIA_OPERATIVA", label: "Evidencia Operativa", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.xls,.xlsx" },
-  { value: "OTRO", label: "Otro", accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.xml,.xls,.xlsx,.csv,.doc,.docx,.txt" },
-] as const;
+export const SOLICITUD_DOCUMENT_TYPES = MATERIALIDAD_CANONICAL_DOCUMENTS.map(({ value, label, accept }) => ({ value, label, accept }));
 
 export type SolicitudDocumentType = typeof SOLICITUD_DOCUMENT_TYPES[number]["value"];
 
