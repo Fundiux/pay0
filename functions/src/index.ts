@@ -33,6 +33,7 @@ import { buildSolicitudCanceladaPatch, buildSolicitudEnSustitucionPatch, getSoli
 import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } from "./modules/iq/solicitudCancellationService";
 import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
+import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -550,6 +551,22 @@ export const createSolicitud = onCall(
         })
       );
     }
+
+    postCreateTasks.push(
+      linkSolicitudToMaterialityOperationCore({
+        auth: request.auth,
+        data: { solicitudId: solicitudRef.id },
+      }).catch((error) =>
+        solicitudRef.set(
+          {
+            materialitySyncStatus: "ERROR",
+            materialitySyncLastError: String(error?.message || error || "No se pudo crear el expediente de Materialidad."),
+            materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      ),
+    );
 
     await Promise.all(postCreateTasks);
     await recordOperationalMetric({
@@ -2649,3 +2666,5 @@ export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
 export { parsePagoReceiptPdf } from "./modules/pagos/receiptPdfCallables";
+export { getFacturamaSandboxStatus, saveFacturamaDraft, listFacturamaInvoices } from "./modules/facturama/callables";
+export { recordAgent007Observation, listAgent007Observations } from "./modules/agent007/callables";

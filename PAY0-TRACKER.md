@@ -1,6 +1,6 @@
 # PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-09  
+Actualizado: 2026-09-14  
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 Este archivo complementa `AGENTS.md`; no lo reemplaza. `AGENTS.md` conserva reglas
@@ -65,6 +65,7 @@ puede ser `IMPLEMENTADO`, `NO REPRODUCIDO`, `ALTERNATIVA`, `BLOQUEADO` o `CERRAD
 | 2026-09-13 | PERF-01 | IMPLEMENTADO / VALIDACIÓN | `/pagos` ya usa la callable `listPagos`: autentica y autoriza por rol, exige `rootId`, consulta por cursor con páginas de hasta 100 y la interfaz ofrece “Cargar más pagos”. La función Node 22 está activa en `us-central1`; los índices de Pagos están `READY` en Firestore. | TypeScript, build de Functions y verificador de políticas correctos. Hosting publicó `ssrpay0system-00387-yiy` y `/login` respondió HTTP 200 el 2026-09-14. Falta smoke autenticado con más de 100 pagos. |
 | 2026-09-13 | PERF-01 / WAL-02 / XLSX-01 | IMPLEMENTADO / VALIDACIÓN | Pagos ahora filtra el rango en Firestore antes de paginar y conserva el cursor con segundos/nanosegundos. Wallet lee todas las páginas de movimientos, anticipos y dispersiones, conservando compatibilidad `clienteId`/`clientId` y deduplicación. El lector CSV de ExcelJS se sustituyó por un parser de navegador con límites, preservando CLABEs y ceros iniciales. | TypeScript frontend, Functions, lint y política de autorización pasan con Node 22. Falta smoke de Emulator con volúmenes representativos y publicación del frontend; la auditoría confirma que `xlsx` ya no está, pero quedan vulnerabilidades transitivas que requieren actualización mayor de Firebase/Next/ExcelJS. |
 | 2026-09-14 | PERF-01 / PERF-06 / WAL-02 | CERRADO | Smoke aislado de Emulator verificó paginación de Usuarios y Pagos y estado de cuenta completo. Durante el smoke se detectó y corrigió el uso inválido de `admin.firestore.Timestamp` en `listPagos`; se migró a `Timestamp` modular. | 102 usuarios en dos páginas, 101 pagos en dos páginas sin duplicados y 1,001 movimientos de Wallet completos. Functions build con Node 22 correcto; se despliega la reparación dirigida de `listPagos`. |
+| 2026-09-14 | MAT-01 / Materialidad 2.0 | IMPLEMENTADO / VALIDACIÓN | Solicitudes y documentos de Solicitud ya disparan sincronización automática hacia el expediente de Materialidad sin crear una arquitectura paralela. El alta de Solicitud intenta crear/actualizar su expediente y la carga/desactivación de documentos recalcula evidencia; si falla, la operación principal no se rompe y queda marcada con `materialitySyncStatus: ERROR` para reintento/auditoría. | Functions build y verificador de política correctos. Desplegadas `createSolicitud`, `finalizeSolicitudDocumentUpload` y `deactivateSolicitudDocument` en `us-central1`. Falta smoke autenticado con OC real para cerrar. |
 
 ## Registro de avance automático
 
@@ -88,7 +89,7 @@ explícita y una revisión final de cambios, índices y configuración.
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
 | Cerrado y verificado | 8 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-03`, `PERF-04`, `PERF-06`, `SOL-PERF-01` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
-| Publicado / validación pendiente | 2 | `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
+| Publicado / validación pendiente | 3 | `XLSX-01`, `QA-01` y `MAT-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
 | Implementado / dependencia externa | 5 | `SEC-01`, `WA-A5`, `WA-CONTACTS-01`, `IQ-01` e `IQ-02`: requieren conector WhatsApp o sandbox IQ para cierre verificable. |
 | Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones todavía pendiente de implementar o diagnosticar. |
 
@@ -164,7 +165,7 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | IQ-01 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / resiliencia | El wrapper HTTP canónico con timeout acotado protege Solicitudes, Depósitos y el POST de Dispersiones; también lectura, recuperación, conciliación, catálogos, descarga de factura y diagnósticos. Las llamadas restantes ya tenían `AbortController` acotado. No hace reintentos implícitos sobre creaciones potencialmente enviadas. | Definir tiempos por operación y probar timeout controlado contra sandbox/local antes de cerrar. |
 | IQ-02 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / automatización | La creación IQ de Solicitudes encola una Cloud Task inmediata e idempotente usando el mismo job, bloqueo por perfil y lógica de recuperación. Para automatización respeta la configuración activa de la raíz; solicitudes manuales autorizadas pueden iniciar sin esperar cinco minutos. El scheduler permanece como respaldo si Cloud Tasks falla. | Emulator validó descubrimiento, creación de cola y ejecución inocua del handler (14 ms); falta prueba con job real + IQ sandbox para medir cola→inicio y confirmar que tarea/scheduler no duplican POST. |
 | WAL-02 | CERRADO | P1 | Wallet / estado de cuenta | La lectura se acota por `scope` y cliente; las consultas internas recorren páginas completas y deduplican `clienteId`/`clientId`, por lo que el saldo no se calcula sobre un prefijo truncado. Sus índices están `READY` en producción. | Smoke de Emulator: estado de cuenta conserva 1,001 movimientos para un cliente sin mezclar otra raíz. |
-| MAT-01 | ABIERTO | P2 | Materialidad | El dashboard limita folders, operaciones y contratos por root antes de agrupar/filtrar localmente; puede omitir operaciones al superar los topes. | Paginación o read-model por carpeta con resultados deterministas. |
+| MAT-01 | IMPLEMENTADO / VALIDACIÓN | P2 | Materialidad | Materialidad avanza hacia expediente operativo central: Solicitudes y documentos sincronizan evidencia automáticamente sin duplicar arquitectura. El dashboard ya no debe depender de cargas manuales para enterarse de nuevas operaciones, pero queda pendiente validar determinismo a escala. | Smoke con Solicitud + OC real, confirmar operación visible en Materialidad y validar paginación/read-model por carpeta antes de cerrar. |
 | REP-01 | IMPLEMENTADO / VALIDACIÓN | P1 | Reportes | Ganancias por cliente y Tiempos operativos consultan por `rootId` + `createdAt`. Pagos nuevos guardan `reportDateAt`; `backfillPagoReportDates` está desplegada y el panel superadmin está compilado. La consulta de incidencias de Pagos ya quedó preparada localmente para filtrar y ordenar por `rootId + reportDateAt`, con su índice. Hosting no pudo publicar el panel: dos subidas consecutivas a Google Storage se reiniciaron (`ECONNRESET`) después de 28.5 MB y 9.5 MB. | Estabilizar la subida a Google Storage, publicar el panel, ejecutar simulación y backfill por root; después desplegar el índice y la consulta de Pagos, y validar rangos antes de cerrar. |
 | PERF-03 | CERRADO | P2 | Frontend / catálogos | Clientes y Empresas usan caché compartida con TTL y deduplicación. Todas las mutaciones de Cliente y Empresa invalidan explícitamente sus catálogos para que el siguiente listado refleje el cambio sin esperar 30 segundos. | Smoke autenticado de Emulator: alta, edición y desactivación de Cliente se reflejan en el catálogo canónico; la desactivación elimina el cliente de la lista activa. |
 | UX-01 | ABIERTO | P1 | Diseño / frontend | Varias páginas difieren en espaciado, jerarquía, tablas, acciones y estados, lo que puede confundir la operación. | Inventario visual, tokens/componentes canónicos y migración por pantalla con revisión visual. |
@@ -220,6 +221,7 @@ Estos puntos deben medirse antes de optimizar; no asumir que toda espera es de R
 
 - 2026-09-14: se cargaron en Firestore Emulator 101 usuarios, 501 dispersiones y 1,001 movimientos bajo una raíz aislada. El smoke de delegaciones pasó: operador dueño y delegado autorizado permitidos; delegado sólo lectura bloqueado.
 - 2026-09-14: el smoke automático de WA-A5 no generó el job esperado en el emulador. `WA-A5` y `SEC-01` permanecen en validación hasta corregir esa ejecución y probar el conector externo con dos raíces.
+- 2026-09-14: Materialidad quedó conectada al ciclo normal de Solicitudes: `createSolicitud`, `finalizeSolicitudDocumentUpload` y `deactivateSolicitudDocument` sincronizan o recalculan el expediente sin bloquear la operación principal.
 
 ## Registro de hallazgos
 

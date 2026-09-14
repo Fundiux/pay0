@@ -1,5 +1,5 @@
 import { HttpsError } from "firebase-functions/v2/https";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, getFirestore, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import {
   MATERIALITY_REQUIRED_TYPES,
   buildMaterialityClientCompanyId,
@@ -9,6 +9,23 @@ import {
 } from "./domain";
 
 const db = getFirestore();
+
+async function readRootCollectionPages(collectionName: string, rootId: string): Promise<QueryDocumentSnapshot[]> {
+  const rows: QueryDocumentSnapshot[] = [];
+  let cursor: QueryDocumentSnapshot | undefined;
+  const pageSize = 500;
+  for (;;) {
+    let query = db.collection(collectionName)
+      .where("rootId", "==", rootId)
+      .orderBy(FieldPath.documentId())
+      .limit(pageSize);
+    if (cursor) query = query.startAfter(cursor);
+    const page = await query.get();
+    rows.push(...page.docs);
+    if (page.size < pageSize) return rows;
+    cursor = page.docs[page.docs.length - 1];
+  }
+}
 
 function requireUid(request: any): string {
   const uid = cleanText(request?.auth?.uid);
@@ -710,24 +727,24 @@ export async function getMaterialityDashboardCore(request: any) {
   const statusFilter = normalizeDashboardStatus(request?.data?.status || "ALL");
   const search = cleanText(request?.data?.search).toLowerCase();
 
-  const [foldersSnap, operationsSnap, contractsSnap] = await Promise.all([
-    db.collection("materialityClientCompanies").where("rootId", "==", rootId).limit(500).get(),
-    db.collection("materialityOperations").where("rootId", "==", rootId).limit(1000).get(),
-    db.collection("materialityContracts").where("rootId", "==", rootId).limit(500).get(),
+  const [folderDocs, operationDocs, contractDocs] = await Promise.all([
+    readRootCollectionPages("materialityClientCompanies", rootId),
+    readRootCollectionPages("materialityOperations", rootId),
+    readRootCollectionPages("materialityContracts", rootId),
   ]);
 
   const foldersById = new Map<string, any>();
-  foldersSnap.docs.forEach((doc) => {
+  folderDocs.forEach((doc) => {
     const row = { id: doc.id, ...(doc.data() || {}) } as any;
     if (cleanText(row.rootId) !== rootId) return;
     foldersById.set(doc.id, row);
   });
 
-  const operations = operationsSnap.docs
+  const operations = operationDocs
     .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
     .filter((row) => cleanText(row.rootId) === rootId);
 
-  const contracts = contractsSnap.docs
+  const contracts = contractDocs
     .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
     .filter((row) => cleanText(row.rootId) === rootId);
 
@@ -852,4 +869,3 @@ export async function getMaterialityDashboardCore(request: any) {
     alerts: rows.filter((row) => row.alertCount > 0).slice(0, 50),
   };
 }
-

@@ -17,6 +17,7 @@ import {
   CreditCard,
   Shield,
   MessageCircle,
+  ReceiptText,
 } from "lucide-react";
 
 import { useAuth, logout } from "@/lib/auth";
@@ -41,6 +42,8 @@ const iconMap: Record<string, any> = {
   modulos: Shield,
   telegram: MessageCircle,
   whatsapp: MessageCircle,
+  facturacion: ReceiptText,
+  hugo: Shield,
 };
 
 export default function AppShell({ children }: { children: ReactNode }) {

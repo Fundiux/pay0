@@ -346,12 +346,10 @@ export default function ReportesPage() {
 
   useEffect(() => {
     if (!profileLoading && canViewReports) {
-      loadEarningsReport();
-      loadOperationalReport();
-      loadPostingIssuesReport();
+      void loadCurrentTab();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileLoading, canViewReports, range.from.getTime(), range.to.getTime()]);
+  }, [profileLoading, canViewReports, activeTab, range.from.getTime(), range.to.getTime()]);
 
   if (profileLoading) {
     return (

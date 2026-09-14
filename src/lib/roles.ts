@@ -143,6 +143,13 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     actionKey: "view",
   },
   {
+    label: "Facturación",
+    href: "/facturacion",
+    iconKey: "facturacion",
+    superadminOnly: true,
+  },
+  { label: "Hugo", href: "/hugo", iconKey: "hugo", superadminOnly: true },
+  {
     label: "Materialidad",
     href: "/materialidad",
     iconKey: "reportes",
@@ -321,6 +328,8 @@ export function getDefaultRouteCandidates(): RouteCandidate[] {
   return [
     { href: "/dashboard", moduleKey: "dashboard", actionKey: "view" },
     { href: "/reportes", moduleKey: "reportes", actionKey: "view" },
+    { href: "/facturacion", superadminOnly: true },
+    { href: "/hugo", superadminOnly: true },
     { href: "/materialidad", moduleKey: "materialidad", actionKey: "view" },
     { href: "/solicitudes", moduleKey: "solicitudes", actionKey: "view" },
     { href: "/pagos", moduleKey: "pagos", actionKey: "view" },
@@ -378,6 +387,8 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   { href: "/integraciones/iq/diagnostico", superadminOnly: true },
     { href: "/integraciones/iq", superadminOnly: true },
     { href: "/whatsapp", superadminOnly: true },
+    { href: "/facturacion", superadminOnly: true },
+    { href: "/hugo", superadminOnly: true },
     { href: "/catalogos/tipos-operacion", superadminOnly: true },
     { href: "/despachos", superadminOnly: true },
     { href: "/wallet/adelantos", moduleKey: "wallet", actionKey: "adelantos", superadminOnly: true },
@@ -452,6 +463,4 @@ export function getFirstAllowedRoute(profile: any): string {
 
   return "/dashboard";
 }
-
-
 

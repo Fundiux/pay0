@@ -23,6 +23,8 @@ export type ActivityEventModule =
   | "dispersiones"
   | "docs"
   | "empresas"
+  | "facturacion"
+  | "agente007"
   | "mantenimiento"
   | "iq"
   | "pagos"
@@ -125,6 +127,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
 
   COMPANY_CREATE: eventEntry("COMPANY_CREATE", "Empresa creada", "empresas", "business", "success"),
   COMPANY_TOGGLE: eventEntry("COMPANY_TOGGLE", "Empresa activada o desactivada", "empresas", "business", "warning"),
+  FACTURA_BORRADOR_CREADO: eventEntry("FACTURA_BORRADOR_CREADO", "Borrador CFDI creado", "facturacion", "financial", "success"),
+  AGENTE_007_OBSERVACION: eventEntry("AGENTE_007_OBSERVACION", "Observación registrada por Hugo", "agente007", "business", "success"),
 
   DESPACHO_CREATE: eventEntry("DESPACHO_CREATE", "Despacho creado", "despachos", "business", "success"),
   DESPACHO_UPDATE: eventEntry("DESPACHO_UPDATE", "Despacho actualizado", "despachos", "business"),
