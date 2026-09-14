@@ -20,7 +20,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { logActivity, logActivityTx } from "./utils/logActivity";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { nextSequenceTx, buildCanonicalFolio } from "./modules/sequences/service";
 import {
@@ -2174,11 +2174,11 @@ export const listPagos = onCall(
     if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
 
-    if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(fromMillis));
-    if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", admin.firestore.Timestamp.fromMillis(toMillis));
-    queryRef = queryRef.orderBy("createdAt", "desc").orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize + 1);
+    if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
+    if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
+    queryRef = queryRef.orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(pageSize + 1);
     if (cursorSeconds > 0 && cursorId) {
-      queryRef = queryRef.startAfter(new admin.firestore.Timestamp(cursorSeconds, cursorNanoseconds), cursorId);
+      queryRef = queryRef.startAfter(new Timestamp(cursorSeconds, cursorNanoseconds), cursorId);
     }
 
     const snap = await queryRef.get();
