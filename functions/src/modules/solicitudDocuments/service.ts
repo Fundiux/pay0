@@ -4,6 +4,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
 import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallables";
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
+import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -528,6 +529,20 @@ logActivityTx(tx, db, {
     });
   }
 
+  await linkSolicitudToMaterialityOperationCore({
+    auth: request.auth,
+    data: { solicitudId },
+  }).catch(async (error) => {
+    await solicitudRef.set(
+      {
+        materialitySyncStatus: "ERROR",
+        materialitySyncLastError: String(error?.message || error || "No se pudo actualizar Materialidad."),
+        materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+
   return {
     ok: true,
     uploadId,
@@ -579,7 +594,7 @@ export async function deactivateSolicitudDocumentCore(request: any) {
   });
 
   
-await uploadRef.update({
+  await uploadRef.update({
     active: false,
     status: "INACTIVE",
     deactivatedBy: uid,
@@ -614,6 +629,20 @@ await uploadRef.update({
       documentTypeLabel: upload.documentTypeLabel || null,
       uploadId,
     },
+  });
+
+  await linkSolicitudToMaterialityOperationCore({
+    auth: request.auth,
+    data: { solicitudId },
+  }).catch(async (error) => {
+    await db.collection("solicitudes").doc(solicitudId).set(
+      {
+        materialitySyncStatus: "ERROR",
+        materialitySyncLastError: String(error?.message || error || "No se pudo actualizar Materialidad."),
+        materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
   });
 
   return {
