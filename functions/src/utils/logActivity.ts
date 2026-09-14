@@ -5,6 +5,7 @@ import type {
   WriteBatch,
 } from "firebase-admin/firestore";
 import { FieldValue as FirestoreFieldValue, getFirestore } from "firebase-admin/firestore";
+import { observeActivityForAgent007 } from "../modules/agent007/observer";
 import { getActivityEventMeta, normalizeActivityEventKey } from "../modules/activityLog/eventCatalog";
 
 export type ActivityLogParams = {
@@ -133,7 +134,9 @@ export function buildActivityPayload(params: ActivityLogParams) {
 
 export async function logActivity(params: LogParams) {
   const db = getFirestore();
-  await db.collection("activityLog").add(buildActivityPayload(params));
+  const payload = buildActivityPayload(params);
+  const ref = await db.collection("activityLog").add(payload);
+  await observeActivityForAgent007(db, ref.id, payload).catch(() => undefined);
 }
 
 export function logActivityTx(
