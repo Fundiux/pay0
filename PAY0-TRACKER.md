@@ -86,11 +86,10 @@ explícita y una revisión final de cambios, índices y configuración.
 
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
-| Cerrado | 2 | `AUTH-01` tiene smoke de Emulator aprobado y `OPS-01` ya está desplegado con Node 22. |
-| Implementado / validación | 3 | `OPS-MET-01`, `IQ-01`, `IQ-02`: código construido; faltan pruebas de ciclo/sandbox indicadas en cada fila. |
-| Validación pendiente | 6 | `PERF-02`, `PERF-03`, `PERF-04`, `PERF-06`, `SOL-PERF-01`, `WAL-02`: requieren smoke local y, en Wallet, despliegue de índices. |
-| En curso | 2 | `SEC-01` y el diagnóstico global de rendimiento. |
-| Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones que todavía no debe presentarse como terminado. |
+| Cerrado y verificado | 2 | `AUTH-01` y `OPS-01`: cuentan con smoke o verificación productiva completa. |
+| Publicado / validación pendiente | 6 | `PERF-01`, `WAL-02`, `PERF-04`, `PERF-06`, `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
+| Implementado / dependencia externa | 5 | `SEC-01`, `WA-A5`, `WA-CONTACTS-01`, `IQ-01` e `IQ-02`: requieren conector WhatsApp o sandbox IQ para cierre verificable. |
+| Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones todavía pendiente de implementar o diagnosticar. |
 
 ### Lote local listo para revisión previa a despliegue
 
@@ -209,6 +208,11 @@ Estos puntos deben medirse antes de optimizar; no asumir que toda espera es de R
 | --- | --- | --- | --- |
 | AUTH-01 | 2026-09-11 | Delegación operativa cerrada: Solicitudes y Pagos exigen permisos operativos específicos. | Smoke de Emulator: dueño y delegado autorizado permitidos; delegado de solo vista bloqueado. |
 | OPS-01 | 2026-09-12 | Runtime SSR y Functions estandarizados en Node 22. | `ssrpay0system` activo y `/login` respondió HTTP 200. |
+
+## Evidencia de validación reciente
+
+- 2026-09-14: se cargaron en Firestore Emulator 101 usuarios, 501 dispersiones y 1,001 movimientos bajo una raíz aislada. El smoke de delegaciones pasó: operador dueño y delegado autorizado permitidos; delegado sólo lectura bloqueado.
+- 2026-09-14: el smoke automático de WA-A5 no generó el job esperado en el emulador. `WA-A5` y `SEC-01` permanecen en validación hasta corregir esa ejecución y probar el conector externo con dos raíces.
 
 ## Registro de hallazgos
 
