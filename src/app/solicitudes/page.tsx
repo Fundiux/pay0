@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { collection, query, where, onSnapshot, orderBy, doc, getDoc} from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
-import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus } from "@/services/solicitudes";
+import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
@@ -615,6 +615,9 @@ export default function SolicitudesPage() {
   const [viewMode, setViewMode] = useState<"active" | "all">("active");
 
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
+  const [solicitudesCursor, setSolicitudesCursor] = useState<SolicitudPageCursor | null>(null);
+  const [hasMoreSolicitudes, setHasMoreSolicitudes] = useState(false);
+  const [loadingMoreSolicitudes, setLoadingMoreSolicitudes] = useState(false);
 
   // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
 
@@ -823,40 +826,39 @@ export default function SolicitudesPage() {
       return;
     }
 
-    let qy;
-
-    if (isSuperAdmin(role)) {
-      if (!rootId) return;
-      qy = query(
-        collection(db, "solicitudes"),
-        where("rootId", "==", rootId),
-        orderBy("createdAt", "desc")
-      );
-    } else if (isAdmin(role)) {
-      qy = query(
-        collection(db, "solicitudes"),
-        where("adminId", "==", uid),
-        orderBy("createdAt", "desc")
-      );
-    } else if (isOperador(role)) {
-      qy = query(
-        collection(db, "solicitudes"),
-        where("createdBy", "==", uid),
-        orderBy("createdAt", "desc")
-      );
-    } else {
-      return;
-    }
-
-    return onSnapshot(
-      qy,
-      (snap) => setSolicitudes(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      (err) => {
-        setPageMsg("No se pudieron cargar solicitudes.");
-        setSolicitudes([]);
-      }
-    );
+    let cancelled = false;
+    void listSolicitudes({ limit: 100 }).then((page) => {
+      if (cancelled) return;
+      setSolicitudes(page.items || []);
+      setSolicitudesCursor(page.nextCursor);
+      setHasMoreSolicitudes(page.hasMore === true);
+    }).catch(() => {
+      if (cancelled) return;
+      setPageMsg("No se pudieron cargar solicitudes.");
+      setSolicitudes([]);
+      setSolicitudesCursor(null);
+      setHasMoreSolicitudes(false);
+    });
+    return () => { cancelled = true; };
   }, [uid, rootId, role, canViewSolicitudes]);
+
+  const loadMoreSolicitudes = useCallback(async () => {
+    if (!solicitudesCursor || loadingMoreSolicitudes) return;
+    setLoadingMoreSolicitudes(true);
+    try {
+      const page = await listSolicitudes({ limit: 100, cursorSeconds: solicitudesCursor.seconds, cursorNanoseconds: solicitudesCursor.nanoseconds, cursorId: solicitudesCursor.id });
+      setSolicitudes((current) => {
+        const known = new Set(current.map((item) => item.id));
+        return [...current, ...(page.items || []).filter((item) => !known.has(item.id))];
+      });
+      setSolicitudesCursor(page.nextCursor);
+      setHasMoreSolicitudes(page.hasMore === true);
+    } catch (error: any) {
+      setPageMsg(error?.message || "No se pudieron cargar más solicitudes.");
+    } finally {
+      setLoadingMoreSolicitudes(false);
+    }
+  }, [loadingMoreSolicitudes, solicitudesCursor]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -1577,6 +1579,13 @@ export default function SolicitudesPage() {
           </tbody>
         </table>
       </div>
+      {hasMoreSolicitudes ? (
+        <div className="mt-3 text-center">
+          <button type="button" onClick={loadMoreSolicitudes} disabled={loadingMoreSolicitudes} className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+            {loadingMoreSolicitudes ? "Cargando solicitudes..." : "Cargar más solicitudes"}
+          </button>
+        </div>
+      ) : null}
 
       <NuevaSolicitudModal open={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} />
 

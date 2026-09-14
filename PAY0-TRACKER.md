@@ -87,7 +87,7 @@ explícita y una revisión final de cambios, índices y configuración.
 
 | Estado | Cantidad | Qué significa ahora |
 | --- | ---: | --- |
-| Cerrado y verificado | 7 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-03`, `PERF-04`, `PERF-06` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
+| Cerrado y verificado | 8 | `AUTH-01`, `OPS-01`, `PERF-01`, `PERF-03`, `PERF-04`, `PERF-06`, `SOL-PERF-01` y `WAL-02`: cuentan con smoke o verificación productiva completa. |
 | Publicado / validación pendiente | 2 | `XLSX-01` y `QA-01`: código publicado o preparado, con checks de compilación; falta el smoke específico indicado en cada fila. |
 | Implementado / dependencia externa | 5 | `SEC-01`, `WA-A5`, `WA-CONTACTS-01`, `IQ-01` e `IQ-02`: requieren conector WhatsApp o sandbox IQ para cierre verificable. |
 | Abierto | 31 | Trabajo funcional, de seguridad, diseño e integraciones todavía pendiente de implementar o diagnosticar. |
@@ -160,7 +160,7 @@ sido revisado de forma sistemática para bugs, rendimiento y pruebas.
 | PERF-05 | ABIERTO | P2 | Frontend / Dashboard | El dashboard descarga todas las solicitudes del rango elegido para calcular tres contadores en navegador. | Contadores agregados/consultas acotadas y medición de respuesta anual. |
 | PERF-06 | CERRADO | P2 | Usuarios | `listUsers` y sus dos pantallas consumidoras usan páginas de 100 filas con cursor y acción “Cargar más”. | Smoke de Emulator: 102 usuarios devueltos en 100 + 2, bajo superadmin de la raíz autorizada. |
 | PERF-07 | ABIERTO | P2 | Telegram / documentos | Varias funciones Telegram leen 200–500 uploads del root y algunas resuelven solicitudes una por una. | Query selectiva por tipo/estado/solicitud y lecturas agrupadas o metadatos ya disponibles. |
-| SOL-PERF-01 | VALIDACIÓN | P1 | Solicitudes | Relaciones de sustitución se indexan una vez por lista y las filas consultan mapas, en lugar de recorrer todas las solicitudes durante cada render. | Smoke visual de origen/cadena/vigente; completar paginación de tabla. |
+| SOL-PERF-01 | CERRADO | P1 | Solicitudes | Relaciones de sustitución se indexan una vez por lista y las filas consultan mapas. La tabla usa una callable autorizada y páginas de 100 filas, con continuidad por cursor en lugar de descargar toda la colección. | Smoke de Emulator: 101 solicitudes en 100 + 1, sin duplicados y con cursor exacto; TypeScript frontend y Functions correctos. |
 | IQ-01 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / resiliencia | El wrapper HTTP canónico con timeout acotado protege Solicitudes, Depósitos y el POST de Dispersiones; también lectura, recuperación, conciliación, catálogos, descarga de factura y diagnósticos. Las llamadas restantes ya tenían `AbortController` acotado. No hace reintentos implícitos sobre creaciones potencialmente enviadas. | Definir tiempos por operación y probar timeout controlado contra sandbox/local antes de cerrar. |
 | IQ-02 | IMPLEMENTADO / VALIDACIÓN | P1 | IQ / automatización | La creación IQ de Solicitudes encola una Cloud Task inmediata e idempotente usando el mismo job, bloqueo por perfil y lógica de recuperación. Para automatización respeta la configuración activa de la raíz; solicitudes manuales autorizadas pueden iniciar sin esperar cinco minutos. El scheduler permanece como respaldo si Cloud Tasks falla. | Emulator validó descubrimiento, creación de cola y ejecución inocua del handler (14 ms); falta prueba con job real + IQ sandbox para medir cola→inicio y confirmar que tarea/scheduler no duplican POST. |
 | WAL-02 | CERRADO | P1 | Wallet / estado de cuenta | La lectura se acota por `scope` y cliente; las consultas internas recorren páginas completas y deduplican `clienteId`/`clientId`, por lo que el saldo no se calcula sobre un prefijo truncado. Sus índices están `READY` en producción. | Smoke de Emulator: estado de cuenta conserva 1,001 movimientos para un cliente sin mezclar otra raíz. |
@@ -214,6 +214,7 @@ Estos puntos deben medirse antes de optimizar; no asumir que toda espera es de R
 | WAL-02 | 2026-09-14 | Estado de cuenta sin límite silencioso de 1,000 registros. | Emulator: 1,001 movimientos completos para el cliente de prueba. |
 | PERF-04 | 2026-09-14 | Historial de dispersiones paginado sin límite de 500 registros. | Emulator: 501 dispersiones en 500 + 1, sin duplicados y con cursor exacto. |
 | PERF-03 | 2026-09-14 | Catálogo de clientes se invalida después de sus mutaciones. | Emulator: alta, edición y desactivación se reflejan inmediatamente en el listado canónico. |
+| SOL-PERF-01 | 2026-09-14 | Solicitudes paginadas y relaciones de sustitución indexadas. | Emulator: 101 solicitudes en 100 + 1, sin duplicados y con cursor exacto. |
 
 ## Evidencia de validación reciente
 

@@ -2208,6 +2208,53 @@ export const listPagos = onCall(
   }
 );
 
+export const listSolicitudes = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const uid = requireAuth(request);
+    const meSnap = await db.doc(`users/${uid}`).get();
+    if (!meSnap.exists) throw new HttpsError("not-found", "Usuario no encontrado.");
+    const me: any = meSnap.data() || {};
+    assertAuthorized(request.auth, me, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "solicitudes",
+      requiredAction: "view",
+    });
+
+    const rootId = String(me.rootId || uid);
+    const role = String(me.role || "").trim().toLowerCase();
+    const requestedLimit = Number(request.data?.limit || 100);
+    const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
+    const cursorSeconds = Number(request.data?.cursorSeconds || 0);
+    const cursorNanoseconds = Number(request.data?.cursorNanoseconds || 0);
+    const cursorId = String(request.data?.cursorId || "").trim();
+
+    let queryRef: FirebaseFirestore.Query = db.collection("solicitudes");
+    if (role === "superadmin") queryRef = queryRef.where("rootId", "==", rootId);
+    else if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
+    else if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
+    else throw new HttpsError("permission-denied", "Rol sin acceso a solicitudes.");
+
+    queryRef = queryRef.orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(pageSize + 1);
+    if (cursorSeconds > 0 && cursorId) {
+      queryRef = queryRef.startAfter(new Timestamp(cursorSeconds, cursorNanoseconds), cursorId);
+    }
+    const snap = await queryRef.get();
+    const docs = snap.docs.slice(0, pageSize);
+    const last = docs[docs.length - 1];
+    const createdAt: any = last?.get("createdAt");
+    return {
+      items: docs.map((entry) => ({ id: entry.id, ...entry.data() })),
+      hasMore: snap.docs.length > pageSize,
+      nextCursor: last ? {
+        seconds: Number(createdAt?.seconds || 0),
+        nanoseconds: Number(createdAt?.nanoseconds || 0),
+        id: last.id,
+      } : null,
+    };
+  },
+);
+
 export const changePagoStatus = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {

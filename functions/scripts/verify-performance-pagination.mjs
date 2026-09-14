@@ -74,9 +74,26 @@ async function seedDispersions() {
   }
 }
 
+async function seedSolicitudes() {
+  const existing = await db.collection("solicitudes").where("rootId", "==", rootId).get();
+  if (existing.size >= 101) return;
+  const now = Date.now();
+  for (let offset = 0; offset < 101; offset += 450) {
+    const batch = db.batch();
+    for (let index = offset + 1; index <= 101; index += 1) {
+      batch.set(db.doc(`solicitudes/${rootId}-solicitud-${String(index).padStart(3, "0")}`), {
+        rootId, adminId: rootId, createdBy: rootId, clienteId: "fixture-client", active: true,
+        folio: `SOL-PERF-${index}`, status: "PENDIENTE", monto: index, createdAt: Timestamp.fromMillis(now - index * 1000),
+      });
+    }
+    await batch.commit();
+  }
+}
+
 await db.doc(`users/${rootId}`).set({ rootId, role: "superadmin", email, active: true }, { merge: true });
 await seedPagos();
 await seedDispersions();
+await seedSolicitudes();
 const token = await signIn();
 
 const usersFirst = await call("listUsers", token, { limit: 100 });
@@ -110,6 +127,19 @@ const dispersionsSecond = await call("listScopedClientDispersions", token, {
 assert.equal(dispersionsSecond.rows.length, 1);
 assert.equal(dispersionsSecond.hasMore, false);
 assert.equal(new Set([...dispersionsFirst.rows, ...dispersionsSecond.rows].map((row) => row.id)).size, 501);
+
+const solicitudesFirst = await call("listSolicitudes", token, { limit: 100 });
+assert.equal(solicitudesFirst.items.length, 100);
+assert.equal(solicitudesFirst.hasMore, true);
+const solicitudesSecond = await call("listSolicitudes", token, {
+  limit: 100,
+  cursorSeconds: solicitudesFirst.nextCursor.seconds,
+  cursorNanoseconds: solicitudesFirst.nextCursor.nanoseconds,
+  cursorId: solicitudesFirst.nextCursor.id,
+});
+assert.equal(solicitudesSecond.items.length, 1);
+assert.equal(solicitudesSecond.hasMore, false);
+assert.equal(new Set([...solicitudesFirst.items, ...solicitudesSecond.items].map((row) => row.id)).size, 101);
 
 const wallet = await call("getClientWalletDetailOverview", token, { clienteId: "fixture-client" });
 assert.equal(wallet.movements.length, 1001);
