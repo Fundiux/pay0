@@ -117,7 +117,10 @@ async function renderCanonicalQuoteHtmlPdf(input: QuotePdfInput): Promise<Buffer
   const htmlPath = resolve(templateRoot, "template.html");
   const cssPath = resolve(templateRoot, "template.css");
   if (!existsSync(htmlPath) || !existsSync(cssPath)) throw new Error("Canonical quotation HTML bundle is missing.");
-  const logoPath = resolve(__dirname, `../../assets/companies/${text(input.companyRfc, 13).toUpperCase()}.png`);
+  const companyRfc = text(input.companyRfc, 13).toUpperCase();
+  const logoPath = companyRfc === "TRO230717L64" && existsSync(trostreLogoPath)
+    ? trostreLogoPath
+    : resolve(__dirname, `../../assets/companies/${companyRfc}.png`);
   const logo = existsSync(logoPath) ? dataUri(readFileSync(logoPath), "image/png") : "";
   const qr = dataUri(await QRCode.toBuffer(text(input.verificationUrl, 900), { type: "png", width: 220, margin: 1, errorCorrectionLevel: "M" }), "image/png");
   const quoteItems = input.items?.length ? input.items.slice(0, 12) : [{ quantity: input.quantity, unit: input.unit, description: input.description, productCode: input.productCode }];
@@ -134,11 +137,15 @@ async function renderCanonicalQuoteHtmlPdf(input: QuotePdfInput): Promise<Buffer
   html = html.replace(/{{\s*([\w.]+)\s*}}/g, (_all, key) => values[key] ?? "-");
   const chromium: any = (await import("@sparticuz/chromium")).default;
   const playwright: any = await import("playwright-core");
-  const browser = await playwright.chromium.launch({ args: chromium.args, executablePath: await chromium.executablePath(), headless: true });
+  const configuredExecutable = text(process.env.PAY0_CHROMIUM_PATH, 500);
+  const executablePath = configuredExecutable && existsSync(configuredExecutable)
+    ? configuredExecutable
+    : await chromium.executablePath();
+  const browser = await playwright.chromium.launch({ args: configuredExecutable ? [] : chromium.args, executablePath, headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 816, height: 1056 } });
     await page.setContent(html, { waitUntil: "networkidle" });
-    return Buffer.from(await page.pdf({ format: "Letter", printBackground: true, preferCSSPageSize: true }));
+    return Buffer.from(await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true }));
   } finally {
     await browser.close();
   }

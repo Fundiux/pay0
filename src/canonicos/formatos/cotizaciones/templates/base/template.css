@@ -1,6 +1,6 @@
 @page {
-  size: letter;
-  margin: 14mm;
+  size: A4;
+  margin: 10mm;
 }
 
 :root {
@@ -26,16 +26,16 @@ body {
 }
 
 .page {
-  min-height: 100vh;
+  min-height: 277mm;
 }
 
 .quote-header {
   display: grid;
-  grid-template-columns: 1fr 220px;
+  grid-template-columns: 1fr 235px;
   gap: 24px;
-  align-items: start;
-  border-bottom: 4px solid var(--accent);
-  padding-bottom: 12px;
+  align-items: center;
+  min-height: 116px;
+  padding: 0 12px 8px;
 }
 
 .brand {
@@ -45,16 +45,20 @@ body {
 }
 
 .brand-logo {
-  max-width: 130px;
-  max-height: 54px;
+  width: 180px;
+  height: 106px;
   object-fit: contain;
+  object-position: left center;
 }
 
-.brand h1,
-.quote-title h2 {
+.brand h1 {
   margin: 0;
   font-size: 18px;
   letter-spacing: 0.02em;
+}
+
+.brand-details {
+  display: none;
 }
 
 .brand p,
@@ -71,7 +75,13 @@ body {
   text-transform: uppercase;
   color: var(--accent);
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.02em;
+  font-size: 24px;
+  line-height: 1;
+  display: inline-block;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 4px;
+  margin-bottom: 4px !important;
 }
 
 dl {
@@ -83,6 +93,31 @@ dl {
   display: grid;
   gap: 4px;
   margin-top: 8px;
+}
+
+.quote-title dl {
+  margin-left: auto;
+  width: 190px;
+}
+
+.quote-title dt {
+  text-align: right;
+}
+
+.issuer-band {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .quote-title div,
@@ -216,13 +251,7 @@ p {
 }
 
 .trace {
-  display: grid;
-  gap: 2px;
-  margin-top: 14px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 7.5px;
+  display: none;
 }
 
 .quote-trostre {

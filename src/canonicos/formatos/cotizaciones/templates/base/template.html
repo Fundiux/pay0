@@ -10,15 +10,18 @@
       <header class="quote-header">
         <section class="brand">
           <img class="brand-logo" src="{{logoUrl}}" alt="{{companyName}}" />
-          <div>
+          <div class="brand-details">
             <h1>{{companyName}}</h1>
             <p>RFC: {{companyRfc}}</p>
           </div>
         </section>
         <section class="quote-title">
           <p class="eyebrow">Cotización</p>
-          <h2>{{folio}}</h2>
           <dl>
+            <div>
+              <dt>Folio</dt>
+              <dd>{{folio}}</dd>
+            </div>
             <div>
               <dt>Fecha</dt>
               <dd>{{fecha}}</dd>
@@ -30,6 +33,12 @@
           </dl>
         </section>
       </header>
+
+      <section class="issuer-band">
+        <span>{{companyName}}</span>
+        <span aria-hidden="true">|</span>
+        <span>RFC: {{companyRfc}}</span>
+      </section>
 
       <section class="party-grid">
         <div>
@@ -96,7 +105,7 @@
         </div>
       </section>
 
-      <footer class="trace">
+      <footer class="trace" aria-hidden="true">
         <span>quotationId: {{quotationId}}</span>
         <span>solicitudId: {{solicitudId}}</span>
         <span>materialidadId: {{materialidadId}}</span>
