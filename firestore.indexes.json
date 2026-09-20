@@ -728,6 +728,22 @@
             ]
         },
         {
+            "collectionGroup": "agent007Recommendations",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "status", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "assetMovements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "ownerUid", "order": "ASCENDING" },
+                { "fieldPath": "positionId", "order": "ASCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "agent007Observations",
             "queryScope": "COLLECTION",
             "fields": [

@@ -149,6 +149,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     superadminOnly: true,
   },
   { label: "Hugo", href: "/hugo", iconKey: "hugo", superadminOnly: true },
+  { label: "Assets", href: "/assets", iconKey: "assets" },
   {
     label: "Materialidad",
     href: "/materialidad",
@@ -332,6 +333,7 @@ export function getDefaultRouteCandidates(): RouteCandidate[] {
     { href: "/reportes", moduleKey: "reportes", actionKey: "view" },
     { href: "/facturacion", superadminOnly: true },
     { href: "/hugo", superadminOnly: true },
+    { href: "/assets" },
     { href: "/materialidad", moduleKey: "materialidad", actionKey: "view" },
     { href: "/solicitudes", moduleKey: "solicitudes", actionKey: "view" },
     { href: "/pagos", moduleKey: "pagos", actionKey: "view" },
@@ -391,6 +393,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
     { href: "/whatsapp", superadminOnly: true },
     { href: "/facturacion", superadminOnly: true },
     { href: "/hugo", superadminOnly: true },
+    { href: "/assets" },
     { href: "/catalogos/tipos-operacion", superadminOnly: true },
     { href: "/despachos", superadminOnly: true },
     { href: "/wallet/adelantos", moduleKey: "wallet", actionKey: "adelantos", superadminOnly: true },
