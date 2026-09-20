@@ -5,14 +5,15 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 ## Corrección arquitectónica PAY0 PLATFORM / ASSETS — 2026-09-20
 
-- Estado: implementación local completa y validada; despliegue productivo pendiente de autorización explícita.
+- Estado: implementación completa, validada y desplegada en producción. Hosting fue liberado el 2026-09-20 y las ocho Functions de ASSETS más SSR quedaron `ACTIVE`.
 - ASSETS dejó de ser un módulo del sidebar PAY0. `/systems` funciona como launcher compartido para PAY0, ASSETS y el placeholder no operativo de TTT; ambos sistemas conservan Firebase Auth, sesión, usuarios y proyecto.
 - ASSETS dispone de layout, identidad y navegación propios: Resumen, Posiciones, Movimientos y Documentos. Desktop y mobile incluyen `Cambiar sistema`; Hugo permanece únicamente en el contexto PAY0.
 - El resumen ASSETS es de lectura: capital trabajando, recuperado, utilidad, interés pendiente, posiciones activas, distribución, posiciones relevantes y actividad reciente. Alta y registro de movimientos salieron del dashboard y viven en página/detalle contextual.
 - La UI traduce tipos, estados, fuentes y movimientos a lenguaje financiero humano. El conjunto confirmado se presenta como `Duster Intens TM 2025`, `Kwid Iconic TM 2025` y `Arkana Esprit Alpine 2025`.
 - Métricas: posiciones `TEST`, excluidas o vehículos antiguos sin clasificación confirmada quedan fuera de KPIs sin borrar registros. U-PRO confirmado, préstamos existentes y nuevas posiciones revisadas siguen incluidos. El ledger, centavos, interés, idempotencia, capital/utilidad y vínculos PAY0 no se reescribieron.
 - Permisos: ASSETS exige Superadmin o `systemAccess.assets === true` tanto en rutas como en Cloud Functions; no depende sólo de ocultar el menú.
-- Evidencia: frontend build PASS (42 rutas), Functions build PASS, política de autorización PASS, dominio ASSETS PASS y smoke Firestore Emulator PASS para aislamiento, permisos, interés idempotente, doble vínculo, seed, revisión documental y exclusión de demo. Sin escrituras ni despliegue en producción.
+- Evidencia previa: frontend build PASS (42 rutas), Functions build PASS, política de autorización PASS, dominio ASSETS PASS y smoke Firestore Emulator PASS para aislamiento, permisos, interés idempotente, doble vínculo, seed, revisión documental y exclusión de demo.
+- Evidencia productiva: `listAssetOverview`, `createAssetPosition`, `recordAssetMovement`, `accrueAssetLoanInterest`, `previewAssetPaymentAllocation`, `linkPay0PaymentToAsset`, `createAssetDocumentDraft` y `seedUproAssetPortfolio` verificadas `ACTIVE`; SSR quedó en `ssrpay0system-00481-mey`. `/systems`, `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents` respondieron HTTP 200. No se ejecutó el seed ni se escribieron datos financieros de producción; tampoco se desplegaron reglas o índices en este corte.
 
 ## Hugo 2.0 / cotización canónica / REP por Pago / ASSETS V1 — 2026-09-20
 

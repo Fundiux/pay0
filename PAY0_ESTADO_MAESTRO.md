@@ -8,7 +8,9 @@ El dashboard ASSETS ahora es informativo y las capturas se movieron a `/assets/p
 
 La lectura del portafolio separa datos confirmados de pruebas. Registros marcados `TEST`, excluidos o vehículos heredados sin clasificación se conservan pero no participan en métricas; U-PRO confirmado, préstamos y altas revisadas sí participan. Los nombres canónicos son Duster Intens TM 2025, Kwid Iconic TM 2025 y Arkana Esprit Alpine 2025. No se alteró el modelo de Position/AssetMovement, proyección, centavos, interés, capital/utilidad, idempotencia o enlace PAY0.
 
-Autorización independiente: frontend y backend exigen Superadmin o `systemAccess.assets`; ocultar navegación no concede acceso. Verificación local: build frontend PASS con 42 rutas, build Functions PASS, política de autorización PASS, smoke de dominio PASS y Firestore Emulator PASS para permisos, propietario, interés, pagos, seed, revisión documental y exclusión de datos no confirmados. Producción no fue modificada ni desplegada en este bloque.
+Autorización independiente: frontend y backend exigen Superadmin o `systemAccess.assets`; ocultar navegación no concede acceso. Verificación local: build frontend PASS con 42 rutas, build Functions PASS, política de autorización PASS, smoke de dominio PASS y Firestore Emulator PASS para permisos, propietario, interés, pagos, seed, revisión documental y exclusión de datos no confirmados.
+
+Despliegue productivo autorizado y completado el 2026-09-20: las ocho Functions de ASSETS y `ssrpay0system` se verificaron `ACTIVE`; la revisión SSR es `ssrpay0system-00481-mey`. Hosting publicó `/systems`, `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents`, todas con HTTP 200. Este corte no desplegó reglas ni índices, no ejecutó el seed U-PRO y no realizó escrituras financieras o documentales en producción.
 
 ### Hugo 2.0 + ASSETS V1 desplegados (2026-09-20)
 
