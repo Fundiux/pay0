@@ -1,8 +1,8 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { DocumentReference, Firestore, Transaction } from "firebase-admin/firestore";
 
 if (!admin.apps.length) admin.initializeApp();
-const FieldValue = admin.firestore.FieldValue;
 
 export type SolicitudDocumentFinalizeMode = "create" | "update";
 
@@ -16,6 +16,8 @@ export async function finalizeSolicitudDocumentVersionTx(input: {
   uploadRef: DocumentReference;
   mode: SolicitudDocumentFinalizeMode;
   readyPatch: Record<string, unknown>;
+  // Distinct REP partialities coexist; only versions of the same REP replace.
+  complementKey?: string;
 }): Promise<number> {
   const activeQuery = input.db
     .collection("uploads")
@@ -27,6 +29,7 @@ export async function finalizeSolicitudDocumentVersionTx(input: {
   let maxVersion = 0;
   for (const document of activeSnap.docs) {
     if (document.id === input.uploadId) continue;
+    if (input.complementKey && document.data().complementKey !== input.complementKey) continue;
     const version = Number((document.data() || {}).version || 0);
     if (version > maxVersion) maxVersion = version;
     input.tx.update(document.ref, {

@@ -367,6 +367,7 @@ export default function PagosPage() {
   const [isMontoTotalFocused, setIsMontoTotalFocused] = useState(false);
   const [fechaPago, setFechaPago] = useState(() => getTodayDateInputValue());
   const [moneda, setMoneda] = useState("MXN");
+  const [paymentForm, setPaymentForm] = useState("");
   const [notaInicial, setNotaInicial] = useState("");
   const [comprobantePagoFile, setComprobantePagoFile] = useState<File | null>(null);
   const [comprobantePagoDragActive, setComprobantePagoDragActive] = useState(false);
@@ -430,6 +431,7 @@ export default function PagosPage() {
     setMontoTotal("");
     setFechaPago(getTodayDateInputValue());
     setMoneda("MXN");
+    setPaymentForm("");
     setNotaInicial("");
     setComprobantePagoFile(null);
     setComprobantePagoDragActive(false);
@@ -1949,6 +1951,7 @@ export default function PagosPage() {
     operationTypeKey: string;
     montoTotal: string | number;
     fechaPago: string;
+    paymentForm?: string;
     referencia?: string;
     moneda: string;
     notaInicial: string;
@@ -1965,6 +1968,7 @@ export default function PagosPage() {
       operationTypeKey: input.operationTypeKey,
       montoTotal: input.montoTotal,
       fechaPago: input.fechaPago,
+      paymentForm: input.paymentForm || "",
       referencia: input.referencia || "",
       moneda: input.moneda,
       notaInicial: input.notaInicial,
@@ -2062,6 +2066,7 @@ export default function PagosPage() {
           operationTypeKey: selectedOperationTypeKey,
           montoTotal: parseMoneyInput(montoTotal),
           fechaPago: fechaPago || "",
+          paymentForm,
           moneda: moneda || "MXN",
           notaInicial: notaInicial.trim(),
           file: comprobantePagoFile,
@@ -2080,6 +2085,7 @@ export default function PagosPage() {
         setMontoTotal("");
         setFechaPago("");
         setMoneda("MXN");
+        setPaymentForm("");
         setNotaInicial("");
     setComprobantePagoFile(null);
         setOpenNewPago(false);
@@ -3186,6 +3192,12 @@ export default function PagosPage() {
                 onChange={setMoneda}
                 options={currencyOptions}
                 placeholder="Selecciona moneda..."
+              />
+              <UiSelect
+                value={paymentForm}
+                onChange={setPaymentForm}
+                options={[{ value: "01", label: "01 · Efectivo" }, { value: "02", label: "02 · Cheque nominativo" }, { value: "03", label: "03 · Transferencia" }, { value: "04", label: "04 · Tarjeta de crédito" }, { value: "28", label: "28 · Tarjeta de débito" }, { value: "29", label: "29 · Tarjeta de servicios" }]}
+                placeholder="Forma SAT del pago (para complemento)..."
               />
               <label
                 className={`block cursor-pointer rounded-2xl border border-dashed px-4 py-4 text-[12px] transition ${

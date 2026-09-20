@@ -1667,6 +1667,7 @@ export const createPago = onCall(
       empresaNombre,
       montoTotal,
       fechaPago,
+      paymentForm,
       referencia,
       moneda,
       notaInicial,
@@ -1922,6 +1923,8 @@ export const createPago = onCall(
     ).trim();
 
     let fechaPagoValue: any = null;
+    const paymentFormValue = String(paymentForm || "").trim();
+    if (paymentFormValue && !/^(01|02|03|04|05|06|08|12|13|14|15|17|23|24|25|26|27|28|29|30|31)$/.test(paymentFormValue)) throw new HttpsError("invalid-argument", "Forma SAT del pago inválida.");
     if (fechaPago) {
       const d = new Date(fechaPago);
       if (Number.isNaN(d.getTime())) {
@@ -2082,6 +2085,7 @@ export const createPago = onCall(
         ...buildPagoFoundationOnCreate(montoTotalNum),
         status: "CONCILIACION_PENDIENTE",
         fechaPago: fechaPagoValue,
+        paymentForm: paymentFormValue || null,
         // Fecha canónica para consultas de reportes. Si el usuario capturó la
         // fecha del pago se conserva; de lo contrario se usa la creación real.
         reportDateAt: fechaPagoValue || FieldValue.serverTimestamp(),
@@ -2588,6 +2592,7 @@ export { getOperationalMetricsReport } from "./modules/reports/callables";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
+export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";

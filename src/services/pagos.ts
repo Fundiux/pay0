@@ -15,6 +15,7 @@ export async function createPago(input: {
   finalClientRate?: number | string | null;
   montoTotal: number | string;
   fechaPago?: string;
+  paymentForm?: string;
   referencia?: string;
   moneda?: string;
   notaInicial?: string;

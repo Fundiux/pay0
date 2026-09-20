@@ -3,6 +3,14 @@
 Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## Complementos automáticos IQ / Facturama — 2026-09-20
+
+- Implementada cola prospectiva para PPD: IQ sólo tras aplicación confirmada, una solicitud por depósito/perfil; Facturama desde XML original con UUID, parcialidad, saldos y forma/fecha reales del pago. Histórico no se despacha automáticamente.
+- Revisión IQ a las 19:00 America/Mexico_City, una por día; alerta única después de diez días y seguimiento continuo sin WhatsApp automático. Los resultados inciertos nunca repiten POST/timbrado a ciegas.
+- XML/PDF validados y vinculados conservando otras parcialidades. Facturama inicial admite MXN sin impuestos o IVA 16 % uniforme; retenciones, impuestos mixtos u otras monedas requieren revisión. Forma SAT faltante se confirma por Superadmin en Reportes.
+- Compilación frontend/backend, autorización y cuatro suites de emulador PASS; incluye concurrencia, aislamiento, fecha civil sin corrimiento, alerta, no reemisión y coexistencia documental. Cero operaciones externas de prueba. Pendiente aceptación del primer REP real por PAC/ZIP real de IQ.
+- Producción: doce funciones ACTIVE y Hosting publicado; IQ/Facturama activados prospectivamente, cero jobs históricos. Scheduler ENABLED a las 19:00 America/Mexico_City; configuración sin sesión devuelve 401. Nuevo pago permite capturar forma SAT real. Contrato: `src/canonicos/COMPLEMENTOS-AUTOMATICOS-2026-09-20.md`.
+
 ## IQ / Hugo / complementos — 2026-09-20
 
 - `IQ-BEN-01`: alta en IQ pendiente del contrato/recorrido que proporcionará el usuario. Corregida captura local de nombres con cifras, control de delegación de beneficiarios y concurrencia de cuentas; probado en emulador.

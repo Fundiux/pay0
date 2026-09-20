@@ -27,7 +27,7 @@ export async function reconcilePaymentComplement(applicationId: string, deletedA
     const solicitud = solicitudSnap.data(), pago = pagoSnap.data();
     if (!solicitud || !pago || solicitud.rootId !== app.rootId || pago.rootId !== app.rootId) throw Error("COMPLEMENT_SCOPE_MISMATCH");
     const invoiceUuid = clean(solicitud.facturaUuid || solicitud.uuidCfdi || solicitud.iqInvoiceUuid).toUpperCase();
-    const provider = clean(solicitud.iqFolio || solicitud.folioIq || solicitud.iqSolicitudId) ? "IQ" : "EMISOR";
+    const provider = solicitud.facturamaEnvironment === "PRODUCTION" && solicitud.facturamaInvoiceId ? "FACTURAMA" : clean(solicitud.iqId || solicitud.iqFolio || solicitud.folioIq || solicitud.iqSolicitudId) ? "IQ" : "EMISOR";
     const appliedInIq = app.iqApplicationStatus === "IQ_APPLIED" && app.iqActionExecuted === true;
     const amountMinor = Math.round(Number(app.montoAplicado || 0) * 100);
     const fiscalComplete = uuid.test(invoiceUuid) && Number.isSafeInteger(amountMinor) && amountMinor > 0;
@@ -45,12 +45,12 @@ export async function reconcilePaymentComplement(applicationId: string, deletedA
     // Future imported evidence must not be overwritten by a source projection.
     if (["RECEIVED", "REQUESTED"].includes(existing.data()?.status)) return;
     const revision = Number(existing.data()?.revision || 0) + 1;
-    tx.set(requestRef, { ...row, fingerprint, revision, createdAt: existing.data()?.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.set(requestRef, { ...row, externalRequestSent: existing.data()?.externalRequestSent === true, fingerprint, revision, createdAt: existing.data()?.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: app.rootId,
       actorUid: "SYSTEM", actorRole: "system", referenceId: applicationId, referenceType: "pagoAplicacion",
       referenceFolio: clean(app.folio), relatedEntityId: solicitudId, relatedEntityType: "solicitud",
       description: status === "VOIDED" ? `El seguimiento del complemento de ${clean(solicitud.folio)} dejó de ser aplicable.`
-        : `Complemento pendiente para ${clean(solicitud.folio)}: ${{ NEEDS_FISCAL_DATA: "faltan UUID o importe válidos", WAITING_IQ_APPLICATION: "la aplicación todavía no está confirmada en IQ", PENDING_PROVIDER_CONTRACT: "falta conectar la solicitud al proveedor" }[status]}. No se ha solicitado ni emitido en el proveedor.`,
+        : `Complemento pendiente para ${clean(solicitud.folio)}: ${{ NEEDS_FISCAL_DATA: "faltan UUID o importe válidos", WAITING_IQ_APPLICATION: "la aplicación todavía no está confirmada en IQ", PENDING_PROVIDER_CONTRACT: "pendiente de procesamiento o revisión" }[status]}.${existing.data()?.externalRequestSent ? " Consulta el estado del envío existente; no se enviará nuevamente desde el seguimiento." : " No se ha solicitado ni emitido en el proveedor."}`,
     });
   });
 }
@@ -84,7 +84,9 @@ export const refreshComplementOnPago = onDocumentWritten({ document: "pagos/{pag
 export const listPaymentComplementFollowup = onCall({ region: "us-central1", cors: true }, async request => {
   const { rootId } = await context(request);
   const rows = await db.collection("paymentComplementRequests").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(101).get();
-  return { ok: true, rows: rows.docs.slice(0, 100).map(doc => ({ id: doc.id, ...doc.data() })), truncated: rows.size > 100, externalContractReady: false };
+  const config = (await db.doc(`paymentComplementConfigs/${rootId}`).get()).data();
+  return { ok: true, rows: rows.docs.slice(0, 100).map(doc => ({ id: doc.id, ...doc.data() })), truncated: rows.size > 100,
+    automation: { iqEnabled: config?.iqEnabled === true, facturamaEnabled: config?.facturamaEnabled === true }, externalContractReady: true };
 });
 
 // Explicit, read/reconcile-only refresh also covers earlier applications and
