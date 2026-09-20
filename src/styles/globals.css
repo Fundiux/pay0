@@ -20,6 +20,45 @@ body {
   background: #334155;
 }
 
+/* ASSETS is a sibling product with its own restrained financial palette. */
+.assets-theme {
+  --assets-bg: #101214;
+  --assets-sidebar: #15181b;
+  --assets-surface: #191d21;
+  --assets-surface-raised: #20252a;
+  --assets-border: #30363c;
+  --assets-text: #f1f3f4;
+  --assets-secondary: #b2b8be;
+  --assets-muted: #747d86;
+  --assets-accent: #8fa9bf;
+  --assets-accent-soft: rgba(143, 169, 191, 0.13);
+  --assets-positive: #55b88a;
+  --assets-warning: #d6a85f;
+  --assets-negative: #db776f;
+  min-height: 100dvh;
+  background: var(--assets-bg);
+  color: var(--assets-text);
+  color-scheme: dark;
+}
+
+.assets-panel {
+  border: 1px solid var(--assets-border);
+  background: var(--assets-surface);
+  border-radius: 0.75rem;
+}
+
+.assets-control {
+  border: 1px solid var(--assets-border);
+  background: var(--assets-bg);
+  color: var(--assets-text);
+  border-radius: 0.55rem;
+}
+
+.assets-control:focus {
+  border-color: var(--assets-accent);
+  outline: none;
+}
+
 /* PAY0 canonical tables */
 .pay0-table-card {
   @apply w-full min-w-0 bg-[#161d2b] rounded-3xl border-2 border-white/5 overflow-hidden shadow-2xl;

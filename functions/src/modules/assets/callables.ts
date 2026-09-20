@@ -1,10 +1,12 @@
 import { createHash } from "crypto";
+import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import {
   allocatePayment,
   assertMinor,
+  canRegisterFinancialMovement,
   AssetKind,
   AssetMovement,
   AssetSource,
@@ -42,6 +44,34 @@ const movementTypes = new Set([
   "INTEREST_PAYMENT",
   "PRINCIPAL_PAYMENT",
 ]);
+const assetDocumentTypes = new Set([
+  "ASSIGNMENT_OFFER",
+  "LIQUIDATION",
+  "SPEI",
+  "CEP",
+  "ACCOUNT_STATEMENT",
+  "TRANSFER_RECEIPT",
+  "OTHER",
+]);
+const assetDocumentMimeTypes = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+]);
+const ASSET_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+const isTerminalPosition = (position: any) =>
+  !canRegisterFinancialMovement(
+    position.kind as AssetKind,
+    clean(position.status, 30),
+  );
+const assertPositionOpen = (position: any) => {
+  if (isTerminalPosition(position)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La posición está cerrada y no admite movimientos ordinarios.",
+    );
+  }
+};
 const movementPriority: Record<string, number> = {
   VEHICLE_INVESTMENT: 10,
   LOAN_ORIGINATED: 10,
@@ -83,6 +113,35 @@ async function ownedPosition(uid: string, id: string) {
     throw new HttpsError("not-found", "Posición no encontrada.");
   return { ref: snap.ref, row: snap.data()! };
 }
+async function assertOwnedAssetRelation(
+  uid: string,
+  input: { positionId?: string | null; operationId?: string | null; movementId?: string | null },
+) {
+  if (input.positionId) await ownedPosition(uid, input.positionId);
+  for (const [collection, id] of [
+    ["assetOperations", input.operationId],
+    ["assetMovements", input.movementId],
+  ] as const) {
+    if (!id) continue;
+    const snap = await db.doc(`${collection}/${id}`).get();
+    if (!snap.exists || snap.data()?.ownerUid !== uid) {
+      throw new HttpsError(
+        "permission-denied",
+        "No tienes permiso para relacionar el documento con ese registro.",
+      );
+    }
+  }
+}
+const safeStorageName = (value: unknown) => {
+  const name = String(value || "documento")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 120);
+  return name || "documento";
+};
 async function movementsFor(uid: string, positionId: string) {
   const snap = await db
     .collection("assetMovements")
@@ -99,9 +158,9 @@ export const listAssetOverview = onCall(
   async (request) => {
     const { uid } = await context(request);
     const [positionsSnap, movementsSnap, documentsSnap] = await Promise.all([
-      db.collection("assetPositions").where("ownerUid", "==", uid).get(),
-      db.collection("assetMovements").where("ownerUid", "==", uid).get(),
-      db.collection("assetDocuments").where("ownerUid", "==", uid).get(),
+      db.collection("assetPositions").where("ownerUid", "==", uid).limit(200).get(),
+      db.collection("assetMovements").where("ownerUid", "==", uid).limit(500).get(),
+      db.collection("assetDocuments").where("ownerUid", "==", uid).limit(200).get(),
     ]);
     const movements = movementsSnap.docs.map(
       (doc) => ({ id: doc.id, ...doc.data() }) as any,
@@ -129,10 +188,11 @@ export const listAssetOverview = onCall(
       };
     });
     const includedPositions = positions.filter((position: any) => position.includedInMetrics);
-    const totals = includedPositions.reduce(
+    const activePositions = includedPositions.filter(
+      (position: any) => clean(position.status, 30).toUpperCase() === "ACTIVE",
+    );
+    const historicalTotals = includedPositions.reduce(
       (sum, position: any) => ({
-        workingMinor:
-          sum.workingMinor + position.snapshot.outstandingPrincipalMinor,
         recoveredPrincipalMinor:
           sum.recoveredPrincipalMinor +
           position.snapshot.recoveredPrincipalMinor,
@@ -142,10 +202,24 @@ export const listAssetOverview = onCall(
           sum.pendingInterestMinor + position.snapshot.pendingInterestMinor,
       }),
       {
-        workingMinor: 0,
         recoveredPrincipalMinor: 0,
         realizedProfitMinor: 0,
         pendingInterestMinor: 0,
+      },
+    );
+    const totals = activePositions.reduce(
+      (sum, position: any) => ({
+        ...sum,
+        workingMinor:
+          sum.workingMinor + position.snapshot.outstandingPrincipalMinor,
+        pendingInterestMinor:
+          sum.pendingInterestMinor + position.snapshot.pendingInterestMinor,
+      }),
+      {
+        workingMinor: 0,
+        pendingInterestMinor: 0,
+        recoveredPrincipalMinor: historicalTotals.recoveredPrincipalMinor,
+        realizedProfitMinor: historicalTotals.realizedProfitMinor,
       },
     );
     return {
@@ -157,6 +231,17 @@ export const listAssetOverview = onCall(
         ...doc.data(),
       })),
       totals,
+      counts: {
+        activeVehicles: activePositions.filter((position: any) => position.kind === "VEHICLE").length,
+        soldVehicles: includedPositions.filter((position: any) => position.kind === "VEHICLE" && position.status === "LIQUIDATED").length,
+        activeLoans: activePositions.filter((position: any) => position.kind === "LOAN").length,
+        paidLoans: includedPositions.filter((position: any) => position.kind === "LOAN" && position.status === "PAID").length,
+      },
+      truncated: {
+        positions: positionsSnap.size === 200,
+        movements: movementsSnap.size === 500,
+        documents: documentsSnap.size === 200,
+      },
       excludedPositionCount: positions.length - includedPositions.length,
     };
   },
@@ -302,6 +387,7 @@ export const recordAssetMovement = onCall(
       const position = positionSnap.data();
       if (!position || position.ownerUid !== uid)
         throw new HttpsError("not-found", "Posición no encontrada.");
+      assertPositionOpen(position);
       const current = ledgerSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
         .sort(compareMovements);
@@ -370,6 +456,76 @@ export const recordAssetMovement = onCall(
   },
 );
 
+export const closeAssetPosition = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const { uid, rootId } = await context(request);
+    const positionId = clean(request.data?.positionId);
+    const confirmation = clean(request.data?.confirmation, 80);
+    if (!positionId || confirmation !== "CONFIRM_ASSET_POSITION_CLOSE") {
+      throw new HttpsError(
+        "invalid-argument",
+        "La confirmación explícita de cierre es obligatoria.",
+      );
+    }
+    const positionRef = db.doc(`assetPositions/${positionId}`);
+    let status = "";
+    await db.runTransaction(async (tx) => {
+      const [positionSnap, ledgerSnap] = await Promise.all([
+        tx.get(positionRef),
+        tx.get(
+          db.collection("assetMovements")
+            .where("ownerUid", "==", uid)
+            .where("positionId", "==", positionId),
+        ),
+      ]);
+      const position = positionSnap.data();
+      if (!position || position.ownerUid !== uid) {
+        throw new HttpsError("not-found", "Posición no encontrada.");
+      }
+      if (isTerminalPosition(position)) {
+        status = clean(position.status, 30).toUpperCase();
+        return;
+      }
+      const snapshot = projectAsset(
+        position.kind,
+        ledgerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as any).sort(compareMovements),
+      );
+      if (snapshot.outstandingPrincipalMinor !== 0) {
+        throw new HttpsError(
+          "failed-precondition",
+          "No se puede cerrar: todavía existe capital pendiente.",
+        );
+      }
+      if (position.kind === "LOAN" && snapshot.pendingInterestMinor !== 0) {
+        throw new HttpsError(
+          "failed-precondition",
+          "No se puede marcar como pagado: todavía existe interés pendiente.",
+        );
+      }
+      status = position.kind === "VEHICLE" ? "LIQUIDATED" : "PAID";
+      tx.set(positionRef, {
+        status,
+        closedAt: FieldValue.serverTimestamp(),
+        closedBy: uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      logActivityTx(tx, db, {
+        event: "ASSET_POSITION_CLOSED",
+        rootId,
+        actorUid: uid,
+        actorRole: "user",
+        referenceId: positionId,
+        referenceType: "assetPosition",
+        description: position.kind === "VEHICLE"
+          ? `Vehículo marcado como vendido: ${position.name}.`
+          : `Préstamo marcado como pagado: ${position.name}.`,
+      });
+    });
+    return { ok: true, positionId, status };
+  },
+);
+
 export const accrueAssetLoanInterest = onCall(
   { region: "us-central1", cors: true },
   async (request) => {
@@ -414,6 +570,7 @@ export const accrueAssetLoanInterest = onCall(
           "failed-precondition",
           "La posición no es un préstamo.",
         );
+      assertPositionOpen(position);
       const ledger = ledgerSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
         .sort(compareMovements);
@@ -545,6 +702,7 @@ export const linkPay0PaymentToAsset = onCall(
       const latestPosition = positionSnap.data();
       if (!latestPosition || latestPosition.ownerUid !== uid)
         throw new HttpsError("not-found", "Posición no encontrada.");
+      assertPositionOpen(latestPosition);
       const ledger = ledgerSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
         .sort(compareMovements);
@@ -686,6 +844,107 @@ export const createAssetDocumentDraft = onCall(
       updatedAt: FieldValue.serverTimestamp(),
     });
     return { ok: true, documentId: ref.id };
+  },
+);
+
+export const initAssetDocumentUpload = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const { uid, rootId } = await context(request);
+    const originalFileName = clean(request.data?.originalFileName, 180);
+    const contentType = clean(request.data?.contentType, 100).toLowerCase();
+    const fileSize = Number(request.data?.fileSize || 0);
+    const sha256 = clean(request.data?.sha256, 64).toLowerCase();
+    const documentType = clean(request.data?.documentType || "OTHER", 60).toUpperCase();
+    const positionId = clean(request.data?.positionId) || null;
+    const operationId = clean(request.data?.operationId) || null;
+    const movementId = clean(request.data?.movementId) || null;
+    const extension = originalFileName.split(".").pop()?.toLowerCase() || "";
+    if (!originalFileName || !assetDocumentTypes.has(documentType)) {
+      throw new HttpsError("invalid-argument", "Archivo y tipo de documento son obligatorios.");
+    }
+    if (!assetDocumentMimeTypes.has(contentType) || !["pdf", "jpg", "jpeg", "png"].includes(extension)) {
+      throw new HttpsError("invalid-argument", "El formato no es compatible. Usa PDF, JPG o PNG.");
+    }
+    if (!Number.isSafeInteger(fileSize) || fileSize <= 0 || fileSize > ASSET_DOCUMENT_MAX_BYTES) {
+      throw new HttpsError("invalid-argument", "El archivo debe pesar máximo 10 MB.");
+    }
+    if (!/^[a-f0-9]{64}$/.test(sha256)) {
+      throw new HttpsError("invalid-argument", "No se pudo validar la integridad del archivo.");
+    }
+    await assertOwnedAssetRelation(uid, { positionId, operationId, movementId });
+    const documentId = hash(`${uid}:ASSET_DOCUMENT:${sha256}`);
+    const ref = db.doc(`assetDocuments/${documentId}`);
+    const existing = await ref.get();
+    if (existing.exists && existing.data()?.status === "ACTIVE") {
+      return {
+        ok: true,
+        duplicate: true,
+        documentId,
+        storagePath: existing.data()?.storagePath,
+        maxSizeBytes: ASSET_DOCUMENT_MAX_BYTES,
+      };
+    }
+    const storedName = `${documentId.slice(0, 12)}-${safeStorageName(originalFileName)}`;
+    const storagePath = `roots/${rootId}/assets/${uid}/documents/${documentId}/${storedName}`;
+    await ref.set({
+      ownerUid: uid,
+      rootId,
+      documentType,
+      description: clean(request.data?.description, 500) || null,
+      originalFileName,
+      fileName: storedName,
+      fileSize,
+      contentType,
+      sha256,
+      storagePath,
+      positionId,
+      operationId,
+      movementId,
+      relations: [
+        ...(positionId ? [{ entityType: "POSITION", entityId: positionId }] : []),
+        ...(operationId ? [{ entityType: "OPERATION", entityId: operationId }] : []),
+        ...(movementId ? [{ entityType: "MOVEMENT", entityId: movementId }] : []),
+      ],
+      status: "PENDING_UPLOAD",
+      extraction: { status: "NOT_STARTED", proposedData: null },
+      createdBy: uid,
+      createdAt: existing.data()?.createdAt || FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, duplicate: false, documentId, storagePath, maxSizeBytes: ASSET_DOCUMENT_MAX_BYTES };
+  },
+);
+
+export const finalizeAssetDocumentUpload = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const { uid, rootId } = await context(request);
+    const documentId = clean(request.data?.documentId);
+    if (!documentId) throw new HttpsError("invalid-argument", "Documento obligatorio.");
+    const ref = db.doc(`assetDocuments/${documentId}`);
+    const snap = await ref.get();
+    const row = snap.data();
+    if (!row || row.ownerUid !== uid || row.rootId !== rootId) {
+      throw new HttpsError("not-found", "Documento no encontrado.");
+    }
+    if (row.status === "ACTIVE") return { ok: true, documentId, duplicate: true };
+    const file = getStorage().bucket().file(String(row.storagePath || ""));
+    const [exists] = await file.exists();
+    if (!exists) throw new HttpsError("failed-precondition", "La carga del archivo no se completó.");
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size || 0);
+    const contentType = String(metadata.contentType || "").toLowerCase();
+    if (size !== Number(row.fileSize) || size > ASSET_DOCUMENT_MAX_BYTES || !assetDocumentMimeTypes.has(contentType)) {
+      throw new HttpsError("failed-precondition", "El archivo cargado no coincide con la preparación.");
+    }
+    await ref.set({
+      status: "ACTIVE",
+      finalizedAt: FieldValue.serverTimestamp(),
+      finalizedBy: uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, documentId, duplicate: false };
   },
 );
 

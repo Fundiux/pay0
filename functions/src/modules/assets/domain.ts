@@ -41,6 +41,16 @@ export type AssetSnapshot = {
   roi: number | null;
 };
 
+export function canRegisterFinancialMovement(
+  kind: AssetKind,
+  status: unknown,
+): boolean {
+  const normalized = String(status || "").trim().toUpperCase();
+  return kind === "VEHICLE"
+    ? !["LIQUIDATED", "CANCELLED"].includes(normalized)
+    : !["PAID", "CANCELLED"].includes(normalized);
+}
+
 export function assertMinor(value: unknown, name = "amountMinor"): number {
   const amount = Number(value);
   if (!Number.isSafeInteger(amount) || amount <= 0)

@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { allocatePayment, interestForPeriod, projectAsset, remainingLinkableAmount } = require("../functions/lib/modules/assets/domain.js");
+const { allocatePayment, canRegisterFinancialMovement, interestForPeriod, projectAsset, remainingLinkableAmount } = require("../functions/lib/modules/assets/domain.js");
 
 const movement = (movementType, amountMinor) => ({ movementType, amountMinor, source: "MANUAL", effectiveDate: "2026-09-20" });
 
@@ -38,5 +38,13 @@ assert.equal(duster.realizedProfitMinor + arkana.realizedProfitMinor, 2_493_000)
 // H: the same PAY0 payment cannot be linked beyond its canonical total.
 assert.equal(remainingLinkableAmount(1_500_000, 1_500_000), 0);
 assert.throws(() => remainingLinkableAmount(1_500_000, 3_000_000), /LINK_BALANCE/);
+
+// Terminal positions preserve history but reject ordinary financial changes.
+assert.equal(canRegisterFinancialMovement("VEHICLE", "ACTIVE"), true);
+assert.equal(canRegisterFinancialMovement("VEHICLE", "LIQUIDATED"), false);
+assert.equal(canRegisterFinancialMovement("VEHICLE", "CANCELLED"), false);
+assert.equal(canRegisterFinancialMovement("LOAN", "ACTIVE"), true);
+assert.equal(canRegisterFinancialMovement("LOAN", "PAID"), false);
+assert.equal(canRegisterFinancialMovement("LOAN", "CANCELLED"), false);
 
 console.log("ASSETS domain smoke passed");

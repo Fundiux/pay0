@@ -3,6 +3,17 @@
 Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## ASSETS V2 — UX operativa, cierres y documentos — 2026-09-20
+
+- Estado: implementación local completa y validada; **pendiente de despliegue productivo**.
+- UX: shell ASSETS compacto e independiente, sidebar fijo con navegación interna, tema grafito propio, dashboard ejecutivo sin hero, tablas densas y vistas responsivas. Posiciones separa Vehículos/Préstamos y actividad/historial; Movimientos agrega filtros operativos.
+- Ciclo terminal: cierre explícito y confirmado de vehículos (`LIQUIDATED`) y préstamos (`PAID`) únicamente con saldos consistentes. Backend bloquea movimientos, devengos y vínculos PAY0 posteriores en posiciones terminales; las métricas de capital trabajando e interés pendiente sólo consideran activas, conservando recuperación/utilidad históricas.
+- Documentos: flujo `init → Storage → finalize` para PDF/JPG/PNG de hasta 10 MB, hash SHA-256, deduplicación, nombre original, relación manual opcional y estado de extracción `NOT_STARTED`. Cargar evidencia no crea ni modifica posiciones o movimientos.
+- Privacidad: documentos y operaciones se aíslan por `ownerUid`/`rootId`; Storage limita lectura al propietario y creación a documentos previamente preparados, con tipo, tamaño, ruta y estado coincidentes.
+- Datos: no se ejecutó seed, importación, OCR, migración ni modificación de Highlander/Duster Zen. La etiqueta U-PRO conocida es sólo presentación de UI.
+- Verificación: frontend build PASS (42 rutas), Functions build/lint PASS, autorización PASS, smoke de dominio PASS y smoke integral Auth/Firestore/Functions/Storage PASS. El emulador Storage instalado no resuelve de forma fiable consultas cruzadas a Firestore para la escritura positiva; por eso el smoke carga el blob con Admin dentro del proyecto demo y sí valida finalización, lectura del propietario y 403 para otro usuario. Todos los emuladores se apagaron.
+- Deploy requerido: Hosting/SSR; reglas de Storage; y Functions `listAssetOverview`, `recordAssetMovement`, `closeAssetPosition`, `accrueAssetLoanInterest`, `linkPay0PaymentToAsset`, `initAssetDocumentUpload` y `finalizeAssetDocumentUpload`. No requiere seed, migración ni índices nuevos identificados.
+
 ## Corrección arquitectónica PAY0 PLATFORM / ASSETS — 2026-09-20
 
 - Estado: implementación completa, validada y desplegada en producción. Hosting fue liberado el 2026-09-20 y las ocho Functions de ASSETS más SSR quedaron `ACTIVE`.
