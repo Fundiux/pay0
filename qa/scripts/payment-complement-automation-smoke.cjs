@@ -39,11 +39,12 @@ async function run(){
  const failing={...adapter,requestIqComplement:async()=>{posts++;throw Error('TIMEOUT');}};
  await api.executeComplement(unknown,failing);await api.executeComplement(unknown,failing);assert.equal(posts,2);assert.equal((await db.doc(`paymentComplementJobs/${unknown}`).get()).data().status,'UNKNOWN');
  assert.equal(policy.iqAvailability(400,{errors:['El depósito no tiene ningún REP adjunto']}),'PENDING');assert.throws(()=>policy.iqAvailability(401,{}));assert.throws(()=>policy.iqAvailability(400,{errors:['otro']}));
- const pago={moneda:'MXN',fechaPago:stamp.fromMillis(now.getTime()-86400000),paymentForm:'03'};
- const payload=policy.buildFacturamaRep(invoiceXml,app,pago,uuid,'REP-test');assert.equal(payload.CfdiType,'P');assert.equal(payload.Receiver.CfdiUse,'CP01');assert.equal(payload.Complemento.Payments[0].RelatedDocuments[0].Taxes[0].Total,8);assert.equal(payload.PaymentMethod,undefined);
+ const pago={moneda:'MXN',fechaPago:stamp.fromMillis(now.getTime()-86400000),paymentTime:'12:00:00',paymentForm:'03',referencia:'RASTREO-1',receiptLearningSignals:{detectedPayerRfc:'BBB010101BBB',detectedBeneficiaryRfc:'AAA010101AAA',detectedSourceAccount:'1234567890',detectedDestinationAccount:'012345678901234567',detectedBankName:'BBVA'}};
+ const payload=policy.buildFacturamaRep(invoiceXml,app,pago,uuid,'REP-test'),payment=payload.Complemento.Payments[0];assert.equal(payload.CfdiType,'P');assert.equal(payload.Receiver.CfdiUse,'CP01');assert.equal(payment.Date.slice(-8),'12:00:00');assert.equal(payment.PaymentForm,'03');assert.equal(payment.PayerAccount,'1234567890');assert.equal(payment.BeneficiaryAccount,'012345678901234567');assert.equal(payment.OperationNumber,'RASTREO-1');assert.equal(payload.PaymentBankName,'BBVA');assert.equal(payment.RelatedDocuments[0].Taxes[0].Total,8);assert.equal(payload.PaymentMethod,undefined);
  assert.equal(policy.paymentDate(stamp.fromDate(new Date('2026-09-20T00:00:00Z'))),'2026-09-20','civil date must not shift backwards');
  assert.equal(policy.paymentDate(stamp.fromDate(new Date('2026-09-20T03:00:00Z'))),'2026-09-19','actual time uses Mexico day');
  assert.throws(()=>policy.buildFacturamaRep(invoiceXml,app,{...pago,paymentForm:undefined},uuid,'REP'),/PAYMENT_FORM/);
+ assert.throws(()=>policy.buildFacturamaRep(invoiceXml,app,{...pago,receiptLearningSignals:{...pago.receiptLearningSignals,detectedPayerRfc:'XXX010101XXX'}},uuid,'REP'),/RFC_MISMATCH/);
  assert.throws(()=>policy.buildFacturamaRep(invoiceXml.replace('0.160000','0.080000'),app,pago,uuid,'REP'),/TAXES/);
  assert.throws(()=>policy.buildFacturamaRep(invoiceXml,app,{...pago,moneda:'USD'},uuid,'REP'),/CURRENCY/);
  assert.throws(()=>policy.assertXml('<Comprobante>'),/XML_INVALID/);

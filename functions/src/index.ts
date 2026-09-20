@@ -1667,10 +1667,20 @@ export const createPago = onCall(
       empresaNombre,
       montoTotal,
       fechaPago,
+      paymentTime,
       paymentForm,
       referencia,
       moneda,
       notaInicial,
+      detectedBankName,
+      detectedSenderName,
+      detectedBeneficiaryName,
+      detectedSourceAccount,
+      detectedDestinationAccount,
+      detectedPayerRfc,
+      detectedBeneficiaryRfc,
+      operatorSelectedBankName,
+      operatorSelectedAccount,
       despachoId,
       asociadoId,
       operationTypeKey,
@@ -1932,9 +1942,24 @@ export const createPago = onCall(
       }
       fechaPagoValue = admin.firestore.Timestamp.fromDate(d);
     }
+    const paymentTimeValue = String(paymentTime || "12:00:00").trim();
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(paymentTimeValue)) throw new HttpsError("invalid-argument", "Hora del pago inválida.");
 
 
     const referenciaValue = String(referencia || "").trim();
+    const detectedBankNameValue = String(detectedBankName || "").trim().slice(0, 120);
+    const detectedSenderNameValue = String(detectedSenderName || "").trim().slice(0, 180);
+    const detectedBeneficiaryNameValue = String(detectedBeneficiaryName || "").trim().slice(0, 180);
+    const detectedSourceAccountValue = String(detectedSourceAccount || "").trim().slice(0, 80);
+    const detectedDestinationAccountValue = String(detectedDestinationAccount || "").trim().slice(0, 80);
+    const detectedPayerRfcValue = String(detectedPayerRfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
+    const detectedBeneficiaryRfcValue = String(detectedBeneficiaryRfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
+    const clientRfcValue = String(clientData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
+    const companyRfcValue = String(companyData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
+    if (detectedPayerRfcValue && detectedPayerRfcValue !== clientRfcValue) throw new HttpsError("failed-precondition", "El RFC del ordenante del comprobante no coincide con el cliente facturado.");
+    if (detectedBeneficiaryRfcValue && detectedBeneficiaryRfcValue !== companyRfcValue) throw new HttpsError("failed-precondition", "El RFC beneficiario del comprobante no coincide con la empresa emisora.");
+    const operatorSelectedBankNameValue = String(operatorSelectedBankName || "").trim().slice(0, 120);
+    const operatorSelectedAccountValue = String(operatorSelectedAccount || "").trim().slice(0, 80);
 
     const referenciaNormalized = referenciaValue
       .normalize("NFD")
@@ -2085,12 +2110,30 @@ export const createPago = onCall(
         ...buildPagoFoundationOnCreate(montoTotalNum),
         status: "CONCILIACION_PENDIENTE",
         fechaPago: fechaPagoValue,
+        paymentTime: paymentTimeValue,
+        paymentDateTimeLocal: fechaPagoValue ? `${fechaPagoKey}T${paymentTimeValue}` : null,
         paymentForm: paymentFormValue || null,
         // Fecha canónica para consultas de reportes. Si el usuario capturó la
         // fecha del pago se conserva; de lo contrario se usa la creación real.
         reportDateAt: fechaPagoValue || FieldValue.serverTimestamp(),
         referencia: referenciaValue || null,
         referenciaNormalized: referenciaNormalized || null,
+        receiptLearningSignals: {
+          detectedBankName: detectedBankNameValue || null,
+          detectedSenderName: detectedSenderNameValue || null,
+          detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
+          detectedSourceAccount: detectedSourceAccountValue || null,
+          detectedDestinationAccount: detectedDestinationAccountValue || null,
+          detectedPayerRfc: detectedPayerRfcValue || null,
+          detectedBeneficiaryRfc: detectedBeneficiaryRfcValue || null,
+          clientRfcSnapshot: clientRfcValue || null,
+          companyRfcSnapshot: companyRfcValue || null,
+          operatorSelectedBankName: operatorSelectedBankNameValue || null,
+          operatorSelectedAccount: operatorSelectedAccountValue || null,
+          bankIdentificationNeedsReview:
+            !!operatorSelectedBankNameValue &&
+            detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+        },
         receiptDuplicateId: receiptDuplicateId || null,
         moneda: String(moneda || "MXN"),
         comprobantes: [],

@@ -366,9 +366,11 @@ export default function PagosPage() {
   const [montoTotal, setMontoTotal] = useState("");
   const [isMontoTotalFocused, setIsMontoTotalFocused] = useState(false);
   const [fechaPago, setFechaPago] = useState(() => getTodayDateInputValue());
+  const [paymentTime, setPaymentTime] = useState("12:00:00");
   const [moneda, setMoneda] = useState("MXN");
-  const [paymentForm, setPaymentForm] = useState("");
+  const [paymentForm, setPaymentForm] = useState("03");
   const [notaInicial, setNotaInicial] = useState("");
+  const [receiptLearningSignals, setReceiptLearningSignals] = useState<Record<string, string>>({});
   const [comprobantePagoFile, setComprobantePagoFile] = useState<File | null>(null);
   const [comprobantePagoDragActive, setComprobantePagoDragActive] = useState(false);
   const [isPagoPageDragging, setIsPagoPageDragging] = useState(false);
@@ -430,9 +432,11 @@ export default function PagosPage() {
     setSelectedOperationTypeKey("");
     setMontoTotal("");
     setFechaPago(getTodayDateInputValue());
+    setPaymentTime("12:00:00");
     setMoneda("MXN");
-    setPaymentForm("");
+    setPaymentForm("03");
     setNotaInicial("");
+    setReceiptLearningSignals({});
     setComprobantePagoFile(null);
     setComprobantePagoDragActive(false);
     setPageMsg("");
@@ -1126,9 +1130,20 @@ export default function PagosPage() {
             operationTypeKey: String(item?.operationTypeKey || ""),
             montoTotal: Number(parsed.amount || 0),
             fechaPago: String(parsed.date || ""),
+            paymentTime: String(parsed.time || "12:00:00"),
+            paymentForm: "03",
             referencia: String(parsed.reference || ""),
             moneda: String(parsed.currency || "MXN"),
             notaInicial: buildReceiptDetectedNote(item),
+            detectedBankName: String(parsed.bankName || ""),
+            detectedSenderName: String(parsed.senderName || ""),
+            detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
+            detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
+            detectedDestinationAccount: String(parsed.destinationAccount || ""),
+            detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
+            detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
+            operatorSelectedBankName: String(company?.bankName || company?.banco || ""),
+            operatorSelectedAccount: String(company?.bankClabe || company?.clabe || company?.cuenta || ""),
             file: item.file,
             onPagoCreated: (nextPagoId) => {
               createdPagoId = nextPagoId;
@@ -1238,12 +1253,24 @@ export default function PagosPage() {
     // Un comprobante importado nunca debe heredar la fecha de hoy
     // si la fecha real no fue detectada.
     setFechaPago(parsed.date || "");
+    setPaymentTime(parsed.time || "12:00:00");
+    setPaymentForm("03");
 
     if (parsed.currency) {
       setMoneda(parsed.currency);
     }
 
     setNotaInicial(buildReceiptDetectedNote(item));
+    setReceiptLearningSignals({
+      detectedBankName: String(parsed.bankName || ""),
+      detectedSenderName: String(parsed.senderName || ""),
+      detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
+      detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
+      detectedDestinationAccount: String(parsed.destinationAccount || ""),
+      detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
+      detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
+      paymentTime: String(parsed.time || "12:00:00"),
+    });
     setPageMsg(
       item.clientMatch && item.companyMatch
         ? "Comprobante del lote cargado con datos detectados."
@@ -1304,6 +1331,8 @@ export default function PagosPage() {
       // Un comprobante importado nunca debe heredar la fecha de hoy
       // si la fecha real no fue detectada.
       setFechaPago(parsed.date || "");
+      setPaymentTime(parsed.time || "12:00:00");
+      setPaymentForm("03");
 
       if (parsed.currency) {
         setMoneda(parsed.currency);
@@ -1333,6 +1362,17 @@ export default function PagosPage() {
       if (detectedDetails.length > 0) {
         setNotaInicial(detectedDetails.join(" | "));
       }
+
+      setReceiptLearningSignals({
+        detectedBankName: String(parsed.bankName || ""),
+        detectedSenderName: String(parsed.senderName || ""),
+        detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
+        detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
+        detectedDestinationAccount: String(parsed.destinationAccount || ""),
+        detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
+        detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
+        paymentTime: String(parsed.time || "12:00:00"),
+      });
 
       const unresolved = [
         parsed.senderName && !clientMatch
@@ -1951,10 +1991,20 @@ export default function PagosPage() {
     operationTypeKey: string;
     montoTotal: string | number;
     fechaPago: string;
+    paymentTime?: string;
     paymentForm?: string;
     referencia?: string;
     moneda: string;
     notaInicial: string;
+    detectedBankName?: string;
+    detectedSenderName?: string;
+    detectedBeneficiaryName?: string;
+    detectedSourceAccount?: string;
+    detectedDestinationAccount?: string;
+    detectedPayerRfc?: string;
+    detectedBeneficiaryRfc?: string;
+    operatorSelectedBankName?: string;
+    operatorSelectedAccount?: string;
     file: File;
     onPagoCreated?: (pagoId: string) => void;
     backgroundUpload?: boolean;
@@ -1968,10 +2018,20 @@ export default function PagosPage() {
       operationTypeKey: input.operationTypeKey,
       montoTotal: input.montoTotal,
       fechaPago: input.fechaPago,
+      paymentTime: input.paymentTime || "12:00:00",
       paymentForm: input.paymentForm || "",
       referencia: input.referencia || "",
       moneda: input.moneda,
       notaInicial: input.notaInicial,
+      detectedBankName: input.detectedBankName || "",
+      detectedSenderName: input.detectedSenderName || "",
+      detectedBeneficiaryName: input.detectedBeneficiaryName || "",
+      detectedSourceAccount: input.detectedSourceAccount || "",
+      detectedDestinationAccount: input.detectedDestinationAccount || "",
+      detectedPayerRfc: input.detectedPayerRfc || "",
+      detectedBeneficiaryRfc: input.detectedBeneficiaryRfc || "",
+      operatorSelectedBankName: input.operatorSelectedBankName || "",
+      operatorSelectedAccount: input.operatorSelectedAccount || "",
     });
 
     const createdPagoId = String(
@@ -2066,9 +2126,19 @@ export default function PagosPage() {
           operationTypeKey: selectedOperationTypeKey,
           montoTotal: parseMoneyInput(montoTotal),
           fechaPago: fechaPago || "",
+          paymentTime,
           paymentForm,
           moneda: moneda || "MXN",
           notaInicial: notaInicial.trim(),
+          detectedBankName: receiptLearningSignals.detectedBankName || "",
+          detectedSenderName: receiptLearningSignals.detectedSenderName || "",
+          detectedBeneficiaryName: receiptLearningSignals.detectedBeneficiaryName || "",
+          detectedSourceAccount: receiptLearningSignals.detectedSourceAccount || "",
+          detectedDestinationAccount: receiptLearningSignals.detectedDestinationAccount || "",
+          detectedPayerRfc: receiptLearningSignals.detectedPayerRfc || "",
+          detectedBeneficiaryRfc: receiptLearningSignals.detectedBeneficiaryRfc || "",
+          operatorSelectedBankName: String(selectedCompanyLearning?.bankName || selectedCompanyLearning?.banco || ""),
+          operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
           backgroundUpload: true,
           onUploadError: (error: any) => {
@@ -2084,9 +2154,11 @@ export default function PagosPage() {
         setSelectedOperationTypeKey("");
         setMontoTotal("");
         setFechaPago("");
+        setPaymentTime("12:00:00");
         setMoneda("MXN");
-        setPaymentForm("");
+        setPaymentForm("03");
         setNotaInicial("");
+        setReceiptLearningSignals({});
     setComprobantePagoFile(null);
         setOpenNewPago(false);
       });
@@ -3186,6 +3258,18 @@ export default function PagosPage() {
                 onChange={(e) => setFechaPago(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-[13px] text-slate-100 outline-none [color-scheme:dark]"
               />
+
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <input
+                  type="time"
+                  step="1"
+                  aria-label="Hora pago"
+                  value={paymentTime}
+                  onChange={(e) => setPaymentTime(e.target.value.length === 5 ? `${e.target.value}:00` : e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-[13px] text-slate-100 outline-none [color-scheme:dark]"
+                />
+                <span className="self-center text-[11px] text-slate-400">Si no aparece: 12:00:00</span>
+              </div>
 
               <UiSelect
                 value={moneda}

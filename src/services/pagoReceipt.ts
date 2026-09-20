@@ -7,10 +7,13 @@ export type ParsedPagoReceipt = {
   bankName: string;
   amount: number;
   date: string;
+  time: string;
   reference: string;
   concept: string;
   currency: string;
   rfc: string;
+  payerRfc: string;
+  beneficiaryRfc: string;
   clabe: string;
   account: string;
   shortName: string;
@@ -64,10 +67,13 @@ export async function parsePagoReceiptPdfFile(file: File): Promise<ParsedPagoRec
     bankName: String(receipt.bankName || ""),
     amount: Number(receipt.amount || 0),
     date: String(receipt.date || ""),
+    time: String(receipt.time || ""),
     reference: String(receipt.reference || ""),
     concept: String(receipt.concept || ""),
     currency: String(receipt.currency || ""),
     rfc: String(receipt.rfc || ""),
+    payerRfc: String(receipt.payerRfc || ""),
+    beneficiaryRfc: String(receipt.beneficiaryRfc || ""),
     clabe: String(receipt.clabe || ""),
     account: String(receipt.account || ""),
     shortName: String(receipt.shortName || ""),

@@ -13,6 +13,12 @@ export function paymentDate(value: any): string {
   return date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0
     ? date.toISOString().slice(0, 10) : dayMexico(date);
 }
+export function paymentDateTime(pago: any): string {
+  const date = paymentDate(pago?.fechaPago);
+  const time = text(pago?.paymentTime || "12:00:00");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(time)) throw Error("REP_PAYMENT_DATE_REQUIRED");
+  return `${date}T${time}`;
+}
 export function overdue(requestedAt: any, now: Date): boolean {
   const start = millis(requestedAt);
   return start > 0 && Date.parse(dayMexico(now)) - Date.parse(dayMexico(new Date(start))) >= 10 * 86400000;
@@ -56,6 +62,14 @@ export function buildFacturamaRep(xml: string, app: any, pago: any, expectedUuid
   if (!/^(01|02|03|04|05|06|08|12|13|14|15|17|23|24|25|26|27|28|29|30|31)$/.test(form)) throw Error("REP_PAYMENT_FORM_REQUIRED");
   const date = millis(pago.fechaPago);
   if (!(date > 0) || date > Date.now()) throw Error("REP_PAYMENT_DATE_REQUIRED");
+  if (form !== "03") throw Error("REP_PAYMENT_FORM_REQUIRES_REVIEW");
+  const signals = pago.receiptLearningSignals || {};
+  const normalizedRfc = (value: unknown) => text(value).toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
+  const invoiceIssuerRfc = normalizedRfc(xmlAttribute(issuer, "Rfc"));
+  const invoiceReceiverRfc = normalizedRfc(xmlAttribute(receiver, "Rfc"));
+  const payerRfc = normalizedRfc(signals.detectedPayerRfc || signals.clientRfcSnapshot);
+  const beneficiaryRfc = normalizedRfc(signals.detectedBeneficiaryRfc || signals.companyRfcSnapshot);
+  if (!payerRfc || payerRfc !== invoiceReceiverRfc || !beneficiaryRfc || beneficiaryRfc !== invoiceIssuerRfc) throw Error("REP_PAYMENT_RFC_MISMATCH");
   const concepts = xmlTags(xml, "Concepto"), objects = [...new Set(concepts.map(tag => xmlAttribute(tag, "ObjetoImp")))];
   if (!concepts.length || objects.length !== 1 || !["01", "02"].includes(objects[0]) || xmlTags(xml, "Retencion").length || Number(xmlAttribute(top, "Descuento") || 0) !== 0) throw Error("REP_TAXES_REQUIRE_REVIEW");
   const paid = cents(app.montoAplicado), total = cents(xmlAttribute(top, "Total"));
@@ -73,10 +87,19 @@ export function buildFacturamaRep(xml: string, app: any, pago: any, expectedUuid
     const allocatedTax = Math.round(tax * paidAfter / total) - Math.round(tax * paidBefore / total);
     related.Taxes = [{ Name: "IVA", Rate: 0.16, Base: (paid - allocatedTax) / 100, Total: allocatedTax / 100, IsRetention: false }];
   }
-  const payload = { CfdiType: "P", NameId: 14, Folio: folio, ExpeditionPlace: xmlAttribute(top, "LugarExpedicion"),
+  const payment: any = { Date: paymentDateTime(pago), PaymentForm: form, Currency: "MXN", Amount: paid / 100, RelatedDocuments: [related] };
+  const payerAccount = text(signals.detectedSourceAccount).replace(/\s/g, "");
+  const beneficiaryAccount = text(signals.detectedDestinationAccount || signals.operatorSelectedAccount).replace(/\s/g, "");
+  const operationNumber = text(pago.referencia).slice(0, 100);
+  if (payerAccount) payment.PayerAccount = payerAccount;
+  if (beneficiaryAccount) payment.BeneficiaryAccount = beneficiaryAccount;
+  if (operationNumber) payment.OperationNumber = operationNumber;
+  const payload: any = { CfdiType: "P", NameId: 14, Folio: folio, ExpeditionPlace: xmlAttribute(top, "LugarExpedicion"),
     Issuer: { Rfc: xmlAttribute(issuer, "Rfc"), Name: xmlAttribute(issuer, "Nombre"), FiscalRegime: xmlAttribute(issuer, "RegimenFiscal") },
     Receiver: { Rfc: xmlAttribute(receiver, "Rfc"), Name: xmlAttribute(receiver, "Nombre"), FiscalRegime: xmlAttribute(receiver, "RegimenFiscalReceptor"), TaxZipCode: xmlAttribute(receiver, "DomicilioFiscalReceptor"), CfdiUse: "CP01" },
-    Complemento: { Payments: [{ Date: paymentDate(pago.fechaPago), PaymentForm: form, Currency: "MXN", Amount: paid / 100, RelatedDocuments: [related] }] } };
+    Complemento: { Payments: [payment] } };
+  const bankName = text(signals.detectedBankName).slice(0, 50);
+  if (bankName) payload.PaymentBankName = bankName;
   if (Object.values(payload.Issuer).some(v => !v) || Object.values(payload.Receiver).some(v => !v) || !/^\d{5}$/.test(payload.ExpeditionPlace)) throw Error("REP_FISCAL_DATA_REQUIRED");
   return payload;
 }

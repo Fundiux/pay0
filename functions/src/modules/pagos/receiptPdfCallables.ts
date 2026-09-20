@@ -10,10 +10,13 @@ type ReceiptData = {
   bankName: string;
   amount: number;
   date: string;
+  time: string;
   reference: string;
   concept: string;
   currency: string;
   rfc: string;
+  payerRfc: string;
+  beneficiaryRfc: string;
   clabe: string;
   account: string;
   shortName: string;
@@ -272,6 +275,25 @@ function parseDateValue(value: string): string {
 
   return "";
 }
+
+function parseTimeValue(value: string): string {
+  const raw = clean(value);
+  const match = raw.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\b/i);
+  if (!match) return "";
+  let hour = Number(match[1]);
+  const suffix = normalize(match[4] || "").replace(/\s|\./g, "");
+  if (suffix === "pm" && hour < 12) hour += 12;
+  if (suffix === "am" && hour === 12) hour = 0;
+  if (hour > 23) return "";
+  return `${String(hour).padStart(2, "0")}:${match[2]}:${match[3] || "00"}`;
+}
+
+function labeledRfc(lines: string[], party: "payer" | "beneficiary"): string {
+  const labels = party === "payer"
+    ? /^(?:rfc\s+(?:ordenante|emisor|remitente|pagador|cliente)|(?:ordenante|emisor|remitente|pagador|cliente)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i
+    : /^(?:rfc\s+(?:beneficiario|receptor)|(?:beneficiario|receptor)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i;
+  return firstMatch(lines.join("\n"), [labels]).toUpperCase();
+}
 function detectReceiptContentType(input: {
   declaredContentType: string;
   originalName: string;
@@ -452,6 +474,9 @@ function parseReceiptText(textRaw: string): ReceiptData {
       /\b(\d{1,2}[\s\-\/.]+[a-z]+[\s\-\/.]+20\d{2})\b/i,
       /\b(\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de|del)\s+20\d{2})\b/i,
     ]);
+  const time = parseTimeValue(dateRaw) || parseTimeValue(extractLabeled(lines, [
+    /^hora\s*(?:de\s+)?(?:operacion|transferencia|pago)?\s*[:\-]\s*(.+)$/i,
+  ]));
 
   const reference =
     extractLabeled(lines, [
@@ -474,6 +499,8 @@ function parseReceiptText(textRaw: string): ReceiptData {
     /(?:rfc\s+(?:ordenante|emisor|remitente|beneficiario|receptor)?|rfc)\s*[:\-]\s*([A-Z&Ãƒâ€˜]{3,4}\d{6}[A-Z0-9]{3})/i,
     /\b([A-Z&Ãƒâ€˜]{3,4}\d{6}[A-Z0-9]{3})\b/i,
   ]).toUpperCase();
+  const payerRfc = labeledRfc(lines, "payer");
+  const beneficiaryRfc = labeledRfc(lines, "beneficiary");
 
   const clabe = firstMatch(text, [
     /(?:clabe|clabe\s+interbancaria|cuenta\s+clabe)\s*[:\-]?\s*(\d[\d\s-]{16,22}\d)/i,
@@ -508,10 +535,13 @@ function parseReceiptText(textRaw: string): ReceiptData {
       detectBank(text),
     amount,
     date,
+    time,
     reference,
     concept,
     currency,
     rfc,
+    payerRfc: payerRfc || (!beneficiaryRfc ? rfc : ""),
+    beneficiaryRfc,
     clabe,
     account,
     shortName,

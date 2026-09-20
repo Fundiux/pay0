@@ -15,10 +15,20 @@ export async function createPago(input: {
   finalClientRate?: number | string | null;
   montoTotal: number | string;
   fechaPago?: string;
+  paymentTime?: string;
   paymentForm?: string;
   referencia?: string;
   moneda?: string;
   notaInicial?: string;
+  detectedBankName?: string;
+  detectedSenderName?: string;
+  detectedBeneficiaryName?: string;
+  detectedSourceAccount?: string;
+  detectedDestinationAccount?: string;
+  detectedPayerRfc?: string;
+  detectedBeneficiaryRfc?: string;
+  operatorSelectedBankName?: string;
+  operatorSelectedAccount?: string;
 }) {
   const fn = httpsCallable(functions, "createPago");
   const res: any = await fn(input);

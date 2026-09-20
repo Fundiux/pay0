@@ -33,3 +33,7 @@ Evidencia: compilación backend/frontend, verificador de autorización y cuatro 
 Producción: doce funciones verificadas ACTIVE; configuración IQ/Facturama activada prospectivamente en el root autorizado, cero jobs históricos creados. Scheduler ENABLED `0 19 * * *`, America/Mexico_City. Configuración sin sesión rechazada con HTTP 401. Hosting final publicado correctamente.
 
 La recepción de un ZIP real y aceptación de un REP real por el PAC deberán comprobarse con la primera operación autorizada; no se declaran probadas por el emulador. No se modificaron reglas. Npm reportó once vulnerabilidades en el conjunto de dependencias; no se ejecutó un audit-fix global fuera de alcance.
+
+## Datos fiscales del pago por transferencia
+
+Para REP automático la forma es `03` (transferencia). La fecha corresponde al movimiento del comprobante, no a su carga en PAY0. Se conserva la hora detectada; cuando el comprobante no contiene hora se registra explícitamente `12:00:00`. El número de operación, cuenta ordenante, cuenta beneficiaria y banco se incorporan cuando fueron identificados. Antes de timbrar, PAY0 exige que el RFC ordenante detectado o canónico coincida con el receptor del CFDI original y que el RFC beneficiario detectado o canónico coincida con su emisor. Los RFC fiscales del cliente y de nuestra empresa permanecen en los nodos Receptor y Emisor; el RFC bancario condicional es un dato diferente y no se inventa a partir del RFC del contribuyente.
