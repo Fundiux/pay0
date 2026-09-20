@@ -104,7 +104,7 @@ function fallbackReply(message: string, name: string, context: any): string {
     return `Revisé ${item.folio}. Está en ${item.estado || "estado no especificado"}, por ${amount}${item.facturamaStatus ? ` y su estado fiscal es ${item.facturamaStatus}` : ""}. Si quieres, dime qué parte revisamos con más detalle.`;
   }
   if (/complement|beneficiari|dispersion|dispersión/.test(normalized)) {
-    return `En el contexto reciente veo ${context.complementosPendientes.length} complementos pendientes. Automatización IQ: ${context.capacidadesIq.solicitudComplemento}; Facturama: ${context.capacidadesIq.complementoFacturama}. IQ se revisa a las 19:00 y se avisa tras 10 días sin recibirlo. Registrar un pendiente no significa que el proveedor lo recibió. El alta de beneficiarios en IQ aún no está conectada. No he enviado ninguna operación desde este chat.`;
+    return `En el contexto reciente veo ${context.complementosPendientes.length} complementos pendientes. Automatización IQ: ${context.capacidadesIq.solicitudComplemento}; Facturama: ${context.capacidadesIq.complementoFacturama}. IQ se revisa a las 19:00 y se avisa tras 7 días sin recibirlo. Registrar un pendiente no significa que el proveedor lo recibió. El alta de beneficiarios en IQ aún no está conectada. No he enviado ninguna operación desde este chat.`;
   }
   if (/qué (pasó|hiciste)|que (paso|hiciste)|resumen|último|ultimo/.test(normalized)) {
     return `Veo ${context.solicitudes.length} solicitudes recientes, ${context.pagos.length} pagos en el contexto actual y ${context.dudasPendientes.length} dudas pendientes. Puedo revisar un folio concreto si me lo indicas.`;

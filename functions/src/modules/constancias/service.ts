@@ -353,7 +353,11 @@ export const getPublicConstanciaVerification = onCall(
     const match = await db.collection("uploads").where("publicVerificationToken", "==", token).limit(1).get();
     if (match.empty) return { valid: false };
     const upload: any = match.docs[0].data() || {};
-    if (upload.documentType !== "CONSTANCIA_RECEPCION_SATISFACCION" || upload.integritySealStatus !== "SEALED") return { valid: false };
+    if (
+      upload.documentType !== "CONSTANCIA_RECEPCION_SATISFACCION" ||
+      upload.integritySealStatus !== "SEALED" ||
+      upload.active !== true
+    ) return { valid: false };
     const snapshot: any = upload.constanciaSnapshot || {};
     return {
       valid: true,

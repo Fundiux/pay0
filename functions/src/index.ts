@@ -92,33 +92,21 @@ export const upsertUser = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
-    const rootId = await getRootId(uid);
     const email = request.data?.email ? String(request.data.email) : null;
 
     const ref = db.doc(`users/${uid}`);
     const snap = await ref.get();
-    const now = FieldValue.serverTimestamp();
-
     if (!snap.exists) {
-      await ref.set(
-        {
-          email,
-          rootId,
-          role: "admin",
-          modules: getDefaultModules("admin"),          parentUserId: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-        { merge: true }
+      throw new HttpsError(
+        "permission-denied",
+        "Tu usuario no tiene un perfil PAY0 autorizado. Solicita acceso a un administrador."
       );
-      return { ok: true, created: true };
     }
 
     await ref.set(
       {
         email,
-        rootId: snap.data()?.rootId || rootId,
-        updatedAt: now,
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -2733,6 +2721,7 @@ export {
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
+export { refreshMaterialityFromUpload } from "./modules/materiality/triggers";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export {
   createIqCredentialProfile,

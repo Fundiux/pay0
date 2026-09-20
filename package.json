@@ -57,7 +57,9 @@
     "qa:pay0:h4-d76-a16": "powershell -ExecutionPolicy Bypass -File scripts/run-h4-d76-a16-qa.ps1",
     "qa:pay0:h4-d76-domain": "node qa/scripts/h4-d76-domain-closure.mjs",
     "demo:cotizacion": "node scripts/render-cotizacion-demo.mjs",
-    "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs"
+    "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs",
+    "qa:audit-security": "node qa/scripts/audit-security-regression.mjs",
+    "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

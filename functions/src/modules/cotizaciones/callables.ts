@@ -384,7 +384,11 @@ export const getPublicQuotationVerification = onCall(
       .get();
     if (match.empty) return { valid: false };
     const upload: any = match.docs[0].data() || {};
-    if (upload.documentType !== "COTIZACION" || upload.integritySealStatus !== "SEALED") return { valid: false };
+    if (
+      upload.documentType !== "COTIZACION" ||
+      upload.integritySealStatus !== "SEALED" ||
+      upload.active !== true
+    ) return { valid: false };
     const quote: any = upload.quotationSnapshot || {};
     return {
       valid: true,

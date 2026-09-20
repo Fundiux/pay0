@@ -21,7 +21,7 @@ export function paymentDateTime(pago: any): string {
 }
 export function overdue(requestedAt: any, now: Date): boolean {
   const start = millis(requestedAt);
-  return start > 0 && Date.parse(dayMexico(now)) - Date.parse(dayMexico(new Date(start))) >= 10 * 86400000;
+  return start > 0 && Date.parse(dayMexico(now)) - Date.parse(dayMexico(new Date(start))) >= 7 * 86400000;
 }
 export function assertSource(rootId: string, app: any, solicitud: any, pago: any) {
   if (!rootId || [app, solicitud, pago].some(row => !row || row.rootId !== rootId)) throw Error("REP_SCOPE_INVALID");

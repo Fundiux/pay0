@@ -1,5 +1,21 @@
 # PAY0 — Estado maestro vivo
 
+### Auditoría maestra preproducción — dictamen bloqueado (2026-09-20)
+
+**No declarar PAY0 Production Ready todavía.** La auditoría de cierre está documentada en `audit/2026-09-20-preproduction-part-1.md` y su continuación. No se hicieron migraciones, despliegues ni acciones externas; sí se aplicaron endurecimientos acotados y pruebas locales descritos abajo.
+
+Bloqueadores vigentes:
+
+1. **P1 — Cobertura de eventos de Materialidad aún incompleta.** Un trigger ya refresca la proyección ante altas, reemplazos, bajas o cambios relevantes de `uploads`, incluidos documentos ligados a Solicitud o Pago. Quedan por demostrar con E2E los eventos que no materializan un upload y el comportamiento ante todos los actores/estados.
+
+Correcciones ya incorporadas durante este cierre:
+
+1. La rama heredada de `upsertUser` que habría creado un perfil administrativo fue eliminada. El análisis de flujo confirmó además que nunca era alcanzable porque `getRootId` ya exigía perfil; ahora el callable niega explícitamente a usuarios sin perfil PAY0.
+2. La verificación pública de constancia/cotización niega documentos inactivos, por lo que una baja o sustitución invalida el token de verificación.
+3. La alerta de complemento PPD se alineó a siete días en la política, automatización y superficies operativas. El smoke `qa:payment-complements` usa Firestore y Storage Emulator, prueba el borde día 6/día 7, idempotencia y cierre de emuladores.
+
+Las compilaciones frontend/Functions, el verificador de política, reglas Emulator y smokes financieros locales pasaron el 2026-09-20. Eso no certifica recorridos E2E completos, producción, proveedores, recuperación ni el bloqueador restante. El plan ordenado por riesgo está en `docs/PRE_PRODUCTION_CLOSEOUT_PLAN.md`.
+
 ### ASSETS V2 validado y desplegado (2026-09-20)
 
 La segunda pasada de ASSETS conserva la separación ya publicada y completa la capa operativa. El sistema usa ahora una identidad grafito/gris con acentos naranja, coral y dorado en todas sus vistas, shell compacto con sidebar fijo y dashboard ejecutivo con KPIs, gráfica de capital activo y estado del portafolio. El verde se reserva para ganancias y entradas. Posiciones mantiene tabs de Vehículos/Préstamos, historial separado, movimientos filtrables y documentos utilizables desde escritorio o móvil. No se agregó ASSETS al menú funcional de PAY0 ni se incorporó Hugo a ASSETS.
