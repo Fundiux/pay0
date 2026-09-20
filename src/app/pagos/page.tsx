@@ -1345,6 +1345,7 @@ export default function PagosPage() {
         parsed.reference ? `Referencia: ${parsed.reference}` : "",
         parsed.concept ? `Concepto: ${parsed.concept}` : "",
         parsed.rfc ? `RFC detectado: ${parsed.rfc}` : "",
+        parsed.time ? `Hora detectada: ${parsed.time}` : "Hora no detectada: se usará 12:00:00",
         parsed.clabe ? `CLABE detectada: ${parsed.clabe}` : "",
         parsed.account ? `Cuenta origen detectada: ${parsed.account}` : "",
         parsed.shortName ? `Nombre corto beneficiario: ${parsed.shortName}` : "",
@@ -2117,6 +2118,8 @@ export default function PagosPage() {
         if (!comprobantePagoFile) {
           throw new Error("Selecciona el comprobante de pago.");
         }
+
+        const selectedCompanyLearning = selectedCompany as any;
 
         await createPagoWithReceipt({
           clienteId: selectedClientId,

@@ -2188,6 +2188,19 @@ export const createPago = onCall(
         relatedEntityType: "cliente",
         amount: montoTotalNum,
         description: `Pago creado ${folio} para cliente ${clienteNombre} por ${montoTotalNum}`,
+        extra: {
+          source: "pagos",
+          detectedBankName: detectedBankNameValue || null,
+          detectedSenderName: detectedSenderNameValue || null,
+          detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
+          detectedSourceAccount: detectedSourceAccountValue || null,
+          detectedDestinationAccount: detectedDestinationAccountValue || null,
+          operatorSelectedBankName: operatorSelectedBankNameValue || null,
+          operatorSelectedAccount: operatorSelectedAccountValue || null,
+          bankIdentificationNeedsReview:
+            !!operatorSelectedBankNameValue &&
+            detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+        },
       });
     });
 
