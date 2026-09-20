@@ -7,6 +7,7 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 - Estado: implementación local completa y validada; **pendiente de despliegue productivo**.
 - UX: shell ASSETS compacto e independiente, sidebar fijo con navegación interna, tema grafito propio, dashboard ejecutivo sin hero, tablas densas y vistas responsivas. Posiciones separa Vehículos/Préstamos y actividad/historial; Movimientos agrega filtros operativos.
+- Semántica: los vehículos no muestran interés ni tasa en sus tarjetas o detalle; esos conceptos quedan exclusivamente en préstamos.
 - Ciclo terminal: cierre explícito y confirmado de vehículos (`LIQUIDATED`) y préstamos (`PAID`) únicamente con saldos consistentes. Backend bloquea movimientos, devengos y vínculos PAY0 posteriores en posiciones terminales; las métricas de capital trabajando e interés pendiente sólo consideran activas, conservando recuperación/utilidad históricas.
 - Documentos: flujo `init → Storage → finalize` para PDF/JPG/PNG de hasta 10 MB, hash SHA-256, deduplicación, nombre original, relación manual opcional y estado de extracción `NOT_STARTED`. Cargar evidencia no crea ni modifica posiciones o movimientos.
 - Privacidad: documentos y operaciones se aíslan por `ownerUid`/`rootId`; Storage limita lectura al propietario y creación a documentos previamente preparados, con tipo, tamaño, ruta y estado coincidentes.

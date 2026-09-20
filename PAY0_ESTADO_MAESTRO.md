@@ -4,6 +4,8 @@
 
 La segunda pasada de ASSETS conserva la separación ya publicada y completa la capa operativa. El sistema usa ahora tema grafito propio, shell compacto con sidebar fijo, dashboard ejecutivo, tabs de Vehículos/Préstamos, historial separado, movimientos filtrables y documentos utilizables desde escritorio o móvil. No se agregó ASSETS al menú funcional de PAY0 ni se incorporó Hugo a ASSETS.
 
+Los vehículos no generan ni presentan interés: sus tarjetas y detalle muestran capital, recuperación y utilidad. Tasa, interés pendiente, devengo y capitalización permanecen exclusivamente en préstamos.
+
 El ciclo de vida terminal quedó protegido en backend: un vehículo sólo puede pasar a `LIQUIDATED` sin capital pendiente y un préstamo a `PAID` sin principal ni interés pendientes. Una posición cerrada conserva todo su ledger e historial, deja de contar como capital trabajando y rechaza nuevos movimientos, devengos o vínculos PAY0. Recuperación y utilidad históricas siguen visibles.
 
 Documentos ASSETS usa preparación, carga privada y finalización verificable. Admite PDF/JPG/PNG hasta 10 MB, SHA-256, deduplicación, nombre original y relaciones opcionales con Position/Operation/Movement. La extracción queda `NOT_STARTED`; no hay OCR ni creación financiera automática. No se ejecutaron seeds, importaciones, migraciones o escrituras de producción, y los registros existentes —incluidos Highlander y Duster Zen— permanecen intactos.
