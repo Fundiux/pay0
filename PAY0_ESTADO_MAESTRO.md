@@ -1,5 +1,13 @@
 # PAY0 — Estado maestro vivo
 
+### Rendimiento por tipo visible en ASSETS Dashboard (2026-09-20)
+
+El Dashboard ya separa claramente tres lecturas: vehículos, préstamos y portafolio. Vehículos muestra el ROI efectivamente realizado sobre el capital de los vehículos vendidos; con los datos actuales equivale aproximadamente a `8.83%`. Préstamos muestra la tasa mensual ponderada por capital vigente y su equivalente anual efectivo compuesto; por ejemplo, `5% mensual` equivale a `79.59% anual efectivo`. Portafolio conserva su ROI acumulado total sin considerar capital recuperado como utilidad.
+
+No se anualiza artificialmente el rendimiento de vehículos porque los registros heredados no incluyen fechas reales de compra y venta. El sistema muestra el retorno realizado y deja la anualización pendiente de contar con una duración verificable.
+
+Validación y publicación: smoke ASSETS PASS, builds Next.js 16.3.5 y baseline productivo Next.js 14.2.35 PASS, SSR `ACTIVE` en `ssrpay0system-00489-xot`, `/assets` HTTP 200 y etiqueta de rendimiento confirmada dentro del chunk servido en producción. No hubo modificación de datos financieros, seed, migración, reglas o Functions de dominio.
+
 ### ASSETS: porcentajes, historial escalable y navegación consistente (2026-09-20)
 
 La mejora visual y de lectura financiera ya está desplegada. Dashboard presenta ROI acumulado del portafolio, tasa mensual ponderada de los préstamos activos con interés y equivalente anual efectivo compuesto. En Posiciones, los vehículos muestran ROI realizado y los préstamos ROI cobrado, tasa mensual y anual equivalente; los vehículos continúan sin conceptos de interés.

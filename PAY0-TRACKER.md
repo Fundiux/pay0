@@ -3,6 +3,16 @@
 Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## ASSETS — rendimiento por tipo visible en Dashboard — 2026-09-20
+
+- Estado: **implementado, validado y desplegado en producción**.
+- Vehículos: el Dashboard separa el ROI realizado de vehículos vendidos (`utilidad realizada / capital original vendido`). Con el conjunto actual, la tarjeta muestra aproximadamente `8.83%`, además de utilidad y capital base en pesos.
+- Préstamos: el Dashboard presenta la tasa mensual ponderada por capital vigente y el equivalente anual efectivo compuesto. Un préstamo al `5% mensual` se presenta como `79.59% anual efectivo`.
+- Portafolio: conserva un tercer indicador de ROI acumulado total, sin mezclar capital recuperado con utilidad.
+- Integridad semántica: el retorno de vehículos no se etiqueta como anualizado porque los registros heredados no contienen fechas reales de compra y venta; anualizarlo sin duración sería un dato financiero inventado.
+- Verificación: smoke de dominio ASSETS PASS; builds con Next.js 16.3.5 y con el baseline productivo Next.js 14.2.35 PASS; `/assets` respondió HTTP 200 y el chunk productivo `/_next/static/chunks/app/assets/page-16a9cab8ef94dbdf.js` contiene las nuevas etiquetas.
+- Despliegue: SSR `ACTIVE` en `ssrpay0system-00489-xot`. El intento directo con Next 16 no publicó por un error local de symlink de Windows; el corte exitoso se aisló sobre el baseline productivo estable y no ejecutó seeds, migraciones ni escrituras financieras.
+
 ## ASSETS — rendimientos visibles, historial tabular y transición — 2026-09-20
 
 - Estado: **implementado, validado y desplegado en producción**.
