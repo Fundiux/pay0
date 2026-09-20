@@ -18,7 +18,7 @@ import {
   Shield,
   MessageCircle,
   ReceiptText,
-  Landmark,
+  AppWindow,
 } from "lucide-react";
 
 import { useAuth, logout } from "@/lib/auth";
@@ -46,7 +46,6 @@ const iconMap: Record<string, any> = {
   whatsapp: MessageCircle,
   facturacion: ReceiptText,
   hugo: Shield,
-  assets: Landmark,
 };
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -101,11 +100,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           sidebarCollapsed ? "justify-center" : "px-4 justify-between"
         )}
       >
-        {!sidebarCollapsed && (
-          <span className="font-bold text-sky-400 text-xs uppercase tracking-widest truncate mr-2">
-            {userLabel}
-          </span>
-        )}
+        {!sidebarCollapsed && <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-400">PAY0</p><p className="truncate text-xs text-slate-500">{userLabel}</p></div>}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className="h-10 w-10 flex items-center justify-center rounded-xl border border-white/10 hover:bg-white/5 transition-colors"
@@ -175,6 +170,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <div className="p-4 border-t border-white/10">
         <button
+          onClick={() => goTo("/systems")}
+          className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-slate-400 transition hover:bg-white/5 hover:text-sky-300"
+        >
+          <AppWindow size={20} />
+          {!sidebarCollapsed && <span className="text-sm font-bold">Cambiar sistema</span>}
+        </button>
+        <button
           onClick={async () => {
             await logout();
             goTo("/login");
@@ -222,6 +224,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => goTo("/systems")}
+          className="flex min-w-[74px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-semibold text-slate-400 hover:bg-white/5 hover:text-sky-300"
+        >
+          <AppWindow className="h-5 w-5" />
+          <span>Sistemas</span>
+        </button>
       </div>
     </nav>
   );

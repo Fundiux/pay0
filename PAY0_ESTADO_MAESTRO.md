@@ -1,5 +1,15 @@
 # PAY0 — Estado maestro vivo
 
+### Separación PAY0 PLATFORM / ASSETS validada localmente (2026-09-20)
+
+ASSETS quedó corregido como sistema hermano de PAY0 y no como opción de su navegación funcional. El `RootLayout` conserva autenticación, mantenimiento y autorización comunes, pero selecciona un `AssetsShell` independiente para `/assets/**`; `/systems` es el launcher de plataforma y deja TTT únicamente como incorporación futura. PAY0 conserva su navegación y Hugo; ambos shells ofrecen cambio de sistema también en móvil.
+
+El dashboard ASSETS ahora es informativo y las capturas se movieron a `/assets/positions/new` y al detalle `/assets/positions/[id]`. Se añadieron listados de posiciones, movimientos y documentos con lenguaje humano. La importación documental continúa sólo preparada: no convierte extracción en verdad financiera ni crea movimientos sin confirmación.
+
+La lectura del portafolio separa datos confirmados de pruebas. Registros marcados `TEST`, excluidos o vehículos heredados sin clasificación se conservan pero no participan en métricas; U-PRO confirmado, préstamos y altas revisadas sí participan. Los nombres canónicos son Duster Intens TM 2025, Kwid Iconic TM 2025 y Arkana Esprit Alpine 2025. No se alteró el modelo de Position/AssetMovement, proyección, centavos, interés, capital/utilidad, idempotencia o enlace PAY0.
+
+Autorización independiente: frontend y backend exigen Superadmin o `systemAccess.assets`; ocultar navegación no concede acceso. Verificación local: build frontend PASS con 42 rutas, build Functions PASS, política de autorización PASS, smoke de dominio PASS y Firestore Emulator PASS para permisos, propietario, interés, pagos, seed, revisión documental y exclusión de datos no confirmados. Producción no fue modificada ni desplegada en este bloque.
+
 ### Hugo 2.0 + ASSETS V1 desplegados (2026-09-20)
 
 Se abrió `feature/hugo-assets-platform-v1` para no mezclar esta línea con Control Center. La implementación ya está desplegada en producción, pero la rama no está fusionada ni publicada al remoto. El renderer de cotización usa A4 y reconstruye el encabezado TROSTRE desde HTML/CSS canónico; la referencia PDF permanece inmutable. La vista previa confirmó datos, tabla, bancos, entrega y QR alineados, sin imprimir IDs técnicos.

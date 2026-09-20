@@ -4,6 +4,7 @@ import "src/styles/globals.css";
 import { Inter } from "next/font/google";
 import { usePathname } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import AssetsShell from "@/components/assets/AssetsShell";
 import { GlobalLoadingProvider } from "@/components/GlobalLoading";
 import MaintenanceGate from "@/components/MaintenanceGate";
 import RequireAuth from "@/components/RequireAuth";
@@ -19,6 +20,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isSignatureRoute = pathname === "/firma" || pathname?.startsWith("/firma/");
   const isPublicVerificationRoute = pathname === "/verificar" || pathname?.startsWith("/verificar/");
   const isLoginPage = pathname === "/login" || isMatRoute || isSignatureRoute || isPublicVerificationRoute;
+  const isAssetsRoute = pathname === "/assets" || pathname?.startsWith("/assets/");
+  const isSystemLauncher = pathname === "/systems";
+
+  const authenticatedContent = isAssetsRoute ? (
+    <AssetsShell>{children}</AssetsShell>
+  ) : isSystemLauncher ? (
+    children
+  ) : (
+    <AppShell>{children}</AppShell>
+  );
 
   return (
     <html lang="es" suppressHydrationWarning>
@@ -30,9 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <MaintenanceGate>
               <RouteAccessGuard>
                 <GlobalLoadingProvider>
-                  <AppShell>
-                    {children}
-                  </AppShell>
+                  {authenticatedContent}
                 </GlobalLoadingProvider>
               </RouteAccessGuard>
             </MaintenanceGate>

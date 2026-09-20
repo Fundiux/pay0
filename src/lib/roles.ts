@@ -1,6 +1,7 @@
 import authorizationPolicy from "../../config/authorization-policy.json";
 
 export type Role = "superadmin" | "admin" | "operador";
+export type PlatformSystem = "pay0" | "assets";
 
 export type ModuleActionMap = Record<string, Record<string, boolean>>;
 
@@ -149,7 +150,6 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     superadminOnly: true,
   },
   { label: "Hugo", href: "/hugo", iconKey: "hugo", superadminOnly: true },
-  { label: "Assets", href: "/assets", iconKey: "assets" },
   {
     label: "Materialidad",
     href: "/materialidad",
@@ -305,7 +305,15 @@ type RouteCandidate = {
   moduleKey?: string;
   actionKey?: string;
   superadminOnly?: boolean;
+  systemKey?: PlatformSystem;
 };
+
+export function canAccessSystem(profile: any, system: PlatformSystem): boolean {
+  if (!profile) return false;
+  if (normalizeRole(profile?.role) === "superadmin") return true;
+  if (system === "assets") return profile?.systemAccess?.assets === true;
+  return true;
+}
 
 function normalizeRoutePath(pathname: string) {
   const rawPath = String(pathname || "/").split("?")[0].split("#")[0] || "/";
@@ -333,7 +341,7 @@ export function getDefaultRouteCandidates(): RouteCandidate[] {
     { href: "/reportes", moduleKey: "reportes", actionKey: "view" },
     { href: "/facturacion", superadminOnly: true },
     { href: "/hugo", superadminOnly: true },
-    { href: "/assets" },
+    { href: "/assets", systemKey: "assets" },
     { href: "/materialidad", moduleKey: "materialidad", actionKey: "view" },
     { href: "/solicitudes", moduleKey: "solicitudes", actionKey: "view" },
     { href: "/pagos", moduleKey: "pagos", actionKey: "view" },
@@ -352,6 +360,11 @@ export function getDefaultRouteCandidates(): RouteCandidate[] {
 export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   const path = normalizeRoutePath(pathname);
   if (isPublicRoutePath(path)) return null;
+
+  if (path === "/systems") return { href: "/systems" };
+  if (path === "/assets" || path.startsWith("/assets/")) {
+    return { href: "/assets", systemKey: "assets" };
+  }
 
   if (/^\/usuarios\/[^/]+\/costos$/.test(path)) {
     return { href: "/usuarios/[id]/costos", moduleKey: "usuarios", actionKey: "costs" };
@@ -393,7 +406,6 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
     { href: "/whatsapp", superadminOnly: true },
     { href: "/facturacion", superadminOnly: true },
     { href: "/hugo", superadminOnly: true },
-    { href: "/assets" },
     { href: "/catalogos/tipos-operacion", superadminOnly: true },
     { href: "/despachos", superadminOnly: true },
     { href: "/wallet/adelantos", moduleKey: "wallet", actionKey: "adelantos", superadminOnly: true },
@@ -440,6 +452,10 @@ export function canAccessRoutePath(profile: any, pathname: string): boolean {
     return normalizeRole(profile?.role) === "superadmin";
   }
 
+  if (rule.systemKey && !canAccessSystem(profile, rule.systemKey)) {
+    return false;
+  }
+
   if (!rule.moduleKey) {
     return true;
   }
@@ -450,6 +466,10 @@ export function getFirstAllowedRoute(profile: any): string {
   const candidates = getDefaultRouteCandidates();
 
   for (const route of candidates) {
+    if (route.systemKey) {
+      if (canAccessSystem(profile, route.systemKey)) return route.href;
+      continue;
+    }
     if (route.superadminOnly) {
       if (normalizeRole(profile?.role) === "superadmin") {
         return route.href;

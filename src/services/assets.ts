@@ -9,6 +9,8 @@ export type AssetPosition = {
   counterpartyName?: string | null;
   interestModel?: string | null;
   rateBasisPoints?: number;
+  includedInMetrics: boolean;
+  dataClassification: "REAL" | "TEST" | "UNCLASSIFIED" | string;
   snapshot: {
     originalPrincipalMinor: number;
     outstandingPrincipalMinor: number;
@@ -30,6 +32,7 @@ export type AssetOverview = {
     realizedProfitMinor: number;
     pendingInterestMinor: number;
   };
+  excludedPositionCount: number;
 };
 const call = <I, O>(name: string, input: I) =>
   httpsCallable<I, O>(functions, name)(input).then((result) => result.data);

@@ -68,6 +68,13 @@ async function context(request: any) {
   const user = await getMyUser(uid);
   if (!user || user.active === false || user.disabled === true)
     throw new HttpsError("permission-denied", "Usuario no disponible.");
+  const role = clean(user.role, 40).toLowerCase();
+  if (role !== "superadmin" && user.systemAccess?.assets !== true) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu cuenta no tiene acceso al sistema ASSETS.",
+    );
+  }
   return { uid, rootId: clean(user.rootId || uid, 128) };
 }
 async function ownedPosition(uid: string, id: string) {
@@ -104,9 +111,25 @@ export const listAssetOverview = onCall(
       const ledger = movements
         .filter((movement) => movement.positionId === doc.id)
         .sort(compareMovements);
-      return { id: doc.id, ...row, snapshot: projectAsset(row.kind, ledger) };
+      const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+      const classification = metadata.dataClassification ||
+        (metadata.dataset === "UPRO_V1" || row.kind === "LOAN"
+          ? "REAL"
+          : "REVIEW_REQUIRED");
+      const includedInMetrics =
+        metadata.excludedFromMetrics !== true &&
+        classification !== "TEST" &&
+        classification !== "REVIEW_REQUIRED";
+      return {
+        id: doc.id,
+        ...row,
+        includedInMetrics,
+        dataClassification: classification,
+        snapshot: projectAsset(row.kind, ledger),
+      };
     });
-    const totals = positions.reduce(
+    const includedPositions = positions.filter((position: any) => position.includedInMetrics);
+    const totals = includedPositions.reduce(
       (sum, position: any) => ({
         workingMinor:
           sum.workingMinor + position.snapshot.outstandingPrincipalMinor,
@@ -134,6 +157,7 @@ export const listAssetOverview = onCall(
         ...doc.data(),
       })),
       totals,
+      excludedPositionCount: positions.length - includedPositions.length,
     };
   },
 );
@@ -177,10 +201,13 @@ export const createAssetPosition = onCall(
           kind === "LOAN"
             ? clean(request.data?.paymentRule || "MANUAL", 30)
             : null,
-        metadata:
-          request.data?.metadata && typeof request.data.metadata === "object"
+        metadata: {
+          ...(request.data?.metadata && typeof request.data.metadata === "object"
             ? request.data.metadata
-            : {},
+            : {}),
+          dataClassification: "REAL",
+          financialTruthConfirmed: true,
+        },
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -668,11 +695,10 @@ export const seedUproAssetPortfolio = onCall(
     const { uid, rootId } = await context(request);
     const seedRef = db.doc(`assetSeeds/${hash(`${uid}:UPRO_V1`)}`);
     const existing = await seedRef.get();
-    if (existing.exists) return { ok: true, alreadySeeded: true };
     const vehicles = [
       {
         key: "DUSTER",
-        name: "Duster",
+        name: "Duster Intens TM 2025",
         principal: 12_000_000,
         profit: 1_200_000,
         liquidated: true,
@@ -681,7 +707,7 @@ export const seedUproAssetPortfolio = onCall(
       },
       {
         key: "KWID",
-        name: "Kwid",
+        name: "Kwid Iconic TM 2025",
         principal: 7_500_000,
         profit: 0,
         liquidated: false,
@@ -690,7 +716,7 @@ export const seedUproAssetPortfolio = onCall(
       },
       {
         key: "ARKANA",
-        name: "Arkana",
+        name: "Arkana Esprit Alpine 2025",
         principal: 16_250_000,
         profit: 1_293_000,
         liquidated: true,
@@ -702,7 +728,7 @@ export const seedUproAssetPortfolio = onCall(
     for (const vehicle of vehicles) {
       const operationId = hash(`${uid}:UPRO_OPERATION:${vehicle.key}`),
         positionId = hash(`${uid}:UPRO_POSITION:${vehicle.key}`);
-      batch.create(db.doc(`assetOperations/${operationId}`), {
+      batch.set(db.doc(`assetOperations/${operationId}`), {
         ownerUid: uid,
         rootId,
         kind: "VEHICLE",
@@ -713,8 +739,8 @@ export const seedUproAssetPortfolio = onCall(
         source: "MANUAL_CONFIRMED",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
-      batch.create(db.doc(`assetPositions/${positionId}`), {
+      }, { merge: true });
+      batch.set(db.doc(`assetPositions/${positionId}`), {
         ownerUid: uid,
         rootId,
         operationId,
@@ -725,14 +751,15 @@ export const seedUproAssetPortfolio = onCall(
         economicShareBps: vehicle.economicShareBps,
         metadata: {
           dataset: "UPRO_V1",
+          dataClassification: "REAL",
           administrativeOwner: vehicle.administrativeOwner,
           financialTruthConfirmed: true,
         },
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       const openingId = hash(`${uid}:${positionId}:OPENING`);
-      batch.create(db.doc(`assetMovements/${openingId}`), {
+      batch.set(db.doc(`assetMovements/${openingId}`), {
         ownerUid: uid,
         rootId,
         operationId,
@@ -745,11 +772,11 @@ export const seedUproAssetPortfolio = onCall(
         description: "Capital económico confirmado U-PRO",
         createdBy: uid,
         createdAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       if (vehicle.liquidated) {
         const returnId = hash(`${uid}:${positionId}:RETURN`),
           profitId = hash(`${uid}:${positionId}:PROFIT`);
-        batch.create(db.doc(`assetMovements/${returnId}`), {
+        batch.set(db.doc(`assetMovements/${returnId}`), {
           ownerUid: uid,
           rootId,
           operationId,
@@ -762,8 +789,8 @@ export const seedUproAssetPortfolio = onCall(
           description: "Recuperación de capital confirmada U-PRO",
           createdBy: uid,
           createdAt: FieldValue.serverTimestamp(),
-        });
-        batch.create(db.doc(`assetMovements/${profitId}`), {
+        }, { merge: true });
+        batch.set(db.doc(`assetMovements/${profitId}`), {
           ownerUid: uid,
           rootId,
           operationId,
@@ -776,15 +803,16 @@ export const seedUproAssetPortfolio = onCall(
           description: "Utilidad realizada confirmada U-PRO",
           createdBy: uid,
           createdAt: FieldValue.serverTimestamp(),
-        });
+        }, { merge: true });
       }
     }
-    batch.create(seedRef, {
+    batch.set(seedRef, {
       ownerUid: uid,
       rootId,
       dataset: "UPRO_V1",
       createdAt: FieldValue.serverTimestamp(),
-    });
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
     logActivityBatch(batch, db, {
       event: "ASSET_PORTFOLIO_SEEDED",
       rootId,
@@ -796,6 +824,6 @@ export const seedUproAssetPortfolio = onCall(
         "Portafolio U-PRO V1 cargado con propiedad económica confirmada.",
     });
     await batch.commit();
-    return { ok: true, alreadySeeded: false };
+    return { ok: true, alreadySeeded: existing.exists };
   },
 );

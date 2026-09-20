@@ -10,12 +10,19 @@ const db = admin.firestore();
 const api = require("../../functions/lib/modules/assets/callables.js");
 const ownerUid = "qa-assets-owner";
 const foreignUid = "qa-assets-foreign";
+const deniedUid = "qa-assets-denied";
 const ownerAuth = { uid: ownerUid, token: {} };
 const foreignAuth = { uid: foreignUid, token: {} };
+const deniedAuth = { uid: deniedUid, token: {} };
 
 async function main() {
   await db.doc(`users/${ownerUid}`).set({ rootId: ownerUid, role: "superadmin", active: true });
   await db.doc(`users/${foreignUid}`).set({ rootId: foreignUid, role: "superadmin", active: true });
+  await db.doc(`users/${deniedUid}`).set({ rootId: deniedUid, role: "operador", active: true });
+  await assert.rejects(
+    api.listAssetOverview.run({ auth: deniedAuth, data: {} }),
+    /no tiene acceso al sistema assets/i,
+  );
 
   const created = await api.createAssetPosition.run({
     auth: ownerAuth,
@@ -77,7 +84,15 @@ async function main() {
   const loan = overview.positions.find((position) => position.id === positionId);
   assert.equal(loan.snapshot.pendingInterestMinor, 0);
   assert.equal(loan.snapshot.outstandingPrincipalMinor, 9_500_000);
-  assert.equal(overview.positions.some((position) => position.name === "Arkana"), true);
+  assert.equal(overview.positions.some((position) => position.name === "Arkana Esprit Alpine 2025"), true);
+
+  await db.doc("assetPositions/qa-demo-vehicle").set({ ownerUid, rootId: ownerUid, kind: "VEHICLE", name: "Vehículo sin confirmar", status: "ACTIVE" });
+  await db.doc("assetMovements/qa-demo-opening").set({ ownerUid, rootId: ownerUid, positionId: "qa-demo-vehicle", movementType: "VEHICLE_INVESTMENT", amountMinor: 99_000_000, source: "MANUAL", effectiveDate: "2026-09-20", sequence: 0 });
+  const overviewWithDemo = await api.listAssetOverview.run({ auth: ownerAuth, data: {} });
+  const demo = overviewWithDemo.positions.find((position) => position.id === "qa-demo-vehicle");
+  assert.equal(demo.includedInMetrics, false);
+  assert.equal(demo.dataClassification, "REVIEW_REQUIRED");
+  assert.equal(overviewWithDemo.totals.workingMinor, overview.totals.workingMinor);
 
   console.log(JSON.stringify({
     ok: true,
@@ -89,6 +104,8 @@ async function main() {
       "PAY0 payment cannot be linked twice",
       "U-PRO seed idempotency",
       "document import remains review-only",
+      "ASSETS system permission is enforced",
+      "unconfirmed vehicles do not contaminate metrics",
     ],
   }));
 }
