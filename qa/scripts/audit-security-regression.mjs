@@ -6,6 +6,7 @@ const index = readFileSync("functions/src/index.ts", "utf8");
 const constancias = readFileSync("functions/src/modules/constancias/service.ts", "utf8");
 const cotizaciones = readFileSync("functions/src/modules/cotizaciones/callables.ts", "utf8");
 const materialityTrigger = readFileSync("functions/src/modules/materiality/triggers.ts", "utf8");
+const privilegedIqHttp = readFileSync("functions/src/modules/iq/pagoDepositCallables.ts", "utf8");
 
 const upsert = index.slice(index.indexOf("export const upsertUser"), index.indexOf("export const createSolicitud"));
 assert.match(upsert, /if \(!snap\.exists\) \{\s*throw new HttpsError\(\s*"permission-denied"/s);
@@ -23,6 +24,12 @@ console.log("PASS upsertUser: perfil inexistente no puede autoaprovisionar privi
 assert.match(materialityTrigger, /document: "uploads\/\{uploadId\}"/);
 assert.match(materialityTrigger, /linkSolicitudToMaterialityOperationCore/);
 console.log("PASS Materialidad: documentos de Solicitud y Pago activan refresco de expediente");
+
+assert.match(privilegedIqHttp, /if \(!userSnap\.exists\) \{\s*throw new HttpsError\("permission-denied", "Perfil PAY0 no autorizado\."\);/s);
+assert.match(privilegedIqHttp, /if \(user\.active === false\) \{\s*throw new HttpsError\("permission-denied", "Usuario PAY0 inactivo\."\);/s);
+assert.match(privilegedIqHttp, /const role = cleanText\(user\.role\)\.toLowerCase\(\);/);
+assert.doesNotMatch(privilegedIqHttp, /user\.role \?\? \(decoded as any\)\.role/);
+console.log("PASS IQ HTTP: perfil activo obligatorio; claims no elevan rol ni root");
 
 const requestedAt = { toMillis: () => Date.parse("2026-09-01T12:00:00Z") };
 assert.equal(overdue(requestedAt, new Date("2026-09-07T23:00:00Z")), false);

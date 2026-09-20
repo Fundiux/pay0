@@ -4279,9 +4279,15 @@ const getHttpAuthContextH4D50F = async (req: any): Promise<{
   }
 
   const userSnap = await db.collection("users").doc(uid).get();
+  if (!userSnap.exists) {
+    throw new HttpsError("permission-denied", "Perfil PAY0 no autorizado.");
+  }
   const user = asRecord(userSnap.data());
-  const role = cleanText(user.role ?? (decoded as any).role).toLowerCase();
-  const rootId = cleanText(user.rootId ?? (decoded as any).rootId ?? (role === "superadmin" ? uid : ""));
+  if (user.active === false) {
+    throw new HttpsError("permission-denied", "Usuario PAY0 inactivo.");
+  }
+  const role = cleanText(user.role).toLowerCase();
+  const rootId = cleanText(user.rootId ?? (role === "superadmin" ? uid : ""));
 
   if (!role) {
     throw new HttpsError("permission-denied", "Usuario sin rol.");
