@@ -1,14 +1,16 @@
 # PAY0 — Estado maestro vivo
 
-### Implementación local en validación: Hugo 2.0 + ASSETS V1 (2026-09-20)
+### Hugo 2.0 + ASSETS V1 desplegados (2026-09-20)
 
-Se abrió `feature/hugo-assets-platform-v1` para no mezclar esta línea con Control Center. No está desplegada ni fusionada. El renderer de cotización ya usa A4 y reconstruye el encabezado TROSTRE desde HTML/CSS canónico; la referencia PDF permanece inmutable. La vista previa confirmó datos, tabla, bancos, entrega y QR alineados, sin imprimir IDs técnicos.
+Se abrió `feature/hugo-assets-platform-v1` para no mezclar esta línea con Control Center. La implementación ya está desplegada en producción, pero la rama no está fusionada ni publicada al remoto. El renderer de cotización usa A4 y reconstruye el encabezado TROSTRE desde HTML/CSS canónico; la referencia PDF permanece inmutable. La vista previa confirmó datos, tabla, bancos, entrega y QR alineados, sin imprimir IDs técnicos.
 
 Hugo reconcilia sus propuestas con Solicitudes/Pagos antes de mostrarlas. Una revisión de OC anterior al timbrado se conserva como aprendizaje, pero deja de ser accionable cuando ya existe UUID/CFDI. Las tarjetas usan título, explicación y pregunta humana en lugar de códigos internos. Sólo una excepción concreta genera confirmación; la mera carga de OC queda como observación.
 
 La capacidad `REQUEST_IQ_PAYMENT_COMPLEMENT` se activa únicamente mediante una orden explícita del Superadmin en la conversación. Selecciona un único seguimiento por folio, reutiliza la automatización existente y bloquea duplicados, estados inciertos o selecciones ambiguas. Los REP recibidos se versionan en documentos del Pago correspondiente, manteniendo referencias de aplicación/Solicitud para trazabilidad.
 
-ASSETS V1 es aditivo y privado por usuario. El ledger es la verdad financiera; las posiciones son proyecciones. Soporta vehículos, préstamos, interés, capitalización, capital/utilidad separados, pagos externos/efectivo/PAY0, evidencia documental preparada para extracción futura con confirmación humana y el conjunto U-PRO confirmado. Build frontend/Functions, autorización, smoke financiero y reconocimiento del comando controlado de Hugo pasan. Faltan pruebas de emulador/reglas y REP antes de cualquier despliegue.
+ASSETS V1 es aditivo y privado por usuario. El ledger es la verdad financiera; las posiciones son proyecciones. Soporta vehículos, préstamos, interés, capitalización, capital/utilidad separados, pagos externos/efectivo/PAY0, evidencia documental preparada para extracción futura con confirmación humana y el conjunto U-PRO confirmado.
+
+Validación final: builds Functions/frontend PASS con 37 rutas; política de autorización PASS; smokes de Hugo, complementos y ASSETS PASS en Emulator. Se comprobaron reconciliación de propuestas, protección contra duplicados IQ, almacenamiento de REP en el Pago, aislamiento por propietario, interés idempotente, asignación capital/interés y bloqueo del doble enlace PAY0. Se desplegaron dos índices Firestore y ambos quedaron `READY`; 16 Functions dirigidas y la función SSR quedaron `ACTIVE`. Hosting fue liberado en `https://pay-0-system.web.app`; `/assets`, `/hugo` y `/facturacion` respondieron HTTP 200. No se emitió CFDI ni se solicitó un complemento real a IQ durante las pruebas.
 
 ### Cierre de despliegue fiscal y documental acumulado (2026-09-20)
 

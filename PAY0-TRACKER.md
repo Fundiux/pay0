@@ -5,13 +5,13 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 ## Hugo 2.0 / cotización canónica / REP por Pago / ASSETS V1 — 2026-09-20
 
-- Rama local: `feature/hugo-assets-platform-v1`. Implementación aún no desplegada ni fusionada.
+- Rama de trabajo: `feature/hugo-assets-platform-v1`. Implementación desplegada en producción; la rama todavía no está fusionada ni publicada al remoto.
 - Cotización: renderer HTML/CSS A4 alineado al encabezado canónico TROSTRE (logotipo, título, folio/fecha/vigencia y franja institucional); metadatos técnicos ocultos. Vista previa local generada con el renderer productivo y revisada visualmente.
 - Hugo: reconciliación genérica previa a lectura. Propuestas pre-emisión pasan a `SUPERSEDED` al existir CFDI y registran `resolvedAt`, `resolvedByEvent`, `supersededBy` y `resolutionReason`. Una OC sin conflicto SAT concreto queda `OBSERVATION_ONLY`, no exige Correcto/Corregir. UI separa decisiones accionables, historial y observaciones.
 - Hugo operativo: capacidad controlada `REQUEST_IQ_PAYMENT_COMPLEMENT`, sólo Superadmin y sólo ante comando explícito. Reutiliza la cola idempotente existente, informa `QUEUED/REQUESTED/BLOCKED/UNKNOWN`, no repite POST inciertos y deja auditoría.
 - Complementos: XML/PDF descargados se guardan desde ahora bajo `roots/{rootId}/pagos/{pagoId}/docs/...`, con `entityType: pagos`, versión por pago y referencia a Solicitud/aplicación; dejan de incorporarse como documentos originales de Solicitud.
 - ASSETS V1: dominio privado por `ownerUid`, posiciones VEHICLE/LOAN, ledger en centavos, orígenes separados de efectos financieros, interés simple/capitalizable/sin interés, pagos manuales/efectivo/transferencia/PAY0, idempotencia de periodos y enlaces, borrador documental con revisión humana y seed U-PRO idempotente.
-- Verificación local: Functions build PASS, frontend build PASS (incluye `/assets`), política de autorización PASS, smoke financiero ASSETS PASS, reconocimiento de la capacidad de Hugo PASS y vista previa final A4 revisada visualmente. Diff y secretos revisados sin credenciales nuevas. Pendientes antes de producción: emuladores de callables/reglas y REP, y definir despliegue dirigido sin eliminar funciones históricas.
+- Verificación y despliegue: builds Functions/frontend PASS (37 rutas); autorización PASS; smokes de Hugo, complementos y ASSETS PASS en Emulator, incluidos reconciliación `SUPERSEDED`, no duplicación IQ, REP bajo Pago, aislamiento por propietario, interés idempotente y bloqueo de doble enlace PAY0. Se desplegaron dos índices Firestore (`rootId + status` y `ownerUid + positionId`), ambos `READY`; 16 Functions dirigidas terminaron exitosas y cero con error; SSR quedó `ACTIVE`. Hosting fue liberado en `https://pay-0-system.web.app`; `/assets`, `/hugo` y `/facturacion` respondieron HTTP 200. No se emitió CFDI ni se envió una solicitud real a IQ durante las pruebas.
 
 ## Cierre de despliegue fiscal y documental acumulado — 2026-09-20
 
