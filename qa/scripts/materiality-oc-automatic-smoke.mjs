@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
+import JSZip from "jszip";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -25,6 +27,52 @@ const clientId = `client-${suffix}`;
 const companyId = `trostre-${suffix}`;
 const auth = { uid };
 const hash = (buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
+
+// El finalizador analiza la OC como XLSX real. El fixture debe conservar esa
+// frontera: un buffer arbitrario prueba Storage, pero no el parser fiscal.
+async function buildOcXlsx() {
+  const cells = [
+    ["RAZON SOCIAL:", "CLIENTE SMOKE"], ["RFC:", "XAXX010101000"],
+    ["REGIMEN FISCAL:", "601"], ["C.P.", "01000"], ["USO DE CFDI:", "G03"],
+    ["METODO DE PAGO:", "PUE"], ["FORMA DE PAGO", "03"], ["MONEDA", "MXN"],
+    ["CANTIDAD", "CLAVE UNIDAD", "CLAVE PRODUCTO", "DESCRIPCION"],
+    ["1", "E48", "72141702", "Renta de barrera anti-derrame"],
+  ];
+  const column = (index) => String.fromCharCode(65 + index);
+  const rows = cells.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => `<c r="${column(columnIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${value}</t></is></c>`).join("")}</row>`).join("");
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+  zip.folder("_rels").file(".rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.folder("xl").file("workbook.xml", '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="OC" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.folder("xl").folder("_rels").file("workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+  zip.folder("xl").folder("worksheets").file("sheet1.xml", `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+function buildSignaturePng() {
+  const crc32 = (buffer) => {
+    let crc = 0xffffffff;
+    for (const value of buffer) {
+      crc ^= value;
+      for (let index = 0; index < 8; index += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const name = Buffer.from(type, "ascii");
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([name, data])));
+    return Buffer.concat([length, name, data, checksum]);
+  };
+  const width = 32; const height = 16;
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let row = 0; row < height; row += 1) {
+    raw[row * (width * 4 + 1)] = 0;
+    for (let column = 0; column < width; column += 1) raw.writeUInt32BE((column + row) % 3 ? 0x183b5fff : 0x4d8abfff, row * (width * 4 + 1) + 1 + column * 4);
+  }
+  const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), chunk("IHDR", header), chunk("tEXt", Buffer.from(`PAY0-signature=${"verified-".repeat(80)}`)), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
 
 async function activeUpload(type) {
   const snap = await db.collection("uploads").where("solicitudId", "==", solicitudId).where("documentType", "==", type).where("active", "==", true).limit(1).get();
@@ -57,12 +105,13 @@ await db.doc(`solicitudes/${solicitudId}`).set({
 
 console.log("SMOKE_STAGE=fixture_ready");
 const { initSolicitudDocumentUploadCore, finalizeSolicitudDocumentUploadCore } = await import("../../functions/lib/modules/solicitudDocuments/service.js");
+const ocContent = await buildOcXlsx();
 const init = await initSolicitudDocumentUploadCore({ auth, data: {
   solicitudId, documentType: "ORDEN_COMPRA", originalName: "oc-smoke.xlsx",
-  contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sizeBytes: 32,
-  sha256: hash(Buffer.from("OC SMOKE CONTENT")),
+  contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sizeBytes: ocContent.length,
+  sha256: hash(ocContent),
 } });
-await bucket.file(init.storagePath).save(Buffer.from("OC SMOKE CONTENT"), { contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+await bucket.file(init.storagePath).save(ocContent, { contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 console.log("SMOKE_STAGE=oc_saved");
 await finalizeSolicitudDocumentUploadCore({ auth, data: { uploadId: init.uploadId, storagePath: init.storagePath } });
 console.log("SMOKE_STAGE=oc_finalized");
@@ -83,7 +132,9 @@ console.log("SMOKE_STAGE=automatic_documents_verified");
 // y el disparo automático de la constancia.
 const token = `smoke-token-${suffix}`;
 await db.doc(`signatureRequests/${token}`).set({ rootId, solicitudId, solicitudFolio: `SMOKE-${suffix}`, clienteId: clientId, clienteNombre: "CLIENTE SMOKE", companyId, status: "PENDING", createdBy: uid, createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000) });
-const signature = Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n"), crypto.randomBytes(700)]).toString("base64");
+// PNG real y deliberadamente mayor a 500 bytes: la constancia lo incrusta en
+// su PDF y el endpoint rechaza firmas triviales para evitar evidencia vacÃ­a.
+const signature = buildSignaturePng().toString("base64");
 let signatureHandledByCore = false;
 if (process.env.SMOKE_SIGNATURE_MODE === "core") {
   const { submitSolicitudSignature } = await import("../../functions/lib/modules/signatureLinks/callables.js");

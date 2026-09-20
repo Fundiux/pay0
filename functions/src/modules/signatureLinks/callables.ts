@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { randomBytes, createHash } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -10,8 +11,6 @@ import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/serv
 if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
-
 function clean(value: unknown, max = 500): string {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 }
