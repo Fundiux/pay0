@@ -30,6 +30,12 @@ export default function AssetsPage() {
   const max = Math.max(...groups.map((item) => item.value), 1);
   const investedMinor = positions.reduce((sum, position) => sum + position.snapshot.originalPrincipalMinor, 0);
   const portfolioRoi = investedMinor > 0 ? Number(data?.totals.realizedProfitMinor || 0) / investedMinor : null;
+  const soldVehiclePositions = positions.filter((position) => position.kind === "VEHICLE" && position.status === "LIQUIDATED");
+  const soldVehiclePrincipalMinor = soldVehiclePositions.reduce((sum, position) => sum + position.snapshot.originalPrincipalMinor, 0);
+  const soldVehicleProfitMinor = soldVehiclePositions.reduce((sum, position) => sum + position.snapshot.realizedProfitMinor, 0);
+  const vehicleRealizedRoi = soldVehiclePrincipalMinor > 0
+    ? soldVehicleProfitMinor / soldVehiclePrincipalMinor
+    : null;
   const interestLoans = active.filter((position) => position.kind === "LOAN" && Number(position.rateBasisPoints || 0) > 0);
   const interestLoanBalance = interestLoans.reduce((sum, position) => sum + position.snapshot.outstandingPrincipalMinor, 0);
   const weightedMonthlyRate = interestLoanBalance > 0
@@ -57,9 +63,24 @@ export default function AssetsPage() {
     </section>
 
     <section className="grid gap-3 sm:grid-cols-3">
-      <div className="assets-panel assets-kpi p-4"><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">ROI acumulado del portafolio</p><p className="mt-2 text-xl font-semibold tabular-nums text-[var(--assets-accent)]">{percentage(portfolioRoi)}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Utilidad cobrada sobre capital aportado</p></div>
-      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-2)" } as CSSProperties}><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">Tasa mensual promedio</p><p className="mt-2 text-xl font-semibold tabular-nums">{percentage(weightedMonthlyRate)}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Ponderada entre préstamos activos con interés</p></div>
-      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-3)" } as CSSProperties}><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">Equivalente anual</p><p className="mt-2 text-xl font-semibold tabular-nums">{percentage(effectiveAnnualRate(weightedMonthlyRate))}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Equivalencia compuesta; no es utilidad garantizada</p></div>
+      <div className="assets-panel assets-kpi p-4">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--assets-accent)]">Vehículos · rendimiento</p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--assets-accent)]">{percentage(vehicleRealizedRoi)}</p>
+        <p className="mt-1 text-[11px] font-medium text-[var(--assets-secondary)]">ROI realizado en vehículos vendidos</p>
+        <p className="mt-1 text-[10px] text-[var(--assets-muted)]">{money(soldVehicleProfitMinor)} de utilidad sobre {money(soldVehiclePrincipalMinor)} invertidos</p>
+      </div>
+      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-2)" } as CSSProperties}>
+        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--assets-accent-2)]">Préstamos · rendimiento anual</p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--assets-accent-2)]">{percentage(effectiveAnnualRate(weightedMonthlyRate))}</p>
+        <p className="mt-1 text-[11px] font-medium text-[var(--assets-secondary)]">Equivalente a {percentage(weightedMonthlyRate)} mensual</p>
+        <p className="mt-1 text-[10px] text-[var(--assets-muted)]">Tasa efectiva compuesta, ponderada por capital vigente</p>
+      </div>
+      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-3)" } as CSSProperties}>
+        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--assets-accent-3)]">Portafolio · ROI acumulado</p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--assets-accent-3)]">{percentage(portfolioRoi)}</p>
+        <p className="mt-1 text-[11px] font-medium text-[var(--assets-secondary)]">Utilidad realizada sobre capital aportado</p>
+        <p className="mt-1 text-[10px] text-[var(--assets-muted)]">No mezcla capital recuperado con utilidad</p>
+      </div>
     </section>
 
     <section className="grid gap-3 xl:grid-cols-12">
