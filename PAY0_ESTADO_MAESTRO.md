@@ -1,5 +1,15 @@
 # PAY0 — Estado maestro vivo
 
+### Implementación local en validación: Hugo 2.0 + ASSETS V1 (2026-09-20)
+
+Se abrió `feature/hugo-assets-platform-v1` para no mezclar esta línea con Control Center. No está desplegada ni fusionada. El renderer de cotización ya usa A4 y reconstruye el encabezado TROSTRE desde HTML/CSS canónico; la referencia PDF permanece inmutable. La vista previa confirmó datos, tabla, bancos, entrega y QR alineados, sin imprimir IDs técnicos.
+
+Hugo reconcilia sus propuestas con Solicitudes/Pagos antes de mostrarlas. Una revisión de OC anterior al timbrado se conserva como aprendizaje, pero deja de ser accionable cuando ya existe UUID/CFDI. Las tarjetas usan título, explicación y pregunta humana en lugar de códigos internos. Sólo una excepción concreta genera confirmación; la mera carga de OC queda como observación.
+
+La capacidad `REQUEST_IQ_PAYMENT_COMPLEMENT` se activa únicamente mediante una orden explícita del Superadmin en la conversación. Selecciona un único seguimiento por folio, reutiliza la automatización existente y bloquea duplicados, estados inciertos o selecciones ambiguas. Los REP recibidos se versionan en documentos del Pago correspondiente, manteniendo referencias de aplicación/Solicitud para trazabilidad.
+
+ASSETS V1 es aditivo y privado por usuario. El ledger es la verdad financiera; las posiciones son proyecciones. Soporta vehículos, préstamos, interés, capitalización, capital/utilidad separados, pagos externos/efectivo/PAY0, evidencia documental preparada para extracción futura con confirmación humana y el conjunto U-PRO confirmado. Build frontend/Functions, autorización, smoke financiero y reconocimiento del comando controlado de Hugo pasan. Faltan pruebas de emulador/reglas y REP antes de cualquier despliegue.
+
 ### Cierre de despliegue fiscal y documental acumulado (2026-09-20)
 
 Quedaron publicados los cambios acumulados que conectan la OC activa con su metadata fiscal y partidas, reproceso, Facturama, catálogos SAT, documentos canónicos, firma, verificación pública y Materialidad. El despliegue dirigido terminó con 39 Functions exitosas, cero errores y cero abortos. Los índices de Firestore y las reglas de Storage también se publicaron; el ruleset de Storage es `37362831-a91f-44a4-a2dc-ac2bfc7aced6`.
