@@ -42,6 +42,26 @@ const movementTypes = new Set([
   "INTEREST_PAYMENT",
   "PRINCIPAL_PAYMENT",
 ]);
+const movementPriority: Record<string, number> = {
+  VEHICLE_INVESTMENT: 10,
+  LOAN_ORIGINATED: 10,
+  INTEREST_ACCRUED: 20,
+  INTEREST_CAPITALIZED: 30,
+  INTEREST_PAYMENT: 40,
+  PRINCIPAL_PAYMENT: 50,
+  VEHICLE_PRINCIPAL_RETURN: 40,
+  VEHICLE_PROFIT: 50,
+};
+const timestampMillis = (value: any) =>
+  Number(value?.toMillis?.() || value?.getTime?.() || 0);
+const compareMovements = (a: any, b: any) =>
+  clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)) ||
+  (Number.isSafeInteger(a.sequence) && Number.isSafeInteger(b.sequence)
+    ? a.sequence - b.sequence
+    : timestampMillis(a.createdAt) - timestampMillis(b.createdAt)) ||
+  (movementPriority[clean(a.movementType, 60)] || 999) -
+    (movementPriority[clean(b.movementType, 60)] || 999) ||
+  clean(a.id).localeCompare(clean(b.id));
 
 async function context(request: any) {
   const uid = requireAuth(request);
@@ -64,13 +84,7 @@ async function movementsFor(uid: string, positionId: string) {
     .get();
   return snap.docs
     .map((doc) => ({ id: doc.id, ...doc.data() }) as any)
-    .sort(
-      (a, b) =>
-        clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)) ||
-        clean(a.createdAt?.toDate?.()?.toISOString()).localeCompare(
-          clean(b.createdAt?.toDate?.()?.toISOString()),
-        ),
-    );
+    .sort(compareMovements);
 }
 
 export const listAssetOverview = onCall(
@@ -89,9 +103,7 @@ export const listAssetOverview = onCall(
       const row = doc.data();
       const ledger = movements
         .filter((movement) => movement.positionId === doc.id)
-        .sort((a, b) =>
-          clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)),
-        );
+        .sort(compareMovements);
       return { id: doc.id, ...row, snapshot: projectAsset(row.kind, ledger) };
     });
     const totals = positions.reduce(
@@ -116,9 +128,7 @@ export const listAssetOverview = onCall(
     return {
       ok: true,
       positions,
-      movements: movements.sort((a, b) =>
-        clean(b.effectiveDate).localeCompare(clean(a.effectiveDate)),
-      ),
+      movements: movements.sort((a, b) => compareMovements(b, a)),
       documents: documentsSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -189,6 +199,7 @@ export const createAssetPosition = onCall(
           movementType:
             kind === "LOAN" ? "LOAN_ORIGINATED" : "VEHICLE_INVESTMENT",
           amountMinor: initialMinor,
+          sequence: 0,
           source: "MANUAL",
           effectiveDate: clean(
             request.data?.effectiveDate ||
@@ -265,16 +276,15 @@ export const recordAssetMovement = onCall(
       if (!position || position.ownerUid !== uid)
         throw new HttpsError("not-found", "Posición no encontrada.");
       const current = ledgerSnap.docs
-        .map((doc) => doc.data() as AssetMovement)
-        .sort((a, b) =>
-          clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)),
-        );
+        .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
+        .sort(compareMovements);
       const next = projectAsset(position.kind, [
         ...current,
         {
           movementType,
           source,
           amountMinor,
+          sequence: current.length,
           effectiveDate: clean(request.data?.effectiveDate, 10),
         } as AssetMovement,
       ]);
@@ -284,6 +294,7 @@ export const recordAssetMovement = onCall(
         positionId,
         movementType,
         amountMinor,
+        sequence: current.length,
         source,
         effectiveDate: clean(
           request.data?.effectiveDate || new Date().toISOString().slice(0, 10),
@@ -377,10 +388,8 @@ export const accrueAssetLoanInterest = onCall(
           "La posición no es un préstamo.",
         );
       const ledger = ledgerSnap.docs
-        .map((doc) => doc.data() as AssetMovement)
-        .sort((a, b) =>
-          clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)),
-        );
+        .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
+        .sort(compareMovements);
       const snapshot = projectAsset("LOAN", ledger);
       amountMinor = interestForPeriod({
         model: position.interestModel as InterestModel,
@@ -393,6 +402,7 @@ export const accrueAssetLoanInterest = onCall(
         amountMinor,
         source: "MANUAL",
         effectiveDate: `${periodKey}-01`,
+        sequence: ledger.length,
         interestPeriodKey: periodKey,
       };
       tx.create(movementRef, {
@@ -509,10 +519,8 @@ export const linkPay0PaymentToAsset = onCall(
       if (!latestPosition || latestPosition.ownerUid !== uid)
         throw new HttpsError("not-found", "Posición no encontrada.");
       const ledger = ledgerSnap.docs
-        .map((doc) => doc.data() as AssetMovement)
-        .sort((a, b) =>
-          clean(a.effectiveDate).localeCompare(clean(b.effectiveDate)),
-        );
+        .map((doc) => ({ id: doc.id, ...doc.data() }) as unknown as AssetMovement)
+        .sort(compareMovements);
       const snapshot = projectAsset(latestPosition.kind, ledger);
       const allocation = allocatePayment({
         amountMinor,
@@ -537,11 +545,13 @@ export const linkPay0PaymentToAsset = onCall(
       ] as const) {
         if (!part) continue;
         const ref = db.collection("assetMovements").doc();
+        const sequence = ledger.length + additions.length;
         movementIds.push(ref.id);
         additions.push({
           movementType,
           amountMinor: part,
           source: "PAY0",
+          sequence,
           effectiveDate: clean(
             request.data?.effectiveDate ||
               new Date().toISOString().slice(0, 10),
@@ -554,6 +564,7 @@ export const linkPay0PaymentToAsset = onCall(
           positionId,
           movementType,
           amountMinor: part,
+          sequence,
           source: "PAY0",
           pay0PaymentId: pagoId,
           effectiveDate: clean(
@@ -728,6 +739,7 @@ export const seedUproAssetPortfolio = onCall(
         positionId,
         movementType: "VEHICLE_INVESTMENT",
         amountMinor: vehicle.principal,
+        sequence: 0,
         source: "MANUAL",
         effectiveDate: "2026-09-20",
         description: "Capital económico confirmado U-PRO",
@@ -744,6 +756,7 @@ export const seedUproAssetPortfolio = onCall(
           positionId,
           movementType: "VEHICLE_PRINCIPAL_RETURN",
           amountMinor: vehicle.principal,
+          sequence: 1,
           source: "EXTERNAL_TRANSFER",
           effectiveDate: "2026-09-20",
           description: "Recuperación de capital confirmada U-PRO",
@@ -757,6 +770,7 @@ export const seedUproAssetPortfolio = onCall(
           positionId,
           movementType: "VEHICLE_PROFIT",
           amountMinor: vehicle.profit,
+          sequence: 2,
           source: "EXTERNAL_TRANSFER",
           effectiveDate: "2026-09-20",
           description: "Utilidad realizada confirmada U-PRO",

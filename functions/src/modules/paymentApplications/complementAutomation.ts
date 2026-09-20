@@ -115,7 +115,7 @@ export async function executeComplement(id: string, adapter = providers) {
 }
 async function markReceived(id: string, rows: any[]) {
   for (const { source, documents } of rows) await db.doc(`paymentComplementRequests/${complementRequestId(source.rootId, source.applicationId)}`).update({ ...documents, status: "RECEIVED", automationStatus: "RECEIVED", receivedAt: FieldValue.serverTimestamp() });
-  await updateJob(id, { status: "RECEIVED", error: null }, "Complemento recibido y validado contra UUID, parcialidad e importes; XML y PDF vinculados a la solicitud.");
+  await updateJob(id, { status: "RECEIVED", error: null }, "Complemento recibido y validado contra UUID, parcialidad e importes; XML y PDF vinculados al pago correspondiente.");
 }
 
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers) {

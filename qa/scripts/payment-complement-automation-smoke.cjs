@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 if(!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||'')||process.env.GCLOUD_PROJECT!=='demo-pay0')throw Error('Local emulator required');
 global.fetch=async()=>{throw Error('EXTERNAL_NETWORK_FORBIDDEN');};
-const admin=require('../../functions/node_modules/firebase-admin');admin.initializeApp({projectId:'demo-pay0'});
+const admin=require('../../functions/node_modules/firebase-admin');admin.initializeApp({projectId:'demo-pay0',storageBucket:'demo-pay0.appspot.com'});
 const db=admin.firestore(),root=`rep-${Date.now()}`,now=new Date(),stamp=admin.firestore.Timestamp;
 const api=require('../../functions/lib/modules/paymentApplications/complementAutomation');
 const follow=require('../../functions/lib/modules/paymentApplications/complementFollowup');
@@ -52,6 +52,11 @@ async function run(){
  const repXml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="22222222-2222-4222-8222-222222222222"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="1" ImpPagado="58" ImpSaldoAnt="116" ImpSaldoInsoluto="58"/></Comprobante>`);
  assert.equal(docs.validateRep(repXml,{invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58}),'22222222-2222-4222-8222-222222222222');
  assert.throws(()=>docs.validateRep(repXml,{invoiceUuid:uuid,installment:2,amountMinor:5800}),/MISMATCH/);
+ const saved=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'));
+ assert.equal(saved.xmlUploadId.length,64);assert.equal(saved.pdfUploadId.length,64);
+ for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId]){const upload=(await db.doc(`uploads/${uploadId}`).get()).data();assert.equal(upload.entityType,'pagos');assert.equal(upload.entityId,root);assert.equal(upload.pagoId,root);assert.equal(upload.solicitudId,root);assert.match(upload.storagePath,new RegExp(`/pagos/${root}/docs/COMPLEMENTO_PAGO_`));}
+ const savedAgain=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'));
+ assert.deepEqual(savedAgain,saved,'document save is idempotent');
  await db.doc(`solicitudes/${root}`).update({facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice'});await follow.reconcilePaymentComplement(root);
  const factJob=job+'-fact';await db.doc(`paymentComplementJobs/${factJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:root,status:'QUEUED'});
  const downloadFail={...adapter,importFacturamaComplement:async()=>{throw Error('DOWNLOAD_FAILED');}};
@@ -67,6 +72,6 @@ async function run(){
  assert.equal((await db.doc(`uploads/${root}-one`).get()).data().active,false);
  assert.equal((await db.doc(`uploads/${root}-two`).get()).data().active,true,'another partiality stays active');
  assert.equal((await db.doc(`uploads/${root}-three`).get()).data().active,true);
- console.log(JSON.stringify({ok:true,checks:['IQ once per deposit under concurrency','confirmed application gate','prospective activation','root isolation','uncertain POST never replayed','daily once and ten-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
+ console.log(JSON.stringify({ok:true,checks:['IQ once per deposit under concurrency','confirmed application gate','prospective activation','root isolation','uncertain POST never replayed','daily once and ten-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','REP documents belong to Pago','REP document save is idempotent','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
 }
 run().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)});

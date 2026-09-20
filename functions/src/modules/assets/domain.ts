@@ -25,6 +25,7 @@ export type AssetMovement = {
   amountMinor: number;
   source: AssetSource;
   effectiveDate: string;
+  sequence?: number;
   interestPeriodKey?: string | null;
   allocation?: { interestMinor: number; principalMinor: number } | null;
 };

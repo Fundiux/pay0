@@ -29,7 +29,7 @@ async function recentRows(collection: string, rootId: string, limit = 20) {
 }
 
 function extractFolio(message: string): string | null {
-  const match = message.toUpperCase().match(/\b(?:S|P)[A-Z0-9]{5,20}\b/);
+  const match = message.toUpperCase().match(/\b[SP]\d[A-Z0-9]{4,19}\b/);
   return match?.[0] || null;
 }
 

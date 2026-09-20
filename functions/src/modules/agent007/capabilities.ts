@@ -30,7 +30,7 @@ export function requestedComplementAction(message: string): boolean {
 }
 
 function folioFrom(message: string): string | null {
-  return message.toUpperCase().match(/\b(?:S|P)[A-Z0-9]{5,20}\b/)?.[0] || null;
+  return message.toUpperCase().match(/\b[SP]\d[A-Z0-9]{4,19}\b/)?.[0] || null;
 }
 
 export async function executeRequestIqComplement(input: {
