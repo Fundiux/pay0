@@ -3,6 +3,16 @@
 Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## ASSETS — rendimientos visibles, historial tabular y transición — 2026-09-20
+
+- Estado: **implementado, validado y desplegado en producción**.
+- Rendimientos: Dashboard muestra ROI acumulado del portafolio, tasa mensual ponderada de préstamos activos con interés y su equivalente anual efectivo compuesto. Las tarjetas/detalle muestran ROI realizado para vehículos y ROI cobrado para préstamos; los préstamos presentan tasa mensual y anual equivalente. Los vehículos siguen sin mostrar ni calcular interés.
+- UX: el tema grafito/gris con acentos naranja, coral y dorado se aplica mediante el shell compartido a todas las rutas ASSETS. La navegación entre Dashboard, Posiciones, Movimientos y Documentos usa el loader animado reutilizable de PAY0 en vez de la pantalla vacía con `Cargando...`.
+- Historial: vehículos vendidos y préstamos pagados se presentan en tabla responsiva, con posición, contraparte, invertido, recuperado, ganancia y ROI; las posiciones activas permanecen en tarjetas por ser un conjunto operativo pequeño.
+- Cálculo: el porcentaje anual de préstamos es equivalencia efectiva compuesta `(1 + tasa mensual)^12 - 1`; es una comparación matemática, no una promesa de rendimiento. El ROI del portafolio se calcula como utilidad realizada acumulada entre capital original acumulado.
+- Verificación: frontend build PASS con Next.js 14.2.35 (42 rutas), smoke de dominio ASSETS PASS y `git diff --check` PASS. Las cuatro rutas `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents` respondieron HTTP 200 en producción.
+- Despliegue: Hosting release `3f669d5c6a5a0d4f`; SSR `ACTIVE` en `ssrpay0system-00487-lug`. El corte se realizó desde un worktree aislado del commit `e003d04` tras confirmar cero deploys/Cloud Builds concurrentes. No hubo seed, migración ni escritura financiera o documental de producción.
+
 ## ASSETS V2 — UX operativa, cierres y documentos — 2026-09-20
 
 - Estado: implementación completa, validada y **desplegada en producción el 2026-09-20**.

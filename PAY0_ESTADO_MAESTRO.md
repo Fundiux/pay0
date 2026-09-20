@@ -1,5 +1,15 @@
 # PAY0 — Estado maestro vivo
 
+### ASSETS: porcentajes, historial escalable y navegación consistente (2026-09-20)
+
+La mejora visual y de lectura financiera ya está desplegada. Dashboard presenta ROI acumulado del portafolio, tasa mensual ponderada de los préstamos activos con interés y equivalente anual efectivo compuesto. En Posiciones, los vehículos muestran ROI realizado y los préstamos ROI cobrado, tasa mensual y anual equivalente; los vehículos continúan sin conceptos de interés.
+
+El shell compartido extiende el tema grafito/gris y los acentos naranja, coral y dorado a todas las vistas ASSETS. Los cambios de ruta usan ahora el loader animado reutilizable de PAY0, evitando la pantalla vacía de `Cargando...`. Vehículos vendidos y préstamos pagados dejaron las tarjetas históricas y se muestran en una tabla responsiva con posición, contraparte, invertido, recuperado, ganancia y ROI. Las posiciones activas siguen en tarjetas por su volumen operativo reducido.
+
+El anual mostrado es el equivalente efectivo compuesto de la tasa mensual, no una garantía de rendimiento. El ROI acumulado relaciona utilidad realizada con capital original acumulado y no mezcla capital recuperado con utilidad.
+
+Evidencia: build frontend PASS con Next.js 14.2.35 y 42 rutas, smoke de dominio ASSETS PASS, Hosting release `3f669d5c6a5a0d4f`, SSR `ACTIVE` en `ssrpay0system-00487-lug` y HTTP 200 para `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents`. El despliegue salió del commit aislado `e003d04`, sin concurrencia de deploys y sin alterar datos financieros, documentos, reglas, índices o Functions de dominio.
+
 ### Auditoría maestra preproducción — dictamen bloqueado (2026-09-20)
 
 **No declarar PAY0 Production Ready todavía.** La auditoría de cierre está documentada en `audit/2026-09-20-preproduction-part-1.md` y su continuación. No se hicieron migraciones, despliegues ni acciones externas; sí se aplicaron endurecimientos acotados y pruebas locales descritos abajo.
