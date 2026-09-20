@@ -4,6 +4,7 @@ import { buildCanonicalFolio, nextSequenceTx } from "../sequences/service";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { assertAuthorized } from "../../utils/authGuard";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -91,8 +92,8 @@ function ensureNombreCanonico(nombre: string) {
   if (!nombre) {
     throw new HttpsError("invalid-argument", "nombre es obligatorio.");
   }
-  if (/\d/.test(nombre)) {
-    throw new HttpsError("invalid-argument", "nombre no puede contener numeros.");
+  if (nombre.length > 180 || !/\p{L}/u.test(nombre)) {
+    throw new HttpsError("invalid-argument", "Indica un nombre o razón social válido de hasta 180 caracteres.");
   }
 }
 
@@ -118,6 +119,8 @@ function maskCard(value: string) {
 }
 
 async function resolveClientScope(uid: string, role: Pay0Role, rootId: string, adminScopeId: string, clientId: string) {
+  // A read-only delegation must never authorize beneficiary mutations.
+  await requireClientOperationalAccess({ uid, role, rootId, clientId, permission: "operateBeneficiarios" });
   const clientRef = db.doc(`clients/${clientId}`);
   const clientSnap = await clientRef.get();
 
@@ -295,6 +298,14 @@ async function assertMethodDoesNotExistForClient(clientId: string, dedupeKey: st
   throw new HttpsError("already-exists", "Ya existe un metodo igual para este cliente.");
 }
 
+async function commitBeneficiaryBatch(batch: FirebaseFirestore.WriteBatch) {
+  try { await batch.commit(); }
+  catch (error: any) {
+    if (error?.code === 6 || error?.code === "already-exists") throw new HttpsError("already-exists", "La cuenta ya fue registrada. Actualiza la lista antes de volver a intentar.");
+    throw error;
+  }
+}
+
 export const createClientBeneficiary = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
@@ -451,7 +462,7 @@ export const createClientBeneficiary = onCall(
     });
 
     for (const item of methodTargets) {
-      batch.set(item.ref, {
+      batch.create(item.ref, {
         rootId,
         adminId,
         operadorId,
@@ -483,7 +494,7 @@ export const createClientBeneficiary = onCall(
       });
     }
 
-    await batch.commit();
+    await commitBeneficiaryBatch(batch);
 
     return {
       ok: true,
@@ -540,7 +551,7 @@ export const addClientBeneficiaryMethod = onCall(
 
     const batch = db.batch();
 
-    batch.set(ref, {
+    batch.create(ref, {
       rootId,
       adminId,
       operadorId,
@@ -607,7 +618,7 @@ export const addClientBeneficiaryMethod = onCall(
       },
     });
 
-    await batch.commit();
+    await commitBeneficiaryBatch(batch);
 
     return {
       ok: true,

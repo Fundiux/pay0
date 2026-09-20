@@ -2,6 +2,8 @@ import type { Firestore, Transaction, WriteBatch } from "firebase-admin/firestor
 import { FieldValue } from "firebase-admin/firestore";
 
 const OBSERVED_EVENTS = new Set([
+  "BENEFICIARIO_CREADO",
+  "COMPLEMENTO_PAGO_SEGUIMIENTO",
   "SOLICITUD_CREADA",
   "SOLICITUD_CANCELADA",
   "SOLICITUD_COMPLETADA",
@@ -9,6 +11,8 @@ const OBSERVED_EVENTS = new Set([
   "SOLICITUD_STATUS_ACTUALIZADO",
   "DOCUMENTO_SOLICITUD_SUBIDO",
   "DOCUMENTO_SOLICITUD_DESACTIVADO",
+  "COTIZACION_GENERADA",
+  "CONSTANCIA_RECEPCION_GENERADA",
   "PAGO_CREADO",
   "PAGO_STATUS_ACTUALIZADO",
   "PAGO_APLICADO_A_SOLICITUD",
@@ -34,6 +38,9 @@ const OBSERVED_EVENTS = new Set([
   "IQ_PAGO_NUEVO_COMPROBANTE",
   "IQ_PAGO_MONTO_CORREGIDO",
   "FACTURA_BORRADOR_CREADO",
+  "FACTURA_EMITIDA",
+  "OPERACION_RECUPERADA",
+  "OPERACION_RECUPERACION_FALLIDA",
 ]);
 
 function clean(value: unknown, max = 1000): string {
@@ -98,11 +105,99 @@ function buildObservationPayload(
       eventCategory: clean(payload.eventCategory, 80),
       eventSeverity: clean(payload.eventSeverity, 80),
       amount: typeof payload.amount === "number" ? payload.amount : null,
-      referenceFolio: clean(payload.referenceFolio, 120) || null,
+      referenceFolio: clean(payload.referenceFolio || payload.referencia || payload.reference || payload.authorization, 120) || null,
+      detectedBankName: clean(payload.detectedBankName, 120) || null,
+      detectedSenderName: clean(payload.detectedSenderName, 180) || null,
+      detectedBeneficiaryName: clean(payload.detectedBeneficiaryName, 180) || null,
+      detectedSourceAccount: clean(payload.detectedSourceAccount, 80) || null,
+      detectedDestinationAccount: clean(payload.detectedDestinationAccount, 80) || null,
+      operatorSelectedBankName: clean(payload.operatorSelectedBankName, 120) || null,
+      operatorSelectedAccount: clean(payload.operatorSelectedAccount, 80) || null,
+      bankIdentificationNeedsReview: payload.bankIdentificationNeedsReview === true,
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     expiresAt: null,
+  };
+}
+
+function buildRecommendationPayload(activityId: string, payload: Record<string, any>) {
+  const observation = buildObservationPayload(activityId, payload);
+  if (!observation) return null;
+  const signal: any = observation.signal || {};
+  const event = String(signal.event || "");
+  const bankNeedsReview = signal.bankIdentificationNeedsReview === true;
+  const requiresPaymentReview = ["IQ_PAGO_REQUIERE_REVISION", "PAGO_POSTEO_FINANCIERO_PENDIENTE"].includes(event);
+  const requiresOcReview = event === "DOCUMENTO_SOLICITUD_SUBIDO" && clean(payload.documentType, 80) === "ORDEN_COMPRA";
+  if (!bankNeedsReview && !requiresPaymentReview && !requiresOcReview) return null;
+  const kind = bankNeedsReview ? "BANK_CLASSIFICATION" : requiresOcReview ? "OC_FISCAL_REVIEW" : "PAYMENT_RECONCILIATION";
+  const proposed = bankNeedsReview
+    ? (signal.operatorSelectedBankName || signal.detectedBankName || "")
+    : requiresOcReview ? "REVISAR_PARTIDAS_Y_CLASIFICACION_SAT_OC" : "REVISAR_CONCILIACION";
+  return {
+    rootId: observation.rootId,
+    agentId: "AGENTE_007",
+    phase: "SUPERVISED_ASSISTANCE",
+    status: "PENDING_REVIEW",
+    kind,
+    caseType: observation.caseType,
+    caseId: observation.caseId,
+    sourceActivityId: activityId,
+    sourceEvent: event,
+    proposal: proposed,
+    confidence: bankNeedsReview && signal.operatorSelectedBankName ? 0.75 : requiresOcReview ? 0.65 : 0.5,
+    evidence: {
+      detectedBankName: signal.detectedBankName || null,
+      operatorSelectedBankName: signal.operatorSelectedBankName || null,
+      referenceFolio: signal.referenceFolio || null,
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+function buildProactiveMessage(activityId: string, payload: Record<string, any>, recommendation: any) {
+  const observation = buildObservationPayload(activityId, payload);
+  if (!observation) return null;
+  const event = clean(payload.event || payload.type, 120);
+  const important = new Set([
+    "BENEFICIARIO_CREADO",
+    "COMPLEMENTO_PAGO_SEGUIMIENTO",
+    "PAGO_APLICADO_A_SOLICITUD",
+    "DISPERSION_REGISTRADA",
+    "DISPERSION_INCIDENCIA_ABIERTA",
+    "DISPERSION_INCIDENCIA_RESUELTA",
+    "OPERACION_RECUPERACION_FALLIDA",
+    "OPERACION_RECUPERADA",
+    "FACTURA_EMITIDA",
+    "IQ_SOLICITUD_CREACION_FALLIDA",
+    "IQ_SOLICITUD_RESULTADO_INCIERTO",
+    "IQ_PAGO_REQUIERE_REVISION",
+    "IQ_PAGO_ERROR",
+    "PAGO_POSTEO_FINANCIERO_PENDIENTE",
+    "FACTURA_BORRADOR_CREADO",
+    "COTIZACION_GENERADA",
+    "CONSTANCIA_RECEPCION_GENERADA",
+  ]);
+  if (!recommendation && !important.has(event)) return null;
+  const folio = clean(payload.referenceFolio || payload.folio || observation.signal?.referenceFolio, 80);
+  const description = clean(payload.description || observation.outcome, 500);
+  const text = recommendation
+    ? `Detecté algo que conviene revisar${folio ? ` en ${folio}` : ""}: ${clean(recommendation.proposal, 300)}. Te dejé la propuesta para confirmarla o corregirla.`
+    : `Vi esta actualización${folio ? ` en ${folio}` : ""}: ${description}`;
+  return {
+    rootId: observation.rootId,
+    conversationId: `${observation.rootId}_${observation.rootId}`,
+    role: "assistant",
+    text,
+    source: "SYSTEM_EVENT",
+    sourceActivityId: activityId,
+    sourceEvent: event,
+    recipientUid: observation.rootId,
+    relatedCaseType: observation.caseType,
+    relatedCaseId: observation.caseId,
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
   };
 }
 
@@ -115,6 +210,10 @@ export async function observeActivityForAgent007(
   if (!observation) return;
 
   await db.collection("agent007Observations").doc(`activity_${activityId}`).set(observation, { merge: true });
+  const recommendation = buildRecommendationPayload(activityId, payload);
+  if (recommendation) await db.collection("agent007Recommendations").doc(`activity_${activityId}`).set(recommendation, { merge: true });
+  const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
+  if (proactiveMessage) await db.collection("agent007Messages").doc(`notice_${activityId}`).set(proactiveMessage, { merge: true });
 }
 
 export function observeActivityForAgent007Tx(
@@ -127,6 +226,10 @@ export function observeActivityForAgent007Tx(
   if (!observation) return;
 
   tx.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
+  const recommendation = buildRecommendationPayload(activityId, payload);
+  if (recommendation) tx.set(db.collection("agent007Recommendations").doc(`activity_${activityId}`), recommendation, { merge: true });
+  const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
+  if (proactiveMessage) tx.set(db.collection("agent007Messages").doc(`notice_${activityId}`), proactiveMessage, { merge: true });
 }
 
 export function observeActivityForAgent007Batch(
@@ -139,4 +242,8 @@ export function observeActivityForAgent007Batch(
   if (!observation) return;
 
   batch.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
+  const recommendation = buildRecommendationPayload(activityId, payload);
+  if (recommendation) batch.set(db.collection("agent007Recommendations").doc(`activity_${activityId}`), recommendation, { merge: true });
+  const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
+  if (proactiveMessage) batch.set(db.collection("agent007Messages").doc(`notice_${activityId}`), proactiveMessage, { merge: true });
 }

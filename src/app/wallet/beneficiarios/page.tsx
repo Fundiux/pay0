@@ -51,7 +51,7 @@ type FormBeneficiaryTipo = BeneficiaryTipo | "";
 type FormDestinationKind = DestinationKind | "";
 
 function normalizeNombreInput(value: string) {
-  return value.replace(/\d+/g, "").replace(/\s+/g, " ").trimStart().toUpperCase();
+  return value.replace(/\s+/g, " ").trimStart().toUpperCase().slice(0, 180);
 }
 
 function onlyDigits(value: string) {
@@ -1928,4 +1928,3 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
     </div>
   );
 }
-

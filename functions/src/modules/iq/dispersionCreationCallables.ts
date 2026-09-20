@@ -9,6 +9,7 @@ import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { assertDispersionDestination } from "./dispersionDestinationGuard";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -1534,6 +1535,8 @@ export async function runCreateClientDispersionIqCore(input: {
   const method = record(
     methodSnap.data(),
   );
+  assertDispersionDestination({ rootId: auth.rootId, clientId, beneficiaryId, dispersionId,
+    client, beneficiary, method, legs: legsSnap.docs.map(doc => record(doc.data())) });
   const destination =
     destinationFromMethod(
       method,
@@ -2284,4 +2287,3 @@ export const processIqDispersionCreate =
       }
     },
   );
-

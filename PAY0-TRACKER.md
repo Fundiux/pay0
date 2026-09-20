@@ -1,7 +1,17 @@
 ﻿# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-19
+Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
+
+## IQ / Hugo / complementos — 2026-09-20
+
+- `IQ-BEN-01`: alta en IQ pendiente del contrato/recorrido que proporcionará el usuario. Corregida captura local de nombres con cifras, control de delegación de beneficiarios y concurrencia de cuentas; probado en emulador.
+- `IQ-DISP-01`: validación de root, destino activo y pertenencia de cliente/beneficiario/método/tramos antes del envío. No se ejecutó dispersión real ni se activó efectivo.
+- `IQ-REP-01`: seguimiento PPD idempotente y tabla en Reportes, sin fingir solicitud o descarga externa. Histórico: 60 aplicaciones revisadas, 16 seguimientos (12 pendientes de proveedor; 4 esperando aplicación IQ). Solicitud/descarga XML/PDF quedan pendientes de mapear IQ.
+- `HUGO-CTX-02`: orden cronológico antes de limitar, consulta exacta por folio, avisos de las operaciones anteriores y contexto que distingue funcionalidades conectadas de pendientes. Continúa sólo Superadmin.
+- Auditoría productiva de lectura: 411 solicitudes, 154 pagos, 60 aplicaciones, 3 facturas emitidas y 9 expedientes; cero inconsistencias en padres, abonos y UUID comprobados. No equivale a auditoría fiscal ni revisión visual completa.
+- Verificación: builds y autorización PASS; smokes de integración, UI y regresión fiscal PASS en emulador. Índices acotados publicados y siete consultas productivas verificadas. Backend publicado: 21/21 funciones ACTIVE; Hosting publicado correctamente, sin desplegar reglas.
+- Evidencia y limitaciones: `src/canonicos/IQ-HUGO-SEGUIMIENTO-2026-09-20.md`. Sin timbrados, dispersiones, altas IQ ni solicitudes de complemento reales.
 
 ## Entrega desplegada — interconexión Control Center, 2026-09-19
 
