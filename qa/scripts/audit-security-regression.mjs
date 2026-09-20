@@ -7,6 +7,7 @@ const constancias = readFileSync("functions/src/modules/constancias/service.ts",
 const cotizaciones = readFileSync("functions/src/modules/cotizaciones/callables.ts", "utf8");
 const materialityTrigger = readFileSync("functions/src/modules/materiality/triggers.ts", "utf8");
 const privilegedIqHttp = readFileSync("functions/src/modules/iq/pagoDepositCallables.ts", "utf8");
+const telegramWebhook = readFileSync("functions/src/modules/telegram/webhook.ts", "utf8");
 
 const upsert = index.slice(index.indexOf("export const upsertUser"), index.indexOf("export const createSolicitud"));
 assert.match(upsert, /if \(!snap\.exists\) \{\s*throw new HttpsError\(\s*"permission-denied"/s);
@@ -30,6 +31,11 @@ assert.match(privilegedIqHttp, /if \(user\.active === false\) \{\s*throw new Htt
 assert.match(privilegedIqHttp, /const role = cleanText\(user\.role\)\.toLowerCase\(\);/);
 assert.doesNotMatch(privilegedIqHttp, /user\.role \?\? \(decoded as any\)\.role/);
 console.log("PASS IQ HTTP: perfil activo obligatorio; claims no elevan rol ni root");
+
+assert.match(telegramWebhook, /import \{ timingSafeEqual \} from "crypto"/);
+assert.match(telegramWebhook, /timingSafeEqual\(expectedBytes, receivedBytes\)/);
+assert.match(telegramWebhook, /if \(!secretsMatch\(expectedSecret, receivedSecret\)\)/);
+console.log("PASS Telegram webhook: secreto comparado en tiempo constante");
 
 const requestedAt = { toMillis: () => Date.parse("2026-09-01T12:00:00Z") };
 assert.equal(overdue(requestedAt, new Date("2026-09-07T23:00:00Z")), false);

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { timingSafeEqual } from "crypto";
 import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
@@ -63,6 +64,12 @@ function safeCaption(value: string): string {
   return String(value || "").slice(0, 1024);
 }
 
+function secretsMatch(expected: string, received: string): boolean {
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const receivedBytes = Buffer.from(received, "utf8");
+  return expectedBytes.length === receivedBytes.length && timingSafeEqual(expectedBytes, receivedBytes);
+}
+
 async function sendUploadDocumentToTelegram(input: {
   botToken: string;
   chatId: string;
@@ -114,7 +121,7 @@ export const telegramWebhook = onRequest(
       return;
     }
 
-    if (receivedSecret !== expectedSecret) {
+    if (!secretsMatch(expectedSecret, receivedSecret)) {
       logger.warn("Telegram webhook secret mismatch");
       res.status(401).send("unauthorized");
       return;
