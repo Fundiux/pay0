@@ -40,6 +40,10 @@ export type MaterialityOperation = {
   status?: MaterialityOperationStatus | string | null;
   contractId?: string | null;
   ordenCompraUploadId?: string | null;
+  cotizacionUploadId?: string | null;
+  constanciaRecepcionUploadId?: string | null;
+  firmaAutorizadaUploadId?: string | null;
+  documentRefs?: Array<{ id: string; documentType?: string | null; documentTypeLabel?: string | null; originalName?: string | null; storagePath?: string | null; contentType?: string | null; sha256?: string | null }>;
   presupuestoUploadId?: string | null;
   facturaXmlUploadId?: string | null;
   facturaPdfUploadId?: string | null;

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "regio_solema-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "regio_solema",
+  "companyName": "REGIO SOLEMA, S.A. DE C.V.",
+  "rfc": "RSO191113182",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#004890",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "f77053910f665196f471e0c52b52fee38e1351b711cde92e4b854fd8a2936715",
+    "htmlSha256": "5eb87fe07cca3145443698222dff358e9bf7c2ca237e3226e1ab04179fcc0277",
+    "cssSha256": "c7692c25f65e9202b5a44b2c917a51c0a727715b34afa543b3a16f191171bfd4",
+    "logoSha256": "490275b196108b6d709236e81195b2e70556f9e54a558e5e802ff31dd78de16d",
+    "sourceQuotationPdfSha256": "44e51417333d7c17afbbb9dd42595f05db59dd2dd8221061238ed3fbf4569adf",
+    "templateBundleSha256": "49aef41a4c16699b452efdd575079f8e2d971ea0cfc11ac924555f971bc3e17d"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

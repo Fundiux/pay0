@@ -23,6 +23,7 @@ import {
 import { useAuth, logout } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { getVisibleSidebarNav } from "@/lib/roles";
+import HugoFloatingBubble from "@/components/HugoFloatingBubble";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -243,6 +244,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {MobileBottomNav}
+      <HugoFloatingBubble />
     </div>
   );
 }

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "204_publicidad-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "204_publicidad",
+  "companyName": "204 PUBLICIDAD, S.A. DE C.V.",
+  "rfc": "DCP191121H35",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "26ef1d32a410ca94300a73bdef8ee11dea0218f1b943162ea3317dbdcf9d27bc",
+    "htmlSha256": "451eec282b7a53ace17dda34c01a0c19daa7edd09c916d363cf3da5a5a6e965e",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "eef873c75132095225867cd82e0a7dbed94fe99698227ba887c00bbdcbf193ce",
+    "sourceQuotationPdfSha256": "7e2c46a8cc48cb7abe8f5ea97773237d5b7ad294d1c9a3dc8e0ec08319abe9a9",
+    "templateBundleSha256": "6dfda7177de61f9bf475ac2b2e616bd8733510bc6eadbeaf7e0e649aead175f7"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

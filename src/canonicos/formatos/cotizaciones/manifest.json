@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0",
+  "documentType": "COTIZACION",
+  "status": "ACTIVE",
+  "canonicalCount": 21,
+  "missingCount": 0,
+  "versionPolicy": "PUBLISHED_VERSIONS_ARE_IMMUTABLE",
+  "template": {
+    "html": "templates/base/template.html",
+    "css": "templates/base/template.css",
+    "engine": "PAY0_CANONICAL_HTML_CSS_PRINT_V1",
+    "templateBundleSha256": "PENDING_AFTER_RENDER_ENGINE_LOCK"
+  },
+  "requiredFields": [
+    "folio",
+    "fecha",
+    "vigencia",
+    "cliente.nombre",
+    "cliente.rfc",
+    "cliente.contacto",
+    "referenciaOc",
+    "items",
+    "subtotal",
+    "iva",
+    "total",
+    "qr",
+    "quotationId",
+    "solicitudId",
+    "materialidadId",
+    "purchaseOrderId",
+    "cfdiUuid"
+  ],
+  "traceability": {
+    "requiresReferencePdfSha256": true,
+    "requiresTemplateBundleSha256": true,
+    "requiresGeneratedDocumentSha256": true,
+    "preserveTemplateVersionOnGeneratedDocument": true
+  },
+  "templates": [
+    {
+      "templateId": "204-publicidad-cotizacion-v1.0",
+      "companyId": "204-publicidad",
+      "companyName": "204 PUBLICIDAD",
+      "rfc": "DCP191121H35",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_204_PUBLICIDAD_v1.0.pdf",
+      "referencePdfSha256": "7e2c46a8cc48cb7abe8f5ea97773237d5b7ad294d1c9a3dc8e0ec08319abe9a9",
+      "pages": 1
+    },
+    {
+      "templateId": "acier-capital-cotizacion-v1.0",
+      "companyId": "acier-capital",
+      "companyName": "ACIER CAPITAL",
+      "rfc": "ACA180724QV3",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_ACIER_CAPITAL_v1.0.pdf",
+      "referencePdfSha256": "488f5502049e05bf7c9d65f1a705d8bf3a4aceca4cafd9c8b83b34fbac8018a9",
+      "pages": 1
+    },
+    {
+      "templateId": "alimentos-livorno-cotizacion-v1.0",
+      "companyId": "alimentos-livorno",
+      "companyName": "ALIMENTOS LIVORNO",
+      "rfc": "ALI211011IU7",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_ALIMENTOS_LIVORNO_v1.0.pdf",
+      "referencePdfSha256": "0cf995114e7951356782abb780fdda180b876f93189f0acf052626c0b6ed8d6b",
+      "pages": 1
+    },
+    {
+      "templateId": "bierzo-publicidad-cotizacion-v1.0",
+      "companyId": "bierzo-publicidad",
+      "companyName": "BIERZO PUBLICIDAD",
+      "rfc": "BPU211028879",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_BIERZO_PUBLICIDAD_v1.0.pdf",
+      "referencePdfSha256": "bd17b690cc8b8b7cacf3981470ccde2b98b04e88c83d5b4990a2c8d21215e0a4",
+      "pages": 1
+    },
+    {
+      "templateId": "brescia-arrendadora-cotizacion-v1.0",
+      "companyId": "brescia-arrendadora",
+      "companyName": "BRESCIA ARRENDADORA",
+      "rfc": "BAR190516648",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_BRESCIA_ARRENDADORA_v1.0.pdf",
+      "referencePdfSha256": "145a9dd8ef983dddcf995cf5b176044d8c3e5b0991a4a1e483030289ce75841e",
+      "pages": 1
+    },
+    {
+      "templateId": "chipinque-soluciones-medicas-cotizacion-v1.0",
+      "companyId": "chipinque-soluciones-medicas",
+      "companyName": "CHIPINQUE SOLUCIONES MEDICAS",
+      "rfc": "CSM190807TZ2",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_CHIPINQUE_SOLUCIONES_MEDICAS_v1.0.pdf",
+      "referencePdfSha256": "77342150eb0a2ad9dabc17fb6d643d99555fcb5b2a3bc0527a69e75644988071",
+      "pages": 1
+    },
+    {
+      "templateId": "comercializadora-aimiera-cotizacion-v1.0",
+      "companyId": "comercializadora-aimiera",
+      "companyName": "COMERCIALIZADORA AIMIERA",
+      "rfc": "CAI190506GR1",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_COMERCIALIZADORA_AIMIERA_v1.0.pdf",
+      "referencePdfSha256": "3773456eb15f93dff39676e970da7b4ffd928a9ba9ac1e2cf5adf545441c0d9f",
+      "pages": 1
+    },
+    {
+      "templateId": "constructora-volcale-cotizacion-v1.0",
+      "companyId": "constructora-volcale",
+      "companyName": "CONSTRUCTORA VOLCALE",
+      "rfc": "CVO230815HV6",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_CONSTRUCTORA_VOLCALE_v1.0.pdf",
+      "referencePdfSha256": "2b6ad10ae99dc3b36fff7bc97abeae924b72c1d731b35ec4f672c4075b279391",
+      "pages": 1
+    },
+    {
+      "templateId": "desarrolladora-sistemas-setubal-cotizacion-v1.0",
+      "companyId": "desarrolladora-sistemas-setubal",
+      "companyName": "DESARROLLADORA SISTEMAS SETUBAL",
+      "rfc": "DSS190521T53",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_DESARROLLADORA_SISTEMAS_SETUBAL_v1.0.pdf",
+      "referencePdfSha256": "86992713a8aab648f860979bf97e85e2dda04200a23b790abfa467eab6750751",
+      "pages": 1
+    },
+    {
+      "templateId": "eivor-control-cotizacion-v1.0",
+      "companyId": "eivor-control",
+      "companyName": "EIVOR CONTROL",
+      "rfc": "ECO1907171N7",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_EIVOR_CONTROL_v1.0.pdf",
+      "referencePdfSha256": "7b05e56bbe0ccd1a07f4bc8d0a0db149ca6a4cd94fed8f09b56a3c0a16796e38",
+      "pages": 1
+    },
+    {
+      "templateId": "goldwing-cotizacion-v1.0",
+      "companyId": "goldwing",
+      "companyName": "GOLDWING",
+      "rfc": "GOL180124N93",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_GOLDWING_v1.0.pdf",
+      "referencePdfSha256": "a1081296de5a253b24b6756d2734d1b8e5a95938c2c472c6806bf4b86cc5c09e",
+      "pages": 1
+    },
+    {
+      "templateId": "invicta-logistic-cotizacion-v1.0",
+      "companyId": "invicta-logistic",
+      "companyName": "INVICTA LOGISTIC",
+      "rfc": "ILO180124UE4",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_INVICTA_LOGISTIC_v1.0.pdf",
+      "referencePdfSha256": "affa1bbd35b439694937e96fa69ddf21a31de922e17c63ba847929a74d2fabbb",
+      "pages": 1
+    },
+    {
+      "templateId": "mercacobra-cotizacion-v1.0",
+      "companyId": "mercacobra",
+      "companyName": "MERCACOBRA",
+      "rfc": "MCO200710YV8",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_MERCACOBRA_v1.0.pdf",
+      "referencePdfSha256": "e90cb80902130c094e5b232784a1e60cf813aa579c1766ff94e9b0ad0e3057ff",
+      "pages": 1
+    },
+    {
+      "templateId": "recexa-cotizacion-v1.0",
+      "companyId": "recexa",
+      "companyName": "RECEXA",
+      "rfc": "REC1908144R0",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_RECEXA_v1.0.pdf",
+      "referencePdfSha256": "ad6c9701601f3beea89668bfb04ae1c3659d4f1fe93cbebfcdaaf3ea329f02d9",
+      "pages": 1
+    },
+    {
+      "templateId": "redes-equipamiento-norrey-cotizacion-v1.0",
+      "companyId": "redes-equipamiento-norrey",
+      "companyName": "REDES EQUIPAMIENTO NORREY",
+      "rfc": "REN201210LK7",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_REDES_EQUIPAMIENTO_NORREY_v1.0.pdf",
+      "referencePdfSha256": "e07cb04748dbefc1468443cc5916cad477fc475233175e4145648ce76af2c20e",
+      "pages": 1
+    },
+    {
+      "templateId": "refaccionaria-elite-cotizacion-v1.0",
+      "companyId": "refaccionaria-elite",
+      "companyName": "REFACCIONARIA ELITE",
+      "rfc": "REL221012741",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_REFACCIONARIA_ELITE_v1.0.pdf",
+      "referencePdfSha256": "9776d0654ef45694f0216a55af7de8be977a3a6f8ecb38ffacf9f68cae24ab9e",
+      "pages": 1
+    },
+    {
+      "templateId": "regio-solema-cotizacion-v1.0",
+      "companyId": "regio-solema",
+      "companyName": "REGIO SOLEMA",
+      "rfc": "RSO191113182",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_REGIO_SOLEMA_v1.0.pdf",
+      "referencePdfSha256": "44e51417333d7c17afbbb9dd42595f05db59dd2dd8221061238ed3fbf4569adf",
+      "pages": 1
+    },
+    {
+      "templateId": "renofec-cotizacion-v1.0",
+      "companyId": "renofec",
+      "companyName": "RENOFEC",
+      "rfc": "REN1907229X4",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_RENOFEC_v1.0.pdf",
+      "referencePdfSha256": "8747cbdc44d66c80d243d8fda0814e5d085fd2bc3b4ed4f9047afdd3ab0a3f86",
+      "pages": 1
+    },
+    {
+      "templateId": "servicios-limpieza-rein-cotizacion-v1.0",
+      "companyId": "servicios-limpieza-rein",
+      "companyName": "SERVICIOS LIMPIEZA REIN",
+      "rfc": "SLM191220SU1",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_SERVICIOS_LIMPIEZA_REIN_v1.0.pdf",
+      "referencePdfSha256": "41e7e9490b04d31bb4b40f91fcc1bad2f6449ed1a56c6abfc604221f36da6fc5",
+      "pages": 1
+    },
+    {
+      "templateId": "slim-capital-cotizacion-v1.0",
+      "companyId": "slim-capital",
+      "companyName": "SLIM CAPITAL",
+      "rfc": "SCA180724M59",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_SLIM_CAPITAL_v1.0.pdf",
+      "referencePdfSha256": "ddc5c6ac1f6c35f14ddde038877e75add30204a1f235afe4dc016648b3df5c5a",
+      "pages": 1
+    },
+    {
+      "templateId": "trostre-cotizacion-v1.0",
+      "companyId": "trostre",
+      "companyName": "TROSTRE",
+      "rfc": "TRO230717L64",
+      "version": "1.0",
+      "status": "ACTIVE",
+      "referencePdf": "COTIZACION_CANONICA_TROSTRE_FINAL_compressed.pdf",
+      "referencePdfSha256": "f12a5db1b1a865541cb3a56da0cc9198ce8d23dfbae318af5282bd09b9806a9a",
+      "pages": 1
+    }
+  ]
+}

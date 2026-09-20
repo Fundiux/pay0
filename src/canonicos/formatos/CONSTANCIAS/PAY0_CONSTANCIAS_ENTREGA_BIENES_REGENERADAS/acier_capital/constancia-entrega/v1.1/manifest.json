@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "acier_capital-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "acier_capital",
+  "companyName": "ACIER CAPITAL, S.A. DE C.V.",
+  "rfc": "ACA180724QV3",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "aba1615d8d525c9ba56259a8dbbce1b31567ee34d7bc89af9914590f3fcc0939",
+    "htmlSha256": "9cd5d6e6d5237bb1dfb28b210e5a47ce25ae367afa82ca0714dadd9435762e66",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "8ef7e5d8d043c69d23566c3fffeca794bdc2c87d192d7b8a4052e47d2ad4afbd",
+    "sourceQuotationPdfSha256": "488f5502049e05bf7c9d65f1a705d8bf3a4aceca4cafd9c8b83b34fbac8018a9",
+    "templateBundleSha256": "be8d607fd25e1c5af7cccbcc1675a71e34039a5bdb0695a1c9ef672ea0569b7b"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

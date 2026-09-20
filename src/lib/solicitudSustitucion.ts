@@ -6,9 +6,14 @@ export type SolicitudLite = {
   status?: string;
   relatedSolicitudId?: string;
   relatedSolicitudFolio?: string;
+  replacementOfSolicitudId?: string;
+  replacementOfSolicitudFolio?: string;
   uuidCfdiSustituto?: string;
   uuidCfdiSustituido?: string;
   _sustituyeFolio?: string;
+  facturaFecha?: string;
+  originalFacturaFecha?: string;
+  sustitucionAt?: { seconds?: number };
 };
 
 export type SustitucionIndex = {
@@ -39,11 +44,20 @@ export function buildSustitucionIndex(all: SolicitudLite[]): SustitucionIndex {
     if (folio) byFolio.set(folio, sol);
   });
   all.forEach((sol) => {
+    // A replacement points back to its origin with replacementOf*. Older
+    // records point forward with relatedSolicitud*. Support both directions.
+    const origin = byId.get(clean(sol.replacementOfSolicitudId)) ||
+      byFolio.get(clean(sol.replacementOfSolicitudFolio));
+    if (origin) {
+      keysFor(sol).forEach((key) => originByCurrentKey.set(key, origin));
+      keysFor(origin).forEach((key) => replacementByCurrentKey.set(key, sol));
+      return;
+    }
     if (!isSolicitudEnSustitucion(sol)) return;
-    const related = byId.get(clean(sol.relatedSolicitudId)) || byFolio.get(clean(sol.relatedSolicitudFolio));
-    if (!related) return;
-    keysFor(sol).forEach((key) => originByCurrentKey.set(key, related));
-    keysFor(related).forEach((key) => replacementByCurrentKey.set(key, sol));
+    const replacement = byId.get(clean(sol.relatedSolicitudId)) || byFolio.get(clean(sol.relatedSolicitudFolio));
+    if (!replacement) return;
+    keysFor(replacement).forEach((key) => originByCurrentKey.set(key, sol));
+    keysFor(sol).forEach((key) => replacementByCurrentKey.set(key, replacement));
   });
   return { byId, byFolio, originByCurrentKey, replacementByCurrentKey };
 }
@@ -95,8 +109,8 @@ export function findSolicitudOrigenOf(
   if (index) {
     return keysFor(current).map((key) => index.originByCurrentKey.get(key)).find(Boolean) || null;
   }
-  const relId = clean(current?.relatedSolicitudId);
-  const relFolio = clean(current?.relatedSolicitudFolio);
+  const relId = clean(current?.replacementOfSolicitudId || current?.relatedSolicitudId);
+  const relFolio = clean(current?.replacementOfSolicitudFolio || current?.relatedSolicitudFolio);
 
   if (!relId && !relFolio) return null;
 

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import JSZip from "jszip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
@@ -6,6 +7,8 @@ import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallabl
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
+import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -107,6 +110,150 @@ type FacturaXmlMetadata = {
   facturaMoneda: string | null;
   facturaFecha: string | null;
 };
+
+type OcFiscalMetadata = {
+  productCode: string; unitCode: string; description: string; quantity: number;
+  clientName: string; clientRfc: string; clientAddress: string;
+  cfdiUse: string; fiscalRegime: string; postalCode: string;
+  paymentMethod: string; paymentForm: string; currency: string;
+  deliveryLocation: string;
+  items: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
+};
+
+function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
+function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
+
+async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
+  const [buffer] = await bucket.file(storagePath).download();
+  return parseOcFiscalMetadataBuffer(buffer);
+}
+
+/** Pure parser used by the upload flow and by emulator/fixture verification. */
+export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
+  const zip = await JSZip.loadAsync(buffer);
+  const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
+  const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => xmlValue(match[1]));
+  const sheetNames = Object.keys(zip.files).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+  const parseRows = async (sheetName: string): Promise<string[][]> => {
+    const sheet = await zip.file(sheetName)?.async("string") || "";
+    const parsed: string[][] = [];
+    for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      const values: string[] = [];
+      // Ignore self-closing cells from merged ranges. The former expression
+      // treated `<c .../>` as an opening tag and then consumed the next real
+      // cell, shifting values such as regimen, CP and uso CFDI one column.
+      for (const cell of row[1].matchAll(/<c\b([^>]*[^/])>([\s\S]*?)<\/c>/g)) {
+        const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "";
+        const raw = cell[2].match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || cell[2].match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "";
+        values[excelColumn(reference) - 1] = cell[1].includes('t="s"') ? shared[Number(raw)] || "" : xmlValue(raw);
+      }
+      if (values.some(Boolean)) parsed.push(values);
+    }
+    return parsed;
+  };
+  let rows: string[][] = [];
+  for (const sheetName of sheetNames) {
+    const candidate = await parseRows(sheetName);
+    const hasOcTable = candidate.some(row => row.some(cell => String(cell || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === "CANTIDAD"));
+    if (hasOcTable) { rows = candidate; break; }
+    if (!rows.length) rows = candidate;
+  }
+  if (!rows.length) return null;
+  const normalized = (value: unknown) => String(value || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase().replace(/[.:;_\-/\\]+/g, " ").replace(/\s+/g, " ").trim();
+  // Canonical OCs use merged cells. The value may be in a later physical cell,
+  // so never assume it is column C; read every cell following the matched label.
+  const field = (label: string) => {
+    const target = normalized(label);
+    const row = rows.find(item => item.some(cell => normalized(cell).startsWith(target)));
+    if (!row) return "";
+    const labelIndex = row.findIndex(cell => normalized(cell).startsWith(target));
+    return row.slice(Math.max(0, labelIndex + 1)).filter(Boolean).join(" ");
+  };
+  // OC templates vary in the literal heading (CLAVE SAT, CLAVE PROD SERV,
+  // CLAVE CONCEPTO, etc.).  Detect the semantic table, never its coordinates
+  // nor one exact heading spelling.
+  const isCodeHeader = (value: unknown) => /\b(CLAVE\s*(SAT|PROD|PRODUCTO|CONCEPTO|SERV)|CODIGO\s*SAT)\b/.test(normalized(value));
+  const isDescriptionHeader = (value: unknown) => /\b(DESCRIPCION|CONCEPTO|PRODUCTO|SERVICIO)\b/.test(normalized(value));
+  const header = rows.findIndex(row => row.some(cell => normalized(cell) === "CANTIDAD" || normalized(cell) === "CANT.") && row.some(isDescriptionHeader) && row.some(isCodeHeader));
+  const headerRow = header >= 0 ? rows[header] || [] : [];
+  const headerIndex = (test: (value: unknown) => boolean) => headerRow.findIndex(test);
+  const quantityIndex = headerIndex(cell => /\bCANT(ID|IDAD)?\b/.test(normalized(cell)));
+  const unitIndex = headerIndex(cell => /\b(CLAVE\s*)?UNIDAD\b/.test(normalized(cell)));
+  const conceptIndex = headerIndex(isCodeHeader);
+  // "Clave Concepto" contains the word Concepto, but it is the SAT code
+  // column.  It must never win over the actual Concepto/Descripcion column.
+  const descriptionIndex = headerIndex(cell => isDescriptionHeader(cell) && !isCodeHeader(cell));
+  const parseQuantity = (value: unknown) => Number(String(value || "1").replace(/[^0-9.,-]/g, "").replace(",", ".")) || 1;
+  const rowsAfterHeader = header >= 0 ? rows.slice(header + 1) : rows;
+  const items: Array<{ quantity: number; unit: string; productCode: string; description: string }> = [];
+  for (const row of rowsAfterHeader) {
+    const rowText = row.map(normalized).filter(Boolean).join(" ");
+    if (/\b(SUBTOTAL|TOTAL|IVA|IMPUESTO|RETENCION)\b/.test(rowText)) {
+      if (items.length) break;
+      continue;
+    }
+    // Algunos formatos canónicos traen visualmente invertidos "Clave Unidad"
+    // y "Clave Concepto". La coordenada/encabezado es una pista, pero la
+    // clasificación fiscal se reconoce por su forma: ocho dígitos SAT.
+    // Nunca se debe dejar de buscar la clave válida sólo porque la celda
+    // indicada por el encabezado contiene una unidad como E48.
+    const headerProductCode = String(row[conceptIndex] || "").trim().match(/^\d{8}$/)?.[0] || "";
+    const productCode = headerProductCode || String(row.find(cell => /^\d{8}$/.test(String(cell || "").trim())) || "").trim();
+    if (!productCode) continue;
+    const headerUnit = String(row[unitIndex] || "").trim();
+    const unitCandidate = /^[A-Z0-9]{2,3}$/i.test(headerUnit) ? headerUnit : String(row.find(cell => /^[A-Z0-9]{2,3}$/i.test(String(cell || "").trim()) && !/^\d{2,3}$/.test(String(cell || "").trim())) || "").trim();
+    const unit = unitCandidate.toUpperCase();
+    const description = String(row[descriptionIndex] || "").replace(/\s+/g, " ").trim().slice(0, 1000)
+      || row.filter(cell => /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(String(cell || "")) && !isCodeHeader(cell)).map(cell => String(cell).trim()).sort((a, b) => b.length - a.length)[0] || "";
+    items.push({ quantity: parseQuantity(row[quantityIndex]), unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000) });
+  }
+  const firstItem = items.find(item => item.productCode && item.unit) || items[0];
+  const code = firstItem?.productCode || "";
+  const unit = firstItem?.unit || "";
+  const description = firstItem?.description || "";
+  const quantity = firstItem?.quantity || 1;
+  // Some supplier templates preserve the fiscal value in a merged cell. Keep
+  // the semantic label lookup first, then search the full OC text as a safe
+  // structural fallback rather than relying on a particular adjacent cell.
+  const fullOcText = rows.flat().map(cell => String(cell || "")).join(" ");
+  const regimeRaw = field("REGIMEN FISCAL:") || fullOcText;
+  const regimeText = normalized(regimeRaw);
+  const regime = regimeRaw.match(/\b\d{3}\b/)?.[0]
+    || (regimeText.includes("GENERAL DE LEY DE PERSONAS MORALES") ? "601" : "")
+    || (regimeText.includes("PERSONAS MORALES CON FINES NO LUCRATIVOS") ? "603" : "")
+    || (regimeText.includes("ACTIVIDADES EMPRESARIALES Y PROFESIONALES") ? "612" : "")
+    || (regimeText.includes("INCORPORACION FISCAL") ? "621" : "")
+    || (regimeText.includes("SIMPLIFICADO DE CONFIANZA") ? "626" : "");
+  // A postal code must be tied to its label. Searching the complete sheet can
+  // accidentally select an Excel date serial such as 46283.
+  const postal = (field("C.P.") || field("CODIGO POSTAL")).match(/\b\d{5}\b/)?.[0] || "";
+  const cfdiRaw = field("USO DE CFDI:") || fullOcText;
+  const cfdiText = normalized(cfdiRaw);
+  const cfdiUse = cfdiRaw.match(/\b[A-Z]\d{2}\b/)?.[0]
+    || (cfdiText.includes("GASTOS EN GENERAL") ? "G03" : "")
+    || (cfdiText.includes("ADQUISICION DE MERCANCIAS") ? "G01" : "")
+    || (cfdiText.includes("DEVOLUCIONES DESCUENTOS O BONIFICACIONES") ? "G02" : "");
+  const paymentMethod = field("METODO DE PAGO:").match(/\b(?:PUE|PPD)\b/)?.[0] || "";
+  const paymentFormField = field("FORMA DE PAGO");
+  // Prefer the explicit code at the beginning of the labelled OC field. This
+  // avoids confusing 03 Transferencia with another numeric value elsewhere.
+  const paymentForm = paymentFormField.match(/^\s*(0[1-9]|[12]\d|30|31)\b/)?.[1] || paymentFormField.match(/\b(?:0[1-9]|[12]\d|30|31)\b/)?.[0] || "";
+  const currency = field("MONEDA").match(/\b[A-Z]{3}\b/)?.[0] || "";
+  const clientName = field("RAZON SOCIAL:") || field("RAZON SOCIAL");
+  const clientRfc = (field("RFC:") || field("RFC")).match(/[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}/i)?.[0] || "";
+  const addressParts = [
+    field("CALLE"), field("NUMERO EXTERIOR"), field("NUMERO INTERIOR"),
+    field("COLONIA"), field("MUNICIPIO / DELEGACION"), field("CIUDAD"), field("ESTADO"), postal ? `CP ${postal}` : "",
+  ].filter(Boolean);
+  const clientAddress = addressParts.join(", ");
+  const deliveryLocation = field("LUGAR DE ENTREGA") || field("LUGAR ENTREGA") || field("LUGAR DE PRESTACION") || field("DOMICILIO DE ENTREGA") || clientAddress;
+  // The OC is the operational source for the quote and fiscal classification.
+  // CSF remains a fiscal validation source, but no quote should display a
+  // placeholder when the OC already supplies the data.
+  return code && unit ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items } : null;
+}
 
 function cleanCfdiText(value: any): string {
   return String(value || "").trim();
@@ -399,6 +546,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
   }
 
   let facturaXmlMetadata: FacturaXmlMetadata | null = null;
+  let ocFiscalMetadata: OcFiscalMetadata | null = null;
 
   try {
     const bucket = admin.storage().bucket();
@@ -412,6 +560,9 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
       documentType === "FACTURA_XML"
         ? await readFacturaXmlMetadataFromStorage(bucket, String(upload.storagePath || ""))
         : null;
+    ocFiscalMetadata = documentType === "ORDEN_COMPRA"
+      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || ""))
+      : null;
   } catch (e: any) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
@@ -472,6 +623,30 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           facturaMetadataSource: "FACTURA_XML",
           facturaMetadataUpdatedAt: FieldValue.serverTimestamp(),
         });
+      }
+      if (ocFiscalMetadata) {
+        tx.set(solicitudRef, {
+          satProductCode: ocFiscalMetadata.productCode,
+          satUnitCode: ocFiscalMetadata.unitCode,
+          ocConceptDescription: ocFiscalMetadata.description || null,
+          ocQuantity: ocFiscalMetadata.quantity || 1,
+          ocClientName: ocFiscalMetadata.clientName || null,
+          ocClientRfc: ocFiscalMetadata.clientRfc || null,
+          ocClientAddress: ocFiscalMetadata.clientAddress || null,
+          ocDeliveryLocation: ocFiscalMetadata.deliveryLocation || null,
+          ocItems: ocFiscalMetadata.items,
+          cfdiUse: ocFiscalMetadata.cfdiUse,
+          regimenFiscalReceptor: ocFiscalMetadata.fiscalRegime,
+          postalCode: ocFiscalMetadata.postalCode,
+          paymentMethod: ocFiscalMetadata.paymentMethod || null,
+          paymentForm: ocFiscalMetadata.paymentForm || null,
+          currency: ocFiscalMetadata.currency || "MXN",
+          ocFiscalMetadataSource: "ORDEN_COMPRA_XLSX",
+          ocFiscalMetadataUploadId: uploadId,
+          ocFiscalMetadataUpdatedAt: FieldValue.serverTimestamp(),
+          replacementOcStatus: "UPLOADED",
+          replacementRequiresOc: false,
+        }, { merge: true });
       }
     const iqUnlockPatchH4D58H = buildSolicitudIqReplacementUnlockPatchH4D58H({
       solicitud: solicitudH4D58H,
@@ -543,6 +718,43 @@ logActivityTx(tx, db, {
         { merge: true },
       );
     });
+
+    await generateCotizacionForSolicitudCore({
+      auth: request.auth,
+      // The active OC is the source of truth. Replacing it must also replace
+      // the derivative quotation; returning an old active version leaves its
+      // SAT key, concept, amount, and receiver data stale.
+      data: { solicitudId, replaceExisting: true },
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          cotizacionAutoGenerateStatus: "ERROR",
+          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
+          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+  }
+
+  if (documentType === "FIRMA_AUTORIZADA_CLIENTE") {
+    await generateConstanciaRecepcionForSolicitudCore({
+      auth: request.auth,
+      data: {
+        solicitudId,
+        signatureUploadId: uploadId,
+        source: "SIGNATURE_UPLOAD",
+      },
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          constanciaAutoGenerateStatus: "ERROR",
+          constanciaAutoGenerateLastError: String(error?.message || error || "No se pudo generar la constancia automatica desde la firma."),
+          constanciaAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
   }
 
   await linkSolicitudToMaterialityOperationCore({
@@ -566,6 +778,72 @@ logActivityTx(tx, db, {
     active: true,
     version: finalVersion,
   };
+}
+
+/** Re-read the currently active OC without asking the user to upload it again. */
+export async function reprocessActiveSolicitudOcCore(request: any) {
+  const uid = requireAuthLike(request);
+  const user = await getUser(uid);
+  if (!user || !canUploadSolicitudDocs(user)) throw new HttpsError("permission-denied", "No autorizado para reprocesar la OC.");
+  const rootId = getRootIdFromUser(user, uid);
+  const solicitudId = String(request?.data?.solicitudId || "").trim();
+  if (!solicitudId) throw new HttpsError("invalid-argument", "solicitudId requerido.");
+  const { solicitudRef, solicitud } = await loadSolicitudOrThrow({ solicitudId, uid, user, rootId });
+  const activeOc = await db.collection("uploads")
+    .where("solicitudId", "==", solicitudId)
+    .where("documentType", "==", "ORDEN_COMPRA")
+    .where("active", "==", true)
+    .limit(1)
+    .get();
+  if (activeOc.empty) throw new HttpsError("failed-precondition", "No existe una Orden de Compra activa para reprocesar.");
+  const oc: any = activeOc.docs[0].data() || {};
+  const metadata = await readOcFiscalMetadata(admin.storage().bucket(), String(oc.storagePath || ""));
+  if (!metadata) throw new HttpsError("failed-precondition", "No se pudo extraer clave SAT, unidad y concepto de la OC activa.");
+
+  await solicitudRef.set({
+    satProductCode: metadata.productCode,
+    satUnitCode: metadata.unitCode,
+    ocConceptDescription: metadata.description || null,
+    ocQuantity: metadata.quantity || 1,
+    ocClientName: metadata.clientName || null,
+    ocClientRfc: metadata.clientRfc || null,
+    ocClientAddress: metadata.clientAddress || null,
+    ocDeliveryLocation: metadata.deliveryLocation || null,
+    ocItems: metadata.items,
+    cfdiUse: metadata.cfdiUse,
+    regimenFiscalReceptor: metadata.fiscalRegime,
+    postalCode: metadata.postalCode,
+    paymentMethod: metadata.paymentMethod || null,
+    paymentForm: metadata.paymentForm || null,
+    currency: metadata.currency || "MXN",
+    ocFiscalMetadataSource: "ORDEN_COMPRA_XLSX",
+    ocFiscalMetadataUploadId: activeOc.docs[0].id,
+    ocFiscalMetadataUpdatedAt: FieldValue.serverTimestamp(),
+    facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC",
+    cotizacionAutoGenerateStatus: "REPROCESSING_ACTIVE_OC",
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  const quote = await generateCotizacionForSolicitudCore({ auth: request.auth, data: { solicitudId, replaceExisting: true } });
+  await linkSolicitudToMaterialityOperationCore({ auth: request.auth, data: { solicitudId } });
+  await logActivity({
+    event: "ORDEN_COMPRA_REPROCESADA",
+    rootId,
+    adminId: solicitud.adminId || rootId,
+    actorUid: uid,
+    actorUsername: getUsername(user, uid),
+    actorRole: getRole(user),
+    entityType: "solicitudes",
+    entityId: solicitudId,
+    referenceId: solicitudId,
+    referenceFolio: solicitud.folio || solicitudId,
+    referenceType: "solicitudDocument",
+    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron Facturacion y Cotizacion.`,
+    createdBy: uid,
+    extra: { source: "docs", activeOcUploadId: activeOc.docs[0].id, productCode: metadata.productCode, unitCode: metadata.unitCode, quotationUploadId: (quote as any).uploadId || null },
+  });
+  return { ok: true, activeOcUploadId: activeOc.docs[0].id, productCode: metadata.productCode, unitCode: metadata.unitCode, quote };
 }
 
 export async function deactivateSolicitudDocumentCore(request: any) {

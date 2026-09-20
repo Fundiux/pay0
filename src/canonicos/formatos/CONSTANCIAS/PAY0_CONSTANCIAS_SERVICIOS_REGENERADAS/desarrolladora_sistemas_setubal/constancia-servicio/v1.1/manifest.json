@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "desarrolladora_sistemas_setubal-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "desarrolladora_sistemas_setubal",
+  "companyName": "DESARROLLADORA DE SISTEMAS SETUBAL, S.A. DE C.V.",
+  "rfc": "DSS190521T53",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "8ed908656ad3b2ac606ea0db7db934cfb91e325989458d518e44d3efb551c786",
+    "htmlSha256": "9ed82bc22ad4831a51229ca38254fbe204505c28f56cd3badf780d8aac28f4a3",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "2adb34287c1b659fecac6d759392d93d15abd285d19270798265d9600acdd483",
+    "sourceQuotationPdfSha256": "86992713a8aab648f860979bf97e85e2dda04200a23b790abfa467eab6750751",
+    "templateBundleSha256": "04f84245da83eaefc7bfdd44438b4fa4e410aea9e37bc39a87e0cdff7ceb986f"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

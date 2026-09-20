@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "renofec-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "renofec",
+  "companyName": "RENOFEC, S.A. DE C.V.",
+  "rfc": "REN1907229X4",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#2F4F6F",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "c5ba3a5ee2888b3bc26faae94118f1fd6e23a9c29f839a7c82f83d8a6b1dc63b",
+    "htmlSha256": "93bf97400c47ac670f4c92445f4a007ffbca24a917eb127d2395bc7aca02fee1",
+    "cssSha256": "607105444b4e6adedb33166c7874c5a6f84aa7d61c5d4f5542336332d25a0f7d",
+    "logoSha256": "718b98b979f0db374031f7f55404d5db8a0f50e84fceed09e45184ea25825dd5",
+    "sourceQuotationPdfSha256": "8747cbdc44d66c80d243d8fda0814e5d085fd2bc3b4ed4f9047afdd3ab0a3f86",
+    "templateBundleSha256": "6bae8ed02544f38e51a8cafc9e4b9dc528b4ddbd4ceb7a08fbf9944d5c06aef6"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

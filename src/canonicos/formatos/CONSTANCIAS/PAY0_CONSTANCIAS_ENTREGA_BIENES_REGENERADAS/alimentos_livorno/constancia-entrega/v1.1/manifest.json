@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "alimentos_livorno-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "alimentos_livorno",
+  "companyName": "ALIMENTOS LIVORNO, S.A. DE C.V.",
+  "rfc": "ALI211011IU7",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#A8A800",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "93ce052e272836b29a7b67ea9735a3d233697e89f908a346d859ac5a9ec3045b",
+    "htmlSha256": "645797f9ca43fb0deaff7bf1da9ff5a0e7bc22330acf0e601962e9644e1e24c5",
+    "cssSha256": "2af6a649a929d6bac911875dda24f82bb85d934c024c0746bde7785211d43986",
+    "logoSha256": "439fb74ede46bfb92b6561448478d10adf9af91a8c5230cf74fd91ba1c10af20",
+    "sourceQuotationPdfSha256": "0cf995114e7951356782abb780fdda180b876f93189f0acf052626c0b6ed8d6b",
+    "templateBundleSha256": "193542116f7f2fbbafe334bc121723306aa735e688e3274880ed03394ae51a69"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

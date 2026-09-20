@@ -274,6 +274,7 @@ export const listCompaniesCanonical = onCall(
 
     const companies = companyDocs.map((doc) => {
       const data: any = doc.data() || {};
+      const depositAccounts = normalizeCompanyDepositAccounts(data.depositAccounts, data.depositClabes);
       return {
         id: doc.id,
         rootId: String(data.rootId || ""),
@@ -281,11 +282,8 @@ export const listCompaniesCanonical = onCall(
         nombre: String(data.nombre || ""),
         rfc: String(data.rfc || ""),
         depositAlias: String(data.depositAlias || ""),
-        depositClabes: Array.isArray(data.depositClabes)
-          ? data.depositClabes
-              .map((value: unknown) => String(value || "").replace(/\D/g, ""))
-              .filter((value: string) => value.length === 18)
-          : [],
+        depositClabes: depositAccounts.filter((row) => row.status === "ACTIVA").map((row) => row.clabe),
+        depositAccounts,
         active: data.active !== false,
         companyNumber: Number(data.companyNumber || data.numeroEmpresa || 0) || null,
       };
@@ -316,6 +314,19 @@ function normalizeCompanyDepositClabes(value: unknown): string[] {
   )];
 }
 
+function normalizeCompanyDepositAccounts(value: unknown, legacyClabes: unknown = []): Array<{ id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom: string | null; validTo: string | null }> {
+  const source = Array.isArray(value) ? value : [];
+  const accounts = source.map((row: any, index) => {
+    const clabe = String(row?.clabe || row?.CLABE || "").replace(/\D/g, "");
+    if (clabe.length !== 18) return null;
+    const status = String(row?.status || "ACTIVA").toUpperCase() === "INACTIVA" ? "INACTIVA" : "ACTIVA";
+    return { id: String(row?.id || `deposit_${clabe}_${index}`), clabe, status, validFrom: row?.validFrom ? String(row.validFrom) : null, validTo: row?.validTo ? String(row.validTo) : null };
+  }).filter(Boolean) as Array<{ id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom: string | null; validTo: string | null }>;
+  const seen = new Set(accounts.map((row) => row.clabe));
+  for (const clabe of normalizeCompanyDepositClabes(legacyClabes)) if (!seen.has(clabe)) accounts.push({ id: `deposit_${clabe}`, clabe, status: "ACTIVA", validFrom: null, validTo: null });
+  return accounts;
+}
+
 export const updateCompanyDepositIdentity = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
@@ -337,6 +348,7 @@ export const updateCompanyDepositIdentity = onCall(
     const depositClabes = normalizeCompanyDepositClabes(
       request.data?.depositClabes,
     );
+    const depositAccounts = normalizeCompanyDepositAccounts(request.data?.depositAccounts, depositClabes);
 
     if (!companyId) {
       throw new HttpsError("invalid-argument", "companyId requerido.");
@@ -394,6 +406,7 @@ export const updateCompanyDepositIdentity = onCall(
       {
         depositAlias,
         depositClabes,
+        depositAccounts,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: callerUid,
       },
@@ -409,4 +422,3 @@ export const updateCompanyDepositIdentity = onCall(
     };
   },
 );
-

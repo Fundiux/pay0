@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "chipinque_soluciones_medicas-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "chipinque_soluciones_medicas",
+  "companyName": "CHIPINQUE SOLUCIONES MÉDICAS, S.A. DE C.V.",
+  "rfc": "CSM190807TZ2",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#0090C0",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "481595c53bcccd45f1642b8c2b3f1af2959fdb3d5d90cbaa03839e0bc8539db1",
+    "htmlSha256": "bb04c92bb480ed1156c91ef6f8f9586e6573e3538526a6923b131ce9192b51bb",
+    "cssSha256": "1b270f75ac13d6db1f0ead26458fdc692cb186762f009f87845b5360c95b6b85",
+    "logoSha256": "550a407847f4644ff711dd71ec796ef95fb6fe657c12bd3b1c0fc2e1811f7efb",
+    "sourceQuotationPdfSha256": "77342150eb0a2ad9dabc17fb6d643d99555fcb5b2a3bc0527a69e75644988071",
+    "templateBundleSha256": "d8ed1da409cdd7f0d44c6d65f79bc9c690e76f6076ab975e0501e9dd622fd6a6"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

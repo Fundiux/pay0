@@ -160,12 +160,15 @@ export const createSolicitud = onCall(
       comentario,
       clienteNombre,
       empresaNombre,
+      replacementOfSolicitudId,
+      replacementReason,
     } = request.data || {};
 
     const clienteId = String(clienteIdRaw || clientId || "").trim();
     const companyIdValue = String(companyId || "").trim();
     const incomingDespachoId = String(despachoIdRaw || "").trim();
     const operationTypeKeyValue = String(operationTypeKey || "").trim().toUpperCase();
+    const replacementSourceId = String(replacementOfSolicitudId || "").trim();
 
     if (!clienteId || !companyIdValue) {
       throw new HttpsError("invalid-argument", "clienteId y companyId son obligatorios.");
@@ -431,6 +434,24 @@ export const createSolicitud = onCall(
     const now = FieldValue.serverTimestamp();
     const solicitudRef = db.collection("solicitudes").doc();
 
+    let replacementSourceRef: FirebaseFirestore.DocumentReference | null = null;
+    let replacementSource: any = null;
+    if (replacementSourceId) {
+      const sourceSnap = await db.doc(`solicitudes/${replacementSourceId}`).get();
+      if (!sourceSnap.exists) throw new HttpsError("not-found", "La solicitud original a sustituir no existe.");
+      replacementSource = sourceSnap.data() || {};
+      if (String(replacementSource.rootId || "") !== rootId) throw new HttpsError("permission-denied", "La solicitud original esta fuera de alcance.");
+      if (String(replacementSource.facturamaEnvironment || "").toUpperCase() !== "PRODUCTION" || !String(replacementSource.facturamaInvoiceId || "").trim()) {
+        throw new HttpsError("failed-precondition", "Esta sustitucion automatica solo aplica a CFDI productivo emitido por Facturama.");
+      }
+      if (String(replacementSource.relatedSolicitudId || "").trim()) throw new HttpsError("already-exists", "La solicitud original ya tiene una sustitucion relacionada.");
+      if (!String(replacementSource.facturaUuid || replacementSource.uuidCfdi || "").trim()) throw new HttpsError("failed-precondition", "La solicitud original no tiene UUID productivo para sustituir.");
+      if (String(replacementSource.companyId || "") !== companyIdValue || String(replacementSource.clienteId || replacementSource.clientId || "") !== clienteId) {
+        throw new HttpsError("failed-precondition", "La sustitucion debe conservar emisor y receptor de la solicitud original.");
+      }
+      replacementSourceRef = sourceSnap.ref;
+    }
+
     let folio = "";
     let solicitudSequenceNumber = 0;
     let solicitudSequenceCounterPath = "";
@@ -497,10 +518,22 @@ export const createSolicitud = onCall(
         motivoCancelacionDetalle: null,
 
         uuidCfdi: null,
-        uuidCfdiSustituido: null,
+        // The original UUID is known before the replacement CFDI is issued.
+        // Preserve it on both records with its fiscal meaning, never as an
+        // ambiguous "UUID sustituto".
+        uuidCfdiSustituido: replacementSource ? String(replacementSource.facturaUuid || replacementSource.uuidCfdi || "").trim().toUpperCase() || null : null,
         uuidCfdiSustituto: null,
         sustitucionStatus: null,
         relatedSolicitudId: null,
+        replacementOfSolicitudId: replacementSourceId || null,
+        replacementOfSolicitudFolio: replacementSource?.folio || null,
+        replacementOfUuid: replacementSource ? String(replacementSource.facturaUuid || replacementSource.uuidCfdi || "").trim().toUpperCase() : null,
+        originalFacturaFecha: replacementSource?.facturaFecha || null,
+        originalFacturaFolio: replacementSource?.facturaDisplay || replacementSource?.facturaFolio || replacementSource?.numFactura || null,
+        cfdiRelationType: replacementSourceId ? "04" : null,
+        replacementReason: replacementSourceId ? String(replacementReason || "").trim().slice(0, 500) || null : null,
+        replacementRequiresOc: !!replacementSourceId,
+        replacementOcStatus: replacementSourceId ? "PENDING_UPLOAD" : null,
 
         isDeleted: false,
         deletedBy: null,
@@ -509,6 +542,17 @@ export const createSolicitud = onCall(
         createdAt: now,
         updatedAt: now,
       });
+      if (replacementSourceRef) {
+        tx.set(replacementSourceRef, {
+          status: "EN_SUSTITUCION",
+          motivoCancelacionSAT: "01",
+          motivoCancelacionDetalle: String(replacementReason || "").trim().slice(0, 500) || null,
+          relatedSolicitudId: solicitudRef.id,
+          relatedSolicitudFolio: folio,
+          sustitucionStatus: "ESPERANDO_NUEVO_CFDI",
+          updatedAt: now,
+        }, { merge: true });
+      }
     });
 
     __mark("folio_transaction");
@@ -2320,9 +2364,17 @@ export const listSolicitudes = onCall(
     const role = String(me.role || "").trim().toLowerCase();
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
+    const fromMillisRaw = Number(request.data?.fromMillis || 0);
+    const toMillisRaw = Number(request.data?.toMillis || 0);
     const cursorSeconds = Number(request.data?.cursorSeconds || 0);
     const cursorNanoseconds = Number(request.data?.cursorNanoseconds || 0);
     const cursorId = String(request.data?.cursorId || "").trim();
+    const fromMillis = Number.isFinite(fromMillisRaw) && fromMillisRaw > 0 ? Math.trunc(fromMillisRaw) : 0;
+    const toMillis = Number.isFinite(toMillisRaw) && toMillisRaw > 0 ? Math.trunc(toMillisRaw) : 0;
+
+    if (fromMillis > 0 && toMillis > 0 && fromMillis > toMillis) {
+      throw new HttpsError("invalid-argument", "Rango temporal invalido.");
+    }
 
     let queryRef: FirebaseFirestore.Query = db.collection("solicitudes");
     if (role === "superadmin") queryRef = queryRef.where("rootId", "==", rootId);
@@ -2330,6 +2382,8 @@ export const listSolicitudes = onCall(
     else if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
     else throw new HttpsError("permission-denied", "Rol sin acceso a solicitudes.");
 
+    if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
+    if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
     queryRef = queryRef.orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(pageSize + 1);
     if (cursorSeconds > 0 && cursorId) {
       queryRef = queryRef.startAfter(new Timestamp(cursorSeconds, cursorNanoseconds), cursorId);
@@ -2339,7 +2393,17 @@ export const listSolicitudes = onCall(
     const last = docs[docs.length - 1];
     const createdAt: any = last?.get("createdAt");
     return {
-      items: docs.map((entry) => ({ id: entry.id, ...entry.data() })),
+      items: docs.map((entry) => {
+        const data: any = entry.data();
+        const entryCreatedAt: any = data.createdAt;
+        return {
+          id: entry.id,
+          ...data,
+          createdAt: entryCreatedAt && typeof entryCreatedAt.seconds === "number"
+            ? { seconds: entryCreatedAt.seconds, nanoseconds: entryCreatedAt.nanoseconds || 0 }
+            : null,
+        };
+      }),
       hasMore: snap.docs.length > pageSize,
       nextCursor: last ? {
         seconds: Number(createdAt?.seconds || 0),
@@ -2631,7 +2695,10 @@ export { addClientBeneficiaryMethod, createClientBeneficiary, deleteClientBenefi
 export { requestClientDispersionIncident } from "./modules/financing/callables";
 export { resolveClientDispersionIncident } from "./modules/financing/callables";
 export { addClientDispersionNota } from "./modules/financing/callables";
-export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument } from "./modules/solicitudDocuments/callables";
+export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
+export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
+export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";
+export { getPublicConstanciaVerification } from "./modules/constancias/service";
 export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoAmountForRetry, deactivatePagoDocument } from "./modules/pagoDocuments/callables";
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
 
@@ -2761,5 +2828,6 @@ export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
 export { parsePagoReceiptPdf } from "./modules/pagos/receiptPdfCallables";
-export { getFacturamaSandboxStatus, saveFacturamaDraft, listFacturamaInvoices } from "./modules/facturama/callables";
+export { getFacturamaSandboxStatus, getFacturamaProductionStatus, saveFacturamaDraft, listFacturamaInvoices, importCompanyInvoiceCatalog, initGlobalSatCatalogUpload, finalizeGlobalSatCatalogImport } from "./modules/facturama/callables";
+export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturamaProductionInvoice, reconcileFacturamaIssuedMetadata, cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus, getFacturamaProductionCsdStatus, registerFacturamaProductionCsd } from "./modules/facturama/sandboxCallables";
 export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message } from "./modules/agent007/callables";

@@ -128,6 +128,53 @@ function parseMoney(value: unknown): number | null {
   return roundMoney(signed);
 }
 
+function columnNumber(column: string) {
+  return [...column.toUpperCase()].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+}
+function columnName(index: number) { let n = index + 1; let out = ""; while (n > 0) { const r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); } return out; }
+
+function evaluateFormula(formula: string, rows: unknown[][], stack = new Set<string>()): number | null {
+  let expression = String(formula || "").trim().replace(/^=/, "").replace(/^\+/, "");
+  const ref = (address: string): number => {
+    const match = /^([A-Z]+)(\d+)$/i.exec(address.trim()); if (!match) return 0;
+    const key = match[0].toUpperCase(); if (stack.has(key)) return 0; const next = new Set(stack); next.add(key);
+    const raw: any = rows[Number(match[2]) - 1]?.[columnNumber(match[1])];
+    if (raw && typeof raw === "object" && raw.formula) return evaluateFormula(raw.formula, rows, next) || 0;
+    return parseMoney(raw) || 0;
+  };
+  expression = expression.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/gi, (_m, start, end) => {
+    const a = /^([A-Z]+)(\d+)$/i.exec(start); const b = /^([A-Z]+)(\d+)$/i.exec(end); if (!a || !b) return "0";
+    let sum = 0; for (let row = Number(a[2]); row <= Number(b[2]); row += 1) for (let col = columnNumber(a[1]); col <= columnNumber(b[1]); col += 1) sum += ref(`${columnName(col)}${row}`); return String(sum);
+  });
+  expression = expression.replace(/([A-Z]+\d+)/gi, (_m, address) => String(ref(address)));
+  if (!/^[\d\s+*/().-]+$/.test(expression)) return null;
+  try { const value = Function(`"use strict"; return (${expression})`)(); return Number.isFinite(value) ? roundMoney(value) : null; } catch { return null; }
+}
+
+function evaluateRows(rows: unknown[][]) {
+  return rows.map((row) => row.map((value) => value && typeof value === "object" && "formula" in value ? evaluateFormula(String((value as any).formula), rows) ?? value : value));
+}
+
+function formulaComponents(rows: unknown[][], total: LabelHit) {
+  let subtotal: number | null = null;
+  let iva: number | null = null;
+  let totalFromFormula: number | null = null;
+  for (let r = 0; r < rows.length; r += 1) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c += 1) {
+      const value: any = row[c];
+      if (!value || typeof value !== "object" || !value.formula) continue;
+      const formula = String(value.formula).toUpperCase().replace(/\s+/g, "");
+      const calculated = evaluateFormula(String(value.formula), rows);
+      if (calculated === null) continue;
+      if (/^=?\+?SUM\([A-Z]+\d+:[A-Z]+\d+\)$/.test(formula)) subtotal = calculated;
+      else if (/\*0\.16(?:$|[+\-*/)])/.test(formula)) iva = calculated;
+      else if (/^=?\+?[A-Z]+\d+(?:\+[A-Z]+\d+)+$/.test(formula) && r <= total.amountRowIndex + 2) totalFromFormula = calculated;
+    }
+  }
+  return { subtotal, iva, totalFromFormula };
+}
+
 function cellAddress(rowIndex: number, columnIndex: number) {
   let column = columnIndex + 1;
   let label = "";
@@ -272,6 +319,24 @@ function scanLabels(rows: unknown[][]): LabelHit[] {
   return hits;
 }
 
+function fallbackFromLineItems(sheetName: string, rows: unknown[][]): ResolvedOrdenCompraTotal | null {
+  const headerTerms = /^(IMPORTE|IMPORTE TOTAL|PRECIO|PRECIO UNITARIO|VALOR|SUBTOTAL)$/;
+  let bestColumn = -1;
+  let bestValues: number[] = [];
+  for (let c = 0; c < Math.max(...rows.map((row) => row?.length || 0), 0); c += 1) {
+    const hasHeader = rows.slice(0, 15).some((row) => headerTerms.test(normalizeLabel(row?.[c])));
+    if (!hasHeader) continue;
+    const values = rows.slice(1).map((row) => parseMoney(row?.[c])).filter((value): value is number => value !== null && value > 0);
+    if (values.length > bestValues.length) { bestColumn = c; bestValues = values; }
+  }
+  if (bestColumn < 0 || bestValues.length === 0) return null;
+  const subtotal = roundMoney(bestValues.reduce((sum, value) => sum + value, 0));
+  const iva = roundMoney(subtotal * 0.16);
+  const total = roundMoney(subtotal + iva);
+  console.info("[OC_XLSX_TOTAL_DIAGNOSTIC] line-item fallback", { sheetName, amountColumn: columnName(bestColumn), subtotal, iva, total });
+  return { ok: true, sheetName, total, subtotal, iva, arithmeticExpected: total, arithmeticDelta: 0, arithmeticValid: true, confidence: "MEDIA", label: "TOTAL (FALLBACK PARTIDAS)", labelCell: "", valueCell: "", error: "" };
+}
+
 function componentContext(total: LabelHit, allHits: LabelHit[]) {
   const components = allHits.filter((hit) => {
     if (hit.kind === "TOTAL") return false;
@@ -335,11 +400,14 @@ function componentContext(total: LabelHit, allHits: LabelHit[]) {
 }
 
 function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompraTotal {
-
-  const allHits = scanLabels(rows);
+  const evaluatedRows = evaluateRows(rows);
+  const allHits = scanLabels(evaluatedRows);
+  console.info("[OC_XLSX_TOTAL_DIAGNOSTIC]", { sheetName, formulaCells: rows.flat().filter((v: any) => v && typeof v === "object" && v.formula).length });
   const totals = allHits.filter((hit) => hit.kind === "TOTAL");
 
   if (totals.length === 0) {
+    const lineItemFallback = fallbackFromLineItems(sheetName, rows);
+    if (lineItemFallback) return lineItemFallback;
     return {
       ok: false,
       sheetName,
@@ -357,6 +425,8 @@ function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompra
         "No se encontró una etiqueta exacta de total autorizada. SUBTOTAL no se usa como respaldo.",
     };
   }
+
+  console.info("[OC_XLSX_TOTAL_DIAGNOSTIC] total candidates", totals.map((hit) => ({ labelCell: hit.labelCell, valueCell: hit.valueCell, raw: rows[hit.amountRowIndex]?.[hit.amountColumnIndex], formula: (rows[hit.amountRowIndex]?.[hit.amountColumnIndex] as any)?.formula || null, calculated: hit.amount })));
 
   const evaluated = totals.map((total) => {
     const context = componentContext(total, allHits);
@@ -403,6 +473,21 @@ function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompra
 
   const best = acceptable[0];
   const bestHasArithmetic = best.context.arithmeticExpected !== null;
+  const formulas = formulaComponents(rows, best.total);
+  const fallbackSubtotal = best.context.subtotal?.amount ?? formulas.subtotal;
+  const fallbackIva = best.context.taxes > 0 ? best.context.taxes : formulas.iva;
+  const fallbackTotal = formulas.totalFromFormula ?? best.total.amount;
+  console.info("[OC_XLSX_TOTAL_DIAGNOSTIC] resolved", {
+    sheetName,
+    totalLabelCell: best.total.labelCell,
+    totalValueCell: best.total.valueCell,
+    rawValue: rows[best.total.amountRowIndex]?.[best.total.amountColumnIndex],
+    formula: (rows[best.total.amountRowIndex]?.[best.total.amountColumnIndex] as any)?.formula || null,
+    calculatedValue: best.total.amount,
+    fallbackSubtotal,
+    fallbackIva,
+    fallbackTotal,
+  });
 
   const comparable = acceptable.filter(
     (item) =>
@@ -458,14 +543,9 @@ function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompra
   return {
     ok: true,
     sheetName,
-    total: roundMoney(best.total.amount),
-    subtotal: best.context.subtotal
-      ? roundMoney(best.context.subtotal.amount)
-      : null,
-    iva:
-      best.context.taxes > 0
-        ? roundMoney(best.context.taxes)
-        : null,
+    total: roundMoney(fallbackTotal),
+    subtotal: fallbackSubtotal === null || fallbackSubtotal === undefined ? null : roundMoney(fallbackSubtotal),
+    iva: fallbackIva === null || fallbackIva === undefined ? null : roundMoney(fallbackIva),
     arithmeticExpected: best.context.arithmeticExpected,
     arithmeticDelta: best.context.arithmeticDelta,
     arithmeticValid: best.context.arithmeticValid,
@@ -481,6 +561,7 @@ export async function resolveOrdenCompraTotalsFromFile(
   file: File,
 ): Promise<Map<string, ResolvedOrdenCompraTotal>> {
   const sheets = await readSpreadsheetFile(file);
+  console.info("[OC_XLSX_TOTAL_FILE]", { fileName: file.name, sheets: sheets.map((sheet) => sheet.name) });
 
   const result = new Map<string, ResolvedOrdenCompraTotal>();
 

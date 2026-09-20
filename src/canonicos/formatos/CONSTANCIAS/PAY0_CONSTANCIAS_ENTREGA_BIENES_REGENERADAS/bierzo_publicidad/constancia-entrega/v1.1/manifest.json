@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "bierzo_publicidad-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "bierzo_publicidad",
+  "companyName": "BIERZO PUBLICIDAD, S.A. DE C.V.",
+  "rfc": "BPU211028879",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "79cc7fc42adc6023027003f45921120778e1a70f0cf035cb97668e6f6c8dd0e7",
+    "htmlSha256": "0aadfd746c5d5389404c90c6112347a2b5c7e9ad018cdc6e8bdd1a520b224b22",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "064d4053b4eceef971ec8aedc38821866ea44b32494f2ecf414147c664b85fd3",
+    "sourceQuotationPdfSha256": "bd17b690cc8b8b7cacf3981470ccde2b98b04e88c83d5b4990a2c8d21215e0a4",
+    "templateBundleSha256": "25324ec251a186572b2699c4f7f09cd7e80c6caae73ab68788c6804ca893c15c"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

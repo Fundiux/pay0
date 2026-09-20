@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "eivor_control-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "eivor_control",
+  "companyName": "EIVOR CONTROL, S.A. DE C.V.",
+  "rfc": "ECO1907171N7",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "954e81fae0ce1291e0799b35ec5b6fa8d61f3c49dbe4e78bb6a42a15ba0cb2a9",
+    "htmlSha256": "17de601de715bb88cdbf5b3c4f07b1d6fbb691daaab7658797f6c8e94010dadc",
+    "cssSha256": "a66d8d3eb189e86b7c32f3a77ba82e46991b6ccd6f23596a7fde73cd5c7e4b1f",
+    "logoSha256": "e8e9d9398edfca11932e1c8246564ba33fabd14895467e09ffd03614dc01b250",
+    "sourceQuotationPdfSha256": "7b05e56bbe0ccd1a07f4bc8d0a0db149ca6a4cd94fed8f09b56a3c0a16796e38",
+    "templateBundleSha256": "ed3b4bd99740ce72ac163001490174b2c1d0591624b345d30329f82a6956e855"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

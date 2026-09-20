@@ -5,6 +5,8 @@ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { isOwnInvoiceIssuerCompany } from "./service";
+import { importCompanyInvoiceCatalogCore, resolveCompanyInvoiceConcept } from "./companyCatalog";
+import { finalizeGlobalSatCatalogImportCore, initGlobalSatCatalogUploadCore } from "./satGlobalCatalog";
 
 const FACTURAMA_SANDBOX_USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const FACTURAMA_SANDBOX_PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -79,13 +81,64 @@ export const getFacturamaSandboxStatus = onCall(
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
     assertFacturacionAccess(request, user);
+    const username = text(FACTURAMA_SANDBOX_USERNAME.value(), 500);
+    const password = text(FACTURAMA_SANDBOX_PASSWORD.value(), 500);
+    const configured = Boolean(username && password);
+    if (!configured) {
+      return { ok: true, environment: "SANDBOX", configured: false, productionEnabled: false, connection: "NOT_CONFIGURED" };
+    }
+
+    // This is intentionally a read-only account probe. It proves that PAY0's
+    // deployed Function can authenticate to Facturama without issuing a CFDI.
+    let connection: "CONNECTED" | "AUTH_FAILED" | "UNREACHABLE" = "UNREACHABLE";
+    let httpStatus: number | null = null;
+    try {
+      const response = await fetch("https://apisandbox.facturama.mx/api/Account/UserInfo", {
+        headers: { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      httpStatus = response.status;
+      connection = response.ok ? "CONNECTED" : (response.status === 401 || response.status === 403 ? "AUTH_FAILED" : "UNREACHABLE");
+    } catch {
+      connection = "UNREACHABLE";
+    }
     return {
       ok: true,
       environment: "SANDBOX",
-      configured: Boolean(text(FACTURAMA_SANDBOX_USERNAME.value(), 500) && text(FACTURAMA_SANDBOX_PASSWORD.value(), 500)),
+      configured,
       productionEnabled: false,
+      connection,
+      httpStatus,
     };
   }
+);
+
+export const getFacturamaProductionStatus = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB", secrets: [FACTURAMA_SANDBOX_USERNAME, FACTURAMA_SANDBOX_PASSWORD] },
+  async (request) => {
+    const uid = requireAuth(request);
+    const user = await getMyUser(uid);
+    assertFacturacionAccess(request, user);
+    // The secret IDs are historical. Their values are the API credentials that
+    // Facturama provisioned for PAY0; no credential is exposed to the browser.
+    const username = text(FACTURAMA_SANDBOX_USERNAME.value(), 500);
+    const password = text(FACTURAMA_SANDBOX_PASSWORD.value(), 500);
+    const configured = Boolean(username && password);
+    if (!configured) return { ok: true, environment: "PRODUCTION", configured: false, productionEnabled: true, connection: "NOT_CONFIGURED", httpStatus: null };
+    let connection: "CONNECTED" | "AUTH_FAILED" | "UNREACHABLE" = "UNREACHABLE";
+    let httpStatus: number | null = null;
+    try {
+      const response = await fetch("https://api.facturama.mx/api/Account/UserInfo", {
+        headers: { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      httpStatus = response.status;
+      connection = response.ok ? "CONNECTED" : (response.status === 401 || response.status === 403 ? "AUTH_FAILED" : "UNREACHABLE");
+    } catch {
+      connection = "UNREACHABLE";
+    }
+    return { ok: true, environment: "PRODUCTION", configured, productionEnabled: true, connection, httpStatus };
+  },
 );
 
 export const saveFacturamaDraft = onCall(
@@ -116,6 +169,14 @@ export const saveFacturamaDraft = onCall(
     const companyRfc = text(company.rfc, 13).toUpperCase();
     if (!companyRfc) throw new HttpsError("failed-precondition", "La empresa emisora no tiene RFC configurado.");
 
+    const fiscalResolutions = await Promise.all(invoice.concepts.map((concept) =>
+      resolveCompanyInvoiceConcept({ rootId, companyId, productCode: concept.productCode, unitCode: concept.unitCode }),
+    ));
+    const blocked = fiscalResolutions.find((result) => result.status !== "VALID");
+    if (blocked) {
+      throw new HttpsError("failed-precondition", `El concepto no está listo para CFDI: ${blocked.status}${blocked.reason ? ` (${blocked.reason})` : ""}.`);
+    }
+
     const existing = await db.collection("facturamaInvoices")
       .where("rootId", "==", rootId).where("idempotencyKey", "==", idempotencyKey).limit(1).get();
     if (!existing.empty) return { ok: true, invoiceId: existing.docs[0].id, reused: true, status: existing.docs[0].data()?.status || "DRAFT" };
@@ -134,6 +195,18 @@ export const saveFacturamaDraft = onCall(
       paymentMethod: invoice.paymentMethod,
       currency: invoice.currency,
       subtotal: invoice.subtotal,
+      fiscalValidation: {
+        status: "VALID",
+        companyCatalogVersion: fiscalResolutions[0]?.companyCatalogVersion || null,
+        companyCatalogSha256: fiscalResolutions[0]?.companyCatalogSha256 || null,
+        concepts: fiscalResolutions.map((result) => ({
+          productCode: result.productCode,
+          unitCode: result.unitCode,
+          companyCatalogVersion: result.companyCatalogVersion || null,
+          companyCatalogSha256: result.companyCatalogSha256 || null,
+        })),
+        evaluatedAt: FieldValue.serverTimestamp(),
+      },
       createdBy: uid,
       updatedBy: uid,
       createdAt: FieldValue.serverTimestamp(),
@@ -160,9 +233,37 @@ export const listFacturamaInvoices = onCall(
     let query: FirebaseFirestore.Query = db.collection("facturamaInvoices").where("rootId", "==", rootId);
     if (companyId) query = query.where("companyId", "==", companyId);
     const snapshot = await query.orderBy("createdAt", "desc").limit(limit).get();
-    return {
-      ok: true,
-      invoices: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    const priority = (row: any) => {
+      const status = String(row?.status || "").toUpperCase();
+      if (status.endsWith("_ISSUED") || status === "EMITTED") return 50;
+      if (status === "AUTO_DRAFT_FISCAL_VALIDATED") return 40;
+      if (status === "PRODUCTION_ERROR") return 30;
+      if (status === "AUTO_DRAFT_FISCAL_REVIEW") return 20;
+      if (status === "AUTO_DRAFT_NEEDS_RECEIVER_DATA") return 10;
+      return 0;
     };
+    const bySolicitud = new Map<string, any>();
+    for (const doc of snapshot.docs) {
+      const row = { id: doc.id, ...doc.data() };
+      const key = text((row as any).sourceSolicitudId || doc.id, 128);
+      const prior = bySolicitud.get(key);
+      if (!prior || priority(row) > priority(prior)) bySolicitud.set(key, row);
+    }
+    return { ok: true, invoices: [...bySolicitud.values()] };
   }
+);
+
+export const importCompanyInvoiceCatalog = onCall(
+  { region: "us-central1", timeoutSeconds: 60, memory: "512MiB" },
+  async (request) => importCompanyInvoiceCatalogCore(request),
+);
+
+export const initGlobalSatCatalogUpload = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => initGlobalSatCatalogUploadCore(request),
+);
+
+export const finalizeGlobalSatCatalogImport = onCall(
+  { region: "us-central1", timeoutSeconds: 540, memory: "1GiB" },
+  async (request) => finalizeGlobalSatCatalogImportCore(request),
 );

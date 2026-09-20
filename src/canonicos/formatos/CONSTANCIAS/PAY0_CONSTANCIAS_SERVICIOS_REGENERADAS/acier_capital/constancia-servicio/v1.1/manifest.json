@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "acier_capital-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "acier_capital",
+  "companyName": "ACIER CAPITAL, S.A. DE C.V.",
+  "rfc": "ACA180724QV3",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "f62c11c0e8b6d3268ba860db108a85b578f3fef61ca40118d6f17a9b1b225760",
+    "htmlSha256": "0c0e631c2c23e3fe25b1e03c63d9718d4cfff6f9941eed6bfa33d557dd566f4e",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "8ef7e5d8d043c69d23566c3fffeca794bdc2c87d192d7b8a4052e47d2ad4afbd",
+    "sourceQuotationPdfSha256": "488f5502049e05bf7c9d65f1a705d8bf3a4aceca4cafd9c8b83b34fbac8018a9",
+    "templateBundleSha256": "72fe3d75e76e3a22ebef6cad566ca44f0901ffc7b0bea69d7313ccc3c7dec715"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

@@ -93,8 +93,9 @@ export default function OrdenCompraMasivaModal(props: {
   files: File[];
   onClose: () => void;
   onFilesConsumed: () => void;
+  replacementOf?: { solicitudId: string; folio?: string; reason?: string } | null;
 }) {
-  const { open, files, onClose, onFilesConsumed } = props;
+  const { open, files, onClose, onFilesConsumed, replacementOf } = props;
 
   const { user } = useAuth();
   const { profile } = useUserProfile();
@@ -483,6 +484,8 @@ export default function OrdenCompraMasivaModal(props: {
           ].filter(Boolean).join(" | "),
           clienteNombre: row.clientOption.label,
           empresaNombre: row.companyOption.label,
+          replacementOfSolicitudId: replacementOf?.solicitudId || undefined,
+          replacementReason: replacementOf?.reason || undefined,
         });
 
         const solicitudId = String(

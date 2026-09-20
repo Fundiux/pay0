@@ -1,0 +1,433 @@
+{
+  "schemaVersion": "1.0",
+  "generatedFrom": "cotizaciones.zip",
+  "companiesWithCanonicalQuotation": 21,
+  "templatesGenerated": 42,
+  "textRule": "ALL TEXT BLACK (#000000)",
+  "headerRule": "Logo and upper visual family derived from each canonical quotation PDF",
+  "missingCanonicalQuotationSource": [
+    "OPERACIONES INDUSTRIALES INDITEC, S.A. DE C.V."
+  ],
+  "templates": [
+    {
+      "companyId": "204_publicidad",
+      "companyName": "204 PUBLICIDAD, S.A. DE C.V.",
+      "rfc": "DCP191121H35",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "204_publicidad/constancia-entrega/v1.1",
+      "referencePdfSha256": "26ef1d32a410ca94300a73bdef8ee11dea0218f1b943162ea3317dbdcf9d27bc",
+      "templateBundleSha256": "6dfda7177de61f9bf475ac2b2e616bd8733510bc6eadbeaf7e0e649aead175f7"
+    },
+    {
+      "companyId": "204_publicidad",
+      "companyName": "204 PUBLICIDAD, S.A. DE C.V.",
+      "rfc": "DCP191121H35",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "204_publicidad/constancia-servicio/v1.1",
+      "referencePdfSha256": "581f55fd14c014dc331c5a43145a727f3a693f9578172f3f47a24a65cef393b7",
+      "templateBundleSha256": "1feb48916e9c44a7d53b3848b47eb95f70075eb3b5a7b5862d09fa3dc676f890"
+    },
+    {
+      "companyId": "acier_capital",
+      "companyName": "ACIER CAPITAL, S.A. DE C.V.",
+      "rfc": "ACA180724QV3",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "acier_capital/constancia-entrega/v1.1",
+      "referencePdfSha256": "aba1615d8d525c9ba56259a8dbbce1b31567ee34d7bc89af9914590f3fcc0939",
+      "templateBundleSha256": "be8d607fd25e1c5af7cccbcc1675a71e34039a5bdb0695a1c9ef672ea0569b7b"
+    },
+    {
+      "companyId": "acier_capital",
+      "companyName": "ACIER CAPITAL, S.A. DE C.V.",
+      "rfc": "ACA180724QV3",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "acier_capital/constancia-servicio/v1.1",
+      "referencePdfSha256": "f62c11c0e8b6d3268ba860db108a85b578f3fef61ca40118d6f17a9b1b225760",
+      "templateBundleSha256": "72fe3d75e76e3a22ebef6cad566ca44f0901ffc7b0bea69d7313ccc3c7dec715"
+    },
+    {
+      "companyId": "alimentos_livorno",
+      "companyName": "ALIMENTOS LIVORNO, S.A. DE C.V.",
+      "rfc": "ALI211011IU7",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "alimentos_livorno/constancia-entrega/v1.1",
+      "referencePdfSha256": "93ce052e272836b29a7b67ea9735a3d233697e89f908a346d859ac5a9ec3045b",
+      "templateBundleSha256": "193542116f7f2fbbafe334bc121723306aa735e688e3274880ed03394ae51a69"
+    },
+    {
+      "companyId": "alimentos_livorno",
+      "companyName": "ALIMENTOS LIVORNO, S.A. DE C.V.",
+      "rfc": "ALI211011IU7",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "alimentos_livorno/constancia-servicio/v1.1",
+      "referencePdfSha256": "309bf1cdefcea609ba234ae916fe5b2e7f09469711df22d69b100fc641c67daf",
+      "templateBundleSha256": "2c11f25867040e89bc122f45b6fadac5ad7940f076c6c012ada99d8699dc6ae4"
+    },
+    {
+      "companyId": "bierzo_publicidad",
+      "companyName": "BIERZO PUBLICIDAD, S.A. DE C.V.",
+      "rfc": "BPU211028879",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "bierzo_publicidad/constancia-entrega/v1.1",
+      "referencePdfSha256": "79cc7fc42adc6023027003f45921120778e1a70f0cf035cb97668e6f6c8dd0e7",
+      "templateBundleSha256": "25324ec251a186572b2699c4f7f09cd7e80c6caae73ab68788c6804ca893c15c"
+    },
+    {
+      "companyId": "bierzo_publicidad",
+      "companyName": "BIERZO PUBLICIDAD, S.A. DE C.V.",
+      "rfc": "BPU211028879",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "bierzo_publicidad/constancia-servicio/v1.1",
+      "referencePdfSha256": "e6d599b277cf2da7d100d20bfb26942475985f005e1fcbfabef8a120036c2a06",
+      "templateBundleSha256": "e3406e2c5d028072baddb8e361f2159f0728924e66020fc975fca829580949a6"
+    },
+    {
+      "companyId": "brescia_arrendadora",
+      "companyName": "BRESCIA ARRENDADORA, S.A. DE C.V.",
+      "rfc": "BAR190516648",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "brescia_arrendadora/constancia-entrega/v1.1",
+      "referencePdfSha256": "19ed720aab69988856da290a0023ec9fa067bb531a431c713440909d28120b64",
+      "templateBundleSha256": "1b24a237ab5ed0ac2a9c95b9d84eca10473299bf79df3dd9b71be603c5a31f27"
+    },
+    {
+      "companyId": "brescia_arrendadora",
+      "companyName": "BRESCIA ARRENDADORA, S.A. DE C.V.",
+      "rfc": "BAR190516648",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "brescia_arrendadora/constancia-servicio/v1.1",
+      "referencePdfSha256": "a71254700d6ad31d9f977cfe1d7fcb6ad87aeaac45e41d7886bf05383cd297d0",
+      "templateBundleSha256": "144b66d45aa3fb66051de10b6f5c3ff753c3ab39baf5b925ddcdf2538eb782a4"
+    },
+    {
+      "companyId": "chipinque_soluciones_medicas",
+      "companyName": "CHIPINQUE SOLUCIONES MÉDICAS, S.A. DE C.V.",
+      "rfc": "CSM190807TZ2",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "chipinque_soluciones_medicas/constancia-entrega/v1.1",
+      "referencePdfSha256": "481595c53bcccd45f1642b8c2b3f1af2959fdb3d5d90cbaa03839e0bc8539db1",
+      "templateBundleSha256": "d8ed1da409cdd7f0d44c6d65f79bc9c690e76f6076ab975e0501e9dd622fd6a6"
+    },
+    {
+      "companyId": "chipinque_soluciones_medicas",
+      "companyName": "CHIPINQUE SOLUCIONES MÉDICAS, S.A. DE C.V.",
+      "rfc": "CSM190807TZ2",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "chipinque_soluciones_medicas/constancia-servicio/v1.1",
+      "referencePdfSha256": "2ef1b817a562a47da48b80c3183c421a75580613dfb0c1e2d550a888c40ede6c",
+      "templateBundleSha256": "9e3f38a0e55bde576d4f5218cb05b2c3b046f381bd2b2b17f567800a5013e6e0"
+    },
+    {
+      "companyId": "comercializadora_aimiera",
+      "companyName": "COMERCIALIZADORA AIMIERA, S.A. DE C.V.",
+      "rfc": "CAI190506GR1",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "comercializadora_aimiera/constancia-entrega/v1.1",
+      "referencePdfSha256": "c37d276a353bad1303eca85d48fe684678a8f2b7eb6300f687e63337bcae0761",
+      "templateBundleSha256": "8bb94715836fc25210f1c86ed884b91bcb8faf876f716a9718b33fa8673fa17a"
+    },
+    {
+      "companyId": "comercializadora_aimiera",
+      "companyName": "COMERCIALIZADORA AIMIERA, S.A. DE C.V.",
+      "rfc": "CAI190506GR1",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "comercializadora_aimiera/constancia-servicio/v1.1",
+      "referencePdfSha256": "91651d78331c5a70749ffeb59c72f2adbc5857b988fdaf370917ba7b6143998b",
+      "templateBundleSha256": "2d5a97112d6ddbb4a1ed11a6fdfaac01f37ec7c801750988272d2c90414d9fec"
+    },
+    {
+      "companyId": "constructora_volcale",
+      "companyName": "CONSTRUCTORA VOLCALE, S.A. DE C.V.",
+      "rfc": "CVO230815HV6",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "constructora_volcale/constancia-entrega/v1.1",
+      "referencePdfSha256": "906e5ed942899598255edb801a3bb317ecf90659d91f762658aabbd6556a970e",
+      "templateBundleSha256": "fe8393da35a0dc0ce9260cfa25c4a71a0e7c74e69e931f8dd4ab5aa7a0c4452d"
+    },
+    {
+      "companyId": "constructora_volcale",
+      "companyName": "CONSTRUCTORA VOLCALE, S.A. DE C.V.",
+      "rfc": "CVO230815HV6",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "constructora_volcale/constancia-servicio/v1.1",
+      "referencePdfSha256": "dbaa50dfc12911c5e53bb5d9d76eb0d5d3642c8a6e3b8e2fa05314cd234a0ca3",
+      "templateBundleSha256": "c49c71a3e3b1ed61398702fda3acf4db796326c423720f3fd57e4c13b0f71b7f"
+    },
+    {
+      "companyId": "desarrolladora_sistemas_setubal",
+      "companyName": "DESARROLLADORA DE SISTEMAS SETUBAL, S.A. DE C.V.",
+      "rfc": "DSS190521T53",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "desarrolladora_sistemas_setubal/constancia-entrega/v1.1",
+      "referencePdfSha256": "70ba13638e52a6c5eec44b01f4d49cd69b7ee924eb3bcd7debc5d426c1fcf8cb",
+      "templateBundleSha256": "7c90c56d00bb252b45086f60794b594828d01334b83c22265395af18c498a46d"
+    },
+    {
+      "companyId": "desarrolladora_sistemas_setubal",
+      "companyName": "DESARROLLADORA DE SISTEMAS SETUBAL, S.A. DE C.V.",
+      "rfc": "DSS190521T53",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "desarrolladora_sistemas_setubal/constancia-servicio/v1.1",
+      "referencePdfSha256": "8ed908656ad3b2ac606ea0db7db934cfb91e325989458d518e44d3efb551c786",
+      "templateBundleSha256": "04f84245da83eaefc7bfdd44438b4fa4e410aea9e37bc39a87e0cdff7ceb986f"
+    },
+    {
+      "companyId": "eivor_control",
+      "companyName": "EIVOR CONTROL, S.A. DE C.V.",
+      "rfc": "ECO1907171N7",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "eivor_control/constancia-entrega/v1.1",
+      "referencePdfSha256": "7d4f4a619d196c3853f062f69faed7072c829048e0d017e2e25b0351c82fcdb5",
+      "templateBundleSha256": "9e1cf968e15f293315da7bd25952ca7ad746db9c8882abbf24a51480b56dfa6b"
+    },
+    {
+      "companyId": "eivor_control",
+      "companyName": "EIVOR CONTROL, S.A. DE C.V.",
+      "rfc": "ECO1907171N7",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "eivor_control/constancia-servicio/v1.1",
+      "referencePdfSha256": "954e81fae0ce1291e0799b35ec5b6fa8d61f3c49dbe4e78bb6a42a15ba0cb2a9",
+      "templateBundleSha256": "ed3b4bd99740ce72ac163001490174b2c1d0591624b345d30329f82a6956e855"
+    },
+    {
+      "companyId": "goldwing",
+      "companyName": "GOLDWING, S.A. DE C.V.",
+      "rfc": "GOL180124N93",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "goldwing/constancia-entrega/v1.1",
+      "referencePdfSha256": "c6a33f909035c654ceadd51af70d231dc35e5b6ab34291cd3c73af74f02ed9ac",
+      "templateBundleSha256": "a71e5e86b639c3ff092e805a3195558b1a93ed00cf02aa29180cbd5d317371c8"
+    },
+    {
+      "companyId": "goldwing",
+      "companyName": "GOLDWING, S.A. DE C.V.",
+      "rfc": "GOL180124N93",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "goldwing/constancia-servicio/v1.1",
+      "referencePdfSha256": "adb3d9efa9e150015325a808bb297ecaef5afe3c8140375cbc584163d9bf6ed9",
+      "templateBundleSha256": "3da15a20d0762f1c89f98472bbfc4cd9a8a4a04484a34316385cd0427804d44d"
+    },
+    {
+      "companyId": "invicta_logistic",
+      "companyName": "INVICTA LOGISTIC, S.A. DE C.V.",
+      "rfc": "ILO180124UE4",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "invicta_logistic/constancia-entrega/v1.1",
+      "referencePdfSha256": "01a5f499775d8727384424f9453d3733d55cb1cf8f85a60d7e051a3c7d4e8cef",
+      "templateBundleSha256": "9ff2958fdf45bf7653206618a2f9e24aff8fc017c0b8de820599fdc7e8003b51"
+    },
+    {
+      "companyId": "invicta_logistic",
+      "companyName": "INVICTA LOGISTIC, S.A. DE C.V.",
+      "rfc": "ILO180124UE4",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "invicta_logistic/constancia-servicio/v1.1",
+      "referencePdfSha256": "4da8c9d57672b670787d94aad360f7ff9a446c4a40b8fa39febf60851ad779cd",
+      "templateBundleSha256": "4271718a1c72368a10c5cf8719de04004f40e4a4a0b41104928f899625724ddc"
+    },
+    {
+      "companyId": "mercacobra",
+      "companyName": "MERCACOBRA, S.A.P.I. DE C.V.",
+      "rfc": "MCO200710YV8",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "mercacobra/constancia-entrega/v1.1",
+      "referencePdfSha256": "6ff3e34c492f5b265186cb0ae9b8a693b041b3305d3af75419f2cd846300bc56",
+      "templateBundleSha256": "98b8e33a9b73e42b86988c131128941af7116a4585f5528d51c32baffc809f81"
+    },
+    {
+      "companyId": "mercacobra",
+      "companyName": "MERCACOBRA, S.A.P.I. DE C.V.",
+      "rfc": "MCO200710YV8",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "mercacobra/constancia-servicio/v1.1",
+      "referencePdfSha256": "2ac8daf7e29c9521bd61ccce6f00bd10b7404622108c715699b0aa4682b8d126",
+      "templateBundleSha256": "83ee0639fb60c68910190c32e7c7053fb129a1e755e4b00764df08af11f44d8b"
+    },
+    {
+      "companyId": "recexa",
+      "companyName": "RECEXA, S.A. DE C.V.",
+      "rfc": "REC1908144R0",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "recexa/constancia-entrega/v1.1",
+      "referencePdfSha256": "7c761b671b45ee92a880777b4c0da1b7d9fb3de7cbe6f2324c85f1aebe1c54e4",
+      "templateBundleSha256": "25ff0cfec05ffa7a145e978e48746e7ab73253350fe1f60bf25ada34a57db20f"
+    },
+    {
+      "companyId": "recexa",
+      "companyName": "RECEXA, S.A. DE C.V.",
+      "rfc": "REC1908144R0",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "recexa/constancia-servicio/v1.1",
+      "referencePdfSha256": "0673062b17678769fa94966a8fe2395045a1389578ddfe0f1c90b377eb31f6df",
+      "templateBundleSha256": "5b8dfa6910c5b266c57f02b46edc9ff4a2e9422f38abb7684d6c9c1d5e9bc0eb"
+    },
+    {
+      "companyId": "redes_equipamiento_norrey",
+      "companyName": "REDES Y EQUIPAMIENTO NORREY, S.A. DE C.V.",
+      "rfc": "REN201210LK7",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "redes_equipamiento_norrey/constancia-entrega/v1.1",
+      "referencePdfSha256": "1bc76ae3ef0f8005a92ed26e34b66fe1eb7ad3ba199db9a05085746d8135f5a7",
+      "templateBundleSha256": "420c13ad9b7a903a8cf1de4884bde76b70e23dc57a8cbdfd7e55c93d5a26c9a5"
+    },
+    {
+      "companyId": "redes_equipamiento_norrey",
+      "companyName": "REDES Y EQUIPAMIENTO NORREY, S.A. DE C.V.",
+      "rfc": "REN201210LK7",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "redes_equipamiento_norrey/constancia-servicio/v1.1",
+      "referencePdfSha256": "22e57945f3b0dadde484e720396fd3795075cafda376716e75e62b4cc8176de5",
+      "templateBundleSha256": "fb70a43cb9fa10825018e8afc3d4c290770c45e8b61da92a4f98f8e13f8db04d"
+    },
+    {
+      "companyId": "refaccionaria_elite",
+      "companyName": "REFACCIONARIA ELITE, S.A. DE C.V.",
+      "rfc": "REL221012741",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "refaccionaria_elite/constancia-entrega/v1.1",
+      "referencePdfSha256": "441caf217af98abb1722ac45db5346255ab19760138e2a8064a07478ef2bdd41",
+      "templateBundleSha256": "a440840bd672434022eee3319d5f6f75598285f674d4180f38ce60e4267b36ce"
+    },
+    {
+      "companyId": "refaccionaria_elite",
+      "companyName": "REFACCIONARIA ELITE, S.A. DE C.V.",
+      "rfc": "REL221012741",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "refaccionaria_elite/constancia-servicio/v1.1",
+      "referencePdfSha256": "1f72087c04183ed54f99fbb91bb05c516e52813c514bb16ccdf04a6d10107453",
+      "templateBundleSha256": "9469307005767079523fd4bff7a15c9d675cdc896536d359a7b80bce75efecac"
+    },
+    {
+      "companyId": "regio_solema",
+      "companyName": "REGIO SOLEMA, S.A. DE C.V.",
+      "rfc": "RSO191113182",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "regio_solema/constancia-entrega/v1.1",
+      "referencePdfSha256": "e7c7bfd82ebdd75b9f760f1207bee0d3a78acd808323a91df0345b5fee03fbbe",
+      "templateBundleSha256": "1aeb75faf0e666ee0d1ce104d927c886fa8bfb2ed7de3990e7606a262328adb8"
+    },
+    {
+      "companyId": "regio_solema",
+      "companyName": "REGIO SOLEMA, S.A. DE C.V.",
+      "rfc": "RSO191113182",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "regio_solema/constancia-servicio/v1.1",
+      "referencePdfSha256": "f77053910f665196f471e0c52b52fee38e1351b711cde92e4b854fd8a2936715",
+      "templateBundleSha256": "49aef41a4c16699b452efdd575079f8e2d971ea0cfc11ac924555f971bc3e17d"
+    },
+    {
+      "companyId": "renofec",
+      "companyName": "RENOFEC, S.A. DE C.V.",
+      "rfc": "REN1907229X4",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "renofec/constancia-entrega/v1.1",
+      "referencePdfSha256": "ecef73288a094c46ca99e8106248605a80c06d202b7716fffd1d07855aff8309",
+      "templateBundleSha256": "4d86e526a84c8756dbf458fc1198c2018556a7d2a8ed9d3f62067a875f4ee015"
+    },
+    {
+      "companyId": "renofec",
+      "companyName": "RENOFEC, S.A. DE C.V.",
+      "rfc": "REN1907229X4",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "renofec/constancia-servicio/v1.1",
+      "referencePdfSha256": "c5ba3a5ee2888b3bc26faae94118f1fd6e23a9c29f839a7c82f83d8a6b1dc63b",
+      "templateBundleSha256": "6bae8ed02544f38e51a8cafc9e4b9dc528b4ddbd4ceb7a08fbf9944d5c06aef6"
+    },
+    {
+      "companyId": "servicios_limpieza_rein",
+      "companyName": "SERVICIOS DE LIMPIEZA Y MANTENIMIENTO REIN, S.A. DE C.V.",
+      "rfc": "SLM191220SU1",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "servicios_limpieza_rein/constancia-entrega/v1.1",
+      "referencePdfSha256": "b5d96252c63af9c23d5934d7ec6c552f8a71eab86580b6a0c52fa1e2b87ff1f9",
+      "templateBundleSha256": "290db981b681264342c446eafac083b5eab7c8d50acfe62b8005f6e8e94cb8c8"
+    },
+    {
+      "companyId": "servicios_limpieza_rein",
+      "companyName": "SERVICIOS DE LIMPIEZA Y MANTENIMIENTO REIN, S.A. DE C.V.",
+      "rfc": "SLM191220SU1",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "servicios_limpieza_rein/constancia-servicio/v1.1",
+      "referencePdfSha256": "c14cd3a2f013209bc1ad72c91cfbe4e1ba93b052260867212c12996bb23cc153",
+      "templateBundleSha256": "8708c2aebf14eb291274eacf16400e39f76eb25132d031848b7d5c0d5a33dd2c"
+    },
+    {
+      "companyId": "slim_capital",
+      "companyName": "SLIM CAPITAL, S.A. DE C.V.",
+      "rfc": "SCA180724M59",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "slim_capital/constancia-entrega/v1.1",
+      "referencePdfSha256": "9963ddcdc7d4e4f8967cb9a598957450390bcf7aa8bbc1895db8fff4021ec480",
+      "templateBundleSha256": "dbaea29d50fb3e83fb3f1a5e0e386b9e2b80b8406b6a80a96f8c91cc4a162c55"
+    },
+    {
+      "companyId": "slim_capital",
+      "companyName": "SLIM CAPITAL, S.A. DE C.V.",
+      "rfc": "SCA180724M59",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "slim_capital/constancia-servicio/v1.1",
+      "referencePdfSha256": "76f832d23d58d1b2b26e704d7876995a97faa878a8dc485ae6a60b4543d318da",
+      "templateBundleSha256": "28571bec574e092f7139c71b4ca0bdb04138612893d98b80b6fb34a494c77f24"
+    },
+    {
+      "companyId": "trostre",
+      "companyName": "TROSTRE, S. DE R.L. DE C.V.",
+      "rfc": "TRO230717L64",
+      "type": "entrega",
+      "version": "1.1",
+      "path": "trostre/constancia-entrega/v1.1",
+      "referencePdfSha256": "f70bcf1cb149a9c08bbe43d548375bd25922d4f3f9ceecf17f4188ff9bdd6827",
+      "templateBundleSha256": "a0d34e54de8961af1ec83a993a4542aa4b349caad2f8cc5ba8af7c4bd0c306c2"
+    },
+    {
+      "companyId": "trostre",
+      "companyName": "TROSTRE, S. DE R.L. DE C.V.",
+      "rfc": "TRO230717L64",
+      "type": "servicio",
+      "version": "1.1",
+      "path": "trostre/constancia-servicio/v1.1",
+      "referencePdfSha256": "bfd849c94e3eec03e13b264e7f95ca011008e38556a391ed25b4f8a006cf78d4",
+      "templateBundleSha256": "7cb7812a072b2ec0aa5dced99b368687da2a3a98efdd3355814c5be825939683"
+    }
+  ]
+}

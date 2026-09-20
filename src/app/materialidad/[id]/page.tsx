@@ -9,18 +9,21 @@ import {
   CheckCircle2,
   FileCheck2,
   FileText,
+  Download,
   FolderOpen,
   ReceiptText,
   RefreshCcw,
   ShieldCheck,
 } from "lucide-react";
+import { getDownloadURL, ref } from "firebase/storage";
 
 import { formatDateTime24 } from "@/lib/dateTime";
 import { formatMoneyMXN } from "@/lib/money";
 import { mergeModules } from "@/lib/roles";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { getLocalMaterialityOverview } from "@/lib/materialityLocalPreview";
-import { getMaterialityClientCompanyOverview } from "@/services/materiality";
+import { getMaterialityClientCompanyOverview, linkSolicitudToMaterialityOperation } from "@/services/materiality";
+import { storage } from "@/lib/firebaseClient";
 
 const DEFAULT_REQUIRED_TYPES = [
   "ORDEN_COMPRA",
@@ -143,6 +146,26 @@ function OperationCard({ operation }: { operation: any }) {
         </div>
       </div>
 
+      <div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/5 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-200">Documentos de esta operación</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(operation.documentRefs || []).length > 0 ? (operation.documentRefs || []).map((doc: any) => (
+            <button key={doc.id} type="button" onClick={async () => {
+              const url = await getDownloadURL(ref(storage, doc.storagePath));
+              window.open(url, "_blank", "noopener,noreferrer");
+            }} className="inline-flex items-center gap-1 rounded-lg border border-sky-300/25 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
+              <Download size={13} /> {doc.documentTypeLabel || documentLabel(doc.documentType)}
+            </button>
+          )) : <span className="text-xs text-slate-400">Actualiza el expediente para cargar sus enlaces.</span>}
+        </div>
+      </div>
+
+      {operation.facturamaInvoiceId ? (
+        <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-sm text-violet-100">
+          Borrador Facturama: <strong>{operation.fiscalValidationStatus === "VALID" ? "validado fiscalmente" : operation.fiscalValidationStatus || "en revisión"}</strong>. Aún no es CFDI timbrado; por eso PDF/XML continúan pendientes.
+        </div>
+      ) : null}
+
       {missing.length > 0 ? (
         <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Faltantes de esta operacion</p>
@@ -208,6 +231,17 @@ export default function MaterialityDetailPage() {
       }
     } finally {
       setLoadingOverview(false);
+    }
+  }
+
+  async function refreshExpediente() {
+    try {
+      const current = overview?.operations || [];
+      await Promise.all(current.map((operation: any) => operation?.solicitudId
+        ? linkSolicitudToMaterialityOperation({ solicitudId: operation.solicitudId })
+        : Promise.resolve()));
+    } finally {
+      await loadOverview();
     }
   }
 
@@ -280,7 +314,7 @@ export default function MaterialityDetailPage() {
 
         <button
           type="button"
-          onClick={loadOverview}
+          onClick={refreshExpediente}
           disabled={loadingOverview}
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
         >

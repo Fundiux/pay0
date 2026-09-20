@@ -27,6 +27,7 @@ export async function updateCompanyDepositIdentityMutation(input: {
   companyId: string;
   depositAlias: string;
   depositClabes: string[];
+  depositAccounts?: Array<{ id?: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom?: string | null; validTo?: string | null }>;
 }) {
   const fn = httpsCallable(functions, "updateCompanyDepositIdentity");
   const res: any = await fn(input);

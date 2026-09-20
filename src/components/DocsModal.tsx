@@ -2,17 +2,19 @@
 
 import { formatDateTime24 } from "@/lib/dateTime";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where,
   getDocs} from "firebase/firestore";
 import { ref, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import {
   releaseWhatsAppJobDeliveries,
   retryWhatsAppJobErrors,
 } from "@/services/whatsappQr";
 import { ChevronDown, Download, UploadCloud, X } from "lucide-react";
-import { db, storage } from "@/lib/firebaseClient";
+import { db, functions, storage } from "@/lib/firebaseClient";
+import { CALLABLES } from "@/lib/callableNames";
 type RelatedPagoReceipt = {
   id: string;
   pagoId: string;
@@ -54,6 +56,7 @@ import {
 import { useGlobalLoading } from "@/components/GlobalLoading";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
+import { createSolicitudSignatureLink, generateSolicitudQuotation } from "@/services/signatureLinks";
 
 type UploadRow = {
   id: string;
@@ -112,8 +115,46 @@ export default function DocsModal(props: {
   } | null>(null);
   const [iqPreparing, setIqPreparing] = useState(false);
   const [iqPreparationMessage, setIqPreparationMessage] = useState("");
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+  const [signatureMessage, setSignatureMessage] = useState("");
+  const [signatureLinkCreating, setSignatureLinkCreating] = useState(false);
+  const [signatureLink, setSignatureLink] = useState("");
+  const [quotationGenerating, setQuotationGenerating] = useState(false);
+  const [ocReprocessing, setOcReprocessing] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureDrawingRef = useRef(false);
+  const signatureHasInkRef = useRef(false);
 
   const solicitudId = solicitud?.id;
+
+  async function handleGenerateQuotation() {
+    if (!solicitudId || quotationGenerating) return;
+    setQuotationGenerating(true);
+    setSignatureMessage("");
+    try {
+      const result = await generateSolicitudQuotation(solicitudId, true);
+      setSignatureMessage(result.alreadyExists ? "La cotizacion ya estaba generada." : "Cotizacion regenerada y agregada a Docs.");
+    } catch (error: any) {
+      setSignatureMessage(error?.message || "No se pudo generar la cotizacion.");
+    } finally {
+      setQuotationGenerating(false);
+    }
+  }
+
+  async function handleReprocessActiveOc() {
+    if (!solicitudId || ocReprocessing) return;
+    setOcReprocessing(true);
+    setSignatureMessage("");
+    try {
+      await httpsCallable<{ solicitudId: string }, any>(functions, CALLABLES.reprocessActiveSolicitudOc)({ solicitudId });
+      setSignatureMessage("OC activa reprocesada. Facturacion y cotizacion se actualizaron desde sus datos.");
+    } catch (error: any) {
+      setSignatureMessage(error?.message || "No se pudo reprocesar la OC activa.");
+    } finally {
+      setOcReprocessing(false);
+    }
+  }
 
   const title = useMemo(() => {
     if (!solicitud) return "Documentos";
@@ -243,11 +284,41 @@ useEffect(() => {
     if (!open) {
       setIqPreparationMessage("");
       setIqPreparing(false);
+      setSignatureOpen(false);
+      setSignatureSaving(false);
+      setSignatureMessage("");
+      setSignatureLink("");
       return;
     }
 
     setIqPreparationMessage("");
+    setSignatureMessage("");
+    setSignatureLink("");
   }, [open, solicitudId]);
+
+  useEffect(() => {
+    if (!signatureOpen) return;
+
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    signatureHasInkRef.current = false;
+  }, [signatureOpen]);
 
   // H4_D87_A58_A29_R1_UNIFIED_MANUAL_SOLICITUD_IQ
   // Un solo boton manual; reutiliza las etapas backend existentes.
@@ -455,6 +526,135 @@ useEffect(() => {
       setIqPreparing(false);
     }
   }
+
+  function getSignaturePoint(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
+
+  function beginSignature(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = signatureCanvasRef.current;
+    const point = getSignaturePoint(event);
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !point || !ctx || signatureSaving) return;
+
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    signatureDrawingRef.current = true;
+    signatureHasInkRef.current = true;
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  }
+
+  function moveSignature(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!signatureDrawingRef.current || signatureSaving) return;
+
+    const point = getSignaturePoint(event);
+    const ctx = signatureCanvasRef.current?.getContext("2d");
+    if (!point || !ctx) return;
+
+    event.preventDefault();
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  }
+
+  function endSignature(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!signatureDrawingRef.current) return;
+
+    event.preventDefault();
+    signatureDrawingRef.current = false;
+    try {
+      signatureCanvasRef.current?.releasePointerCapture(event.pointerId);
+    } catch {
+      // El pointer puede haberse liberado por el navegador.
+    }
+  }
+
+  function clearSignature() {
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx || signatureSaving) return;
+
+    const rect = canvas.getBoundingClientRect();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.strokeStyle = "#0f172a";
+    signatureHasInkRef.current = false;
+    setSignatureMessage("");
+  }
+
+  async function saveSignature() {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas || !solicitudId || signatureSaving) return;
+
+    if (!signatureHasInkRef.current) {
+      setSignatureMessage("Primero captura la firma en el recuadro.");
+      return;
+    }
+
+    setSignatureSaving(true);
+    setSignatureMessage("");
+
+    try {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((value) => {
+          if (value) resolve(value);
+          else reject(new Error("No se pudo preparar la imagen de firma."));
+        }, "image/png");
+      });
+
+      const folio = String(solicitud?.folio || solicitudId || "solicitud").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const file = new File(
+        [blob],
+        `firma-autorizada-cliente-${folio}-${Date.now()}.png`,
+        { type: "image/png" },
+      );
+
+      await uploadSolicitudDoc({
+        solicitudId: String(solicitudId),
+        documentType: "FIRMA_AUTORIZADA_CLIENTE" as SolicitudDocumentType,
+        file,
+        onProgress: setPct,
+      });
+
+      setSignatureMessage("Firma guardada como evidencia autorizada del cliente.");
+      setSignatureOpen(false);
+    } catch (error: any) {
+      setSignatureMessage(error?.message || "No se pudo guardar la firma.");
+    } finally {
+      setSignatureSaving(false);
+      setPct(0);
+    }
+  }
+
+  async function createSignatureLink() {
+    if (!solicitudId || signatureLinkCreating) return;
+
+    setSignatureLinkCreating(true);
+    setSignatureMessage("");
+
+    try {
+      const result = await createSolicitudSignatureLink(String(solicitudId));
+      setSignatureLink(result.url);
+      try {
+        await navigator.clipboard?.writeText(result.url);
+        setSignatureMessage("Link de firma creado y copiado. Puedes enviarlo por WhatsApp al repartidor o cliente.");
+      } catch {
+        setSignatureMessage("Link de firma creado. Copialo y envialo al repartidor o cliente.");
+      }
+    } catch (error: any) {
+      setSignatureMessage(error?.message || "No se pudo crear el link de firma.");
+    } finally {
+      setSignatureLinkCreating(false);
+    }
+  }
+
   if (!open) return null;
 
   const selectType = (value: SolicitudDocumentType) => {
@@ -733,8 +933,8 @@ const downloadDoc = async (doc: UploadRow) => {
 
           <button
             type="button"
-            onClick={() => !busy && !iqPreparing && onClose()}
-            disabled={busy || iqPreparing}
+            onClick={() => !busy && !iqPreparing && !signatureSaving && onClose()}
+            disabled={busy || iqPreparing || signatureSaving}
             className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             title="Cerrar"
           >
@@ -743,7 +943,7 @@ const downloadDoc = async (doc: UploadRow) => {
         </div>
 
         <div className="space-y-4 px-4 py-4">
-{isIqPreparationSuperAdmin ? (
+          {isIqPreparationSuperAdmin ? (
             <div className="mb-4 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 pr-12">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -774,6 +974,102 @@ const downloadDoc = async (doc: UploadRow) => {
               ) : null}
             </div>
           ) : null}
+
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-cyan-200">Cotizacion automatica</div>
+                <div className="mt-1 text-[11px] text-slate-500">Genera una nueva version desde la OC y reemplaza la cotizacion activa anterior.</div>
+              </div>
+              <button type="button" onClick={handleGenerateQuotation} disabled={quotationGenerating || !solicitudId}
+                className="rounded-xl border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+                {quotationGenerating ? "Generando..." : "Regenerar cotizacion"}
+              </button>
+              <button type="button" onClick={handleReprocessActiveOc} disabled={ocReprocessing || !solicitudId}
+                className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+                {ocReprocessing ? "Reprocesando OC..." : "Reprocesar OC activa"}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-emerald-200">
+                  Firma de recepción desde celular
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Captura la firma del receptor y PAY0 la guarda como documento canónico para la constancia final.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSignatureOpen((value) => !value)}
+                disabled={busy || iqPreparing || signatureSaving || !solicitudId}
+                className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {signatureOpen ? "Ocultar firma" : "Capturar firma"}
+              </button>
+              <button
+                type="button"
+                onClick={createSignatureLink}
+                disabled={busy || iqPreparing || signatureSaving || signatureLinkCreating || !solicitudId}
+                className="rounded-xl border border-sky-400/30 bg-sky-500/15 px-3 py-2 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {signatureLinkCreating ? "Creando link..." : "Crear link"}
+              </button>
+            </div>
+
+            {signatureLink ? (
+              <div className="mt-3 break-all rounded-xl border border-sky-400/20 bg-black/20 px-3 py-2 text-[11px] leading-5 text-sky-100">
+                {signatureLink}
+              </div>
+            ) : null}
+
+            {signatureOpen ? (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-2xl border border-white/10 bg-white p-2">
+                  <canvas
+                    ref={signatureCanvasRef}
+                    className="h-48 w-full touch-none rounded-xl bg-white"
+                    onPointerDown={beginSignature}
+                    onPointerMove={moveSignature}
+                    onPointerUp={endSignature}
+                    onPointerCancel={endSignature}
+                    aria-label="Area para capturar firma del receptor"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={clearSignature}
+                    disabled={signatureSaving}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Limpiar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={saveSignature}
+                    disabled={signatureSaving || !solicitudId}
+                    className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {signatureSaving ? "Guardando..." : "Guardar firma"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {signatureMessage ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] leading-5 text-slate-200">
+                {signatureMessage}
+              </div>
+            ) : null}
+          </div>
+
           <div>
             <label className="mb-1 block text-[10px] uppercase tracking-widest text-slate-400">
               Tipo documento
@@ -859,61 +1155,149 @@ const downloadDoc = async (doc: UploadRow) => {
             </div>
           )}
 
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+            {/* IQ2G_H4_D41_UI_RELATED_PAGO_RECEIPTS_SECTION */}
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[12px] uppercase tracking-[0.12em] text-emerald-200">
+                  Comprobantes relacionados por pagos
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Se detectan desde los pagos aplicados a esta solicitud. No se duplica el archivo.
+                </div>
+              </div>
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200">
+                {relatedPagoReceipts.length}
+              </span>
+            </div>
+
+            {loadingRelatedPagoReceipts ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-400">
+                Buscando comprobantes relacionados...
+              </div>
+            ) : relatedPagoReceipts.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-500">
+                Sin comprobantes relacionados por pagos aplicados.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {relatedPagoReceipts.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[12px] text-slate-100">
+                        {getRelatedReceiptName(row)}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-slate-500">
+                        Pago: {row.pagoFolio || row.pagoId || "---"}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => downloadRelatedPagoReceipt(row)}
+                      className="shrink-0 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200 transition hover:bg-emerald-500/20"
+                    >
+                      Descargar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_PDF" && !!doc.storagePath) &&
+          docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_XML" && !!doc.storagePath) ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                <div>
+                  <div className="text-[12px] font-semibold text-emerald-100">Factura lista para WhatsApp</div>
+                  <div className="text-[11px] text-emerald-200/80">Mensaje: compartimos folio solicitado</div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => sendFacturaWhatsapp(false)}
+                  disabled={deliveryPreparing}
+                  className="rounded-lg border border-emerald-500/40 px-3 py-1 text-[12px] text-emerald-100 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {deliveryPreparing ? "Enviando..." : "Enviar por WhatsApp"}
+                </button>
+              </div>
+
+              {whatsappResendWarning && (
+                <div
+                  className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-[2px]"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="whatsapp-resend-title"
+                  onMouseDown={(event) => {
+                    if (
+                      event.target === event.currentTarget &&
+                      !deliveryPreparing
+                    ) {
+                      setWhatsappResendWarning(null);
+                    }
+                  }}
+                >
+                  <div className="relative w-full max-w-md rounded-2xl border border-amber-400/25 bg-[#161d2b] p-6 shadow-2xl">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWhatsappResendWarning(null)
+                      }
+                      disabled={deliveryPreparing}
+                      className="absolute -top-3 -right-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0f172a] text-slate-300 shadow-lg transition hover:bg-[#162033] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Cerrar"
+                    >
+                      <X size={18} />
+                    </button>
+
+                    <div className="pr-8">
+                      <div
+                        id="whatsapp-resend-title"
+                        className="text-2xl font-semibold text-slate-50"
+                      >
+                        Factura Enviada Anteriormente!
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setWhatsappResendWarning(null)
+                        }
+                        disabled={deliveryPreparing}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          sendFacturaWhatsapp(true)
+                        }
+                        disabled={deliveryPreparing}
+                        className="rounded-xl border border-amber-400/30 bg-amber-500/20 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deliveryPreparing
+                          ? "Enviando..."
+                          : "Enviar de todos modos"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-white/10 bg-white/[0.02]">
             <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
               <div className="text-[11px] font-bold uppercase tracking-widest text-white">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4">
-                {/* IQ2G_H4_D41_UI_RELATED_PAGO_RECEIPTS_SECTION */}
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[12px] uppercase tracking-[0.12em] text-emerald-200">
-                      Comprobantes relacionados por pagos
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      Se detectan desde los pagos aplicados a esta solicitud. No se duplica el archivo.
-                    </div>
-                  </div>
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200">
-                    {relatedPagoReceipts.length}
-                  </span>
-                </div>
-
-                {loadingRelatedPagoReceipts ? (
-                  <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-400">
-                    Buscando comprobantes relacionados...
-                  </div>
-                ) : relatedPagoReceipts.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-500">
-                    Sin comprobantes relacionados por pagos aplicados.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {relatedPagoReceipts.map((row) => (
-                      <div
-                        key={row.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-[12px] text-slate-100">
-                            {getRelatedReceiptName(row)}
-                          </div>
-                          <div className="mt-0.5 text-[10px] text-slate-500">
-                            Pago: {row.pagoFolio || row.pagoId || "---"}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => downloadRelatedPagoReceipt(row)}
-                          className="shrink-0 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200 transition hover:bg-emerald-500/20"
-                        >
-                          Descargar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
                 Documentos cargados
               </div>
               <div className="text-[10px] text-slate-500">{docs.length} registros</div>
@@ -936,93 +1320,6 @@ const downloadDoc = async (doc: UploadRow) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_PDF" && !!doc.storagePath) &&
-                    docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_XML" && !!doc.storagePath) ? (
-                      <div className="mb-3 space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-                          <div>
-                            <div className="text-[12px] font-semibold text-emerald-100">Factura lista para WhatsApp</div>
-                            <div className="text-[11px] text-emerald-200/80">Mensaje: compartimos folio solicitado</div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => sendFacturaWhatsapp(false)}
-                            disabled={deliveryPreparing}
-                            className="rounded-lg border border-emerald-500/40 px-3 py-1 text-[12px] text-emerald-100 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {deliveryPreparing ? "Enviando..." : "Enviar por WhatsApp"}
-                          </button>
-                        </div>
-
-                        {whatsappResendWarning && (
-                          <div
-                            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-[2px]"
-                            role="dialog"
-                            aria-modal="true"
-                            aria-labelledby="whatsapp-resend-title"
-                            onMouseDown={(event) => {
-                              if (
-                                event.target === event.currentTarget &&
-                                !deliveryPreparing
-                              ) {
-                                setWhatsappResendWarning(null);
-                              }
-                            }}
-                          >
-                            <div className="relative w-full max-w-md rounded-2xl border border-amber-400/25 bg-[#161d2b] p-6 shadow-2xl">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setWhatsappResendWarning(null)
-                                }
-                                disabled={deliveryPreparing}
-                                className="absolute -top-3 -right-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0f172a] text-slate-300 shadow-lg transition hover:bg-[#162033] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                                aria-label="Cerrar"
-                              >
-                                <X size={18} />
-                              </button>
-
-                              <div className="pr-8">
-                                <div
-                                  id="whatsapp-resend-title"
-                                  className="text-2xl font-semibold text-slate-50"
-                                >
-                                  Factura Enviada Anteriormente!
-                                </div>
-                              </div>
-
-                              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setWhatsappResendWarning(null)
-                                  }
-                                  disabled={deliveryPreparing}
-                                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  Cancelar
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    sendFacturaWhatsapp(true)
-                                  }
-                                  disabled={deliveryPreparing}
-                                  className="rounded-xl border border-amber-400/30 bg-amber-500/20 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {deliveryPreparing
-                                    ? "Enviando..."
-                                    : "Enviar de todos modos"}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-
                     {docs.map((doc) => {
                       const status = String(doc.status || "").toUpperCase();
                       const active = doc.active === true;

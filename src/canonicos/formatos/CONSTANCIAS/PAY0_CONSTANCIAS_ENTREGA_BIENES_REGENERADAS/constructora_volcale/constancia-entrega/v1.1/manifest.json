@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "constructora_volcale-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "constructora_volcale",
+  "companyName": "CONSTRUCTORA VOLCALE, S.A. DE C.V.",
+  "rfc": "CVO230815HV6",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F09000",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "906e5ed942899598255edb801a3bb317ecf90659d91f762658aabbd6556a970e",
+    "htmlSha256": "d2a7ee498968f69c7b869812c98bae5751dfd53866cc56d0b3d2d1d70b1bb050",
+    "cssSha256": "77c19d382272d530f476f2242eed9f214d23120021d640a7956d7b954225a488",
+    "logoSha256": "f27461a01a5b4984c139d990886bc737381524e7b1fb03b9d9ae7d2c8439eaae",
+    "sourceQuotationPdfSha256": "2b6ad10ae99dc3b36fff7bc97abeae924b72c1d731b35ec4f672c4075b279391",
+    "templateBundleSha256": "fe8393da35a0dc0ce9260cfa25c4a71a0e7c74e69e931f8dd4ab5aa7a0c4452d"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

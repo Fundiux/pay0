@@ -5,9 +5,12 @@ export const SOLICITUD_DOCUMENT_TYPES = [
   "FACTURA_XML",
   "ORDEN_COMPRA",
   "COTIZACION",
+  "COTIZACION_FIRMADA",
   "PRESUPUESTO",
   "CONTRATO_OPERACION",
   "AUTORIZACION_OPERATIVA",
+  "FIRMA_AUTORIZADA_CLIENTE",
+  "CONSTANCIA_RECEPCION_SATISFACCION",
   "COMPLEMENTO_PAGO_XML",
   "COMPLEMENTO_PAGO_PDF",
   "CFDI_GASTO_XML",
@@ -16,6 +19,7 @@ export const SOLICITUD_DOCUMENT_TYPES = [
   "COMPROBANTE_TRANSFERENCIA",
   "ESTADO_CUENTA",
   "ACUSE_RECEPCION",
+  "ACUSE_CANCELACION_CFDI",
   "EVIDENCIA_ENTREGA",
   "EVIDENCIA_OPERATIVA",
   "OTRO",
@@ -45,12 +49,18 @@ export function getSolicitudDocumentTypeLabel(type: SolicitudDocumentType): stri
       return "Orden de Compra";
     case "COTIZACION":
       return "Cotizacion";
+    case "COTIZACION_FIRMADA":
+      return "Cotizacion Firmada";
     case "PRESUPUESTO":
       return "Presupuesto / Cotizacion";
     case "CONTRATO_OPERACION":
       return "Contrato de operacion";
     case "AUTORIZACION_OPERATIVA":
       return "Autorizacion operativa";
+    case "FIRMA_AUTORIZADA_CLIENTE":
+      return "Firma Autorizada del Cliente";
+    case "CONSTANCIA_RECEPCION_SATISFACCION":
+      return "Constancia de Recepcion y Satisfaccion";
     case "COMPLEMENTO_PAGO_XML":
       return "Complemento de Pago XML";
     case "COMPLEMENTO_PAGO_PDF":
@@ -67,6 +77,8 @@ export function getSolicitudDocumentTypeLabel(type: SolicitudDocumentType): stri
       return "Estado de Cuenta";
     case "ACUSE_RECEPCION":
       return "Acuse de Recepcion";
+    case "ACUSE_CANCELACION_CFDI":
+      return "Acuse de Cancelacion CFDI";
     case "EVIDENCIA_ENTREGA":
       return "Evidencia de Entrega";
     case "EVIDENCIA_OPERATIVA":

@@ -24,6 +24,7 @@ type CompanyRow = {
   rfc: string;
   depositAlias?: string;
   depositClabes?: string[];
+  depositAccounts?: Array<{ id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom?: string | null; validTo?: string | null }>;
   active: boolean;
   createdAt?: any;
 };
@@ -156,8 +157,10 @@ export default function DespachoDetallePage({ params }: { params: { id: string }
     setDepositEditorCompany(company);
     setDepositAlias(String(company.depositAlias || ""));
     setDepositClabesText(
-      Array.isArray(company.depositClabes)
-        ? company.depositClabes.join("\n")
+      Array.isArray(company.depositAccounts) && company.depositAccounts.length
+        ? company.depositAccounts.map((row) => `${row.clabe}|${row.status}`).join("\n")
+        : Array.isArray(company.depositClabes)
+          ? company.depositClabes.map((clabe) => `${clabe}|ACTIVA`).join("\n")
         : "",
     );
   }
@@ -166,12 +169,13 @@ export default function DespachoDetallePage({ params }: { params: { id: string }
     if (!depositEditorCompany || depositSaving) return;
 
     const alias = depositAlias.trim();
-    const clabes = [...new Set(
-      depositClabesText
-        .split(/[\s,;]+/)
-        .map((value) => value.replace(/\D/g, ""))
-        .filter(Boolean),
-    )];
+    const accounts = depositClabesText.split(/\r?\n|[,;]/).map((line, index) => {
+      const [rawClabe, rawStatus] = line.trim().split("|");
+      const clabe = String(rawClabe || "").replace(/\D/g, "");
+      const status = String(rawStatus || "ACTIVA").trim().toUpperCase() === "INACTIVA" ? "INACTIVA" as const : "ACTIVA" as const;
+      return { id: `deposit_${clabe}_${index}`, clabe, status };
+    }).filter((row) => row.clabe);
+    const clabes = [...new Set(accounts.map((row) => row.clabe))];
 
     const invalid = clabes.find((value) => value.length !== 18);
     if (invalid) {
@@ -187,6 +191,7 @@ export default function DespachoDetallePage({ params }: { params: { id: string }
         companyId: depositEditorCompany.id,
         depositAlias: alias,
         depositClabes: clabes,
+        depositAccounts: accounts,
       });
 
       setDepositEditorCompany(null);
@@ -414,7 +419,7 @@ export default function DespachoDetallePage({ params }: { params: { id: string }
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-slate-100 outline-none"
                   />
                   <div className="mt-1 text-[10px] text-slate-500">
-                    Se permiten multiples CLABEs. No se permiten CLABEs duplicadas entre empresas activas.
+                    Una cuenta por linea: CLABE|ACTIVA o CLABE|INACTIVA. Las cuentas inactivas se conservan para historial.
                   </div>
                 </div>
               </div>

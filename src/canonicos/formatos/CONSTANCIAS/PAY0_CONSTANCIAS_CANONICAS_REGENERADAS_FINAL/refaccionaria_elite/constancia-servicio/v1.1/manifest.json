@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "refaccionaria_elite-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "refaccionaria_elite",
+  "companyName": "REFACCIONARIA ELITE, S.A. DE C.V.",
+  "rfc": "REL221012741",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F00030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "1f72087c04183ed54f99fbb91bb05c516e52813c514bb16ccdf04a6d10107453",
+    "htmlSha256": "56954822564debf99c678f3adac781488147890ef33b6df341ee7677fef49777",
+    "cssSha256": "a158650524f0308cd64dfdf0882640d7d27f77684a5bdea6e597c03a1d79d771",
+    "logoSha256": "f14e1594ccd34ade7a78849e9477782f086605943d3a52beb2d05de77dc90082",
+    "sourceQuotationPdfSha256": "9776d0654ef45694f0216a55af7de8be977a3a6f8ecb38ffacf9f68cae24ab9e",
+    "templateBundleSha256": "9469307005767079523fd4bff7a15c9d675cdc896536d359a7b80bce75efecac"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "invicta_logistic-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "invicta_logistic",
+  "companyName": "INVICTA LOGISTIC, S.A. DE C.V.",
+  "rfc": "ILO180124UE4",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F00048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "4da8c9d57672b670787d94aad360f7ff9a446c4a40b8fa39febf60851ad779cd",
+    "htmlSha256": "f774ca10e391fd6cad7e8854242a7eeb52d6e4a79c962b8f3d102e5e3940d00d",
+    "cssSha256": "8d12a263836726802ef8f3a0ed694ea989894dfcaa74e8b7d5b5c48ac1d39972",
+    "logoSha256": "a5d986d6a6ba1f0d374cbd7dfeea88bc892c8bd18c016c2ee90f2f1c86b913c4",
+    "sourceQuotationPdfSha256": "affa1bbd35b439694937e96fa69ddf21a31de922e17c63ba847929a74d2fabbb",
+    "templateBundleSha256": "4271718a1c72368a10c5cf8719de04004f40e4a4a0b41104928f899625724ddc"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

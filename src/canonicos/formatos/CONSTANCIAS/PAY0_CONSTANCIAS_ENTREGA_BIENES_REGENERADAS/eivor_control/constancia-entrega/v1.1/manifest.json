@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "eivor_control-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "eivor_control",
+  "companyName": "EIVOR CONTROL, S.A. DE C.V.",
+  "rfc": "ECO1907171N7",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "7d4f4a619d196c3853f062f69faed7072c829048e0d017e2e25b0351c82fcdb5",
+    "htmlSha256": "66edbfb6a12bca224eea6b1d56e83c22e886477dde177d84bc964857a59fe43e",
+    "cssSha256": "a66d8d3eb189e86b7c32f3a77ba82e46991b6ccd6f23596a7fde73cd5c7e4b1f",
+    "logoSha256": "e8e9d9398edfca11932e1c8246564ba33fabd14895467e09ffd03614dc01b250",
+    "sourceQuotationPdfSha256": "7b05e56bbe0ccd1a07f4bc8d0a0db149ca6a4cd94fed8f09b56a3c0a16796e38",
+    "templateBundleSha256": "9e1cf968e15f293315da7bd25952ca7ad746db9c8882abbf24a51480b56dfa6b"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

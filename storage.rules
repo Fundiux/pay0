@@ -478,6 +478,26 @@ service firebase.storage {
         );
     }
 
+    function preparedSatCatalogMatches(rootId, fileName) {
+      return signedIn()
+        && isSuperAdmin()
+        && firestore.exists(
+          /databases/(default)/documents/satCatalogImports/$(fileName)
+        )
+        && firestore.get(
+          /databases/(default)/documents/satCatalogImports/$(fileName)
+        ).data.rootId == rootId
+        && firestore.get(
+          /databases/(default)/documents/satCatalogImports/$(fileName)
+        ).data.createdBy == request.auth.uid
+        && firestore.get(
+          /databases/(default)/documents/satCatalogImports/$(fileName)
+        ).data.status == "PENDING_UPLOAD"
+        && firestore.get(
+          /databases/(default)/documents/satCatalogImports/$(fileName)
+        ).data.storagePath == "roots/" + rootId + "/fiscal-catalogs/sat/" + fileName;
+    }
+
     match /roots/{rootId}/solicitudes/{solicitudId}/docs/{documentType}/{fileName} {
       allow read: if canAccessSolicitud(rootId, solicitudId);
 
@@ -546,6 +566,17 @@ service firebase.storage {
                       fileName
                     );
 
+      allow update, delete: if false;
+    }
+
+    // Archivo fuente del catálogo SAT. Solo una importación preparada por
+    // superadministración puede crear un objeto inmutable en esta ruta.
+    match /roots/{rootId}/fiscal-catalogs/sat/{fileName} {
+      allow read: if signedIn() && isSuperAdmin() && myRootId() == rootId;
+      allow create: if resource == null
+                    && request.resource.size <= 40 * 1024 * 1024
+                    && request.resource.contentType == "application/x-bzip2"
+                    && preparedSatCatalogMatches(rootId, fileName);
       allow update, delete: if false;
     }
 

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "recexa-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "recexa",
+  "companyName": "RECEXA, S.A. DE C.V.",
+  "rfc": "REC1908144R0",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#4860A8",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "0673062b17678769fa94966a8fe2395045a1389578ddfe0f1c90b377eb31f6df",
+    "htmlSha256": "214662e67067fea9d5eda1bef95c83dee3e080e3b116b635f461e39f2585278a",
+    "cssSha256": "18aa264c9d56ba69a9e54f0cdca81591674c69dffbe5aa42574951e2f780fa9c",
+    "logoSha256": "c8a41d5f26239dfb5780c0d3c5de55275800c48e12af4d4ce36b1b51d30818c8",
+    "sourceQuotationPdfSha256": "ad6c9701601f3beea89668bfb04ae1c3659d4f1fe93cbebfcdaaf3ea329f02d9",
+    "templateBundleSha256": "5b8dfa6910c5b266c57f02b46edc9ff4a2e9422f38abb7684d6c9c1d5e9bc0eb"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

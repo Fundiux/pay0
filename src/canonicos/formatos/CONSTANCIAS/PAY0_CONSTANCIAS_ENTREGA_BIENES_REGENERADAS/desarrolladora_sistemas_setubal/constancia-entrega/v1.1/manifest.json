@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "desarrolladora_sistemas_setubal-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "desarrolladora_sistemas_setubal",
+  "companyName": "DESARROLLADORA DE SISTEMAS SETUBAL, S.A. DE C.V.",
+  "rfc": "DSS190521T53",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "70ba13638e52a6c5eec44b01f4d49cd69b7ee924eb3bcd7debc5d426c1fcf8cb",
+    "htmlSha256": "fbfcfbb0d22fe0ee80707b453a0eb38d45c0fae43f1d3ba76d2254dd2c2b8058",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "2adb34287c1b659fecac6d759392d93d15abd285d19270798265d9600acdd483",
+    "sourceQuotationPdfSha256": "86992713a8aab648f860979bf97e85e2dda04200a23b790abfa467eab6750751",
+    "templateBundleSha256": "7c90c56d00bb252b45086f60794b594828d01334b83c22265395af18c498a46d"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

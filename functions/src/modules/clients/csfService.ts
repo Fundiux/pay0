@@ -138,7 +138,7 @@ function parseSatDate(raw: string) {
   };
 }
 
-function findRegimenFiscal(text: string): string {
+function findRegimenFiscalLegacy(text: string): string {
   const section = text.match(/Reg[iÃ­]menes:\s*([\s\S]*?)\s*Obligaciones:/i)?.[1] || "";
   return clean(
     section
@@ -146,6 +146,38 @@ function findRegimenFiscal(text: string): string {
       .replace(/\b\d{2}\/\d{2}\/\d{4}\b/g,"")
       .replace(/\n+/g," ")
   );
+}
+
+function findRegimenFiscal(text: string): string {
+  // pdf-parse can return accented SAT headings as Unicode or mojibake. Work
+  // on normalized text so a valid CSF cannot silently omit the CFDI regime.
+  const normalized = normalizeSatAscii(text).toUpperCase();
+  // Some SAT PDFs collapse the table heading ("RégimenFecha Inicio...") and
+  // make section slicing unreliable. The regime label itself remains intact.
+  if (normalized.includes("REGIMEN GENERAL DE LEY PERSONAS MORALES")) return "601";
+  if (normalized.includes("PERSONAS MORALES CON FINES NO LUCRATIVOS")) return "603";
+  if (normalized.includes("SIMPLIFICADO DE CONFIANZA")) return "626";
+  if (normalized.includes("ACTIVIDADES EMPRESARIALES Y PROFESIONALES")) return "612";
+  if (normalized.includes("ARRENDAMIENTO")) return "606";
+  if (normalized.includes("SUELDOS Y SALARIOS")) return "605";
+  if (normalized.includes("INCORPORACION FISCAL")) return "621";
+  const section = normalized.match(/REGIMENES\s*:\s*(.*?)\s*OBLIGACIONES\s*:/i)?.[1] || "";
+  const name = clean(
+    section
+      .replace(/REGIMEN\s+FECHA\s+INICIO\s+FECHA\s+FIN/gi, "")
+      .replace(/\b\d{2}\/\d{2}\/\d{4}\b/g, ""),
+  ).toUpperCase();
+
+  // CFDI requires the SAT key. An unknown label remains blank, deliberately
+  // keeping the draft in fiscal review instead of inferring a tax regime.
+  if (name.includes("REGIMEN GENERAL DE LEY PERSONAS MORALES")) return "601";
+  if (name.includes("PERSONAS MORALES CON FINES NO LUCRATIVOS")) return "603";
+  if (name.includes("SIMPLIFICADO DE CONFIANZA")) return "626";
+  if (name.includes("ACTIVIDADES EMPRESARIALES Y PROFESIONALES")) return "612";
+  if (name.includes("ARRENDAMIENTO")) return "606";
+  if (name.includes("SUELDOS Y SALARIOS")) return "605";
+  if (name.includes("INCORPORACION FISCAL")) return "621";
+  return "";
 }
 
 export function parseClientCsfText(rawText: string): ClientCsfParsed {

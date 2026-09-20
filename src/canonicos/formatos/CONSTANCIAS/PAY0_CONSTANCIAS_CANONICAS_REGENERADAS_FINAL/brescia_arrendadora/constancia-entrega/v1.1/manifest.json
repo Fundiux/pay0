@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "brescia_arrendadora-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "brescia_arrendadora",
+  "companyName": "BRESCIA ARRENDADORA, S.A. DE C.V.",
+  "rfc": "BAR190516648",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#0060A8",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "19ed720aab69988856da290a0023ec9fa067bb531a431c713440909d28120b64",
+    "htmlSha256": "4e433aab65cbe7a4163b76b7e0464069ae22b1a032d24b3a25a0409f3deae2f6",
+    "cssSha256": "9417f1230d8bae7fc1ed5a54db7916d9aa2a77bc352457cab24d7fc21b5b047b",
+    "logoSha256": "22698316ea65cd4b0420b8e3ecc5eeb711fdca1a803ac17867743b8be65a96e5",
+    "sourceQuotationPdfSha256": "145a9dd8ef983dddcf995cf5b176044d8c3e5b0991a4a1e483030289ce75841e",
+    "templateBundleSha256": "1b24a237ab5ed0ac2a9c95b9d84eca10473299bf79df3dd9b71be603c5a31f27"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

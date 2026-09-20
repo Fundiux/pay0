@@ -1,4 +1,5 @@
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { resolveSolicitudFiscalClassification } from "./companyCatalog";
 
 const db = getFirestore();
 
@@ -31,6 +32,18 @@ function isValidCfdiUse(value: string) {
   return /^[A-Z]\d{2}$/.test(value);
 }
 
+function operationalDescription(solicitud: any) {
+  const candidates = [
+    solicitud?.ocConceptDescription,
+    solicitud?.ordenCompraConcepto,
+    solicitud?.concepto,
+    solicitud?.descripcion,
+    solicitud?.operationTypeName,
+  ];
+  const selected = candidates.map((value) => text(value, 1000)).find((value) => value && !/^(FACTURA[_ -]?SUBTOTAL|SUBTOTAL|TOTAL)$/i.test(value));
+  return selected || "Servicio operativo según Orden de Compra";
+}
+
 export function isOwnInvoiceIssuerCompany(company: any): boolean {
   const rfc = normalizeRfc(company?.rfc);
   return (
@@ -56,13 +69,16 @@ function pickName(row: any, fallback: string) {
 }
 
 function buildReceiver(client: any, solicitud: any, clienteId: string) {
-  const rfc = normalizeRfc(client?.rfc || client?.RFC || solicitud?.clienteRfc || solicitud?.clientRfc);
-  const fiscalRegime = text(client?.fiscalRegime || client?.regimenFiscal || client?.regimenFiscalReceptor, 3);
-  const postalCode = text(client?.postalCode || client?.codigoPostal || client?.cp || client?.zipCode, 5);
-  const cfdiUse = text(client?.cfdiUse || client?.usoCfdi || client?.usoCFDI || "G03", 3).toUpperCase();
+  const fiscalProfile = client?.fiscalProfile || {};
+  const rfc = normalizeRfc(client?.rfc || client?.RFC || solicitud?.ocClientRfc || solicitud?.clienteRfc || solicitud?.clientRfc);
+  // La ficha del cliente prevalece. Los datos extraídos de una OC canónica
+  // son el respaldo cuando esa ficha aún no ha sido completada.
+  const fiscalRegime = text(client?.fiscalRegime || client?.regimenFiscal || client?.regimenFiscalReceptor || fiscalProfile?.regimenFiscal || solicitud?.regimenFiscalReceptor, 3);
+  const postalCode = text(client?.postalCode || client?.codigoPostal || client?.cp || client?.zipCode || fiscalProfile?.codigoPostal || solicitud?.postalCode, 5);
+  const cfdiUse = text(client?.cfdiUse || client?.usoCfdi || client?.usoCFDI || solicitud?.cfdiUse || solicitud?.usoCfdi || "G03", 3).toUpperCase();
   return {
     rfc,
-    name: pickName(client, text(solicitud?.clienteNombre || solicitud?.clientName || clienteId, 254)),
+    name: pickName(client, text(solicitud?.ocClientName || solicitud?.clienteNombre || solicitud?.clientName || clienteId, 254)),
     fiscalRegime,
     postalCode,
     cfdiUse,
@@ -109,20 +125,10 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     db.collection("facturamaInvoices")
       .where("rootId", "==", rootId)
       .where("sourceSolicitudId", "==", solicitudId)
-      .limit(1)
+      .limit(20)
       .get(),
   ]);
   if (!companySnap.exists || !clientSnap.exists) return { ok: false, skipped: true, reason: "RELATION_NOT_FOUND" };
-  if (!existingSnap.empty) {
-    const invoiceId = existingSnap.docs[0].id;
-    await solicitudSnap.ref.set({
-      facturamaAutoDraftStatus: "EXISTS",
-      facturamaInvoiceId: invoiceId,
-      facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return { ok: true, skipped: false, reused: true, invoiceId };
-  }
-
   const company: any = companySnap.data() || {};
   const client: any = clientSnap.data() || {};
   if (text(company.rootId, 128) !== rootId || company.active === false || !isOwnInvoiceIssuerCompany(company)) {
@@ -135,18 +141,50 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
 
   const receiver = buildReceiver(client, solicitud, clienteId);
   const complete = receiverIsComplete(receiver);
-  const amount = money(solicitud.monto || solicitud.total || solicitud.amount);
-  const invoiceRef = db.collection("facturamaInvoices").doc();
+  // Solicitud.monto is the gross operational total. CFDI concept unit price
+  // must be the pre-tax amount when ObjetoImp is 02.
+  const totalAmount = money(solicitud.total || solicitud.monto || solicitud.amount);
+  const amount = Math.round((totalAmount / 1.16) * 100) / 100;
+  const fiscal = await resolveSolicitudFiscalClassification({ rootId, companyId, solicitud });
+  // La Solicitud puede existir antes de que llegue la OC. En ese caso se creó
+  // un borrador incompleto y la OC debe actualizarlo, no congelarlo ni crear
+  // una segunda factura.
+  const linkedInvoiceId = text(solicitud.facturamaInvoiceId, 128);
+  const statusPriority = (status: unknown) => {
+    const value = String(status || "").toUpperCase();
+    if (value.endsWith("_ISSUED") || value === "EMITTED") return 50;
+    if (value === "AUTO_DRAFT_FISCAL_VALIDATED") return 40;
+    if (value === "PRODUCTION_ERROR") return 30;
+    if (value === "AUTO_DRAFT_FISCAL_REVIEW") return 20;
+    if (value === "AUTO_DRAFT_NEEDS_RECEIVER_DATA") return 10;
+    return 0;
+  };
+  const existingInvoice = existingSnap.empty ? null : [...existingSnap.docs].sort((left, right) => {
+    if (left.id === linkedInvoiceId && right.id !== linkedInvoiceId) return -1;
+    if (right.id === linkedInvoiceId && left.id !== linkedInvoiceId) return 1;
+    return statusPriority(right.data()?.status) - statusPriority(left.data()?.status);
+  })[0];
+  // A finalized CFDI is immutable. A later OC upload may enrich documents, but
+  // must never create another draft or downgrade an issued invoice.
+  const existingInvoiceData: any = existingInvoice?.data() || {};
+  if (existingInvoice && String(existingInvoiceData.status || "").toUpperCase().endsWith("_ISSUED")) {
+    await solicitudSnap.ref.set({
+      facturamaAutoDraftStatus: existingInvoiceData.status,
+      facturamaInvoiceId: existingInvoice.ref.id,
+      facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, skipped: false, reused: true, invoiceId: existingInvoice.ref.id, status: existingInvoiceData.status };
+  }
+  const invoiceRef = existingInvoice?.ref || db.collection("facturamaInvoices").doc();
   const idempotencyKey = `auto-solicitud-${rootId}-${solicitudId}`;
-  const status = complete ? "AUTO_DRAFT" : "AUTO_DRAFT_NEEDS_FISCAL_DATA";
-  const conceptDescription = text(
-    solicitud.operationTypeName ||
-    solicitud.operationTypeKey ||
-    "Servicio operativo segun Orden de Compra",
-    1000,
-  );
+  const status = !complete
+    ? "AUTO_DRAFT_NEEDS_RECEIVER_DATA"
+    : fiscal.status === "VALID"
+      ? "AUTO_DRAFT_FISCAL_VALIDATED"
+      : "AUTO_DRAFT_FISCAL_REVIEW";
+  const conceptDescription = operationalDescription(solicitud);
 
-  await invoiceRef.create({
+  await invoiceRef.set({
     rootId,
     companyId,
     issuer: { name: pickName(company, companyId), rfc: normalizeRfc(company.rfc) },
@@ -160,15 +198,25 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     sourceClienteId: clienteId,
     receiver,
     receiverDataComplete: complete,
-    concepts: [{
-      productCode: "84111506",
+    concepts: fiscal.entry ? [{
+      productCode: fiscal.entry.productCode,
+      satDescription: fiscal.entry.satDescription,
       description: conceptDescription,
-      unitCode: "E48",
-      unit: "Unidad de servicio",
+      unitCode: fiscal.entry.unitCode,
+      unit: fiscal.entry.unit,
       quantity: 1,
       unitPrice: amount,
       taxObject: "02",
-    }],
+    }] : [],
+    fiscalValidation: {
+      status: fiscal.status,
+      reason: fiscal.reason || null,
+      productCode: fiscal.productCode || null,
+      unitCode: fiscal.unitCode || null,
+      companyCatalogVersion: fiscal.companyCatalogVersion || null,
+      companyCatalogSha256: fiscal.companyCatalogSha256 || null,
+      evaluatedAt: FieldValue.serverTimestamp(),
+    },
     paymentForm: text(solicitud.paymentForm || "03", 2),
     paymentMethod: text(solicitud.tipoFactura || solicitud.paymentMethod || "PUE", 3).toUpperCase() === "PPD" ? "PPD" : "PUE",
     currency: "MXN",
@@ -185,18 +233,20 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     },
     createdBy: uid,
     updatedBy: uid,
-    createdAt: FieldValue.serverTimestamp(),
+    createdAt: existingInvoice ? existingInvoice.data()?.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  }, { merge: true });
 
   await solicitudSnap.ref.set({
     facturamaAutoDraftStatus: status,
     facturamaInvoiceId: invoiceRef.id,
     facturamaReceiverDataComplete: complete,
+    fiscalValidationStatus: fiscal.status,
+    fiscalValidationReason: fiscal.reason || null,
     financialCycleStatus: "INCOME_REQUIRES_EXPENSE",
     expenseProposalStatus: "PENDING_RULES",
     facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  return { ok: true, skipped: false, reused: false, invoiceId: invoiceRef.id, status };
+  return { ok: true, skipped: false, reused: !!existingInvoice, invoiceId: invoiceRef.id, status };
 }

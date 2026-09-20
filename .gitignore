@@ -15,6 +15,14 @@ test-results/
 qa/reports/playwright-html/
 qa/.auth/
 
+# Local QA/deployment artifacts
+.firebase.qa-whatsapp.json
+output/
+tmp/
+
+# Canonical source bundles are kept expanded in Git; ZIP exports are redundant.
+src/canonicos/formatos/**/*.zip
+
 # PAY0 WhatsApp QR connector
 tools/whatsapp-qr-connector/.env
 tools/whatsapp-qr-connector/.wwebjs_auth/

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "servicios_limpieza_rein-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "servicios_limpieza_rein",
+  "companyName": "SERVICIOS DE LIMPIEZA Y MANTENIMIENTO REIN, S.A. DE C.V.",
+  "rfc": "SLM191220SU1",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#60C048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "b5d96252c63af9c23d5934d7ec6c552f8a71eab86580b6a0c52fa1e2b87ff1f9",
+    "htmlSha256": "a985d9dacec9e2fe5433ea08580995ff564a03dc1ceaf22f653fccd4b0f34f29",
+    "cssSha256": "ffaf1d8c80d0622aa46fe42d3c9adfc16860fb65d8495a8cbeff94e4266b4dc4",
+    "logoSha256": "e037ec385e49e0ab8e96a3aaa5d14a293d3cfeae1c075fff1c18f2735ca67cb4",
+    "sourceQuotationPdfSha256": "41e7e9490b04d31bb4b40f91fcc1bad2f6449ed1a56c6abfc604221f36da6fc5",
+    "templateBundleSha256": "290db981b681264342c446eafac083b5eab7c8d50acfe62b8005f6e8e94cb8c8"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

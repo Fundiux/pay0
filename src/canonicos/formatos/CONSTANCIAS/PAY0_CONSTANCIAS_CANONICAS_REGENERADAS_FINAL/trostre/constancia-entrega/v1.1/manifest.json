@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "trostre-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "trostre",
+  "companyName": "TROSTRE, S. DE R.L. DE C.V.",
+  "rfc": "TRO230717L64",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#003048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "f70bcf1cb149a9c08bbe43d548375bd25922d4f3f9ceecf17f4188ff9bdd6827",
+    "htmlSha256": "6d794315374c7808c9943c3cab5aafcfed1e9b67bb1ff466e8517e666293fdb3",
+    "cssSha256": "f75312dd574d86906976e077685a8f27aa4327708156795847fe9606f433b148",
+    "logoSha256": "b37a4f6ef18715677ed7749452a757cee6a1074584a1375175f31b425284d6fa",
+    "sourceQuotationPdfSha256": "f12a5db1b1a865541cb3a56da0cc9198ce8d23dfbae318af5282bd09b9806a9a",
+    "templateBundleSha256": "a0d34e54de8961af1ec83a993a4542aa4b349caad2f8cc5ba8af7c4bd0c306c2"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

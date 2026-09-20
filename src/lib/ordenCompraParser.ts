@@ -180,17 +180,13 @@ function parseSingleSheet(params: {
     cleanText(cellValue(sheet, "E23")) ||
     cleanText(findValueByLabel(rows, ["concepto", "descripcion", "servicio"]));
 
-  const subtotal =
-    toNumber(cellValue(sheet, "I29")) ||
-    findNumberRightOfLabel(rows, ["subtotal", "sub total", "sub-total"]);
-
-  const iva =
-    toNumber(cellValue(sheet, "I31")) ||
-    findNumberRightOfLabel(rows, ["iva", "iva 16", "impuesto", "impuestos"]);
-
-  const total =
-    toNumber(cellValue(sheet, "I32")) ||
-    findNumberRightOfLabel(rows, ["total", "total factura", "total a pagar", "gran total"]);
+  // Los importes se resuelven por estructura semántica, no por coordenadas.
+  // El resolver posterior busca TOTAL/SUBTOTAL/IVA y sus valores cercanos,
+  // incluyendo celdas con fórmulas. Estas búsquedas solo mantienen datos
+  // preliminares para el preview si el resolver aún no ha terminado.
+  const subtotal = findNumberRightOfLabel(rows, ["subtotal", "sub total", "sub-total"]);
+  const iva = findNumberRightOfLabel(rows, ["iva", "iva 16", "impuesto", "impuestos"]);
+  const total = findNumberRightOfLabel(rows, ["total", "total factura", "total oc", "total a pagar", "gran total", "importe total"]);
 
   const tipoFactura = detectTipoFactura(metodoPago);
 

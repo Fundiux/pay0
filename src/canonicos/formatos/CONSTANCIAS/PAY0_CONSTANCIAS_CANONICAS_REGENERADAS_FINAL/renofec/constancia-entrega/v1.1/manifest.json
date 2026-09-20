@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "renofec-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "renofec",
+  "companyName": "RENOFEC, S.A. DE C.V.",
+  "rfc": "REN1907229X4",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#2F4F6F",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "ecef73288a094c46ca99e8106248605a80c06d202b7716fffd1d07855aff8309",
+    "htmlSha256": "9b2c70d189394d0a8212c84ce4fb6f0cc3df6775d51f2bc0be7387fad5bb84bb",
+    "cssSha256": "607105444b4e6adedb33166c7874c5a6f84aa7d61c5d4f5542336332d25a0f7d",
+    "logoSha256": "718b98b979f0db374031f7f55404d5db8a0f50e84fceed09e45184ea25825dd5",
+    "sourceQuotationPdfSha256": "8747cbdc44d66c80d243d8fda0814e5d085fd2bc3b4ed4f9047afdd3ab0a3f86",
+    "templateBundleSha256": "4d86e526a84c8756dbf458fc1198c2018556a7d2a8ed9d3f62067a875f4ee015"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

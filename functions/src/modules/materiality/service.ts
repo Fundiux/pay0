@@ -7,6 +7,7 @@ import {
   getMaterialityDocumentLabel,
   normalizeMaterialityDocumentType,
 } from "./domain";
+import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
 
 const db = getFirestore();
 
@@ -394,8 +395,12 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
     throw new HttpsError("not-found", "Solicitud no encontrada.");
   }
 
-  const solicitud = solicitudSnap.data() || {};
+  let solicitud = solicitudSnap.data() || {};
   assertSameRoot(solicitud, rootId, "Solicitud");
+
+  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  const refreshedSolicitudSnap = await db.collection("solicitudes").doc(solicitudId).get();
+  solicitud = refreshedSolicitudSnap.data() || solicitud;
 
   const clienteId = cleanText(solicitud?.clienteId || solicitud?.clientId);
   const companyId = cleanText(solicitud?.companyId);
@@ -422,6 +427,11 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
   const operationStatus = buildOperationStatus(solicitud, missingTypes);
   const contractId = cleanText(contract?.id || "");
   const now = FieldValue.serverTimestamp();
+  const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
+    id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
+    documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
+    storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
+  })).filter((upload: any) => upload.id && upload.storagePath);
 
   const operationRef = db.collection("materialityOperations").doc(solicitudId);
   const solicitudRef = db.collection("solicitudes").doc(solicitudId);
@@ -454,9 +464,16 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
       status: operationStatus,
       contractId: contractId || null,
       ordenCompraUploadId: cleanText(activeUploadsByType.ORDEN_COMPRA?.id) || null,
+      cotizacionUploadId: cleanText(activeUploadsByType.COTIZACION?.id) || null,
+      constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
+      firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
+      documentRefs,
       presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
       facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
       facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
+      facturamaInvoiceId: cleanText(solicitud?.facturamaInvoiceId) || null,
+      fiscalValidationStatus: cleanText(solicitud?.fiscalValidationStatus) || null,
+      fiscalValidationReason: cleanText(solicitud?.fiscalValidationReason) || null,
       comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
       comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
       comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,

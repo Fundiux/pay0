@@ -14,7 +14,11 @@ const inter = Inter({ subsets: ["latin"] });
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isMatRoute = pathname === "/mat" || pathname?.startsWith("/mat/");
-  const isLoginPage = pathname === "/login" || isMatRoute;
+  // A signature recipient must never need a PAY0 account. The token itself is
+  // the narrowly scoped credential, validated by the public callables.
+  const isSignatureRoute = pathname === "/firma" || pathname?.startsWith("/firma/");
+  const isPublicVerificationRoute = pathname === "/verificar" || pathname?.startsWith("/verificar/");
+  const isLoginPage = pathname === "/login" || isMatRoute || isSignatureRoute || isPublicVerificationRoute;
 
   return (
     <html lang="es" suppressHydrationWarning>

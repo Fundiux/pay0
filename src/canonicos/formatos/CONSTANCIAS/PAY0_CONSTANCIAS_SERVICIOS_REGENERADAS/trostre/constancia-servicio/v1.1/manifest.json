@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "trostre-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "trostre",
+  "companyName": "TROSTRE, S. DE R.L. DE C.V.",
+  "rfc": "TRO230717L64",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#003048",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "bfd849c94e3eec03e13b264e7f95ca011008e38556a391ed25b4f8a006cf78d4",
+    "htmlSha256": "36ec36c4fbb9f194c340991ed5cf48c49e79846cd4231f520b1028714106b51a",
+    "cssSha256": "f75312dd574d86906976e077685a8f27aa4327708156795847fe9606f433b148",
+    "logoSha256": "b37a4f6ef18715677ed7749452a757cee6a1074584a1375175f31b425284d6fa",
+    "sourceQuotationPdfSha256": "f12a5db1b1a865541cb3a56da0cc9198ce8d23dfbae318af5282bd09b9806a9a",
+    "templateBundleSha256": "7cb7812a072b2ec0aa5dced99b368687da2a3a98efdd3355814c5be825939683"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

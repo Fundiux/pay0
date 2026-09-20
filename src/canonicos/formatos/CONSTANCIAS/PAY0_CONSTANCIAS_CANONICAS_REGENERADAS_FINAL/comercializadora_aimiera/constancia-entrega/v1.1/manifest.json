@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "comercializadora_aimiera-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "comercializadora_aimiera",
+  "companyName": "COMERCIALIZADORA AIMIERA, S.A. DE C.V.",
+  "rfc": "CAI190506GR1",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#00A8F0",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "c37d276a353bad1303eca85d48fe684678a8f2b7eb6300f687e63337bcae0761",
+    "htmlSha256": "68128659802a336c2910b5a9b80e4b96aeb16c8c27c968b8e444eeabc9687692",
+    "cssSha256": "330cd707f18ecdab3c9976d17b6d90052c169dbb43f3e6ebd62cb097f79086e4",
+    "logoSha256": "1117fd1b730797c03f200987bfe09b27635ca38e1756b3c1ea2491e56f61725b",
+    "sourceQuotationPdfSha256": "3773456eb15f93dff39676e970da7b4ffd928a9ba9ac1e2cf5adf545441c0d9f",
+    "templateBundleSha256": "8bb94715836fc25210f1c86ed884b91bcb8faf876f716a9718b33fa8673fa17a"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

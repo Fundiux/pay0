@@ -12,6 +12,8 @@ export type CreateSolicitudInput = {
   comentario?: string;
   clienteNombre?: string;
   empresaNombre?: string;
+  replacementOfSolicitudId?: string;
+  replacementReason?: string;
 };
 
 export async function createSolicitud(input: CreateSolicitudInput) {
@@ -22,6 +24,8 @@ export async function createSolicitud(input: CreateSolicitudInput) {
 export type SolicitudPageCursor = { seconds: number; nanoseconds: number; id: string };
 export async function listSolicitudes(input: {
   limit?: number;
+  fromMillis?: number;
+  toMillis?: number;
   cursorSeconds?: number;
   cursorNanoseconds?: number;
   cursorId?: string;

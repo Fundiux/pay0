@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "regio_solema-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "regio_solema",
+  "companyName": "REGIO SOLEMA, S.A. DE C.V.",
+  "rfc": "RSO191113182",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#004890",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "e7c7bfd82ebdd75b9f760f1207bee0d3a78acd808323a91df0345b5fee03fbbe",
+    "htmlSha256": "c8887716f59b804dd3626f1798df9be8257ffd09a5ae1bcc8a78091a8305b617",
+    "cssSha256": "c7692c25f65e9202b5a44b2c917a51c0a727715b34afa543b3a16f191171bfd4",
+    "logoSha256": "490275b196108b6d709236e81195b2e70556f9e54a558e5e802ff31dd78de16d",
+    "sourceQuotationPdfSha256": "44e51417333d7c17afbbb9dd42595f05db59dd2dd8221061238ed3fbf4569adf",
+    "templateBundleSha256": "1aeb75faf0e666ee0d1ce104d927c886fa8bfb2ed7de3990e7606a262328adb8"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

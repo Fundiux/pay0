@@ -9,8 +9,10 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
+import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
+import { formatDateOnly } from "@/lib/dateTime";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
   Plus,
@@ -99,6 +101,7 @@ const SolicitudRow = React.memo(({
   onReject,
   onCloseCancelSat,
   onSubmitCancelSat,
+  onStartReplacement,
   onDocs,
   cancelSatFor,
   cancelSatMotivo,
@@ -146,12 +149,17 @@ const SolicitudRow = React.memo(({
   const traceOrigenFolio = String(sustitucionTrace?.origen?.folio || "").trim();
   const traceActualFolio = String(s?.folio || s?.id || "").trim();
   const traceSustitutaFolio = String(sustitucionTrace?.sustituta?.folio || "").trim();
-  const hasTrace = !!traceOrigenFolio || !!traceSustitutaFolio || statusUpper === "EN_SUSTITUCION";
+  const replacementOriginFolio = String(s?.replacementOfSolicitudFolio || "").trim();
+  const hasTrace = !!traceOrigenFolio || !!replacementOriginFolio || !!traceSustitutaFolio || statusUpper === "EN_SUSTITUCION";
 
   const sustitucionChain = buildSustitucionChain(s, allSolicitudes || [], sustitucionIndex);
   const traceVigenteFolio = String(sustitucionChain?.vigente?.folio || sustitucionChain?.vigente?.id || "").trim();
   const traceChainText = Array.isArray(sustitucionChain?.chainFolios) ? sustitucionChain.chainFolios.join(" -> ") : "";
   const isCurrentVigente = sustitucionChain?.currentIndex >= 0 && sustitucionChain?.currentIndex === sustitucionChain?.vigenteIndex;
+  // The trace is fiscal, so its date must be the issue date of the original
+  // CFDI.  `sustitucionAt` is only an operational timestamp and older chains
+  // do not have it.  The replacement preserves it as originalFacturaFecha.
+  const originalCfdiDate = sustitucionChain?.root?.facturaFecha || s?.originalFacturaFecha || s?.facturaFecha || s?.sustitucionAt || null;
 
   const diasRestantes = useMemo(() => {
     if (saldo <= 0 || isTerminal) return null;
@@ -389,42 +397,21 @@ const SolicitudRow = React.memo(({
                   />
                 </div>
 
-                {cancelSatMotivo === "01" && (
-                  <>
-                    <div className="min-w-[280px] flex-[1.3]">
-                      <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-400">
-                        UUID CFDI sustituto
-                      </label>
-                      <input
-                        value={cancelSatUuidSustituto}
-                        onChange={(e) => setCancelSatUuidSustituto(e.target.value)}
-                        placeholder="UUID sustituto"
-                        disabled={!!String(s?.uuidCfdiSustituto || "").trim()}
-                        className={`w-full rounded-xl border px-3 py-2 text-[12px] text-white outline-none ${
-                          String(s?.uuidCfdiSustituto || "").trim()
-                            ? "border-violet-500/20 bg-violet-500/10 text-violet-200 opacity-90"
-                            : "border-white/10 bg-black/30"
-                        }`}
-                      />
-                    </div>
-
-                    <div className="min-w-[240px] flex-1">
-                      <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-400">
-                        Solicitud relacionada
-                      </label>
-                      <input
-                        value={cancelSatRelatedSolicitudId}
-                        onChange={(e) => setCancelSatRelatedSolicitudId(e.target.value)}
-                        placeholder="ID / folio relacionado"
-                        disabled={!!String(s?.relatedSolicitudFolio || s?.relatedSolicitudId || "").trim()}
-                        className={`w-full rounded-xl border px-3 py-2 text-[12px] text-white outline-none ${
-                          String(s?.relatedSolicitudFolio || s?.relatedSolicitudId || "").trim()
-                            ? "border-sky-500/20 bg-sky-500/10 text-sky-200 opacity-90"
-                            : "border-white/10 bg-black/30"
-                        }`}
-                      />
-                    </div>
-                  </>
+                {cancelSatMotivo === "01" && String(s?.facturamaEnvironment || "").toUpperCase() === "PRODUCTION" && (
+                  <label className="min-w-[300px] flex-1 cursor-pointer rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-[12px] text-violet-100 hover:bg-violet-500/20">
+                    + Nueva sustitucion: cargar OC corregida
+                    <input type="file" accept=".xlsx,.csv" className="hidden" onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) onStartReplacement(s, file, cancelSatDetalle);
+                      event.currentTarget.value = "";
+                    }} />
+                  </label>
+                )}
+                {cancelSatMotivo === "01" && String(s?.facturamaEnvironment || "").toUpperCase() !== "PRODUCTION" && (
+                  <div className="min-w-[320px] flex-1">
+                    <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-400">Solicitud o UUID sustituto (flujo IQ)</label>
+                    <input value={cancelSatRelatedSolicitudId || cancelSatUuidSustituto} onChange={(event) => setCancelSatRelatedSolicitudId(event.target.value)} placeholder="Folio, ID o UUID relacionado" className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[12px] text-white outline-none" />
+                  </div>
                 )}
 
                 <div className="ml-auto flex items-end gap-2">
@@ -437,10 +424,10 @@ const SolicitudRow = React.memo(({
 
                   <button
                     onClick={onSubmitCancelSat}
-                    disabled={cancelSatSaving}
+                    disabled={cancelSatSaving || (cancelSatMotivo === "01" && String(s?.facturamaEnvironment || "").toUpperCase() === "PRODUCTION")}
                     className="rounded-xl bg-amber-500 px-4 py-2 text-[12px] font-normal text-black hover:bg-amber-400 disabled:opacity-60"
                   >
-                    {cancelSatSaving ? "Guardando..." : (cancelSatFor?.status === "EN_SUSTITUCION" ? "Guardar datos de sustitucion" : "Confirmar cancelacion")}
+                    {cancelSatSaving ? "Guardando..." : (cancelSatMotivo === "01" && String(s?.facturamaEnvironment || "").toUpperCase() === "PRODUCTION" ? "Carga la nueva OC" : "Confirmar cancelacion")}
                   </button>
                 </div>
               </div>
@@ -457,10 +444,10 @@ const SolicitudRow = React.memo(({
                   <tr className="border-t border-violet-500/10 text-[9px] uppercase text-violet-300/70">
                     <td className="p-2 pl-8 font-normal">Evento</td>
                     <td className="p-2 font-normal">Fecha</td>
-                    <td className="p-2 font-normal">Origen</td>
-                    <td className="p-2 font-normal">Actual</td>
-                    <td className="p-2 font-normal">Vigente / Sustituta</td>
-                    <td className="p-2 font-normal">UUID sustituto</td>
+                    <td className="p-2 font-normal">Folio origen</td>
+                    <td className="p-2 font-normal">Folio actual</td>
+                    <td className="p-2 font-normal">Folio sustituto vigente</td>
+                    <td className="p-2 font-normal">CFDI sustituido / sustituto</td>
                     <td className="p-2 font-normal">Estado</td>
                     <td className="p-2 text-center font-normal">Acción</td>
                   </tr>
@@ -471,13 +458,11 @@ const SolicitudRow = React.memo(({
                     </td>
 
                     <td className="p-2 text-slate-400">
-                      {s?.sustitucionAt?.seconds
-                        ? new Date(s.sustitucionAt.seconds * 1000).toLocaleString()
-                        : "--"}
+                      {formatDateOnly(originalCfdiDate, "--")}
                     </td>
 
                     <td className="p-2 font-mono text-cyan-300">
-                      {traceOrigenFolio || sustituyeFolio || "---"}
+                      {traceOrigenFolio || replacementOriginFolio || "---"}
                     </td>
 
                     <td className="p-2 font-mono text-slate-200">
@@ -485,11 +470,12 @@ const SolicitudRow = React.memo(({
                     </td>
 
                     <td className="p-2 font-mono text-fuchsia-300">
-                      {targetFolio || traceVigenteFolio || "---"}
+                      {traceSustitutaFolio || traceVigenteFolio || (isCurrentVigente ? traceActualFolio : "---")}
                     </td>
 
                     <td className="p-2 font-mono text-slate-300">
-                      {uuidSustituto || "---"}
+                      <div>{String(s?.uuidCfdiSustituido || s?.replacementOfUuid || "---")}</div>
+                      <div className="mt-1 text-emerald-300">{uuidSustituto || String(s?.uuidCfdi || s?.facturaUuid || "---")}</div>
                     </td>
 
                     <td className="p-2 text-violet-200">
@@ -505,6 +491,8 @@ const SolicitudRow = React.memo(({
                         >
                           Completar datos
                         </button>
+                      ) : String(s?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" || String(s?.status || "").toUpperCase() === "EN_SUSTITUCION" ? (
+                        <span className="text-slate-500 uppercase font-normal text-[10px]">Verificacion automatica</span>
                       ) : (
                         <span className="text-slate-600">---</span>
                       )}
@@ -618,6 +606,7 @@ export default function SolicitudesPage() {
   const [solicitudesCursor, setSolicitudesCursor] = useState<SolicitudPageCursor | null>(null);
   const [hasMoreSolicitudes, setHasMoreSolicitudes] = useState(false);
   const [loadingMoreSolicitudes, setLoadingMoreSolicitudes] = useState(false);
+  const solicitudesRequestSeq = useRef(0);
 
   // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
 
@@ -720,6 +709,7 @@ export default function SolicitudesPage() {
   const [noteSending, setNoteSending] = useState(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [ordenCompraMassiveFiles, setOrdenCompraMassiveFiles] = useState<File[]>([]);
+  const [replacementContext, setReplacementContext] = useState<{ solicitudId: string; folio?: string; reason?: string } | null>(null);
   const [isOrdenCompraPageDragging, setIsOrdenCompraPageDragging] = useState(false);
 
   useEffect(() => {
@@ -819,34 +809,51 @@ export default function SolicitudesPage() {
   const canUploadDocsSolicitud = !!modules?.solicitudes?.uploadDocs;
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
+  const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
       setSolicitudes([]);
+      setSolicitudesCursor(null);
+      setHasMoreSolicitudes(false);
       return;
     }
 
     let cancelled = false;
-    void listSolicitudes({ limit: 100 }).then((page) => {
-      if (cancelled) return;
+    const requestSeq = ++solicitudesRequestSeq.current;
+    setSolicitudes([]);
+    setSolicitudesCursor(null);
+    setHasMoreSolicitudes(false);
+    void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() }).then((page) => {
+      if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       setSolicitudes(page.items || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
+      setPageMsg((current) => current.includes("solicitudes") ? "" : current);
     }).catch(() => {
-      if (cancelled) return;
+      if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       setPageMsg("No se pudieron cargar solicitudes.");
       setSolicitudes([]);
       setSolicitudesCursor(null);
       setHasMoreSolicitudes(false);
     });
     return () => { cancelled = true; };
-  }, [uid, rootId, role, canViewSolicitudes]);
+  }, [uid, rootId, role, canViewSolicitudes, rangeKey]);
 
   const loadMoreSolicitudes = useCallback(async () => {
     if (!solicitudesCursor || loadingMoreSolicitudes) return;
     setLoadingMoreSolicitudes(true);
+    const requestSeq = solicitudesRequestSeq.current;
     try {
-      const page = await listSolicitudes({ limit: 100, cursorSeconds: solicitudesCursor.seconds, cursorNanoseconds: solicitudesCursor.nanoseconds, cursorId: solicitudesCursor.id });
+      const page = await listSolicitudes({
+        limit: 100,
+        fromMillis: range.from.getTime(),
+        toMillis: range.to.getTime(),
+        cursorSeconds: solicitudesCursor.seconds,
+        cursorNanoseconds: solicitudesCursor.nanoseconds,
+        cursorId: solicitudesCursor.id,
+      });
+      if (requestSeq !== solicitudesRequestSeq.current) return;
       setSolicitudes((current) => {
         const known = new Set(current.map((item) => item.id));
         return [...current, ...(page.items || []).filter((item) => !known.has(item.id))];
@@ -856,9 +863,11 @@ export default function SolicitudesPage() {
     } catch (error: any) {
       setPageMsg(error?.message || "No se pudieron cargar más solicitudes.");
     } finally {
-      setLoadingMoreSolicitudes(false);
+      if (requestSeq === solicitudesRequestSeq.current) {
+        setLoadingMoreSolicitudes(false);
+      }
     }
-  }, [loadingMoreSolicitudes, solicitudesCursor]);
+  }, [loadingMoreSolicitudes, solicitudesCursor, range]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -1087,6 +1096,44 @@ export default function SolicitudesPage() {
     setCancelSatRelatedSolicitudId(String(sol?.relatedSolicitudFolio || sol?.relatedSolicitudId || ""));
   };
 
+  const refreshCancellation = async (sol: any) => {
+    try {
+      setPageMsg("");
+      const result = await refreshFacturamaProductionCancellationStatus(sol.id);
+      setSolicitudes((prev: any[]) => prev.map((item: any) => item.id === sol.id ? {
+        ...item,
+        facturamaCancellationStatus: result.status,
+        ...(result.terminal ? { status: "CANCELADA", sustitucionStatus: "CANCELADA_SAT" } : {}),
+      } : item));
+      setPageMsg(`Estado SAT actualizado: ${result.status}${result.isCancelable ? ` (${result.isCancelable})` : ""}.`);
+    } catch (error: any) {
+      setPageMsg(error?.message || "No se pudo consultar el estado de cancelacion.");
+    }
+  };
+
+  // A cancellation request is checked automatically once per loaded Solicitud.
+  // There is deliberately no operator button: this never sends a new request
+  // to Facturama, it only reads the SAT/Facturama result already in progress.
+  const checkedCancellationIds = useRef(new Set<string>());
+  useEffect(() => {
+    const pending = solicitudes.filter((item: any) =>
+      String(item?.facturamaInvoiceId || "").trim() &&
+      (
+        String(item?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" ||
+        String(item?.status || "").toUpperCase() === "EN_SUSTITUCION" ||
+        !String(item?.facturaDisplay || "").trim() ||
+        !String(item?.facturaFecha || "").trim() ||
+        (String(item?.status || "").toUpperCase() === "CANCELADA" && !String(item?.cancellationReceiptUploadId || "").trim())
+      ) &&
+      !checkedCancellationIds.current.has(String(item?.id || "")),
+    );
+    for (const item of pending) {
+      if (!item?.id) continue;
+      checkedCancellationIds.current.add(String(item.id));
+      void refreshCancellation(item);
+    }
+  }, [solicitudes]);
+
   const closeCancelSat = () => {
     setCancelSatFor(null);
     setCancelSatMotivo("02");
@@ -1148,14 +1195,18 @@ export default function SolicitudesPage() {
           relatedSolicitudId: String(cancelSatRelatedSolicitudId || "").trim() || null,
         });
       } else {
-        cancelResult = await cancelFn({
-          solicitudId: cancelSatFor.id,
-          motivo: cancelSatDetalle?.trim() || `Cancelacion SAT ${cancelSatMotivo}`,
-          motivoCancelacionSAT: cancelSatMotivo,
-          motivoCancelacionDetalle: String(cancelSatDetalle || "").trim() || null,
-          uuidCfdiSustituto: String(cancelSatUuidSustituto || "").trim() || null,
-          relatedSolicitudId: String(cancelSatRelatedSolicitudId || "").trim() || null,
-        });
+        if (String(cancelSatFor?.facturamaEnvironment || "").toUpperCase() === "PRODUCTION" && cancelSatFor?.facturamaInvoiceId) {
+          cancelResult = await cancelFacturamaProductionInvoice({ solicitudId: cancelSatFor.id, motive: cancelSatMotivo });
+        } else {
+          cancelResult = await cancelFn({
+            solicitudId: cancelSatFor.id,
+            motivo: cancelSatDetalle?.trim() || `Cancelacion SAT ${cancelSatMotivo}`,
+            motivoCancelacionSAT: cancelSatMotivo,
+            motivoCancelacionDetalle: String(cancelSatDetalle || "").trim() || null,
+            uuidCfdiSustituto: String(cancelSatUuidSustituto || "").trim() || null,
+            relatedSolicitudId: String(cancelSatRelatedSolicitudId || "").trim() || null,
+          });
+        }
       }
 
       const nextUuid = String(
@@ -1555,6 +1606,11 @@ export default function SolicitudesPage() {
                   onReject={handleRechazar}
                   onCloseCancelSat={closeCancelSat}
                   onSubmitCancelSat={submitCancelSat}
+                  onStartReplacement={(sol: any, file: File, reason: string) => {
+                    setReplacementContext({ solicitudId: sol.id, folio: sol.folio, reason: String(reason || "").trim() });
+                    setOrdenCompraMassiveFiles([file]);
+                    closeCancelSat();
+                  }}
                   cancelSatFor={cancelSatFor}
                   cancelSatMotivo={cancelSatMotivo}
                   setCancelSatMotivo={setCancelSatMotivo}
@@ -1595,8 +1651,10 @@ export default function SolicitudesPage() {
         onClose={() => {
           setIsOrdenCompraPageDragging(false);
           setOrdenCompraMassiveFiles([]);
+          setReplacementContext(null);
         }}
         onFilesConsumed={() => setIsOrdenCompraPageDragging(false)}
+        replacementOf={replacementContext}
       />
 
       {rejectFor && (

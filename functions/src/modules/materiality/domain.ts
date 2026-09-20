@@ -1,7 +1,7 @@
 export const MATERIALITY_REQUIRED_TYPES = [
   "ORDEN_COMPRA",
   "COTIZACION",
-  "PRESUPUESTO",
+  "CONSTANCIA_RECEPCION_SATISFACCION",
   "FACTURA_XML",
   "FACTURA_PDF",
   "COMPROBANTE_PAGO",
@@ -12,7 +12,10 @@ export const MATERIALITY_DOCUMENT_TYPES = [
   "CONTRATO_OPERACION",
   "SOLICITUD_INTERNA",
   "AUTORIZACION_OPERATIVA",
+  "FIRMA_AUTORIZADA_CLIENTE",
+  "PRESUPUESTO",
   ...MATERIALITY_REQUIRED_TYPES,
+  "COTIZACION_FIRMADA",
   "COMPLEMENTO_PAGO_XML",
   "COMPLEMENTO_PAGO_PDF",
   "CFDI_GASTO_XML",
@@ -77,8 +80,14 @@ export function getMaterialityDocumentLabel(type: unknown): string {
       return "Orden de Compra";
     case "COTIZACION":
       return "Cotizacion";
+    case "COTIZACION_FIRMADA":
+      return "Cotizacion Firmada";
     case "PRESUPUESTO":
       return "Presupuesto / Cotizacion";
+    case "FIRMA_AUTORIZADA_CLIENTE":
+      return "Firma Autorizada del Cliente";
+    case "CONSTANCIA_RECEPCION_SATISFACCION":
+      return "Constancia de Recepcion y Satisfaccion";
     case "FACTURA_XML":
       return "Factura XML";
     case "FACTURA_PDF":

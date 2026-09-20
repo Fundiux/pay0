@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "recexa-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "recexa",
+  "companyName": "RECEXA, S.A. DE C.V.",
+  "rfc": "REC1908144R0",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#4860A8",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "7c761b671b45ee92a880777b4c0da1b7d9fb3de7cbe6f2324c85f1aebe1c54e4",
+    "htmlSha256": "8889bf00b10508c1006bdd98f5aee79d986c2c313775d96f2135f7358db276a2",
+    "cssSha256": "18aa264c9d56ba69a9e54f0cdca81591674c69dffbe5aa42574951e2f780fa9c",
+    "logoSha256": "c8a41d5f26239dfb5780c0d3c5de55275800c48e12af4d4ce36b1b51d30818c8",
+    "sourceQuotationPdfSha256": "ad6c9701601f3beea89668bfb04ae1c3659d4f1fe93cbebfcdaaf3ea329f02d9",
+    "templateBundleSha256": "25ff0cfec05ffa7a145e978e48746e7ab73253350fe1f60bf25ada34a57db20f"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

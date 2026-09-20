@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "redes_equipamiento_norrey-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "redes_equipamiento_norrey",
+  "companyName": "REDES Y EQUIPAMIENTO NORREY, S.A. DE C.V.",
+  "rfc": "REN201210LK7",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#3060A8",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "22e57945f3b0dadde484e720396fd3795075cafda376716e75e62b4cc8176de5",
+    "htmlSha256": "f550ca3b143d9e6f6a4014def3c2bf73a206d7ce06e330660e4f7733bed42d11",
+    "cssSha256": "cb6df35e1fc770f88ff8ef199af56cea5564e73b46f1d324fbc29bb333abf56e",
+    "logoSha256": "cf4f98829d0e81c9630c9f0916d38f12c41ad52c29189d032cd20719d222e4b8",
+    "sourceQuotationPdfSha256": "e07cb04748dbefc1468443cc5916cad477fc475233175e4145648ce76af2c20e",
+    "templateBundleSha256": "fb70a43cb9fa10825018e8afc3d4c290770c45e8b61da92a4f98f8e13f8db04d"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "constructora_volcale-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "constructora_volcale",
+  "companyName": "CONSTRUCTORA VOLCALE, S.A. DE C.V.",
+  "rfc": "CVO230815HV6",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F09000",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "dbaa50dfc12911c5e53bb5d9d76eb0d5d3642c8a6e3b8e2fa05314cd234a0ca3",
+    "htmlSha256": "b4f4c8be7171ab49e5958c8744523915a6d52763ff1a8854d2cd3d0307ea7421",
+    "cssSha256": "77c19d382272d530f476f2242eed9f214d23120021d640a7956d7b954225a488",
+    "logoSha256": "f27461a01a5b4984c139d990886bc737381524e7b1fb03b9d9ae7d2c8439eaae",
+    "sourceQuotationPdfSha256": "2b6ad10ae99dc3b36fff7bc97abeae924b72c1d731b35ec4f672c4075b279391",
+    "templateBundleSha256": "c49c71a3e3b1ed61398702fda3acf4db796326c423720f3fd57e4c13b0f71b7f"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "goldwing-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "goldwing",
+  "companyName": "GOLDWING, S.A. DE C.V.",
+  "rfc": "GOL180124N93",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F0A848",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "adb3d9efa9e150015325a808bb297ecaef5afe3c8140375cbc584163d9bf6ed9",
+    "htmlSha256": "441a3ea3112199caeef7922e401f1dc2525044d4cddd7dff69669b07a441e425",
+    "cssSha256": "55585a9bc5015f1ba09ee134827be553962d8900edb8a497c054234c93769461",
+    "logoSha256": "f2c285f85b081873dad43375f8e6de575bb5748a8f8c9d1593506fd787e7045c",
+    "sourceQuotationPdfSha256": "a1081296de5a253b24b6756d2734d1b8e5a95938c2c472c6806bf4b86cc5c09e",
+    "templateBundleSha256": "3da15a20d0762f1c89f98472bbfc4cd9a8a4a04484a34316385cd0427804d44d"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

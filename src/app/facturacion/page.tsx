@@ -1,178 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FilePlus2, Loader2, ReceiptText, RefreshCw, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, Loader2, ReceiptText, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useAuth } from "@/lib/auth";
 import { listCompanies, type Company } from "@/services/companies";
-import { getFacturamaSandboxStatus, listFacturamaInvoices, saveFacturamaDraft, type FacturamaConcept, type FacturamaInvoice } from "@/services/facturama";
+import { getFacturamaProductionCsdStatus, getFacturamaProductionStatus, importCompanyInvoiceCatalog, issueFacturamaProductionInvoice, listFacturamaInvoices, reconcileFacturamaIssuedMetadata, registerFacturamaProductionCsd, saveFacturamaIssuerConfig, type FacturamaCsdStatus, type FacturamaInvoice } from "@/services/facturama";
+import { uploadAndImportGlobalSatCatalog } from "@/lib/uploadSatCatalog";
 
-const initialConcept: FacturamaConcept = { productCode: "84111506", description: "Servicios administrativos", unitCode: "E48", unit: "Unidad de servicio", quantity: 1, unitPrice: 0, taxObject: "02" };
 const inputClass = "mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-emerald-500";
-
-function money(value: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(value || 0));
-}
-
-function date(value: any) {
-  const ms = value?.seconds ? value.seconds * 1000 : value ? new Date(value).getTime() : 0;
-  return ms ? new Date(ms).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }) : "Ahora";
-}
-
-function newKey() {
-  return globalThis.crypto?.randomUUID?.() || `cfdi-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function conceptAmounts(concept: FacturamaConcept) {
-  const subtotal = Number(concept.quantity || 0) * Number(concept.unitPrice || 0);
-  const tax = concept.taxObject === "02" ? subtotal * 0.16 : 0;
-  return { subtotal, tax, total: subtotal + tax };
+const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(value || 0));
+const date = (value: any) => { const ms = value?.seconds ? value.seconds * 1000 : value ? new Date(value).getTime() : 0; return ms ? new Date(ms).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }) : "—"; };
+function own(company: Company) { const o = String(company.ownership || company.companyOwnership || company.companyType || "").toUpperCase(); return company.isOwnCompany === true || company.ownedByRoot === true || company.pay0OwnCompany === true || o === "PROPIA" || String(company.rfc || "").toUpperCase() === "TRO230717L64"; }
+async function toBase64(file: File) { const b = await file.arrayBuffer(); const a = new Uint8Array(b); let raw = ""; for (let i = 0; i < a.length; i += 8192) raw += String.fromCharCode(...a.subarray(i, i + 8192)); const d = await crypto.subtle.digest("SHA-256", b); return { workbookBase64: btoa(raw), sha256: Array.from(new Uint8Array(d)).map(x => x.toString(16).padStart(2, "0")).join("") }; }
+async function fileBase64(file: File) { const bytes = new Uint8Array(await file.arrayBuffer()); let raw = ""; for (let i = 0; i < bytes.length; i += 8192) raw += String.fromCharCode(...bytes.subarray(i, i + 8192)); return btoa(raw); }
+function validation(i: FacturamaInvoice) {
+  const status = String(i.status || "").toUpperCase();
+  if (status === "PRODUCTION_ERROR") return i.lastError || "Facturama rechazo la emision; revisa el detalle.";
+  if (status.endsWith("_ISSUED") || status === "EMITTED") return "CFDI timbrado y vinculado al expediente.";
+  if (status === "AUTO_DRAFT_FISCAL_VALIDATED") return "Catalogo de empresa y datos fiscales validados.";
+  const fiscal = i.fiscalValidation || {};
+  if (fiscal.status === "COMPANY_SAT_KEY_NOT_AUTHORIZED") return `BLOQUEADO: clave SAT ${fiscal.productCode || "de la OC"} no autorizada para esta empresa.`;
+  if (fiscal.status === "SAT_UNIT_INVALID") return `BLOQUEADO: unidad SAT ${fiscal.unitCode || "de la OC"} no coincide con el catalogo autorizado.`;
+  if (fiscal.status === "SAT_CLASSIFICATION_REVIEW_REQUIRED") return "BLOQUEADO: falta clave SAT explicita en la OC.";
+  if (fiscal.status === "PENDING_GLOBAL_SAT_CATALOG") return "BLOQUEADO: la clave no esta vigente en el catalogo SAT global.";
+  return fiscal.reason || "Pendiente de datos fiscales o validacion SAT.";
 }
 
 export default function FacturacionPage() {
-  const { profile } = useUserProfile();
-  const { user } = useAuth();
-  const allowed = profile?.role === "superadmin";
-  const [configured, setConfigured] = useState<boolean | null>(null);
-  const [invoices, setInvoices] = useState<FacturamaInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [receiver, setReceiver] = useState({ rfc: "", name: "", fiscalRegime: "", postalCode: "", cfdiUse: "G03" });
-  const [concepts, setConcepts] = useState<FacturamaConcept[]>([{ ...initialConcept }]);
-  const [paymentForm, setPaymentForm] = useState("03");
-  const [paymentMethod, setPaymentMethod] = useState("PUE");
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [companyId, setCompanyId] = useState("");
-
-  const totals = useMemo(() => concepts.reduce((sum, concept) => {
-    const amounts = conceptAmounts(concept);
-    return { subtotal: sum.subtotal + amounts.subtotal, tax: sum.tax + amounts.tax, total: sum.total + amounts.total };
-  }, { subtotal: 0, tax: 0, total: 0 }), [concepts]);
-
-  const refresh = useCallback(async () => {
-    if (!allowed) return;
-    setLoading(true);
-    try {
-      const [status, rows] = await Promise.all([getFacturamaSandboxStatus(), listFacturamaInvoices(companyId)]);
-      setConfigured(status.configured);
-      setInvoices(rows.invoices || []);
-    } catch (error: any) {
-      setMessage(`No se pudo cargar Facturación: ${error?.message || error}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [allowed, companyId]);
-
+  const { profile } = useUserProfile(); const { user } = useAuth(); const allowed = profile?.role === "superadmin";
+  const [configured, setConfigured] = useState<boolean | null>(null); const [connection, setConnection] = useState("CHECKING"); const [invoices, setInvoices] = useState<FacturamaInvoice[]>([]); const [companies, setCompanies] = useState<Company[]>([]); const [companyId, setCompanyId] = useState("");
+  const [issuer, setIssuer] = useState({ issuerName: "TROSTRE", fiscalRegime: "601", expeditionPlace: "92560" }); const [catalogVersion, setCatalogVersion] = useState("1.2 - PRUEBA PAY0"); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [importingCatalog, setImportingCatalog] = useState(false); const [importingSat, setImportingSat] = useState(false); const [satProgress, setSatProgress] = useState(0); const [issuingId, setIssuingId] = useState(""); const [message, setMessage] = useState(""); const [csdStatus, setCsdStatus] = useState<FacturamaCsdStatus | null>(null); const [certificate, setCertificate] = useState<File | null>(null); const [privateKey, setPrivateKey] = useState<File | null>(null); const [privateKeyPassword, setPrivateKeyPassword] = useState(""); const [registeringCsd, setRegisteringCsd] = useState(false);
+  const refresh = useCallback(async () => { if (!allowed) return; setLoading(true); try { await reconcileFacturamaIssuedMetadata(); const [s, rows] = await Promise.all([getFacturamaProductionStatus(), listFacturamaInvoices()]); setConfigured(s.configured); setConnection(s.connection); setInvoices(rows.invoices || []); } catch (e: any) { setMessage(`No se pudo cargar Facturacion: ${e?.message || e}`); } finally { setLoading(false); } }, [allowed]);
   useEffect(() => { void refresh(); }, [refresh]);
-
-  useEffect(() => {
-    if (!allowed || !user?.uid || !profile?.role) return;
-    return listCompanies({ uid: user.uid, role: profile.role }, (items) => {
-      const active = items.filter((item) => item.active !== false);
-      setCompanies(active);
-      setCompanyId((current) => current || active[0]?.id || "");
-    }, (error) => setMessage(`No se pudo cargar empresas emisoras: ${error?.message || error}`));
-  }, [allowed, profile?.role, user?.uid]);
-
-  function updateConcept(index: number, key: keyof FacturamaConcept, value: string) {
-    setConcepts((current) => current.map((concept, i) => i === index ? { ...concept, [key]: key === "quantity" || key === "unitPrice" ? Number(value) : value } : concept));
-  }
-
-  async function saveDraft() {
-    setSaving(true);
-    setMessage("");
-    try {
-      const result = await saveFacturamaDraft({ idempotencyKey: newKey(), companyId, receiver, concepts, paymentForm, paymentMethod, currency: "MXN" });
-      setMessage(result.reused ? "El borrador ya existía; se conservó el mismo registro." : "Borrador CFDI guardado. Aún no se timbra ni genera efectos fiscales.");
-      await refresh();
-    } catch (error: any) {
-      setMessage(`Revisa los datos fiscales: ${error?.message || error}`);
-    } finally {
-      setSaving(false);
-    }
-  }
-
+  useEffect(() => { if (!allowed || !user?.uid || !profile?.role) return; return listCompanies({ uid: user.uid, role: profile.role }, rows => { const issuers = rows.filter(x => x.active !== false && own(x)); setCompanies(issuers); setCompanyId(id => issuers.some(x => x.id === id) ? id : issuers[0]?.id || ""); }, e => setMessage(`No se pudieron cargar emisores: ${e?.message || e}`)); }, [allowed, profile?.role, user?.uid]);
+  useEffect(() => { if (!allowed || !companyId) return; void getFacturamaProductionCsdStatus(companyId).then(setCsdStatus).catch((e: any) => setMessage(`No se pudo consultar CSD: ${e?.message || e}`)); }, [allowed, companyId]);
+  async function saveIssuer() { if (!companyId) return; setSaving(true); setMessage(""); try { await saveFacturamaIssuerConfig({ companyId, ...issuer }); setMessage("Datos fiscales del emisor guardados."); } catch (e: any) { setMessage(`No se pudo guardar el emisor: ${e?.message || e}`); } finally { setSaving(false); } }
+  async function importCatalog(file?: File) { if (!file || !companyId) return; if (!/\.xlsx$/i.test(file.name)) { setMessage("Selecciona el Excel canónico .xlsx."); return; } setImportingCatalog(true); setMessage(""); try { const r = await importCompanyInvoiceCatalog({ companyId, version: catalogVersion, originalName: file.name, ...await toBase64(file) }); setMessage(`${r.reused ? "El catálogo ya estaba importado" : "Catálogo importado"}: ${r.entryCount} conceptos.`); } catch (e: any) { setMessage(`No se pudo importar catálogo: ${e?.message || e}`); } finally { setImportingCatalog(false); } }
+  async function importSat(file?: File) { if (!file) return; setImportingSat(true); setSatProgress(0); setMessage(""); try { const r = await uploadAndImportGlobalSatCatalog({ file, versionLabel: file.name, onProgress: setSatProgress }); setMessage(`SAT global importado: ${r.productCount.toLocaleString("es-MX")} productos/servicios y ${r.unitCount.toLocaleString("es-MX")} unidades.`); } catch (e: any) { setMessage(`No se pudo importar SAT: ${e?.message || e}`); } finally { setImportingSat(false); } }
+  async function issue(id: string) { if (!window.confirm("Esta acción timbra un CFDI real con efectos fiscales. ¿Confirmas emitir esta factura?")) return; setIssuingId(id); setMessage(""); try { const r = await issueFacturamaProductionInvoice(id); setMessage(`CFDI real timbrado${r.uuid ? ` · UUID ${r.uuid}` : ""}. XML y PDF quedaron vinculados a la Solicitud y Materialidad.`); } catch (e: any) { setMessage(`Facturama producción: ${e?.message || e}`); } finally { setIssuingId(""); await refresh(); } }
   if (!allowed) return <main className="p-6 text-slate-400">Facturación está restringida a superadministración.</main>;
-
-  return (
-    <main className="min-h-full p-4 sm:p-6">
-      <section className="mb-6 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/70 via-slate-950 to-slate-950 p-6 shadow-2xl shadow-emerald-950/20">
-        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300"><ReceiptText size={16} /> CFDI 4.0 · Facturama</div>
-            <h1 className="text-3xl font-semibold text-white">Facturación desde PAY0</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Crea y controla tus comprobantes desde la operación. Esta entrega guarda borradores auditables en sandbox; la emisión real queda bloqueada hasta validar CSD, emisor y flujo de timbrado.</p>
-          </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 font-medium text-slate-100"><ShieldCheck size={17} className={configured ? "text-emerald-400" : "text-amber-400"} /> Sandbox {configured ? "configurado" : "pendiente de credenciales"}</div>
-            <p className="mt-1 text-xs text-slate-400">Solo empresas propias pueden preparar CFDI desde PAY0.</p>
-          </div>
-        </div>
-      </section>
-
-      {message && <div className="mb-5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">{message}</div>}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <div className="mb-5 flex items-center justify-between">
-            <div><h2 className="text-lg font-semibold text-white">Nuevo borrador CFDI</h2><p className="text-sm text-slate-400">Los datos se validan en servidor y quedan ligados a tu root PAY0.</p></div>
-            <FilePlus2 className="text-emerald-400" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <label className="text-xs text-slate-400">Empresa emisora<select className={inputClass} value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">Selecciona una empresa propia</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.nombre} · {company.rfc}</option>)}</select></label>
-            <label className="text-xs text-slate-400">RFC receptor<input className={inputClass} value={receiver.rfc} onChange={(e) => setReceiver({ ...receiver, rfc: e.target.value.toUpperCase() })} placeholder="XAXX010101000" /></label>
-            <label className="text-xs text-slate-400">Razón social<input className={inputClass} value={receiver.name} onChange={(e) => setReceiver({ ...receiver, name: e.target.value })} placeholder="Nombre o razón social" /></label>
-            <label className="text-xs text-slate-400">Régimen fiscal<select className={inputClass} value={receiver.fiscalRegime} onChange={(e) => setReceiver({ ...receiver, fiscalRegime: e.target.value })}><option value="">Selecciona</option><option value="601">601 General de Ley</option><option value="603">603 Personas Morales</option><option value="612">612 Personas Físicas</option><option value="616">616 Sin obligaciones</option></select></label>
-            <label className="text-xs text-slate-400">Código postal receptor<input className={inputClass} value={receiver.postalCode} onChange={(e) => setReceiver({ ...receiver, postalCode: e.target.value.replace(/\D/g, "").slice(0, 5) })} placeholder="00000" /></label>
-            <label className="text-xs text-slate-400">Uso CFDI<select className={inputClass} value={receiver.cfdiUse} onChange={(e) => setReceiver({ ...receiver, cfdiUse: e.target.value })}><option value="G03">G03 Gastos en general</option><option value="S01">S01 Sin efectos fiscales</option><option value="D01">D01 Honorarios médicos</option></select></label>
-            <label className="text-xs text-slate-400">Método de pago<select className={inputClass} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}><option value="PUE">PUE - Pago en una sola exhibición</option><option value="PPD">PPD - Pago en parcialidades o diferido</option></select></label>
-            <label className="text-xs text-slate-400">Forma de pago<select className={inputClass} value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)}><option value="03">03 Transferencia electrónica</option><option value="01">01 Efectivo</option><option value="99">99 Por definir</option></select></label>
-          </div>
-
-          <div className="mt-7">
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <div><h3 className="font-medium text-white">Conceptos</h3><p className="text-xs text-slate-400">Clave SAT, concepto, cantidad, precio, subtotal, impuesto y total visibles antes de guardar.</p></div>
-              <button type="button" className="text-sm text-emerald-300 hover:text-emerald-200" onClick={() => setConcepts([...concepts, { ...initialConcept }])}>+ Agregar concepto</button>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
-              <div className="grid min-w-[980px] grid-cols-[1.1fr_2.1fr_0.8fr_1fr_1fr_1fr_1fr] gap-2 border-b border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <span>Clave SAT</span><span>Concepto</span><span>Cantidad</span><span>Precio unitario</span><span>Subtotal</span><span>Impuestos</span><span>Total</span>
-              </div>
-              <div className="space-y-3 p-3">
-                {concepts.map((concept, index) => {
-                  const amounts = conceptAmounts(concept);
-                  return <div key={index} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                    <div className="grid min-w-[940px] grid-cols-[1.1fr_2.1fr_0.8fr_1fr_1fr_1fr_1fr] gap-2">
-                      <input className={inputClass} aria-label="Clave SAT" value={concept.productCode} onChange={(e) => updateConcept(index, "productCode", e.target.value)} placeholder="Clave SAT" />
-                      <input className={inputClass} value={concept.description} onChange={(e) => updateConcept(index, "description", e.target.value)} placeholder="Descripción" />
-                      <input className={inputClass} value={concept.quantity} type="number" min="0.000001" onChange={(e) => updateConcept(index, "quantity", e.target.value)} placeholder="Cant." />
-                      <input className={inputClass} value={concept.unitPrice} type="number" min="0" step="0.01" onChange={(e) => updateConcept(index, "unitPrice", e.target.value)} placeholder="Precio" />
-                      <div className="mt-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-200">{money(amounts.subtotal)}</div>
-                      <select className={inputClass} value={concept.taxObject} onChange={(e) => updateConcept(index, "taxObject", e.target.value)}><option value="02">IVA 16%</option><option value="01">No objeto</option><option value="03">Exento</option></select>
-                      <div className="mt-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm font-medium text-white">{money(amounts.total)}</div>
-                    </div>
-                    {concepts.length > 1 && <button className="mt-2 text-xs text-rose-300" onClick={() => setConcepts(concepts.filter((_, i) => i !== index))}>Quitar concepto</button>}
-                  </div>;
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-col items-end gap-2 border-t border-slate-800 pt-5">
-            <div className="text-sm text-slate-400">Subtotal <strong className="ml-3 text-lg text-white">{money(totals.subtotal)}</strong></div>
-            <div className="text-sm text-slate-400">IVA estimado <strong className="ml-3 text-lg text-white">{money(totals.tax)}</strong></div>
-            <div className="text-sm text-slate-400">Total estimado <strong className="ml-3 text-xl text-emerald-300">{money(totals.total)}</strong></div>
-            <button type="button" disabled={saving} onClick={saveDraft} className="mt-2 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 font-medium text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 size={17} className="animate-spin" /> : <FilePlus2 size={17} />}{saving ? "Guardando..." : "Guardar borrador CFDI"}</button>
-          </div>
-        </section>
-
-        <aside className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <div className="flex items-center justify-between"><div><h2 className="font-semibold text-white">Borradores recientes</h2><p className="text-xs text-slate-400">Preparados para validación.</p></div><button onClick={() => void refresh()} className="rounded-lg p-2 text-slate-300 hover:bg-slate-800" aria-label="Actualizar"><RefreshCw size={17} className={loading ? "animate-spin" : ""} /></button></div>
-          <div className="mt-4 space-y-3">{!loading && !invoices.length && <p className="rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">Aún no hay borradores. Crea el primero desde este módulo.</p>}{invoices.map((invoice) => <article key={invoice.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><div className="flex items-center justify-between"><span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs font-medium text-amber-300">{invoice.status}</span><span className="text-xs text-slate-500">{date(invoice.createdAt)}</span></div><p className="mt-2 text-sm font-medium text-slate-100">{invoice.receiver?.name || invoice.receiver?.rfc}</p><p className="text-xs text-slate-400">{invoice.receiver?.rfc} · {money(invoice.subtotal)}</p></article>)}</div>
-        </aside>
-      </div>
-    </main>
-  );
+  async function registerCsd() {
+    if (!companyId || !certificate || !privateKey || !privateKeyPassword) { setMessage("Selecciona .cer, .key e ingresa la contraseña de la llave."); return; }
+    if (!/\.cer$/i.test(certificate.name) || !/\.key$/i.test(privateKey.name)) { setMessage("Selecciona un certificado .cer y una llave .key."); return; }
+    setRegisteringCsd(true); setMessage("");
+    try {
+      const result = await registerFacturamaProductionCsd({ companyId, certificateBase64: await fileBase64(certificate), privateKeyBase64: await fileBase64(privateKey), privateKeyPassword });
+      setPrivateKeyPassword(""); setCertificate(null); setPrivateKey(null); setCsdStatus(await getFacturamaProductionCsdStatus(companyId));
+      setMessage(`CSD de ${result.rfc} registrado directamente en Facturama API Multiemisor.`);
+    } catch (e: any) { setMessage(`No se pudo registrar el CSD: ${e?.message || e}`); } finally { setRegisteringCsd(false); }
+  }
+  return <main className="min-h-full p-4 sm:p-6">
+    <section className="mb-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/70 via-slate-950 to-slate-950 p-6"><div className="flex flex-col justify-between gap-5 md:flex-row"><div><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.18em] text-emerald-300"><ReceiptText size={16} /> CFDI 4.0 · Facturama</div><h1 className="text-3xl font-semibold text-white">Facturación automática desde Solicitudes</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">PAY0 crea el borrador al detectar una OC de empresa propia, toma cliente y CSF desde el catálogo y valida SAT antes de habilitar el timbrado. Aquí no se captura una factura manual.</p></div><div className="rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm"><div className="flex items-center gap-2 font-medium text-slate-100"><ShieldCheck size={17} className={connection === "CONNECTED" ? "text-emerald-400" : "text-amber-400"} /> Producción {connection === "CONNECTED" ? "conectada" : connection === "AUTH_FAILED" ? "credenciales rechazadas" : configured ? "sin conexión" : "sin credenciales"}</div><p className="mt-1 text-xs text-slate-400">Conexión API comprobada; CSD se valida al emitir.</p></div></div></section>
+    {message && <div className="mb-5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">{message}</div>}
+    <section className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">Cola fiscal de operaciones</h2><p className="mt-1 text-sm text-slate-400">Cada fila corresponde a una Solicitud y su mismo expediente de Materialidad; no crea una operación paralela.</p></div><button onClick={() => void refresh()} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"><RefreshCw size={17} className={loading ? "animate-spin" : ""} /></button></div><div className="mt-4 overflow-x-auto"><table className="min-w-[1020px] w-full text-left text-sm"><thead className="border-b border-slate-700 text-xs uppercase tracking-wide text-slate-400"><tr><th className="p-3">Solicitud / OC</th><th className="p-3">Cliente</th><th className="p-3">Emisor</th><th className="p-3">Importe</th><th className="p-3">Validación</th><th className="p-3">Estado</th><th className="p-3">Acción</th></tr></thead><tbody>{!loading && !invoices.length && <tr><td className="p-5 text-slate-400" colSpan={7}>Aún no hay operaciones fiscales. Sube una OC válida de empresa propia desde Solicitudes.</td></tr>}{invoices.map(i => <tr key={i.id} className="border-b border-slate-800/80 align-top"><td className="p-3 font-medium text-slate-100">{i.sourceSolicitudFolio || i.sourceSolicitudId || "Sin solicitud"}<div className="mt-1 text-xs text-slate-500">{date(i.createdAt)}</div></td><td className="p-3 text-slate-200">{i.receiver?.name || "Cliente pendiente"}<div className="mt-1 text-xs text-slate-400">{i.receiver?.rfc || "RFC pendiente"}</div></td><td className="p-3 text-slate-200">{i.issuer?.name || "—"}<div className="mt-1 text-xs text-slate-400">{i.issuer?.rfc || ""}</div></td><td className="p-3 font-medium text-slate-100">{money(i.subtotal * 1.16)}</td><td className="p-3 max-w-[275px]"><div className="flex gap-1.5 text-xs text-slate-300">{i.status === "AUTO_DRAFT_FISCAL_VALIDATED" || i.status === "EMITTED" ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" /> : <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-400" />}<span>{validation(i)}</span></div></td><td className="p-3"><span className="rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-slate-200">{i.status}</span>{i.uuid && <div className="mt-2 max-w-[180px] break-all text-xs text-emerald-300">UUID {i.uuid}</div>}</td><td className="p-3">{["AUTO_DRAFT_FISCAL_VALIDATED", "PRODUCTION_ERROR"].includes(i.status) && <button disabled={connection !== "CONNECTED" || issuingId === i.id} onClick={() => void issue(i.id)} className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-medium text-rose-200 disabled:opacity-40">{issuingId === i.id ? "Timbrando..." : i.status === "PRODUCTION_ERROR" ? "Reintentar CFDI" : "Emitir CFDI real"}</button>}</td></tr>)}</tbody></table></div></section>
+    <details className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"><summary className="cursor-pointer font-semibold text-white">Configuración controlada del emisor y catálogos</summary><p className="mt-2 text-sm text-slate-400">No son datos de una factura manual: administran únicamente al emisor propio y sus catálogos canónicos.</p><div className="mt-4 grid gap-3 sm:grid-cols-4"><label className="text-xs text-slate-400">Empresa propia<select className={inputClass} value={companyId} onChange={e => setCompanyId(e.target.value)}>{companies.map(c => <option key={c.id} value={c.id}>{c.nombre} · {c.rfc}</option>)}</select></label><label className="text-xs text-slate-400">Razón social SAT<input className={inputClass} value={issuer.issuerName} onChange={e => setIssuer({ ...issuer, issuerName: e.target.value.toUpperCase() })} /></label><label className="text-xs text-slate-400">Régimen emisor<input className={inputClass} value={issuer.fiscalRegime} onChange={e => setIssuer({ ...issuer, fiscalRegime: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></label><label className="text-xs text-slate-400">CP expedición<input className={inputClass} value={issuer.expeditionPlace} onChange={e => setIssuer({ ...issuer, expeditionPlace: e.target.value.replace(/\D/g, "").slice(0, 5) })} /></label></div><button disabled={saving || !companyId} onClick={() => void saveIssuer()} className="mt-3 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm text-emerald-200 disabled:opacity-50">Guardar emisor</button><div className="mt-6 grid gap-4 border-t border-slate-800 pt-5 lg:grid-cols-2"><div><h3 className="font-medium text-white">Catálogo fiscal autorizado por empresa</h3><div className="mt-2 flex gap-3"><input className={inputClass} value={catalogVersion} onChange={e => setCatalogVersion(e.target.value)} /><label className="mt-1 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-500/40 px-3 text-sm text-emerald-200">{importingCatalog ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Importar<input className="sr-only" type="file" accept=".xlsx" onChange={e => { void importCatalog(e.target.files?.[0]); e.currentTarget.value = ""; }} /></label></div></div><div><h3 className="font-medium text-white">Catálogo global SAT CFDI 4.0</h3><label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sky-500/40 px-3 py-2 text-sm text-sky-200">{importingSat ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {importingSat ? `Importando ${satProgress}%` : "Importar paquete SAT"}<input className="sr-only" type="file" accept=".db.bz2" onChange={e => { void importSat(e.target.files?.[0]); e.currentTarget.value = ""; }} /></label></div></div></details>
+    <section className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+      <h2 className="text-lg font-semibold text-white">CSD de API Multiemisor</h2>
+      <p className="mt-1 text-sm text-slate-300">Se envía una sola vez directamente a Facturama Producción. PAY0 no guarda el certificado, llave privada ni contraseña.</p>
+      <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200">{csdStatus ? (csdStatus.registered ? `Registrado para ${csdStatus.rfc}${csdStatus.expirationDate ? ` · vence ${new Date(csdStatus.expirationDate).toLocaleDateString("es-MX")}` : ""}` : `No registrado para ${csdStatus.rfc}`) : "Consultando estado del CSD..."}</div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3"><label className="text-xs text-slate-400">Certificado .cer<input className={inputClass} type="file" accept=".cer" onChange={e => setCertificate(e.target.files?.[0] || null)} /></label><label className="text-xs text-slate-400">Llave privada .key<input className={inputClass} type="file" accept=".key" onChange={e => setPrivateKey(e.target.files?.[0] || null)} /></label><label className="text-xs text-slate-400">Contraseña de la llave<input className={inputClass} type="password" autoComplete="new-password" value={privateKeyPassword} onChange={e => setPrivateKeyPassword(e.target.value)} /></label></div>
+      <button type="button" disabled={registeringCsd || !companyId} onClick={() => void registerCsd()} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-400/50 px-4 py-3 text-sm font-medium text-amber-100 disabled:opacity-50">{registeringCsd ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}{registeringCsd ? "Registrando CSD..." : "Registrar CSD en Facturama"}</button>
+    </section>
+  </main>;
 }

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "slim_capital-constancia-entrega-v1.1",
+  "documentType": "CONSTANCIA_ENTREGA_BIENES",
+  "companyId": "slim_capital",
+  "companyName": "SLIM CAPITAL, S.A. DE C.V.",
+  "rfc": "SCA180724M59",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#60A848",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "9963ddcdc7d4e4f8967cb9a598957450390bcf7aa8bbc1895db8fff4021ec480",
+    "htmlSha256": "da881b15f2e24f954bc3d5084f0550edced8439a5506ed31fbb6883b37fdf8b2",
+    "cssSha256": "2c98f4ef377785d1ed3159dbd461c36be0a6cf44926d502f18f494c1dfbfc4be",
+    "logoSha256": "36698f9854aa59c3ddd70018b5a780eb224716320fc4eeb49bcdd14ad2775b6d",
+    "sourceQuotationPdfSha256": "ddc5c6ac1f6c35f14ddde038877e75add30204a1f235afe4dc016648b3df5c5a",
+    "templateBundleSha256": "dbaea29d50fb3e83fb3f1a5e0e386b9e2b80b8406b6a80a96f8c91cc4a162c55"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

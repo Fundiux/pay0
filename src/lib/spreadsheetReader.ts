@@ -18,8 +18,12 @@ function normalizeCellValue(value: any): unknown {
   if (value === null || value === undefined) return "";
   if (typeof value !== "object") return value;
   if ("formula" in value || "sharedFormula" in value) {
-    // ExcelJS does not calculate formulas; only consume saved, scalar results.
-    return normalizeCellValue(value.result);
+    // Conserva formula y cache. ExcelJS no calcula formulas cuando el libro
+    // fue generado sin cache, y el parser puede evaluarla de forma segura.
+    const formula = value.formula || value.sharedFormula || "";
+    return value.result !== undefined
+      ? normalizeCellValue(value.result)
+      : { formula: String(formula), result: null };
   }
   if ("error" in value) return "";
   if (Array.isArray(value.richText)) return value.richText.map((part: any) => part.text || "").join("");

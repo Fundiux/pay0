@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "204_publicidad-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "204_publicidad",
+  "companyName": "204 PUBLICIDAD, S.A. DE C.V.",
+  "rfc": "DCP191121H35",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#F03030",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "581f55fd14c014dc331c5a43145a727f3a693f9578172f3f47a24a65cef393b7",
+    "htmlSha256": "6e22eafd9598579115d8a15178395aef1186d252d295103409cc59f4c6761627",
+    "cssSha256": "a7b555ae4c2fad3e79c375154ee8184698f0a9cba9919e8aed7a4f5d8f56ed10",
+    "logoSha256": "eef873c75132095225867cd82e0a7dbed94fe99698227ba887c00bbdcbf193ce",
+    "sourceQuotationPdfSha256": "7e2c46a8cc48cb7abe8f5ea97773237d5b7ad294d1c9a3dc8e0ec08319abe9a9",
+    "templateBundleSha256": "1feb48916e9c44a7d53b3848b47eb95f70075eb3b5a7b5862d09fa3dc676f890"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

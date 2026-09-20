@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "comercializadora_aimiera-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "comercializadora_aimiera",
+  "companyName": "COMERCIALIZADORA AIMIERA, S.A. DE C.V.",
+  "rfc": "CAI190506GR1",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#00A8F0",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "91651d78331c5a70749ffeb59c72f2adbc5857b988fdaf370917ba7b6143998b",
+    "htmlSha256": "3a6120de37f4f3d2be9f8e026723b0dfa4f3c3dcc9a0f19e3fa7809e1dbb3c73",
+    "cssSha256": "330cd707f18ecdab3c9976d17b6d90052c169dbb43f3e6ebd62cb097f79086e4",
+    "logoSha256": "1117fd1b730797c03f200987bfe09b27635ca38e1756b3c1ea2491e56f61725b",
+    "sourceQuotationPdfSha256": "3773456eb15f93dff39676e970da7b4ffd928a9ba9ac1e2cf5adf545441c0d9f",
+    "templateBundleSha256": "2d5a97112d6ddbb4a1ed11a6fdfaac01f37ec7c801750988272d2c90414d9fec"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}

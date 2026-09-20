@@ -113,6 +113,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
 
   DOCUMENTO_SOLICITUD_SUBIDO: eventEntry("DOCUMENTO_SOLICITUD_SUBIDO", "Documento de solicitud subido", "docs", "document", "success"),
   DOCUMENTO_SOLICITUD_DESACTIVADO: eventEntry("DOCUMENTO_SOLICITUD_DESACTIVADO", "Documento de solicitud desactivado", "docs", "document", "warning"),
+  COTIZACION_GENERADA: eventEntry("COTIZACION_GENERADA", "Cotizacion generada", "docs", "document", "success"),
+  CONSTANCIA_RECEPCION_GENERADA: eventEntry("CONSTANCIA_RECEPCION_GENERADA", "Constancia de recepcion generada", "docs", "document", "success"),
   DOCUMENTO_DISPERSION_SUBIDO: eventEntry("DOCUMENTO_DISPERSION_SUBIDO", "Comprobante de dispersion subido", "docs", "document", "success"),
   DOCUMENTO_DISPERSION_DESACTIVADO: eventEntry("DOCUMENTO_DISPERSION_DESACTIVADO", "Comprobante de dispersion desactivado", "docs", "document", "warning"),
 
@@ -134,6 +136,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   GASTO_RECONOCIDO: eventEntry("GASTO_RECONOCIDO", "Gasto reconocido", "costos", "financial", "success"),
   GASTO_REVERTIDO: eventEntry("GASTO_REVERTIDO", "Gasto revertido", "costos", "financial", "warning"),
   COMPLEMENTO_PAGO_SEGUIMIENTO: eventEntry("COMPLEMENTO_PAGO_SEGUIMIENTO", "Seguimiento de complemento de pago", "facturacion", "document", "warning"),
+  CATALOGO_FISCAL_EMPRESA_IMPORTADO: eventEntry("CATALOGO_FISCAL_EMPRESA_IMPORTADO", "Catálogo fiscal de empresa importado", "facturacion", "catalog", "success"),
+  CATALOGO_SAT_GLOBAL_IMPORTADO: eventEntry("CATALOGO_SAT_GLOBAL_IMPORTADO", "Catálogo SAT global importado", "facturacion", "catalog", "success"),
   AGENTE_007_OBSERVACION: eventEntry("AGENTE_007_OBSERVACION", "Observación registrada por Hugo", "agente007", "business", "success"),
 
   DESPACHO_CREATE: eventEntry("DESPACHO_CREATE", "Despacho creado", "despachos", "business", "success"),

@@ -320,7 +320,9 @@ export function isPublicRoutePath(pathname: string): boolean {
     path === "/login" ||
     path.startsWith("/login/") ||
     path === "/mat" ||
-    path.startsWith("/mat/")
+    path.startsWith("/mat/") ||
+    path === "/firma" ||
+    path.startsWith("/firma/")
   );
 }
 
@@ -463,4 +465,3 @@ export function getFirstAllowedRoute(profile: any): string {
 
   return "/dashboard";
 }
-

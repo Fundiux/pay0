@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cotización {{folio}}</title>
+    <link rel="stylesheet" href="./template.css" />
+  </head>
+  <body>
+    <main class="page quote quote-{{companyId}}">
+      <header class="quote-header">
+        <section class="brand">
+          <img class="brand-logo" src="{{logoUrl}}" alt="{{companyName}}" />
+          <div>
+            <h1>{{companyName}}</h1>
+            <p>RFC: {{companyRfc}}</p>
+          </div>
+        </section>
+        <section class="quote-title">
+          <p class="eyebrow">Cotización</p>
+          <h2>{{folio}}</h2>
+          <dl>
+            <div>
+              <dt>Fecha</dt>
+              <dd>{{fecha}}</dd>
+            </div>
+            <div>
+              <dt>Vigencia</dt>
+              <dd>{{vigencia}}</dd>
+            </div>
+          </dl>
+        </section>
+      </header>
+
+      <section class="party-grid">
+        <div>
+          <h3>Cliente</h3>
+          <p class="strong">{{cliente.nombre}}</p>
+          <p>RFC: {{cliente.rfc}}</p>
+        </div>
+        <div>
+          <h3>Contacto</h3>
+          <p>{{cliente.contacto}}</p>
+        </div>
+        <div>
+          <h3>Referencia / OC</h3>
+          <p>{{referenciaOc}}</p>
+        </div>
+      </section>
+
+      <table class="items">
+        <thead>
+          <tr>
+            <th>Cant.</th>
+            <th>Unidad</th>
+            <th>Descripción</th>
+            <th>Clave</th>
+            <th class="money">P. unitario</th>
+            <th class="money">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{items}}
+        </tbody>
+      </table>
+
+      <section class="totals">
+        <dl>
+          <div>
+            <dt>Subtotal</dt>
+            <dd>{{subtotal}}</dd>
+          </div>
+          <div>
+            <dt>IVA</dt>
+            <dd>{{iva}}</dd>
+          </div>
+          <div class="grand-total">
+            <dt>Total</dt>
+            <dd>{{total}}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="payment-grid">
+        <div>
+          <h3>Datos bancarios</h3>
+          <p>{{bankName}}</p>
+          <p>Cuenta: {{bankAccount}}</p>
+          <p>CLABE: {{bankClabe}}</p>
+        </div>
+        <div>
+          <h3>Condiciones</h3>
+          <p>{{terms}}</p>
+        </div>
+        <div class="qr-box">
+          <img src="{{qr}}" alt="QR de trazabilidad" />
+        </div>
+      </section>
+
+      <footer class="trace">
+        <span>quotationId: {{quotationId}}</span>
+        <span>solicitudId: {{solicitudId}}</span>
+        <span>materialidadId: {{materialidadId}}</span>
+        <span>purchaseOrderId: {{purchaseOrderId}}</span>
+        <span>cfdiUuid: {{cfdiUuid}}</span>
+      </footer>
+    </main>
+  </body>
+</html>

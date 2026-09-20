@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "templateId": "mercacobra-constancia-servicio-v1.1",
+  "documentType": "CONSTANCIA_SERVICIO",
+  "companyId": "mercacobra",
+  "companyName": "MERCACOBRA, S.A.P.I. DE C.V.",
+  "rfc": "MCO200710YV8",
+  "version": "1.1",
+  "status": "ACTIVE",
+  "identitySource": "source_quotation_reference.pdf",
+  "styleRules": {
+    "headerMatchesQuotation": true,
+    "logoMatchesQuotation": true,
+    "allTextColor": "#000000",
+    "accentColor": "#303090",
+    "accentUsage": "lines, borders and light backgrounds only"
+  },
+  "template": {
+    "html": "template.html",
+    "css": "template.css",
+    "editableDocx": "editable.docx"
+  },
+  "reference": {
+    "pdf": "reference.pdf",
+    "referencePdfSha256": "2ac8daf7e29c9521bd61ccce6f00bd10b7404622108c715699b0aa4682b8d126",
+    "htmlSha256": "0278b48ea6b0dd8bda2c859c463ca4923a9ca64999ea6dde9a987c6848553089",
+    "cssSha256": "3f636aa7835d74d63347740fc7bb695ed1ff7ecfa39be3422a76e5330f9dde0f",
+    "logoSha256": "a8dd404731d27c72cdf8ff148f0a0c5c5198f981c1448412e335188b2e768426",
+    "sourceQuotationPdfSha256": "e90cb80902130c094e5b232784a1e60cf813aa579c1766ff94e9b0ad0e3057ff",
+    "templateBundleSha256": "83ee0639fb60c68910190c32e7c7053fb129a1e755e4b00764df08af11f44d8b"
+  },
+  "assets": {
+    "logo": "assets/logo.png"
+  },
+  "traceabilityFields": [
+    "constanciaFolio",
+    "cotizacionFolio",
+    "ocFolio",
+    "solicitudFolio",
+    "cfdiUuid",
+    "iqFolio",
+    "expedienteId",
+    "sha256Expediente",
+    "verificationUrl"
+  ]
+}
