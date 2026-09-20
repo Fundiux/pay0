@@ -2586,6 +2586,21 @@ export { getPaymentsFinancialPostingIssuesReport } from "./modules/reports/calla
 export { getOperationalIntelligenceReport } from "./modules/reports/callables";
 export { getOperationalMetricsReport } from "./modules/reports/callables";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
+export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
+export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
+export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
+export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";
+export { queueControlCenterApplications, queueControlCenterBalances, queueControlCenterMovements, queueControlCenterAdvances, queueControlCenterLearning, queueControlCenterRecovery, queueControlCenterExpenses } from "./modules/controlCenter/automation";
+export { queueControlCenterIqInvoice, queueControlCenterIqCreate, queueControlCenterIqStatus, queueControlCenterIqReceipt, queueControlCenterIqDeposit, queueControlCenterWhatsapp, queueControlCenterTelegram } from "./modules/controlCenter/automation";
+export {
+  queueControlCenterSolicitud,
+  queueControlCenterPago,
+  queueControlCenterFacturama,
+  queueControlCenterMateriality,
+  queueControlCenterDispersion,
+  queueControlCenterHugo,
+  reconcileDirtyControlCenters,
+} from "./modules/controlCenter/automation";
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";

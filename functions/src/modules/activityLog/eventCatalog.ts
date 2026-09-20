@@ -128,6 +128,11 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   COMPANY_CREATE: eventEntry("COMPANY_CREATE", "Empresa creada", "empresas", "business", "success"),
   COMPANY_TOGGLE: eventEntry("COMPANY_TOGGLE", "Empresa activada o desactivada", "empresas", "business", "warning"),
   FACTURA_BORRADOR_CREADO: eventEntry("FACTURA_BORRADOR_CREADO", "Borrador CFDI creado", "facturacion", "financial", "success"),
+  FACTURA_EMITIDA: eventEntry("FACTURA_EMITIDA", "CFDI vinculado al expediente", "facturacion", "financial", "success"),
+  OPERACION_RECUPERADA: eventEntry("OPERACION_RECUPERADA", "Operación reconciliada", "solicitudes", "repair", "success"),
+  OPERACION_RECUPERACION_FALLIDA: eventEntry("OPERACION_RECUPERACION_FALLIDA", "Recuperación requiere atención", "solicitudes", "repair", "warning"),
+  GASTO_RECONOCIDO: eventEntry("GASTO_RECONOCIDO", "Gasto reconocido", "costos", "financial", "success"),
+  GASTO_REVERTIDO: eventEntry("GASTO_REVERTIDO", "Gasto revertido", "costos", "financial", "warning"),
   AGENTE_007_OBSERVACION: eventEntry("AGENTE_007_OBSERVACION", "Observación registrada por Hugo", "agente007", "business", "success"),
 
   DESPACHO_CREATE: eventEntry("DESPACHO_CREATE", "Despacho creado", "despachos", "business", "success"),

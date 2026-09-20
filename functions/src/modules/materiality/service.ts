@@ -427,6 +427,7 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
   const solicitudRef = db.collection("solicitudes").doc(solicitudId);
 
   await db.runTransaction(async (tx) => {
+    const previousOperation = await tx.get(operationRef);
     await ensureMaterialityClientCompanyTx(tx, {
       rootId,
       uid,
@@ -471,9 +472,9 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
       updatedAt: now,
       updatedBy: uid,
       updatedByUsername: username,
-      createdAt: now,
-      createdBy: uid,
-      createdByUsername: username,
+      createdAt: previousOperation.data()?.createdAt || now,
+      createdBy: previousOperation.data()?.createdBy || uid,
+      createdByUsername: previousOperation.data()?.createdByUsername || username,
     }, { merge: true });
 
     tx.set(solicitudRef, {

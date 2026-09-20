@@ -1,10 +1,31 @@
 ﻿# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-14  
+Actualizado: 2026-09-19
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
+
+## Entrega desplegada — interconexión Control Center, 2026-09-19
+
+- Rama: `feature/control-center-interconnection`; se preservaron los cambios previos del workspace, sin mezclar ni descartar ramas.
+- No se introduce Proyectos. Se conectan 20 fuentes operativas a contribuciones incrementales, eventos y agregados aislados por root.
+- Acceso consolidado sólo Superadmin. Histórico reanudable por lotes; fechas del filtro canónico; avisos explícitos de cobertura, límites y fuentes desconocidas.
+- Pagos, aplicaciones, comisiones, gastos documentados, Wallet e integraciones se distinguen. No se anuncia utilidad/impuestos sin cobertura contable.
+- Recuperación de borrador/materialidad con permisos vigentes; documentos en revisión; resolución de incidencias cuando se corrige la fuente. Sin timbrado, cancelación ni transferencias automáticas.
+- Publicación local CFDI/solicitud/expediente atómica; documentos fiscales idempotentes; Total del XML conservado; alcance del emisor verificado antes del PAC.
+- Materialidad conserva su fecha original. Hugo recibe eventos de emisión/recuperación; aprobación concurrente no duplica el aprendizaje. Sólo reglas con aprobaciones netas positivas cuentan como confirmadas.
+- Evidencia: builds frontend/Functions, verificador de autorización y seis smokes PASS (contrato, eventos, snapshot, conexiones, enlace fiscal y UI Chromium). Pruebas de API/Admin en emulador, no de reglas. PAC y Storage simulados: cero timbrados reales. Prueba de concurrencia de Hugo incluida con `PAY0_QA_HUGO_CONCURRENCY=true`.
+- Despliegue completado: 30 Functions de Control Center/recuperación/gastos, 10 de interconexión y Hosting/SSR. Las 30 funciones de Control Center consultadas `ACTIVE`; `/reportes` HTTP 200 y API analítica anónima HTTP 401. No se desplegaron reglas/índices ni se ejecutaron transferencias, cancelaciones o envíos externos.
+- Histórico productivo completo: 2,070 contribuciones; snapshot incremental versión 2; 37 métricas cotejadas contra contribuciones sin diferencias. El mantenimiento sólo consolidó datos derivados y encoló errores existentes.
+- Límite de validación: no había navegador con sesión autenticada disponible. La UI se probó en Chromium aislado con backend de emulador; no se afirma un recorrido autenticado de producción ni disponibilidad de proveedores externos.
+- Alcance entregado: interconexión 3B, no todas las ideas futuras del Control Center 3.0. Una dimensión por periodo (hasta 366 días); utilidad/impuestos requieren cobertura contable. Se mantienen los cambios previos y los archivos fiscales/Hugo superpuestos fuera del commit acotado, sin descartarlos.
+- Tracker y estado maestro se actualizan manualmente con evidencia por entrega; no se afirma que exista automatización de su escritura.
 
 Este archivo complementa `AGENTS.md`; no lo reemplaza. `AGENTS.md` conserva reglas
 estables de desarrollo y seguridad. Aquí se administra el trabajo que cambia día a día.
+
+> **Estado de continuidad:** `PAY0_ESTADO_MAESTRO.md` es la bitácora técnica
+> detallada creada el 2026-09-16/17. Este tracker conserva los IDs y cierres;
+> antes de cerrar o priorizar un ID, contrastarlo contra el código y el Estado
+> Maestro. Los conteos históricos de este archivo no sustituyen evidencia.
 
 ## Cómo usarlo
 

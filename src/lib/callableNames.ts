@@ -1,4 +1,11 @@
 export const CALLABLES = {
+  getControlCenterAnalytics: "getControlCenterAnalytics",
+  initializeControlCenterAnalytics: "initializeControlCenterAnalytics",
+  getControlCenterEvidence: "getControlCenterEvidence",
+  recognizeControlCenterExpense: "recognizeControlCenterExpense",
+  reverseControlCenterExpense: "reverseControlCenterExpense",
+  getControlCenterOverview: "getControlCenterOverview",
+  refreshControlCenterOverview: "refreshControlCenterOverview",
   getOperationalIntelligenceReport: "getOperationalIntelligenceReport",
   getOperationalMetricsReport: "getOperationalMetricsReport",
   getPaymentsFinancialPostingIssuesReport: "getPaymentsFinancialPostingIssuesReport",

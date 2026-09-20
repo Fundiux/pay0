@@ -5,6 +5,8 @@ import { AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 
 import DateScopeBar from "@/components/DateScopeBar";
 import NoAccess from "@/components/NoAccess";
+import ControlCenterOverview from "@/components/control-center/ControlCenterOverview";
+import ControlCenterAnalytics from "@/components/control-center/ControlCenterAnalytics";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { downloadSpreadsheetFile } from "@/lib/spreadsheetReader";
@@ -26,8 +28,9 @@ import {
   type PaymentsFinancialPostingIssuesReportRow,
   type PagoReportDateBackfillResult,
 } from "@/services/reports";
+import { getControlCenterOverview, refreshControlCenterOverview, type ControlCenterSnapshot } from "@/services/controlCenter";
 
-type ReportTab = "earnings" | "operational" | "metrics" | "postingIssues";
+type ReportTab = "control" | "earnings" | "operational" | "metrics" | "postingIssues";
 
 function money(value: number | null | undefined) {
   const amount = Number(value || 0);
@@ -96,7 +99,7 @@ async function exportToExcel(filename: string, sheetName: string, rows: Record<s
 export default function ReportesPage() {
   const { profile, loading: profileLoading } = useUserProfile();
 
-  const [activeTab, setActiveTab] = useState<ReportTab>("earnings");
+  const [activeTab, setActiveTab] = useState<ReportTab>("control");
   const [mode, setMode] = useState<DateScopeMode>("month");
   const [baseDate, setBaseDate] = useState(new Date());
   const [customRange, setCustomRange] = useState<CustomRange>({});
@@ -105,12 +108,14 @@ export default function ReportesPage() {
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [operationalLoading, setOperationalLoading] = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [controlLoading, setControlLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const [earningsError, setEarningsError] = useState("");
   const [issuesError, setIssuesError] = useState("");
   const [operationalError, setOperationalError] = useState("");
   const [metricsError, setMetricsError] = useState("");
+  const [controlError, setControlError] = useState("");
   const [exportError, setExportError] = useState("");
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillError, setBackfillError] = useState("");
@@ -121,6 +126,8 @@ export default function ReportesPage() {
   const [issuesResult, setIssuesResult] = useState<PaymentsFinancialPostingIssuesReportResult | null>(null);
   const [operationalResult, setOperationalResult] = useState<OperationalIntelligenceReportResult | null>(null);
   const [metricsResult, setMetricsResult] = useState<OperationalMetricsReportResult | null>(null);
+  const [controlSnapshot, setControlSnapshot] = useState<ControlCenterSnapshot | null>(null);
+  const [controlRefreshVersion, setControlRefreshVersion] = useState(0);
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
@@ -197,6 +204,15 @@ export default function ReportesPage() {
   }
 
   async function loadCurrentTab() {
+    if (activeTab === "control") {
+      if (String(profile?.role || "").toLowerCase() !== "superadmin") return;
+      setControlRefreshVersion(value => value + 1);
+      setControlLoading(true); setControlError("");
+      try { setControlSnapshot((await getControlCenterOverview()).snapshot); }
+      catch (err: any) { setControlError(err?.message || "No se pudo cargar el Control Center."); }
+      finally { setControlLoading(false); }
+      return;
+    }
     if (activeTab === "earnings") {
       await loadEarningsReport();
       return;
@@ -209,6 +225,13 @@ export default function ReportesPage() {
     if (activeTab === "metrics") { await loadMetricsReport(); return; }
 
     await loadPostingIssuesReport();
+  }
+
+  async function refreshControlCenter() {
+    setControlLoading(true); setControlError("");
+    try { setControlSnapshot((await refreshControlCenterOverview()).snapshot); }
+    catch (err: any) { setControlError(err?.message || "No se pudieron actualizar las métricas."); }
+    finally { setControlLoading(false); }
   }
 
   async function runPagoDateBackfill(apply: boolean) {
@@ -375,7 +398,9 @@ export default function ReportesPage() {
   const operationalAlertRows: OperationalAlertRow[] = operationalResult?.alerts || [];
 
   const currentLoading =
-    activeTab === "earnings"
+    activeTab === "control"
+      ? controlLoading
+      : activeTab === "earnings"
       ? earningsLoading
       : activeTab === "operational"
         ? operationalLoading
@@ -384,7 +409,9 @@ export default function ReportesPage() {
           : issuesLoading;
 
   const activeRowsCount =
-    activeTab === "earnings"
+    activeTab === "control"
+      ? 0
+      : activeTab === "earnings"
       ? earningsRows.length
       : activeTab === "operational"
         ? clientRankingRows.length + userActivityRows.length + operationalAlertRows.length
@@ -397,13 +424,13 @@ export default function ReportesPage() {
       <header className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-sky-400">
-            Reportes
+            PAY0 Control Center
           </p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-white">
-            Centro financiero
+            Centro de control e inteligencia
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Ganancias, alertas de posteo e inteligencia operativa.
+            Estado operativo, financiero, fiscal y de integraciones en un solo lugar.
           </p>
         </div>
 
@@ -411,7 +438,7 @@ export default function ReportesPage() {
           <button
             type="button"
             onClick={exportActiveTab}
-            disabled={exporting || activeRowsCount === 0}
+            disabled={activeTab === "control" || exporting || activeRowsCount === 0}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-4 text-[11px] font-bold uppercase tracking-wide text-emerald-300 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileDown size={15} />
@@ -471,6 +498,9 @@ export default function ReportesPage() {
       ) : null}
 
       <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#111827] p-2 sm:flex-row">
+        <button type="button" onClick={() => setActiveTab("control")} className={activeTab === "control" ? "h-11 flex-1 rounded-xl bg-sky-400/15 px-4 text-[11px] font-bold uppercase tracking-wide text-sky-300" : "h-11 flex-1 rounded-xl px-4 text-[11px] font-bold uppercase tracking-wide text-slate-400 hover:bg-white/5"}>
+          Centro de control
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab("earnings")}
@@ -518,7 +548,12 @@ export default function ReportesPage() {
         </div>
       ) : null}
 
-      {activeTab === "metrics" ? (
+      {activeTab === "control" ? (
+        String(profile?.role || "").toLowerCase() === "superadmin" ? <div className="space-y-5">
+          <ControlCenterAnalytics from={range.from} to={range.to} refreshVersion={controlRefreshVersion} />
+          <details className="rounded-xl border border-white/10 p-4"><summary className="mb-4 cursor-pointer font-bold">Resumen operativo global · sin filtro de fechas</summary><ControlCenterOverview snapshot={controlSnapshot} loading={controlLoading} error={controlError} onRefresh={refreshControlCenter} canRefresh /></details>
+        </div> : <p className="rounded-xl border border-white/10 p-4">El Control Center consolidado está habilitado únicamente para Superadmin. Tus reportes autorizados continúan disponibles en las demás pestañas.</p>
+      ) : activeTab === "metrics" ? (
         <section className="mb-5">
           {metricsError ? <div className="mb-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{metricsError}</div> : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
