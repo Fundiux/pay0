@@ -2,6 +2,8 @@ export const MAX_PAGO_DOCUMENT_SIZE_BYTES = 1 * 1024 * 1024;
 
 export const PAGO_DOCUMENT_TYPES = [
   "COMPROBANTE_PAGO",
+  "COMPLEMENTO_PAGO_XML",
+  "COMPLEMENTO_PAGO_PDF",
   "OTRO",
 ] as const;
 
@@ -21,6 +23,10 @@ export function getPagoDocumentTypeLabel(type: any): string {
   switch (normalized) {
     case "COMPROBANTE_PAGO":
       return "Comprobante de Pago";
+    case "COMPLEMENTO_PAGO_XML":
+      return "Complemento de Pago XML";
+    case "COMPLEMENTO_PAGO_PDF":
+      return "Complemento de Pago PDF";
     case "OTRO":
     default:
       return "Otro";

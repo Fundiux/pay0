@@ -128,12 +128,14 @@ function buildRecommendationPayload(activityId: string, payload: Record<string, 
   const event = String(signal.event || "");
   const bankNeedsReview = signal.bankIdentificationNeedsReview === true;
   const requiresPaymentReview = ["IQ_PAGO_REQUIERE_REVISION", "PAGO_POSTEO_FINANCIERO_PENDIENTE"].includes(event);
-  const requiresOcReview = event === "DOCUMENTO_SOLICITUD_SUBIDO" && clean(payload.documentType, 80) === "ORDEN_COMPRA";
-  if (!bankNeedsReview && !requiresPaymentReview && !requiresOcReview) return null;
-  const kind = bankNeedsReview ? "BANK_CLASSIFICATION" : requiresOcReview ? "OC_FISCAL_REVIEW" : "PAYMENT_RECONCILIATION";
+  // Uploading an OC alone is not a concrete human decision. It remains in
+  // observations, but Hugo only creates a confirmation when it has an actual
+  // conflicting value or an unresolved operational exception.
+  if (!bankNeedsReview && !requiresPaymentReview) return null;
+  const kind = bankNeedsReview ? "BANK_CLASSIFICATION" : "PAYMENT_RECONCILIATION";
   const proposed = bankNeedsReview
     ? (signal.operatorSelectedBankName || signal.detectedBankName || "")
-    : requiresOcReview ? "REVISAR_PARTIDAS_Y_CLASIFICACION_SAT_OC" : "REVISAR_CONCILIACION";
+    : "Revisar la conciliación pendiente del pago";
   return {
     rootId: observation.rootId,
     agentId: "AGENTE_007",
@@ -145,7 +147,13 @@ function buildRecommendationPayload(activityId: string, payload: Record<string, 
     sourceActivityId: activityId,
     sourceEvent: event,
     proposal: proposed,
-    confidence: bankNeedsReview && signal.operatorSelectedBankName ? 0.75 : requiresOcReview ? 0.65 : 0.5,
+    confidence: bankNeedsReview && signal.operatorSelectedBankName ? 0.75 : 0.5,
+    title: bankNeedsReview ? "Revisión de identificación bancaria" : "Revisión de conciliación de pago",
+    explanation: bankNeedsReview
+      ? "Detecté una posible diferencia entre el banco identificado y el seleccionado por el operador."
+      : "Detecté una excepción que todavía puede modificar la conciliación del pago.",
+    actionPrompt: bankNeedsReview ? "¿La identificación bancaria actual es correcta?" : "¿Debemos conservar la conciliación propuesta?",
+    requiresHumanDecision: true,
     evidence: {
       detectedBankName: signal.detectedBankName || null,
       operatorSelectedBankName: signal.operatorSelectedBankName || null,

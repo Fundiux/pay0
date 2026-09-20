@@ -2,7 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 
 export type Agent007Observation = { id: string; caseType: string; caseId: string; intent: string; humanDecision: string; outcome: string; source?: string; sourceEvent?: string; createdAt?: any };
-export type Agent007Recommendation = { id: string; kind: string; caseType: string; caseId: string; proposal: string; confidence: number; status: string; evidence?: Record<string, string | null>; createdAt?: any };
+export type Agent007Recommendation = { id: string; kind: string; caseType: string; caseId: string; proposal: string; title?: string; explanation?: string; actionPrompt?: string | null; requiresHumanDecision?: boolean; confidence: number; status: string; resolutionReason?: string | null; resolvedByEvent?: string | null; supersededBy?: string | null; resolvedAt?: any; evidence?: Record<string, string | null>; createdAt?: any };
 export type Agent007Message = { id: string; role: "user" | "assistant"; text: string; source?: "USER" | "VERTEX_AI" | "HUGO_ENGINE" | "SYSTEM_EVENT"; read?: boolean; relatedCaseType?: string; relatedCaseId?: string; createdAt?: any };
 
 export async function recordAgent007Observation(input: Omit<Agent007Observation, "id" | "createdAt">) { return (await httpsCallable<typeof input, { ok: boolean; observationId: string }>(functions, "recordAgent007Observation")(input)).data; }

@@ -49,7 +49,7 @@ export function contribution(source: AnalyticSource, row: any): Metrics {
     case "balanceMovements": if (status === "APPLIED") metrics[row.direction === "OUT" ? "walletOutMinor" : "walletInMinor"] = minor(row.amount); break;
     case "clientAdvances": metrics.advancePendingMinor = minor(row.pendingAmount); break;
     case "clientDispersions": metrics.dispersions = 1; metrics.dispersionsPending = terminal.has(status) || status === "COMPLETED" ? 0 : 1; break;
-    case "agent007Recommendations": metrics.hugoProposals = 1; metrics.hugoPending = ["APPROVED", "ACCEPTED", "REJECTED", "RESOLVED"].includes(status) ? 0 : 1; break;
+    case "agent007Recommendations": metrics.hugoProposals = 1; metrics.hugoPending = status === "PENDING_REVIEW" ? 1 : 0; break;
     case "agent007LearnedRules": metrics.hugoRules = Number(row.approvals || 0) > Number(row.rejections || 0) ? 1 : 0; break;
     case "operationRecoveryJobs": metrics.recoveryPending = ["PENDING", "RUNNING"].includes(status) ? 1 : 0; metrics.recoveryBlocked = status === "NEEDS_REVIEW" ? 1 : 0; break;
     case "recognizedExpenses": if (status === "RECOGNIZED") { if (!Number.isSafeInteger(row.amountMinor) || row.amountMinor <= 0) throw Error("INVALID_EXPENSE_AMOUNT"); metrics.expensesMinor = row.amountMinor; } break;

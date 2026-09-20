@@ -4,6 +4,8 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
+import { reconcileAgent007Recommendations } from "./reconciliation";
+import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -32,6 +34,7 @@ function extractFolio(message: string): string | null {
 }
 
 async function operationalContext(rootId: string, message: string) {
+  await reconcileAgent007Recommendations(db, rootId);
   const folio = extractFolio(message);
   const byFolio = async (collection: string) => {
     const snap = await db.collection(collection).where("rootId", "==", rootId).where("folio", "==", folio).limit(3).get();
@@ -192,6 +195,7 @@ export const listAgent007Recommendations = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { rootId } = await actor(request);
+    await reconcileAgent007Recommendations(db, rootId);
     const snapshot = await db.collection("agent007Recommendations").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(50).get();
     return { ok: true, recommendations: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })) };
   },
@@ -277,8 +281,11 @@ export const sendAgent007Message = onCall(
       .slice(-12);
     const context = await operationalContext(rootId, text);
     const name = displayName(user);
-    const aiReply = await vertexReply(text, name, context, history);
-    const reply = aiReply || fallbackReply(text, name, context);
+    const capability = requestedComplementAction(text)
+      ? await executeRequestIqComplement({ db, rootId, uid, message: text })
+      : null;
+    const aiReply = capability ? null : await vertexReply(text, name, context, history);
+    const reply = capability?.reply || aiReply || fallbackReply(text, name, context);
     const userMessage = messagesRef.doc();
     const assistantMessage = messagesRef.doc();
     const now = Timestamp.now();
@@ -295,6 +302,8 @@ export const sendAgent007Message = onCall(
     batch.create(assistantMessage, {
       rootId, conversationId, role: "assistant", text: reply, recipientUid: uid,
       source: aiReply ? "VERTEX_AI" : "HUGO_ENGINE", read: true,
+      capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+      capabilityExecuted: capability?.executed === true,
       contextSummary: { folioConsultado: context.folioConsultado, solicitudes: context.solicitudes.length, pagos: context.pagos.length, dudas: context.dudasPendientes.length },
       createdAt: Timestamp.fromMillis(now.toMillis() + 1),
     });
