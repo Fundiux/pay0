@@ -2,7 +2,7 @@
 
 ### ASSETS V2 validado y desplegado (2026-09-20)
 
-La segunda pasada de ASSETS conserva la separación ya publicada y completa la capa operativa. El sistema usa ahora tema grafito propio, shell compacto con sidebar fijo, dashboard ejecutivo, tabs de Vehículos/Préstamos, historial separado, movimientos filtrables y documentos utilizables desde escritorio o móvil. No se agregó ASSETS al menú funcional de PAY0 ni se incorporó Hugo a ASSETS.
+La segunda pasada de ASSETS conserva la separación ya publicada y completa la capa operativa. El sistema usa ahora una identidad grafito/gris con acentos naranja, coral y dorado en todas sus vistas, shell compacto con sidebar fijo y dashboard ejecutivo con KPIs, gráfica de capital activo y estado del portafolio. El verde se reserva para ganancias y entradas. Posiciones mantiene tabs de Vehículos/Préstamos, historial separado, movimientos filtrables y documentos utilizables desde escritorio o móvil. No se agregó ASSETS al menú funcional de PAY0 ni se incorporó Hugo a ASSETS.
 
 Los vehículos no generan ni presentan interés: sus tarjetas y detalle muestran capital, recuperación y utilidad. Tasa, interés pendiente, devengo y capitalización permanecen exclusivamente en préstamos.
 
@@ -12,7 +12,7 @@ Documentos ASSETS usa preparación, carga privada y finalización verificable. A
 
 Evidencia local: frontend build PASS (42 rutas), Functions build y lint PASS, autorización PASS, smoke de dominio PASS y smoke integral Auth/Firestore/Functions/Storage PASS. Se probaron cierres, bloqueos terminales, métricas activas, deduplicación documental, finalización y aislamiento entre propietarios. El emulador Storage local no evalúa de forma confiable la consulta cruzada a Firestore usada para autorizar la escritura; el blob de la prueba se cargó con Admin en el proyecto demo, sin relajar reglas, y se validó lectura del dueño/403 ajeno. Emuladores apagados.
 
-Despliegue productivo completado y verificado: Hosting/SSR quedó `ACTIVE` en la revisión `ssrpay0system-00483-cux`; las reglas de Storage se publicaron con el ruleset `22291ae3-4f45-4ca7-b4a8-882c5cccd057`; y quedaron `ACTIVE` las siete Functions ASSETS (`listAssetOverview`, `recordAssetMovement`, `closeAssetPosition`, `accrueAssetLoanInterest`, `linkPay0PaymentToAsset`, `initAssetDocumentUpload`, `finalizeAssetDocumentUpload`). `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents` respondieron HTTP 200. No se ejecutó seed, migración ni escritura financiera o documental de producción.
+Despliegue productivo completado y verificado: Hosting/SSR quedó `ACTIVE` en la revisión `ssrpay0system-00485-zuc`; las reglas de Storage se publicaron con el ruleset `22291ae3-4f45-4ca7-b4a8-882c5cccd057`; y quedaron `ACTIVE` las siete Functions ASSETS (`listAssetOverview`, `recordAssetMovement`, `closeAssetPosition`, `accrueAssetLoanInterest`, `linkPay0PaymentToAsset`, `initAssetDocumentUpload`, `finalizeAssetDocumentUpload`). Antes del despliegue visual se verificaron cero procesos de deploy y cero Cloud Builds activos; no hubo despliegue concurrente. `/assets`, `/assets/positions`, `/assets/movements` y `/assets/documents` respondieron HTTP 200. No se ejecutó seed, migración ni escritura financiera o documental de producción.
 
 ### Separación PAY0 PLATFORM / ASSETS validada localmente (2026-09-20)
 
