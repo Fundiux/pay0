@@ -22,29 +22,45 @@ body {
 
 /* ASSETS is a sibling product with its own restrained financial palette. */
 .assets-theme {
-  --assets-bg: #101214;
-  --assets-sidebar: #15181b;
-  --assets-surface: #191d21;
-  --assets-surface-raised: #20252a;
-  --assets-border: #30363c;
-  --assets-text: #f1f3f4;
-  --assets-secondary: #b2b8be;
-  --assets-muted: #747d86;
-  --assets-accent: #8fa9bf;
-  --assets-accent-soft: rgba(143, 169, 191, 0.13);
-  --assets-positive: #55b88a;
-  --assets-warning: #d6a85f;
-  --assets-negative: #db776f;
+  --assets-bg: #17191b;
+  --assets-sidebar: #202326;
+  --assets-surface: #24282b;
+  --assets-surface-raised: #2b3034;
+  --assets-border: #3a4045;
+  --assets-text: #f4f4f2;
+  --assets-secondary: #c4c6c7;
+  --assets-muted: #858b90;
+  --assets-accent: #f58220;
+  --assets-accent-2: #d95a45;
+  --assets-accent-3: #e6b13f;
+  --assets-accent-soft: rgba(245, 130, 32, 0.15);
+  --assets-positive: #65b88a;
+  --assets-warning: #e6b13f;
+  --assets-negative: #d95a45;
   min-height: 100dvh;
   background: var(--assets-bg);
   color: var(--assets-text);
   color-scheme: dark;
+  accent-color: var(--assets-accent);
+}
+
+.assets-theme ::-webkit-scrollbar-thumb {
+  background: #4a4f53;
+}
+
+.assets-theme ::-webkit-scrollbar-thumb:hover {
+  background: var(--assets-accent);
 }
 
 .assets-panel {
   border: 1px solid var(--assets-border);
   background: var(--assets-surface);
-  border-radius: 0.75rem;
+  border-radius: 0.65rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+
+.assets-panel:hover {
+  border-color: #494f54;
 }
 
 .assets-control {
@@ -57,6 +73,24 @@ body {
 .assets-control:focus {
   border-color: var(--assets-accent);
   outline: none;
+  box-shadow: 0 0 0 2px var(--assets-accent-soft);
+}
+
+.assets-kpi {
+  position: relative;
+  overflow: hidden;
+}
+
+.assets-kpi::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--assets-accent);
+  content: "";
+}
+
+.assets-chart-grid {
+  background-image: linear-gradient(to bottom, transparent 24%, rgba(255, 255, 255, 0.055) 25%, transparent 26%, transparent 49%, rgba(255, 255, 255, 0.055) 50%, transparent 51%, transparent 74%, rgba(255, 255, 255, 0.055) 75%, transparent 76%);
 }
 
 /* PAY0 canonical tables */

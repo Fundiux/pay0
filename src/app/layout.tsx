@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${inter.className} ${isAssetsRoute ? "bg-[#101214]" : "bg-[#0b1220]"} min-h-screen antialiased`}>
+      <body className={`${inter.className} ${isAssetsRoute ? "bg-[#17191b]" : "bg-[#0b1220]"} min-h-screen antialiased`}>
         {isLoginPage ? (
           children
         ) : (
