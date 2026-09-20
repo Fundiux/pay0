@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, RefreshCw } from "lucide-react";
 import { AssetsEmpty, AssetsError, AssetsLoading } from "@/components/assets/AssetsStates";
 import { useAssetsOverview } from "@/components/assets/useAssetsOverview";
-import { dateLabel, displayCounterpartyName, displayPositionName, interestLabel, money, movementIsInflow, movementLabel } from "@/lib/assetsUi";
+import { dateLabel, displayCounterpartyName, displayPositionName, effectiveAnnualRate, interestLabel, money, movementIsInflow, movementLabel, percentage } from "@/lib/assetsUi";
 
 export default function AssetsPage() {
   const { data, loading, error, reload } = useAssetsOverview();
@@ -28,6 +28,13 @@ export default function AssetsPage() {
     { label: "Préstamos sin interés", value: active.filter((p) => p.kind === "LOAN" && Number(p.rateBasisPoints || 0) === 0).reduce((sum, p) => sum + p.snapshot.outstandingPrincipalMinor, 0), color: "var(--assets-accent-3)" },
   ];
   const max = Math.max(...groups.map((item) => item.value), 1);
+  const investedMinor = positions.reduce((sum, position) => sum + position.snapshot.originalPrincipalMinor, 0);
+  const portfolioRoi = investedMinor > 0 ? Number(data?.totals.realizedProfitMinor || 0) / investedMinor : null;
+  const interestLoans = active.filter((position) => position.kind === "LOAN" && Number(position.rateBasisPoints || 0) > 0);
+  const interestLoanBalance = interestLoans.reduce((sum, position) => sum + position.snapshot.outstandingPrincipalMinor, 0);
+  const weightedMonthlyRate = interestLoanBalance > 0
+    ? interestLoans.reduce((sum, position) => sum + (Number(position.rateBasisPoints || 0) / 10_000) * position.snapshot.outstandingPrincipalMinor, 0) / interestLoanBalance
+    : null;
   const metrics = [
     ["Capital recuperado", data?.totals.recoveredPrincipalMinor],
     ["Utilidad realizada", data?.totals.realizedProfitMinor],
@@ -47,6 +54,12 @@ export default function AssetsPage() {
       <div className="assets-panel grid grid-cols-3 divide-x divide-[var(--assets-border)] sm:col-span-2">
         {[["Vehículos activos", activeVehicles], ["Vehículos vendidos", soldVehicles], ["Préstamos activos", activeLoans]].map(([label, value]) => <div key={String(label)} className="flex min-h-20 flex-col justify-between p-3"><p className="text-[9px] uppercase leading-4 tracking-wide text-[var(--assets-muted)]">{label}</p><p className="text-xl font-semibold tabular-nums text-[var(--assets-accent)]">{value}</p></div>)}
       </div>
+    </section>
+
+    <section className="grid gap-3 sm:grid-cols-3">
+      <div className="assets-panel assets-kpi p-4"><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">ROI acumulado del portafolio</p><p className="mt-2 text-xl font-semibold tabular-nums text-[var(--assets-accent)]">{percentage(portfolioRoi)}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Utilidad cobrada sobre capital aportado</p></div>
+      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-2)" } as CSSProperties}><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">Tasa mensual promedio</p><p className="mt-2 text-xl font-semibold tabular-nums">{percentage(weightedMonthlyRate)}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Ponderada entre préstamos activos con interés</p></div>
+      <div className="assets-panel assets-kpi p-4" style={{ "--assets-accent": "var(--assets-accent-3)" } as CSSProperties}><p className="text-[10px] uppercase tracking-wide text-[var(--assets-muted)]">Equivalente anual</p><p className="mt-2 text-xl font-semibold tabular-nums">{percentage(effectiveAnnualRate(weightedMonthlyRate))}</p><p className="mt-1 text-[10px] text-[var(--assets-muted)]">Equivalencia compuesta; no es utilidad garantizada</p></div>
     </section>
 
     <section className="grid gap-3 xl:grid-cols-12">

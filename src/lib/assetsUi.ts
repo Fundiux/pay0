@@ -1,6 +1,16 @@
 import type { AssetPosition } from "@/services/assets";
 
 export const money = (minor = 0) => (minor / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
+export const percentage = (ratio: number | null | undefined, maximumFractionDigits = 2) =>
+  ratio == null || !Number.isFinite(ratio)
+    ? "—"
+    : `${(ratio * 100).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits })}%`;
+export const monthlyRate = (position: AssetPosition) =>
+  position.kind === "LOAN" ? Number(position.rateBasisPoints || 0) / 10_000 : null;
+export const effectiveAnnualRate = (monthly: number | null | undefined) =>
+  monthly == null || !Number.isFinite(monthly) || monthly < 0
+    ? null
+    : Math.pow(1 + monthly, 12) - 1;
 export const assetKindLabel = (kind: string) => kind === "VEHICLE" ? "Vehículo" : kind === "LOAN" ? "Préstamo" : "Posición";
 export const assetStatusLabel = (status: string, kind?: string) => status === "ACTIVE" ? "Activo" : status === "LIQUIDATED" ? "Vendido" : status === "PAID" ? "Pagado" : status === "CANCELLED" ? "Cancelado" : status === "CLOSED" ? "Cerrado" : "En revisión";
 export const isTerminalAssetPosition = (position: Pick<AssetPosition, "kind" | "status">) =>

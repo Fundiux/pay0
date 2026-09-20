@@ -47,13 +47,16 @@ function buildState(options: GlobalLoadingOptions = {}): GlobalLoadingState {
   };
 }
 
-function GlobalLoadingOverlay({ state }: { state: GlobalLoadingState }) {
-  if (!state.active) return null;
-
-  const label = state.label || "LOADING...";
-
+export function Pay0LoadingOverlay({
+  active = true,
+  label = "LOADING...",
+}: {
+  active?: boolean;
+  label?: string;
+}) {
+  if (!active) return null;
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/82 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/82 px-4 backdrop-blur-sm" role="status" aria-live="polite">
       <div className="flex max-w-[90vw] items-end justify-center gap-4">
         <span className="pay0-bounceball" aria-hidden="true" />
 
@@ -105,6 +108,10 @@ function GlobalLoadingOverlay({ state }: { state: GlobalLoadingState }) {
       `}</style>
     </div>
   );
+}
+
+function GlobalLoadingOverlay({ state }: { state: GlobalLoadingState }) {
+  return <Pay0LoadingOverlay active={state.active} label={state.label || "LOADING..."} />;
 }
 
 export function GlobalLoadingProvider({ children }: { children: ReactNode }) {
