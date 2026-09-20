@@ -6,6 +6,7 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 ## Complementos automáticos IQ / Facturama — 2026-09-20
 
 - Ajuste fiscal de transferencia: el comprobante fija forma `03`, conserva fecha real del movimiento y hora detectada; si falta hora usa `12:00:00` visible/editable. Guarda número de operación, banco y cuentas cuando existen, y bloquea el REP si RFC ordenante/receptor o beneficiario/emisor no coinciden. El RFC bancario se mantiene separado y nunca se inventa con el RFC fiscal.
+- Publicado en producción: `createPago`, `parsePagoReceiptPdf`, `executeAutomaticPaymentComplement` y Hosting terminaron correctamente. Smoke de emulador y builds backend/frontend PASS; cero solicitudes IQ o timbrados reales durante la validación.
 - Implementada cola prospectiva para PPD: IQ sólo tras aplicación confirmada, una solicitud por depósito/perfil; Facturama desde XML original con UUID, parcialidad, saldos y forma/fecha reales del pago. Histórico no se despacha automáticamente.
 - Revisión IQ a las 19:00 America/Mexico_City, una por día; alerta única después de diez días y seguimiento continuo sin WhatsApp automático. Los resultados inciertos nunca repiten POST/timbrado a ciegas.
 - XML/PDF validados y vinculados conservando otras parcialidades. Facturama inicial admite MXN sin impuestos o IVA 16 % uniforme; retenciones, impuestos mixtos u otras monedas requieren revisión. Forma SAT faltante se confirma por Superadmin en Reportes.

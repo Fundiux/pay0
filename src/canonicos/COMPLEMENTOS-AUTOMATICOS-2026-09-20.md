@@ -37,3 +37,5 @@ La recepción de un ZIP real y aceptación de un REP real por el PAC deberán co
 ## Datos fiscales del pago por transferencia
 
 Para REP automático la forma es `03` (transferencia). La fecha corresponde al movimiento del comprobante, no a su carga en PAY0. Se conserva la hora detectada; cuando el comprobante no contiene hora se registra explícitamente `12:00:00`. El número de operación, cuenta ordenante, cuenta beneficiaria y banco se incorporan cuando fueron identificados. Antes de timbrar, PAY0 exige que el RFC ordenante detectado o canónico coincida con el receptor del CFDI original y que el RFC beneficiario detectado o canónico coincida con su emisor. Los RFC fiscales del cliente y de nuestra empresa permanecen en los nodos Receptor y Emisor; el RFC bancario condicional es un dato diferente y no se inventa a partir del RFC del contribuyente.
+
+Deploy verificado: `createPago`, `parsePagoReceiptPdf`, `executeAutomaticPaymentComplement` y Hosting publicados correctamente el 2026-09-20.
