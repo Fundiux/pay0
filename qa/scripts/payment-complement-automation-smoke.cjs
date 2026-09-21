@@ -40,6 +40,14 @@ async function run(){
  global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');authPosts++;return {status:401,text:async()=>JSON.stringify({errors:['unauthorized']})};};
  await assert.rejects(provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),/IQ_REP_REQUEST_HTTP_401/);
  assert.equal(authPosts,1,'401 must never replay POST');global.fetch=oldFetch;
+ const observed422=require('../fixtures/iq-rep-request-ap1c4u1e6-2026-09-21.json');
+ assert.equal(observed422.httpStatus,422);assert.equal(observed422.domainClassification,'REQUEST_STATE_UNKNOWN');
+ assert.equal(observed422.automaticResendAllowed,false);assert.deepEqual(observed422.response.topLevelKeys,['error','status']);
+ let rejectedPosts=0;
+ global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');rejectedPosts++;return {status:422,text:async()=>JSON.stringify({status:422,error:'provider rejection with undetermined effect'})};};
+ await assert.rejects(provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),error=>
+   error.message==='IQ_REP_REQUEST_HTTP_422' && error.observation?.httpStatus===422 && error.observation?.topLevelKeys?.join(',')==='error,status');
+ assert.equal(rejectedPosts,1,'observed 422 must never replay POST');global.fetch=oldFetch;
  assert.equal(depositFields.readIqRepDepositFields(historicalShape.eligibleIndicatorTrue).canRequestRep.value,true);
  assert.equal(depositFields.readIqRepDepositFields(realDeposit).canRequestRep.value,true,'real AP1C4U1E6 response uses question-mark key');
  assert.equal(depositFields.readIqRepDepositFields(realDeposit).rep.value,false);

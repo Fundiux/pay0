@@ -1,0 +1,15 @@
+{
+  "source": "First authorized IQ REP request canary for AP1C4U1E6, deposit 220483",
+  "operation": "POST /deposits/220483/complement",
+  "httpStatus": 422,
+  "response": {
+    "bodyBytes": 46,
+    "bodySha256": "29d14c28d41db9267a3577c0f8b834e86d4a99d2ed4d6a64db173e4cfc7f7950",
+    "bodyKind": "object",
+    "topLevelKeys": ["error", "status"],
+    "message": null
+  },
+  "domainClassification": "REQUEST_STATE_UNKNOWN",
+  "automaticResendAllowed": false,
+  "note": "The raw error value was not retained. HTTP 422 alone does not prove that the request had no external effect."
+}
