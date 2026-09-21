@@ -7,12 +7,25 @@ import { assessLocalIqRecovery } from "./complementRecoveryPlan";
 
 type Outcome = "PROCESSED" | "PENDING" | "ERROR" | "EXCLUDED";
 type Provider = "IQ" | "FACTURAMA" | "EMISOR";
-type Count = { scanned: number; detected: number; processed: number; pending: number; errors: number; excluded: number; iq: number; facturama: number; emisor: number };
+type Count = { scanned: number; detected: number; processed: number; pending: number; errors: number; excluded: number; iq: number; facturama: number; emisor: number;
+  waitingB: number; requestedC: number; uncertainC: number; attachmentAvailable: number; exceptionBlocked: number; otherPending: number };
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const upper = (value: unknown) => clean(value).toUpperCase();
 const terminal = new Set(["CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO"]);
-const count = (): Count => ({ scanned: 0, detected: 0, processed: 0, pending: 0, errors: 0, excluded: 0, iq: 0, facturama: 0, emisor: 0 });
+const count = (): Count => ({ scanned: 0, detected: 0, processed: 0, pending: 0, errors: 0, excluded: 0, iq: 0, facturama: 0, emisor: 0,
+  waitingB: 0, requestedC: 0, uncertainC: 0, attachmentAvailable: 0, exceptionBlocked: 0, otherPending: 0 });
+
+function operationalTags(request: any): ("waitingB" | "requestedC" | "uncertainC" | "attachmentAvailable" | "exceptionBlocked")[] {
+  if (!request) return [];
+  const tags: ReturnType<typeof operationalTags> = [];
+  if (request.status === "REQUEST_STATE_UNKNOWN" || request.externalRequestSent === null) tags.push("uncertainC");
+  else if (request.externalRequestSent === true || ["REQUESTED", "ATTACHMENT_PENDING"].includes(request.status)) tags.push("requestedC");
+  else if (request.nextCheckAt && request.provider === "IQ" && ["PENDING", "PENDING_B", "PENDING_PROVIDER_CONTRACT"].includes(request.status)) tags.push("waitingB");
+  if (request.repAttachmentStatus === "REP_ATTACHMENT_AVAILABLE" || request.bReadState === "ATTACHMENT_AVAILABLE") tags.push("attachmentAvailable");
+  if (["EXCEPTION", "BLOCKED"].includes(request.bReadState) || ["BLOCKED", "REVIEW_REQUIRED"].includes(request.automationStatus)) tags.push("exceptionBlocked");
+  return tags;
+}
 
 function providerFor(solicitud: any): Provider {
   if (solicitud?.facturamaEnvironment === "PRODUCTION" && solicitud?.facturamaInvoiceId) return "FACTURAMA";
@@ -52,14 +65,16 @@ async function classify(applicationId: string, app: any, rootId: string) {
     request.balanceBefore === app.saldoAnterior && request.balanceAfter === app.saldoInsoluto &&
     evidence("COMPLEMENTO_PAGO_XML", request.xmlUploadId) && evidence("COMPLEMENTO_PAGO_PDF", request.pdfUploadId);
   if (received) return { ...row, outcome: "PROCESSED" as Outcome, reason: "VERIFIED_LINKED" };
-  if (request?.status === "RECEIVED") return { ...row, outcome: "ERROR" as Outcome, reason: "RECEIPT_EVIDENCE_MISMATCH" };
+  const details = { operationalTags: operationalTags(request), requestStatus: clean(request?.status), bReadState: clean(request?.bReadState),
+    bReadReason: clean(request?.bReadReason), nextCheckAt: request?.nextCheckAt?.toDate?.()?.toISOString?.() || null };
+  if (request?.status === "RECEIVED") return { ...row, ...details, outcome: "ERROR" as Outcome, reason: "RECEIPT_EVIDENCE_MISMATCH" };
   if (["BLOCKED", "UNKNOWN", "REVIEW_REQUIRED"].includes(request?.automationStatus) || request?.automationError)
-    return { ...row, outcome: "ERROR" as Outcome, reason: clean(request?.automationError || request?.automationStatus) };
+    return { ...row, ...details, outcome: "ERROR" as Outcome, reason: clean(request?.automationError || request?.automationStatus) };
   const recovery = provider === "IQ" ? await assessLocalIqRecovery(rootId, applicationId) : null;
   if (uploads.some(doc => doc.active === true && ["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(doc.documentType)))
-    return { ...row, outcome: "PENDING" as Outcome, reason: "DOCUMENTS_NEED_VERIFICATION", recoveryState: recovery?.state, recoveryReason: recovery?.reason };
+    return { ...row, ...details, outcome: "PENDING" as Outcome, reason: "DOCUMENTS_NEED_VERIFICATION", recoveryState: recovery?.state, recoveryReason: recovery?.reason };
   if (!request) return { ...row, outcome: "PENDING" as Outcome, reason: "FOLLOWUP_NOT_RECORDED", recoveryState: recovery?.state, recoveryReason: recovery?.reason };
-  return { ...row, outcome: "PENDING" as Outcome, reason: clean(request.automationStatus || request.status || "NOT_REQUESTED"), recoveryState: recovery?.state, recoveryReason: recovery?.reason };
+  return { ...row, ...details, outcome: "PENDING" as Outcome, reason: clean(request.automationStatus || request.status || "NOT_REQUESTED"), recoveryState: recovery?.state, recoveryReason: recovery?.reason };
 }
 
 export async function inventoryPage(rootId: string, cursor = "", pageSize = 25) {
@@ -76,6 +91,11 @@ export async function inventoryPage(rootId: string, cursor = "", pageSize = 25) 
     counts.detected++;
     counts[row.outcome === "PROCESSED" ? "processed" : row.outcome === "ERROR" ? "errors" : "pending"]++;
     counts[row.provider === "IQ" ? "iq" : row.provider === "FACTURAMA" ? "facturama" : "emisor"]++;
+    if (row.outcome !== "PROCESSED") {
+      const tags = "operationalTags" in row ? row.operationalTags || [] : [];
+      if (!tags.length && row.outcome === "PENDING") counts.otherPending++;
+      for (const tag of tags) counts[tag]++;
+    }
   }
   return { counts, exceptions: rows.filter(row => row.outcome === "ERROR" || row.outcome === "PENDING"),
     complete: snapshot.size <= pageSize, cursor: page.at(-1)?.id || null, checkedAt: new Date().toISOString() };

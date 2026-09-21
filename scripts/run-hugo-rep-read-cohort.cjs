@@ -15,7 +15,8 @@ const {assessLocalIqRecovery}=require('../functions/lib/modules/paymentApplicati
 const {complementRequestId}=require('../functions/lib/modules/paymentApplications/complementFollowup.js');
 const {inventoryPage}=require('../functions/lib/modules/paymentApplications/complementInventory.js');
 async function metrics(rootId) {
-  const totals={scanned:0,detected:0,processed:0,pending:0,errors:0,excluded:0};let cursor='',complete=false;
+  const totals={scanned:0,detected:0,processed:0,pending:0,errors:0,excluded:0,
+    waitingB:0,requestedC:0,uncertainC:0,attachmentAvailable:0,exceptionBlocked:0,otherPending:0};let cursor='',complete=false;
   while(!complete){const page=await inventoryPage(rootId,cursor,25);for(const key of Object.keys(totals))totals[key]+=page.counts[key];cursor=page.cursor||'';complete=page.complete;}
   return totals;
 }
