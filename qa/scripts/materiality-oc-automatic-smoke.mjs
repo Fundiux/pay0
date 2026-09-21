@@ -79,6 +79,16 @@ async function activeUpload(type) {
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
+async function waitForActiveUpload(type, timeoutMs = 8_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const upload = await activeUpload(type);
+    if (upload) return upload;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return activeUpload(type);
+}
+
 console.log("=== MATERIALIDAD OC AUTOMATICA SMOKE (EMULATOR ONLY) ===");
 
 await db.doc(`users/${uid}`).set({
@@ -117,7 +127,7 @@ await finalizeSolicitudDocumentUploadCore({ auth, data: { uploadId: init.uploadI
 console.log("SMOKE_STAGE=oc_finalized");
 
 const [oc, quote, operation, invoice] = await Promise.all([
-  activeUpload("ORDEN_COMPRA"), activeUpload("COTIZACION"), db.doc(`materialityOperations/${solicitudId}`).get(),
+  waitForActiveUpload("ORDEN_COMPRA"), waitForActiveUpload("COTIZACION"), db.doc(`materialityOperations/${solicitudId}`).get(),
   db.collection("facturamaInvoices").where("sourceSolicitudId", "==", solicitudId).limit(1).get(),
 ]);
 assert.ok(oc, "La OC debe quedar activa.");
@@ -150,6 +160,8 @@ const response = await fetch(`http://${functionsHost}/${projectId}/us-central1/s
   body: JSON.stringify({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } }),
 });
 const payload = await response.json();
+// Callable v2 uses `result` in the emulator and `data` in some runtimes.
+payload.data ??= payload.result;
 assert.equal(response.status, 200, `La firma pública falló: ${JSON.stringify(payload)}`);
 assert.equal(payload?.data?.ok, true, "La firma pública debe confirmar éxito.");
 
