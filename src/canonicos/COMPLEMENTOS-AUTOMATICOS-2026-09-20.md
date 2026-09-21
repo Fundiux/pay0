@@ -7,8 +7,8 @@ Sólo aplicaciones PPD nuevas posteriores a la activación de `paymentComplement
 ## IQ
 
 - Requiere `IQ_APPLIED`, `iqActionExecuted=true`, plan/intento del mismo root y perfil, depósito numérico y permisos vigentes del usuario/perfil.
-- Un job por root/perfil/depósito evita POST duplicado entre aplicaciones concurrentes. Se verifica el depósito conciliado y su disponibilidad para solicitar; estados desconocidos se bloquean.
-- `POST /deposits/{id}/complement` sin cuerpo, con aceptación explícita `200 {message:"success"}`. El cuerpo vacío es la implementación inicial de la ruta capturada: no se presentó evidencia del Payload del POST. No se usan tokens pegados en conversación. Un 401 permite una sola autenticación nueva; timeout/5xx/respuesta incierta nunca repiten el POST automáticamente.
+- Un job por root/proveedor/depósito/operación evita POST duplicado entre aplicaciones concurrentes y cambios de perfil. Se verifica el depósito conciliado; la elegibilidad C permanece bloqueada hasta contar con el contrato IQ de `can_request_rep`.
+- `POST /deposits/{id}/complement` sin cuerpo, con aceptación explícita `200 {message:"success"}`. El cuerpo vacío es la implementación inicial de la ruta capturada: no se presentó evidencia del Payload del POST. No se usan tokens pegados en conversación. Después de enviar, incluso un 401 es resultado incierto y nunca repite el POST automáticamente.
 - `GET /deposits/complement/{id}`: sólo el 400 con el mensaje exacto de ningún REP adjunto representa pendiente. 200 con URL habilita la descarga, no prueba todavía correspondencia fiscal.
 - Scheduler `0 19 * * *`, `America/Mexico_City`; marca por job/día antes de consultar. A los diez días naturales desde aceptación, una alerta a Hugo/actividad para gestión manual por WhatsApp. Continúa revisando diariamente.
 - ZIP acotado y sin extracción al disco; se limitan tamaño, entradas y expansión. Redirects HTTPS sólo a IQ/Active Storage y S3 permitido, sin transmitir Authorization. Se exige pareja XML/PDF con el mismo nombre base y correspondencia de UUID/parcialidad/saldos/moneda. Un formato distinto requiere revisión, no asociación por parecido.

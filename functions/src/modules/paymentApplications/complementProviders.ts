@@ -33,16 +33,11 @@ export async function iqSession(job: any, action: IqComplementAction = "REQUEST"
   return session;
 }
 export async function requestIqComplement(job: any, session: any) {
-  // No body: the route carries the deposit. Never replay an uncertain POST.
-  const send = async (auth: any) => {
-    await requireGate(job, "REQUEST");
-    return fetch(`${IQ_ORIGIN}/deposits/${job.depositId}/complement`, { method: "POST",
-      headers: { Authorization: `Bearer ${auth.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
-  };
-  let response = await send(session);
-  // An explicit 401 is a rejected authentication, unlike a timeout/5xx.
-  // Renew from the configured credential profile, never from pasted tokens.
-  if (response.status === 401) { await requireGate(job, "REQUEST"); response = await send(await iqSession(job, "REQUEST")); }
+  // No body or provider idempotency token is documented. Every response after
+  // sending, including 401, belongs to this single attempt; never replay it.
+  await requireGate(job, "REQUEST");
+  const response = await fetch(`${IQ_ORIGIN}/deposits/${job.depositId}/complement`, { method: "POST",
+    headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
   const body = await response.json().catch(() => null);
   if (response.status !== 200 || body?.message !== "success") throw Error(`IQ_REP_REQUEST_HTTP_${response.status}`);
 }
@@ -59,7 +54,9 @@ export async function preflightIqComplement(job: any, session: any): Promise<"RE
       if (row.conciliation_status !== "Conciliado" || row.operation_status !== "En Operacion") throw Error("IQ_REP_DEPOSIT_NOT_RECONCILED");
       if (row.rep === true) return "AVAILABLE";
       if (row.can_request_rep !== true) throw Error("IQ_REP_REQUEST_STATE_REQUIRES_REVIEW");
-      return "REQUEST";
+      // The field is observed only as an adapter condition, not as a provider
+      // contract. Even true cannot authorize a real generation request yet.
+      throw Error("IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED");
     }
     if (rows.length < 100) break;
   }

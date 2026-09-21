@@ -9,6 +9,7 @@ import { complementRequestId, reconcilePaymentComplement } from "./complementFol
 import { assertSource, dayMexico, hash, millis, overdue, text } from "./complementPolicy";
 import * as providers from "./complementProviders";
 import { claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } from "./complementGates";
+import { iqRepRequestId, matchingIqRepJobs } from "./complementRequestIdentity";
 
 const jobs = () => db.collection("paymentComplementJobs");
 const errorCode = (e: any) => /^[A-Z0-9_]+$/.test(e?.message || "") ? e.message : "REP_OPERATION_FAILED";
@@ -62,17 +63,42 @@ export async function enqueueComplement(applicationId: string) {
     actorUid = text(attempt.createdBy);
     if (!/^\d{3,20}$/.test(depositId) || !profileId) throw Error("REP_IQ_DEPOSIT_REQUIRED");
   } else if (config.facturamaEnabled !== true || solicitud.facturamaEnvironment !== "PRODUCTION" || !solicitud.facturamaInvoiceId) return;
-  const id = hash(`${app.rootId}:${provider}:${provider === "IQ" ? `${profileId}:${depositId}` : applicationId}`);
+  const canonicalId = provider === "IQ" ? iqRepRequestId(app.rootId, depositId) : hash(`${app.rootId}:${provider}:${applicationId}`);
   await db.runTransaction(async tx => {
+    // Include old profile-keyed jobs before creating the new stable identity.
+    // A profile switch must reuse the old job or stop, never create a second C.
+    const historical = provider === "IQ" ? await tx.get(jobs().where("depositId", "==", depositId)) : null;
+    const matches = historical ? matchingIqRepJobs(historical.docs, app.rootId, depositId) : [];
+    if (matches.length > 1) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
+    const id = matches[0]?.id || canonicalId;
     const jobRef = jobs().doc(id), existing = await tx.get(jobRef), latest = await tx.get(ref);
+    if (latest.data()?.automationJobId && latest.data()?.automationJobId !== id) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
     if (latest.data()?.automationJobId === id) return;
     if (existing.exists && existing.data()?.rootId !== app.rootId) throw Error("REP_JOB_SCOPE");
     if (!existing.exists) tx.create(jobRef, { rootId: app.rootId, provider, depositId, profileId, actorUid, clientId: solicitud.clienteId,
-      applicationId, status: "QUEUED", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      applicationId, requestIdentity: provider === "IQ" ? canonicalId : null,
+      status: "QUEUED", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     // A late application must be checked against the received REP. Never
     // interpret a previous request as evidence that this new partiality exists.
     if (existing.data()?.status === "RECEIVED") tx.update(jobRef, { status: "REQUESTED", updatedAt: FieldValue.serverTimestamp() });
     tx.update(ref, { automationJobId: id, automationStatus: existing.data()?.status === "RECEIVED" ? "REQUESTED" : existing.data()?.status || "QUEUED" });
+  });
+}
+
+async function markIqSending(id: string) {
+  await db.runTransaction(async tx => {
+    const ref = jobs().doc(id), snap = await tx.get(ref), job = snap.data();
+    if (!job || job.provider !== "IQ" || job.status !== "PREPARING" || job.attemptedAt || job.requestedAt)
+      throw Error("REP_IQ_REQUEST_ALREADY_ATTEMPTED");
+    const sameDeposit = await tx.get(jobs().where("depositId", "==", job.depositId));
+    const matches = matchingIqRepJobs(sameDeposit.docs, job.rootId, job.depositId);
+    if (matches.length !== 1 || matches[0].id !== id) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
+    const identity = iqRepRequestId(job.rootId, job.depositId);
+    if (job.requestIdentity && job.requestIdentity !== identity) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
+    tx.update(ref, { status: "SENDING", requestIdentity: identity, attemptedAt: FieldValue.serverTimestamp(),
+      attemptProfileId: job.profileId, attemptActorUid: job.actorUid, updatedAt: FieldValue.serverTimestamp() });
+    logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
+      referenceId: id, referenceType: "complementoPago", description: "Solicitud IQ C reservada de forma durable antes del POST; cualquier resultado incierto bloquea reenvío." });
   });
 }
 
@@ -114,7 +140,7 @@ export async function executeComplement(id: string, adapter = providers) {
       const requestSession = await adapter.iqSession(job, "REQUEST");
       const afterRequestSession = await inspectIqComplementGate(job, "REQUEST");
       if (!afterRequestSession.allowed) { await updateJob(id, { status: "PAUSED", gateReason: afterRequestSession.reason }, `Solicitud IQ pausada: ${afterRequestSession.reason}.`); return; }
-      await updateJob(id, { status: "SENDING", attemptedAt: FieldValue.serverTimestamp() }); sending = true;
+      await markIqSending(id); sending = true;
       await adapter.requestIqComplement(job, requestSession);
       await updateJob(id, { status: "REQUESTED", requestedAt: FieldValue.serverTimestamp(), error: null, gateReason: null }, "Complemento solicitado a IQ. Se revisará diariamente a las 19:00; no significa que ya esté emitido.");
     } else {
