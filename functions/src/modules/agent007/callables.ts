@@ -124,6 +124,8 @@ async function vertexReply(message: string, name: string, context: any, history:
       "Eres Hugo, asistente operativo interno de PAY0.",
       `Conversas exclusivamente con ${name}, superadministrador de su raíz.`,
       "Responde en español natural, cálido y breve. No suenes robótico.",
+      "Entrega siempre una respuesta completa: nunca termines a media frase ni a media lista.",
+      "Si hay muchos elementos, agrúpalos por estado, muestra como máximo 12 y explica cuántos adicionales existen.",
       "Usa solamente los datos del contexto; si falta evidencia, dilo claramente.",
       "Puedes observar, explicar y proponer. Nunca afirmes haber emitido, pagado, transferido, cancelado o modificado algo.",
       "No solicites contraseñas, CSD, tokens ni secretos. No expongas datos bancarios completos salvo que el usuario los pida expresamente.",
@@ -131,21 +133,39 @@ async function vertexReply(message: string, name: string, context: any, history:
     ].join(" ");
     const historyText = history.slice(-10).map((row) => `${row.role === "assistant" ? "Hugo" : name}: ${clean(row.text, 1200)}`).join("\n");
     const prompt = `${historyText ? `CONVERSACIÓN RECIENTE:\n${historyText}\n\n` : ""}CONTEXTO OPERATIVO DE SOLO LECTURA:\n${JSON.stringify(context)}\n\nMENSAJE DE ${name.toUpperCase()}: ${message}`;
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.45, maxOutputTokens: 500 },
-      }),
-    });
-    if (!response.ok) {
-      console.warn("[Hugo] Vertex response", response.status);
-      return null;
+    const generate = async (requestPrompt: string, maxOutputTokens: number) => {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: requestPrompt }] }],
+          generationConfig: { temperature: 0.35, maxOutputTokens },
+        }),
+        signal: AbortSignal.timeout(35_000),
+      });
+      if (!response.ok) {
+        console.warn("[Hugo] Vertex response", response.status);
+        return { text: null, finishReason: `HTTP_${response.status}` };
+      }
+      const payload: any = await response.json();
+      const candidate = payload?.candidates?.[0];
+      const finishReason = clean(candidate?.finishReason, 40).toUpperCase();
+      const text = clean(candidate?.content?.parts?.map((part: any) => part?.text || "").join(" "), 6000) || null;
+      return { text, finishReason };
+    };
+    const first = await generate(prompt, 1200);
+    if (first.text && first.finishReason === "STOP") return first.text;
+    if (first.finishReason === "MAX_TOKENS") {
+      console.warn("[Hugo] Vertex output reached token limit; retrying compact response");
+      const compactPrompt = `${prompt}\n\nINSTRUCCIÓN DE FORMATO OBLIGATORIA: Responde de nuevo de forma completa y compacta. Resume por estado, incluye como máximo 8 folios representativos, indica cuántos adicionales hay y termina todas las frases.`;
+      const retry = await generate(compactPrompt, 1200);
+      if (retry.text && retry.finishReason === "STOP") return retry.text;
+      console.warn("[Hugo] Discarded incomplete retry", retry.finishReason || "UNKNOWN");
+    } else if (first.text) {
+      console.warn("[Hugo] Discarded non-final Vertex output", first.finishReason || "UNKNOWN");
     }
-    const payload: any = await response.json();
-    return clean(payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join(" "), 3000) || null;
+    return null;
   } catch (error) {
     console.warn("[Hugo] Vertex unavailable");
     return null;
