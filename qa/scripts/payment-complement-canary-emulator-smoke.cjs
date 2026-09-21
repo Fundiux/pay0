@@ -6,6 +6,8 @@ const admin = require('../../functions/node_modules/firebase-admin');
 admin.initializeApp({ projectId: 'demo-pay0', storageBucket: 'demo-pay0.appspot.com' });
 const db = admin.firestore(), stamp = admin.firestore.Timestamp;
 const { runIqRepReadCanary, IQ_REP_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/complementCanary');
+const { runRepAttachmentExperiment, IQ_REP_ATTACHMENT_EXPERIMENT_ID } = require('../../functions/lib/modules/paymentApplications/repAttachmentExperiment');
+const { assessLocalIqRecovery } = require('../../functions/lib/modules/paymentApplications/complementRecoveryPlan');
 const { reconcilePaymentComplement, complementRequestId } = require('../../functions/lib/modules/paymentApplications/complementFollowup');
 const { saveComplementDocuments } = require('../../functions/lib/modules/paymentApplications/complementDocuments');
 const provider = require('../../functions/lib/modules/paymentApplications/complementProviders');
@@ -74,6 +76,52 @@ async function run() {
     return { status: 200, json: async () => ({ url: 'https://iq.test/rep.zip' }) }; };
   assert.equal(await provider.availableIqComplement(job, { accessToken: 'fixture-only' }), 'https://iq.test/rep.zip');
   global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
-  console.log(JSON.stringify({ ok: true, pendingWithoutPost: true, masterBlocksExternal: true, verifiedReceipt: true, idempotentCanary: true, ambiguousDepositRegression: true, repEndpointContract: true, externalNetworkCalls: 0 }));
+  let realAdapterGets = 0;
+  global.fetch = async (url, init) => { realAdapterGets++; assert.match(String(url), /\/deposits\/complement\/220483$/);
+    assert.equal(init.method, 'GET'); return new Response(JSON.stringify({ errors: ['El depósito no tiene ningún REP adjunto'] }),
+      { status: 400, headers: { 'content-type': 'application/json' } }); };
+  const observedMissing = await provider.observeIqRepAttachment({ rootId: root, provider: 'IQ', profileId, actorUid: root, clientId: root, depositId: '220483' }, { accessToken: 'fixture-only' });
+  assert.equal(realAdapterGets, 1); assert.equal(observedMissing.classification, 'REP_ATTACHMENT_NOT_AVAILABLE');
+  assert.equal(observedMissing.shape.exactNoAttachmentMessage, true);
+  assert.equal(observedMissing.shape.rep.present, false);
+  assert.equal(observedMissing.shape.canRequestRep.present, false);
+  assert.equal(JSON.stringify(observedMissing).includes('fixture-only'), false);
+  global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
+  await requestRef.update({ status: 'PENDING', automationStatus: 'PENDING' });
+  const preview = await assessLocalIqRecovery(root, appId);
+  await ref.update({ status: 'STOPPED', error: 'IQ_REP_REQUEST_STATE_REQUIRES_REVIEW',
+    steps: [{ stage: 'LOCAL_EVIDENCE_VERIFIED', fingerprint: preview.planFingerprint }] });
+  const experimentRef = db.doc(`hugoRepAttachmentExperiments/${IQ_REP_ATTACHMENT_EXPERIMENT_ID}`);
+  const seedExperiment = async () => experimentRef.set({ rootId: root, applicationFolio: 'AP1C4U1E6', applicationId: appId,
+    capability: 'LOOKUP', status: 'QUEUED', steps: [] });
+  await seedExperiment();
+  let observed = 0, downloaded = 0;
+  const missing = { iqSession: async () => ({}), observeIqRepAttachment: async () => { observed++; return {
+    classification: 'REP_ATTACHMENT_NOT_AVAILABLE', shape: { httpStatus: 400, exactNoAttachmentMessage: true }, url: null }; },
+    validateIqRepAttachmentDownload: async () => { downloaded++; throw Error('UNEXPECTED_DOWNLOAD'); } };
+  await runRepAttachmentExperiment(IQ_REP_ATTACHMENT_EXPERIMENT_ID, missing);
+  assert.equal(observed, 1); assert.equal(downloaded, 0);
+  assert.equal((await experimentRef.get()).data().status, 'PENDING_B');
+  assert.equal((await requestRef.get()).data().repGenerationStatus, 'REP_GENERATION_UNKNOWN');
+  assert.equal((await requestRef.get()).data().repAttachmentStatus, 'REP_ATTACHMENT_NOT_AVAILABLE');
+  await runRepAttachmentExperiment(IQ_REP_ATTACHMENT_EXPERIMENT_ID, missing);
+  assert.equal(observed, 1, 'one-time experiment does not repeat GET');
+  await seedExperiment();
+  const availableAttachment = { ...missing, observeIqRepAttachment: async () => { observed++; return {
+    classification: 'REP_ATTACHMENT_AVAILABLE', shape: { httpStatus: 200, urlPresent: true }, url: 'https://iq.test/rep.zip' }; },
+    validateIqRepAttachmentDownload: async () => { downloaded++; return { repUuid: '22222222-2222-4222-8222-222222222222', validated: true }; } };
+  await runRepAttachmentExperiment(IQ_REP_ATTACHMENT_EXPERIMENT_ID, availableAttachment);
+  assert.equal(downloaded, 1);
+  assert.equal((await experimentRef.get()).data().status, 'VALIDATED_NOT_RECEIVED');
+  assert.notEqual((await requestRef.get()).data().status, 'RECEIVED');
+  await seedExperiment();
+  const ambiguous = { ...missing, observeIqRepAttachment: async () => { observed++; return {
+    classification: 'REP_ATTACHMENT_AMBIGUOUS', shape: { httpStatus: 502 }, url: null }; } };
+  await runRepAttachmentExperiment(IQ_REP_ATTACHMENT_EXPERIMENT_ID, ambiguous);
+  assert.equal((await experimentRef.get()).data().status, 'STOPPED');
+  assert.equal((await experimentRef.get()).data().responseShape.httpStatus, 502);
+  assert.equal(downloaded, 1);
+  console.log(JSON.stringify({ ok: true, pendingWithoutPost: true, masterBlocksExternal: true, verifiedReceipt: true, idempotentCanary: true,
+    ambiguousDepositRegression: true, repEndpointContract: true, oneGetExperiment: true, noReceivedFromObservation: true, externalNetworkCalls: 0 }));
 }
 run().then(() => process.exit(0)).catch(error => { console.error(error); process.exit(1); });

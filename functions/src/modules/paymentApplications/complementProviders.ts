@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import JSZip from "jszip";
+import { createHash } from "crypto";
 import { defineSecret } from "firebase-functions/params";
 import { db } from "../sharedCallables/helpers";
 import { getUserRole } from "../../utils/authGuard";
@@ -70,6 +71,36 @@ export async function availableIqComplement(job: any, session: any) {
   const body = await response.json().catch(() => null);
   return iqAvailability(response.status, body) === "PENDING" ? null : text(body.url);
 }
+export async function observeIqRepAttachment(job: any, session: any) {
+  await requireGate(job, "LOOKUP");
+  const response = await fetch(`${IQ_ORIGIN}/deposits/complement/${job.depositId}`, {
+    method: "GET", headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" },
+    redirect: "error", signal: AbortSignal.timeout(30000),
+  });
+  const raw = await response.text();
+  const body = raw.length <= 1_000_000 ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
+  const object = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  const field = (name: string) => {
+    const present = !!object && Object.prototype.hasOwnProperty.call(object, name), value = object?.[name];
+    return { present, type: !present ? "absent" : value === null ? "null" : typeof value,
+      ...((typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) ||
+        typeof value === "string" && value.length <= 32 && /^[a-zA-Z0-9_-]+$/.test(value)) ? { value } : {}),
+      ...(present && typeof value === "string" && !(value.length <= 32 && /^[a-zA-Z0-9_-]+$/.test(value))
+        ? { valueSha256: createHash("sha256").update(value).digest("hex") } : {}) };
+  };
+  const url = typeof object?.url === "string" ? object.url : null;
+  const exactMissing = Array.isArray(object?.errors) && object.errors.length === 1 && object.errors[0] === "El depósito no tiene ningún REP adjunto";
+  const shape = { httpStatus: response.status, contentType: response.headers.get("content-type")?.split(";")[0] || null,
+    bodyKind: Array.isArray(body) ? "array" : body === null ? "unparsed_or_null" : typeof body,
+    topLevelKeys: object ? Object.keys(object).sort().slice(0, 40) : [], bodyBytes: Buffer.byteLength(raw),
+    bodySha256: createHash("sha256").update(raw).digest("hex"), rep: field("rep"), canRequestRep: field("can_request_rep"),
+    urlPresent: !!url, urlKind: url ? (() => { try { const parsed = new URL(url); return parsed.protocol === "https:" ? "HTTPS" : "OTHER_SCHEME"; } catch { return "INVALID"; } })() : "ABSENT",
+    errorCount: Array.isArray(object?.errors) ? object.errors.length : null,
+    exactNoAttachmentMessage: exactMissing };
+  const classification = response.status === 200 && url?.startsWith("https://") && !object?.errors ? "REP_ATTACHMENT_AVAILABLE"
+    : response.status === 400 && exactMissing && !url ? "REP_ATTACHMENT_NOT_AVAILABLE" : "REP_ATTACHMENT_AMBIGUOUS";
+  return { classification, shape, url: classification === "REP_ATTACHMENT_AVAILABLE" ? url : null };
+}
 async function boundedDownload(initial: string, job?: any) {
   let url = new URL(initial);
   if (url.origin !== IQ_ORIGIN || !url.pathname.startsWith("/rails/active_storage/blobs/redirect/")) throw Error("REP_DOWNLOAD_ORIGIN_INVALID");
@@ -84,6 +115,29 @@ async function boundedDownload(initial: string, job?: any) {
     return Buffer.concat(chunks);
   }
   throw Error("REP_DOWNLOAD_TOO_MANY_REDIRECTS");
+}
+export async function validateIqRepAttachmentDownload(url: string, source: any, job: any) {
+  const archive = await boundedDownload(url, job);
+  const zip = await JSZip.loadAsync(archive);
+  const files = Object.values(zip.files).filter(file => !file.dir);
+  if (files.length > 30 || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000)
+    throw Error("REP_ZIP_LIMIT");
+  const candidates = [];
+  for (const xmlFile of files.filter(file => /\.xml$/i.test(file.name))) {
+    const xml = await xmlFile.async("nodebuffer");
+    let uuid: string;
+    try { uuid = validateRep(xml, source); } catch { continue; }
+    const pdfFile = files.find(file => file.name.toLowerCase() === xmlFile.name.replace(/\.xml$/i, ".pdf").toLowerCase());
+    if (!pdfFile) throw Error("REP_PDF_PAIR_MISSING");
+    const pdf = await pdfFile.async("nodebuffer");
+    if (pdf.length > 10_000_000 || pdf.subarray(0, 5).toString() !== "%PDF-") throw Error("REP_PDF_INVALID");
+    candidates.push({ uuid, xml, pdf });
+  }
+  if (candidates.length !== 1) throw Error("REP_ZIP_APPLICATION_MISMATCH");
+  const match = candidates[0];
+  return { repUuid: match.uuid, archiveSha256: createHash("sha256").update(archive).digest("hex"),
+    xmlSha256: createHash("sha256").update(match.xml).digest("hex"), pdfSha256: createHash("sha256").update(match.pdf).digest("hex"),
+    xmlBytes: match.xml.length, pdfBytes: match.pdf.length, validated: true };
 }
 export async function importIqComplement(url: string, sources: any[], job?: any) {
   const zip = await JSZip.loadAsync(await boundedDownload(url, job));
