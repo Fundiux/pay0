@@ -34,7 +34,10 @@ async function run(){
   const ref=db.doc(`hugoRepReadCohort/${ids[folio]}`),row=(await ref.get()).data();
   const request=(await db.doc(`paymentComplementRequests/${complementRequestId(prior.rootId,applicationId)}`).get()).data();
   if(mode==='--inspect'){
+    const sameDepositJobs=await db.collection('paymentComplementJobs').where('depositId','==',depositId).get();
+    const iqRequestJobs=sameDepositJobs.docs.filter(doc=>doc.data().rootId===prior.rootId&&doc.data().provider==='IQ');
     console.log(JSON.stringify({mode:'INSPECT',folio,applicationId,depositId,metrics:await metrics(prior.rootId),
+      iqRequestJobCount:iqRequestJobs.length,
       read:row?{status:row.status,stage:row.stage,error:row.error||null,deposit:row.deposit||null,
         attachmentClassification:row.attachmentClassification||null,attachmentShape:row.attachmentShape||null,
         validation:row.validation||null,nextCheckAt:row.nextCheckAt||null}:null,
