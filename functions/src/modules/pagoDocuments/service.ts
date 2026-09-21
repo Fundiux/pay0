@@ -6,6 +6,7 @@ import { MAX_PAGO_DOCUMENT_SIZE_BYTES, buildPagoDocumentStoragePath, getPagoDocu
 
 import { logActivityTx, logActivity } from "../../utils/logActivity";
 import { notifyIqPagoTelegramH4D59B } from "../iq/pagoTelegramNotifications";
+import { canRunIqAutomationForDispatch } from "../dispatches/domain";
 
 const db = admin.firestore();
 
@@ -456,6 +457,9 @@ export async function finalizePagoDocumentUploadCore(
     const pagoRefH4D58H = db.collection("pagos").doc(pagoId);
     const pagoSnapH4D58H = await tx.get(pagoRefH4D58H);
     const pagoH4D58H = pagoSnapH4D58H.exists ? ((pagoSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
+    const despachoId = cleanTextH4D64A6(pagoH4D58H.despachoId);
+    const despachoSnap = despachoId ? await tx.get(db.collection("despachos").doc(despachoId)) : null;
+    const iqDispatchEnabled = despachoSnap?.exists && canRunIqAutomationForDispatch(despachoSnap.data());
     terminalContextH4D64A6 = getPagoIqTerminalContextH4D64A6(pagoH4D58H);
     pagoForNotificationH4D64A6 = pagoH4D58H;
     // H4_D64_A6_PAGO_DOC_TX_READ_TERMINAL_CONTEXT
@@ -545,13 +549,13 @@ export async function finalizePagoDocumentUploadCore(
     }
     // H4_D64_A6_PAGO_DOC_UNLOCK_WRITE
 
-    const iqAutoQueuePatchH4D62B = buildPagoIqAutoQueuePatchH4D62B({
+    const iqAutoQueuePatchH4D62B = iqDispatchEnabled ? buildPagoIqAutoQueuePatchH4D62B({
       pago: pagoH4D58H,
       uploadId,
       documentType,
       uid,
       terminalUnlockApplied: iqUnlockAppliedH4D62B,
-    });
+    }) : {};
 
     if (Object.keys(iqAutoQueuePatchH4D62B).length > 0) {
       tx.set(pagoRefH4D58H, iqAutoQueuePatchH4D62B, { merge: true });

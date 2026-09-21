@@ -284,6 +284,7 @@ function isPagoIqLinked(p: any) {
 }
 
 function getPagoIqStatus(p: any) {
+  if (p?.iqApplicable === false) return "No aplica";
   return String(
     p?.iqDepositReconciliationStatus ||
     p?.iqPagoDepositReconciliationStatus ||

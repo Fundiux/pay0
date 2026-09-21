@@ -35,6 +35,7 @@ import { normalizeClientAccessPermissions } from "./modules/clientDelegations/ac
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
+import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -2310,6 +2311,9 @@ export const listPagos = onCall(
 
     const snap = await queryRef.get();
     const docs = snap.docs.slice(0, pageSize);
+    const despachoIds = [...new Set(docs.map((doc) => String(doc.get("despachoId") || "").trim()).filter(Boolean))];
+    const despachoSnapshots = await Promise.all(despachoIds.map((id) => db.collection("despachos").doc(id).get()));
+    const iqByDespacho = new Map(despachoSnapshots.map((dispatch, index) => [despachoIds[index], dispatch.exists && canRunIqAutomationForDispatch(dispatch.data())]));
     const last = docs[docs.length - 1];
     const lastCreatedAt: any = last?.get("createdAt");
 
@@ -2320,6 +2324,7 @@ export const listPagos = onCall(
         return {
           id: doc.id,
           ...data,
+          iqApplicable: iqByDespacho.get(String(data.despachoId || "").trim()) === true,
           createdAt: createdAt && typeof createdAt.seconds === "number"
             ? { seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds || 0 }
             : null,
