@@ -2709,6 +2709,7 @@ export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfil
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
+export { getHugoComplementInventoryPage } from "./modules/paymentApplications/complementInventory";
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";

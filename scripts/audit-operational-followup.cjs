@@ -41,6 +41,18 @@ async function run(){
     if(!file||String(file.facturamaUuid||'').toUpperCase()!==String(row.uuid||'').toUpperCase()) anomalies.issuedMaterialityMismatch++;
   }
   console.log(JSON.stringify({mode:'READ_ONLY_AUDIT',counts:{solicitudes:solicitudes.length,pagos:pagos.length,applications:applications.length,issuedInvoices:issued.length,materiality:files.length},anomalies,externalActions:0}));
+  if(args.includes('--hugo-inventory')){
+    const {inventoryPage}=require('../functions/lib/modules/paymentApplications/complementInventory.js');
+    const total={scanned:0,detected:0,processed:0,pending:0,errors:0,excluded:0,iq:0,facturama:0,emisor:0};
+    let cursor='',complete=false,pages=0;const reasons={};
+    while(!complete){
+      const page=await inventoryPage(rootId,cursor,25);
+      for(const key of Object.keys(total))total[key]+=page.counts[key];
+      for(const row of page.exceptions)reasons[row.reason]=(reasons[row.reason]||0)+1;
+      complete=page.complete;cursor=page.cursor||'';pages++;
+    }
+    console.log(JSON.stringify({mode:'HUGO_INVENTORY_READ_ONLY',counts:total,reasons,pages,complete,externalActions:0}));
+  }
   if(args.includes('--reconcile-complements')){
     const {reconcilePaymentComplement}=require('../functions/lib/modules/paymentApplications/complementFollowup.js');
     for(const row of applications) await reconcilePaymentComplement(row.id);
