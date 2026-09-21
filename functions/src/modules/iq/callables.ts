@@ -556,12 +556,15 @@ export const listUserIqAccess = onCall(callableWithIqSecret, async (request) => 
   const accessSnap = await db
     .collection("iqUserAccess")
     .where("rootId", "==", auth.rootId)
-    .orderBy("updatedAt", "desc")
     .get();
+
+  const accessDocs = accessSnap.docs.sort(
+    (a, b) => (toMillis(b.data().updatedAt) ?? 0) - (toMillis(a.data().updatedAt) ?? 0),
+  );
 
   const profileIds = Array.from(
     new Set(
-      accessSnap.docs
+      accessDocs
         .map((doc) => String(doc.data().iqCredentialProfileId ?? ""))
         .filter(Boolean),
     ),
@@ -582,7 +585,7 @@ export const listUserIqAccess = onCall(callableWithIqSecret, async (request) => 
 
   return {
     ok: true,
-    data: accessSnap.docs.map((doc) => {
+    data: accessDocs.map((doc) => {
       const data = doc.data();
       const profileId = String(data.iqCredentialProfileId ?? "");
       return sanitizeAccess(doc.id, data, aliases.get(profileId) ?? null);
