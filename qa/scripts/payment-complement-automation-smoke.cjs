@@ -19,7 +19,8 @@ async function run(){
  await db.doc(`pagos/${root}`).set({rootId:root,folio:'P1',companyId:root,clienteId:root,status:'CONCILIADO',fechaPago:stamp.fromMillis(now.getTime()-86400000),moneda:'MXN'});
  await db.doc(`pagoApplicationIqPlans/${root}`).set({rootId:root,pagoId:root,iqExecutionProfileId:'profile',plan:{pagoIqFolio:'220483'}});
  await db.doc(`pagoApplicationIqAttempts/${root}`).set({rootId:root,profileId:'profile',planId:root,createdBy:root});
- for(const id of [root,root+'-2'])await db.doc(`pagoAplicaciones/${id}`).set({...app,folio:id});
+ await db.doc(`pagoAplicaciones/${root}`).set(app);
+ await db.doc(`pagoAplicaciones/${root}-2`).set({...app,folio:'AP2',numeroParcialidad:2,saldoAnterior:58,saldoInsoluto:0});
  const enqueues=await Promise.allSettled([api.enqueueComplement(root),api.enqueueComplement(root+'-2'),api.enqueueComplement(root)]);
  assert(enqueues.some(result=>result.status==='fulfilled'),'at least one concurrent enqueue must complete');
  await api.enqueueComplement(root);
@@ -67,13 +68,32 @@ async function run(){
  for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId]){const upload=(await db.doc(`uploads/${uploadId}`).get()).data();assert.equal(upload.entityType,'pagos');assert.equal(upload.entityId,root);assert.equal(upload.pagoId,root);assert.equal(upload.solicitudId,root);assert.match(upload.storagePath,new RegExp(`/pagos/${root}/docs/COMPLEMENTO_PAGO_`));}
  const savedAgain=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'));
  assert.deepEqual(savedAgain,saved,'document save is idempotent');
- await db.doc(`solicitudes/${root}`).update({facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice'});await follow.reconcilePaymentComplement(root);
- const factJob=job+'-fact';await db.doc(`paymentComplementJobs/${factJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:root,status:'QUEUED'});
+ const concurrentSaves=await Promise.all([1,2].map(()=>docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'))));
+ for(const result of concurrentSaves)assert.deepEqual(result,saved,'concurrent retries preserve the same uploads');
+ const rep2Xml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="33333333-3333-4333-8333-333333333333"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="2" ImpPagado="58" ImpSaldoAnt="58" ImpSaldoInsoluto="0"/></Comprobante>`);
+ const second=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root+'-2',invoiceUuid:uuid,installment:2,amountMinor:5800,balanceBefore:58,balanceAfter:0},rep2Xml,Buffer.from('%PDF-1.4\n% PAY0 REP second'));
+ for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId,second.xmlUploadId,second.pdfUploadId])assert.equal((await db.doc(`uploads/${uploadId}`).get()).data().active,true,'separate partialities remain active');
+ const brokenReceipt={...adapter,availableIqComplement:async()=> 'https://iq.test/rep.zip',importIqComplement:async(_url,sources)=>sources.map(source=>({source,documents:{uuid:saved.uuid,xmlUploadId:'missing',pdfUploadId:'missing'}}))};
+ await api.checkComplementDaily(job,new Date(day7.getTime()+86400000),brokenReceipt);
+ assert.equal((await db.doc(`paymentComplementJobs/${job}`).get()).data().status,'REQUESTED','unverified files cannot close the job');
+ for(const id of [root,root+'-2'])assert.notEqual((await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,id)}`).get()).data().status,'RECEIVED');
+ const verifiedReceipt={...adapter,availableIqComplement:async()=> 'https://iq.test/rep.zip',importIqComplement:async(_url,sources)=>sources.map(source=>({source,documents:source.applicationId===root?saved:second}))};
+ await api.checkComplementDaily(job,new Date(day7.getTime()+2*86400000),verifiedReceipt);
+ assert.equal((await db.doc(`paymentComplementJobs/${job}`).get()).data().status,'RECEIVED');
+ for(const id of [root,root+'-2'])assert.equal((await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,id)}`).get()).data().status,'RECEIVED');
+ const factId=root+'-fact';
+ await db.doc(`solicitudes/${factId}`).set({rootId:root,folio:'SF',tipoFactura:'PPD',companyId:root,clienteId:root,facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice',facturaUuid:uuid,status:'PROCESANDO'});
+ await db.doc(`pagos/${factId}`).set({rootId:root,folio:'PF',companyId:root,clienteId:root,status:'CONCILIADO',fechaPago:stamp.fromMillis(now.getTime()-86400000),moneda:'MXN'});
+ await db.doc(`pagoAplicaciones/${factId}`).set({...app,solicitudId:factId,pagoId:factId,folio:'APF',iqPlanId:null,iqExecutionAttemptId:null,iqApplicationStatus:null,iqActionExecuted:false});
+ await follow.reconcilePaymentComplement(factId);
+ const factJob=job+'-fact';await db.doc(`paymentComplementJobs/${factJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:factId,status:'QUEUED'});
  const downloadFail={...adapter,importFacturamaComplement:async()=>{throw Error('DOWNLOAD_FAILED');}};
  await api.executeComplement(factJob,downloadFail);await api.executeComplement(factJob,downloadFail);assert.equal(emits,1);assert.equal((await db.doc(`paymentComplementJobs/${factJob}`).get()).data().status,'ISSUED_PENDING_FILES');
  // This fake job has no linked request, so use the proper linkage for recovery.
- await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,root)}`).update({automationJobId:factJob});
- await api.checkComplementDaily(factJob,new Date(now.getTime()+86400000),adapter);assert.equal(emits,1);assert.equal(imports,1);
+ await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,factId)}`).update({automationJobId:factJob});
+ const factSaved=await docs.saveComplementDocuments({rootId:root,solicitudId:factId,pagoId:factId,pagoFolio:'PF',applicationId:factId,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP fact'));
+ const factRecovery={...adapter,importFacturamaComplement:async()=>{imports++;return factSaved;}};
+ await api.checkComplementDaily(factJob,new Date(now.getTime()+86400000),factRecovery);assert.equal(emits,1);assert.equal(imports,1);
  await assert.rejects(api.configurePaymentComplementAutomation.run({auth:{uid:'not-a-user',token:{}},data:{iqEnabled:true,facturamaEnabled:true}}));
  for(const [suffix,key] of [['one','rep1'],['two','rep2'],['three','rep1']]){
    const uploadId=`${root}-${suffix}`,ref=db.doc(`uploads/${uploadId}`);
@@ -82,6 +102,6 @@ async function run(){
  assert.equal((await db.doc(`uploads/${root}-one`).get()).data().active,false);
  assert.equal((await db.doc(`uploads/${root}-two`).get()).data().active,true,'another partiality stays active');
  assert.equal((await db.doc(`uploads/${root}-three`).get()).data().active,true);
- console.log(JSON.stringify({ok:true,checks:['IQ once per deposit under concurrency','confirmed application gate','prospective activation','root isolation','uncertain POST never replayed','daily once and seven-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','REP documents belong to Pago','REP document save is idempotent','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
+ console.log(JSON.stringify({ok:true,checks:['IQ once per deposit under concurrency','confirmed application gate','prospective activation','root isolation','uncertain POST never replayed','daily once and seven-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','REP documents belong to Pago','REP document save is idempotent under concurrent retry','distinct partialities retain XML and PDF','unverified receipt cannot close a job','verified receipt closes all linked applications atomically','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
 }
 run().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)});

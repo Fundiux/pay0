@@ -23,47 +23,56 @@ export async function saveComplementDocuments(source: any, xml: Buffer, pdf: Buf
   if (!solicitud || solicitud.rootId !== source.rootId) throw Error("REP_DOCUMENT_SCOPE");
   const pago = (await db.doc(`pagos/${source.pagoId}`).get()).data();
   if (!pago || pago.rootId !== source.rootId) throw Error("REP_PAYMENT_DOCUMENT_SCOPE");
-  const ids: string[] = [];
-  for (const [extension, buffer, contentType] of [["xml", xml, "application/xml"], ["pdf", pdf, "application/pdf"]] as const) {
-    const sha256 = createHash("sha256").update(buffer).digest("hex");
-    const type = `COMPLEMENTO_PAGO_${extension.toUpperCase()}`, id = hash(`${source.rootId}:${source.pagoId}:${source.applicationId}:${uuid}:${type}:PAGO_V2`);
-    const ref = db.doc(`uploads/${id}`), previous = await ref.get();
+  const files = ([ ["xml", xml, "application/xml"], ["pdf", pdf, "application/pdf"] ] as const).map(([extension, buffer, contentType]) => {
+    const type = `COMPLEMENTO_PAGO_${extension.toUpperCase()}`;
+    const id = hash(`${source.rootId}:${source.pagoId}:${source.applicationId}:${uuid}:${type}:PAGO_V2`);
+    const filename = `REP-${uuid}.${extension}`;
+    return { extension, buffer, contentType, type, id, filename, ref: db.doc(`uploads/${id}`),
+      sha256: createHash("sha256").update(buffer).digest("hex"),
+      storagePath: `roots/${source.rootId}/pagos/${source.pagoId}/docs/${type}/${id}-${filename}` };
+  });
+  // A retry may leave blobs without metadata. Both blobs must be stored before
+  // the single transaction publishes either READY document.
+  for (const file of files) {
+    const previous = await file.ref.get();
     if (previous.exists) {
-      if (previous.data()?.status !== "READY" || previous.data()?.active !== true || previous.data()?.sha256 !== sha256) throw Error("REP_DOCUMENT_CONFLICT");
-      ids.push(id); continue;
-    }
-    const filename = `REP-${uuid}.${extension}`, storagePath = `roots/${source.rootId}/pagos/${source.pagoId}/docs/${type}/${id}-${filename}`;
-    // Same server-owned init/save/finalize lifecycle as issued invoices. No
-    // client-controlled path or replacement of previous partialities.
-    await admin.storage().bucket().file(storagePath).save(buffer, { resumable: false, contentType });
-    await db.runTransaction(async tx => {
-      const existing = await tx.get(ref);
-      if (existing.exists) return;
-      const active = await tx.get(db.collection("uploads")
-        .where("rootId", "==", source.rootId)
-        .where("pagoId", "==", source.pagoId)
-        .where("documentType", "==", type)
-        .where("active", "==", true));
-      let maxVersion = 0;
-      for (const document of active.docs) {
-        maxVersion = Math.max(maxVersion, Number(document.data().version || 0));
-        tx.set(document.ref, { active: false, status: "REPLACED", replacedByUploadId: id, replacedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (previous.data()?.status !== "READY" || previous.data()?.active !== true || previous.data()?.sha256 !== file.sha256) throw Error("REP_DOCUMENT_CONFLICT");
+    } else await admin.storage().bucket().file(file.storagePath).save(file.buffer, { resumable: false, contentType: file.contentType });
+  }
+  await db.runTransaction(async tx => {
+    const existing = await Promise.all(files.map(file => tx.get(file.ref)));
+    const active = await Promise.all(files.map(file => tx.get(db.collection("uploads")
+      .where("rootId", "==", source.rootId).where("pagoId", "==", source.pagoId)
+      .where("documentType", "==", file.type).where("active", "==", true))));
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index], previous = existing[index];
+      if (previous.exists) {
+        if (previous.data()?.status !== "READY" || previous.data()?.active !== true || previous.data()?.sha256 !== file.sha256) throw Error("REP_DOCUMENT_CONFLICT");
+        continue;
       }
-      tx.create(ref, { rootId: source.rootId, adminId: pago.adminId || solicitud.adminId || source.rootId, clienteId: pago.clienteId || solicitud.clienteId,
+      let maxVersion = 0;
+      for (const document of active[index].docs) {
+        // Other applications, including other partialities of this payment,
+        // retain their active XML and PDF.
+        if (document.data().applicationId !== source.applicationId) continue;
+        maxVersion = Math.max(maxVersion, Number(document.data().version || 0));
+        tx.update(document.ref, { active: false, status: "REPLACED", replacedByUploadId: file.id,
+          replacedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      }
+      tx.create(file.ref, { rootId: source.rootId, adminId: pago.adminId || solicitud.adminId || source.rootId, clienteId: pago.clienteId || solicitud.clienteId,
         companyId: solicitud.companyId, solicitudId: source.solicitudId, solicitudFolio: solicitud.folio || null,
         entityType: "pagos", entityId: source.pagoId, pagoId: source.pagoId, pagoFolio: pago.folio || source.pagoFolio || null,
-        documentType: type, documentTypeLabel: `Complemento de pago ${extension.toUpperCase()}`,
-        complementKey: uuid, applicationId: source.applicationId, originalName: filename, filename, storagePath,
-        contentType, sizeBytes: buffer.length, sha256, integrityHashAlgorithm: "SHA-256", integritySealStatus: "SEALED",
+        documentType: file.type, documentTypeLabel: `Complemento de pago ${file.extension.toUpperCase()}`,
+        complementKey: uuid, applicationId: source.applicationId, originalName: file.filename, filename: file.filename, storagePath: file.storagePath,
+        contentType: file.contentType, sizeBytes: file.buffer.length, sha256: file.sha256, integrityHashAlgorithm: "SHA-256", integritySealStatus: "SEALED",
         status: "READY", active: true, version: maxVersion + 1, finalizedAt: FieldValue.serverTimestamp(), finalizedBy: "SYSTEM",
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), createdBy: "SYSTEM" });
       logActivityTx(tx, db, { event: "DOCUMENTO_PAGO_SUBIDO", rootId: source.rootId, adminId: pago.adminId || source.rootId,
         actorUid: "SYSTEM", actorRole: "system", entityType: "pagos", entityId: source.pagoId,
         referenceId: source.pagoId, referenceFolio: pago.folio || source.pagoFolio || source.pagoId,
-        referenceType: "pagoDocument", description: `Complemento de pago ${extension.toUpperCase()} vinculado al pago ${pago.folio || source.pagoId}.`,
-        extra: { documentType: type, uploadId: id, applicationId: source.applicationId, complementUuid: uuid } });
-    });
-    ids.push(id);
-  }
-  return { uuid, xmlUploadId: ids[0], pdfUploadId: ids[1] };
+        referenceType: "pagoDocument", description: `Complemento de pago ${file.extension.toUpperCase()} vinculado al pago ${pago.folio || source.pagoId}.`,
+        extra: { documentType: file.type, uploadId: file.id, applicationId: source.applicationId, complementUuid: uuid } });
+    }
+  });
+  return { uuid, xmlUploadId: files[0].id, pdfUploadId: files[1].id };
 }

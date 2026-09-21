@@ -114,8 +114,37 @@ export async function executeComplement(id: string, adapter = providers) {
   }
 }
 async function markReceived(id: string, rows: any[]) {
-  for (const { source, documents } of rows) await db.doc(`paymentComplementRequests/${complementRequestId(source.rootId, source.applicationId)}`).update({ ...documents, status: "RECEIVED", automationStatus: "RECEIVED", receivedAt: FieldValue.serverTimestamp() });
-  await updateJob(id, { status: "RECEIVED", error: null }, "Complemento recibido y validado contra UUID, parcialidad e importes; XML y PDF vinculados al pago correspondiente.");
+  if (!rows.length) throw Error("REP_RECEIPT_EMPTY");
+  await db.runTransaction(async tx => {
+    const jobRef = jobs().doc(id), job = (await tx.get(jobRef)).data();
+    if (!job || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status)) throw Error("REP_JOB_STATE_CHANGED");
+    const linked = await tx.get(db.collection("paymentComplementRequests").where("automationJobId", "==", id));
+    if (linked.empty || linked.size !== rows.length) throw Error("REP_RECEIPT_COVERAGE_MISMATCH");
+    const expected = new Map(linked.docs.map(doc => [doc.data().applicationId, doc]));
+    const updates: { ref: FirebaseFirestore.DocumentReference; documents: any }[] = [];
+    for (const { source, documents } of rows) {
+      const request = expected.get(source.applicationId);
+      if (!request || request.data().rootId !== job.rootId || source.rootId !== job.rootId ||
+          request.id !== complementRequestId(job.rootId, source.applicationId) ||
+          request.data().pagoId !== source.pagoId || request.data().invoiceUuid !== source.invoiceUuid ||
+          request.data().installment !== source.installment || request.data().amountMinor !== source.amountMinor ||
+          !documents?.uuid || !documents?.xmlUploadId || !documents?.pdfUploadId) throw Error("REP_RECEIPT_SOURCE_MISMATCH");
+      for (const [type, uploadId] of [["COMPLEMENTO_PAGO_XML", documents.xmlUploadId], ["COMPLEMENTO_PAGO_PDF", documents.pdfUploadId]]) {
+        const upload = (await tx.get(db.doc(`uploads/${uploadId}`))).data();
+        if (!upload || upload.rootId !== job.rootId || upload.pagoId !== source.pagoId || upload.applicationId !== source.applicationId ||
+            upload.documentType !== type || upload.complementKey !== documents.uuid || upload.status !== "READY" ||
+            upload.active !== true || upload.integritySealStatus !== "SEALED" || !/^[a-f0-9]{64}$/i.test(upload.sha256 || "")) throw Error("REP_RECEIPT_DOCUMENT_MISMATCH");
+      }
+      updates.push({ ref: request.ref, documents });
+      expected.delete(source.applicationId);
+    }
+    if (expected.size) throw Error("REP_RECEIPT_COVERAGE_MISMATCH");
+    for (const { ref, documents } of updates) tx.update(ref, { ...documents, status: "RECEIVED", automationStatus: "RECEIVED", automationError: null,
+      receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.update(jobRef, { status: "RECEIVED", error: null, updatedAt: FieldValue.serverTimestamp() });
+    logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
+      referenceId: id, referenceType: "complementoPago", description: "Complemento recibido y validado contra UUID, parcialidad e importes; XML y PDF vinculados al pago correspondiente." });
+  });
 }
 
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers) {
