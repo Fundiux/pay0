@@ -384,10 +384,35 @@ export async function syncIqClientById(params: {
     (partnerPayload as any).partners,
   );
 
-  const partner = resolveUniqueIqEntity(
-    partnerRows,
-    access.username,
-  );
+  const exactPartner = (name: string) => {
+    const wanted = normalizeIqEntityName(name);
+    if (!wanted) return null;
+    const matches = partnerRows.filter(
+      row => normalizeIqEntityName(row.name ?? row.value) === wanted,
+    );
+    if (matches.length !== 1) return null;
+    const selected = matches[0];
+    const id = cleanText(selected.id ?? selected.value);
+    return id ? { id, name: cleanText(selected.name ?? selected.value) } : null;
+  };
+
+  const partner = exactPartner(access.username) || exactPartner(access.profileAlias);
+  if (!partner) {
+    await persistReview({
+      clientRef,
+      actor:params.actor,
+      reason:"IQ_PARTNER_NOT_FOUND",
+    });
+    return {
+      ok:false,
+      status:"REVIEW_REQUIRED",
+      clientId,
+      iqClientId:"",
+      iqClientName:"",
+      method:"IQ_PARTNER_NOT_FOUND",
+      message:"No se encontro un despacho IQ que coincida exactamente con el usuario o alias de la cuenta IQ. Revisa la cuenta asignada.",
+    };
+  }
 
   let clients = await listIqClients({
     apiOrigin:auth.apiOrigin,
