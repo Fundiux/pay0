@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   getSolicitudSignatureRequest,
   submitSolicitudSignature,
 } from "@/services/signatureLinks";
 
-export default function PublicSignaturePage({ params }: { params: { token: string } }) {
+export default function PublicSignaturePage() {
+  const params = useParams<{ token: string }>();
   const token = decodeURIComponent(params.token || "");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);

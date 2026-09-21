@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   collection,
   onSnapshot,
@@ -43,7 +44,8 @@ function actionIconClass(kind: "on" | "off") {
   return `${base} ${map[kind] || ""}`;
 }
 
-export default function DespachoDetallePage({ params }: { params: { id: string } }) {
+export default function DespachoDetallePage() {
+  const params = useParams<{ id: string }>();
   const despachoId = params.id;
 
   const { user } = useAuth();

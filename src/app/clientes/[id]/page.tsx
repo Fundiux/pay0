@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Building2, ClipboardCheck, FileText, ShieldCheck } from "lucide-react";
 
@@ -13,12 +14,6 @@ import {
   saveWhatsAppDeliveryRoute,
 } from "@/services/whatsappQr";
 import ClientEntityDocumentsPanel from "@/components/ClientEntityDocumentsPanel";
-
-type PageProps = {
-  params: {
-    id: string;
-  };
-};
 
 type DetailTab = "resumen" | "expediente" | "papeleria" | "kyc";
 
@@ -43,7 +38,8 @@ function formatStatus(active?: boolean) {
   return active === false ? "Inactivo" : "Activo";
 }
 
-export default function ClienteDetallePage({ params }: PageProps) {
+export default function ClienteDetallePage() {
+  const params = useParams<{ id: string }>();
   const { user } = useAuth();
   const { profile, loading } = useUserProfile();
 

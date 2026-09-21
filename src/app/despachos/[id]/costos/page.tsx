@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import NoAccess from "@/components/NoAccess";
@@ -8,10 +9,6 @@ import UiSelect, { type UiSelectOption } from "@/components/UiSelect";
 import { db } from "@/lib/firebaseClient";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { setDespachoOperationCost } from "@/services/rates";
-
-type Props = {
-  params: { id: string };
-};
 
 type BaseType = "TOTAL" | "SUBTOTAL";
 type PricingMode = "PERCENT" | "FIXED";
@@ -69,7 +66,8 @@ function formatCostDisplay(value: number, pricingMode: PricingMode): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export default function DespachoCostosPage({ params }: Props) {
+export default function DespachoCostosPage() {
+  const params = useParams<{ id: string }>();
   const despachoId = params.id;
   const { profile } = useUserProfile();
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import NoAccess from "@/components/NoAccess";
@@ -13,10 +14,6 @@ import { isAdmin, isOperador, isSuperAdmin, normalizeRole } from "@/lib/roles";
 import { setClientOperationCost } from "@/services/rates";
 import { watchClientById } from "@/services/clients";
 import { watchUserDespachos } from "@/services/despachosAccess";
-
-type Props = {
-  params: { id: string };
-};
 
 type ClientLite = {
   id: string;
@@ -116,7 +113,8 @@ function sortByName<T extends { operationTypeName?: string; nombre?: string | nu
   });
 }
 
-export default function ClienteCostosPage({ params }: Props) {
+export default function ClienteCostosPage() {
+  const params = useParams<{ id: string }>();
   const clientId = params.id;
   const { user } = useAuth();
   const { profile } = useUserProfile();

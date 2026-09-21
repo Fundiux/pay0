@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
@@ -12,10 +13,6 @@ import { useModuleAccess } from "@/lib/useModuleAccess";
 import { isAdmin, isSuperAdmin, normalizeRole } from "@/lib/roles";
 import { setUserOperationCost } from "@/services/rates";
 import { watchUserDespachos } from "@/services/despachosAccess";
-
-type Props = {
-  params: { id: string };
-};
 
 type UserLite = {
   uid: string;
@@ -108,7 +105,8 @@ function sortByName<T extends { operationTypeName?: string; nombre?: string | nu
   });
 }
 
-export default function UsuarioCostosPage({ params }: Props) {
+export default function UsuarioCostosPage() {
+  const params = useParams<{ id: string }>();
   const targetUid = params.id;
   const { profile } = useUserProfile();
   const { modules, canAccess } = useModuleAccess(profile, "usuarios", "costs");
