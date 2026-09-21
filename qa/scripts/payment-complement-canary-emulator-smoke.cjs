@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const observation = require('../fixtures/iq-rep-canary-ap1c4u1e6-observation.json');
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || !process.env.FIREBASE_STORAGE_EMULATOR_HOST || process.env.GCLOUD_PROJECT !== 'demo-pay0') throw Error('Local emulators required');
 global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
 const admin = require('../../functions/node_modules/firebase-admin');
@@ -7,6 +8,7 @@ const db = admin.firestore(), stamp = admin.firestore.Timestamp;
 const { runIqRepReadCanary, IQ_REP_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/complementCanary');
 const { reconcilePaymentComplement, complementRequestId } = require('../../functions/lib/modules/paymentApplications/complementFollowup');
 const { saveComplementDocuments } = require('../../functions/lib/modules/paymentApplications/complementDocuments');
+const provider = require('../../functions/lib/modules/paymentApplications/complementProviders');
 const { inventoryPage } = require('../../functions/lib/modules/paymentApplications/complementInventory');
 const root = `canary-${Date.now()}`, appId = `${root}-app`, profileId = `${root}-profile`;
 const uuid = '11111111-1111-4111-8111-111111111111';
@@ -54,6 +56,24 @@ async function run() {
   assert.equal((await inventoryPage(root)).counts.processed, 1);
   await runIqRepReadCanary(IQ_REP_CANARY_ID, available);
   assert.equal((await ref.get()).data().status, 'RECEIVED');
-  console.log(JSON.stringify({ ok: true, pendingWithoutPost: true, masterBlocksExternal: true, verifiedReceipt: true, idempotentCanary: true, externalNetworkCalls: 0 }));
+  assert.equal(observation.kind, 'SANITIZED_RUNTIME_OBSERVATION_NOT_RAW_IQ_RESPONSE');
+  assert.equal(observation.repAvailability, 'UNKNOWN');
+  const job = { rootId: root, provider: 'IQ', profileId, actorUid: root, clientId: root, depositId: '220483' };
+  for (const fields of [{}, { rep: false, can_request_rep: false }, { rep: null, can_request_rep: null }]) {
+    let gets = 0;
+    global.fetch = async url => { gets++; assert.match(String(url), /^https:\/\/iq-produccion-ccc570f75402\.herokuapp\.com\/deposits\?/);
+      return { ok: true, json: async () => [{ id: job.depositId, conciliation_status: observation.conciliationStatus,
+        operation_status: observation.operationStatus, ...fields }] }; };
+    await assert.rejects(provider.preflightIqComplement(job, { accessToken: 'fixture-only' }), /IQ_REP_REQUEST_STATE_REQUIRES_REVIEW/);
+    assert.equal(gets, 1, 'ambiguous deposit does not reach REP resource');
+  }
+  global.fetch = async url => { assert.match(String(url), /\/deposits\/complement\/220483$/);
+    return { status: 400, json: async () => ({ errors: ['El depósito no tiene ningún REP adjunto'] }) }; };
+  assert.equal(await provider.availableIqComplement(job, { accessToken: 'fixture-only' }), null);
+  global.fetch = async url => { assert.match(String(url), /\/deposits\/complement\/220483$/);
+    return { status: 200, json: async () => ({ url: 'https://iq.test/rep.zip' }) }; };
+  assert.equal(await provider.availableIqComplement(job, { accessToken: 'fixture-only' }), 'https://iq.test/rep.zip');
+  global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
+  console.log(JSON.stringify({ ok: true, pendingWithoutPost: true, masterBlocksExternal: true, verifiedReceipt: true, idempotentCanary: true, ambiguousDepositRegression: true, repEndpointContract: true, externalNetworkCalls: 0 }));
 }
 run().then(() => process.exit(0)).catch(error => { console.error(error); process.exit(1); });

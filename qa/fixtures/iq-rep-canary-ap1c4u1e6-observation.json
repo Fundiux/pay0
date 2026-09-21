@@ -1,0 +1,17 @@
+{
+  "kind": "SANITIZED_RUNTIME_OBSERVATION_NOT_RAW_IQ_RESPONSE",
+  "source": "hugoComplementCanaries/iq-rep-read-ap1c4u1e6-v1 and deployed adapter branch, 2026-09-21",
+  "applicationFolio": "AP1C4U1E6",
+  "endpoint": "GET /deposits",
+  "exactDepositMatchCount": 1,
+  "conciliationStatus": "Conciliado",
+  "operationStatus": "En Operacion",
+  "repStrictlyTrue": false,
+  "canRequestRepStrictlyTrue": false,
+  "repFieldPresenceAndRawValue": "NOT_CAPTURED",
+  "canRequestRepFieldPresenceAndRawValue": "NOT_CAPTURED",
+  "adapterResult": "IQ_REP_REQUEST_STATE_REQUIRES_REVIEW",
+  "repResourceGetExecuted": false,
+  "generationPostExecuted": false,
+  "repAvailability": "UNKNOWN"
+}
