@@ -405,12 +405,13 @@ export const listIqCredentialProfiles = onCall(callableWithIqSecret, async (requ
   const snap = await db
     .collection("iqCredentialProfiles")
     .where("rootId", "==", auth.rootId)
-    .orderBy("createdAt", "desc")
     .get();
 
   return {
     ok: true,
-    data: snap.docs.map((doc) => sanitizeProfileForAdmin(doc.id, doc.data())),
+    data: snap.docs
+      .map((doc) => sanitizeProfileForAdmin(doc.id, doc.data()))
+      .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
   };
 });
 
