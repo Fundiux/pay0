@@ -82,6 +82,42 @@ async function run(){
     }
     console.log(JSON.stringify({mode:'HUGO_LOCAL_CANDIDATES_READ_ONLY',gates:{masterEnabled:master.enabled===true,paymentApplicationEnabled:master.automation?.aplicacionPagos===true,complementRequestEnabled:complementConfig.iqEnabled===true,complementLookupEnabled:complementConfig.iqLookupEnabled!==false&&!!complementConfig.rootId},candidates,externalActions:0}));
   }
+  if(args.includes('--hugo-request-evidence')){
+    const {hash,millis}=require('../functions/lib/modules/paymentApplications/complementPolicy.js');
+    const {complementRequestId}=require('../functions/lib/modules/paymentApplications/complementFollowup.js');
+    const [followups,jobs,activity,quotaSnap]=await Promise.all([
+      ...['paymentComplementRequests','paymentComplementJobs','activityLog'].map(read),
+      db.collection('paymentComplementQuotas').where('rootId','==',rootId).get(),
+    ]);
+    const byApplication=new Map(followups.map(row=>[row.applicationId,row]));
+    const relevant=applications.filter(app=>['AP1C4U1E6','AP2C4U1E6','AP3C4U1E6','AP4C4U1E6'].includes(app.folio)).sort((a,b)=>a.folio.localeCompare(b.folio));
+    const config=(await db.doc(`paymentComplementConfigs/${rootId}`).get()).data()||{};
+    const cases=[];
+    for(const app of relevant){
+      const follow=byApplication.get(app.id)||{},plan=app.iqPlanId?(await db.doc(`pagoApplicationIqPlans/${app.iqPlanId}`).get()).data():null;
+      const profileId=String(plan?.iqExecutionProfileId||''),depositId=String(plan?.plan?.pagoIqFolio||plan?.pagoIqFolio||'');
+      const jobId=hash(`${rootId}:IQ:${profileId}:${depositId}`),requestId=complementRequestId(rootId,app.id);
+      const exact=jobs.find(row=>row.id===jobId),sameDeposit=jobs.filter(row=>row.provider==='IQ'&&row.profileId===profileId&&String(row.depositId)===depositId);
+      const linkedLogs=activity.filter(row=>[app.id,requestId,jobId].includes(String(row.referenceId||''))||
+        (row.event==='COMPLEMENTO_PAGO_SEGUIMIENTO'&&[app.folio,follow.solicitudFolio,follow.pagoFolio].some(folio=>folio&&String(row.referenceFolio||'')===folio)));
+      const outboundLogs=linkedLogs.filter(row=>/solicitado a IQ|iniciar el envío|después de iniciar el envío|REQUEST_IQ_PAYMENT_COMPLEMENT/i.test(String(row.description||'')));
+      cases.push({applicationFolio:app.folio,followupExists:!!follow.id,provider:follow.provider||null,
+        prospectiveActivationExcludesApplication:millis(app.createdAt)>0&&millis(app.createdAt)<millis(config.activatedAt),
+        externalRequestSent:follow.externalRequestSent===true,requestedAtPresent:!!follow.requestedAt,requestedThroughHugo:follow.requestedThroughHugo===true,
+        automationJobIdPresent:!!follow.automationJobId,expectedJobExists:!!exact,matchingDepositProfileJobs:sameDeposit.length,
+        matchingJobStatuses:sameDeposit.map(row=>row.status||null),jobAttemptedAtPresent:sameDeposit.some(row=>!!row.attemptedAt),
+        jobRequestedAtPresent:sameDeposit.some(row=>!!row.requestedAt),jobUncertain:sameDeposit.some(row=>['SENDING','UNKNOWN'].includes(row.status)),
+        linkedActivityEvents:linkedLogs.length,outboundActivityEvents:outboundLogs.length,
+        requestQuotaDocumentsForRoot:quotaSnap.docs.filter(doc=>doc.data().action==='REQUEST').length,
+        localConclusion:!follow.id?'REP_REQUEST_STATE_UNKNOWN':
+          follow.externalRequestSent===true||follow.requestedAt||sameDeposit.some(row=>row.attemptedAt||row.requestedAt||['SENDING','UNKNOWN','REQUESTED'].includes(row.status))||outboundLogs.length
+            ?'REP_REQUEST_SENT_OR_UNCERTAIN':
+            millis(app.createdAt)>0&&millis(app.createdAt)<millis(config.activatedAt)&&!follow.automationJobId&&!exact&&!sameDeposit.length
+              ?'REP_REQUEST_NOT_SENT_BY_CURRENT_PAY0_PATH_WITH_LOCAL_EVIDENCE':'REP_REQUEST_STATE_UNKNOWN'});
+    }
+    console.log(JSON.stringify({mode:'HUGO_REP_REQUEST_EVIDENCE_READ_ONLY',repositoryScope:'Current PAY0 collections and deployed-path invariants; no proof about actions outside PAY0 or deleted records',
+      collections:{followups:followups.length,jobs:jobs.length,activity:activity.length},cases,externalActions:0}));
+  }
   if(args.includes('--reconcile-complements')){
     const {reconcilePaymentComplement}=require('../functions/lib/modules/paymentApplications/complementFollowup.js');
     for(const row of applications) await reconcilePaymentComplement(row.id);
