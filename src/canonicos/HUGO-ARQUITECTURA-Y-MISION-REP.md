@@ -2,6 +2,8 @@
 
 Estado: definición arquitectónica y plan de evolución. Auditoría del repositorio: 2026-09-21. Este texto no habilita por sí mismo acciones externas ni backfill productivo.
 
+Avance: la parte 1 quedó implementada en `3e7b4da`. La parte 2 incorpora un inventario paginado de solo lectura y métricas en `/hugo`; su diseño no llama a IQ ni a modelos. La deuda prioritaria de motores cognitivos está en `HUGO-DEUDA-ROUTER-MODELOS.md` y se implementará por separado, sin detener esta misión.
+
 ## Identidad y principios
 
 Hugo (`AGENTE_007`) es la capa inteligente y operativa del ecosistema PAY0, U-PRO TTT y sistemas futuros. Su ciclo es observar, entender, planear, usar herramientas, actuar, verificar, registrar, aprender y escalar. PAY0 es el primer sistema conectado, no el límite de Hugo.
