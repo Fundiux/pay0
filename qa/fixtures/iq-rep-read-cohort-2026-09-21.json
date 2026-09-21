@@ -1,0 +1,28 @@
+{
+  "kind": "SANITIZED_PRODUCTION_B_OBSERVATION",
+  "cases": [
+    { "folio": "AP2C4U1E6", "depositId": "220484" },
+    { "folio": "AP3C4U1E6", "depositId": "220486" },
+    { "folio": "AP4C4U1E6", "depositId": "220485" }
+  ],
+  "deposit": {
+    "httpStatus": 200,
+    "exactMatchCount": 1,
+    "operationStatus": "En Operacion",
+    "conciliationStatus": "Conciliado",
+    "rep": { "present": true, "type": "boolean", "value": false },
+    "canRequestRep": { "present": true, "type": "boolean", "value": true }
+  },
+  "attachment": {
+    "httpStatus": 400,
+    "bodyKind": "object",
+    "topLevelKeys": ["errors"],
+    "bodyBytes": 56,
+    "bodySha256": "05d2404eff35ed73f26820bef7a5c3bb03d4012bd19098b874074408d91af3a4",
+    "exactNoAttachmentMessage": true,
+    "classification": "REP_ATTACHMENT_NOT_AVAILABLE"
+  },
+  "requestJobsCreated": 0,
+  "cRequestsSent": 0,
+  "documentsDownloaded": 0
+}
