@@ -62,6 +62,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const isActive = (href?: string) => {
     if (!href) return false;
     const [pathOnly] = href.split("?");
+    // Las rutas índice, como /wallet, no deben quedar activas cuando se
+    // navega a un hijo. El grupo conserva su estado activo por sus hijos.
+    if (pathOnly === "/wallet") return pathname === pathOnly;
     return pathname === pathOnly || pathname.startsWith(pathOnly + "/");
   };
 

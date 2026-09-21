@@ -830,9 +830,9 @@ export default function SolicitudesPage() {
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
       setPageMsg((current) => current.includes("solicitudes") ? "" : current);
-    }).catch(() => {
+    }).catch((error: any) => {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
-      setPageMsg("No se pudieron cargar solicitudes.");
+      setPageMsg(`No se pudieron cargar solicitudes: ${String(error?.message || "Error interno.")}`);
       setSolicitudes([]);
       setSolicitudesCursor(null);
       setHasMoreSolicitudes(false);

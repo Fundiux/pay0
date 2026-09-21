@@ -173,52 +173,10 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
   },
   {
     label: "Wallet",
+    href: "/wallet",
     iconKey: "wallet",
-    children: [
-      {
-        label: "General",
-        href: "/wallet",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "saldos",
-      },
-      {
-        label: "Adelantos",
-        href: "/wallet/adelantos",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "adelantos",
-        superadminOnly: true,
-      },      {
-        label: "Clientes",
-        href: "/wallet/clientes",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "estadoCuentaCliente",
-      },
-      {
-        label: "Dispersiones",
-        href: "/wallet/dispersiones",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "dispersiones",
-      },
-      {
-        label: "Beneficiarios",
-        href: "/wallet/beneficiarios",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "beneficiarios",
-      },
-
-      {
-        label: "Estado cuenta usuario",
-        href: "/wallet/estado-cuenta-usuario",
-        iconKey: "wallet",
-        moduleKey: "wallet",
-        actionKey: "estadoCuentaUsuario",
-      },
-    ],
+    moduleKey: "wallet",
+    actionKey: "saldos",
   },
   {
     label: "Catalogos",

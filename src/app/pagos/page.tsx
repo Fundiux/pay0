@@ -1507,8 +1507,8 @@ export default function PagosPage() {
       setPagos((current) => append ? [...current, ...page.items] : page.items);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
-    } catch {
-      setPageMsg("No se pudieron cargar pagos.");
+    } catch (error: any) {
+      setPageMsg(`No se pudieron cargar pagos: ${String(error?.message || "Error interno.")}`);
     } finally {
       setLoadingPagos(false);
       setLoadingMorePagos(false);

@@ -1,11 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Clock,
+  Landmark,
+  Send,
   TrendingUp,
+  Users,
   Wallet as WalletIcon,
 } from "lucide-react";
 import NoAccess from "@/components/NoAccess";
@@ -43,6 +47,10 @@ export default function WalletPage() {
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const { canAccess: canViewWallet } = useModuleAccess(profile, "wallet", "saldos");
+  const { canAccess: canViewClients } = useModuleAccess(profile, "wallet", "estadoCuentaCliente");
+  const { canAccess: canViewUserStatement } = useModuleAccess(profile, "wallet", "estadoCuentaUsuario");
+  const { canAccess: canManageDispersions } = useModuleAccess(profile, "wallet", "dispersiones");
+  const { canAccess: canManageBeneficiaries } = useModuleAccess(profile, "wallet", "beneficiarios");
 
   const role = normalizeRole((profile as any)?.role);
   const uid = String(user?.uid || "");
@@ -133,10 +141,17 @@ export default function WalletPage() {
         <p className="text-slate-500 text-[10px] font-bold uppercase mt-1">
           {scope.subtitle}
         </p>
-        <p className="text-slate-600 text-[10px] font-bold uppercase mt-2">
-          Fuente canonica: balanceAccounts + balanceMovements / CLIENT
-        </p>
+        <p className="text-slate-600 text-[10px] font-bold uppercase mt-2">Resumen operativo de saldos y movimientos</p>
       </header>
+
+      <section className="mb-6 rounded-2xl border border-white/10 bg-[#161d2b] p-3 shadow-xl shadow-black/10">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {canViewClients && <WalletShortcut href="/wallet/clientes" icon={<Users size={17} />} title="Saldos de clientes" description="Cuentas, movimientos y adelantos." />}
+          {canViewUserStatement && <WalletShortcut href="/wallet/estado-cuenta-usuario" icon={<Landmark size={17} />} title="Saldos de usuarios" description="Utilidades y estado de cuenta." />}
+          {canManageDispersions && <WalletShortcut href="/wallet/dispersiones" icon={<Send size={17} />} title="Dispersiones" description="Crear y consultar salidas." />}
+          {canManageBeneficiaries && <WalletShortcut href="/wallet/beneficiarios" icon={<Users size={17} />} title="Beneficiarios" description="Cuentas destino de clientes." />}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div className="bg-[#161d2b] p-10 rounded-[2.5rem] border-2 border-sky-500/20 shadow-2xl relative overflow-hidden md:col-span-2">
@@ -177,34 +192,35 @@ export default function WalletPage() {
         </div>
       </div>
 
-      <div className="bg-[#161d2b] rounded-3xl border-2 border-white/5 overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-white/10 bg-white/5 flex justify-between items-center">
-          <h2 className="text-sm font-bold text-white uppercase tracking-widest">
-            Historial de movimientos
-          </h2>
-          <Clock size={18} className="text-slate-500" />
+      <div className="pay0-table-card">
+        <div className="pay0-table-header">
+          <div>
+            <h2 className="pay0-table-title">Historial reciente de clientes</h2>
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">Consulta el detalle completo desde Saldos de clientes.</p>
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-slate-400"><span>{movements.length} movimientos</span><Clock size={17} className="text-slate-500" /></div>
         </div>
-
-        <table className="w-full text-left border-collapse">
+        <div className="pay0-table-wrap">
+        <table className="pay0-table min-w-[760px]">
           <thead>
-            <tr className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-white/10">
-              <th className="p-4">Fecha</th>
-              <th className="p-4 text-center">Tipo</th>
-              <th className="p-4">Concepto</th>
-              <th className="p-4 text-right">Monto</th>
+            <tr className="pay0-table-head-row">
+              <th className="pay0-th">Fecha</th>
+              <th className="pay0-th">Tipo</th>
+              <th className="pay0-th">Concepto</th>
+              <th className="pay0-th-right">Monto</th>
             </tr>
           </thead>
 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="p-10 text-center text-slate-500 text-xs italic">
+                <td colSpan={4} className="pay0-empty-cell">
                   Cargando historial...
                 </td>
               </tr>
             ) : movements.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-10 text-center text-slate-500 text-xs italic">
+                <td colSpan={4} className="pay0-empty-cell">
                   No hay movimientos en el modelo canonico.
                 </td>
               </tr>
@@ -217,14 +233,14 @@ export default function WalletPage() {
                 const referenceId = String(m.referenceId || "").trim();
 
                 return (
-                  <tr key={m.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    <td className="p-4 text-slate-400 text-[11px] font-mono">
+                  <tr key={m.id} className="pay0-table-row">
+                    <td className="pay0-td-date">
                       {m.createdAt?.seconds
                         ? new Date(m.createdAt.seconds * 1000).toLocaleString("es-MX")
                         : "---"}
                     </td>
 
-                    <td className="p-4 text-center">
+                    <td className="pay0-td">
                       <div
                         className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center ${
                           isIn
@@ -236,7 +252,7 @@ export default function WalletPage() {
                       </div>
                     </td>
 
-                    <td className="p-4">
+                    <td className="pay0-td">
                       <div className="uppercase text-[10px] font-bold text-white">
                         {label}
                       </div>
@@ -253,8 +269,7 @@ export default function WalletPage() {
                       </div>
                     </td>
 
-                    <td
-                      className={`p-4 text-right font-mono font-bold ${
+                    <td className={`pay0-td-amount ${
                         isIn ? "text-emerald-400" : "text-rose-400"
                       }`}
                     >
@@ -267,7 +282,15 @@ export default function WalletPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
+}
+
+function WalletShortcut({ href, icon, title, description }: { href: string; icon: React.ReactNode; title: string; description: string }) {
+  return <Link href={href} className="group flex min-h-[76px] items-center gap-3 rounded-xl border border-white/5 bg-black/10 px-4 py-3 transition hover:border-sky-400/30 hover:bg-sky-500/[0.07]">
+    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-300 transition group-hover:bg-sky-500/20">{icon}</span>
+    <span className="min-w-0"><span className="block text-xs font-semibold text-slate-100">{title}</span><span className="mt-1 block text-[11px] leading-4 text-slate-500">{description}</span></span>
+  </Link>;
 }
