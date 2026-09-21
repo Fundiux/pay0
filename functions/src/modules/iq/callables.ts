@@ -358,6 +358,9 @@ export const updateIqCredentialProfile = onCall(callableWithIqSecret, async (req
   }
 
   const current = await loadProfile(profileId, auth.rootId);
+  if (current.data.deletedAt) {
+    throw new HttpsError("failed-precondition", "La cuenta IQ fue eliminada.");
+  }
   const patch: Record<string, unknown> = {
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: auth.uid,
@@ -410,6 +413,7 @@ export const listIqCredentialProfiles = onCall(callableWithIqSecret, async (requ
   return {
     ok: true,
     data: snap.docs
+      .filter((doc) => !doc.data().deletedAt)
       .map((doc) => sanitizeProfileForAdmin(doc.id, doc.data()))
       .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
   };
@@ -434,6 +438,30 @@ export const deactivateIqCredentialProfile = onCall(callableWithIqSecret, async 
     },
     { merge: true },
   );
+
+  return { ok: true, data: null };
+});
+
+export const deleteIqCredentialProfile = onCall(callableWithIqSecret, async (request) => {
+  const auth = await assertSuperAdmin(request);
+  const profileId = readString(asRecord(request.data), "profileId");
+
+  if (!profileId) {
+    throw new HttpsError("invalid-argument", "profileId requerido.");
+  }
+
+  const current = await loadProfile(profileId, auth.rootId);
+  if (current.data.deletedAt) {
+    return { ok: true, data: null };
+  }
+
+  await current.snap.ref.update({
+    active: false,
+    deletedAt: FieldValue.serverTimestamp(),
+    deletedBy: auth.uid,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: auth.uid,
+  });
 
   return { ok: true, data: null };
 });

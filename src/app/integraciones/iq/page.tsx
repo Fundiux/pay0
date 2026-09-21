@@ -15,8 +15,10 @@ import {
   type IqCredentialProfile,
   createIqCredentialProfile,
   deactivateIqCredentialProfile,
+  deleteIqCredentialProfile,
   listIqCredentialProfiles,
   testIqConnection,
+  updateIqCredentialProfile,
 } from "@/services/iq";
 
 const DEFAULT_IQ_ERP_URL =
@@ -101,6 +103,12 @@ export default function IqIntegrationPage() {
     setShowPassword,
   ] = useState(false);
 
+  const [editing, setEditing] = useState<IqCredentialProfile | null>(null);
+  const [editAlias, setEditAlias] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editErpUrl, setEditErpUrl] = useState("");
+
   const [
     erpUrl,
     setErpUrl,
@@ -126,7 +134,6 @@ export default function IqIntegrationPage() {
 
   async function loadData() {
     setLoading(true);
-    setMessage(null);
 
     try {
       const profileList =
@@ -180,11 +187,8 @@ export default function IqIntegrationPage() {
       setUsername("");
       setPassword("");
 
-      setMessage(
-        "Cuenta IQ creada.",
-      );
-
       await loadData();
+      setMessage("Cuenta IQ creada.");
     } catch (error) {
       const err = error as Error;
 
@@ -208,11 +212,8 @@ export default function IqIntegrationPage() {
         profileId,
       );
 
-      setMessage(
-        "Cuenta IQ desactivada.",
-      );
-
       await loadData();
+      setMessage("Cuenta IQ desactivada.");
     } catch (error) {
       const err = error as Error;
 
@@ -237,9 +238,8 @@ export default function IqIntegrationPage() {
           profileId,
         );
 
-      setMessage(result.message);
-
       await loadData();
+      setMessage(result.message);
     } catch (error) {
       const err = error as Error;
 
@@ -247,6 +247,59 @@ export default function IqIntegrationPage() {
         err.message ||
           "No se pudo probar la cuenta IQ.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEditing(profile: IqCredentialProfile) {
+    setEditing(profile);
+    setEditAlias(profile.alias);
+    setEditUsername(profile.username);
+    setEditPassword("");
+    setEditErpUrl(profile.erpUrl || DEFAULT_IQ_ERP_URL);
+    setMessage(null);
+  }
+
+  async function onSaveEdit() {
+    if (!editing) return;
+    if (!editAlias.trim() || !editUsername.trim()) {
+      setMessage("Alias y usuario IQ son requeridos.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      await updateIqCredentialProfile({
+        profileId: editing.id,
+        alias: editAlias.trim(),
+        username: editUsername.trim(),
+        password: editPassword.trim() || undefined,
+        erpUrl: editErpUrl.trim() || DEFAULT_IQ_ERP_URL,
+      });
+      setEditing(null);
+      setEditPassword("");
+      await loadData();
+      setMessage("Cuenta IQ actualizada.");
+    } catch (error) {
+      setMessage((error as Error).message || "No se pudo actualizar la cuenta IQ.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onDeleteProfile(profile: IqCredentialProfile) {
+    if (!window.confirm(`¿Eliminar la cuenta IQ ${profile.alias}? Dejará de estar disponible para nuevas operaciones.`)) return;
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      await deleteIqCredentialProfile(profile.id);
+      await loadData();
+      setMessage("Cuenta IQ eliminada.");
+    } catch (error) {
+      setMessage((error as Error).message || "No se pudo eliminar la cuenta IQ.");
     } finally {
       setSaving(false);
     }
@@ -320,6 +373,30 @@ export default function IqIntegrationPage() {
           >
             {message}
           </div>
+        ) : null}
+
+        {editing ? (
+          <section style={panelStyle()}>
+            <h2 style={{ marginTop: 0 }}>Editar cuenta IQ</h2>
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+              <label style={{ display: "grid", gap: 6 }}>Alias
+                <input style={inputStyle()} value={editAlias} onChange={(event) => setEditAlias(event.target.value)} />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>Usuario IQ
+                <input style={inputStyle()} value={editUsername} onChange={(event) => setEditUsername(event.target.value)} autoComplete="off" />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>Nueva contraseña IQ
+                <input style={inputStyle()} type="password" value={editPassword} onChange={(event) => setEditPassword(event.target.value)} autoComplete="new-password" placeholder="Dejar vacía para conservar la actual" />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>URL ERP IQ
+                <input style={inputStyle()} value={editErpUrl} onChange={(event) => setEditErpUrl(event.target.value)} />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button type="button" style={buttonStyle(true)} disabled={saving} onClick={onSaveEdit}>Guardar cambios</button>
+              <button type="button" style={buttonStyle()} disabled={saving} onClick={() => { setEditing(null); setEditPassword(""); }}>Cancelar</button>
+            </div>
+          </section>
         ) : null}
 
         {loading ? (
@@ -708,8 +785,9 @@ export default function IqIntegrationPage() {
                                 padding: 10,
                               }}
                             >
-                              {profile.lastTestMessage ||
-                                "-"}
+                              <span title={profile.lastTestMessage || undefined} style={{ display: "block", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {profile.lastTestMessage || "-"}
+                              </span>
                             </td>
 
                             <td
@@ -722,6 +800,15 @@ export default function IqIntegrationPage() {
                                   "wrap",
                               }}
                             >
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => startEditing(profile)}
+                                style={buttonStyle()}
+                              >
+                                Editar
+                              </button>
+
                               <button
                                 type="button"
                                 disabled={
@@ -752,6 +839,10 @@ export default function IqIntegrationPage() {
                                 style={buttonStyle()}
                               >
                                 Desactivar
+                              </button>
+
+                              <button type="button" disabled={saving} onClick={() => onDeleteProfile(profile)} style={buttonStyle()}>
+                                Eliminar
                               </button>
                             </td>
                           </tr>
