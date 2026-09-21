@@ -120,6 +120,13 @@ export async function deactivateIqCredentialProfile(profileId: string): Promise<
   );
 }
 
+export async function deleteIqCredentialProfile(profileId: string): Promise<void> {
+  await callIq<{ profileId: string }, CallableResult<null>>(
+    "deleteIqCredentialProfile",
+    { profileId },
+  );
+}
+
 export async function testIqConnection(profileId: string): Promise<{
   ok: boolean;
   message: string;

@@ -2738,6 +2738,7 @@ export {
   createIqCredentialProfile,
   updateIqCredentialProfile,
   listIqCredentialProfiles,
+  deleteIqCredentialProfile,
   deactivateIqCredentialProfile,
   updateUserIqAccess,
   removeUserIqAccess,
