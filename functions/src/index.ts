@@ -2710,6 +2710,7 @@ export { getControlCenterOverview, refreshControlCenterOverview } from "./module
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
 export { getHugoComplementInventoryPage } from "./modules/paymentApplications/complementInventory";
+export { runHugoIqRepReadCanary } from "./modules/paymentApplications/complementCanary";
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";

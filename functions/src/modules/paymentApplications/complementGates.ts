@@ -85,6 +85,28 @@ export async function claimIqComplementGate(jobId: string, action: IqComplementA
   });
 }
 
+// Historical recovery has no prospective automation job. Reserve only the B
+// quota, with the same live root/profile/actor switches, before IQ login.
+export async function claimIqComplementCanaryLookup(job: any, canaryId: string, now = new Date()): Promise<GateDecision> {
+  const day = dayMexico(now);
+  return db.runTransaction(async tx => {
+    const [config, master, user, access, profile] = await Promise.all([
+      tx.get(db.doc(`paymentComplementConfigs/${job.rootId}`)), tx.get(db.doc(`iqIntegrationConfigs/${job.rootId}`)),
+      tx.get(db.doc(`users/${job.actorUid}`)), tx.get(db.doc(`iqUserAccess/${job.actorUid}`)),
+      tx.get(db.doc(`iqCredentialProfiles/${job.profileId}`)),
+    ]);
+    let decision = decide(job, "LOOKUP", config.data(), master.data(), user.data(), access.data(), profile.data());
+    const quotaRef = db.doc(`paymentComplementQuotas/${hash(`${job.rootId}:${job.profileId}:LOOKUP:${day}`)}`);
+    const quota = await tx.get(quotaRef);
+    if (decision.allowed && Number(quota.data()?.count || 0) >= decision.limit) decision = { ...decision, allowed: false, reason: "REP_GATE_QUOTA_EXHAUSTED" };
+    if (decision.allowed) tx.set(quotaRef, { rootId: job.rootId, profileId: job.profileId, action: "LOOKUP", day,
+      count: Number(quota.data()?.count || 0) + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
+      referenceId: canaryId, referenceType: "complementoPago", description: `Canario IQ LOOKUP: ${decision.reason}.` });
+    return decision;
+  });
+}
+
 export async function recordBlockedIqGate(jobId: string, action: IqComplementAction, reason: string, now = new Date()) {
   await db.runTransaction(async tx => {
     const ref = db.doc(`paymentComplementJobs/${jobId}`), snap = await tx.get(ref), job = snap.data();
