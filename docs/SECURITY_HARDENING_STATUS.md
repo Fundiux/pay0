@@ -2,6 +2,9 @@
 
 Fecha: 2026-09-20
 
+Actualizacion: Firebase Web SDK elevado de 10.14.1 a 12.19.0; el build y la
+regresion de seguridad pasaron con Node 22.23.2.
+
 ## Controles aplicados
 
 - Next.js actualizado a 16.3.5 y compilado con Node 22.23.2.
