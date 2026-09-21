@@ -1,4 +1,5 @@
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { resolveIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -1275,7 +1276,7 @@ export const createSolicitudIq = onCall(
     const username = cleanText(profile.username);
     const profileAlias = cleanText(profile.alias);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
-    const associatedName = username;
+    const associatedName = resolveIqAssociatedName(username, profile.associatedName);
 
     const pay0ClientId = cleanText(
       solicitud.clienteId ??

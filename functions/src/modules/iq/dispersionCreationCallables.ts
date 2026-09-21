@@ -7,6 +7,7 @@ import {
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { resolveIqAssociatedName } from "./associatedName";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
@@ -731,12 +732,14 @@ async function loadIqAccess(
     profileAlias:
       clean(profile.alias) ||
       profileId,
-    associatedName:
+    associatedName: resolveIqAssociatedName(
+      username,
       clean(
         despacho.iqAssociatedName ??
           despacho.associatedName ??
           access.associatedName,
-      ) || username,
+      ) || profile.associatedName,
+    ),
     username,
     password:
       decryptSecret(profile),

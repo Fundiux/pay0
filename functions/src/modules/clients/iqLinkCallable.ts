@@ -396,7 +396,7 @@ export async function syncIqClientById(params: {
     return id ? { id, name: cleanText(selected.name ?? selected.value) } : null;
   };
 
-  const partner = exactPartner(access.username) || exactPartner(access.profileAlias);
+  const partner = exactPartner(access.associatedName) || exactPartner(access.profileAlias);
   if (!partner) {
     await persistReview({
       clientRef,

@@ -11,6 +11,7 @@ import {
   parseIqDateTimeMs,
 } from "../iq/iqDateTime";
 import type { PaymentApplicationActor } from "./service";
+import { resolveIqAssociatedName } from "../iq/associatedName";
 import {
   PAYMENT_APPLICATION_IQ_EXECUTION_VERSION,
   buildPaymentApplicationIqExecutionAttemptId,
@@ -102,6 +103,7 @@ function resolveIqApiOrigin(): string {
 export type IqAccess = {
   profileId: string;
   profileAlias: string;
+  associatedName: string;
   username: string;
   password: string;
   erpUrl: string;
@@ -466,6 +468,7 @@ export async function resolveIqAccess(
   return {
     profileId,
     profileAlias: cleanText(profile.alias),
+    associatedName: resolveIqAssociatedName(username, access.associatedName || profile.associatedName),
     username,
     password: decryptPassword(profile),
     erpUrl: normalizeErpUrl(profile.erpUrl),
@@ -812,7 +815,7 @@ async function claimExecution(params: {
       reservationId,
       pagoId,
       pagoIqFolio,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: cleanText(pago?.clienteNombre),
       empresaName: cleanText(pago?.empresaNombre),
       attemptId,
@@ -1846,7 +1849,7 @@ export async function resolvePaymentApplicationIqFolio(params: {
       pagoIqFolio,
       solicitudIqFolio: item.solicitudIqFolio,
       amount: item.amount,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: cleanText(pago?.clienteNombre),
       empresaName: cleanText(pago?.empresaNombre),
       lowerBoundMs,
@@ -2043,7 +2046,7 @@ export async function executePaymentApplicationIqPlan(params: {
       access,
       planId: claimed.planId,
       pagoIqFolio: claimed.pagoIqFolio,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: claimed.clienteName,
       empresaName: claimed.empresaName,
       items: claimed.items.map((item) => ({
@@ -2186,11 +2189,11 @@ export async function diagnosePaymentApplicationIqMethods(params: {
     },
     {
       field: "ASOCIADO",
-      expected: access.username,
+      expected: access.associatedName,
       actual: cleanText(deposit.partner),
       ok:
         cleanUpper(deposit.partner) ===
-        cleanUpper(access.username),
+        cleanUpper(access.associatedName),
     },
     {
       field: "MONTO",
@@ -2259,13 +2262,13 @@ export async function diagnosePaymentApplicationIqMethods(params: {
   }
 
   const c0=await getCat({});
-  const partner=oneByName(c0.cat.partner,access.username);
-  if(!partner)throw new HttpsError("failed-precondition",`No se encontro el asociado ${access.username} en IQ.`);
+  const partner=oneByName(c0.cat.partner,access.associatedName);
+  if(!partner)throw new HttpsError("failed-precondition",`No se encontro el asociado ${access.associatedName} en IQ.`);
   const partnerId=cleanText(partner.id);
 
   const c1=await getCat({partner_id:partnerId});
   const client=oneByName(c1.cat.client,targetClientName);
-  if(!client)throw new HttpsError("failed-precondition",`No se encontro el cliente ${targetClientName} para ${access.username} en IQ.`);
+  if(!client)throw new HttpsError("failed-precondition",`No se encontro el cliente ${targetClientName} para ${access.associatedName} en IQ.`);
   const clientId=cleanText(client.id);
 
   const c2=await getCat({partner_id:partnerId,client_id:clientId});
@@ -2299,7 +2302,7 @@ export async function diagnosePaymentApplicationIqMethods(params: {
   }
 
   const catalogValidations=[
-    {field:"ASOCIADO",expected:access.username,actual:cleanText(partner.name),ok:norm(partner.name)===norm(access.username)},
+    {field:"ASOCIADO",expected:access.associatedName,actual:cleanText(partner.name),ok:norm(partner.name)===norm(access.associatedName)},
     {field:"CLIENTE",expected:targetClientName,actual:cleanText(client.name),ok:norm(client.name)===norm(targetClientName)},
     {field:"EMPRESA",expected:targetCompanyName,actual:cleanText(company.name),ok:norm(company.name)===norm(targetCompanyName)},
     {field:"DEPOSITO_DISPONIBLE",expected:pagoIqFolio,actual:depositMatches.length===1?cleanText(depositMatches[0].id):"",ok:depositMatches.length===1},
