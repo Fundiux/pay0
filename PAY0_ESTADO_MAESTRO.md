@@ -1,5 +1,15 @@
 # PAY0 — Estado maestro vivo
 
+### ASSETS interactivo, fechas y permisos por sistema (2026-09-20)
+
+ASSETS ya usa una identidad predominantemente grafito/gris con acentos naranja en todas sus pantallas; el verde queda reservado para utilidad o entradas. El Dashboard permite cambiar entre `Todo`, `Vehículos` y `Préstamos`: KPIs, rendimientos, actividad, posiciones y las dos gráficas se recalculan con el alcance elegido. La distribución de capital es horizontal y usa las etiquetas cortas `Vehículos`, `Préstamos+INT` y `Préstamos`; la utilidad generada se presenta en verde en ambas gráficas.
+
+Las posiciones permiten corregir fechas operativas sin reescribir el ledger. Vehículos registra adquisición y venta; préstamos registra origen y fecha acordada de cobro de intereses con margen fijo de `±5 días`. Backend valida el orden cronológico, limita la edición al propietario autorizado y conserva auditoría. No se asignaron fechas ficticias a registros anteriores.
+
+El acceso no es libre: Superadmin conserva acceso implícito y puede habilitar ASSETS por usuario en `Administración → Usuarios → Permisos → Sistemas`. El permiso `systemAccess.assets` se exige en el launcher, rutas y Cloud Functions; un administrador ordinario no puede concederlo.
+
+Validación y publicación: builds frontend/Functions, verificador de autorización, smoke de dominio y smoke integral con emuladores PASS. Functions de alta, edición/cierre de posiciones y permisos quedaron `ACTIVE`; Hosting/SSR quedó `ACTIVE` en `ssrpay0system-00491-yew`; `/assets` y `/systems` respondieron HTTP 200 y se confirmó el bundle nuevo en producción. No hubo seeds, migraciones ni operaciones financieras reales.
+
 ### Rendimiento por tipo visible en ASSETS Dashboard (2026-09-20)
 
 El Dashboard ya separa claramente tres lecturas: vehículos, préstamos y portafolio. Vehículos muestra el ROI efectivamente realizado sobre el capital de los vehículos vendidos; con los datos actuales equivale aproximadamente a `8.83%`. Préstamos muestra la tasa mensual ponderada por capital vigente y su equivalente anual efectivo compuesto; por ejemplo, `5% mensual` equivale a `79.59% anual efectivo`. Portafolio conserva su ROI acumulado total sin considerar capital recuperado como utilidad.

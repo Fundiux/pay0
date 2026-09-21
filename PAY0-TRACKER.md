@@ -3,6 +3,16 @@
 Actualizado: 2026-09-20
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## ASSETS — dashboard interactivo, fechas operativas y acceso gobernado — 2026-09-20
+
+- Estado: **implementado, validado y desplegado en producción**.
+- Dashboard: filtros `Todo / Vehículos / Préstamos`; las tarjetas, indicadores, actividad, posiciones y ambas gráficas reaccionan al alcance seleccionado. La distribución usa barras horizontales y etiquetas breves `Vehículos`, `Préstamos+INT` y `Préstamos`; la utilidad generada aparece como serie verde tanto en distribución como en estado del portafolio.
+- Diseño: todas las rutas ASSETS comparten superficies grafito/gris y acentos naranja; el verde queda reservado para utilidad o entradas positivas. El launcher `/systems` usa la misma identidad para ASSETS.
+- Fechas: vehículos permiten registrar/editar adquisición y venta; préstamos permiten origen y próxima fecha acordada de cobro de intereses. El margen operativo queda fijado en `±5 días`, con validación cronológica y auditoría de cada edición. Los datos heredados no se inventaron y deben completarse desde el detalle de cada posición.
+- Acceso: ASSETS continúa cerrado por defecto. Sólo Superadmin puede conceder o retirar `systemAccess.assets` desde `Administración → Usuarios → Permisos → Sistemas`; la protección se aplica en launcher, rutas y Functions, no sólo en la visibilidad del menú.
+- Verificación: builds frontend y Functions PASS, política de autorización PASS, smoke de dominio PASS y smoke integral de emuladores PASS, incluidos aislamiento por propietario, edición de fechas, rechazo de fechas invertidas y margen de cinco días. El chunk productivo de `/assets` contiene los filtros y etiquetas nuevas; `/assets` y `/systems` respondieron HTTP 200.
+- Despliegue: commit funcional `9e1235c`; Functions `createAssetPosition`, `updateAssetPositionDetails`, `closeAssetPosition` y `updateUserModules` quedaron `ACTIVE`. Hosting/SSR quedó `ACTIVE` en `ssrpay0system-00491-yew`. Antes de cada corte se comprobó que no hubiera otro proceso de despliegue activo. No se ejecutaron seeds, migraciones ni escrituras financieras de producción.
+
 ## ASSETS — rendimiento por tipo visible en Dashboard — 2026-09-20
 
 - Estado: **implementado, validado y desplegado en producción**.
