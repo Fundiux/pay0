@@ -44,10 +44,21 @@ async function run(){
  assert.equal(observed422.httpStatus,422);assert.equal(observed422.domainClassification,'REQUEST_STATE_UNKNOWN');
  assert.equal(observed422.automaticResendAllowed,false);assert.deepEqual(observed422.response.topLevelKeys,['error','status']);
  let rejectedPosts=0;
- global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');rejectedPosts++;return {status:422,text:async()=>JSON.stringify({status:422,error:'provider rejection with undetermined effect'})};};
+ global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');rejectedPosts++;return {status:422,text:async()=>JSON.stringify({status:422,error:'El depósito no admite solicitud de REP en su estado actual'})};};
  await assert.rejects(provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),error=>
-   error.message==='IQ_REP_REQUEST_HTTP_422' && error.observation?.httpStatus===422 && error.observation?.topLevelKeys?.join(',')==='error,status');
+   error.message==='IQ_REP_REQUEST_HTTP_422' && error.observation?.httpStatus===422 && error.observation?.topLevelKeys?.join(',')==='error,status' &&
+   error.observation?.operationalError==='El depósito no admite solicitud de REP en su estado actual' && error.observation?.providerStatus===422);
  assert.equal(rejectedPosts,1,'observed 422 must never replay POST');global.fetch=oldFetch;
+ global.fetch=async()=>({status:200,text:async()=>JSON.stringify({message:'success'})});
+ const accepted=await provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'});
+ assert.equal(accepted.message,'success');assert.equal(accepted.operationalError,null);global.fetch=oldFetch;
+ const {sanitizeIqOperationalError}=require('../../functions/lib/modules/paymentApplications/iqOperationalError');
+ assert.equal(sanitizeIqOperationalError(['No permitido','Revisar depósito']),'No permitido; Revisar depósito');
+ const sanitized=sanitizeIqOperationalError('Rechazado para usuario ana@example.com; URL https://iq.example/path?token=abc; Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature; password=secreto');
+ assert(sanitized.startsWith('Rechazado para usuario '));
+ for(const secret of ['ana@example.com','https://iq.example','eyJhbGciOiJIUzI1NiJ9','secreto']) assert(!sanitized.includes(secret));
+ assert.equal(sanitizeIqOperationalError('Motivo funcional; Cookie: session=abc; refresh=def'),'Motivo funcional; [HEADER_REDACTED]');
+ assert.equal(sanitizeIqOperationalError('x'.repeat(600)).length,500);
  assert.equal(depositFields.readIqRepDepositFields(historicalShape.eligibleIndicatorTrue).canRequestRep.value,true);
  assert.equal(depositFields.readIqRepDepositFields(realDeposit).canRequestRep.value,true,'real AP1C4U1E6 response uses question-mark key');
  assert.equal(depositFields.readIqRepDepositFields(realDeposit).rep.value,false);

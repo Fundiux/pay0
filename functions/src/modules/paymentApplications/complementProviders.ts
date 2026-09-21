@@ -11,6 +11,7 @@ import { buildFacturamaRep, iqAvailability, text } from "./complementPolicy";
 import { saveComplementDocuments, validateRep } from "./complementDocuments";
 import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
 import { readIqRepDepositFields } from "./iqRepDepositFields";
+import { sanitizeIqOperationalError } from "./iqOperationalError";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME"), PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
 export const COMPLEMENT_SECRETS = [IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY, USERNAME, PASSWORD];
@@ -45,7 +46,9 @@ export async function requestIqComplement(job: any, session: any) {
     bodySha256: createHash("sha256").update(raw).digest("hex"),
     bodyKind: body && typeof body === "object" && !Array.isArray(body) ? "object" as const : "other" as const,
     topLevelKeys: body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().slice(0, 20) : [],
-    message: body?.message === "success" ? "success" as const : null };
+    message: body?.message === "success" ? "success" as const : null,
+    operationalError: sanitizeIqOperationalError(body?.error ?? body?.errors ?? (body?.message === "success" ? null : body?.message)),
+    providerStatus: typeof body?.status === "number" && Number.isInteger(body.status) ? body.status : null };
   if (response.status !== 200 || observation.message !== "success")
     throw Object.assign(Error(`IQ_REP_REQUEST_HTTP_${response.status}`), { observation });
   return observation;
