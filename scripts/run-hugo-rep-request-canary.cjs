@@ -1,8 +1,8 @@
 // One authorized C command. IQ contact occurs only inside the gated Function.
 const path = require('node:path');
-const args = process.argv.slice(2), launch = args.includes('--launch'), inspect = args.includes('--inspect');
+const args = process.argv.slice(2), launch = args.includes('--launch'), inspect = args.includes('--inspect'), signal = args.includes('--signal');
 const cliPath = args[args.indexOf('--cli-lib') + 1];
-if ((!launch && !inspect) || !cliPath || process.env.FIRESTORE_EMULATOR_HOST) throw Error('Use --launch or --inspect with Firebase CLI lib');
+if ((!launch && !inspect && !signal) || !cliPath || process.env.FIRESTORE_EMULATOR_HOST) throw Error('Use --launch, --inspect or --signal with Firebase CLI lib');
 process.env.DEBUG = '';
 const cliAuth = require(path.join(cliPath, 'auth.js')), scopes = require(path.join(cliPath, 'scopes.js'));
 const account = cliAuth.getProjectDefaultAccount(process.cwd());
@@ -50,6 +50,13 @@ async function run() {
         externalRequestSent:followup.externalRequestSent,requestedAt:followup.requestedAt||null,
         nextCheckAt:followup.nextCheckAt||null,repAttachmentStatus:followup.repAttachmentStatus||null}:null,
       externalCallsFromScript:0 })); return;
+  }
+  if (signal) {
+    if (snap.data()?.status !== 'QUEUED') throw Error('C canary already claimed; no redispatch');
+    const existingJob = await db.doc(`paymentComplementJobs/${iqRepRequestId(field.rootId,'220483')}`).get();
+    if (existingJob.exists) throw Error('C job already exists; no redispatch');
+    await ref.update({ dispatchSignalAt: admin.firestore.FieldValue.serverTimestamp() });
+    console.log(JSON.stringify({ mode:'SIGNALLED_EXISTING_COMMAND',applicationFolio:'AP1C4U1E6',depositId:'220483',externalCallsFromScript:0 })); return;
   }
   if (snap.exists) throw Error('C canary already launched; no replay');
   const preview = await assessLocalIqRecovery(field.rootId,field.applicationId);

@@ -1,5 +1,5 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { db } from "../sharedCallables/helpers";
 import { logActivityTx } from "../../utils/logActivity";
 import { complementRequestId } from "./complementFollowup";
@@ -143,7 +143,7 @@ export async function runIqRepRequestCanary(id: string, adapter = providers) {
   }
 }
 
-export const runHugoIqRepRequestCanary = onDocumentCreated({ document: "hugoRepRequestCanaries/{canaryId}", region: "us-central1",
+export const runHugoIqRepRequestCanary = onDocumentWritten({ document: "hugoRepRequestCanaries/{canaryId}", region: "us-central1",
   timeoutSeconds: 540, memory: "512MiB", retry: false, secrets: providers.COMPLEMENT_SECRETS }, async event => {
   if (event.params.canaryId === IQ_REP_REQUEST_CANARY_ID) await runIqRepRequestCanary(event.params.canaryId);
 });
