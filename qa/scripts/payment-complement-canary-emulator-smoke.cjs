@@ -11,6 +11,7 @@ const { runIqRepReadCanary, IQ_REP_CANARY_ID } = require('../../functions/lib/mo
 const { runRepAttachmentExperiment, IQ_REP_ATTACHMENT_EXPERIMENT_ID } = require('../../functions/lib/modules/paymentApplications/repAttachmentExperiment');
 const { runIqRepDepositFieldProbe, IQ_REP_DEPOSIT_FIELD_PROBE_ID } = require('../../functions/lib/modules/paymentApplications/repDepositFieldProbe');
 const { runIqRepRequestCanary, IQ_REP_REQUEST_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/repRequestCanary');
+const { runIqRepReadCohort, IQ_REP_READ_COHORT } = require('../../functions/lib/modules/paymentApplications/repReadCohort');
 const automation = require('../../functions/lib/modules/paymentApplications/complementAutomation');
 const { iqRepRequestId } = require('../../functions/lib/modules/paymentApplications/complementRequestIdentity');
 const { assessLocalIqRecovery } = require('../../functions/lib/modules/paymentApplications/complementRecoveryPlan');
@@ -112,6 +113,46 @@ async function run() {
   assert.equal((await inventoryPage(root)).counts.processed, 1);
   await runIqRepReadCanary(IQ_REP_CANARY_ID, available);
   assert.equal((await ref.get()).data().status, 'RECEIVED');
+  const app2Id=`${root}-app2`,plan2=`${root}-plan2`,attempt2=`${root}-attempt2`;
+  await db.doc(`pagoApplicationIqPlans/${plan2}`).set({rootId:root,pagoId:root,iqExecutionProfileId:profileId,plan:{pagoIqFolio:'220484'}});
+  await db.doc(`pagoApplicationIqAttempts/${attempt2}`).set({rootId:root,planId:plan2,profileId,createdBy:root});
+  await db.doc(`pagoAplicaciones/${app2Id}`).set({rootId:root,folio:'AP2C4U1E6',solicitudId:root,pagoId:root,status:'APLICADA',invoiceType:'PPD',montoAplicado:58,
+    numeroParcialidad:1,saldoAnterior:116,saldoInsoluto:58,iqApplicationStatus:'IQ_APPLIED',iqActionExecuted:true,iqPlanId:plan2,iqExecutionAttemptId:attempt2});
+  await reconcilePaymentComplement(app2Id);
+  const cohortId=Object.keys(IQ_REP_READ_COHORT).find(id=>IQ_REP_READ_COHORT[id]==='AP2C4U1E6');
+  const cohortPreview=await assessLocalIqRecovery(root,app2Id),cohortRef=db.doc(`hugoRepReadCohort/${cohortId}`);
+  await cohortRef.set({rootId:root,applicationId:app2Id,applicationFolio:'AP2C4U1E6',expectedDepositId:'220484',
+    expectedFingerprint:cohortPreview.planFingerprint,capability:'LOOKUP',status:'QUEUED'});
+  let cohortDepositGets=0,cohortAttachmentGets=0;
+  const cohortAdapter={iqSession:async()=>({accessToken:'fixture-only'}),
+    observeIqRepDepositFields:async job=>{cohortDepositGets++;return {httpStatus:200,exactMatchCount:1,
+      ...require('../../functions/lib/modules/paymentApplications/iqRepDepositFields').readIqRepDepositFields({...historicalShape.eligibleIndicatorTrue,id:job.depositId})};},
+    observeIqRepAttachment:async()=>{cohortAttachmentGets++;return {classification:'REP_ATTACHMENT_NOT_AVAILABLE',
+      shape:{httpStatus:400,exactNoAttachmentMessage:true},url:null};},
+    importIqComplement:async()=>{throw Error('UNEXPECTED_DOWNLOAD');}};
+  await Promise.all([runIqRepReadCohort(cohortId,cohortAdapter),runIqRepReadCohort(cohortId,cohortAdapter)]);
+  assert.equal(cohortDepositGets,1);assert.equal(cohortAttachmentGets,1);
+  assert.equal((await cohortRef.get()).data().status,'PENDING_B');
+  assert.equal((await db.doc(`paymentComplementRequests/${complementRequestId(root,app2Id)}`).get()).data().status,'PENDING');
+  await runIqRepReadCohort(cohortId,cohortAdapter);assert.equal(cohortDepositGets,1,'B command cannot replay');
+  const app3Id=`${root}-app3`,plan3=`${root}-plan3`,attempt3=`${root}-attempt3`,solicitud3=`${root}-s3`,pago3=`${root}-p3`;
+  await db.doc(`solicitudes/${solicitud3}`).set({rootId:root,folio:'S3',tipoFactura:'PPD',clienteId:root,companyId:root,iqFolio:'124',facturaUuid:uuid,status:'PROCESANDO'});
+  await db.doc(`pagos/${pago3}`).set({rootId:root,folio:'P3',clienteId:root,companyId:root,status:'CONCILIADO',moneda:'MXN'});
+  await db.doc(`pagoApplicationIqPlans/${plan3}`).set({rootId:root,pagoId:pago3,iqExecutionProfileId:profileId,plan:{pagoIqFolio:'220485'}});
+  await db.doc(`pagoApplicationIqAttempts/${attempt3}`).set({rootId:root,planId:plan3,profileId,createdBy:root});
+  await db.doc(`pagoAplicaciones/${app3Id}`).set({rootId:root,folio:'AP3C4U1E6',solicitudId:solicitud3,pagoId:pago3,status:'APLICADA',invoiceType:'PPD',montoAplicado:58,
+    numeroParcialidad:1,saldoAnterior:116,saldoInsoluto:58,iqApplicationStatus:'IQ_APPLIED',iqActionExecuted:true,iqPlanId:plan3,iqExecutionAttemptId:attempt3});
+  await reconcilePaymentComplement(app3Id);
+  const cohort3Id=Object.keys(IQ_REP_READ_COHORT).find(id=>IQ_REP_READ_COHORT[id]==='AP3C4U1E6');
+  const cohort3Preview=await assessLocalIqRecovery(root,app3Id),cohort3Ref=db.doc(`hugoRepReadCohort/${cohort3Id}`);
+  await cohort3Ref.set({rootId:root,applicationId:app3Id,applicationFolio:'AP3C4U1E6',expectedDepositId:'220485',
+    expectedFingerprint:cohort3Preview.planFingerprint,capability:'LOOKUP',status:'QUEUED'});
+  const availableCohortAdapter={...cohortAdapter,
+    observeIqRepAttachment:async()=>({classification:'REP_ATTACHMENT_AVAILABLE',shape:{httpStatus:200,urlPresent:true},url:'https://iq.example/rails/active_storage/blobs/redirect/fixture'}),
+    importIqComplement:async(_url,sources)=>[{source:sources[0],documents:await saveComplementDocuments(sources[0],rep,pdf)}]};
+  await runIqRepReadCohort(cohort3Id,availableCohortAdapter);
+  assert.equal((await cohort3Ref.get()).data().status,'RECEIVED',(await cohort3Ref.get()).data().error);
+  assert.equal((await db.doc(`paymentComplementRequests/${complementRequestId(root,app3Id)}`).get()).data().status,'RECEIVED');
   assert.equal(observation.kind, 'SANITIZED_RUNTIME_OBSERVATION_NOT_RAW_IQ_RESPONSE');
   assert.equal(observation.repAvailability, 'UNKNOWN');
   const job = { rootId: root, provider: 'IQ', profileId, actorUid: root, clientId: root, depositId: '220483' };
