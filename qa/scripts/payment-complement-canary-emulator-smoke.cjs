@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const observation = require('../fixtures/iq-rep-canary-ap1c4u1e6-observation.json');
+const realAttachment = require('../fixtures/iq-rep-attachment-ap1c4u1e6-2026-09-21.json');
+const createHash = require('node:crypto').createHash;
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || !process.env.FIREBASE_STORAGE_EMULATOR_HOST || process.env.GCLOUD_PROJECT !== 'demo-pay0') throw Error('Local emulators required');
 global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
 const admin = require('../../functions/node_modules/firebase-admin');
@@ -77,14 +79,18 @@ async function run() {
   assert.equal(await provider.availableIqComplement(job, { accessToken: 'fixture-only' }), 'https://iq.test/rep.zip');
   global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
   let realAdapterGets = 0;
+  const realBody = JSON.stringify(realAttachment.body);
+  assert.equal(Buffer.byteLength(realBody), realAttachment.bodyBytes);
+  assert.equal(createHash('sha256').update(realBody).digest('hex'), realAttachment.bodySha256);
   global.fetch = async (url, init) => { realAdapterGets++; assert.match(String(url), /\/deposits\/complement\/220483$/);
-    assert.equal(init.method, 'GET'); return new Response(JSON.stringify({ errors: ['El depósito no tiene ningún REP adjunto'] }),
+    assert.equal(init.method, 'GET'); return new Response(realBody,
       { status: 400, headers: { 'content-type': 'application/json' } }); };
   const observedMissing = await provider.observeIqRepAttachment({ rootId: root, provider: 'IQ', profileId, actorUid: root, clientId: root, depositId: '220483' }, { accessToken: 'fixture-only' });
   assert.equal(realAdapterGets, 1); assert.equal(observedMissing.classification, 'REP_ATTACHMENT_NOT_AVAILABLE');
   assert.equal(observedMissing.shape.exactNoAttachmentMessage, true);
   assert.equal(observedMissing.shape.rep.present, false);
   assert.equal(observedMissing.shape.canRequestRep.present, false);
+  assert.equal(observedMissing.shape.bodySha256, realAttachment.bodySha256);
   assert.equal(JSON.stringify(observedMissing).includes('fixture-only'), false);
   global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
   await requestRef.update({ status: 'PENDING', automationStatus: 'PENDING' });

@@ -1,0 +1,20 @@
+{
+  "kind": "SANITIZED_REAL_IQ_REP_RESOURCE_RESPONSE",
+  "applicationFolio": "AP1C4U1E6",
+  "method": "GET",
+  "endpointTemplate": "/deposits/complement/{depositId}",
+  "httpStatus": 400,
+  "contentType": "application/json",
+  "body": {
+    "errors": ["El depósito no tiene ningún REP adjunto"]
+  },
+  "bodyBytes": 56,
+  "bodySha256": "05d2404eff35ed73f26820bef7a5c3bb03d4012bd19098b874074408d91af3a4",
+  "rep": { "present": false, "type": "absent" },
+  "canRequestRep": { "present": false, "type": "absent" },
+  "urlPresent": false,
+  "classification": "REP_ATTACHMENT_NOT_AVAILABLE",
+  "generationStatus": "REP_GENERATION_UNKNOWN",
+  "downloadExecuted": false,
+  "generationPostExecuted": false
+}
