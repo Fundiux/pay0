@@ -37,7 +37,7 @@ async function run(){
  assert.equal(job,identity.iqRepRequestId(root,'220483'),'logical C identity excludes the IQ profile');
  assert.equal(identity.iqRepRequestId(root,'220483'),identity.iqRepRequestId(root,'220483'));
  const oldFetch=global.fetch;let authPosts=0;
- global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');authPosts++;return {status:401,json:async()=>({errors:['unauthorized']})};};
+ global.fetch=async(_url,opts)=>{assert.equal(opts.method,'POST');authPosts++;return {status:401,text:async()=>JSON.stringify({errors:['unauthorized']})};};
  await assert.rejects(provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),/IQ_REP_REQUEST_HTTP_401/);
  assert.equal(authPosts,1,'401 must never replay POST');global.fetch=oldFetch;
  assert.equal(depositFields.readIqRepDepositFields(historicalShape.eligibleIndicatorTrue).canRequestRep.value,true);
@@ -117,7 +117,7 @@ async function run(){
  assert.throws(()=>policy.buildFacturamaRep(invoiceXml,app,{...pago,moneda:'USD'},uuid,'REP'),/CURRENCY/);
  assert.throws(()=>policy.assertXml('<Comprobante>'),/XML_INVALID/);
  assert.throws(()=>policy.assertXml('<!DOCTYPE x><Comprobante/>'),/XML_INVALID/);
- const repXml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="22222222-2222-4222-8222-222222222222"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="1" ImpPagado="58" ImpSaldoAnt="116" ImpSaldoInsoluto="58"/></Comprobante>`);
+ const repXml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="22222222-2222-4222-8222-222222222222"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="1" ImpPagado="58" ImpSaldoAnt="116" ImpSaldoInsoluto="58" MonedaDR="MXN"/></Comprobante>`);
  assert.equal(docs.validateRep(repXml,{invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58}),'22222222-2222-4222-8222-222222222222');
  assert.throws(()=>docs.validateRep(repXml,{invoiceUuid:uuid,installment:2,amountMinor:5800}),/MISMATCH/);
  const saved=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'));
@@ -127,7 +127,7 @@ async function run(){
  assert.deepEqual(savedAgain,saved,'document save is idempotent');
  const concurrentSaves=await Promise.all([1,2].map(()=>docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'))));
  for(const result of concurrentSaves)assert.deepEqual(result,saved,'concurrent retries preserve the same uploads');
- const rep2Xml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="33333333-3333-4333-8333-333333333333"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="2" ImpPagado="58" ImpSaldoAnt="58" ImpSaldoInsoluto="0"/></Comprobante>`);
+ const rep2Xml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="33333333-3333-4333-8333-333333333333"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="2" ImpPagado="58" ImpSaldoAnt="58" ImpSaldoInsoluto="0" MonedaDR="MXN"/></Comprobante>`);
  const second=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root+'-2',invoiceUuid:uuid,installment:2,amountMinor:5800,balanceBefore:58,balanceAfter:0},rep2Xml,Buffer.from('%PDF-1.4\n% PAY0 REP second'));
  for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId,second.xmlUploadId,second.pdfUploadId])assert.equal((await db.doc(`uploads/${uploadId}`).get()).data().active,true,'separate partialities remain active');
  const brokenReceipt={...adapter,availableIqComplement:async()=> 'https://iq.test/rep.zip',importIqComplement:async(_url,sources)=>sources.map(source=>({source,documents:{uuid:saved.uuid,xmlUploadId:'missing',pdfUploadId:'missing'}}))};

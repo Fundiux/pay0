@@ -39,8 +39,16 @@ export async function requestIqComplement(job: any, session: any) {
   await requireGate(job, "REQUEST");
   const response = await fetch(`${IQ_ORIGIN}/deposits/${job.depositId}/complement`, { method: "POST",
     headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
-  const body = await response.json().catch(() => null);
-  if (response.status !== 200 || body?.message !== "success") throw Error(`IQ_REP_REQUEST_HTTP_${response.status}`);
+  const raw = await response.text().catch(() => "");
+  const body = raw.length <= 1_000_000 ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
+  const observation = { httpStatus: response.status, bodyBytes: Buffer.byteLength(raw),
+    bodySha256: createHash("sha256").update(raw).digest("hex"),
+    bodyKind: body && typeof body === "object" && !Array.isArray(body) ? "object" as const : "other" as const,
+    topLevelKeys: body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().slice(0, 20) : [],
+    message: body?.message === "success" ? "success" as const : null };
+  if (response.status !== 200 || observation.message !== "success")
+    throw Object.assign(Error(`IQ_REP_REQUEST_HTTP_${response.status}`), { observation });
+  return observation;
 }
 export async function preflightIqComplement(job: any, session: any): Promise<"REQUEST" | "AVAILABLE"> {
   for (let offset = 0; offset < 10000; offset += 100) {

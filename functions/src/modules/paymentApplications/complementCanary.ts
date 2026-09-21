@@ -37,7 +37,7 @@ async function sourceFor(rootId: string, applicationId: string) {
   return { app, request, source: { ...(request as any), currency: text(pago.moneda).toUpperCase(), clientId: solicitud.clienteId } as any, requestRef: requestSnap.ref };
 }
 
-async function verifiedDocuments(rootId: string, source: any, documents: any) {
+export async function verifiedDocuments(rootId: string, source: any, documents: any) {
   const files = await Promise.all([documents.xmlUploadId, documents.pdfUploadId].map((id: string) => db.doc(`uploads/${id}`).get()));
   const [xmlMeta, pdfMeta] = files.map(row => row.data());
   for (const [index, meta] of [xmlMeta, pdfMeta].entries()) {

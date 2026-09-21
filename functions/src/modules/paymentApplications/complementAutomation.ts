@@ -10,6 +10,7 @@ import { assertSource, dayMexico, hash, millis, overdue, text } from "./compleme
 import * as providers from "./complementProviders";
 import { claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } from "./complementGates";
 import { iqRepRequestId, matchingIqRepJobs } from "./complementRequestIdentity";
+import { verifiedDocuments } from "./complementCanary";
 
 const jobs = () => db.collection("paymentComplementJobs");
 const errorCode = (e: any) => /^[A-Z0-9_]+$/.test(e?.message || "") ? e.message : "REP_OPERATION_FAILED";
@@ -24,7 +25,7 @@ async function sourceFor(applicationId: string) {
   const enrichedSource: Record<string, any> = { ...source, currency: text(pago!.moneda).toUpperCase() };
   return { app, solicitud: solicitud!, pago: pago!, source: enrichedSource, ref };
 }
-async function updateJob(id: string, patch: any, message?: string) {
+export async function updateJob(id: string, patch: any, message?: string) {
   const ref = jobs().doc(id);
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref); if (!snap.exists) throw Error("REP_JOB_MISSING");
@@ -34,6 +35,10 @@ async function updateJob(id: string, patch: any, message?: string) {
     for (const source of requests.docs) {
       if (source.data().rootId !== job.rootId) throw Error("REP_FOLLOWUP_SCOPE");
       tx.update(source.ref, { automationStatus: patch.status || job.status, automationError: patch.error || null,
+        ...(patch.status === "REQUESTED" && patch.requestedAt ? { status: "REQUESTED" } : {}),
+        ...(patch.status === "UNKNOWN" && job.provider === "IQ" ? { status: "REQUEST_STATE_UNKNOWN", externalRequestSent: null } : {}),
+        ...(Object.prototype.hasOwnProperty.call(patch, "nextCheckAt") ? { nextCheckAt: patch.nextCheckAt } : {}),
+        ...(Object.prototype.hasOwnProperty.call(patch, "repAttachmentStatus") ? { repAttachmentStatus: patch.repAttachmentStatus } : {}),
         ...(Object.prototype.hasOwnProperty.call(patch, "gateReason") ? { automationGateReason: patch.gateReason } : {}),
         ...(patch.requestedAt ? { requestedAt: patch.requestedAt, externalRequestSent: true } : {}), updatedAt: FieldValue.serverTimestamp() });
     }
@@ -85,7 +90,7 @@ export async function enqueueComplement(applicationId: string) {
   });
 }
 
-async function markIqSending(id: string) {
+export async function markIqSending(id: string) {
   await db.runTransaction(async tx => {
     const ref = jobs().doc(id), snap = await tx.get(ref), job = snap.data();
     if (!job || job.provider !== "IQ" || job.status !== "PREPARING" || job.attemptedAt || job.requestedAt)
@@ -95,8 +100,13 @@ async function markIqSending(id: string) {
     if (matches.length !== 1 || matches[0].id !== id) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
     const identity = iqRepRequestId(job.rootId, job.depositId);
     if (job.requestIdentity && job.requestIdentity !== identity) throw Error("REP_IQ_REQUEST_IDENTITY_CONFLICT");
+    const linked = await tx.get(db.collection("paymentComplementRequests").where("automationJobId", "==", id));
+    if (linked.empty || linked.docs.some(row => row.data().rootId !== job.rootId || row.data().externalRequestSent === true ||
+        row.data().requestedAt || ["REQUESTED", "RECEIVED", "REQUEST_STATE_UNKNOWN"].includes(row.data().status)))
+      throw Error("REP_IQ_REQUEST_PREVIOUS_EVIDENCE");
     tx.update(ref, { status: "SENDING", requestIdentity: identity, attemptedAt: FieldValue.serverTimestamp(),
       attemptProfileId: job.profileId, attemptActorUid: job.actorUid, updatedAt: FieldValue.serverTimestamp() });
+    for (const row of linked.docs) tx.update(row.ref, { automationStatus: "SENDING", status: "SENDING", updatedAt: FieldValue.serverTimestamp() });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
       referenceId: id, referenceType: "complementoPago", description: "Solicitud IQ C reservada de forma durable antes del POST; cualquier resultado incierto bloquea reenvío." });
   });
@@ -185,8 +195,8 @@ async function markReceived(id: string, rows: any[]) {
     }
     if (expected.size) throw Error("REP_RECEIPT_COVERAGE_MISMATCH");
     for (const { ref, documents } of updates) tx.update(ref, { ...documents, status: "RECEIVED", automationStatus: "RECEIVED", automationError: null,
-      receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    tx.update(jobRef, { status: "RECEIVED", error: null, updatedAt: FieldValue.serverTimestamp() });
+      repAttachmentStatus: "REP_VALIDATED", nextCheckAt: null, receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.update(jobRef, { status: "RECEIVED", nextCheckAt: null, error: null, updatedAt: FieldValue.serverTimestamp() });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
       referenceId: id, referenceType: "complementoPago", description: "Complemento recibido y validado contra UUID, parcialidad e importes; XML y PDF vinculados al pago correspondiente." });
   });
@@ -195,13 +205,15 @@ async function markReceived(id: string, rows: any[]) {
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers) {
   const ref = jobs().doc(id), day = dayMexico(now);
   const current = (await ref.get()).data();
+  if (current?.nextCheckAt && millis(current.nextCheckAt) > now.getTime()) return;
   if (current?.provider === "IQ" && ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(current.status)) {
     const gate = await inspectIqComplementGate(current, "LOOKUP");
     if (!gate.allowed) { await recordBlockedIqGate(id, "LOOKUP", gate.reason, now); return; }
   }
   const job = await db.runTransaction(async tx => {
     const row = (await tx.get(ref)).data();
-    if (!row || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status) || row.lastCheckDay === day) return null;
+    if (!row || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status) || row.lastCheckDay === day ||
+        row.nextCheckAt && millis(row.nextCheckAt) > now.getTime()) return null;
     tx.update(ref, { lastCheckDay: day, lastCheckedAt: Timestamp.fromDate(now) }); return { ...row, id } as any;
   });
   if (!job) return;
@@ -221,7 +233,17 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
       if (url) {
         const downloadGate = await inspectIqComplementGate(job, "LOOKUP");
         if (!downloadGate.allowed) { await recordBlockedIqGate(id, "LOOKUP", downloadGate.reason, now); return; }
-        await markReceived(id, await adapter.importIqComplement(url, sources, job)); return;
+        const imported = await adapter.importIqComplement(url, sources, job);
+        for (const row of imported) await verifiedDocuments(job.rootId, row.source, row.documents);
+        await markReceived(id, imported); return;
+      }
+      const nextCheckAt = Timestamp.fromMillis(now.getTime() + 24 * 60 * 60 * 1000);
+      await updateJob(id, { nextCheckAt, repAttachmentStatus: "REP_ATTACHMENT_NOT_AVAILABLE" },
+        "IQ todavía no ofrece un REP adjunto; Hugo volverá a consultar después de la siguiente revisión programada.");
+      if (job.status === "REQUESTED") {
+        const linked = await db.collection("paymentComplementRequests").where("automationJobId", "==", id).get();
+        for (const row of linked.docs) await row.ref.update({ status: "ATTACHMENT_PENDING", automationStatus: "ATTACHMENT_PENDING",
+          nextCheckAt, updatedAt: FieldValue.serverTimestamp() });
       }
     } else if (job.cfdiId) {
       await markReceived(id, [{ source: sources[0], documents: await adapter.importFacturamaComplement(job.cfdiId, sources[0]) }]); return;

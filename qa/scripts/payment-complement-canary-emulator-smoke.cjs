@@ -10,6 +10,9 @@ const db = admin.firestore(), stamp = admin.firestore.Timestamp;
 const { runIqRepReadCanary, IQ_REP_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/complementCanary');
 const { runRepAttachmentExperiment, IQ_REP_ATTACHMENT_EXPERIMENT_ID } = require('../../functions/lib/modules/paymentApplications/repAttachmentExperiment');
 const { runIqRepDepositFieldProbe, IQ_REP_DEPOSIT_FIELD_PROBE_ID } = require('../../functions/lib/modules/paymentApplications/repDepositFieldProbe');
+const { runIqRepRequestCanary, IQ_REP_REQUEST_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/repRequestCanary');
+const automation = require('../../functions/lib/modules/paymentApplications/complementAutomation');
+const { iqRepRequestId } = require('../../functions/lib/modules/paymentApplications/complementRequestIdentity');
 const { assessLocalIqRecovery } = require('../../functions/lib/modules/paymentApplications/complementRecoveryPlan');
 const { reconcilePaymentComplement, complementRequestId } = require('../../functions/lib/modules/paymentApplications/complementFollowup');
 const { saveComplementDocuments } = require('../../functions/lib/modules/paymentApplications/complementDocuments');
@@ -62,6 +65,37 @@ async function run() {
   assert.equal((await fieldProbeRef.get()).data().observation.canRequestRep.value, true);
   await runIqRepDepositFieldProbe(IQ_REP_DEPOSIT_FIELD_PROBE_ID, fieldAdapter);
   assert.equal(fieldGets, 1, 'probe cannot replay');
+  await db.doc(`iqIntegrationConfigs/${root}`).update({ automation: { aplicacionPagos: true } });
+  await db.doc(`paymentComplementConfigs/${root}`).update({ iqEnabled: true, iqRequestEnabled: true });
+  const requestCanaryRef = db.doc(`hugoRepRequestCanaries/${IQ_REP_REQUEST_CANARY_ID}`);
+  await requestCanaryRef.set({ rootId: root, applicationId: appId, applicationFolio: 'AP1C4U1E6', capability: 'REQUEST',
+    expectedFingerprint: fieldPreview.planFingerprint, status: 'QUEUED' });
+  let canaryPosts = 0, currentDepositGets = 0, currentAttachmentGets = 0;
+  const requestAdapter = { iqSession: async () => ({ accessToken: 'fixture-only' }),
+    observeIqRepDepositFields: async job => { currentDepositGets++; return { httpStatus: 200, exactMatchCount: 1,
+      ...require('../../functions/lib/modules/paymentApplications/iqRepDepositFields').readIqRepDepositFields({
+        ...historicalShape.eligibleIndicatorTrue, id: job.depositId }) }; },
+    observeIqRepAttachment: async () => { currentAttachmentGets++; return { classification: 'REP_ATTACHMENT_NOT_AVAILABLE',
+      shape: { httpStatus: 400, exactNoAttachmentMessage: true }, url: null }; },
+    requestIqComplement: async job => { canaryPosts++; const persisted = (await db.doc(`paymentComplementJobs/${iqRepRequestId(root,job.depositId)}`).get()).data();
+      assert.equal(persisted.status, 'SENDING', 'SENDING is durable before POST');
+      return { httpStatus: 200, message: 'success', bodyKind: 'object', topLevelKeys: ['message'] }; } };
+  await Promise.all([runIqRepRequestCanary(IQ_REP_REQUEST_CANARY_ID,requestAdapter),runIqRepRequestCanary(IQ_REP_REQUEST_CANARY_ID,requestAdapter)]);
+  assert.equal(canaryPosts,1);assert.equal(currentDepositGets,1);assert.equal(currentAttachmentGets,1);
+  assert.equal((await requestCanaryRef.get()).data().status,'REQUESTED');
+  const requestedJobId=iqRepRequestId(root,'220483'),requestedJob=(await db.doc(`paymentComplementJobs/${requestedJobId}`).get()).data();
+  assert.equal(requestedJob.status,'REQUESTED');assert(requestedJob.nextCheckAt);
+  assert.equal((await requestRef.get()).data().status,'REQUESTED');
+  await runIqRepRequestCanary(IQ_REP_REQUEST_CANARY_ID,requestAdapter);assert.equal(canaryPosts,1,'C cannot replay');
+  let earlyReads=0;
+  await automation.checkComplementDaily(requestedJobId,new Date(),{...requestAdapter,availableIqComplement:async()=>{earlyReads++;return null;}});
+  assert.equal(earlyReads,0,'nextCheckAt prevents aggressive B polling');
+  await automation.checkComplementDaily(requestedJobId,new Date(Date.now()+25*60*60*1000),
+    {...requestAdapter,availableIqComplement:async()=>{earlyReads++;return null;}});
+  assert.equal(earlyReads,1);assert.equal((await requestRef.get()).data().status,'ATTACHMENT_PENDING');
+  assert((await requestRef.get()).data().nextCheckAt);
+  await db.doc(`iqIntegrationConfigs/${root}`).update({ automation: { aplicacionPagos: false } });
+  await db.doc(`paymentComplementConfigs/${root}`).update({ iqEnabled: false });
   await ref.update({ status: 'QUEUED', steps: [] });
   await db.doc(`iqIntegrationConfigs/${root}`).update({ enabled: false });
   calls = { session: 0, deposit: 0, rep: 0, import: 0 };

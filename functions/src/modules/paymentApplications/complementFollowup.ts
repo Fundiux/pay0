@@ -43,7 +43,7 @@ export async function reconcilePaymentComplement(applicationId: string, deletedA
     const fingerprint = createHash("sha256").update(JSON.stringify(row)).digest("hex");
     if (existing.data()?.fingerprint === fingerprint) return;
     // Future imported evidence must not be overwritten by a source projection.
-    if (["RECEIVED", "REQUESTED"].includes(existing.data()?.status)) return;
+    if (["RECEIVED", "REQUESTED", "SENDING", "REQUEST_STATE_UNKNOWN", "ATTACHMENT_PENDING"].includes(existing.data()?.status)) return;
     const revision = Number(existing.data()?.revision || 0) + 1;
     tx.set(requestRef, { ...row, externalRequestSent: existing.data()?.externalRequestSent === true, fingerprint, revision, createdAt: existing.data()?.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: app.rootId,

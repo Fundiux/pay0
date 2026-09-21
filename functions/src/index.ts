@@ -2713,6 +2713,7 @@ export { getHugoComplementInventoryPage } from "./modules/paymentApplications/co
 export { runHugoIqRepReadCanary } from "./modules/paymentApplications/complementCanary";
 export { runHugoIqRepAttachmentExperiment } from "./modules/paymentApplications/repAttachmentExperiment";
 export { runHugoIqRepDepositFieldProbe } from "./modules/paymentApplications/repDepositFieldProbe";
+export { runHugoIqRepRequestCanary } from "./modules/paymentApplications/repRequestCanary";
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";
