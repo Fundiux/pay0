@@ -74,7 +74,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "3.0.4",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^20.14.9",
