@@ -9,10 +9,12 @@ admin.initializeApp({ projectId: 'demo-pay0', storageBucket: 'demo-pay0.appspot.
 const db = admin.firestore(), stamp = admin.firestore.Timestamp;
 const { runIqRepReadCanary, IQ_REP_CANARY_ID } = require('../../functions/lib/modules/paymentApplications/complementCanary');
 const { runRepAttachmentExperiment, IQ_REP_ATTACHMENT_EXPERIMENT_ID } = require('../../functions/lib/modules/paymentApplications/repAttachmentExperiment');
+const { runIqRepDepositFieldProbe, IQ_REP_DEPOSIT_FIELD_PROBE_ID } = require('../../functions/lib/modules/paymentApplications/repDepositFieldProbe');
 const { assessLocalIqRecovery } = require('../../functions/lib/modules/paymentApplications/complementRecoveryPlan');
 const { reconcilePaymentComplement, complementRequestId } = require('../../functions/lib/modules/paymentApplications/complementFollowup');
 const { saveComplementDocuments } = require('../../functions/lib/modules/paymentApplications/complementDocuments');
 const provider = require('../../functions/lib/modules/paymentApplications/complementProviders');
+const historicalShape = require('../fixtures/iq-rep-deposit-fields-user-confirmed.json');
 const { inventoryPage } = require('../../functions/lib/modules/paymentApplications/complementInventory');
 const root = `canary-${Date.now()}`, appId = `${root}-app`, profileId = `${root}-profile`;
 const uuid = '11111111-1111-4111-8111-111111111111';
@@ -44,6 +46,22 @@ async function run() {
   assert((await requestRef.get()).data().nextCheckAt);
   assert.equal((await ref.get()).data().status, 'PENDING');
   assert.equal((await inventoryPage(root)).counts.pending, 1);
+  const fieldProbeRef = db.doc(`hugoRepDepositFieldProbes/${IQ_REP_DEPOSIT_FIELD_PROBE_ID}`);
+  await db.doc(`hugoRepAttachmentExperiments/${IQ_REP_ATTACHMENT_EXPERIMENT_ID}`).set({ rootId: root, applicationId: appId, repAttachmentStatus: 'REP_ATTACHMENT_NOT_AVAILABLE' });
+  const fieldPreview = await assessLocalIqRecovery(root, appId);
+  await fieldProbeRef.set({ rootId: root, applicationId: appId, applicationFolio: 'AP1C4U1E6', capability: 'LOOKUP',
+    expectedFingerprint: fieldPreview.planFingerprint, status: 'QUEUED' });
+  let fieldGets = 0;
+  const fieldAdapter = { iqSession: async () => ({ accessToken: 'fixture-only' }), observeIqRepDepositFields: async job => {
+    fieldGets++; const parsed = require('../../functions/lib/modules/paymentApplications/iqRepDepositFields').readIqRepDepositFields({
+      ...historicalShape.eligibleIndicatorTrue, id: job.depositId });
+    return { httpStatus: 200, exactMatchCount: 1, ...parsed };
+  } };
+  await Promise.all([runIqRepDepositFieldProbe(IQ_REP_DEPOSIT_FIELD_PROBE_ID, fieldAdapter),runIqRepDepositFieldProbe(IQ_REP_DEPOSIT_FIELD_PROBE_ID, fieldAdapter)]);
+  assert.equal(fieldGets, 1, 'one B deposit observation under concurrent delivery');
+  assert.equal((await fieldProbeRef.get()).data().observation.canRequestRep.value, true);
+  await runIqRepDepositFieldProbe(IQ_REP_DEPOSIT_FIELD_PROBE_ID, fieldAdapter);
+  assert.equal(fieldGets, 1, 'probe cannot replay');
   await ref.update({ status: 'QUEUED', steps: [] });
   await db.doc(`iqIntegrationConfigs/${root}`).update({ enabled: false });
   calls = { session: 0, deposit: 0, rep: 0, import: 0 };
@@ -63,7 +81,14 @@ async function run() {
   assert.equal(observation.kind, 'SANITIZED_RUNTIME_OBSERVATION_NOT_RAW_IQ_RESPONSE');
   assert.equal(observation.repAvailability, 'UNKNOWN');
   const job = { rootId: root, provider: 'IQ', profileId, actorUid: root, clientId: root, depositId: '220483' };
-  for (const fields of [{}, { rep: false, can_request_rep: false }, { rep: null, can_request_rep: null }]) {
+  let exactDepositGets = 0;
+  global.fetch = async (url, init) => { exactDepositGets++; assert.equal(init.method, 'GET');
+    assert.match(String(url), /\/deposits\?/); assert.match(String(url), /filter%5Bid%5D=220483/);
+    return { ok: true, status: 200, json: async () => [{ ...historicalShape.eligibleIndicatorTrue, id: job.depositId }] }; };
+  const fieldObservation = await provider.observeIqRepDepositFields(job, { accessToken: 'fixture-only' });
+  assert.equal(exactDepositGets, 1); assert.equal(fieldObservation.canRequestRep.value, true);
+  assert.equal(fieldObservation.rep.value, false); assert.equal(fieldObservation.depositId, job.depositId);
+  for (const fields of [{}, { ...historicalShape.eligibleIndicatorFalse, id: '220483' }, { rep: null, 'can_request_rep?': null }]) {
     let gets = 0;
     global.fetch = async url => { gets++; assert.match(String(url), /^https:\/\/iq-produccion-ccc570f75402\.herokuapp\.com\/deposits\?/);
       return { ok: true, json: async () => [{ id: job.depositId, conciliation_status: observation.conciliationStatus,

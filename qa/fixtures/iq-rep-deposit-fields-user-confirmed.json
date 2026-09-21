@@ -1,0 +1,17 @@
+{
+  "source": "User-confirmed structure from historical real GET /deposits responses; rows are sanitized minimal examples, not AP1C4U1E6 evidence",
+  "eligibleIndicatorTrue": {
+    "id": "123456",
+    "operation_status": "En Operacion",
+    "conciliation_status": "Conciliado",
+    "can_request_rep?": true,
+    "rep": false
+  },
+  "eligibleIndicatorFalse": {
+    "id": "123457",
+    "operation_status": "En Operacion",
+    "conciliation_status": "Conciliado",
+    "can_request_rep?": false,
+    "rep": false
+  }
+}

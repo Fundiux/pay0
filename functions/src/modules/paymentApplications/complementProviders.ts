@@ -10,6 +10,7 @@ import { resolveIqAccess, IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY } from "./iqExe
 import { buildFacturamaRep, iqAvailability, text } from "./complementPolicy";
 import { saveComplementDocuments, validateRep } from "./complementDocuments";
 import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
+import { readIqRepDepositFields } from "./iqRepDepositFields";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME"), PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
 export const COMPLEMENT_SECRETS = [IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY, USERNAME, PASSWORD];
@@ -50,10 +51,10 @@ export async function preflightIqComplement(job: any, session: any): Promise<"RE
     const rows = await response.json(); if (!Array.isArray(rows)) throw Error("IQ_REP_DEPOSIT_LIST_INVALID");
     const matches = rows.filter((row: any) => text(row.id) === job.depositId);
     if (matches.length === 1) {
-      const row = matches[0];
-      if (row.conciliation_status !== "Conciliado" || row.operation_status !== "En Operacion") throw Error("IQ_REP_DEPOSIT_NOT_RECONCILED");
-      if (row.rep === true) return "AVAILABLE";
-      if (row.can_request_rep !== true) throw Error("IQ_REP_REQUEST_STATE_REQUIRES_REVIEW");
+      const row = readIqRepDepositFields(matches[0]);
+      if (row.conciliationStatus !== "Conciliado" || row.operationStatus !== "En Operacion") throw Error("IQ_REP_DEPOSIT_NOT_RECONCILED");
+      if (row.rep.value === true) return "AVAILABLE";
+      if (row.canRequestRep.value !== true) throw Error("IQ_REP_REQUEST_STATE_REQUIRES_REVIEW");
       // The field is observed only as an adapter condition, not as a provider
       // contract. Even true cannot authorize a real generation request yet.
       throw Error("IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED");
@@ -61,6 +62,24 @@ export async function preflightIqComplement(job: any, session: any): Promise<"RE
     if (rows.length < 100) break;
   }
   throw Error("IQ_REP_DEPOSIT_NOT_FOUND");
+}
+export async function observeIqRepDepositFields(job: any, session: any) {
+  await requireGate(job, "LOOKUP");
+  if (!/^\d{3,20}$/.test(job.depositId)) throw Error("IQ_REP_DEPOSIT_ID_INVALID");
+  const url = new URL("/deposits", IQ_ORIGIN);
+  url.searchParams.set("limit", "100");
+  url.searchParams.set("offset", "0");
+  url.searchParams.set("order_by_field", "id");
+  url.searchParams.set("order_by_direction", "asc");
+  url.searchParams.set("filter[id]", job.depositId);
+  const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" },
+    redirect: "error", signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw Error(`IQ_REP_DEPOSIT_HTTP_${response.status}`);
+  const body: unknown = await response.json().catch(() => null);
+  if (!Array.isArray(body)) throw Error("IQ_REP_DEPOSIT_RESPONSE_INVALID");
+  const matches = body.map(readIqRepDepositFields).filter(row => row.depositId === job.depositId);
+  if (matches.length !== 1) throw Error("IQ_REP_DEPOSIT_MATCH_AMBIGUOUS");
+  return { httpStatus: response.status, exactMatchCount: matches.length, ...matches[0] };
 }
 export async function availableIqComplement(job: any, session: any) {
   await requireGate(job, "LOOKUP");
@@ -90,7 +109,7 @@ export async function observeIqRepAttachment(job: any, session: any) {
   const shape = { httpStatus: response.status, contentType: response.headers.get("content-type")?.split(";")[0] || null,
     bodyKind: Array.isArray(body) ? "array" : body === null ? "unparsed_or_null" : typeof body,
     topLevelKeys: object ? Object.keys(object).sort().slice(0, 40) : [], bodyBytes: Buffer.byteLength(raw),
-    bodySha256: createHash("sha256").update(raw).digest("hex"), rep: field("rep"), canRequestRep: field("can_request_rep"),
+    bodySha256: createHash("sha256").update(raw).digest("hex"), rep: field("rep"), canRequestRep: field("can_request_rep?"),
     urlPresent: !!url, urlKind: url ? (() => { try { const parsed = new URL(url); return parsed.protocol === "https:" ? "HTTPS" : "OTHER_SCHEME"; } catch { return "INVALID"; } })() : "ABSENT",
     errorCount: Array.isArray(object?.errors) ? object.errors.length : null,
     exactNoAttachmentMessage: exactMissing };
