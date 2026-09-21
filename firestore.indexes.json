@@ -97,6 +97,10 @@
                 {
                     "fieldPath": "createdAt",
                     "order": "DESCENDING"
+                },
+                {
+                    "fieldPath": "__name__",
+                    "order": "ASCENDING"
                 }
             ]
         },
@@ -111,6 +115,10 @@
                 {
                     "fieldPath": "createdAt",
                     "order": "DESCENDING"
+                },
+                {
+                    "fieldPath": "__name__",
+                    "order": "ASCENDING"
                 }
             ]
         },
@@ -139,6 +147,10 @@
                 {
                     "fieldPath": "createdAt",
                     "order": "DESCENDING"
+                },
+                {
+                    "fieldPath": "__name__",
+                    "order": "ASCENDING"
                 }
             ]
         },
@@ -653,7 +665,8 @@
             "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },
-                { "fieldPath": "createdAt", "order": "DESCENDING" }
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
         },
         {
@@ -662,7 +675,8 @@
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },
                 { "fieldPath": "adminId", "order": "ASCENDING" },
-                { "fieldPath": "createdAt", "order": "DESCENDING" }
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
         },
         {
@@ -671,7 +685,8 @@
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },
                 { "fieldPath": "createdBy", "order": "ASCENDING" },
-                { "fieldPath": "createdAt", "order": "DESCENDING" }
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
         },
         {
