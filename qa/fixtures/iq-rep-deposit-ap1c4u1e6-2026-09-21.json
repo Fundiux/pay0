@@ -1,0 +1,14 @@
+{
+  "kind": "SANITIZED_REAL_IQ_DEPOSIT_GET_OBSERVATION",
+  "applicationFolio": "AP1C4U1E6",
+  "method": "GET",
+  "endpointTemplate": "/deposits?filter[id]={depositId}",
+  "httpStatus": 200,
+  "exactMatchCount": 1,
+  "depositId": "220483",
+  "operation_status": "En Operacion",
+  "conciliation_status": "Conciliado",
+  "rep": false,
+  "can_request_rep?": true,
+  "generationPostExecuted": false
+}

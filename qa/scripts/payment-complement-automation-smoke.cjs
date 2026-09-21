@@ -11,6 +11,7 @@ const identity=require('../../functions/lib/modules/paymentApplications/compleme
 const provider=require('../../functions/lib/modules/paymentApplications/complementProviders');
 const depositFields=require('../../functions/lib/modules/paymentApplications/iqRepDepositFields');
 const historicalShape=require('../fixtures/iq-rep-deposit-fields-user-confirmed.json');
+const realDeposit=require('../fixtures/iq-rep-deposit-ap1c4u1e6-2026-09-21.json');
 const lifecycle=require('../../functions/lib/modules/solicitudDocuments/lifecycle');
 const uuid='11111111-1111-4111-8111-111111111111';
 const invoiceXml=`<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" TipoDeComprobante="I" MetodoPago="PPD" Moneda="MXN" SubTotal="100" Total="116" LugarExpedicion="92560"><cfdi:Emisor Rfc="AAA010101AAA" Nombre="EMISOR" RegimenFiscal="601"/><cfdi:Receptor Rfc="BBB010101BBB" Nombre="RECEPTOR" RegimenFiscalReceptor="601" DomicilioFiscalReceptor="92560"/><cfdi:Conceptos><cfdi:Concepto ObjetoImp="02"><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Base="100" Importe="16"/></cfdi:Traslados></cfdi:Impuestos></cfdi:Concepto></cfdi:Conceptos><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="${uuid}"/></cfdi:Complemento></cfdi:Comprobante>`;
@@ -40,6 +41,8 @@ async function run(){
  await assert.rejects(provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),/IQ_REP_REQUEST_HTTP_401/);
  assert.equal(authPosts,1,'401 must never replay POST');global.fetch=oldFetch;
  assert.equal(depositFields.readIqRepDepositFields(historicalShape.eligibleIndicatorTrue).canRequestRep.value,true);
+ assert.equal(depositFields.readIqRepDepositFields(realDeposit).canRequestRep.value,true,'real AP1C4U1E6 response uses question-mark key');
+ assert.equal(depositFields.readIqRepDepositFields(realDeposit).rep.value,false);
  assert.equal(depositFields.readIqRepDepositFields(historicalShape.eligibleIndicatorFalse).canRequestRep.value,false);
  assert.equal(depositFields.readIqRepDepositFields({...historicalShape.eligibleIndicatorTrue,'can_request_rep?':null}).canRequestRep.type,'null');
  const {['can_request_rep?']:ignored,...withoutIndicator}=historicalShape.eligibleIndicatorTrue;
