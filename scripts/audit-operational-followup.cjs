@@ -53,6 +53,35 @@ async function run(){
     }
     console.log(JSON.stringify({mode:'HUGO_INVENTORY_READ_ONLY',counts:total,reasons,pages,complete,externalActions:0}));
   }
+  if(args.includes('--hugo-candidates')){
+    const {assessLocalIqRecovery}=require('../functions/lib/modules/paymentApplications/complementRecoveryPlan.js');
+    const followups=await read('paymentComplementRequests');const byApplication=new Map(followups.map(row=>[row.applicationId,row]));
+    const master=(await db.doc(`iqIntegrationConfigs/${rootId}`).get()).data()||{};
+    const complementConfig=(await db.doc(`paymentComplementConfigs/${rootId}`).get()).data()||{};
+    const candidates=[];
+    for(const app of applications){
+      if(app.status!=='APLICADA'||app.invoiceType!=='PPD')continue;
+      const solicitud=ss.get(app.solicitudId),pago=pp.get(app.pagoId),followup=byApplication.get(app.id);
+      if(!solicitud||!pago||!(solicitud.iqId||solicitud.iqFolio||solicitud.folioIq||solicitud.iqSolicitudId))continue;
+      const plan=app.iqPlanId?(await db.doc(`pagoApplicationIqPlans/${app.iqPlanId}`).get()).data():null;
+      const attempt=app.iqExecutionAttemptId?(await db.doc(`pagoApplicationIqAttempts/${app.iqExecutionAttemptId}`).get()).data():null;
+      const actor=attempt?.createdBy?(await db.doc(`users/${attempt.createdBy}`).get()).data():null;
+      const access=attempt?.createdBy?(await db.doc(`iqUserAccess/${attempt.createdBy}`).get()).data():null;
+      const profile=plan?.iqExecutionProfileId?(await db.doc(`iqCredentialProfiles/${plan.iqExecutionProfileId}`).get()).data():null;
+      const preview=await assessLocalIqRecovery(rootId,app.id);
+      candidates.push({applicationFolio:app.folio||app.id,solicitudFolio:solicitud.folio||null,pagoFolio:pago.folio||null,
+        previewState:preview.state,previewReason:preview.reason,
+        localStatus:followup?.status||null,iqApplied:app.iqApplicationStatus==='IQ_APPLIED'&&app.iqActionExecuted===true,
+        planScoped:!!plan&&plan.rootId===rootId&&plan.pagoId===app.pagoId,
+        attemptScoped:!!attempt&&attempt.rootId===rootId&&attempt.planId===app.iqPlanId,
+        profilePresent:!!(plan?.iqExecutionProfileId),depositPresent:/^\d{3,20}$/.test(String(plan?.plan?.pagoIqFolio||plan?.pagoIqFolio||'')),
+        actorActive:!!actor&&actor.rootId===rootId&&actor.active!==false&&actor.disabled!==true,
+        accessActive:!!access&&access.rootId===rootId&&access.active===true&&access.iqEnabled===true,
+        profileActive:!!profile&&profile.rootId===rootId&&profile.active===true&&profile.hasPassword===true,
+        profileMatches:access?.iqCredentialProfileId===plan?.iqExecutionProfileId});
+    }
+    console.log(JSON.stringify({mode:'HUGO_LOCAL_CANDIDATES_READ_ONLY',gates:{masterEnabled:master.enabled===true,paymentApplicationEnabled:master.automation?.aplicacionPagos===true,complementRequestEnabled:complementConfig.iqEnabled===true,complementLookupEnabled:complementConfig.iqLookupEnabled!==false&&!!complementConfig.rootId},candidates,externalActions:0}));
+  }
   if(args.includes('--reconcile-complements')){
     const {reconcilePaymentComplement}=require('../functions/lib/modules/paymentApplications/complementFollowup.js');
     for(const row of applications) await reconcilePaymentComplement(row.id);

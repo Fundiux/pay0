@@ -1,5 +1,6 @@
 import { FieldValue, Firestore } from "firebase-admin/firestore";
 import { enqueueComplement } from "../paymentApplications/complementAutomation";
+import { inspectIqComplementGate } from "../paymentApplications/complementGates";
 import { logActivity } from "../../utils/logActivity";
 
 const clean = (value: unknown, max = 180) =>
@@ -117,6 +118,11 @@ export async function executeRequestIqComplement(input: {
       executed: false,
       reply: `No pude poner en cola el complemento de ${source.solicitudFolio || source.pagoFolio || source.applicationId}. La automatización IQ puede estar pausada o la aplicación aún no cumple las precondiciones.`,
     };
+  const gate = await inspectIqComplementGate(job, "REQUEST");
+  if (!gate.allowed) return {
+    executed: false,
+    reply: `Encontré el complemento de ${source.solicitudFolio || source.pagoFolio || source.applicationId}, pero no tengo autorización vigente para solicitarlo a IQ (${gate.reason}). La observación continúa; no envié un POST.`,
+  };
   if (clean(job.status, 40).toUpperCase() === "BLOCKED")
     return {
       executed: false,

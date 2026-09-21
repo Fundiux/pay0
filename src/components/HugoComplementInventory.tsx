@@ -22,7 +22,19 @@ const reasons: Record<string, string> = {
   UNKNOWN: "Resultado externo incierto",
   BLOCKED: "Bloqueado para revisión",
   REVIEW_REQUIRED: "Requiere revisión",
+  REP_GATE_MASTER_OFF: "Master Switch de IQ apagado",
+  REP_GATE_LOOKUP_OFF: "Consulta de complementos IQ pausada",
+  REP_GATE_REQUEST_OFF: "Solicitud de complementos IQ pausada",
+  REP_GATE_CLIENT_PERMISSION: "Sin permiso vigente sobre el cliente",
+  REP_GATE_IQ_ACCESS_CHANGED: "Acceso o perfil IQ cambió",
+  REP_GATE_PROFILE_UNAVAILABLE: "Perfil IQ no disponible",
+  REP_GATE_QUOTA_ZERO: "Cuota de consulta deshabilitada",
 };
+const recoveryLabel = (row: ComplementInventoryException) => row.recoveryState === "GATE_BLOCKED"
+  ? `Hugo encontró el caso, pero no tiene autorización para consultar IQ: ${reasons[row.recoveryReason || ""] || row.recoveryReason}`
+  : row.recoveryState === "WAITING_IQ_APPLICATION" ? "Sin confirmación suficiente de aplicación IQ"
+  : row.recoveryState === "READY_FOR_IQ_LOOKUP" ? "Listo localmente para consulta IQ; IQ aún no consultado"
+  : row.recoveryState === "LOCAL_EVIDENCE_INCOMPLETE" ? "Falta evidencia local para consultar IQ" : "";
 
 export default function HugoComplementInventory() {
   const [counts, setCounts] = useState(empty);
@@ -68,6 +80,6 @@ export default function HugoComplementInventory() {
     <p className="mt-3 text-xs text-slate-400" role="status">{complete ? "Cobertura completa" : error ? "Cobertura parcial" : "Revisando histórico…"} · {counts.scanned.toLocaleString("es-MX")} aplicaciones revisadas · {counts.excluded.toLocaleString("es-MX")} fuera de alcance · IQ {counts.iq}, Facturama {counts.facturama}, otros {counts.emisor}{checkedAt ? ` · última revisión ${new Date(checkedAt).toLocaleString("es-MX")}` : ""}</p>
     {error && <p className="mt-2 text-xs text-amber-300">{error}. Los conteos mostrados son parciales.</p>}
     {exceptions.length > 0 && <div className="mt-4 border-t border-slate-800 pt-3"><p className="text-xs font-medium text-slate-300">Muestra de pendientes y errores ({exceptions.length} casos)</p>
-      <ul className="mt-2 space-y-1 text-xs text-slate-400">{exceptions.map(row => <li key={row.applicationId}><span className={row.outcome === "ERROR" ? "text-rose-300" : "text-amber-300"}>{row.outcome === "ERROR" ? "Error" : "Pendiente"}</span> · {row.applicationFolio || row.applicationId} · {row.provider} · {reasons[row.reason] || `Revisar código ${row.reason}`}</li>)}</ul></div>}
+      <ul className="mt-2 space-y-1 text-xs text-slate-400">{exceptions.map(row => <li key={row.applicationId}><span className={row.outcome === "ERROR" ? "text-rose-300" : "text-amber-300"}>{row.outcome === "ERROR" ? "Error" : "Pendiente"}</span> · {row.applicationFolio || row.applicationId} · {row.provider} · {reasons[row.reason] || `Revisar código ${row.reason}`}{recoveryLabel(row) && <span className="block pl-4 text-sky-300">{recoveryLabel(row)}</span>}</li>)}</ul></div>}
   </section>;
 }

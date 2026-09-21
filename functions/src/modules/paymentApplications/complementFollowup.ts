@@ -86,7 +86,8 @@ export const listPaymentComplementFollowup = onCall({ region: "us-central1", cor
   const rows = await db.collection("paymentComplementRequests").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(101).get();
   const config = (await db.doc(`paymentComplementConfigs/${rootId}`).get()).data();
   return { ok: true, rows: rows.docs.slice(0, 100).map(doc => ({ id: doc.id, ...doc.data() })), truncated: rows.size > 100,
-    automation: { iqEnabled: config?.iqEnabled === true, facturamaEnabled: config?.facturamaEnabled === true }, externalContractReady: true };
+    automation: { iqEnabled: config?.iqEnabled === true, iqLookupEnabled: !!config && config.iqLookupEnabled !== false,
+      facturamaEnabled: config?.facturamaEnabled === true }, externalContractReady: true };
 });
 
 // Explicit, read/reconcile-only refresh also covers earlier applications and

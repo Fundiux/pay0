@@ -3,6 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { db } from "../sharedCallables/helpers";
 import { context } from "../controlCenter/callables";
 import { complementRequestId } from "./complementFollowup";
+import { assessLocalIqRecovery } from "./complementRecoveryPlan";
 
 type Outcome = "PROCESSED" | "PENDING" | "ERROR" | "EXCLUDED";
 type Provider = "IQ" | "FACTURAMA" | "EMISOR";
@@ -54,10 +55,11 @@ async function classify(applicationId: string, app: any, rootId: string) {
   if (request?.status === "RECEIVED") return { ...row, outcome: "ERROR" as Outcome, reason: "RECEIPT_EVIDENCE_MISMATCH" };
   if (["BLOCKED", "UNKNOWN", "REVIEW_REQUIRED"].includes(request?.automationStatus) || request?.automationError)
     return { ...row, outcome: "ERROR" as Outcome, reason: clean(request?.automationError || request?.automationStatus) };
+  const recovery = provider === "IQ" ? await assessLocalIqRecovery(rootId, applicationId) : null;
   if (uploads.some(doc => doc.active === true && ["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(doc.documentType)))
-    return { ...row, outcome: "PENDING" as Outcome, reason: "DOCUMENTS_NEED_VERIFICATION" };
-  if (!request) return { ...row, outcome: "PENDING" as Outcome, reason: "FOLLOWUP_NOT_RECORDED" };
-  return { ...row, outcome: "PENDING" as Outcome, reason: clean(request.automationStatus || request.status || "NOT_REQUESTED") };
+    return { ...row, outcome: "PENDING" as Outcome, reason: "DOCUMENTS_NEED_VERIFICATION", recoveryState: recovery?.state, recoveryReason: recovery?.reason };
+  if (!request) return { ...row, outcome: "PENDING" as Outcome, reason: "FOLLOWUP_NOT_RECORDED", recoveryState: recovery?.state, recoveryReason: recovery?.reason };
+  return { ...row, outcome: "PENDING" as Outcome, reason: clean(request.automationStatus || request.status || "NOT_REQUESTED"), recoveryState: recovery?.state, recoveryReason: recovery?.reason };
 }
 
 export async function inventoryPage(rootId: string, cursor = "", pageSize = 25) {

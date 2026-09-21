@@ -53,10 +53,17 @@ async function operationalContext(rootId: string, message: string) {
   const selectedPagos = folio
     ? pagos.filter((row) => clean(row.folio || row.folioIq, 60).toUpperCase() === folio).slice(0, 3)
     : pagos.slice(0, 6);
-  const complementConfig = (await db.doc(`paymentComplementConfigs/${rootId}`).get()).data();
+  const [complementConfigSnap, masterSnap] = await Promise.all([
+    db.doc(`paymentComplementConfigs/${rootId}`).get(), db.doc(`iqIntegrationConfigs/${rootId}`).get(),
+  ]);
+  const complementConfig = complementConfigSnap.data(), master = masterSnap.data();
+  const iqLookupAllowed = master?.enabled === true && !!complementConfig && complementConfig.iqLookupEnabled !== false;
+  const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && complementConfig?.iqRequestEnabled !== false;
   return {
     alcanceContexto: "Muestra reciente y búsqueda exacta por folio, no un inventario completo.",
-    capacidadesIq: { altaBeneficiario: "NO_CONECTADA", solicitudComplemento: complementConfig?.iqEnabled === true ? "AUTOMATICA_PPD_NUEVAS_CONFIRMADAS_REVISION_19H" : "PAUSADA", complementoFacturama: complementConfig?.facturamaEnabled === true ? "AUTOMATICO_CON_VALIDACION_FISCAL" : "PAUSADO", dispersion: "TRANSFERENCIA_Y_TDC_CON_VALIDACIONES" },
+    capacidadesIq: { altaBeneficiario: "NO_CONECTADA", consultaComplemento: iqLookupAllowed ? "HABILITADA_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
+      solicitudComplemento: iqRequestAllowed ? "HABILITADA_SOLO_PPD_NUEVAS_CONFIRMADAS_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
+      complementoFacturama: complementConfig?.facturamaEnabled === true ? "AUTOMATICO_CON_VALIDACION_FISCAL" : "PAUSADO", dispersion: "TRANSFERENCIA_Y_TDC_CON_VALIDACIONES" },
     complementosPendientes: complements.filter(row => row.status !== "VOIDED" && row.status !== "RECEIVED" && (!folio || row.solicitudFolio === folio || row.pagoFolio === folio)).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.automationStatus || row.status, error: row.automationError || null, proveedor: row.provider, enviadoAlProveedor: row.externalRequestSent === true })),
     folioConsultado: folio,
     solicitudes: selectedSolicitudes.map((row) => ({
@@ -104,7 +111,7 @@ function fallbackReply(message: string, name: string, context: any): string {
     return `Revisé ${item.folio}. Está en ${item.estado || "estado no especificado"}, por ${amount}${item.facturamaStatus ? ` y su estado fiscal es ${item.facturamaStatus}` : ""}. Si quieres, dime qué parte revisamos con más detalle.`;
   }
   if (/complement|beneficiari|dispersion|dispersión/.test(normalized)) {
-    return `En el contexto reciente veo ${context.complementosPendientes.length} complementos pendientes. Automatización IQ: ${context.capacidadesIq.solicitudComplemento}; Facturama: ${context.capacidadesIq.complementoFacturama}. IQ se revisa a las 19:00 y se avisa tras 7 días sin recibirlo. Registrar un pendiente no significa que el proveedor lo recibió. El alta de beneficiarios en IQ aún no está conectada. No he enviado ninguna operación desde este chat.`;
+    return `En el contexto reciente veo ${context.complementosPendientes.length} complementos pendientes. Consulta IQ: ${context.capacidadesIq.consultaComplemento}; nuevas solicitudes IQ: ${context.capacidadesIq.solicitudComplemento}; Facturama: ${context.capacidadesIq.complementoFacturama}. Cada caso requiere perfil, permisos y cuota vigentes. Registrar un pendiente no significa que el proveedor lo recibió. No he enviado ninguna operación desde este chat.`;
   }
   if (/qué (pasó|hiciste)|que (paso|hiciste)|resumen|último|ultimo/.test(normalized)) {
     return `Veo ${context.solicitudes.length} solicitudes recientes, ${context.pagos.length} pagos en el contexto actual y ${context.dudasPendientes.length} dudas pendientes. Puedo revisar un folio concreto si me lo indicas.`;

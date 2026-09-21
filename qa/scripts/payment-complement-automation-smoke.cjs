@@ -14,6 +14,10 @@ const app={rootId:root,solicitudId:root,pagoId:root,createdBy:root,folio:'AP1',i
 const jobFor=async id=>(await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,id)}`).get()).data()?.automationJobId;
 async function run(){
  await db.doc(`users/${root}`).set({rootId:root,role:'superadmin',active:true});
+ await db.doc(`clients/${root}`).set({rootId:root,adminId:root,active:true});
+ await db.doc(`iqIntegrationConfigs/${root}`).set({rootId:root,enabled:true,automation:{aplicacionPagos:true}});
+ await db.doc(`iqUserAccess/${root}`).set({rootId:root,active:true,iqEnabled:true,iqCredentialProfileId:'profile',allowedModules:{pagos:true}});
+ await db.doc('iqCredentialProfiles/profile').set({rootId:root,active:true,hasPassword:true,username:'smoke'});
  await db.doc(`paymentComplementConfigs/${root}`).set({rootId:root,iqEnabled:true,facturamaEnabled:true,activatedAt:stamp.fromMillis(now.getTime()-1000)});
  await db.doc(`solicitudes/${root}`).set({rootId:root,folio:'S1',tipoFactura:'PPD',companyId:root,clienteId:root,iqFolio:'123',facturaUuid:uuid,status:'PROCESANDO'});
  await db.doc(`pagos/${root}`).set({rootId:root,folio:'P1',companyId:root,clienteId:root,status:'CONCILIADO',fechaPago:stamp.fromMillis(now.getTime()-86400000),moneda:'MXN'});

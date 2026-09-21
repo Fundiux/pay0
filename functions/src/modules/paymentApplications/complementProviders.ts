@@ -8,11 +8,16 @@ import { loginIqHttpDirect } from "../iq/iqHttpAuth";
 import { resolveIqAccess, IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY } from "./iqExecution";
 import { buildFacturamaRep, iqAvailability, text } from "./complementPolicy";
 import { saveComplementDocuments, validateRep } from "./complementDocuments";
+import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME"), PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
 export const COMPLEMENT_SECRETS = [IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY, USERNAME, PASSWORD];
 const IQ_ORIGIN = "https://iq-produccion-ccc570f75402.herokuapp.com";
-export async function iqSession(job: any) {
+async function requireGate(job: any, action: IqComplementAction) {
+  const decision = await inspectIqComplementGate(job, action);
+  if (!decision.allowed) throw Error(decision.reason);
+}
+export async function iqSession(job: any, action: IqComplementAction = "REQUEST") {
   const user = (await db.doc(`users/${job.actorUid}`).get()).data();
   if (!user || text(user.rootId || job.actorUid) !== job.rootId || user.active === false || user.disabled === true) throw Error("REP_ACTOR_INVALID");
   const role = getUserRole(user);
@@ -20,23 +25,29 @@ export async function iqSession(job: any) {
   await requireClientOperationalAccess({ uid: job.actorUid, role, rootId: job.rootId, clientId: job.clientId, permission: "operatePagos" });
   const access = await resolveIqAccess({ uid: job.actorUid, rootId: job.rootId, adminId: job.rootId, role, displayName: "", username: "" });
   if (access.profileId !== job.profileId || access.apiOrigin !== IQ_ORIGIN) throw Error("REP_IQ_PROFILE_CHANGED");
+  await requireGate(job, action);
   const session = await loginIqHttpDirect({ apiOrigin: IQ_ORIGIN, credentials: access, requiredPermissions: "NONE" });
-  for (const action of ["create", "view"]) if (!session.permissions.some(p => p.entity === "deposits/complement" && p.action === action)) throw Error("REP_IQ_PERMISSION_REQUIRED");
+  for (const permission of action === "REQUEST" ? ["create", "view"] : ["view"])
+    if (!session.permissions.some(p => p.entity === "deposits/complement" && p.action === permission)) throw Error("REP_IQ_PERMISSION_REQUIRED");
   return session;
 }
 export async function requestIqComplement(job: any, session: any) {
   // No body: the route carries the deposit. Never replay an uncertain POST.
-  const send = (auth: any) => fetch(`${IQ_ORIGIN}/deposits/${job.depositId}/complement`, { method: "POST",
-    headers: { Authorization: `Bearer ${auth.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
+  const send = async (auth: any) => {
+    await requireGate(job, "REQUEST");
+    return fetch(`${IQ_ORIGIN}/deposits/${job.depositId}/complement`, { method: "POST",
+      headers: { Authorization: `Bearer ${auth.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
+  };
   let response = await send(session);
   // An explicit 401 is a rejected authentication, unlike a timeout/5xx.
   // Renew from the configured credential profile, never from pasted tokens.
-  if (response.status === 401) response = await send(await iqSession(job));
+  if (response.status === 401) { await requireGate(job, "REQUEST"); response = await send(await iqSession(job, "REQUEST")); }
   const body = await response.json().catch(() => null);
   if (response.status !== 200 || body?.message !== "success") throw Error(`IQ_REP_REQUEST_HTTP_${response.status}`);
 }
 export async function preflightIqComplement(job: any, session: any): Promise<"REQUEST" | "AVAILABLE"> {
   for (let offset = 0; offset < 10000; offset += 100) {
+    await requireGate(job, "LOOKUP");
     const query = new URLSearchParams({ limit: "100", offset: String(offset), order_by_field: "id", order_by_direction: "desc" });
     const response = await fetch(`${IQ_ORIGIN}/deposits?${query}`, { headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
     if (!response.ok) throw Error(`IQ_REP_PREFLIGHT_HTTP_${response.status}`);
@@ -54,14 +65,16 @@ export async function preflightIqComplement(job: any, session: any): Promise<"RE
   throw Error("IQ_REP_DEPOSIT_NOT_FOUND");
 }
 export async function availableIqComplement(job: any, session: any) {
+  await requireGate(job, "LOOKUP");
   const response = await fetch(`${IQ_ORIGIN}/deposits/complement/${job.depositId}`, { headers: { Authorization: `Bearer ${session.accessToken}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(30000) });
   const body = await response.json().catch(() => null);
   return iqAvailability(response.status, body) === "PENDING" ? null : text(body.url);
 }
-async function boundedDownload(initial: string) {
+async function boundedDownload(initial: string, job?: any) {
   let url = new URL(initial);
   if (url.origin !== IQ_ORIGIN || !url.pathname.startsWith("/rails/active_storage/blobs/redirect/")) throw Error("REP_DOWNLOAD_ORIGIN_INVALID");
   for (let step = 0; step < 4; step++) {
+    if (job) await requireGate(job, "LOOKUP");
     if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || !(url.origin === IQ_ORIGIN || /^[a-z0-9.-]+\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(url.hostname))) throw Error("REP_DOWNLOAD_REDIRECT_INVALID");
     const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(30000) });
     if ([301, 302, 303, 307, 308].includes(response.status)) { url = new URL(response.headers.get("location") || "", url); continue; }
@@ -72,12 +85,13 @@ async function boundedDownload(initial: string) {
   }
   throw Error("REP_DOWNLOAD_TOO_MANY_REDIRECTS");
 }
-export async function importIqComplement(url: string, sources: any[]) {
-  const zip = await JSZip.loadAsync(await boundedDownload(url));
+export async function importIqComplement(url: string, sources: any[], job?: any) {
+  const zip = await JSZip.loadAsync(await boundedDownload(url, job));
   const files = Object.values(zip.files).filter(file => !file.dir);
   if (files.length > 30 || files.some(file => Number((file as any)._data?.uncompressedSize || 0) > 10_000_000) || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000) throw Error("REP_ZIP_LIMIT");
   const xmlFiles = files.filter(file => /\.xml$/i.test(file.name)), result = [];
   for (const source of sources) {
+    if (job) await requireGate(job, "LOOKUP");
     const matches: { xml: Buffer; pdf: Buffer }[] = [];
     for (const file of xmlFiles) {
       const xml = await file.async("nodebuffer");

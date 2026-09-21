@@ -8,6 +8,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { complementRequestId, reconcilePaymentComplement } from "./complementFollowup";
 import { assertSource, dayMexico, hash, millis, overdue, text } from "./complementPolicy";
 import * as providers from "./complementProviders";
+import { claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } from "./complementGates";
 
 const jobs = () => db.collection("paymentComplementJobs");
 const errorCode = (e: any) => /^[A-Z0-9_]+$/.test(e?.message || "") ? e.message : "REP_OPERATION_FAILED";
@@ -32,6 +33,7 @@ async function updateJob(id: string, patch: any, message?: string) {
     for (const source of requests.docs) {
       if (source.data().rootId !== job.rootId) throw Error("REP_FOLLOWUP_SCOPE");
       tx.update(source.ref, { automationStatus: patch.status || job.status, automationError: patch.error || null,
+        ...(Object.prototype.hasOwnProperty.call(patch, "gateReason") ? { automationGateReason: patch.gateReason } : {}),
         ...(patch.requestedAt ? { requestedAt: patch.requestedAt, externalRequestSent: true } : {}), updatedAt: FieldValue.serverTimestamp() });
     }
     if (message) logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
@@ -51,7 +53,7 @@ export async function enqueueComplement(applicationId: string) {
   let provider = "FACTURAMA", depositId = "", profileId = "", actorUid = text(app.createdBy);
   if (source.provider === "IQ") {
     provider = "IQ";
-    if (config.iqEnabled !== true || app.iqApplicationStatus !== "IQ_APPLIED" || app.iqActionExecuted !== true || !app.iqPlanId) return;
+    if (app.iqApplicationStatus !== "IQ_APPLIED" || app.iqActionExecuted !== true || !app.iqPlanId) return;
     const plan = (await db.doc(`pagoApplicationIqPlans/${app.iqPlanId}`).get()).data();
     if (!plan || plan.rootId !== app.rootId || plan.pagoId !== app.pagoId) throw Error("REP_IQ_PLAN_SCOPE");
     depositId = text(plan.plan?.pagoIqFolio || plan.pagoIqFolio); profileId = text(plan.iqExecutionProfileId);
@@ -78,9 +80,9 @@ export async function executeComplement(id: string, adapter = providers) {
   const ref = jobs().doc(id);
   const job = await db.runTransaction(async tx => {
     const snap = await tx.get(ref), row = snap.data();
-    if (!row || row.status !== "QUEUED") return null;
+    if (!row || !["QUEUED", "PAUSED"].includes(row.status)) return null;
     const config = (await tx.get(db.doc(`paymentComplementConfigs/${row.rootId}`))).data();
-    if (config?.[row.provider === "IQ" ? "iqEnabled" : "facturamaEnabled"] !== true) return null;
+    if (row.provider !== "IQ" && config?.facturamaEnabled !== true) return null;
     tx.update(ref, { status: "PREPARING", startedAt: FieldValue.serverTimestamp() }); return { ...row, id } as any;
   });
   if (!job) return;
@@ -91,13 +93,30 @@ export async function executeComplement(id: string, adapter = providers) {
     if (source.provider !== job.provider) throw Error("REP_PROVIDER_MISMATCH");
     if (job.provider === "IQ") {
       if (app.iqApplicationStatus !== "IQ_APPLIED" || app.iqActionExecuted !== true) throw Error("REP_IQ_NOT_APPLIED");
-      const session = await adapter.iqSession(job);
+      const lookupGate = await inspectIqComplementGate(job, "LOOKUP");
+      if (!lookupGate.allowed) { await updateJob(id, { status: "PAUSED", gateReason: lookupGate.reason }, `Hugo no puede consultar IQ: ${lookupGate.reason}.`); return; }
+      const lookupClaim = await claimIqComplementGate(id, "LOOKUP");
+      if (!lookupClaim.allowed) { await updateJob(id, { status: "PAUSED", gateReason: lookupClaim.reason }, `Consulta IQ pausada: ${lookupClaim.reason}.`); return; }
+      const stillAllowedToLook = await inspectIqComplementGate(job, "LOOKUP");
+      if (!stillAllowedToLook.allowed) { await updateJob(id, { status: "PAUSED", gateReason: stillAllowedToLook.reason }, `Consulta IQ pausada: ${stillAllowedToLook.reason}.`); return; }
+      const session = await adapter.iqSession(job, "LOOKUP");
+      const afterSession = await inspectIqComplementGate(job, "LOOKUP");
+      if (!afterSession.allowed) { await updateJob(id, { status: "PAUSED", gateReason: afterSession.reason }, `Consulta IQ pausada: ${afterSession.reason}.`); return; }
       const state = await adapter.preflightIqComplement(job, session);
-      if (state === "AVAILABLE") { await updateJob(id, { status: "REQUESTED", alreadyAvailable: true }, "IQ ya tiene un REP disponible; se verificará y descargará a las 19:00, sin duplicar la solicitud."); return; }
+      if (state === "AVAILABLE") { await updateJob(id, { status: "REQUESTED", alreadyAvailable: true, gateReason: null }, "IQ ya tiene un REP disponible; se verificará y descargará a las 19:00, sin duplicar la solicitud."); return; }
       await sourceFor(job.applicationId);
+      const requestGate = await inspectIqComplementGate(job, "REQUEST");
+      if (!requestGate.allowed) { await updateJob(id, { status: "PAUSED", gateReason: requestGate.reason }, `Hugo detectó un REP ausente, pero no puede solicitarlo: ${requestGate.reason}.`); return; }
+      const requestClaim = await claimIqComplementGate(id, "REQUEST");
+      if (!requestClaim.allowed) { await updateJob(id, { status: "PAUSED", gateReason: requestClaim.reason }, `Solicitud IQ pausada: ${requestClaim.reason}.`); return; }
+      const stillAllowedToRequest = await inspectIqComplementGate(job, "REQUEST");
+      if (!stillAllowedToRequest.allowed) { await updateJob(id, { status: "PAUSED", gateReason: stillAllowedToRequest.reason }, `Solicitud IQ pausada: ${stillAllowedToRequest.reason}.`); return; }
+      const requestSession = await adapter.iqSession(job, "REQUEST");
+      const afterRequestSession = await inspectIqComplementGate(job, "REQUEST");
+      if (!afterRequestSession.allowed) { await updateJob(id, { status: "PAUSED", gateReason: afterRequestSession.reason }, `Solicitud IQ pausada: ${afterRequestSession.reason}.`); return; }
       await updateJob(id, { status: "SENDING", attemptedAt: FieldValue.serverTimestamp() }); sending = true;
-      await adapter.requestIqComplement(job, session);
-      await updateJob(id, { status: "REQUESTED", requestedAt: FieldValue.serverTimestamp(), error: null }, "Complemento solicitado a IQ. Se revisará diariamente a las 19:00; no significa que ya esté emitido.");
+      await adapter.requestIqComplement(job, requestSession);
+      await updateJob(id, { status: "REQUESTED", requestedAt: FieldValue.serverTimestamp(), error: null, gateReason: null }, "Complemento solicitado a IQ. Se revisará diariamente a las 19:00; no significa que ya esté emitido.");
     } else {
       const payload = await adapter.prepareFacturamaComplement(job, source, app, solicitud, pago);
       await updateJob(id, { status: "SENDING", attemptedAt: FieldValue.serverTimestamp(), payloadHash: hash(JSON.stringify(payload)) }); sending = true;
@@ -149,6 +168,11 @@ async function markReceived(id: string, rows: any[]) {
 
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers) {
   const ref = jobs().doc(id), day = dayMexico(now);
+  const current = (await ref.get()).data();
+  if (current?.provider === "IQ" && ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(current.status)) {
+    const gate = await inspectIqComplementGate(current, "LOOKUP");
+    if (!gate.allowed) { await recordBlockedIqGate(id, "LOOKUP", gate.reason, now); return; }
+  }
   const job = await db.runTransaction(async tx => {
     const row = (await tx.get(ref)).data();
     if (!row || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status) || row.lastCheckDay === day) return null;
@@ -160,8 +184,19 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
     for (const doc of refs.docs) { const loaded = await sourceFor(doc.data().applicationId); if (loaded.source.rootId !== job.rootId) throw Error("REP_JOB_SCOPE"); sources.push(loaded.source); }
     if (!sources.length) throw Error("REP_APPLICATION_MISSING");
     if (job.provider === "IQ") {
-      const session = await adapter.iqSession(job), url = await adapter.availableIqComplement(job, session);
-      if (url) { await markReceived(id, await adapter.importIqComplement(url, sources)); return; }
+      const claim = await claimIqComplementGate(id, "LOOKUP", now);
+      if (!claim.allowed) { await recordBlockedIqGate(id, "LOOKUP", claim.reason, now); return; }
+      const stillAllowed = await inspectIqComplementGate(job, "LOOKUP");
+      if (!stillAllowed.allowed) { await recordBlockedIqGate(id, "LOOKUP", stillAllowed.reason, now); return; }
+      const session = await adapter.iqSession(job, "LOOKUP");
+      const afterSession = await inspectIqComplementGate(job, "LOOKUP");
+      if (!afterSession.allowed) { await recordBlockedIqGate(id, "LOOKUP", afterSession.reason, now); return; }
+      const url = await adapter.availableIqComplement(job, session);
+      if (url) {
+        const downloadGate = await inspectIqComplementGate(job, "LOOKUP");
+        if (!downloadGate.allowed) { await recordBlockedIqGate(id, "LOOKUP", downloadGate.reason, now); return; }
+        await markReceived(id, await adapter.importIqComplement(url, sources, job)); return;
+      }
     } else if (job.cfdiId) {
       await markReceived(id, [{ source: sources[0], documents: await adapter.importFacturamaComplement(job.cfdiId, sources[0]) }]); return;
     }
@@ -198,6 +233,7 @@ export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * *",
       const job = row.data();
       if (["PREPARING", "SENDING"].includes(job.status) && Date.now() - millis(job.startedAt) > 15 * 60000) await updateJob(row.id,
         { status: job.status === "SENDING" ? "UNKNOWN" : "BLOCKED", error: "REP_INTERRUPTED" }, "El procesamiento del complemento se interrumpió. Se requiere revisión; no se repetirá el envío automáticamente.");
+      if (job.provider === "IQ" && ["QUEUED", "PAUSED"].includes(job.status)) await executeComplement(row.id);
       await checkComplementDaily(row.id);
     }
     if (page.size < 50) return; cursor = page.docs.at(-1)?.id;
@@ -212,7 +248,7 @@ export const configurePaymentComplementAutomation = onCall({ region: "us-central
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
     tx.set(ref, { rootId, iqEnabled: request.data.iqEnabled, facturamaEnabled: request.data.facturamaEnabled,
-      activatedAt: existing.data()?.activatedAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid });
+      activatedAt: existing.data()?.activatedAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: request.auth!.uid, actorRole: "superadmin",
       referenceId: rootId, referenceType: "configuracion", description: `Automatización de complementos actualizada: IQ ${request.data.iqEnabled ? "activo" : "pausado"}; Facturama ${request.data.facturamaEnabled ? "activo" : "pausado"}. Sólo aplicaciones posteriores a la activación.` });
   });
