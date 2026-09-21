@@ -101,6 +101,7 @@ export default function DocsModal(props: {
   const [documentType, setDocumentType] = useState<SolicitudDocumentType>("FACTURA_PDF");
   const [otherLabel, setOtherLabel] = useState("");
   const [docs, setDocs] = useState<UploadRow[]>([]);
+  const [docsError, setDocsError] = useState("");
   const [relatedPagoReceipts, setRelatedPagoReceipts] = useState<RelatedPagoReceipt[]>([]);
   const [loadingRelatedPagoReceipts, setLoadingRelatedPagoReceipts] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -114,6 +115,7 @@ export default function DocsModal(props: {
   const [iqPreparationMessage, setIqPreparationMessage] = useState("");
 
   const solicitudId = solicitud?.id;
+  const solicitudRootId = String(solicitud?.rootId || "").trim();
 
   const title = useMemo(() => {
     if (!solicitud) return "Documentos";
@@ -205,11 +207,21 @@ export default function DocsModal(props: {
 useEffect(() => {
     if (!open || !solicitudId) {
       setDocs([]);
+      setDocsError("");
       return;
     }
 
+    if (!solicitudRootId) {
+      setDocs([]);
+      setDocsError("La solicitud no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    setDocsError("");
+
     const qDocs = query(
       collection(db, "uploads"),
+      where("rootId", "==", solicitudRootId),
       where("solicitudId", "==", solicitudId)
     );
 
@@ -226,10 +238,14 @@ useEffect(() => {
           }) as UploadRow[];
 
         setDocs(rows);
+        setDocsError("");
       },
-      () => setDocs([])
+      () => {
+        setDocs([]);
+        setDocsError("No se pudieron cargar los documentos de esta solicitud.");
+      }
     );
-  }, [open, solicitudId]);
+  }, [open, solicitudId, solicitudRootId]);
 
   useEffect(() => {
     if (!open) {
@@ -919,7 +935,11 @@ const downloadDoc = async (doc: UploadRow) => {
               <div className="text-[10px] text-slate-500">{docs.length} registros</div>
             </div>
 
-            {docs.length === 0 ? (
+            {docsError ? (
+              <div className="px-3 py-6 text-center text-[11px] text-rose-300">
+                {docsError}
+              </div>
+            ) : docs.length === 0 ? (
               <div className="px-3 py-6 text-center text-[11px] text-slate-500">
                 Sin documentos cargados.
               </div>
