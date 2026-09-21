@@ -12,7 +12,7 @@ export default function SystemsPage() {
   const assetsAllowed = canAccessSystem(profile, "assets");
   const cards = [
     { name: "PAY0", description: "Operación, pagos, solicitudes, facturación y control.", icon: WalletCards, action: () => router.push(getFirstAllowedRoute(profile)), enabled: true, style: "border-sky-500/30 bg-sky-500/5 text-sky-200" },
-    { name: "ASSETS", description: "Patrimonio, inversiones, préstamos y movimientos.", icon: Landmark, action: () => router.push("/assets"), enabled: assetsAllowed, style: "border-emerald-500/30 bg-emerald-500/5 text-emerald-200" },
+    { name: "ASSETS", description: "Patrimonio, inversiones, préstamos y movimientos.", icon: Landmark, action: () => router.push("/assets"), enabled: assetsAllowed, style: "border-orange-500/35 bg-[#202224] text-orange-300" },
   ];
   return <main className="min-h-screen bg-[#070d18] px-5 py-16 text-white">
     <section className="mx-auto max-w-5xl">

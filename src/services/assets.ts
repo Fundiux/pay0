@@ -10,6 +10,12 @@ export type AssetPosition = {
   interestModel?: string | null;
   rateBasisPoints?: number;
   paymentRule?: string | null;
+  acquiredDate?: string | null;
+  soldDate?: string | null;
+  originatedDate?: string | null;
+  paidDate?: string | null;
+  interestPaymentDueDate?: string | null;
+  paymentGraceDays?: number | null;
   metadata?: Record<string, unknown>;
   operationId?: string | null;
   includedInMetrics: boolean;
@@ -60,6 +66,7 @@ export const createAssetPosition = (input: {
   interestModel?: string;
   rateBasisPoints?: number;
   paymentRule?: string;
+  interestPaymentDueDate?: string;
   metadata?: Record<string, unknown>;
   idempotencyKey: string;
 }) =>
@@ -89,6 +96,16 @@ export const closeAssetPosition = (positionId: string) =>
     positionId,
     confirmation: "CONFIRM_ASSET_POSITION_CLOSE",
   });
+export const updateAssetPositionDetails = (input: {
+  positionId: string;
+  acquiredDate?: string | null;
+  soldDate?: string | null;
+  originatedDate?: string | null;
+  interestPaymentDueDate?: string | null;
+}) => call<typeof input, { ok: true; positionId: string; paymentGraceDays: 5 }>(
+  "updateAssetPositionDetails",
+  input,
+);
 export const accrueAssetLoanInterest = (input: {
   positionId: string;
   periodKey: string;

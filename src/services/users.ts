@@ -108,9 +108,13 @@ export async function saveUserClientAccess(
 }
 
 
-export async function saveUserModules(targetUid: string, modules: Record<string, Record<string, boolean>>) {
+export async function saveUserModules(
+  targetUid: string,
+  modules: Record<string, Record<string, boolean>>,
+  systemAccess?: { assets: boolean },
+) {
   const fn = httpsCallable(functions, CALLABLES.updateUserModules);
-  const res: any = await fn({ targetUid, modules });
+  const res: any = await fn({ targetUid, modules, ...(systemAccess ? { systemAccess } : {}) });
   return res?.data;
 }
 

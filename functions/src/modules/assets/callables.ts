@@ -25,6 +25,18 @@ const clean = (value: unknown, max = 180) =>
     .slice(0, max);
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+const isoDate = (value: unknown, field: string, allowEmpty = true) => {
+  const normalized = clean(value, 10);
+  if (!normalized && allowEmpty) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", `${field} debe usar formato AAAA-MM-DD.`);
+  }
+  const parsed = new Date(`${normalized}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
+    throw new HttpsError("invalid-argument", `${field} no es una fecha válida.`);
+  }
+  return normalized;
+};
 const kinds = new Set(["VEHICLE", "LOAN"]);
 const sources = new Set([
   "MANUAL",
@@ -266,6 +278,20 @@ export const createAssetPosition = onCall(
     const initialMinor = request.data?.initialMinor
       ? assertMinor(request.data.initialMinor, "initialMinor")
       : 0;
+    const effectiveDate = isoDate(
+      request.data?.effectiveDate || new Date().toISOString().slice(0, 10),
+      kind === "VEHICLE" ? "Fecha de adquisición" : "Fecha del préstamo",
+      false,
+    )!;
+    const interestPaymentDueDate = kind === "LOAN"
+      ? isoDate(request.data?.interestPaymentDueDate, "Próxima fecha de cobro")
+      : null;
+    if (interestPaymentDueDate && interestPaymentDueDate < effectiveDate) {
+      throw new HttpsError(
+        "invalid-argument",
+        "La fecha de cobro no puede ser anterior a la fecha del préstamo.",
+      );
+    }
     await db.runTransaction(async (tx) => {
       const existing = await tx.get(keyRef);
       if (existing.exists) return;
@@ -286,6 +312,10 @@ export const createAssetPosition = onCall(
           kind === "LOAN"
             ? clean(request.data?.paymentRule || "MANUAL", 30)
             : null,
+        acquiredDate: kind === "VEHICLE" ? effectiveDate : null,
+        originatedDate: kind === "LOAN" ? effectiveDate : null,
+        interestPaymentDueDate,
+        paymentGraceDays: kind === "LOAN" && interestPaymentDueDate ? 5 : null,
         metadata: {
           ...(request.data?.metadata && typeof request.data.metadata === "object"
             ? request.data.metadata
@@ -313,11 +343,7 @@ export const createAssetPosition = onCall(
           amountMinor: initialMinor,
           sequence: 0,
           source: "MANUAL",
-          effectiveDate: clean(
-            request.data?.effectiveDate ||
-              new Date().toISOString().slice(0, 10),
-            10,
-          ),
+          effectiveDate,
           description: "Apertura de posición",
           createdBy: uid,
           createdAt: FieldValue.serverTimestamp(),
@@ -339,6 +365,69 @@ export const createAssetPosition = onCall(
       ok: true,
       positionId: existing.data()?.targetId || positionRef.id,
     };
+  },
+);
+
+export const updateAssetPositionDetails = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const { uid, rootId } = await context(request);
+    const positionId = clean(request.data?.positionId);
+    if (!positionId) {
+      throw new HttpsError("invalid-argument", "La posición es obligatoria.");
+    }
+    const positionRef = db.doc(`assetPositions/${positionId}`);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(positionRef);
+      const position = snap.data();
+      if (!position || position.ownerUid !== uid) {
+        throw new HttpsError("not-found", "Posición no encontrada.");
+      }
+      const patch: Record<string, unknown> = {
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: uid,
+      };
+      if (position.kind === "VEHICLE") {
+        const acquiredDate = isoDate(request.data?.acquiredDate, "Fecha de adquisición");
+        const soldDate = isoDate(request.data?.soldDate, "Fecha de venta");
+        if (acquiredDate && soldDate && soldDate < acquiredDate) {
+          throw new HttpsError(
+            "invalid-argument",
+            "La fecha de venta no puede ser anterior a la adquisición.",
+          );
+        }
+        patch.acquiredDate = acquiredDate;
+        patch.soldDate = soldDate;
+      } else if (position.kind === "LOAN") {
+        const originatedDate = isoDate(request.data?.originatedDate, "Fecha del préstamo");
+        const interestPaymentDueDate = isoDate(
+          request.data?.interestPaymentDueDate,
+          "Próxima fecha de cobro",
+        );
+        if (originatedDate && interestPaymentDueDate && interestPaymentDueDate < originatedDate) {
+          throw new HttpsError(
+            "invalid-argument",
+            "La fecha de cobro no puede ser anterior a la fecha del préstamo.",
+          );
+        }
+        patch.originatedDate = originatedDate;
+        patch.interestPaymentDueDate = interestPaymentDueDate;
+        patch.paymentGraceDays = interestPaymentDueDate ? 5 : null;
+      } else {
+        throw new HttpsError("failed-precondition", "Tipo de posición no compatible.");
+      }
+      tx.set(positionRef, patch, { merge: true });
+      logActivityTx(tx, db, {
+        event: "ASSET_POSITION_DETAILS_UPDATED",
+        rootId,
+        actorUid: uid,
+        actorRole: "user",
+        referenceId: positionId,
+        referenceType: "assetPosition",
+        description: `Fechas operativas actualizadas para ${position.name || positionId}.`,
+      });
+    });
+    return { ok: true, positionId, paymentGraceDays: 5 };
   },
 );
 
@@ -506,6 +595,12 @@ export const closeAssetPosition = onCall(
       status = position.kind === "VEHICLE" ? "LIQUIDATED" : "PAID";
       tx.set(positionRef, {
         status,
+        ...(position.kind === "VEHICLE" && !position.soldDate
+          ? { soldDate: new Date().toISOString().slice(0, 10) }
+          : {}),
+        ...(position.kind === "LOAN" && !position.paidDate
+          ? { paidDate: new Date().toISOString().slice(0, 10) }
+          : {}),
         closedAt: FieldValue.serverTimestamp(),
         closedBy: uid,
         updatedAt: FieldValue.serverTimestamp(),

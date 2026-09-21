@@ -22,20 +22,21 @@ body {
 
 /* ASSETS is a sibling product with its own restrained financial palette. */
 .assets-theme {
-  --assets-bg: #17191b;
-  --assets-sidebar: #202326;
-  --assets-surface: #24282b;
-  --assets-surface-raised: #2b3034;
-  --assets-border: #3a4045;
+  --assets-bg: #141516;
+  --assets-sidebar: #1b1d1f;
+  --assets-surface: #232527;
+  --assets-surface-raised: #2a2d2f;
+  --assets-border: #3b3f42;
   --assets-text: #f4f4f2;
   --assets-secondary: #c4c6c7;
   --assets-muted: #858b90;
   --assets-accent: #f58220;
-  --assets-accent-2: #d95a45;
-  --assets-accent-3: #e6b13f;
+  --assets-accent-2: #c96a2b;
+  --assets-accent-3: #a96f36;
+  --assets-neutral-chart: #747b80;
   --assets-accent-soft: rgba(245, 130, 32, 0.15);
   --assets-positive: #65b88a;
-  --assets-warning: #e6b13f;
+  --assets-warning: #d58a39;
   --assets-negative: #d95a45;
   min-height: 100dvh;
   background: var(--assets-bg);

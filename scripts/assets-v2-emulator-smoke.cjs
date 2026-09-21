@@ -53,19 +53,29 @@ async function provision() {
 
 async function main() {
   const ownerUid = await provision();
-  const vehicle = await call("createAssetPosition", { kind: "VEHICLE", name: "Smoke Vehicle", counterpartyName: "U-PRO", initialMinor: 100_000, effectiveDate: "2026-09-20", idempotencyKey: "v2-vehicle" });
+  const vehicle = await call("createAssetPosition", { kind: "VEHICLE", name: "Smoke Vehicle", counterpartyName: "U-PRO", initialMinor: 100_000, effectiveDate: "2026-01-10", idempotencyKey: "v2-vehicle" });
+  await call("updateAssetPositionDetails", { positionId: vehicle.positionId, acquiredDate: "2026-01-10", soldDate: "2026-09-20" });
+  await assert.rejects(() => call("updateAssetPositionDetails", { positionId: vehicle.positionId, acquiredDate: "2026-09-21", soldDate: "2026-09-20" }), /anterior|invalid-argument/i);
   await call("recordAssetMovement", { positionId: vehicle.positionId, movementType: "VEHICLE_PRINCIPAL_RETURN", amountMinor: 100_000, source: "EXTERNAL_TRANSFER", effectiveDate: "2026-09-20", idempotencyKey: "v2-return" });
   const closedVehicle = await call("closeAssetPosition", { positionId: vehicle.positionId, confirmation: "CONFIRM_ASSET_POSITION_CLOSE" });
   assert.equal(closedVehicle.status, "LIQUIDATED");
   await assert.rejects(() => call("recordAssetMovement", { positionId: vehicle.positionId, movementType: "VEHICLE_PROFIT", amountMinor: 1_000, source: "MANUAL", effectiveDate: "2026-09-20", idempotencyKey: "v2-blocked" }), /cerrada|failed-precondition/i);
 
-  const loan = await call("createAssetPosition", { kind: "LOAN", name: "Smoke Loan", initialMinor: 200_000, interestModel: "NONE", rateBasisPoints: 0, effectiveDate: "2026-09-20", idempotencyKey: "v2-loan" });
+  const loan = await call("createAssetPosition", { kind: "LOAN", name: "Smoke Loan", initialMinor: 200_000, interestModel: "NONE", rateBasisPoints: 0, effectiveDate: "2026-01-15", interestPaymentDueDate: "2026-10-15", idempotencyKey: "v2-loan" });
+  await call("updateAssetPositionDetails", { positionId: loan.positionId, originatedDate: "2026-01-15", interestPaymentDueDate: "2026-10-20" });
   await call("recordAssetMovement", { positionId: loan.positionId, movementType: "PRINCIPAL_PAYMENT", amountMinor: 200_000, source: "CASH", effectiveDate: "2026-09-20", idempotencyKey: "v2-loan-payment" });
   const closedLoan = await call("closeAssetPosition", { positionId: loan.positionId, confirmation: "CONFIRM_ASSET_POSITION_CLOSE" });
   assert.equal(closedLoan.status, "PAID");
   await assert.rejects(() => call("accrueAssetLoanInterest", { positionId: loan.positionId, periodKey: "2026-09" }), /cerrada|failed-precondition/i);
 
   const before = await call("listAssetOverview");
+  const storedVehicle = before.positions.find((row) => row.id === vehicle.positionId);
+  const storedLoan = before.positions.find((row) => row.id === loan.positionId);
+  assert.equal(storedVehicle.acquiredDate, "2026-01-10");
+  assert.equal(storedVehicle.soldDate, "2026-09-20");
+  assert.equal(storedLoan.originatedDate, "2026-01-15");
+  assert.equal(storedLoan.interestPaymentDueDate, "2026-10-20");
+  assert.equal(storedLoan.paymentGraceDays, 5);
   const pdf = Buffer.from("%PDF-1.4\nASSETS smoke\n%%EOF");
   const digest = createHash("sha256").update(pdf).digest("hex");
   const prepared = await call("initAssetDocumentUpload", { originalFileName: "Evidencia smoke.pdf", contentType: "application/pdf", fileSize: pdf.length, sha256: digest, documentType: "OTHER", positionId: vehicle.positionId, description: "Prueba sin interpretación" });

@@ -52,6 +52,7 @@ export default function UserPermissionsPanel({
   const [selectedCompanies, setSelectedCompanies] = useState<Record<string, boolean>>({});
 
   const [selectedModules, setSelectedModules] = useState<ModulesShape>({});
+  const [selectedSystems, setSelectedSystems] = useState({ assets: false });
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -73,6 +74,7 @@ export default function UserPermissionsPanel({
         setTargetProfile(data);
 
         setSelectedModules(mergeModules(data?.role, data?.modules));
+        setSelectedSystems({ assets: data?.systemAccess?.assets === true });
       } catch (e: any) {
         if (!alive) return;
         setMsg(`No pude leer el usuario: ${e?.code || e?.message || e}`);
@@ -425,7 +427,8 @@ export default function UserPermissionsPanel({
         try {
           await saveUserModules(
             targetUid,
-            mergeModules(targetProfile?.role, selectedModules)
+            mergeModules(targetProfile?.role, selectedModules),
+            selectedSystems,
           );
         } catch (e: any) {
           setMsg(
@@ -482,6 +485,23 @@ export default function UserPermissionsPanel({
           Cerrar
         </button>
       </div>
+
+      {isSuper && (
+        <div className="mt-4">
+          <div className="text-slate-100 font-semibold">Sistemas</div>
+          <p className="mt-1 text-xs text-slate-400">El acceso se valida también en rutas y funciones; no depende solamente del selector visual.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
+              <input type="checkbox" checked disabled />
+              <span className="text-slate-100">PAY0 <span className="text-xs text-slate-400">(base)</span></span>
+            </label>
+            <label className="flex items-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 p-3">
+              <input type="checkbox" checked={selectedSystems.assets} onChange={() => setSelectedSystems((current) => ({ assets: !current.assets }))} />
+              <span className="text-slate-100">ASSETS</span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {isSuper && (
         <div className="mt-4">
@@ -563,6 +583,5 @@ export default function UserPermissionsPanel({
     </div>
   );
 }
-
 
 

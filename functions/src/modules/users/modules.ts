@@ -48,6 +48,7 @@ export const updateUserModules = onCall(
 
     const targetUid = String(request.data?.targetUid || request.data?.uid || "").trim();
     const rawModules = request.data?.modules;
+    const rawSystemAccess = request.data?.systemAccess;
 
     if (!targetUid) {
       throw new HttpsError("invalid-argument", "targetUid requerido");
@@ -55,6 +56,14 @@ export const updateUserModules = onCall(
 
     if (!rawModules || typeof rawModules !== "object" || Array.isArray(rawModules)) {
       throw new HttpsError("invalid-argument", "modules invalido");
+    }
+
+    if (rawSystemAccess !== undefined && callerRole !== "superadmin") {
+      throw new HttpsError("permission-denied", "Solo superadmin puede asignar acceso a sistemas.");
+    }
+
+    if (rawSystemAccess !== undefined && (!rawSystemAccess || typeof rawSystemAccess !== "object" || Array.isArray(rawSystemAccess))) {
+      throw new HttpsError("invalid-argument", "systemAccess invalido");
     }
 
     const targetSnap = await db.doc(`users/${targetUid}`).get();
@@ -112,15 +121,21 @@ export const updateUserModules = onCall(
       }
     }
 
+    const update: Record<string, unknown> = {
+      modules: sanitizedModules,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: callerUid,
+    };
+
+    if (rawSystemAccess !== undefined) {
+      update.systemAccess = { assets: rawSystemAccess.assets === true };
+    }
+
     await db.doc(`users/${targetUid}`).set(
-      {
-        modules: sanitizedModules,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: callerUid,
-      },
+      update,
       { merge: true }
     );
 
-    return { ok: true, targetUid };
+    return { ok: true, targetUid, ...(rawSystemAccess !== undefined ? { systemAccess: update.systemAccess } : {}) };
   }
 );
