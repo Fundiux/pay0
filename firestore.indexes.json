@@ -1,6 +1,14 @@
 {
     "indexes": [
         {
+            "collectionGroup": "agent007Traces", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "timestamp", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "DESCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "agent007Messages", "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },

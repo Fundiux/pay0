@@ -1,4 +1,5 @@
 import { FieldValue, Firestore } from "firebase-admin/firestore";
+import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 
 const clean = (value: unknown, max = 160) =>
   String(value ?? "")
@@ -101,12 +102,7 @@ export async function reconcileAgent007Recommendations(
   rootId: string,
   limit = 100,
 ) {
-  const snapshot = await db
-    .collection("agent007Recommendations")
-    .where("rootId", "==", rootId)
-    .where("status", "==", "PENDING_REVIEW")
-    .limit(limit)
-    .get();
+  const snapshot = await new FirestoreHugoDataStore(db).pendingRecommendations(rootId, limit).get();
   let changed = 0;
   for (const doc of snapshot.docs) {
     const row = doc.data();

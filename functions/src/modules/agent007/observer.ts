@@ -1,5 +1,6 @@
 import type { Firestore, Transaction, WriteBatch } from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
+import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 
 const OBSERVED_EVENTS = new Set([
   "BENEFICIARIO_CREADO",
@@ -216,12 +217,12 @@ export async function observeActivityForAgent007(
 ) {
   const observation = buildObservationPayload(activityId, payload);
   if (!observation) return;
-
-  await db.collection("agent007Observations").doc(`activity_${activityId}`).set(observation, { merge: true });
+  const store = new FirestoreHugoDataStore(db);
+  await store.observationRef(`activity_${activityId}`).set(observation, { merge: true });
   const recommendation = buildRecommendationPayload(activityId, payload);
-  if (recommendation) await db.collection("agent007Recommendations").doc(`activity_${activityId}`).set(recommendation, { merge: true });
+  if (recommendation) await store.recommendationRef(`activity_${activityId}`).set(recommendation, { merge: true });
   const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
-  if (proactiveMessage) await db.collection("agent007Messages").doc(`notice_${activityId}`).set(proactiveMessage, { merge: true });
+  if (proactiveMessage) await store.messageRef(`notice_${activityId}`).set(proactiveMessage, { merge: true });
 }
 
 export function observeActivityForAgent007Tx(
@@ -232,12 +233,12 @@ export function observeActivityForAgent007Tx(
 ) {
   const observation = buildObservationPayload(activityId, payload);
   if (!observation) return;
-
-  tx.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
+  const store = new FirestoreHugoDataStore(db);
+  tx.set(store.observationRef(`activity_${activityId}`), observation, { merge: true });
   const recommendation = buildRecommendationPayload(activityId, payload);
-  if (recommendation) tx.set(db.collection("agent007Recommendations").doc(`activity_${activityId}`), recommendation, { merge: true });
+  if (recommendation) tx.set(store.recommendationRef(`activity_${activityId}`), recommendation, { merge: true });
   const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
-  if (proactiveMessage) tx.set(db.collection("agent007Messages").doc(`notice_${activityId}`), proactiveMessage, { merge: true });
+  if (proactiveMessage) tx.set(store.messageRef(`notice_${activityId}`), proactiveMessage, { merge: true });
 }
 
 export function observeActivityForAgent007Batch(
@@ -248,10 +249,10 @@ export function observeActivityForAgent007Batch(
 ) {
   const observation = buildObservationPayload(activityId, payload);
   if (!observation) return;
-
-  batch.set(db.collection("agent007Observations").doc(`activity_${activityId}`), observation, { merge: true });
+  const store = new FirestoreHugoDataStore(db);
+  batch.set(store.observationRef(`activity_${activityId}`), observation, { merge: true });
   const recommendation = buildRecommendationPayload(activityId, payload);
-  if (recommendation) batch.set(db.collection("agent007Recommendations").doc(`activity_${activityId}`), recommendation, { merge: true });
+  if (recommendation) batch.set(store.recommendationRef(`activity_${activityId}`), recommendation, { merge: true });
   const proactiveMessage = buildProactiveMessage(activityId, payload, recommendation);
-  if (proactiveMessage) batch.set(db.collection("agent007Messages").doc(`notice_${activityId}`), proactiveMessage, { merge: true });
+  if (proactiveMessage) batch.set(store.messageRef(`notice_${activityId}`), proactiveMessage, { merge: true });
 }

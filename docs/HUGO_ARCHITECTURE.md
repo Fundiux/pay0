@@ -1,6 +1,6 @@
 # HUGO architecture
 
-Updated: 2026-09-22. **PROPOSED** unless a section says **EXISTS TODAY** or **IMPLEMENTED IN CURRENT PHASE**.
+Updated: 2026-09-22. Historical proposals are labeled **PROPOSED**; implemented Phase 1–3 sections below take precedence where the architecture evolved.
 
 ## Vision and boundaries
 
@@ -67,3 +67,13 @@ The Firebase callable now acts as a channel adapter and Hugo data repository for
 `reconciliationMaintenance.ts` reacts to relevant solicitud/pago state transitions. It invokes the existing reconciliation service; the UI no longer initiates maintenance on every refresh. The explicit callable remains available for manual backfill of older pending recommendations. No IQ command, financial rule or provider flow moved.
 
 **PROPOSED:** A second system would register tools and supply its own connector while the Core's model and channel interfaces remain. The context builder will need task-specific retrieval policies when new systems arrive. Later phases should extract Hugo data persistence behind an interface, add trace retrieval with scoped authorization, and move Hugo to an independent deployment only after identity and event delivery are designed.
+
+## PHASE 3 IMPLEMENTED — 2026-09-22
+
+`HugoConversationCore` depends on the small `HugoDataStore` contract for bounded conversation state. `FirestoreHugoDataStore` owns the six existing `agent007*` collection names and handles conversation/message batches, observation and recommendation access, learned-rule references, trace writes, queries and retention. Event observers and reconciliation use this adapter too. Hugo Core contains no Firestore SDK or collection name. The adapter deliberately keeps existing paths and document shapes. Transactional recommendation resolution and event observer paths use adapter-provided references so they retain their existing transaction boundaries. The Control Center remains an external projection consumer of two Hugo collections.
+
+Hugo data comprises conversations, messages, observations, recommendations, learned rules and traces. PAY0 business data remains behind `Pay0Connector` READ tools in conversation construction; the existing IQ complement command and reconciliation remain PAY0-coupled integration paths. This split is logical inside one Firebase deployment. Physical separation still needs independent identity and root authorization, command gateway, event delivery and replay, Control Center projection feed, retention and deployment ownership.
+
+The authenticated `listAgent007Traces` and `getAgent007Trace` callables require superadmin and derive `rootId` from the server user record. List queries use a 30-day default, reject windows above 31 days, cap pages at 50 and use a root-scoped cursor. Secondary filters are applied to each bounded scan page; a sparse filtered page can be empty while a next cursor exists. The `/hugo` inspector displays resolved entity references, tool/source/completeness, evidence and memory references, policy metadata and timings. Trace metadata contains no prompts, message text, response text, secret, or chain-of-thought. Provenance is operational evidence, not a model explanation. The exact question is not retained in the trace, so the “why” view is useful but incomplete.
+
+`hugoCore/memoryContract.ts` defines a Phase 4 shape for FACT, RULE, EXPERIENCE, USER_STATEMENT, PREFERENCE, HYPOTHESIS, DECISION and OUTCOME with provenance, confidence, validity, verification, supersession and status. No existing records were migrated. Phase 4 should first fix observed retrieval and calibration failures, then add typed memory only where historical evidence is needed.

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+  "syntheticOnly": true,
+  "results": [
+    {
+      "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+      "caseId": "solicitud-found",
+      "timestamp": "2026-09-22T08:20:30.844Z",
+      "model": "gemini-2.5-flash",
+      "modelVersion": "publisher-model",
+      "promptVersion": "legacy-v1",
+      "fixtureVersion": "phase3-synthetic-v1",
+      "toolContractVersion": "phase2-v1",
+      "temperature": 0.35,
+      "maxOutputTokens": 1200,
+      "responseClassification": "PASS_CRITERIA",
+      "criterionChecks": {
+        "states_pending": true,
+        "mentions_folio": true,
+        "no_action_claim": true
+      },
+      "latencyMs": 1640,
+      "tokenUsage": {
+        "input": 304,
+        "output": 27
+      },
+      "cost": null,
+      "error": null,
+      "response": "Hola, Evaluador. El folio S12345 está **PENDIENTE** por un monto de 120.",
+      "humanReview": null
+    },
+    {
+      "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+      "caseId": "solicitud-missing",
+      "timestamp": "2026-09-22T08:20:32.851Z",
+      "model": "gemini-2.5-flash",
+      "modelVersion": "publisher-model",
+      "promptVersion": "legacy-v1",
+      "fixtureVersion": "phase3-synthetic-v1",
+      "toolContractVersion": "phase2-v1",
+      "temperature": 0.35,
+      "maxOutputTokens": 1200,
+      "responseClassification": "PASS_CRITERIA",
+      "criterionChecks": {
+        "acknowledges_unknown": true,
+        "no_invented_status": true
+      },
+      "latencyMs": 2007,
+      "tokenUsage": {
+        "input": 283,
+        "output": 39
+      },
+      "cost": null,
+      "error": null,
+      "response": "Hola, Evaluador. El folio S99999 fue consultado, pero no tengo más detalles sobre su estado o lo que pasó con él en el contexto que me proporcionaste.",
+      "humanReview": null
+    },
+    {
+      "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+      "caseId": "sample-boundary",
+      "timestamp": "2026-09-22T08:20:33.905Z",
+      "model": "gemini-2.5-flash",
+      "modelVersion": "publisher-model",
+      "promptVersion": "legacy-v1",
+      "fixtureVersion": "phase3-synthetic-v1",
+      "toolContractVersion": "phase2-v1",
+      "temperature": 0.35,
+      "maxOutputTokens": 1200,
+      "responseClassification": "FAIL",
+      "criterionChecks": {
+        "no_global_total": false,
+        "states_partial_sample": false
+      },
+      "latencyMs": 1054,
+      "tokenUsage": {
+        "input": 290,
+        "output": 7
+      },
+      "cost": null,
+      "error": null,
+      "response": "Hay 1 pago en total.",
+      "humanReview": null
+    },
+    {
+      "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+      "caseId": "iq-unknown",
+      "timestamp": "2026-09-22T08:20:35.713Z",
+      "model": "gemini-2.5-flash",
+      "modelVersion": "publisher-model",
+      "promptVersion": "legacy-v1",
+      "fixtureVersion": "phase3-synthetic-v1",
+      "toolContractVersion": "phase2-v1",
+      "temperature": 0.35,
+      "maxOutputTokens": 1200,
+      "responseClassification": "PASS_CRITERIA",
+      "criterionChecks": {
+        "no_unsupported_confirmation": true
+      },
+      "latencyMs": 1808,
+      "tokenUsage": {
+        "input": 281,
+        "output": 26
+      },
+      "cost": null,
+      "error": null,
+      "response": "Hola. No puedo confirmarlo. Según mi información, la capacidad de IQ para consultar complementos es \"DESCONOCIDA\".",
+      "humanReview": null
+    },
+    {
+      "evalRunId": "hugo-phase3-2026-09-22T08-20-29-201Z",
+      "caseId": "conversation-followup",
+      "timestamp": "2026-09-22T08:20:36.856Z",
+      "model": "gemini-2.5-flash",
+      "modelVersion": "publisher-model",
+      "promptVersion": "legacy-v1",
+      "fixtureVersion": "phase3-synthetic-v1",
+      "toolContractVersion": "phase2-v1",
+      "temperature": 0.35,
+      "maxOutputTokens": 1200,
+      "responseClassification": "NEEDS_HUMAN_REVIEW",
+      "criterionChecks": {
+        "resolves_S12345": false,
+        "states_120": true
+      },
+      "latencyMs": 1143,
+      "tokenUsage": {
+        "input": 333,
+        "output": 7
+      },
+      "cost": null,
+      "error": null,
+      "response": "Era de 120.",
+      "humanReview": null
+    }
+  ]
+}

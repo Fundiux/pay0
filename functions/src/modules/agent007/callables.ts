@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
@@ -10,26 +10,16 @@ import { HugoToolRouter } from "./hugoCore/toolRouter";
 import { HugoConversationCore } from "./hugoCore/conversationCore";
 import { VertexGeminiAdapter } from "./vertexGeminiAdapter";
 import { conversationTrace } from "./traceStore";
+import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
+import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 const conversationIdFor = (rootId: string, uid: string) => `${rootId}_${uid}`;
-
-function timestampMillis(value: any): number {
-  if (value?.toMillis) return value.toMillis();
-  if (value instanceof Date) return value.getTime();
-  return 0;
-}
+const hugoData = new FirestoreHugoDataStore(db);
 
 function displayName(user: any): string {
   return clean(user?.displayName || user?.name || user?.nombre || user?.firstName || user?.email?.split?.("@")[0] || "", 80) || "usuario";
-}
-
-async function recentRows(collection: string, rootId: string, limit = 20) {
-  const snap = await db.collection(collection).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(limit).get();
-  return snap.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() } as any))
-    .sort((a, b) => timestampMillis(b.updatedAt || b.createdAt) - timestampMillis(a.updatedAt || a.createdAt));
 }
 
 async function actor(request: any) {
@@ -51,14 +41,13 @@ export const recordAgent007Observation = onCall(
     if (!caseType || !caseId || !intent || !humanDecision || !outcome) {
       throw new HttpsError("invalid-argument", "Caso, intención, decisión humana y resultado son obligatorios.");
     }
-    const ref = db.collection("agent007Observations").doc();
-    await ref.create({
+    const observationId = await hugoData.recordObservation(rootId, {
       rootId, agentId: "AGENTE_007", phase: "OBSERVATION", caseType, caseId, intent, humanDecision, outcome,
       actorUid: uid, actorRole: String(getUserRole(user)), authorization: { role: String(getUserRole(user)), scope: "rootId", rootId },
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null,
     });
-    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: ref.id, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `Hugo registró observación supervisada: ${intent}` });
-    return { ok: true, observationId: ref.id };
+    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: observationId, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `Hugo registró observación supervisada: ${intent}` });
+    return { ok: true, observationId };
   }
 );
 
@@ -66,8 +55,7 @@ export const listAgent007Observations = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { rootId } = await actor(request);
-    const snapshot = await db.collection("agent007Observations").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(50).get();
-    return { ok: true, observations: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
+    return { ok: true, observations: await hugoData.listObservations(rootId) };
   }
 );
 
@@ -75,8 +63,7 @@ export const listAgent007Recommendations = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { rootId } = await actor(request);
-    const snapshot = await db.collection("agent007Recommendations").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(50).get();
-    return { ok: true, recommendations: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })) };
+    return { ok: true, recommendations: await hugoData.listRecommendations(rootId) };
   },
 );
 
@@ -97,11 +84,11 @@ export const resolveAgent007Recommendation = onCall(
     const decision = clean(request.data?.decision, 16).toUpperCase();
     const correction = clean(request.data?.correction, 500);
     if (!recommendationId || !["APPROVED", "REJECTED"].includes(decision)) throw new HttpsError("invalid-argument", "Recomendacion o decision invalida.");
-    const ref = db.collection("agent007Recommendations").doc(recommendationId);
+    const ref = hugoData.recommendationRef(recommendationId);
     const snap = await ref.get(); const row: any = snap.data() || {};
     if (!snap.exists || clean(row.rootId, 128) !== rootId) throw new HttpsError("not-found", "Recomendacion no encontrada.");
     if (row.status !== "PENDING_REVIEW") return { ok: true, alreadyResolved: true };
-    const ruleRef = db.collection("agent007LearnedRules").doc(`${rootId}_${clean(row.kind, 50)}_${clean(row.proposal, 120)}`.replace(/[^A-Za-z0-9_-]/g, "_"));
+    const ruleRef = hugoData.learnedRuleRef(`${rootId}_${clean(row.kind, 50)}_${clean(row.proposal, 120)}`.replace(/[^A-Za-z0-9_-]/g, "_"));
     const resolved = await db.runTransaction(async (tx) => {
       const latest = await tx.get(ref);
       if (!latest.exists || latest.data()?.rootId !== rootId) throw new HttpsError("not-found", "Recomendación no encontrada.");
@@ -122,16 +109,7 @@ export const listAgent007Messages = onCall(
   async (request) => {
     const { uid, rootId } = await actor(request);
     const conversationId = conversationIdFor(rootId, uid);
-    const snapshot = await db.collection("agent007Messages")
-      .where("conversationId", "==", conversationId)
-      .where("rootId", "==", rootId)
-      .orderBy("createdAt", "desc")
-      .limit(80)
-      .get();
-    const messages = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() } as any))
-      .sort((a, b) => timestampMillis(a.createdAt) - timestampMillis(b.createdAt))
-      .slice(-80);
+    const messages = await hugoData.listMessages(rootId, uid);
     return { ok: true, conversationId, messages };
   },
 );
@@ -141,15 +119,7 @@ export const markAgent007MessagesRead = onCall(
   async (request) => {
     const { uid, rootId } = await actor(request);
     const conversationId = conversationIdFor(rootId, uid);
-    const snapshot = await db.collection("agent007Messages").where("conversationId", "==", conversationId).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(80).get();
-    const batch = db.batch();
-    const unread = snapshot.docs.filter((doc) => {
-      const row = doc.data();
-      return row.recipientUid === uid && row.read === false;
-    });
-    unread.forEach((doc) => batch.set(doc.ref, { read: true, readAt: FieldValue.serverTimestamp() }, { merge: true }));
-    if (unread.length) await batch.commit();
-    return { ok: true, marked: unread.length };
+    return { ok: true, marked: await hugoData.markMessagesRead(rootId, uid) };
   },
 );
 
@@ -161,16 +131,6 @@ export const sendAgent007Message = onCall(
     if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
     const startedAt = Date.now();
     const conversationId = conversationIdFor(rootId, uid);
-    const conversationRef = db.collection("agent007Conversations").doc(conversationId);
-    const messagesRef = db.collection("agent007Messages");
-    const [prior, conversationSnap, recommendations, rules] = await Promise.all([
-      messagesRef.where("conversationId", "==", conversationId).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(12).get(),
-      conversationRef.get(), recentRows("agent007Recommendations", rootId, 20), recentRows("agent007LearnedRules", rootId, 20),
-    ]);
-    const history = prior.docs
-      .map((doc) => doc.data() as any)
-      .sort((a, b) => timestampMillis(a.createdAt) - timestampMillis(b.createdAt))
-      .slice(-12);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
       ? await executeRequestIqComplement({ db, rootId, uid, message: text })
@@ -183,13 +143,11 @@ export const sendAgent007Message = onCall(
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
     });
-    const core = new HugoConversationCore(router, new VertexGeminiAdapter());
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, history, memory: { recommendations, rules },
-      recentEntities: conversationSnap.data()?.rootId === rootId && conversationSnap.data()?.ownerUid === uid ? conversationSnap.data()?.recentEntities || [] : [],
-      commandReply: capability?.reply };
-    const traceRef = db.collection("agent007Traces").doc();
+    const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData);
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply };
+    const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
-      await traceRef.create({ schemaVersion: 1, traceId: traceRef.id, conversationId, rootId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
+      await hugoData.saveErrorTrace(rootId, traceId, { schemaVersion: 1, conversationId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
         timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "legacy-v1", resultStatus: "ERROR",
         errorCode: error instanceof Error ? clean(error.name, 80) : "ERROR", latencyMs: Date.now() - startedAt,
         toolsRequested: error instanceof Error ? (error as Error & { hugoToolsRequested?: string[] }).hugoToolsRequested || [] : [],
@@ -198,30 +156,48 @@ export const sendAgent007Message = onCall(
       throw error;
     });
     const reply = result.text;
-    const userMessage = messagesRef.doc();
-    const assistantMessage = messagesRef.doc();
-    const now = Timestamp.now();
-    const batch = db.batch();
-    batch.set(conversationRef, {
-      rootId, ownerUid: uid, participantUids: [uid], status: "ACTIVE",
-      lastMessage: reply, lastMessageAt: now, updatedAt: now,
-      recentEntities: result.recentEntities.length ? result.recentEntities : coreInput.recentEntities,
-      createdAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    batch.create(userMessage, {
-      rootId, conversationId, role: "user", text, senderUid: uid,
-      source: "USER", read: true, createdAt: now,
-    });
-    batch.create(assistantMessage, {
-      rootId, conversationId, role: "assistant", text: reply, recipientUid: uid,
-      source: result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE", read: true,
-      capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
-      capabilityExecuted: capability?.executed === true,
+    const source = result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE";
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+      capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
-      createdAt: Timestamp.fromMillis(now.toMillis() + 1),
-    });
-    batch.create(traceRef, conversationTrace(traceRef.id, coreInput, result, startedAt, capability));
-    await batch.commit();
-    return { ok: true, conversationId, message: { id: assistantMessage.id, role: "assistant", text: reply, source: result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE", createdAt: now } };
+      traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
+    return { ok: true, conversationId, message: { id: saved.id, role: "assistant", text: reply, source, createdAt: saved.createdAt } };
+  },
+);
+
+export const listAgent007Traces = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    const data = request.data || {};
+    const date = (value: unknown, endOfDay = false) => {
+      if (value == null || value === "") return undefined;
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(value)) throw new HttpsError("invalid-argument", "Fecha inválida.");
+      const parsed = new Date(value);
+      if (!Number.isFinite(parsed.getTime())) throw new HttpsError("invalid-argument", "Fecha inválida.");
+      if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) parsed.setUTCHours(23, 59, 59, 999);
+      return parsed;
+    };
+    const filter: HugoTraceFilter = {
+      conversationId: clean(data.conversationId, 160) || undefined,
+      resultStatus: clean(data.resultStatus, 40) || undefined,
+      tool: clean(data.tool, 80) || undefined,
+      sourceSystem: clean(data.sourceSystem, 80) || undefined,
+      completeness: clean(data.completeness, 40) || undefined,
+      errorOnly: data.errorOnly === true,
+      from: date(data.from), to: date(data.to, true), cursor: clean(data.cursor, 160) || undefined,
+      limit: Number(data.limit) || 20,
+    };
+    return { ok: true, ...(await hugoData.listTraces(rootId, filter)) };
+  },
+);
+
+export const getAgent007Trace = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    const traceId = clean(request.data?.traceId, 160);
+    if (!traceId) throw new HttpsError("invalid-argument", "Traza requerida.");
+    return { ok: true, trace: await hugoData.getTrace(rootId, traceId) };
   },
 );

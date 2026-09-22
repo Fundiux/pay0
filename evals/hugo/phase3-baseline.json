@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-22",
+  "deterministic": {
+    "source": "phase2-emulator-observations.json scored against the unchanged 15 cases",
+    "pass": 7,
+    "fail": 0,
+    "unevaluated": 8
+  },
+  "phase3Emulator": {
+    "traceQuery": "PASS",
+    "rootIsolation": "PASS",
+    "unauthenticatedAndNonSuperadminDenied": "PASS",
+    "paginationAndFilters": "PASS",
+    "dateLimit": "PASS",
+    "explicitConversationFolio": "PASS",
+    "uniqueTypedConversationReference": "PASS",
+    "implicitAmountFollowup": "FAIL",
+    "implicitWhyFollowup": "FAIL",
+    "ambiguousOtherNotGuessed": "PASS"
+  },
+  "model": {
+    "source": "phase3-model-results.json",
+    "evaluated": 5,
+    "passCriteria": 3,
+    "needsHumanReview": 1,
+    "fail": 1,
+    "criticalFailures": 1,
+    "humanReviewsCompleted": 0,
+    "humanReviewsPending": 5
+  }
+}
