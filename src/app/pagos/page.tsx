@@ -1915,16 +1915,18 @@ export default function PagosPage() {
   }, [foliosAplicables, applyAmounts]);
 
   const pagosFiltradosOrdenados = useMemo(() => {
-    const term = filter.toLowerCase();
+    const term = filter.trim().toLowerCase();
 
     const data = pagos
       .filter((p) => isTsWithinRange(p?.createdAt, range.from, range.to))
       .filter((p) => {
-        const id = String(p?.id || "").toLowerCase();
-        const cliente = String(p?.clienteNombre || "").toLowerCase();
-        const clienteId = String(p?.clienteId || "").toLowerCase();
-        const status = String(p?.status || "").toLowerCase();
-        return id.includes(term) || cliente.includes(term) || clienteId.includes(term) || status.includes(term);
+        const displayedFields = [
+          getPagoFolio(p), getPagoIqFolio(p), getPagoIqStatus(p),
+          p?.clienteNombre, p?.empresaNombre || p?.companyId,
+          p?.montoTotal, toCurrency(p?.montoTotal), p?.status,
+          p?.id, p?.clienteId,
+        ];
+        return displayedFields.some((value) => String(value ?? "").toLowerCase().includes(term));
       });
 
     return data.sort((a, b) => {

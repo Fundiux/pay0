@@ -687,6 +687,7 @@ export default function SolicitudesPage() {
   }, []);
 
   const [pagos, setPagos] = useState<any[]>([]);
+  const [applicationFoliosBySolicitud, setApplicationFoliosBySolicitud] = useState<Record<string, string[]>>({});
   const [filter, setFilter] = useState("");
 
   useEffect(() => {
@@ -807,6 +808,7 @@ export default function SolicitudesPage() {
   const canCommentSolicitud = !!modules?.solicitudes?.comment;
   const canCancelSolicitud = !!modules?.solicitudes?.cancel;
   const canUploadDocsSolicitud = !!modules?.solicitudes?.uploadDocs;
+  const canReadPaymentApplications = !!modules?.pagos?.create;
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
   const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
@@ -942,8 +944,30 @@ export default function SolicitudesPage() {
     }
   }, [commentFor]);
 
+  useEffect(() => {
+    if (!uid || !rootId || !canReadPaymentApplications) {
+      setApplicationFoliosBySolicitud({});
+      return;
+    }
+    const applicationsQuery = isSuperAdmin(role)
+      ? query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId))
+      : isAdmin(role)
+        ? query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId), where("adminId", "==", uid))
+        : query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId), where("createdBy", "==", uid));
+    return onSnapshot(applicationsQuery, (snapshot) => {
+      const folios: Record<string, string[]> = {};
+      snapshot.docs.forEach((application) => {
+        const row = application.data();
+        const solicitudId = String(row.solicitudId || "").trim();
+        const folio = String(row.folio || "").trim().toLowerCase();
+        if (solicitudId && folio) (folios[solicitudId] ||= []).push(folio);
+      });
+      setApplicationFoliosBySolicitud(folios);
+    }, () => setApplicationFoliosBySolicitud({}));
+  }, [uid, rootId, role, canReadPaymentApplications]);
+
   const filteredSortedData = useMemo(() => {
-    const term = filter.toLowerCase();
+    const term = filter.trim().toLowerCase();
 
     let data = solicitudes
       .filter(x => isTsWithinRange(x?.createdAt, range.from, range.to))
@@ -962,7 +986,13 @@ export default function SolicitudesPage() {
 
         if (viewMode === "active" && (isTerminal || isHidden)) return false;
 
-        return ((x.folio || "").toLowerCase().includes(term) || (x.clienteNombre || "").toLowerCase().includes(term));
+        const displayedFields = [
+          x.folio, x.iqFolio || x.iqId, x.clienteNombre,
+          x.empresaNombre, x.tipoFactura, x.facturaDisplay || x.numFactura || x.facturaFolio,
+          x.monto, toCurrency(x.monto),
+        ];
+        return displayedFields.some((value) => String(value ?? "").toLowerCase().includes(term)) ||
+          (applicationFoliosBySolicitud[String(x.id || "")] || []).some((folio) => folio.includes(term));
       });
 
     return data.sort((a, b) => {
@@ -984,7 +1014,7 @@ export default function SolicitudesPage() {
       if (vA > vB) return sortConfig.dir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [solicitudes, filter, sortConfig, range, viewMode]);
+  }, [solicitudes, filter, sortConfig, range, viewMode, applicationFoliosBySolicitud]);
 
   const sustitucionIndex = useMemo(
     () => buildSustitucionIndex(filteredSortedData),
@@ -1454,7 +1484,7 @@ export default function SolicitudesPage() {
           <input
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            placeholder="Buscar por folio o cliente..."
+            placeholder="Buscar folio, aplicación, cliente, empresa..."
             className="h-9 w-full rounded-xl border border-white/10 bg-[#161d2b] py-2 pl-9 text-[11px] outline-none"
           />
         </div>
