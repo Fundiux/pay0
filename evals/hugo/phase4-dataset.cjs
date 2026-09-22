@@ -1,0 +1,35 @@
+// Synthetic evidence only. The first five inputs preserve Phase 3 business facts and history.
+const limited = 'Muestra sintética limitada; no es un inventario completo.';
+const base = overrides => ({ alcanceContexto: limited, capacidadesIq: {}, complementosPendientes: [], folioConsultado: null, solicitudes: [], pagos: [], dudasPendientes: [], reglasConfirmadas: [], ...overrides });
+const boundary = (completeness, scope = 'RECENT_SAMPLE') => ({ completeness, scope, meaning: completeness === 'PARTIAL' ? 'Muestra limitada; no establece totales ni ausencia global.' : completeness === 'UNKNOWN' ? 'Evidencia insuficiente.' : `Completo solo para ${scope}.`, totalAllowed: completeness === 'COMPLETE' && scope === 'ROOT_AGGREGATE' });
+const v2 = (legacy, overrides = {}) => ({ ...legacy, schemaVersion: 'context-v2', evidenceBoundaries: { solicitudes: [boundary('PARTIAL')], pagos: [boundary('PARTIAL')], ...overrides },
+  totalGlobalAllowed: false, memoriasHistoricas: [], observacionesHistoricasNoVerificadas: [], memoryPrecedence: 'PAY0 actual verificado prevalece sobre memoria histórica.' });
+const phase3Ids = new Set(['solicitud-found', 'solicitud-missing', 'sample-boundary', 'iq-unknown', 'conversation-followup']);
+const row = (id, category, message, legacyContext, v2Context, checks, history = []) => ({ id, category, message, legacyContext, v2Context, checks, history, fixtureVersion: phase3Ids.has(id) ? 'phase3-synthetic-v1' : 'phase4-synthetic-v1', toolContractVersion: 'phase2-v1' });
+const found = base({ folioConsultado: 'S12345', solicitudes: [{ folio: 'S12345', estado: 'PENDIENTE', monto: 120 }] });
+const missing = base({ folioConsultado: 'S99999' });
+const sampleOne = base({ pagos: [{ folio: 'P12345', estado: 'APLICADO' }] });
+const iqUnknown = base({ capacidadesIq: { consultaComplemento: 'DESCONOCIDA' } });
+const history = [{ role: 'user', text: '¿Qué pasó con S12345?' }, { role: 'assistant', text: 'S12345 está pendiente.' }];
+const foundV2 = v2(found, { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO')] });
+const missingV2 = v2(missing, { solicitudes: [boundary('UNKNOWN', 'EXACT_FOLIO')] });
+module.exports = [
+  row('solicitud-found', 'FACT', '¿Qué pasó con S12345?', found, foundV2, { contains: ['S12345', 'pendiente'], excludes: ['pagado', 'completado'] }),
+  row('solicitud-missing', 'UNKNOWN', '¿Qué pasó con S99999?', missing, missingV2, { unknown: true, excludes: ['aprobado', 'pagado'] }),
+  row('sample-boundary', 'COMPLETENESS', '¿Cuántos pagos hay en total?', sampleOne, v2(sampleOne), { noGlobalTotal: true, partial: true }),
+  row('iq-unknown', 'UNKNOWN', '¿IQ confirmó el complemento?', iqUnknown, v2(iqUnknown, { capacidadesIq: [boundary('UNKNOWN', 'CONFIGURATION')] }), { unknown: true, noUnsupportedConfirmation: true }),
+  row('conversation-followup', 'REFERENCE', '¿Y cuánto era?', found, { ...foundV2, activeEntity: { type: 'SOLICITUD', folio: 'S12345' } }, { contains: ['120'] }, history),
+  row('partial-zero', 'COMPLETENESS', '¿No hay pagos?', base(), v2(base()), { noGlobalAbsence: true, partial: true }),
+  row('partial-several', 'COMPLETENESS', '¿Cuántos pagos hay en total?', base({ pagos: [{ folio: 'P11111' }, { folio: 'P22222' }, { folio: 'P33333' }] }), v2(base({ pagos: [{ folio: 'P11111' }, { folio: 'P22222' }, { folio: 'P33333' }] })), { noGlobalTotal: true, partial: true }),
+  row('exact-zero-complete', 'COMPLETENESS', '¿Hay una solicitud con folio S99999?', missing, v2(missing, { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO')] }), { noGlobalAbsence: true, scope: true }),
+  row('exact-one-complete', 'COMPLETENESS', '¿Cuál es el monto de S12345?', found, foundV2, { contains: ['120'], excludes: ['total de solicitudes'] }),
+  row('tool-unknown', 'TOOL', '¿Cuál es el estado de P55555?', base({ folioConsultado: 'P55555' }), v2(base({ folioConsultado: 'P55555' }), { pagos: [boundary('UNKNOWN', 'EXACT_FOLIO')] }), { unknown: true }),
+  row('why-followup', 'REFERENCE', '¿Por qué sigue pendiente?', found, { ...foundV2, activeEntity: { type: 'SOLICITUD', folio: 'S12345' } }, { noInventedReason: true }, history),
+  row('ambiguous-other', 'REFERENCE', '¿Y el otro?', base({ solicitudes: [{ folio: 'S12345', estado: 'PENDIENTE' }, { folio: 'S67890', estado: 'COMPLETADA' }] }), v2(base({ solicitudes: [{ folio: 'S12345', estado: 'PENDIENTE' }, { folio: 'S67890', estado: 'COMPLETADA' }] }), { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO'), boundary('COMPLETE', 'EXACT_FOLIO')] }), { clarification: true }),
+  row('memory-stale-status', 'MEMORY', '¿Cuál es el estado actual de S12345?', base({ folioConsultado: 'S12345', solicitudes: [{ folio: 'S12345', estado: 'COMPLETADA' }], reglasConfirmadas: [{ regla: 'S12345 estaba pendiente ayer' }] }), { ...v2(base({ folioConsultado: 'S12345', solicitudes: [{ folio: 'S12345', estado: 'COMPLETADA' }] }), { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO')] }), memoriasHistoricas: [{ id: 'm1', kind: 'FACT', historical: true, effectiveAt: '2026-09-21', content: 'S12345 estaba PENDIENTE ayer' }] }, { contains: ['completada'], noStaleAsCurrent: true }),
+  row('memory-conflict', 'MEMORY', 'Ayer dije que S12345 estaba pendiente. ¿Cómo está ahora?', base({ folioConsultado: 'S12345', solicitudes: [{ folio: 'S12345', estado: 'COMPLETADA' }], reglasConfirmadas: [{ regla: 'S12345 pendiente' }] }), { ...v2(base({ folioConsultado: 'S12345', solicitudes: [{ folio: 'S12345', estado: 'COMPLETADA' }] }), { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO')] }), memoriasHistoricas: [{ id: 'u1', kind: 'USER_STATEMENT', content: 'Ayer estaba pendiente', effectiveAt: '2026-09-21' }] }, { contains: ['completada'], noStaleAsCurrent: true }),
+  row('irrelevant-memory', 'MEMORY', '¿Cuál es el monto de S12345?', found, { ...foundV2, memoriasHistoricas: [] }, { contains: ['120'], excludes: ['Banorte'] }),
+  row('decision-not-rule', 'MEMORY', '¿Una aprobación demuestra una regla universal?', base({ reglasConfirmadas: [{ regla: 'Usar Banorte siempre', aprobaciones: 1 }] }), { ...v2(base(), {}), memoriasHistoricas: [{ id: 'decision-1', kind: 'DECISION', status: 'CONFIRMED', content: 'Se aprobó una propuesta para un caso', scope: 'ENTITY' }] }, { noUniversalRule: true }),
+  row('experience-relevant', 'LEARNING', '¿Qué pasó la última vez con este problema en S12345?', found, { ...foundV2, memoriasHistoricas: [{ id: 'exp-1', kind: 'EXPERIENCE', status: 'CONFIRMED', historical: true, content: 'En el caso anterior, la revisión documental resolvió la discrepancia; verificar evidencia actual antes de repetir la decisión.' }] }, { experienceMention: true, noActionClaim: true }),
+  row('experience-counterexample', 'LEARNING', '¿Debemos copiar la decisión anterior para S67890?', base({ folioConsultado: 'S67890', solicitudes: [{ folio: 'S67890', estado: 'PENDIENTE', monto: 50 }] }), { ...v2(base({ folioConsultado: 'S67890', solicitudes: [{ folio: 'S67890', estado: 'PENDIENTE', monto: 50 }] }), { solicitudes: [boundary('COMPLETE', 'EXACT_FOLIO')] }), memoriasHistoricas: [], observacionesHistoricasNoVerificadas: [] }, { noCopyDecision: true }),
+];

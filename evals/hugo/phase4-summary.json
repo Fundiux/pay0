@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "evalRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+  "datasetVersion": "phase4-synthetic-v1",
+  "pairedCases": 18,
+  "legacyPhase3": {
+    "evaluated": 5,
+    "passCriteria": 3,
+    "needsHumanReview": 1,
+    "fail": 1,
+    "criticalFailures": 1
+  },
+  "phase4": {
+    "legacy-v1": {
+      "evaluated": 17,
+      "passCriteria": 12,
+      "fail": 5,
+      "needsHumanReview": 1
+    },
+    "hugo-v2": {
+      "evaluated": 17,
+      "passCriteria": 15,
+      "fail": 2,
+      "needsHumanReview": 1
+    }
+  },
+  "phase4CriticalFailures": {
+    "legacy-v1": 4,
+    "hugo-v2": 1
+  },
+  "humanReviewsCompleted": 0,
+  "humanReviewsPending": 18,
+  "byCategory": {
+    "FACT": {
+      "legacy-v1": {
+        "pass": 1,
+        "fail": 0,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 1,
+        "fail": 0,
+        "review": 0
+      }
+    },
+    "UNKNOWN": {
+      "legacy-v1": {
+        "pass": 2,
+        "fail": 0,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 2,
+        "fail": 0,
+        "review": 0
+      }
+    },
+    "COMPLETENESS": {
+      "legacy-v1": {
+        "pass": 2,
+        "fail": 3,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 5,
+        "fail": 0,
+        "review": 0
+      }
+    },
+    "REFERENCE": {
+      "legacy-v1": {
+        "pass": 1,
+        "fail": 1,
+        "review": 1
+      },
+      "hugo-v2": {
+        "pass": 1,
+        "fail": 1,
+        "review": 1
+      }
+    },
+    "TOOL": {
+      "legacy-v1": {
+        "pass": 1,
+        "fail": 0,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 1,
+        "fail": 0,
+        "review": 0
+      }
+    },
+    "MEMORY": {
+      "legacy-v1": {
+        "pass": 3,
+        "fail": 1,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 4,
+        "fail": 0,
+        "review": 0
+      }
+    },
+    "LEARNING": {
+      "legacy-v1": {
+        "pass": 2,
+        "fail": 0,
+        "review": 0
+      },
+      "hugo-v2": {
+        "pass": 1,
+        "fail": 1,
+        "review": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,83 @@
+const assert = require('node:assert/strict');
+if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || process.env.GCLOUD_PROJECT !== 'demo-pay0') throw Error('Local emulator required');
+global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
+const admin = require('../../functions/node_modules/firebase-admin');
+admin.initializeApp({ projectId: 'demo-pay0' });
+const db = admin.firestore();
+const { FirestoreHugoDataStore } = require('../../functions/lib/modules/agent007/firestoreHugoDataStore');
+const callables = require('../../functions/lib/modules/agent007/callables');
+const store = new FirestoreHugoDataStore(db);
+const root = `hugo-phase4-${Date.now()}`, other = `${root}-other`, viewer = `${root}-viewer`;
+const auth = { uid: root, token: { role: 'superadmin' } };
+const ref = { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: `${root}-sol`, displayReference: 'S12345' };
+async function rejects(call, code) { await assert.rejects(call, error => error.code === code || error.code?.endsWith(`/${code}`)); }
+async function main() {
+  await db.doc(`users/${root}`).set({ role: 'superadmin', rootId: root, active: true });
+  await db.doc(`users/${other}`).set({ role: 'superadmin', rootId: other, active: true });
+  await db.doc(`users/${viewer}`).set({ role: 'cliente', rootId: root, active: true });
+  await db.doc(`solicitudes/${root}-sol`).set({ rootId: root, folio: 'S12345', status: 'PENDIENTE', amount: 120, createdAt: admin.firestore.Timestamp.now() });
+  await db.doc(`solicitudes/${root}-other-sol`).set({ rootId: root, folio: 'S67890', status: 'COMPLETADA', amount: 60, createdAt: admin.firestore.Timestamp.now() });
+  await db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, iqLookupEnabled: true });
+  await db.doc(`iqIntegrationConfigs/${root}`).set({ rootId: root, enabled: true });
+  await rejects(() => callables.listAgent007MemoryDiagnostics.run({ auth: null, data: {} }), 'unauthenticated');
+  await rejects(() => callables.listAgent007MemoryDiagnostics.run({ auth: { uid: viewer, token: { role: 'cliente' } }, data: {} }), 'permission-denied');
+  await rejects(() => callables.createAgent007MemoryCandidate.run({ auth, data: { kind: 'RULE', content: 'Siempre usar X' } }), 'invalid-argument');
+  await rejects(() => store.retrieveMemory({ rootId: root, entityReferences: [{ sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: 'bad/path' }], intent: 'STATUS' }), 'invalid-argument');
+  const candidate = await callables.createAgent007MemoryCandidate.run({ auth, data: { kind: 'PREFERENCE', content: 'Revisar primero el documento', entityReference: ref } });
+  assert.equal(candidate.status, 'CANDIDATE');
+  assert.equal((await callables.createAgent007MemoryCandidate.run({ auth, data: { kind: 'PREFERENCE', content: 'Revisar primero el documento', entityReference: ref } })).created, false);
+  assert.equal((await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' })).selected.length, 0, 'candidate is not retrieved');
+  const review = await callables.reviewAgent007MemoryCandidate.run({ auth, data: { memoryId: candidate.id, decision: 'CONFIRM' } });
+  assert.equal(review.changed, true);
+  assert.deepEqual((await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' })).selected.map(x => x.record.id), [candidate.id]);
+  const replacement = await callables.createAgent007MemoryCandidate.run({ auth, data: { kind: 'PREFERENCE', content: 'Revisar primero el CFDI', entityReference: ref } });
+  await callables.reviewAgent007MemoryCandidate.run({ auth, data: { memoryId: replacement.id, decision: 'CONFIRM', supersedesId: candidate.id } });
+  assert.equal((await db.doc(`agent007Memory/${candidate.id}`).get()).data().status, 'SUPERSEDED');
+  assert.deepEqual((await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' })).selected.map(x => x.record.id), [replacement.id]);
+  const rootPreference = await callables.createAgent007MemoryCandidate.run({ auth, data: { kind: 'PREFERENCE', content: 'Mostrar la fuente de cada respuesta' } });
+  await callables.reviewAgent007MemoryCandidate.run({ auth, data: { memoryId: rootPreference.id, decision: 'CONFIRM' } });
+  assert((await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' })).selected.some(x => x.record.id === rootPreference.id));
+  const observationId = `activity_${root}-activity`, outcomeId = `activity_${root}-outcome`, recommendationId = `${root}-recommendation`;
+  await db.doc(`agent007Observations/${observationId}`).set({ rootId: root, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
+    intent: 'Observar evento', humanDecision: 'superadmin', outcome: 'Ayer la solicitud estaba pendiente', createdAt: admin.firestore.Timestamp.now() });
+  await db.doc(`agent007Recommendations/${recommendationId}`).set({ rootId: root, sourceActivityId: `${root}-activity`, caseId: ref.entityId, caseType: 'SOLICITUD', kind: 'OC_FISCAL_REVIEW',
+    proposal: 'Revisar documento', status: 'PENDING_REVIEW', createdAt: admin.firestore.Timestamp.now() });
+  await callables.resolveAgent007Recommendation.run({ auth, data: { recommendationId, decision: 'APPROVED' } });
+  const decisionId = `decision_${recommendationId}`;
+  assert.equal((await db.doc(`agent007Memory/${decisionId}`).get()).data().links.observationId, observationId);
+  await db.doc(`agent007Observations/${outcomeId}`).set({ rootId: root, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', caseId: ref.entityId,
+    intent: 'Resultado posterior', humanDecision: 'SYSTEM', outcome: 'Completada tras revisión documental', createdAt: admin.firestore.Timestamp.now() });
+  await rejects(() => callables.linkAgent007VerifiedExperience.run({ auth, data: { observationId, decisionId, outcomeId: `${other}-observation` } }), 'failed-precondition');
+  const linked = await callables.linkAgent007VerifiedExperience.run({ auth, data: { observationId, decisionId, outcomeId } });
+  assert.equal(linked.created, true);
+  const experience = (await db.doc(`agent007Memory/${linked.id}`).get()).data();
+  assert.equal(experience.links.linkStatus, 'LINKED');
+  await db.doc(`agent007Memory/${other}-foreign`).set({ ...experience, id: `${other}-foreign`, rootId: other, scope: { ...experience.scope, rootId: other } });
+  await db.doc(`agent007Memory/${root}-expired`).set({ ...experience, id: `${root}-expired`, validUntil: '2020-01-01T00:00:00Z' });
+  await db.doc(`agent007Memory/${root}-wrong-entity`).set({ ...experience, id: `${root}-wrong-entity`, entityKey: 'PAY0:SOLICITUD:other-entity', entityReference: { ...ref, entityId: 'other-entity' }, scope: { ...experience.scope, entityId: 'other-entity' } });
+  const retrieved = await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' });
+  assert(retrieved.selected.some(x => x.record.id === experience.id));
+  assert(!retrieved.selected.some(x => x.record.id === `${other}-foreign` || x.record.id === `${root}-expired` || x.record.id === `${root}-wrong-entity`));
+  assert(!(await store.retrieveMemory({ rootId: root, entityReferences: [{ ...ref, entityId: 'different-case' }], intent: 'REASON' })).selected.some(x => x.record.id === experience.id), 'counterexample does not reuse prior experience');
+  await db.doc(`agent007Observations/${other}-observation`).set({ rootId: other, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
+    intent: 'Extranjero', outcome: 'Foreign', createdAt: admin.firestore.Timestamp.now() });
+  const first = await callables.sendAgent007Message.run({ auth, data: { text: '¿Qué pasó con S12345?' } });
+  assert.match(first.message.text, /S12345/);
+  const second = await callables.sendAgent007Message.run({ auth, data: { text: '¿Por qué sigue pendiente?' } });
+  assert(second.message.text);
+  await callables.sendAgent007Message.run({ auth, data: { text: 'Revisa S67890' } });
+  const ambiguous = await callables.sendAgent007Message.run({ auth, data: { text: '¿Y el otro?' } });
+  assert.match(ambiguous.message.text, /S12345.*S67890|S67890.*S12345/);
+  const traces = await db.collection('agent007Traces').where('rootId', '==', root).get();
+  const why = traces.docs.map(x => x.data()).find(x => x.memoryUsage?.legacyObservationsIncluded > 0);
+  assert(why, 'relevant legacy observation entered v2 context');
+  assert(why.memoryUsage.includedReferences.some(x => x.id === experience.id));
+  assert(why.memoryUsage.includedReferences.some(x => x.id === observationId));
+  assert.equal(why.intelligenceConfig.promptVersion, 'hugo-v2');
+  assert.equal(why.contextComposition.experiences >= 1, true);
+  await rejects(() => callables.getAgent007Trace.run({ auth: { uid: other, token: { role: 'superadmin' } }, data: { traceId: traces.docs[0].id } }), 'not-found');
+  const diagnostics = await callables.listAgent007MemoryDiagnostics.run({ auth, data: {} });
+  assert(diagnostics.memories.every(x => x.rootId === root));
+  console.log(JSON.stringify({ ok: true, crossRootMemoryDenied: true, experienceRetrieved: true, counterexampleExcluded: true, observationIncluded: true, memoryTraceIds: why.memoryUsage.includedReferences.map(x => x.id) }));
+}
+main().then(() => process.exit(0)).catch(error => { console.error(error); process.exit(1); });

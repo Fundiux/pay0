@@ -1,0 +1,798 @@
+{
+  "schemaVersion": 1,
+  "evalRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+  "cases": [
+    {
+      "caseId": "solicitud-found",
+      "category": "FACT",
+      "userInput": "¿Qué pasó con S12345?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "contains": [
+          "S12345",
+          "pendiente"
+        ],
+        "excludes": [
+          "pagado",
+          "completado"
+        ]
+      },
+      "responseA": "Hola, Evaluador. La solicitud S12345 está pendiente.",
+      "responseB": "Hola, Evaluador. El folio S12345 está pendiente. Su monto es de 120.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "solicitud-missing",
+      "category": "UNKNOWN",
+      "userInput": "¿Qué pasó con S99999?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S99999",
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "unknown": true,
+        "excludes": [
+          "aprobado",
+          "pagado"
+        ]
+      },
+      "responseA": "Hola, Evaluador. Para el folio S99999, no tengo información suficiente en este momento. La evidencia disponible es limitada y no me permite saber qué pasó con él.",
+      "responseB": "Hola, Evaluador. El folio `S99999` fue consultado, pero con la información que tengo ahora mismo, no veo detalles sobre su estado o qué pasó con él. No hay solicitudes, pagos o dudas pendientes asociadas en mi contexto actual.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "sample-boundary",
+      "category": "COMPLETENESS",
+      "userInput": "¿Cuántos pagos hay en total?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [],
+        "pagos": [
+          {
+            "folio": "P12345",
+            "estado": "APLICADO"
+          }
+        ],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noGlobalTotal": true,
+        "partial": true
+      },
+      "responseA": "¡Hola! Hay 1 pago en total.",
+      "responseB": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "iq-unknown",
+      "category": "UNKNOWN",
+      "userInput": "¿IQ confirmó el complemento?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {
+          "consultaComplemento": "DESCONOCIDA"
+        },
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "unknown": true,
+        "noUnsupportedConfirmation": true
+      },
+      "responseA": "Hola. No tengo información sobre si IQ confirmó el complemento. El estado de `consultaComplemento` es desconocido en mis registros actuales.",
+      "responseB": "Hola, Evaluador. No tengo información sobre si IQ confirmó el complemento. En mi contexto, la capacidad de `consultaComplemento` de IQ aparece como `DESCONOCIDA`.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "conversation-followup",
+      "category": "REFERENCE",
+      "userInput": "¿Y cuánto era?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "contains": [
+          "120"
+        ]
+      },
+      "responseA": "¡Hola! El monto de S12345 es de 120.",
+      "responseB": "Era de 120.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "partial-zero",
+      "category": "COMPLETENESS",
+      "userInput": "¿No hay pagos?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noGlobalAbsence": true,
+        "partial": true
+      },
+      "responseA": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+      "responseB": "Hola, Evaluador. No, no hay pagos registrados en este momento.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "partial-several",
+      "category": "COMPLETENESS",
+      "userInput": "¿Cuántos pagos hay en total?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [],
+        "pagos": [
+          {
+            "folio": "P11111"
+          },
+          {
+            "folio": "P22222"
+          },
+          {
+            "folio": "P33333"
+          }
+        ],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noGlobalTotal": true,
+        "partial": true
+      },
+      "responseA": "Hola, Evaluador. Hay 3 pagos en total.",
+      "responseB": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "exact-zero-complete",
+      "category": "COMPLETENESS",
+      "userInput": "¿Hay una solicitud con folio S99999?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S99999",
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noGlobalAbsence": true,
+        "scope": true
+      },
+      "responseA": "Hola, Evaluador. No, no hay ninguna solicitud con el folio S99999 en la información que tengo.",
+      "responseB": "Hola, Evaluador. No encuentro ninguna solicitud con el folio S99999 en la información que tengo.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "exact-one-complete",
+      "category": "COMPLETENESS",
+      "userInput": "¿Cuál es el monto de S12345?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "contains": [
+          "120"
+        ],
+        "excludes": [
+          "total de solicitudes"
+        ]
+      },
+      "responseA": "El monto de la solicitud S12345 es 120.",
+      "responseB": "Hola, Evaluador. El monto de la solicitud S12345 es de 120.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "tool-unknown",
+      "category": "TOOL",
+      "userInput": "¿Cuál es el estado de P55555?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "P55555",
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "unknown": true
+      },
+      "responseA": "Hola, Evaluador. No tengo información sobre el estado actual del folio P55555 en los datos que puedo ver.",
+      "responseB": "Hola, Evaluador. Con la información que tengo aquí, solo veo que \"P55555\" fue el folio consultado, pero no tengo datos sobre su estado actual. Parece que la muestra es limitada.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "why-followup",
+      "category": "REFERENCE",
+      "userInput": "¿Por qué sigue pendiente?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noInventedReason": true
+      },
+      "responseA": "Hola de nuevo. El contexto operativo que tengo no especifica la razón por la que S12345 sigue pendiente. Solo me indica que su estado actual es ese.",
+      "responseB": "Hola de nuevo. El folio S12345 sigue en estado \"PENDIENTE\", pero no tengo información en este momento sobre el motivo específico por el que no ha avanzado. El contexto que manejo no detalla las razones de su estado.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "ambiguous-other",
+      "category": "REFERENCE",
+      "userInput": "¿Y el otro?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE"
+          },
+          {
+            "folio": "S67890",
+            "estado": "COMPLETADA"
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "clarification": true
+      },
+      "responseA": "La solicitud S12345 está PENDIENTE. Es la otra que aparece en este contexto.",
+      "responseB": "¡Hola! De las solicitudes que tengo a la vista, la `S12345` está **PENDIENTE**. La `S67890` ya está completada.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "memory-stale-status",
+      "category": "MEMORY",
+      "userInput": "¿Cuál es el estado actual de S12345?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "COMPLETADA"
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": [
+          {
+            "regla": "S12345 estaba pendiente ayer"
+          }
+        ]
+      },
+      "criteria": {
+        "contains": [
+          "completada"
+        ],
+        "noStaleAsCurrent": true
+      },
+      "responseA": "Hola, Evaluador. El folio S12345 está **COMPLETADA**.",
+      "responseB": "Hola, Evaluador. El estado actual de la solicitud S12345 es \"COMPLETADA\". Sé que ayer figuraba como \"PENDIENTE\" según nuestros registros históricos, pero el estado actual verificado es \"COMPLETADA\".",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "memory-conflict",
+      "category": "MEMORY",
+      "userInput": "Ayer dije que S12345 estaba pendiente. ¿Cómo está ahora?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "COMPLETADA"
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": [
+          {
+            "regla": "S12345 pendiente"
+          }
+        ]
+      },
+      "criteria": {
+        "contains": [
+          "completada"
+        ],
+        "noStaleAsCurrent": true
+      },
+      "responseA": "Hola. El folio S12345 está completado. Recuerdo que ayer mencionaste que estaba pendiente. Entiendo que la pregunta es si el estado actual es diferente al que mencionaste, y sí, ahora está completado.",
+      "responseB": null,
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "irrelevant-memory",
+      "category": "MEMORY",
+      "userInput": "¿Cuál es el monto de S12345?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "contains": [
+          "120"
+        ],
+        "excludes": [
+          "Banorte"
+        ]
+      },
+      "responseA": "El monto de la solicitud S12345 es de 120.",
+      "responseB": "El monto para la solicitud S12345 es de 120.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "decision-not-rule",
+      "category": "MEMORY",
+      "userInput": "¿Una aprobación demuestra una regla universal?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": null,
+        "solicitudes": [],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": [
+          {
+            "regla": "Usar Banorte siempre",
+            "aprobaciones": 1
+          }
+        ]
+      },
+      "criteria": {
+        "noUniversalRule": true
+      },
+      "responseA": "¡Hola, Evaluador! No, una aprobación de recomendación no crea una regla universal.",
+      "responseB": "Hola, Evaluador. Mira, por lo que veo en el contexto, solo tenemos una regla registrada (\"Usar Banorte siempre\") y esta tiene una aprobación. Sin embargo, el contexto no especifica qué cantidad de aprobaciones se requiere para que una regla sea considerada \"universal\" o si una sola aprobación es suficiente para ello. Entiendo que buscas saber si una única aprobación es el criterio para establecer una regla como universal en nuestro sistema. Necesitaría confirmación para que esto se convierta en una regla.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "experience-relevant",
+      "category": "LEARNING",
+      "userInput": "¿Qué pasó la última vez con este problema en S12345?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S12345",
+        "solicitudes": [
+          {
+            "folio": "S12345",
+            "estado": "PENDIENTE",
+            "monto": 120
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "experienceMention": true,
+        "noActionClaim": true
+      },
+      "responseA": "Hola, Evaluador. El contexto que tengo es limitado y no me muestra un historial de eventos para el folio S12345. Lo único que veo es que la solicitud S12345 está actualmente **PENDIENTE** por un monto de 120. Si necesitas saber sobre algún evento pasado, necesitaría más información o un contexto más amplio.",
+      "responseB": null,
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    },
+    {
+      "caseId": "experience-counterexample",
+      "category": "LEARNING",
+      "userInput": "¿Debemos copiar la decisión anterior para S67890?",
+      "controlledEvidence": {
+        "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+        "capacidadesIq": {},
+        "complementosPendientes": [],
+        "folioConsultado": "S67890",
+        "solicitudes": [
+          {
+            "folio": "S67890",
+            "estado": "PENDIENTE",
+            "monto": 50
+          }
+        ],
+        "pagos": [],
+        "dudasPendientes": [],
+        "reglasConfirmadas": []
+      },
+      "criteria": {
+        "noCopyDecision": true
+      },
+      "responseA": "Hola, Evaluador. No tengo información sobre decisiones anteriores para la solicitud S67890 en el contexto actual. Solo veo que está pendiente con un monto de 50. ¿Podrías darme más detalles sobre a qué decisión te refieres?",
+      "responseB": "Hola, Evaluador. No encuentro información en el contexto que me indique si hay una decisión anterior para el folio S67890 que debamos copiar. Solo veo que su estado actual es PENDIENTE.",
+      "reviewerChoice": null,
+      "allowedChoices": [
+        "A_BETTER",
+        "B_BETTER",
+        "EQUIVALENT",
+        "BOTH_UNACCEPTABLE"
+      ],
+      "ratings": {
+        "CORRECTNESS": null,
+        "USEFULNESS": null,
+        "CLARITY": null,
+        "CONTEXTUAL_UNDERSTANDING": null,
+        "CALIBRATION": null,
+        "TONE": null
+      },
+      "failureCategories": [],
+      "comment": null
+    }
+  ]
+}

@@ -1,6 +1,27 @@
 {
     "indexes": [
         {
+            "collectionGroup": "agent007Memory", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "entityKey", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agent007Memory", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agent007Observations", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "caseId", "order": "ASCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "agent007Traces", "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },

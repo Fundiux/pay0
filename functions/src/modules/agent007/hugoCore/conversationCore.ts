@@ -3,6 +3,10 @@ import { HugoToolRouter, ToolRequest, ToolResult } from "./toolRouter";
 import { HugoModelAdapter, ModelOutput } from "./modelContract";
 import { HUGO_PROMPT_VERSION } from "./legacyPrompt";
 import { HugoDataStore } from "./dataStoreContract";
+import { ConversationState, normalizeConversationState } from "./conversationState";
+import { buildHugoContextV2, isGlobalCountQuestion, canStateGlobalTotalForMessage, relevantEvidenceBoundaries, MemoryUsage } from "./contextBuilderV2";
+import { HUGO_V2_CONFIG } from "./intelligenceConfig";
+import { checkExhaustiveness } from "./exhaustivenessPolicy";
 
 function fallbackReply(message: string, name: string, context: any): string {
   const normalized = message.toLocaleLowerCase("es-MX");
@@ -23,8 +27,8 @@ function fallbackReply(message: string, name: string, context: any): string {
   return `Entendido, ${name}. Guardé tu mensaje en esta conversación. Todavía no tengo evidencia suficiente para afirmarlo como una regla; cuando vea un caso relacionado te lo señalaré para que lo confirmemos.`;
 }
 
-export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; commandReply?: string };
-export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK"; context: any; pieces: any[]; recentEntities: RecentEntity[]; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
+export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2" };
+export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
 
 export class HugoConversationCore {
   constructor(private readonly router: HugoToolRouter, private readonly model: HugoModelAdapter, private readonly dataStore?: HugoDataStore) {}
@@ -43,15 +47,27 @@ export class HugoConversationCore {
       executed.push(result);
       return result;
     } };
-    const built = await buildHugoContext({ message: input.message, recentEntities, memory, router: recordingRouter }).catch(error => {
+    const v2 = input.promptVersion === "hugo-v2";
+    const built = await (v2 ? buildHugoContextV2({ message: input.message, rootId: input.identity.rootId, conversationState: state?.conversationState || normalizeConversationState(input.conversationState, input.identity.rootId), router: recordingRouter, dataStore: this.dataStore }) :
+      buildHugoContext({ message: input.message, recentEntities, memory, router: recordingRouter })).catch(error => {
       if (error instanceof Error) (error as Error & { hugoToolsRequested?: string[]; hugoToolsExecuted?: string[] }).hugoToolsRequested = requested.map(row => row.name);
       if (error instanceof Error) (error as Error & { hugoToolsExecuted?: string[] }).hugoToolsExecuted = executed.map(row => row.tool);
       throw error;
     });
-    const model = input.commandReply ? { text: null, model: "gemini-2.5-flash", modelVersion: "publisher-model", promptVersion: HUGO_PROMPT_VERSION, tokenUsage: null, error: "COMMAND_HANDLED" }
-      : await this.model.generate({ message: input.message, name: input.name, context: built.context, history });
-    const text = input.commandReply || model.text || fallbackReply(input.message, input.name, built.context);
-    return { text, source: model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", context: built.context, pieces: built.pieces,
-      recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, toolsRequested: requested, toolsExecuted: executed, model, promptVersion: HUGO_PROMPT_VERSION };
+    const policyReply = v2 && !input.commandReply ? ("clarification" in built && built.clarification ? built.clarification :
+      isGlobalCountQuestion(input.message) && "evidenceBoundaries" in built.context && !canStateGlobalTotalForMessage(input.message, built.context.evidenceBoundaries as any)
+        ? "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos." : null) : null;
+    const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
+    const model: ModelOutput = input.commandReply || policyReply ? { text: null, model: "gemini-2.5-flash", modelVersion: "publisher-model", promptVersion, tokenUsage: null, error: input.commandReply ? "COMMAND_HANDLED" : "POLICY_HANDLED" }
+      : await this.model.generate({ message: input.message, name: input.name, context: built.context, history, promptVersion });
+    const bounds = v2 && "evidenceBoundaries" in built.context && canStateGlobalTotalForMessage(model.text || input.message, built.context.evidenceBoundaries as any)
+      ? relevantEvidenceBoundaries(model.text || input.message, built.context.evidenceBoundaries as any) : [];
+    const checked = v2 && model.text ? checkExhaustiveness(model.text, bounds) : { allowed: true, reason: null };
+    const text = input.commandReply || policyReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || model.text || fallbackReply(input.message, input.name, built.context);
+    return { text, source: policyReply || !checked.allowed ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : checked.reason,
+      context: built.context, pieces: built.pieces,
+      recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, conversationState: "conversationState" in built ? built.conversationState : undefined,
+      memoryUsage: "memoryUsage" in built ? built.memoryUsage : undefined, composition: "composition" in built ? built.composition : undefined,
+      intelligenceConfig: v2 ? HUGO_V2_CONFIG : undefined, toolsRequested: requested, toolsExecuted: executed, model, promptVersion };
   }
 }

@@ -1,11 +1,13 @@
 import { getApp } from "firebase-admin/app";
 import { legacyPrompt, HUGO_PROMPT_VERSION } from "./hugoCore/legacyPrompt";
 import { HugoModelAdapter, ModelOutput } from "./hugoCore/modelContract";
+import { hugoV2Prompt, HUGO_V2_PROMPT_VERSION } from "./hugoCore/hugoV2Prompt";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 export class VertexGeminiAdapter implements HugoModelAdapter {
-  async generate(input: { message: string; name: string; context: any; history: any[] }): Promise<ModelOutput> {
-    const base = { model: "gemini-2.5-flash", modelVersion: "publisher-model", promptVersion: HUGO_PROMPT_VERSION, tokenUsage: null };
+  async generate(input: { message: string; name: string; context: any; history: any[]; promptVersion?: string }): Promise<ModelOutput> {
+    const version = input.promptVersion === HUGO_V2_PROMPT_VERSION ? HUGO_V2_PROMPT_VERSION : HUGO_PROMPT_VERSION;
+    const base = { model: "gemini-2.5-flash", modelVersion: "publisher-model", promptVersion: version, tokenUsage: null };
     try {
       if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FUNCTIONS_EMULATOR) return { ...base, text: null, error: "EMULATOR_DISABLED" };
       const credential: any = getApp().options.credential;
@@ -13,7 +15,7 @@ export class VertexGeminiAdapter implements HugoModelAdapter {
       const token = await credential.getAccessToken();
       const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "pay-0-system";
       const endpoint = `https://us-central1-aiplatform.googleapis.com/v1/projects/${project}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent`;
-      const { system, prompt } = legacyPrompt(input.message, input.name, input.context, input.history);
+      const { system, prompt } = version === HUGO_V2_PROMPT_VERSION ? hugoV2Prompt(input.message, input.name, input.context, input.history) : legacyPrompt(input.message, input.name, input.context, input.history);
       const generate = async (requestPrompt: string, maxOutputTokens: number) => {
         const response = await fetch(endpoint, {
           method: "POST", headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },

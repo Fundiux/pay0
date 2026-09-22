@@ -12,6 +12,7 @@ import { VertexGeminiAdapter } from "./vertexGeminiAdapter";
 import { conversationTrace } from "./traceStore";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
+import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -89,13 +90,27 @@ export const resolveAgent007Recommendation = onCall(
     if (!snap.exists || clean(row.rootId, 128) !== rootId) throw new HttpsError("not-found", "Recomendacion no encontrada.");
     if (row.status !== "PENDING_REVIEW") return { ok: true, alreadyResolved: true };
     const ruleRef = hugoData.learnedRuleRef(`${rootId}_${clean(row.kind, 50)}_${clean(row.proposal, 120)}`.replace(/[^A-Za-z0-9_-]/g, "_"));
+    const memoryRef = hugoData.memoryRef(`decision_${recommendationId}`);
     const resolved = await db.runTransaction(async (tx) => {
       const latest = await tx.get(ref);
       if (!latest.exists || latest.data()?.rootId !== rootId) throw new HttpsError("not-found", "Recomendación no encontrada.");
       if (latest.data()?.status !== "PENDING_REVIEW") return false;
       const rule = await tx.get(ruleRef); const current: any = rule.data() || {};
+      const observationRef = row.sourceActivityId ? hugoData.observationRef(`activity_${clean(row.sourceActivityId, 160)}`) : null;
+      const observation = observationRef ? await tx.get(observationRef) : null;
+      const linkedObservation = observationRef && observation?.data()?.rootId === rootId && observation.data()?.caseId === row.caseId ? observationRef.id : null;
       tx.set(ref, { status: decision, correction: correction || null, resolvedBy: uid, resolvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.set(ruleRef, { rootId, agentId: "AGENTE_007", phase: "SUPERVISED_ASSISTANCE", kind: row.kind, proposal: row.proposal, correction: correction || null, approvals: Number(current.approvals || 0) + (decision === "APPROVED" ? 1 : 0), rejections: Number(current.rejections || 0) + (decision === "REJECTED" ? 1 : 0), lastDecision: decision, updatedAt: FieldValue.serverTimestamp(), createdAt: current.createdAt || FieldValue.serverTimestamp() }, { merge: true });
+      const now = new Date().toISOString(), entityId = clean(row.caseId, 128), entityType = clean(row.caseType, 40);
+      tx.set(memoryRef, { id: memoryRef.id, version: MEMORY_CONTRACT_VERSION, rootId, kind: "DECISION", status: "CONFIRMED",
+        scope: entityId && entityType ? { level: "ENTITY", rootId, system: "PAY0", entityType, entityId } : { level: "ROOT", rootId },
+        entityKey: entityId && entityType ? `PAY0:${entityType}:${entityId}` : null,
+        ...(entityId && entityType ? { entityReference: { sourceSystem: "PAY0", entityType, entityId } } : {}),
+        content: `Decisión ${decision} sobre propuesta: ${clean(row.proposal, 300)}${correction ? `. Corrección: ${correction}` : ""}`,
+        source: "RECOMMENDATION_RESOLUTION", sourceSystem: "HUGO", confidence: null, createdAt: now, effectiveAt: now, lastVerifiedAt: now,
+        validUntil: null, supersedes: [], links: { recommendationId, ...(linkedObservation ? { observationId: linkedObservation } : {}), linkStatus: linkedObservation ? "LINKED" : "UNKNOWN" },
+        decision: { actorUid: uid, actorRole: String(getUserRole(user)), decisionType: decision, decisionAt: now },
+        verification: { evidenceSource: "HUMAN_DECISION", confirmations: 1, contradictions: 0, outcomeKnown: false } });
       return true;
     });
     if (!resolved) return { ok: true, alreadyResolved: true };
@@ -144,11 +159,11 @@ export const sendAgent007Message = onCall(
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
     });
     const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply };
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply, promptVersion: "hugo-v2" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
       await hugoData.saveErrorTrace(rootId, traceId, { schemaVersion: 1, conversationId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
-        timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "legacy-v1", resultStatus: "ERROR",
+        timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "hugo-v2", resultStatus: "ERROR",
         errorCode: error instanceof Error ? clean(error.name, 80) : "ERROR", latencyMs: Date.now() - startedAt,
         toolsRequested: error instanceof Error ? (error as Error & { hugoToolsRequested?: string[] }).hugoToolsRequested || [] : [],
         toolsExecuted: error instanceof Error ? (error as Error & { hugoToolsExecuted?: string[] }).hugoToolsExecuted || [] : [],
@@ -158,7 +173,7 @@ export const sendAgent007Message = onCall(
     const reply = result.text;
     const source = result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE";
     const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
-      capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities,
+      capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     return { ok: true, conversationId, message: { id: saved.id, role: "assistant", text: reply, source, createdAt: saved.createdAt } };
@@ -199,5 +214,54 @@ export const getAgent007Trace = onCall(
     const traceId = clean(request.data?.traceId, 160);
     if (!traceId) throw new HttpsError("invalid-argument", "Traza requerida.");
     return { ok: true, trace: await hugoData.getTrace(rootId, traceId) };
+  },
+);
+
+export const listAgent007MemoryDiagnostics = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    return { ok: true, memories: await hugoData.listMemoryDiagnostics(rootId) };
+  },
+);
+
+export const createAgent007MemoryCandidate = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, user, rootId } = await actor(request);
+    const kind = clean(request.data?.kind, 30);
+    const content = clean(request.data?.content, 1000);
+    if (!["USER_STATEMENT", "PREFERENCE", "DECISION", "EXPERIENCE"].includes(kind) || !content) throw new HttpsError("invalid-argument", "Tipo o contenido de memoria inválido.");
+    const raw = request.data?.entityReference;
+    const entityReference = raw ? { sourceSystem: clean(raw.sourceSystem, 40), entityType: clean(raw.entityType, 40), entityId: clean(raw.entityId, 160), displayReference: clean(raw.displayReference, 80) || undefined } : undefined;
+    if (entityReference && (!entityReference.sourceSystem || !entityReference.entityType || !entityReference.entityId)) throw new HttpsError("invalid-argument", "Entidad inválida.");
+    const result = await hugoData.createMemoryCandidate({ rootId, actorUid: uid, kind: kind as "USER_STATEMENT" | "PREFERENCE" | "DECISION" | "EXPERIENCE", content, entityReference });
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: `Hugo creó candidato de memoria ${kind}` });
+    return { ok: true, ...result, status: "CANDIDATE" };
+  },
+);
+
+export const reviewAgent007MemoryCandidate = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, user, rootId } = await actor(request);
+    const id = clean(request.data?.memoryId, 160), decision = clean(request.data?.decision, 20).toUpperCase();
+    const supersedesId = clean(request.data?.supersedesId, 160) || undefined;
+    if (!id || !["CONFIRM", "REJECT"].includes(decision) || decision === "REJECT" && supersedesId) throw new HttpsError("invalid-argument", "Revisión de memoria inválida.");
+    const result = await hugoData.reviewMemoryCandidate(rootId, uid, id, decision as "CONFIRM" | "REJECT", supersedesId);
+    if (result.changed) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: id, referenceType: "agent007Memory", description: `Hugo revisó candidato de memoria: ${decision}` });
+    return { ok: true, ...result };
+  },
+);
+
+export const linkAgent007VerifiedExperience = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, user, rootId } = await actor(request);
+    const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
+    if (!observationId || !decisionId || !outcomeId) throw new HttpsError("invalid-argument", "Vínculos obligatorios.");
+    const result = await hugoData.linkVerifiedExperience(rootId, observationId, decisionId, outcomeId);
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "Hugo vinculó experiencia con resultado verificado" });
+    return { ok: true, ...result };
   },
 );

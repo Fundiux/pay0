@@ -28,7 +28,7 @@ async function main() {
   assert.equal(traces.size, 1);
   const trace = traces.docs[0].data();
   assert.equal(trace.channel, 'WEB');
-  assert.equal(trace.promptVersion, 'legacy-v1');
+  assert.equal(trace.promptVersion, 'hugo-v2');
   assert.equal(trace.resultStatus, 'DETERMINISTIC_FALLBACK');
   assert(trace.toolsRequested.includes('getIqCapabilities'));
   assert(trace.toolsRequested.includes('getSolicitud'));
