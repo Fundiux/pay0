@@ -329,7 +329,8 @@ export const listAgent007LearningDiagnostics = onCall(
     return { ok: true, boundedTo: 100, experiences: records.map(row => ({ id: row.experienceId, domain: row.domain, taskType: row.taskType, state: row.state,
       revision: row.revision, createdAt: row.createdAt, provenance: row.quality.provenance, outcome: row.quality.outcome, feedback: row.quality.feedback,
       trainingEligible: row.trainingEligibility.eligible, reasons: row.trainingEligibility.reasons, memoryId: row.createdFrom.memoryId,
-      traceId: row.createdFrom.traceId, correctionCode: row.correction?.reasonCode || null, outcomeType: row.outcome?.type || null })) };
+      traceId: row.createdFrom.traceId, correctionCode: row.correction?.reasonCode || null, outcomeType: row.outcome?.type || null,
+      supersededById: row.supersededById || null })) };
   },
 );
 
@@ -347,5 +348,14 @@ export const assignAgent007LearningSplit = onCall(
     const { uid, rootId } = await actor(request);
     const record = await hugoLearning.assignSplit(rootId, clean(request.data?.experienceId, 160), clean(request.data?.split, 20) as any, uid);
     return { ok: true, id: record.experienceId, revision: record.revision, split: record.split, trainingEligibility: record.trainingEligibility };
+  },
+);
+
+export const supersedeAgent007LearningExperience = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const record = await hugoLearning.supersede(rootId, clean(request.data?.experienceId, 160), clean(request.data?.replacementId, 160), uid);
+    return { ok: true, id: record.experienceId, state: record.state, revision: record.revision, supersededById: record.supersededById };
   },
 );

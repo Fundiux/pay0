@@ -1,0 +1,409 @@
+{
+  "schemaVersion": "hugo-phase6-real-model-v1",
+  "syntheticOnly": true,
+  "model": "gemini-2.5-flash",
+  "promptVersion": "hugo-v2",
+  "config": {
+    "temperature": 0.35,
+    "maxOutputTokens": 1200,
+    "adapterRetry": "compact-on-MAX_TOKENS"
+  },
+  "executedAt": "2026-09-22T15:44:56.202Z",
+  "families": [
+    {
+      "id": "bank-rejection",
+      "entityType": "PAGO",
+      "folio": "P61006",
+      "status": "RECHAZADO",
+      "issueCode": "BANK_REJECTED",
+      "expectedBehavior": "VERIFY_BANK_REJECTION_BEFORE_RETRY",
+      "category": "known failure avoidance",
+      "priorExperienceId": "learning_bank-rejection",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_bank-rejection"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 6139,
+          "currentEvidenceDigest": "c6fa2b865a0ab20de413fcd43ce8bf46e95617f0450757d766464d98d03a861f",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago con folio `P61006` está en estado \"RECHAZADO\" porque el banco lo rechazó. Antes de actuar, yo comprobaría si existe un detalle más específico del motivo de rechazo por parte del banco y si hay algún complemento o solicitud asociada a este pago que pueda dar más contexto.",
+          "systemServed": "Hola, Evaluador. El pago con folio `P61006` está en estado \"RECHAZADO\" porque el banco lo rechazó. Antes de actuar, yo comprobaría si existe un detalle más específico del motivo de rechazo por parte del banco y si hay algún complemento o solicitud asociada a este pago que pueda dar más contexto.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 716,
+            "output": 74,
+            "reasoning": 673
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 6134,
+              "promptChars": 3141,
+              "outputLimit": 1200,
+              "inputTokens": 716,
+              "outputTokens": 74,
+              "cachedInputTokens": null,
+              "reasoningTokens": 673
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1149,
+            "approximateInputTokens": 288,
+            "currentFactsChars": 670,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61006",
+                  "monto": 120,
+                  "estado": "RECHAZADO",
+                  "issueCode": "BANK_REJECTED"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 2657,
+          "currentEvidenceDigest": "c6fa2b865a0ab20de413fcd43ce8bf46e95617f0450757d766464d98d03a861f",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61006 está rechazado porque el banco lo rechazó, su `issueCode` es `BANK_REJECTED`. Antes de actuar, yo verificaría el motivo exacto del rechazo con el banco.",
+          "systemServed": "Hola, Evaluador. El pago P61006 está rechazado porque el banco lo rechazó, su `issueCode` es `BANK_REJECTED`. Antes de actuar, yo verificaría el motivo exacto del rechazo con el banco.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 913,
+            "output": 56,
+            "reasoning": 185
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2655,
+              "promptChars": 3768,
+              "outputLimit": 1200,
+              "inputTokens": 913,
+              "outputTokens": 56,
+              "cachedInputTokens": null,
+              "reasoningTokens": 185
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1776,
+            "approximateInputTokens": 444,
+            "currentFactsChars": 670,
+            "memoryChars": 2,
+            "experienceChars": 629,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_bank-rejection"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_bank-rejection"
+          ],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61006",
+                  "monto": 120,
+                  "estado": "RECHAZADO",
+                  "issueCode": "BANK_REJECTED"
+                }
+              ]
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_bank-rejection",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "PAGOS",
+                  "taskType": "REASON",
+                  "entityType": "PAGO"
+                },
+                "situation": {
+                  "entityType": "PAGO",
+                  "status": "RECHAZADO",
+                  "issueCode": "BANK_REJECTED"
+                },
+                "expectedBehavior": "VERIFY_BANK_REJECTION_BEFORE_RETRY",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_BANK_REJECTION_BEFORE_RETRY",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "PAGO_APLICADO_A_SOLICITUD",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 3850,
+          "currentEvidenceDigest": "3184376e2d0ebdb36ee6b98fe1fee58872c4aa580ea98d5655673692b58f681a",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61006 está en estado \"RECHAZADO\" debido a un `issueCode` que indica \"UNRELATED_HOLD\". Antes de actuar, yo verificaría el significado exacto de \"UNRELATED_HOLD\" en nuestros sistemas internos para entender la causa raíz y si hay alguna retención o dependencia externa que lo esté provocando.",
+          "systemServed": "Hola, Evaluador. El pago P61006 está en estado \"RECHAZADO\" debido a un `issueCode` que indica \"UNRELATED_HOLD\". Antes de actuar, yo verificaría el significado exacto de \"UNRELATED_HOLD\" en nuestros sistemas internos para entender la causa raíz y si hay alguna retención o dependencia externa que lo esté provocando.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 714,
+            "output": 79,
+            "reasoning": 343
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3849,
+              "promptChars": 3142,
+              "outputLimit": 1200,
+              "inputTokens": 714,
+              "outputTokens": 79,
+              "cachedInputTokens": null,
+              "reasoningTokens": 343
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1150,
+            "approximateInputTokens": 288,
+            "currentFactsChars": 671,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_bank-rejection",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61006",
+                  "monto": 120,
+                  "estado": "RECHAZADO",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

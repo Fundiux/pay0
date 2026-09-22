@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "hugo-phase6-token-v1",
+  "syntheticOnly": true,
+  "historicalPhase4Failure": "MAX_TOKENS",
+  "maxOutputTokens": 1200,
+  "unchangedModelConfiguration": true,
+  "inferenceLimit": "No Phase 4 discarded-candidate usage was recorded; absence of a new MAX_TOKENS failure cannot isolate its original cause.",
+  "results": [
+    {
+      "repeat": 1,
+      "variant": "original",
+      "contextChars": 996,
+      "memoryChars": 214,
+      "experienceChars": 2,
+      "latencyMs": 4318,
+      "finish": "COMPLETE",
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 4317,
+          "promptChars": 2965,
+          "outputLimit": 1200,
+          "inputTokens": 681,
+          "outputTokens": 102,
+          "cachedInputTokens": null,
+          "reasoningTokens": 404
+        }
+      ],
+      "tokenUsage": {
+        "input": 681,
+        "output": 102,
+        "reasoning": 404
+      },
+      "outputChars": 461,
+      "response": "Hola, Evaluador. La última vez que hubo una situación similar, una revisión documental ayudó a resolver la discrepancia. Sin embargo, es importante verificar la evidencia actual antes de aplicar la misma solución. Ahora mismo, la solicitud S12345 está en estado PENDIENTE con un monto de 120. Entiendo que la revisión documental fue clave en un caso anterior para resolver una discrepancia, y esto requiere confirmación para ver si aplica a la situación actual."
+    },
+    {
+      "repeat": 1,
+      "variant": "compact",
+      "contextChars": 978,
+      "memoryChars": 196,
+      "experienceChars": 2,
+      "latencyMs": 15362,
+      "finish": "MAX_TOKENS",
+      "attempts": [
+        {
+          "finishReason": "MAX_TOKENS",
+          "latencyMs": 7778,
+          "promptChars": 2947,
+          "outputLimit": 1200,
+          "inputTokens": 677,
+          "outputTokens": 46,
+          "cachedInputTokens": null,
+          "reasoningTokens": 1150
+        },
+        {
+          "finishReason": "MAX_TOKENS",
+          "latencyMs": 7583,
+          "promptChars": 3156,
+          "outputLimit": 1200,
+          "inputTokens": 726,
+          "outputTokens": 44,
+          "cachedInputTokens": null,
+          "reasoningTokens": 1152
+        }
+      ],
+      "tokenUsage": null,
+      "outputChars": 0,
+      "response": null
+    },
+    {
+      "repeat": 2,
+      "variant": "original",
+      "contextChars": 996,
+      "memoryChars": 214,
+      "experienceChars": 2,
+      "latencyMs": 4190,
+      "finish": "COMPLETE",
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 4190,
+          "promptChars": 2965,
+          "outputLimit": 1200,
+          "inputTokens": 681,
+          "outputTokens": 60,
+          "cachedInputTokens": null,
+          "reasoningTokens": 403
+        }
+      ],
+      "tokenUsage": {
+        "input": 681,
+        "output": 60,
+        "reasoning": 403
+      },
+      "outputChars": 211,
+      "response": "Hola. No tengo registro de un \"problema\" anterior específico asociado al folio S12345 en el contexto que me proporcionas. Lo que sí veo es que la solicitud S12345 está actualmente PENDIENTE, con un monto de 120."
+    },
+    {
+      "repeat": 2,
+      "variant": "compact",
+      "contextChars": 978,
+      "memoryChars": 196,
+      "experienceChars": 2,
+      "latencyMs": 42964,
+      "finish": "MODEL_TIMEOUT",
+      "attempts": [
+        {
+          "finishReason": "MAX_TOKENS",
+          "latencyMs": 7946,
+          "promptChars": 2947,
+          "outputLimit": 1200,
+          "inputTokens": 677,
+          "outputTokens": 43,
+          "cachedInputTokens": null,
+          "reasoningTokens": 1153
+        }
+      ],
+      "tokenUsage": null,
+      "outputChars": 0,
+      "response": null
+    }
+  ]
+}

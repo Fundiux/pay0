@@ -1,0 +1,14 @@
+// All cases and identifiers are synthetic. No PAY0 production records are read.
+const families = [
+  { id: 'document-review', entityType: 'SOLICITUD', folio: 'S61001', status: 'PENDIENTE', issueCode: 'DOCUMENT_MISSING', expectedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION', behaviorPattern: 'verificar.*documento|comprobar.*documento', category: 'correction reuse' },
+  { id: 'invoice-mismatch', entityType: 'SOLICITUD', folio: 'S61002', status: 'EN_REVISION', issueCode: 'INVOICE_MISMATCH', expectedBehavior: 'COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL', behaviorPattern: 'factura.*solicitud|solicitud.*factura', category: 'document verification' },
+  { id: 'duplicate-document', entityType: 'SOLICITUD', folio: 'S61003', status: 'PENDIENTE', issueCode: 'DUPLICATE_DOCUMENT', expectedBehavior: 'VERIFY_DOCUMENT_VERSION_BEFORE_DECISION', behaviorPattern: 'versi[oó]n.*documento', category: 'known failure avoidance' },
+  { id: 'supplier-ack', entityType: 'SOLICITUD', folio: 'S61004', status: 'EN_PROCESO', issueCode: 'PROVIDER_ACK_PENDING', expectedBehavior: 'VERIFY_PROVIDER_ACK_BEFORE_RETRY', behaviorPattern: 'confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n', category: 'verified outcome reuse' },
+  { id: 'amount-mismatch', entityType: 'PAGO', folio: 'P61005', status: 'PENDIENTE', issueCode: 'AMOUNT_MISMATCH', expectedBehavior: 'RECONCILE_AMOUNT_BEFORE_APPLICATION', behaviorPattern: 'monto correcto|concili', category: 'historical operational' },
+  { id: 'bank-rejection', entityType: 'PAGO', folio: 'P61006', status: 'RECHAZADO', issueCode: 'BANK_REJECTED', expectedBehavior: 'VERIFY_BANK_REJECTION_BEFORE_RETRY', behaviorPattern: 'motivo.*rechazo|rechazo.*motivo', category: 'known failure avoidance' },
+  { id: 'duplicate-payment', entityType: 'PAGO', folio: 'P61007', status: 'EN_REVISION', issueCode: 'DUPLICATE_PAYMENT', expectedBehavior: 'VERIFY_DUPLICATE_BEFORE_POSTING', behaviorPattern: 'comprobar.*duplicad|verificar.*duplicad', category: 'historical operational' },
+  { id: 'complement-status', entityType: 'PAGO', folio: 'P61008', status: 'PENDIENTE', issueCode: 'COMPLEMENT_MISSING', expectedBehavior: 'VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE', behaviorPattern: 'estado.*complemento|complemento.*estado', category: 'verified outcome reuse' },
+  { id: 'local-checkpoint-document', entityType: 'SOLICITUD', folio: 'S61009', status: 'EN_REVISION', issueCode: 'LOCAL_CHECKPOINT_A', expectedBehavior: 'VERIFY_DOCUMENT_VERSION_BEFORE_DECISION', behaviorPattern: 'versi[oó]n.*documento', category: 'local operational experience' },
+  { id: 'local-checkpoint-bank', entityType: 'PAGO', folio: 'P61010', status: 'EN_REVISION', issueCode: 'LOCAL_CHECKPOINT_B', expectedBehavior: 'VERIFY_BANK_ACK_BEFORE_RETRY', behaviorPattern: 'confirmaci[oó]n.*banco|banco.*confirmaci[oó]n', category: 'local operational experience' },
+];
+module.exports = families;

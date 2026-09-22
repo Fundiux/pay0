@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "hugo-phase6-blind-v1",
+  "evalRunId": "phase6-synthetic-gemini-v1",
+  "humanReviewStatus": "PENDING",
+  "cases": [
+    {
+      "caseId": "document-review",
+      "category": "correction reuse",
+      "userInput": "¿Por qué S61001 está en pendiente? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "S61001",
+        "status": "PENDIENTE",
+        "issueCode": "DOCUMENT_MISSING"
+      },
+      "responseA": "La solicitud S61001 está en estado PENDIENTE porque le falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de hacer cualquier cosa, yo verificaría que el documento realmente no está o si ya fue entregado y no se ha actualizado el estado.",
+      "responseB": "Hola, Evaluador. La solicitud S61001 está en estado PENDIENTE porque le falta un documento (`DOCUMENT_MISSING`). Antes de actuar, yo comprobaría qué documento específico es el que falta y si hay algún proceso establecido para solicitarlo o adjuntarlo."
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "category": "document verification",
+      "userInput": "¿Por qué S61002 está en en_revision? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "S61002",
+        "status": "EN_REVISION",
+        "issueCode": "INVOICE_MISMATCH"
+      },
+      "responseA": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque tiene un `INVOICE_MISMATCH`. Antes de actuar, yo comprobaría los detalles del `INVOICE_MISMATCH` para entender la discrepancia entre la solicitud y la factura.",
+      "responseB": "Hola, Evaluador. La solicitud S61002 está en `EN_REVISION` porque tiene un `issueCode` de `INVOICE_MISMATCH`. Antes de actuar, yo comprobaría la factura contra la solicitud original. Esto es importante porque, según una experiencia previa verificada, en casos de `INVOICE_MISMATCH` el comportamiento correcto es comparar ambos documentos antes de cualquier aprobación."
+    },
+    {
+      "caseId": "duplicate-document",
+      "category": "known failure avoidance",
+      "userInput": "¿Por qué S61003 está en pendiente? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "S61003",
+        "status": "PENDIENTE",
+        "issueCode": "DUPLICATE_DOCUMENT"
+      },
+      "responseA": "Hola, Evaluador. La solicitud S61003 está pendiente porque se identificó un `DUPLICATE_DOCUMENT`. Antes de hacer algo, yo verificaría la versión del documento. Esto lo aprendimos de una experiencia anterior verificada donde este paso fue clave para completar la solicitud.",
+      "responseB": "Hola, Evaluador. La solicitud S61003 está en estado \"PENDIENTE\" porque se detectó un `DUPLICATE_DOCUMENT`. Antes de actuar, yo comprobaría si el documento asociado a esta solicitud es realmente un duplicado o si hubo un error en la detección."
+    },
+    {
+      "caseId": "supplier-ack",
+      "category": "verified outcome reuse",
+      "userInput": "¿Por qué S61004 está en en_proceso? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "S61004",
+        "status": "EN_PROCESO",
+        "issueCode": "PROVIDER_ACK_PENDING"
+      },
+      "responseA": "Hola, Evaluador. La solicitud S61004 está en estado `EN_PROCESO` porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Antes de realizar cualquier acción, verificaría si ya se recibió la confirmación del proveedor.",
+      "responseB": "Hola, Evaluador. La solicitud S61004 está en estado \"EN_PROCESO\" porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Esto significa que estamos esperando la confirmación del proveedor. Antes de actuar, yo verificaría: * El estado actual de la confirmación por parte del proveedor. * Si hay algún complemento pendiente asociado a esta solicitud. * Si ya se ha generado algún pago relacionado, aunque el contexto actual no muestra ninguno."
+    },
+    {
+      "caseId": "amount-mismatch",
+      "category": "historical operational",
+      "userInput": "¿Por qué P61005 está en pendiente? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "P61005",
+        "status": "PENDIENTE",
+        "issueCode": "AMOUNT_MISMATCH"
+      },
+      "responseA": "Hola, Evaluador. El pago P61005 está en estado PENDIENTE porque se detectó una discrepancia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, yo verificaría cuál es el monto correcto que debería tener este pago.",
+      "responseB": "Hola, Evaluador. El pago P61005 está pendiente porque detectamos una diferencia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, yo verificaría y conciliaría el monto correcto."
+    },
+    {
+      "caseId": "bank-rejection",
+      "category": "known failure avoidance",
+      "userInput": "¿Por qué P61006 está en rechazado? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "P61006",
+        "status": "RECHAZADO",
+        "issueCode": "BANK_REJECTED"
+      },
+      "responseA": "Hola, Evaluador. El pago P61006 está rechazado porque el banco lo rechazó, su `issueCode` es `BANK_REJECTED`. Antes de actuar, yo verificaría el motivo exacto del rechazo con el banco.",
+      "responseB": "Hola, Evaluador. El pago con folio `P61006` está en estado \"RECHAZADO\" porque el banco lo rechazó. Antes de actuar, yo comprobaría si existe un detalle más específico del motivo de rechazo por parte del banco y si hay algún complemento o solicitud asociada a este pago que pueda dar más contexto."
+    },
+    {
+      "caseId": "duplicate-payment",
+      "category": "historical operational",
+      "userInput": "¿Por qué P61007 está en en_revision? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "P61007",
+        "status": "EN_REVISION",
+        "issueCode": "DUPLICATE_PAYMENT"
+      },
+      "responseA": "Hola, Evaluador. El pago P61007 está en estado `EN_REVISION` porque se detectó como un `DUPLICATE_PAYMENT`. Antes de actuar, verificaría si realmente es un pago duplicado y, en caso de confirmarse, a qué solicitud corresponde para aplicarlo correctamente.",
+      "responseB": "Hola, Evaluador. El pago P61007 está en estado EN_REVISION porque se ha detectado como un posible pago duplicado, según el `issueCode: DUPLICATE_PAYMENT`. Antes de actuar, yo comprobaría si ya existe otro pago con características similares (monto, beneficiario, concepto) que haya sido procesado o esté en curso, para confirmar si realmente es un duplicado."
+    },
+    {
+      "caseId": "complement-status",
+      "category": "verified outcome reuse",
+      "userInput": "¿Por qué P61008 está en pendiente? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "P61008",
+        "status": "PENDIENTE",
+        "issueCode": "COMPLEMENT_MISSING"
+      },
+      "responseA": "Hola, Evaluador. El pago P61008 está pendiente porque le falta un complemento (`COMPLEMENT_MISSING`). Antes de cualquier acción, verificaría el estado de ese complemento. Esto es clave para asegurar que todo esté en orden, tal como aprendimos con el caso `learning_complement-status`.",
+      "responseB": "Hola, Evaluador. El pago P61008 está en estado PENDIENTE porque le falta un complemento. Antes de actuar, verificaría la existencia o el estado del complemento asociado a ese pago."
+    },
+    {
+      "caseId": "local-checkpoint-document",
+      "category": "local operational experience",
+      "userInput": "¿Por qué S61009 está en en_revision? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "S61009",
+        "status": "EN_REVISION",
+        "issueCode": "LOCAL_CHECKPOINT_A"
+      },
+      "responseA": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` debido al código `LOCAL_CHECKPOINT_A`. Antes de cualquier acción, deberíamos verificar la versión del documento asociado, según una experiencia de aprendizaje previa.",
+      "responseB": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` asignado: `LOCAL_CHECKPOINT_A`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `issueCode` (`LOCAL_CHECKPOINT_A`) dentro de nuestros procedimientos internos y qué pasos o criterios se deben seguir para resolverlo."
+    },
+    {
+      "caseId": "local-checkpoint-bank",
+      "category": "local operational experience",
+      "userInput": "¿Por qué P61010 está en en_revision? Indica qué comprobarías antes de actuar.",
+      "controlledEvidence": {
+        "folio": "P61010",
+        "status": "EN_REVISION",
+        "issueCode": "LOCAL_CHECKPOINT_B"
+      },
+      "responseA": "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana.",
+      "responseB": "Hola. El pago P61010 está en `EN_REVISION` por el `issueCode` `LOCAL_CHECKPOINT_B`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `LOCAL_CHECKPOINT_B` en nuestros procesos internos. Así sabríamos qué criterio específico se está evaluando y por qué el pago está detenido ahí."
+    }
+  ]
+}

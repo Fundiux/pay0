@@ -1,0 +1,804 @@
+{
+  "schemaVersion": "hugo-phase6-real-model-v1",
+  "syntheticOnly": true,
+  "model": "gemini-2.5-flash",
+  "promptVersion": "hugo-v2",
+  "config": {
+    "temperature": 0.35,
+    "maxOutputTokens": 1200,
+    "adapterRetry": "compact-on-MAX_TOKENS"
+  },
+  "executedAt": "2026-09-22T15:46:53.594Z",
+  "families": [
+    {
+      "id": "invoice-mismatch",
+      "entityType": "SOLICITUD",
+      "folio": "S61002",
+      "status": "EN_REVISION",
+      "issueCode": "INVOICE_MISMATCH",
+      "expectedBehavior": "COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL",
+      "category": "document verification",
+      "priorExperienceId": "learning_invoice-mismatch",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_invoice-mismatch"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 11757,
+          "currentEvidenceDigest": "4e31d4e7105dcc9d30a799cde5f8c300546de35f4818be944c855c193a01edfa",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque se detectó un `INVOICE_MISMATCH`. Antes de hacer cualquier cosa, yo comprobaría: 1. Los detalles de la factura asociada para ver qué monto o datos no coinciden con la solicitud. 2. Si hay algún complemento o documento adicional que pueda aclarar la discrepancia.",
+          "systemServed": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque se detectó un `INVOICE_MISMATCH`. Antes de hacer cualquier cosa, yo comprobaría: 1. Los detalles de la factura asociada para ver qué monto o datos no coinciden con la solicitud. 2. Si hay algún complemento o documento adicional que pueda aclarar la discrepancia.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 720,
+            "output": 88,
+            "reasoning": 284
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 11750,
+              "promptChars": 3153,
+              "outputLimit": 1200,
+              "inputTokens": 720,
+              "outputTokens": 88,
+              "cachedInputTokens": null,
+              "reasoningTokens": 284
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1159,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61002",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "INVOICE_MISMATCH"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 6426,
+          "currentEvidenceDigest": "4e31d4e7105dcc9d30a799cde5f8c300546de35f4818be944c855c193a01edfa",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque se detectó un `INVOICE_MISMATCH`. Antes de cualquier acción, yo comprobaría que la factura coincida con los detalles de la solicitud.",
+          "systemServed": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque se detectó un `INVOICE_MISMATCH`. Antes de cualquier acción, yo comprobaría que la factura coincida con los detalles de la solicitud.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 923,
+            "output": 57,
+            "reasoning": 658
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 6419,
+              "promptChars": 3818,
+              "outputLimit": 1200,
+              "inputTokens": 923,
+              "outputTokens": 57,
+              "cachedInputTokens": null,
+              "reasoningTokens": 658
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1824,
+            "approximateInputTokens": 456,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 667,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_invoice-mismatch"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_invoice-mismatch"
+          ],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61002",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "INVOICE_MISMATCH"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_invoice-mismatch",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "SOLICITUDES",
+                  "taskType": "REASON",
+                  "entityType": "SOLICITUD"
+                },
+                "situation": {
+                  "entityType": "SOLICITUD",
+                  "status": "EN_REVISION",
+                  "issueCode": "INVOICE_MISMATCH"
+                },
+                "expectedBehavior": "COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "SOLICITUD_COMPLETADA",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 4198,
+          "currentEvidenceDigest": "3d8e88b3933b76711407b7a505b5f9607b06da010765b2afba82694bb6416b6b",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "El folio S61002 está en estado `EN_REVISION` debido a un `issueCode` de `UNRELATED_HOLD`. Antes de actuar, yo comprobaría: 1. La definición interna del `issueCode` `UNRELATED_HOLD` para entender su naturaleza y el motivo exacto del bloqueo. 2. Si existen otras solicitudes o entidades relacionadas que pudieran estar causando este bloqueo. 3. Los procedimientos operativos específicos de PAY0 para manejar solicitudes con este `issueCode`.",
+          "systemServed": "El folio S61002 está en estado `EN_REVISION` debido a un `issueCode` de `UNRELATED_HOLD`. Antes de actuar, yo comprobaría: 1. La definición interna del `issueCode` `UNRELATED_HOLD` para entender su naturaleza y el motivo exacto del bloqueo. 2. Si existen otras solicitudes o entidades relacionadas que pudieran estar causando este bloqueo. 3. Los procedimientos operativos específicos de PAY0 para manejar solicitudes con este `issueCode`.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 717,
+            "output": 106,
+            "reasoning": 508
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4196,
+              "promptChars": 3151,
+              "outputLimit": 1200,
+              "inputTokens": 717,
+              "outputTokens": 106,
+              "cachedInputTokens": null,
+              "reasoningTokens": 508
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1157,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 678,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_invoice-mismatch",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61002",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "duplicate-document",
+      "entityType": "SOLICITUD",
+      "folio": "S61003",
+      "status": "PENDIENTE",
+      "issueCode": "DUPLICATE_DOCUMENT",
+      "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+      "category": "known failure avoidance",
+      "priorExperienceId": "learning_duplicate-document",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_duplicate-document"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 8778,
+          "currentEvidenceDigest": "13eb5e7c7485b70707321d23dbf7b2033b70b5f58e423849d8bd1aeede73a8a4",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61003 está en estado PENDIENTE porque se detectó un `DUPLICATE_DOCUMENT`. Antes de hacer algo, yo comprobaría si realmente existe un documento duplicado y cuál es la política de PAY0 para gestionar estos casos.",
+          "systemServed": "Hola, Evaluador. La solicitud S61003 está en estado PENDIENTE porque se detectó un `DUPLICATE_DOCUMENT`. Antes de hacer algo, yo comprobaría si realmente existe un documento duplicado y cuál es la política de PAY0 para gestionar estos casos.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 715,
+            "output": 61,
+            "reasoning": 398
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 8776,
+              "promptChars": 3151,
+              "outputLimit": 1200,
+              "inputTokens": 715,
+              "outputTokens": 61,
+              "cachedInputTokens": null,
+              "reasoningTokens": 398
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1159,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61003",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "DUPLICATE_DOCUMENT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 6540,
+          "currentEvidenceDigest": "13eb5e7c7485b70707321d23dbf7b2033b70b5f58e423849d8bd1aeede73a8a4",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61003 está pendiente porque se detectó un problema de documento duplicado (`DUPLICATE_DOCUMENT`). Antes de tomar cualquier acción, y basándome en experiencias previas con este tipo de situación, verificaría la versión del documento para asegurarme de que estamos trabajando con la correcta.",
+          "systemServed": "Hola, Evaluador. La solicitud S61003 está pendiente porque se detectó un problema de documento duplicado (`DUPLICATE_DOCUMENT`). Antes de tomar cualquier acción, y basándome en experiencias previas con este tipo de situación, verificaría la versión del documento para asegurarme de que estamos trabajando con la correcta.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 908,
+            "output": 71,
+            "reasoning": 379
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 6537,
+              "promptChars": 3808,
+              "outputLimit": 1200,
+              "inputTokens": 908,
+              "outputTokens": 71,
+              "cachedInputTokens": null,
+              "reasoningTokens": 379
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1816,
+            "approximateInputTokens": 454,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 659,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_duplicate-document"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_duplicate-document"
+          ],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61003",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "DUPLICATE_DOCUMENT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_duplicate-document",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "SOLICITUDES",
+                  "taskType": "REASON",
+                  "entityType": "SOLICITUD"
+                },
+                "situation": {
+                  "entityType": "SOLICITUD",
+                  "status": "PENDIENTE",
+                  "issueCode": "DUPLICATE_DOCUMENT"
+                },
+                "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "SOLICITUD_COMPLETADA",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 5254,
+          "currentEvidenceDigest": "0a46e8b20dcd84091b962ebf4d698d8bf0162ca219aa4b9a15e710b8da0e213b",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola. La solicitud S61003 está en estado \"PENDIENTE\" debido a un código de incidencia \"UNRELATED_HOLD\". Antes de actuar, yo verificaría qué implica exactamente ese \"UNRELATED_HOLD\" para entender la naturaleza del bloqueo y si hay algún proceso específico para resolverlo.",
+          "systemServed": "Hola. La solicitud S61003 está en estado \"PENDIENTE\" debido a un código de incidencia \"UNRELATED_HOLD\". Antes de actuar, yo verificaría qué implica exactamente ese \"UNRELATED_HOLD\" para entender la naturaleza del bloqueo y si hay algún proceso específico para resolverlo.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 713,
+            "output": 61,
+            "reasoning": 723
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 5248,
+              "promptChars": 3147,
+              "outputLimit": 1200,
+              "inputTokens": 713,
+              "outputTokens": 61,
+              "cachedInputTokens": null,
+              "reasoningTokens": 723
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1155,
+            "approximateInputTokens": 289,
+            "currentFactsChars": 676,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_duplicate-document",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61003",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

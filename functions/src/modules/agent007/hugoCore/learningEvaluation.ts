@@ -26,7 +26,10 @@ export function measureLearningEffect(input: { task: StructuredTask; experience:
 export type RuleCandidate = { domain: string; taskType: string; features: Record<string, string>; expectedBehavior: string; supportingIds: string[]; contradictoryIds: string[]; status: "RULE_CANDIDATE" };
 export function proposeRuleCandidates(records: LearningExperience[]): RuleCandidate[] {
   const groups = new Map<string, LearningExperience[]>();
-  for (const row of records.filter(x => x.state === "VERIFIED" && x.outcome?.verified && x.expectedBehavior)) {
+  const seen = new Set<string>();
+  for (const row of records.filter(x => x.state === "VERIFIED" && x.outcome?.verified && x.expectedBehavior && x.quality.provenance === "VERIFIED" && !x.supersededById)) {
+    if (seen.has(row.experienceId)) continue;
+    seen.add(row.experienceId);
     const key = JSON.stringify([row.domain, row.taskType, Object.entries(row.features).sort()]);
     groups.set(key, [...(groups.get(key) || []), row]);
   }
@@ -34,7 +37,7 @@ export function proposeRuleCandidates(records: LearningExperience[]): RuleCandid
   for (const group of groups.values()) {
     const byBehavior = new Map<string, LearningExperience[]>();
     for (const row of group) byBehavior.set(row.expectedBehavior!, [...(byBehavior.get(row.expectedBehavior!) || []), row]);
-    for (const [expectedBehavior, support] of byBehavior) if (support.length >= 2) candidates.push({ domain: support[0].domain, taskType: support[0].taskType,
+    for (const [expectedBehavior, support] of byBehavior) if (new Set(support.map(x => x.entityReferences[0]?.entityId)).size >= 2) candidates.push({ domain: support[0].domain, taskType: support[0].taskType,
       features: support[0].features, expectedBehavior, supportingIds: support.map(x => x.experienceId),
       contradictoryIds: group.filter(x => x.expectedBehavior !== expectedBehavior).map(x => x.experienceId), status: "RULE_CANDIDATE" });
   }

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "hugo-phase6-analysis-v1",
+  "syntheticOnly": true,
+  "familyCount": 10,
+  "classifications": {
+    "POSITIVE_LEARNING_EFFECT": 1,
+    "NO_EFFECT": 7,
+    "NEGATIVE_LEARNING_EFFECT": 0,
+    "OVERGENERALIZATION": 0,
+    "INCONCLUSIVE": 1,
+    "MODEL_ERROR": 1,
+    "CONTEXT_ERROR": 0,
+    "RETRIEVAL_ERROR": 0,
+    "TOKEN_LIMIT_ERROR": 0
+  },
+  "retrieval": {
+    "expectedRelevantIncluded": 10,
+    "expectedCounterexamplesExcluded": 10,
+    "familyDenominator": 10
+  },
+  "tokenAndLatency": {
+    "completedArms": 29,
+    "medianInputTokens": 718,
+    "medianOutputTokens": 74,
+    "medianReasoningTokens": 363,
+    "medianElapsedMs": 3580,
+    "maxContextChars": 1827,
+    "estimatedProviderCost": null,
+    "costReason": "No versioned provider price contract"
+  },
+  "humanReviewsCompleted": 0,
+  "families": [
+    {
+      "caseId": "document-review",
+      "domain": "SOLICITUDES",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "domain": "SOLICITUDES",
+      "classification": "NO_EFFECT",
+      "runCount": 3,
+      "retrieved": true,
+      "referenced": true
+    },
+    {
+      "caseId": "duplicate-document",
+      "domain": "SOLICITUDES",
+      "classification": "POSITIVE_LEARNING_EFFECT",
+      "runCount": 3,
+      "retrieved": true,
+      "referenced": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "domain": "SOLICITUDES",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    },
+    {
+      "caseId": "amount-mismatch",
+      "domain": "PAGOS",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    },
+    {
+      "caseId": "bank-rejection",
+      "domain": "PAGOS",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    },
+    {
+      "caseId": "duplicate-payment",
+      "domain": "PAGOS",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    },
+    {
+      "caseId": "complement-status",
+      "domain": "PAGOS",
+      "classification": "NO_EFFECT",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": true
+    },
+    {
+      "caseId": "local-checkpoint-document",
+      "domain": "SOLICITUDES",
+      "classification": "INCONCLUSIVE",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": true
+    },
+    {
+      "caseId": "local-checkpoint-bank",
+      "domain": "PAGOS",
+      "classification": "MODEL_ERROR",
+      "runCount": 1,
+      "retrieved": true,
+      "referenced": false
+    }
+  ]
+}

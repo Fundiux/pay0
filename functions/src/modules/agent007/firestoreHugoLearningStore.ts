@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildDraftExperience, buildVerifiedExperience, withCorrection, withOutcome } from "./hugoCore/experienceBuilder";
-import { HugoLearningStore, relevantExperience } from "./hugoCore/learningStore";
+import { HugoLearningStore, selectLearningExperiences } from "./hugoCore/learningStore";
 import { LearningCorrection, LearningEffect, LearningEventType, LearningExperience, LearningLedgerEvent, LearningQuery, LearningRetrieval, LearningSplit, trainingEligibility } from "./hugoCore/learningContract";
 
 const validId = (value: string) => /^[A-Za-z0-9_-]{1,160}$/.test(value);
@@ -130,7 +130,8 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
     return this.db.runTransaction(async tx => {
       const snap = await tx.get(target), row = snap.data() as LearningExperience | undefined;
       if (!row || row.rootId !== scope) throw new HttpsError("not-found", "Experiencia no encontrada.");
-      if (row.state !== "VERIFIED" || split === "TRAIN" && (row.protectedCaseIds.length || ["HOLDOUT", "GOLDEN"].includes(row.split))) throw new HttpsError("failed-precondition", "Caso protegido o no verificado.");
+      if (row.state !== "VERIFIED" || ["HOLDOUT", "GOLDEN"].includes(row.split) && split !== row.split ||
+        split === "TRAIN" && row.protectedCaseIds.length) throw new HttpsError("failed-precondition", "Caso protegido o no verificado.");
       if (row.split === split) return row;
       const next: LearningExperience = { ...row, revision: row.revision + 1, split,
         protectedCaseIds: ["HOLDOUT", "GOLDEN"].includes(split) ? [...new Set([...row.protectedCaseIds, row.experienceId])] : row.protectedCaseIds };
@@ -143,13 +144,37 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
       return next;
     });
   }
+  async supersede(rootId: string, experienceId: string, replacementId: string, actorUid: string) {
+    const scope = this.scope(rootId), previousRef = this.ref(experienceId), nextRef = this.ref(replacementId);
+    if (experienceId === replacementId || !validId(actorUid)) throw new HttpsError("invalid-argument", "Reemplazo inválido.");
+    return this.db.runTransaction(async tx => {
+      const [previousSnap, nextSnap] = await Promise.all([tx.get(previousRef), tx.get(nextRef)]);
+      const previous = previousSnap.data() as LearningExperience | undefined, replacement = nextSnap.data() as LearningExperience | undefined;
+      if (!previous || !replacement || previous.rootId !== scope || replacement.rootId !== scope) throw new HttpsError("not-found", "Experiencia no encontrada.");
+      if (previous.supersededById === replacementId && replacement.supersedesId === experienceId) return previous;
+      if (previous.state !== "VERIFIED" || replacement.state !== "VERIFIED" || previous.supersededById || replacement.supersedesId ||
+        previous.domain !== replacement.domain || previous.taskType !== replacement.taskType ||
+        previous.entityReferences[0]?.entityType !== replacement.entityReferences[0]?.entityType ||
+        JSON.stringify(Object.entries(previous.features).sort()) !== JSON.stringify(Object.entries(replacement.features).sort()) ||
+        Date.parse(replacement.createdAt) <= Date.parse(previous.createdAt)) throw new HttpsError("failed-precondition", "El reemplazo no conserva el ámbito o la cronología.");
+      const oldUpdated: LearningExperience = { ...previous, revision: previous.revision + 1, state: "SUPERSEDED", supersededById: replacementId };
+      oldUpdated.trainingEligibility = trainingEligibility(oldUpdated);
+      const newUpdated: LearningExperience = { ...replacement, revision: replacement.revision + 1, supersedesId: experienceId };
+      newUpdated.trainingEligibility = trainingEligibility(newUpdated);
+      tx.set(previousRef, oldUpdated); tx.set(nextRef, newUpdated);
+      tx.create(this.db.collection("agent007LearningRevisions").doc(`${experienceId}_${oldUpdated.revision}`), oldUpdated);
+      tx.create(this.db.collection("agent007LearningRevisions").doc(`${replacementId}_${newUpdated.revision}`), newUpdated);
+      const eventId = `superseded_${experienceId}_${oldUpdated.revision}`;
+      tx.create(this.ledgerRef(eventId), { eventId, rootId: scope, experienceId, type: "EXPERIENCE_SUPERSEDED", at: new Date().toISOString(), actorUid,
+        references: [{ system: "HUGO", kind: "EXPERIENCE", id: replacementId, rootId: scope }], metadata: { replacementId, revision: oldUpdated.revision } } satisfies LearningLedgerEvent);
+      return oldUpdated;
+    });
+  }
   async retrieve(query: LearningQuery): Promise<LearningRetrieval> {
     const rootId = this.scope(query.rootId);
     if (!/^[A-Z][A-Z0-9_]{1,59}$/.test(query.domain) || !/^[A-Z][A-Z0-9_]{1,59}$/.test(query.taskType) || !/^[A-Z][A-Z0-9_]{1,59}$/.test(query.entityType)) throw new HttpsError("invalid-argument", "Consulta de aprendizaje inválida.");
     const snap = await this.db.collection("agent007LearningExperiences").where("rootId", "==", rootId).where("domain", "==", query.domain).where("taskType", "==", query.taskType).limit(100).get();
-    const rows = snap.docs.map(doc => doc.data() as LearningExperience), selected: LearningExperience[] = [], rejected: LearningRetrieval["rejected"] = [];
-    for (const row of rows) { const match = relevantExperience(row, query); if (match.selected) selected.push(row); else rejected.push({ experienceId: row.experienceId, reason: match.reason }); }
-    return { considered: rows.length, selected: selected.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, Math.min(Math.max(query.limit || 3, 1), 5)), rejected };
+    return selectLearningExperiences(snap.docs.map(doc => doc.data() as LearningExperience), query);
   }
   async list(rootId: string, limit = 50) {
     const snap = await this.db.collection("agent007LearningExperiences").where("rootId", "==", this.scope(rootId)).orderBy("createdAt", "desc").limit(Math.min(Math.max(limit, 1), 500)).get();

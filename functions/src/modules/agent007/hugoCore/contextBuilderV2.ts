@@ -90,8 +90,10 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const context = { schemaVersion: CONTEXT_BUILDER_VERSION, questionIntent: resolution.intent, referenceResolution: resolution.reason, folioConsultado: folios.length === 1 ? folios[0] : null,
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),
-    solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus })),
-    pagos: pagos.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado })),
+    solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus,
+      ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
+    pagos: pagos.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado,
+      ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     complementosPendientes: asRows(by("getPaymentComplementStatus")[0]?.data).filter(row => row.status !== "RECEIVED" && row.status !== "VOIDED").slice(0, 6).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.status, enviadoAlProveedor: row.externalRequestSent === true })),
     capacidadesIq: by("getIqCapabilities")[0]?.data || {}, memoriasHistoricas: memoryContext, observacionesHistoricasNoVerificadas: observationContext, memoryConflicts,
     memoryPrecedence: "El estado operativo actual verificado por PAY0 prevalece sobre memoria histórica; decisiones y observaciones no son reglas universales." };

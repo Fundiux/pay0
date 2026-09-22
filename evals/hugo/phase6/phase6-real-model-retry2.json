@@ -1,0 +1,804 @@
+{
+  "schemaVersion": "hugo-phase6-real-model-v1",
+  "syntheticOnly": true,
+  "model": "gemini-2.5-flash",
+  "promptVersion": "hugo-v2",
+  "config": {
+    "temperature": 0.35,
+    "maxOutputTokens": 1200,
+    "adapterRetry": "compact-on-MAX_TOKENS"
+  },
+  "executedAt": "2026-09-22T15:45:15.516Z",
+  "families": [
+    {
+      "id": "duplicate-payment",
+      "entityType": "PAGO",
+      "folio": "P61007",
+      "status": "EN_REVISION",
+      "issueCode": "DUPLICATE_PAYMENT",
+      "expectedBehavior": "VERIFY_DUPLICATE_BEFORE_POSTING",
+      "category": "historical operational",
+      "priorExperienceId": "learning_duplicate-payment",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_duplicate-payment"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 4038,
+          "currentEvidenceDigest": "52d5432e645b4cdf6ae7f2d329544ac279bd55d3c07bb008c081a5d706f6ad39",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61007 está en estado EN_REVISION porque se ha detectado como un posible pago duplicado, según el `issueCode: DUPLICATE_PAYMENT`. Antes de actuar, yo comprobaría si ya existe otro pago con características similares (monto, beneficiario, concepto) que haya sido procesado o esté en curso, para confirmar si realmente es un duplicado.",
+          "systemServed": "Hola, Evaluador. El pago P61007 está en estado EN_REVISION porque se ha detectado como un posible pago duplicado, según el `issueCode: DUPLICATE_PAYMENT`. Antes de actuar, yo comprobaría si ya existe otro pago con características similares (monto, beneficiario, concepto) que haya sido procesado o esté en curso, para confirmar si realmente es un duplicado.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 718,
+            "output": 90,
+            "reasoning": 401
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4032,
+              "promptChars": 3149,
+              "outputLimit": 1200,
+              "inputTokens": 718,
+              "outputTokens": 90,
+              "cachedInputTokens": null,
+              "reasoningTokens": 401
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1155,
+            "approximateInputTokens": 289,
+            "currentFactsChars": 676,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "DUPLICATE_PAYMENT"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 3874,
+          "currentEvidenceDigest": "52d5432e645b4cdf6ae7f2d329544ac279bd55d3c07bb008c081a5d706f6ad39",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61007 está en estado `EN_REVISION` porque se detectó como un `DUPLICATE_PAYMENT`. Antes de actuar, verificaría si realmente es un pago duplicado y, en caso de confirmarse, a qué solicitud corresponde para aplicarlo correctamente.",
+          "systemServed": "Hola, Evaluador. El pago P61007 está en estado `EN_REVISION` porque se detectó como un `DUPLICATE_PAYMENT`. Antes de actuar, verificaría si realmente es un pago duplicado y, en caso de confirmarse, a qué solicitud corresponde para aplicarlo correctamente.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 913,
+            "output": 68,
+            "reasoning": 497
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3871,
+              "promptChars": 3779,
+              "outputLimit": 1200,
+              "inputTokens": 913,
+              "outputTokens": 68,
+              "cachedInputTokens": null,
+              "reasoningTokens": 497
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1785,
+            "approximateInputTokens": 447,
+            "currentFactsChars": 676,
+            "memoryChars": 2,
+            "experienceChars": 632,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_duplicate-payment"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_duplicate-payment"
+          ],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "DUPLICATE_PAYMENT"
+                }
+              ]
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_duplicate-payment",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "PAGOS",
+                  "taskType": "REASON",
+                  "entityType": "PAGO"
+                },
+                "situation": {
+                  "entityType": "PAGO",
+                  "status": "EN_REVISION",
+                  "issueCode": "DUPLICATE_PAYMENT"
+                },
+                "expectedBehavior": "VERIFY_DUPLICATE_BEFORE_POSTING",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_DUPLICATE_BEFORE_POSTING",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "PAGO_APLICADO_A_SOLICITUD",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 4495,
+          "currentEvidenceDigest": "9526e40ace39206db56a8bfbe458e03bd8ccff511a60c5dcbe81cd0549e7bdc7",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "El pago P61007 está en `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_HOLD`. Esto significa que hay una retención o bloqueo que no está directamente relacionado con los detalles del pago en sí, sino con algún otro factor externo. Antes de actuar, yo comprobaría: 1. **La naturaleza del `UNRELATED_HOLD`:** ¿Qué tipo de retención es y por qué se aplicó? 2. **El origen de la retención:** ¿Quién o qué sistema la generó? 3. **El impacto específico en P61007:** ¿Cómo afecta esta retención a este pago en particular? 4. **Los pasos para levantar la retención:** ¿Qué se necesita hacer para que el pago pueda continuar su proceso?",
+          "systemServed": "El pago P61007 está en `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_HOLD`. Esto significa que hay una retención o bloqueo que no está directamente relacionado con los detalles del pago en sí, sino con algún otro factor externo. Antes de actuar, yo comprobaría: 1. **La naturaleza del `UNRELATED_HOLD`:** ¿Qué tipo de retención es y por qué se aplicó? 2. **El origen de la retención:** ¿Quién o qué sistema la generó? 3. **El impacto específico en P61007:** ¿Cómo afecta esta retención a este pago en particular? 4. **Los pasos para levantar la retención:** ¿Qué se necesita hacer para que el pago pueda continuar su proceso?",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 715,
+            "output": 171,
+            "reasoning": 271
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4495,
+              "promptChars": 3146,
+              "outputLimit": 1200,
+              "inputTokens": 715,
+              "outputTokens": 171,
+              "cachedInputTokens": null,
+              "reasoningTokens": 271
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1152,
+            "approximateInputTokens": 288,
+            "currentFactsChars": 673,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_duplicate-payment",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "complement-status",
+      "entityType": "PAGO",
+      "folio": "P61008",
+      "status": "PENDIENTE",
+      "issueCode": "COMPLEMENT_MISSING",
+      "expectedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+      "category": "verified outcome reuse",
+      "priorExperienceId": "learning_complement-status",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_complement-status"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 6261,
+          "currentEvidenceDigest": "7704952e9080c25495d718304ec2f06b21e466517d0908439beb79d8a91e4370",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61008 está en estado PENDIENTE porque le falta un complemento. Antes de actuar, verificaría la existencia o el estado del complemento asociado a ese pago.",
+          "systemServed": "Hola, Evaluador. El pago P61008 está en estado PENDIENTE porque le falta un complemento. Antes de actuar, verificaría la existencia o el estado del complemento asociado a ese pago.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 713,
+            "output": 45,
+            "reasoning": 862
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 6259,
+              "promptChars": 3146,
+              "outputLimit": 1200,
+              "inputTokens": 713,
+              "outputTokens": 45,
+              "cachedInputTokens": null,
+              "reasoningTokens": 862
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1154,
+            "approximateInputTokens": 289,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61008",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "COMPLEMENT_MISSING"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 3580,
+          "currentEvidenceDigest": "7704952e9080c25495d718304ec2f06b21e466517d0908439beb79d8a91e4370",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. El pago P61008 está pendiente porque le falta un complemento (`COMPLEMENT_MISSING`). Antes de cualquier acción, verificaría el estado de ese complemento. Esto es clave para asegurar que todo esté en orden, tal como aprendimos con el caso `learning_complement-status`.",
+          "systemServed": "Hola, Evaluador. El pago P61008 está pendiente porque le falta un complemento (`COMPLEMENT_MISSING`). Antes de cualquier acción, verificaría el estado de ese complemento. Esto es clave para asegurar que todo esté en orden, tal como aprendimos con el caso `learning_complement-status`.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 905,
+            "output": 67,
+            "reasoning": 261
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3577,
+              "promptChars": 3787,
+              "outputLimit": 1200,
+              "inputTokens": 905,
+              "outputTokens": 67,
+              "cachedInputTokens": null,
+              "reasoningTokens": 261
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1795,
+            "approximateInputTokens": 449,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 643,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_complement-status"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_complement-status"
+          ],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61008",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "COMPLEMENT_MISSING"
+                }
+              ]
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_complement-status",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "PAGOS",
+                  "taskType": "REASON",
+                  "entityType": "PAGO"
+                },
+                "situation": {
+                  "entityType": "PAGO",
+                  "status": "PENDIENTE",
+                  "issueCode": "COMPLEMENT_MISSING"
+                },
+                "expectedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "PAGO_APLICADO_A_SOLICITUD",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 3994,
+          "currentEvidenceDigest": "2fcbae9916c5e41f4525ca0b1f97b2379133d62c440b47daecceba4d4143f0ec",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "El pago P61008 está en estado \"PENDIENTE\" debido a un `issueCode` que indica un `UNRELATED_HOLD`. Antes de cualquier acción, yo comprobaría la naturaleza y el origen de ese `UNRELATED_HOLD` para entender por qué se aplicó y si ya se resolvió o necesita alguna gestión externa. También verificaría si hay alguna instrucción específica en PAY0 para manejar pagos con este `issueCode`.",
+          "systemServed": "El pago P61008 está en estado \"PENDIENTE\" debido a un `issueCode` que indica un `UNRELATED_HOLD`. Antes de cualquier acción, yo comprobaría la naturaleza y el origen de ese `UNRELATED_HOLD` para entender por qué se aplicó y si ya se resolvió o necesita alguna gestión externa. También verificaría si hay alguna instrucción específica en PAY0 para manejar pagos con este `issueCode`.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 711,
+            "output": 90,
+            "reasoning": 365
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3991,
+              "promptChars": 3142,
+              "outputLimit": 1200,
+              "inputTokens": 711,
+              "outputTokens": 90,
+              "cachedInputTokens": null,
+              "reasoningTokens": 365
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1150,
+            "approximateInputTokens": 288,
+            "currentFactsChars": 671,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_complement-status",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61008",
+                  "monto": 120,
+                  "estado": "PENDIENTE",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

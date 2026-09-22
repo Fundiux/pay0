@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "hugo-phase6-structured-v1",
+  "syntheticOnly": true,
+  "caseId": "duplicate-document",
+  "contextSnapshotDigest": "62ce0bd4df28f8d47b032a57d0eb7d484ce9e0279fc7a9e8a59bfbd898a6c8fe",
+  "model": "gemini-2.5-flash",
+  "maxOutputTokens": 1200,
+  "temperature": 0.35,
+  "results": [
+    {
+      "structured": false,
+      "error": null,
+      "finishReason": "STOP",
+      "latencyMs": 2858,
+      "tokenUsage": {
+        "input": 863,
+        "output": 51,
+        "reasoning": 353
+      },
+      "response": "Hola, Evaluador.\n\nLa solicitud S61003 está pendiente porque tiene un código de incidencia \"DUPLICATE_DOCUMENT\".\n\nAntes de actuar, verificaría la versión del documento para asegurarme de que estamos trabajando con la correcta."
+    },
+    {
+      "structured": true,
+      "error": null,
+      "finishReason": "STOP",
+      "latencyMs": 3581,
+      "tokenUsage": {
+        "input": 932,
+        "output": 260,
+        "reasoning": 291
+      },
+      "response": "{\n  \"answer\": \"La solicitud S61003 está pendiente porque se identificó como un documento duplicado. Antes de tomar cualquier acción, sería importante verificar la versión del documento para asegurar que no haya habido un error o que se esté procesando la versión correcta.\",\n  \"claims\": [\n    {\n      \"text\": \"La solicitud S61003 se encuentra en estado PENDIENTE.\",\n      \"evidenceIds\": [\"solicitudes[0]\"]\n    },\n    {\n      \"text\": \"El motivo de su estado PENDIENTE es que tiene un código de incidencia 'DUPLICATE_DOCUMENT'.\",\n      \"evidenceIds\": [\"solicitudes[0]\"]\n    },\n    {\n      \"text\": \"Una experiencia de aprendizaje previa con el código de incidencia 'DUPLICATE_DOCUMENT' indica que el comportamiento esperado es verificar la versión del documento antes de tomar una decisión.\",\n      \"evidenceIds\": [\"learning_duplicate-document\"]\n    }\n  ],\n  \"uncertainties\": [],\n  \"referencedEntities\": [\"S61003\"],\n  \"experienceReferences\": [\"learning_duplicate-document\"],\n  \"proposedActions\": []\n}",
+      "validation": {
+        "jsonParsed": true,
+        "hasAnswer": true,
+        "claims": 3,
+        "unknownEvidenceIds": [
+          "solicitudes[0]",
+          "solicitudes[0]"
+        ],
+        "unknownEntities": [],
+        "unknownExperiences": [],
+        "experienceReferenced": true
+      }
+    }
+  ]
+}

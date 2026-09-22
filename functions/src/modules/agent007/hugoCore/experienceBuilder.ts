@@ -14,7 +14,8 @@ export type DraftArtifacts = Omit<ExperienceArtifacts, "memory" | "outcome"> & {
 export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
   const o = a.observation, d = a.decision;
   if (o.rootId !== a.rootId || d.rootId !== a.rootId || o.caseId !== d.entityId || o.source !== "ACTIVITY_LOG" || d.kind !== "DECISION" || d.status !== "CONFIRMED" ||
-    Date.parse(o.createdAt) > Date.parse(d.decidedAt) || a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
+    !Number.isFinite(Date.parse(o.createdAt)) || !Number.isFinite(Date.parse(d.decidedAt)) || Date.parse(o.createdAt) > Date.parse(d.decidedAt) ||
+    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
   const entityType = String(a.features.entityType || "");
   const references = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id)];
   const record: LearningExperience = { schemaVersion: LEARNING_SCHEMA_VERSION, experienceId: a.experienceId, revision: 1, rootId: a.rootId, domain: a.domain, taskType: a.taskType,
@@ -24,6 +25,7 @@ export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
     humanDecision: { type: d.decisionType, actorUid: d.actorUid, decidedAt: d.decidedAt, reference: references[1] }, correction: null, outcome: null, expectedBehavior: null,
     state: "WAITING_FOR_OUTCOME", quality: { provenance: "VERIFIED", outcome: "UNKNOWN", feedback: "DECIDED" },
     trainingEligibility: { eligible: false, reasons: [], policyVersion: "learning-eligibility-v1" }, split: "TEST", protectedCaseIds: [],
+    governance: { use: "TRAINING_REVIEW_REQUIRED", externalProvider: "NOT_APPROVED", reviewedBy: null, reviewedAt: null },
     createdFrom: { memoryId: a.decisionMemoryId, traceId: a.trace?.id || null }, sourceVersions: { core: "phase5-v1", context: "context-v2", memory: "memory-v2", prompt: a.trace?.promptVersion || null },
     createdAt: a.now, finalizedAt: null, supersedesId: null };
   record.trainingEligibility = trainingEligibility(record);
@@ -47,20 +49,24 @@ export function buildVerifiedExperience(a: ExperienceArtifacts): LearningExperie
     outcome: { type: z.sourceEvent, verified: true, occurredAt: z.occurredAt, reference: evidence[2] }, expectedBehavior: null,
     state: "VERIFIED", quality: { provenance: "VERIFIED", outcome: "VERIFIED", feedback: "DECIDED" },
     trainingEligibility: { eligible: false, reasons: [], policyVersion: "learning-eligibility-v1" }, split: "TEST", protectedCaseIds: [],
+    governance: { use: "TRAINING_REVIEW_REQUIRED", externalProvider: "NOT_APPROVED", reviewedBy: null, reviewedAt: null },
     createdFrom: { memoryId: m.id, traceId: a.trace?.id || null }, sourceVersions: { core: "phase5-v1", context: "context-v2", memory: "memory-v2", prompt: a.trace?.promptVersion || null },
     createdAt: a.now, finalizedAt: a.now, supersedesId: null };
   record.trainingEligibility = trainingEligibility(record);
   return record;
 }
 export function withCorrection(record: LearningExperience, correction: LearningCorrection, expectedBehavior: string): LearningExperience {
-  if (!["WAITING_FOR_OUTCOME", "VERIFIED"].includes(record.state) || !correction.evidenceReferences.length || !correction.evidenceReferences.every(r => r.rootId === record.rootId) ||
+  if (!["WAITING_FOR_OUTCOME", "VERIFIED"].includes(record.state) || !correction.evidenceReferences.length ||
+    !correction.evidenceReferences.every(r => r.rootId === record.rootId && record.evidenceReferences.some(e => e.system === r.system && e.kind === r.kind && e.id === r.id)) ||
+    !Number.isFinite(Date.parse(correction.correctedAt)) || Date.parse(correction.correctedAt) < Date.parse(record.humanDecision?.decidedAt || "") ||
     !correction.correctedBehavior || !expectedBehavior) throw Error("LEARNING_CORRECTION_INVALID");
   const next = { ...record, revision: record.revision + 1, correction, expectedBehavior, quality: { ...record.quality, feedback: "CORRECTED" as const } };
   next.trainingEligibility = trainingEligibility(next);
   return next;
 }
 export function withOutcome(record: LearningExperience, outcome: LearningOutcome): LearningExperience {
-  if (record.state !== "WAITING_FOR_OUTCOME" || record.outcome || outcome.reference.rootId !== record.rootId || !outcome.verified) throw Error("LEARNING_OUTCOME_INVALID");
+  if (record.state !== "WAITING_FOR_OUTCOME" || record.outcome || outcome.reference.rootId !== record.rootId || !outcome.verified || !terminal.has(outcome.type) ||
+    !Number.isFinite(Date.parse(outcome.occurredAt)) || Date.parse(outcome.occurredAt) < Date.parse(record.correction?.correctedAt || record.humanDecision?.decidedAt || "")) throw Error("LEARNING_OUTCOME_INVALID");
   const next: LearningExperience = { ...record, revision: record.revision + 1, outcome, evidenceReferences: [...record.evidenceReferences, outcome.reference], evidenceCompleteness: "COMPLETE", state: "VERIFIED", finalizedAt: outcome.occurredAt,
     quality: { ...record.quality, outcome: "VERIFIED" } };
   next.trainingEligibility = trainingEligibility(next);

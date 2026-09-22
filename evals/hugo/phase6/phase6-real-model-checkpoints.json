@@ -1,0 +1,800 @@
+{
+  "schemaVersion": "hugo-phase6-real-model-v1",
+  "syntheticOnly": true,
+  "model": "gemini-2.5-flash",
+  "promptVersion": "hugo-v2",
+  "config": {
+    "temperature": 0.35,
+    "maxOutputTokens": 1200,
+    "adapterRetry": "compact-on-MAX_TOKENS"
+  },
+  "executedAt": "2026-09-22T15:48:14.573Z",
+  "families": [
+    {
+      "id": "local-checkpoint-document",
+      "entityType": "SOLICITUD",
+      "folio": "S61009",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_CHECKPOINT_A",
+      "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+      "category": "local operational experience",
+      "priorExperienceId": "learning_local-checkpoint-document",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_local-checkpoint-document"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 4551,
+          "currentEvidenceDigest": "625332118a3ba61bc6bb29d1f5beb2521c11cce132f7a82ee565b2d5cfb896ed",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` asignado: `LOCAL_CHECKPOINT_A`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `issueCode` (`LOCAL_CHECKPOINT_A`) dentro de nuestros procedimientos internos y qué pasos o criterios se deben seguir para resolverlo.",
+          "systemServed": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` asignado: `LOCAL_CHECKPOINT_A`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `issueCode` (`LOCAL_CHECKPOINT_A`) dentro de nuestros procedimientos internos y qué pasos o criterios se deben seguir para resolverlo.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 720,
+            "output": 84,
+            "reasoning": 416
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4545,
+              "promptChars": 3155,
+              "outputLimit": 1200,
+              "inputTokens": 720,
+              "outputTokens": 84,
+              "cachedInputTokens": null,
+              "reasoningTokens": 416
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1161,
+            "approximateInputTokens": 291,
+            "currentFactsChars": 682,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61009",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_A"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 7605,
+          "currentEvidenceDigest": "625332118a3ba61bc6bb29d1f5beb2521c11cce132f7a82ee565b2d5cfb896ed",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` debido al código `LOCAL_CHECKPOINT_A`. Antes de cualquier acción, deberíamos verificar la versión del documento asociado, según una experiencia de aprendizaje previa.",
+          "systemServed": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` debido al código `LOCAL_CHECKPOINT_A`. Antes de cualquier acción, deberíamos verificar la versión del documento asociado, según una experiencia de aprendizaje previa.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 918,
+            "output": 56,
+            "reasoning": 502
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 7594,
+              "promptChars": 3821,
+              "outputLimit": 1200,
+              "inputTokens": 918,
+              "outputTokens": 56,
+              "cachedInputTokens": null,
+              "reasoningTokens": 502
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1827,
+            "approximateInputTokens": 457,
+            "currentFactsChars": 682,
+            "memoryChars": 2,
+            "experienceChars": 668,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_local-checkpoint-document"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_local-checkpoint-document"
+          ],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61009",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_A"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_local-checkpoint-document",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "SOLICITUDES",
+                  "taskType": "REASON",
+                  "entityType": "SOLICITUD"
+                },
+                "situation": {
+                  "entityType": "SOLICITUD",
+                  "status": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_A"
+                },
+                "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "SOLICITUD_COMPLETADA",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 2992,
+          "currentEvidenceDigest": "d48bd59e7978c01504160abd90728b980e0b9f1aa68e135ba9215edf8557ffc2",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_HOLD`. Antes de cualquier acción, yo verificaría qué significa exactamente ese `UNRELATED_HOLD` en nuestro sistema, ya que indica una retención por un motivo no directamente relacionado con la solicitud en sí.",
+          "systemServed": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_HOLD`. Antes de cualquier acción, yo verificaría qué significa exactamente ese `UNRELATED_HOLD` en nuestro sistema, ya que indica una retención por un motivo no directamente relacionado con la solicitud en sí.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 717,
+            "output": 76,
+            "reasoning": 289
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2988,
+              "promptChars": 3151,
+              "outputLimit": 1200,
+              "inputTokens": 717,
+              "outputTokens": 76,
+              "cachedInputTokens": null,
+              "reasoningTokens": 289
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1157,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 678,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_local-checkpoint-document",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getSolicitud",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S61009",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "local-checkpoint-bank",
+      "entityType": "PAGO",
+      "folio": "P61010",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_CHECKPOINT_B",
+      "expectedBehavior": "VERIFY_BANK_ACK_BEFORE_RETRY",
+      "category": "local operational experience",
+      "priorExperienceId": "learning_local-checkpoint-bank",
+      "experienceQuality": {
+        "provenance": "VERIFIED",
+        "outcome": "VERIFIED",
+        "feedback": "CORRECTED"
+      },
+      "expectedRetrieval": {
+        "BEFORE": [],
+        "AFTER": [
+          "learning_local-checkpoint-bank"
+        ],
+        "COUNTEREXAMPLE": []
+      },
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 7315,
+          "currentEvidenceDigest": "97e3638e6126c186114016fd25994ced4597aecee2a6be823c010eff0e957577",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "Hola. El pago P61010 está en `EN_REVISION` por el `issueCode` `LOCAL_CHECKPOINT_B`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `LOCAL_CHECKPOINT_B` en nuestros procesos internos. Así sabríamos qué criterio específico se está evaluando y por qué el pago está detenido ahí.",
+          "systemServed": "Hola. El pago P61010 está en `EN_REVISION` por el `issueCode` `LOCAL_CHECKPOINT_B`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `LOCAL_CHECKPOINT_B` en nuestros procesos internos. Así sabríamos qué criterio específico se está evaluando y por qué el pago está detenido ahí.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 718,
+            "output": 78,
+            "reasoning": 492
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 7309,
+              "promptChars": 3150,
+              "outputLimit": 1200,
+              "inputTokens": 718,
+              "outputTokens": 78,
+              "cachedInputTokens": null,
+              "reasoningTokens": 492
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1156,
+            "approximateInputTokens": 289,
+            "currentFactsChars": 677,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 0,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61010",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_B"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 15904,
+          "currentEvidenceDigest": "97e3638e6126c186114016fd25994ced4597aecee2a6be823c010eff0e957577",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": "HTTP_429",
+          "modelRaw": null,
+          "systemServed": "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana.",
+          "systemSource": "DETERMINISTIC_FALLBACK",
+          "responsePolicy": null,
+          "tokenUsage": null,
+          "attempts": [
+            {
+              "finishReason": "HTTP_429",
+              "latencyMs": 15900,
+              "promptChars": 3779,
+              "outputLimit": 1200,
+              "inputTokens": null,
+              "outputTokens": null,
+              "cachedInputTokens": null,
+              "reasoningTokens": null
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1785,
+            "approximateInputTokens": 447,
+            "currentFactsChars": 677,
+            "memoryChars": 2,
+            "experienceChars": 631,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 1,
+            "includedIds": [
+              "learning_local-checkpoint-bank"
+            ],
+            "rejected": [],
+            "conflict": false
+          },
+          "contextExperienceIds": [
+            "learning_local-checkpoint-bank"
+          ],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61010",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_B"
+                }
+              ]
+            },
+            "learningExperiences": [
+              {
+                "id": "learning_local-checkpoint-bank",
+                "scope": {
+                  "rootId": "phase6-synthetic-root",
+                  "domain": "PAGOS",
+                  "taskType": "REASON",
+                  "entityType": "PAGO"
+                },
+                "situation": {
+                  "entityType": "PAGO",
+                  "status": "EN_REVISION",
+                  "issueCode": "LOCAL_CHECKPOINT_B"
+                },
+                "expectedBehavior": "VERIFY_BANK_ACK_BEFORE_RETRY",
+                "correction": {
+                  "originalBehavior": "COPY_PRIOR_ACTION",
+                  "correctedBehavior": "VERIFY_BANK_ACK_BEFORE_RETRY",
+                  "reasonCode": "OUTCOME_SUPPORTED_CORRECTION"
+                },
+                "outcome": {
+                  "type": "PAGO_APLICADO_A_SOLICITUD",
+                  "verified": true,
+                  "occurredAt": "2026-09-22T12:02:00.000Z"
+                },
+                "quality": {
+                  "provenance": "VERIFIED",
+                  "outcome": "VERIFIED",
+                  "feedback": "CORRECTED"
+                },
+                "historical": true
+              }
+            ],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 6014,
+          "currentEvidenceDigest": "070d30c501d0e41c07bb9af628f7c938ba54c8d11b7dca3f54814820b5c3514a",
+          "model": "gemini-2.5-flash",
+          "provider": "GOOGLE_VERTEX",
+          "promptVersion": "hugo-v2",
+          "modelError": null,
+          "modelRaw": "El pago P61010 está en `EN_REVISION` debido a un `UNRELATED_HOLD`. Antes de actuar, yo comprobaría: * La naturaleza específica de este `UNRELATED_HOLD`. * Quién lo aplicó y por qué. * Las condiciones para su liberación. La información disponible no detalla el origen ni el impacto de este tipo de retención.",
+          "systemServed": "El pago P61010 está en `EN_REVISION` debido a un `UNRELATED_HOLD`. Antes de actuar, yo comprobaría: * La naturaleza específica de este `UNRELATED_HOLD`. * Quién lo aplicó y por qué. * Las condiciones para su liberación. La información disponible no detalla el origen ni el impacto de este tipo de retención.",
+          "systemSource": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "tokenUsage": {
+            "input": 715,
+            "output": 85,
+            "reasoning": 370
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 6011,
+              "promptChars": 3146,
+              "outputLimit": 1200,
+              "inputTokens": 715,
+              "outputTokens": 85,
+              "cachedInputTokens": null,
+              "reasoningTokens": 370
+            }
+          ],
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1152,
+            "approximateInputTokens": 288,
+            "currentFactsChars": 673,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "learningUsage": {
+            "considered": 1,
+            "selected": 0,
+            "includedIds": [],
+            "rejected": [
+              {
+                "experienceId": "learning_local-checkpoint-bank",
+                "reason": "MATERIAL_DIFFERENCE_issueCode"
+              }
+            ],
+            "conflict": false
+          },
+          "contextExperienceIds": [],
+          "tools": [
+            {
+              "tool": "getPago",
+              "completeness": "COMPLETE",
+              "result": "OK"
+            },
+            {
+              "tool": "getPaymentComplementStatus",
+              "completeness": "PARTIAL",
+              "result": "OK"
+            },
+            {
+              "tool": "getIqCapabilities",
+              "completeness": "UNKNOWN",
+              "result": "OK"
+            }
+          ],
+          "contextSnapshot": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P61010",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_HOLD"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "memoryCount": 0,
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

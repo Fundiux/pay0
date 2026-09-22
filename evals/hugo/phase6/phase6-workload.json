@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "hugo-phase6-workload-v1",
+  "syntheticOnly": true,
+  "selectionBias": "10 model-focused learning families plus 4 known deterministic safety/fact tasks",
+  "totalTasks": 14,
+  "safelyResolvedWithoutModel": 4,
+  "currentlyGenerativeDependent": 10,
+  "humanDecisionCompleted": 0,
+  "modelNecessityCountsForCurrentCore": {
+    "MODEL_REQUIRED": 10,
+    "MODEL_OPTIONAL": 0,
+    "MODEL_NOT_REQUIRED": 4
+  },
+  "modelNecessityPercentForCurrentCore": {
+    "MODEL_REQUIRED": 71.4,
+    "MODEL_OPTIONAL": 0,
+    "MODEL_NOT_REQUIRED": 28.6
+  },
+  "safeNoModelPercent": 28.6,
+  "generativeDependentPercent": 71.4,
+  "tasks": [
+    {
+      "caseId": "document-review",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "duplicate-document",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "bank-rejection",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "duplicate-payment",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "complement-status",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "local-checkpoint-document",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "local-checkpoint-bank",
+      "category": "EXPLANATION",
+      "observed": "MODEL_UNAVAILABLE",
+      "safelyResolvedWithoutModel": false,
+      "modelNeededByCurrentCore": true
+    },
+    {
+      "caseId": "partial-total",
+      "category": "DETERMINISTIC",
+      "observed": "PARTIAL_TOTAL_OR_CLARIFICATION",
+      "safelyResolvedWithoutModel": true,
+      "modelNeededByCurrentCore": false
+    },
+    {
+      "caseId": "exact-status",
+      "category": "DETERMINISTIC",
+      "observed": "EXACT_FACT",
+      "safelyResolvedWithoutModel": true,
+      "modelNeededByCurrentCore": false
+    },
+    {
+      "caseId": "exact-amount",
+      "category": "DETERMINISTIC",
+      "observed": "EXACT_FACT",
+      "safelyResolvedWithoutModel": true,
+      "modelNeededByCurrentCore": false
+    },
+    {
+      "caseId": "ambiguous-reference",
+      "category": "DETERMINISTIC",
+      "observed": "PARTIAL_TOTAL_OR_CLARIFICATION",
+      "safelyResolvedWithoutModel": true,
+      "modelNeededByCurrentCore": false
+    }
+  ],
+  "limit": "This measures current served capability on the selected fixture, not necessity in production or business traffic."
+}

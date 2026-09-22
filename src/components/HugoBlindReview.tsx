@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import blind from "../../evals/hugo/phase4-model-results-blind-review.json";
 
-type Choice = "A_BETTER" | "B_BETTER" | "EQUIVALENT" | "BOTH_UNACCEPTABLE";
-type Decision = { choice?: Choice; note: string };
+type Choice = "A_BETTER" | "B_BETTER" | "EQUIVALENT" | "BOTH_ACCEPTABLE" | "BOTH_UNACCEPTABLE";
+type Reason = "CORRECTNESS" | "CLARITY" | "CONFIDENCE" | "EVIDENCE_USE" | "AMBIGUITY" | "OTHER";
+type Decision = { choice?: Choice; reason?: Reason; note: string };
 const key = `hugo-blind-review-${blind.evalRunId}`;
-const options: Array<[Choice, string]> = [["A_BETTER", "A mejor"], ["B_BETTER", "B mejor"], ["EQUIVALENT", "Equivalentes"], ["BOTH_UNACCEPTABLE", "Ambas inaceptables"]];
+const options: Array<[Choice, string]> = [["A_BETTER", "A mejor"], ["B_BETTER", "B mejor"], ["EQUIVALENT", "Equivalentes"], ["BOTH_ACCEPTABLE", "Ambas aceptables"], ["BOTH_UNACCEPTABLE", "Ambas inaceptables"]];
+const reasons: Array<[Reason, string]> = [["CORRECTNESS", "Corrección"], ["CLARITY", "Claridad"], ["CONFIDENCE", "Confianza"], ["EVIDENCE_USE", "Uso de evidencia"], ["AMBIGUITY", "Ambigüedad"], ["OTHER", "Otro"]];
 export default function HugoBlindReview() {
   const [index, setIndex] = useState(0), [answers, setAnswers] = useState<Record<string, Decision>>({});
   useEffect(() => { try { setAnswers(JSON.parse(localStorage.getItem(key) || "{}")); } catch { setAnswers({}); } }, []);
@@ -18,9 +20,11 @@ export default function HugoBlindReview() {
   return <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300"><h2 className="font-semibold text-white">Revisión humana ciega · Fase 4</h2>
     <p className="mt-1 text-xs text-slate-500">{Object.values(answers).filter(x => x.choice).length}/{blind.cases.length} comparaciones guardadas en este navegador. Exporta el archivo para conservarlas; no se envían a Firebase.</p>
     <div className="mt-3 flex items-center gap-3"><button disabled={index === 0} onClick={() => setIndex(index - 1)} className="rounded bg-slate-800 px-2 py-1">Anterior</button><span>{index + 1}/{blind.cases.length} · {row.category}</span><button disabled={index === blind.cases.length - 1} onClick={() => setIndex(index + 1)} className="rounded bg-slate-800 px-2 py-1">Siguiente</button></div>
-    <p className="mt-3">Entrada: {row.userInput}</p><div className="mt-2 grid gap-3 md:grid-cols-2">{[["A", row.responseA], ["B", row.responseB]].map(([label, response]) => <div key={label} className="rounded bg-slate-950 p-3"><strong>Respuesta {label}</strong><p className="mt-2 whitespace-pre-wrap">{response || "Sin respuesta completa"}</p></div>)}</div>
-    <div className="mt-3 flex flex-wrap gap-2">{options.map(([value, label]) => <button key={value} onClick={() => update({ choice: value, note: current?.note || "" })} className={`rounded px-3 py-1.5 ${current?.choice === value ? "bg-violet-600 text-white" : "bg-slate-800"}`}>{label}</button>)}</div>
-    <label className="mt-3 block text-xs">Nota opcional<textarea value={current?.note || ""} onChange={event => update({ choice: current?.choice, note: event.target.value.slice(0, 1000) })} className="mt-1 w-full rounded bg-slate-950 p-2" /></label>
+    <p className="mt-3">Caso: {row.category}. Entrada: {row.userInput}</p><details className="mt-2 rounded bg-slate-950 p-2"><summary>Evidencia controlada</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(row.controlledEvidence, null, 2)}</pre></details>
+    <div className="mt-2 grid gap-3 md:grid-cols-2">{[["A", row.responseA], ["B", row.responseB]].map(([label, response]) => <div key={label} className="rounded bg-slate-950 p-3"><strong>Respuesta {label}</strong><p className="mt-2 whitespace-pre-wrap">{response || "Sin respuesta completa"}</p></div>)}</div>
+    <div className="mt-3 flex flex-wrap gap-2">{options.map(([value, label]) => <button key={value} onClick={() => update({ choice: value, reason: current?.reason, note: current?.note || "" })} className={`rounded px-3 py-1.5 ${current?.choice === value ? "bg-violet-600 text-white" : "bg-slate-800"}`}>{label}</button>)}</div>
+    <label className="mt-3 block text-xs">Motivo opcional<select value={current?.reason || ""} onChange={event => update({ choice: current?.choice, reason: event.target.value as Reason || undefined, note: current?.note || "" })} className="mt-1 w-full rounded bg-slate-950 p-2"><option value="">Sin motivo</option>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    <label className="mt-3 block text-xs">Nota opcional<textarea value={current?.note || ""} onChange={event => update({ choice: current?.choice, reason: current?.reason, note: event.target.value.slice(0, 1000) })} className="mt-1 w-full rounded bg-slate-950 p-2" /></label>
     <button onClick={download} className="mt-3 rounded border border-violet-500 px-3 py-2 text-violet-200">Exportar revisión</button>
   </section>;
 }

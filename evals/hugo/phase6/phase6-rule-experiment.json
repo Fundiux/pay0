@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "hugo-phase6-rule-experiment-v1",
+  "syntheticOnly": true,
+  "supportingExperiences": [
+    "learning_rule_1",
+    "learning_rule_2"
+  ],
+  "candidate": {
+    "domain": "SOLICITUDES",
+    "taskType": "REASON",
+    "features": {
+      "entityType": "SOLICITUD",
+      "status": "PENDIENTE",
+      "issueCode": "DOCUMENT_MISSING"
+    },
+    "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+    "supportingIds": [
+      "learning_rule_1",
+      "learning_rule_2"
+    ],
+    "contradictoryIds": [],
+    "status": "RULE_CANDIDATE"
+  },
+  "approval": {
+    "actor": "synthetic-human-approval",
+    "synthetic": true,
+    "at": "2026-09-22T12:10:00.000Z"
+  },
+  "rule": {
+    "ruleId": "synthetic_learning_rule_1_learning_rule_2",
+    "version": 1,
+    "scope": {
+      "rootId": "phase6-synthetic-root",
+      "domain": "SOLICITUDES",
+      "taskType": "REASON"
+    },
+    "conditions": {
+      "entityType": "SOLICITUD",
+      "status": "PENDIENTE",
+      "issueCode": "DOCUMENT_MISSING"
+    },
+    "exceptions": [],
+    "status": "ACTIVE"
+  },
+  "deterministicResult": {
+    "behavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+    "latencyMs": 0.04189999999999827,
+    "modelCalls": 0
+  },
+  "realModelComparison": {
+    "sourceCase": "document-review",
+    "latencyMs": 2582,
+    "modelCalls": 1,
+    "response": "La solicitud S61001 está en estado PENDIENTE porque le falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de hacer cualquier cosa, yo verificaría que el documento realmente no está o si ya fue entregado y no se ha actualizado el estado."
+  },
+  "counterexampleResult": null,
+  "invalidation": {
+    "contradictoryExperienceId": "learning_later_contradiction",
+    "status": "INVALIDATED",
+    "resultAfterInvalidation": null
+  },
+  "limit": "Approval is synthetic. A code-valued deterministic behavior is not a production user response or a financial action."
+}

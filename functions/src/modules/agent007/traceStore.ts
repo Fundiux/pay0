@@ -17,6 +17,8 @@ export function conversationTrace(traceId: string, input: ConversationInput, out
     memoryReferences: output.pieces.filter(piece => piece.sourceSystem === "HUGO" && piece.entityId).map(piece => ({ kind: piece.kind, entityType: piece.entityType, entityId: piece.entityId })).slice(0, 18),
     ...(output.memoryUsage ? { memoryUsage: output.memoryUsage } : {}),
     ...(output.learningUsage ? { learningUsage: output.learningUsage } : {}),
+    ...(output.budget ? { contextBudget: output.budget } : {}),
+    ...(output.model.attempts ? { modelAttempts: output.model.attempts } : {}),
     ...(output.composition ? { contextComposition: output.composition } : {}),
     ...(Array.isArray(output.context?.memoryConflicts) ? { memoryConflictCount: output.context.memoryConflicts.length } : {}),
     ...(output.intelligenceConfig ? { intelligenceConfig: output.intelligenceConfig } : {}),
