@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "hugo-phase7-tournament-readiness-v1",
+  "status": "NOT_READY",
+  "decidedAt": "2026-09-22T19:30:00.000Z",
+  "gates": [
+    { "gate": "PRE_REGISTERED_CRITERIA", "status": "PASS", "evidence": "phase7-tournament-dataset-v1.json" },
+    { "gate": "FROZEN_VERSIONED_DATASET", "status": "PASS", "evidence": "SHA-256 manifest with 28 cases" },
+    { "gate": "HOLDOUT_PROTECTED", "status": "PASS", "evidence": "7 frozen HOLDOUT cases and integrity test" },
+    { "gate": "FULL_FLOW_STABLE", "status": "REVIEW", "evidence": "8 MAX_TOKENS arms were safely degraded but prevent stable comparison" },
+    { "gate": "APPROPRIATE_EFFECT_SEMANTICS", "status": "PASS", "evidence": "appropriate change and appropriate stability are scored separately" },
+    { "gate": "HUMAN_REVIEW_WORKFLOW", "status": "PASS", "evidence": "authenticated revision-preserving Firestore workflow passed emulator" },
+    { "gate": "MEANINGFUL_HUMAN_REVIEW", "status": "FAIL", "evidence": "0 of 28 historical blind comparisons reviewed" },
+    { "gate": "TOKEN_BEHAVIOR_SUFFICIENTLY_MITIGATED", "status": "FAIL", "evidence": "UNDERSTOOD_NOT_MITIGATED" },
+    { "gate": "PROVIDER_NEUTRAL_METRICS", "status": "PASS", "evidence": "neutral success, safety, token, latency and error classes" },
+    { "gate": "NO_PROVIDER_COUPLING_IN_HUGO_INTELLIGENCE", "status": "PASS", "evidence": "non-generative contracts run without Vertex" },
+    { "gate": "EXPERIENCE_EQUIVALENCE", "status": "PASS", "evidence": "canonical LearningExperience used by Core, Fake adapters and Gemini" },
+    { "gate": "CRITICAL_FAILURES_VISIBLE", "status": "PASS", "evidence": "family classifications and full-flow matrix do not average failures away" }
+  ],
+  "phase8Recommendation": "HUMAN_REVIEW_AND_TOKEN_RELIABILITY_GATE",
+  "tournamentPermitted": false
+}

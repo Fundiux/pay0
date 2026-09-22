@@ -1,0 +1,2395 @@
+{
+  "schemaVersion": "hugo-phase7-real-model-v1",
+  "syntheticOnly": true,
+  "preregisteredDatasetDigest": "d91845bc21be9fbcfe1f99377608a8fe72ddf57989f4c5c67c2d3072fd6b2096",
+  "model": "gemini-2.5-flash",
+  "config": {
+    "temperature": 0.35,
+    "maxOutputTokens": 1200,
+    "reasoningIntent": "STANDARD_REASONING",
+    "retryPolicy": "2 retries, 1s/2s, retryable provider errors only"
+  },
+  "executedAt": "2026-09-22T18:43:48.665Z",
+  "families": [
+    {
+      "id": "p7-solicitud-local-version",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_REQ_A",
+      "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "versi[oó]n.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 4994,
+          "currentEvidenceDigest": "80522ac2f7a72f64e9bbee33cfb990f9c382b7aa1ed9c89c27c3f88bbc11fffe",
+          "rawModel": "Hola, Evaluador. La solicitud S70003 está en estado `EN_REVISION` porque tiene un `issueCode` asociado que es `LOCAL_REQ_A`. Antes de tomar cualquier acción, yo comprobaría qué significa exactamente ese código `LOCAL_REQ_A`, ya que el contexto actual no me da más detalles sobre su naturaleza.",
+          "served": "Hola, Evaluador. La solicitud S70003 está en estado `EN_REVISION` porque tiene un `issueCode` asociado que es `LOCAL_REQ_A`. Antes de tomar cualquier acción, yo comprobaría qué significa exactamente ese código `LOCAL_REQ_A`, ya que el contexto actual no me da más detalles sobre su naturaleza.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 76,
+            "reasoning": 639
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4984,
+              "promptChars": 3138,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 76,
+              "cachedInputTokens": null,
+              "reasoningTokens": 639
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 4984,
+                    "promptChars": 3138,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 76,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 639
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 4986
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1129,
+            "approximateInputTokens": 283,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70003",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_REQ_A"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 3793,
+          "currentEvidenceDigest": "80522ac2f7a72f64e9bbee33cfb990f9c382b7aa1ed9c89c27c3f88bbc11fffe",
+          "rawModel": "Hola, Evaluador. La solicitud `S70003` está en estado `EN_REVISION` debido al código de incidencia `LOCAL_REQ_A`. Antes de tomar cualquier acción, yo verificaría qué significa exactamente ese código `LOCAL_REQ_A` en nuestros procedimientos internos o en la documentación de incidencias. Así sabríamos el motivo específico de la revisión y cómo proceder.",
+          "served": "Hola, Evaluador. La solicitud `S70003` está en estado `EN_REVISION` debido al código de incidencia `LOCAL_REQ_A`. Antes de tomar cualquier acción, yo verificaría qué significa exactamente ese código `LOCAL_REQ_A` en nuestros procedimientos internos o en la documentación de incidencias. Así sabríamos el motivo específico de la revisión y cómo proceder.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 84,
+            "reasoning": 297
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3788,
+              "promptChars": 3138,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 84,
+              "cachedInputTokens": null,
+              "reasoningTokens": 297
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3788,
+                    "promptChars": 3138,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 84,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 297
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3789
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1129,
+            "approximateInputTokens": 283,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70003",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_REQ_A"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 2751,
+          "currentEvidenceDigest": "138f074390b4187fd13a1bbeee65799e2d106c7aa007026fb3d0ba00c1b1baa2",
+          "rawModel": "Hola, Evaluador. La solicitud S70003 está en estado `EN_REVISION` porque tiene un `issueCode` que indica un \"hecho actual no relacionado\". Antes de actuar, yo comprobaría exactamente a qué se refiere ese \"hecho actual no relacionado\" para entender la razón específica de la revisión.",
+          "served": "Hola, Evaluador. La solicitud S70003 está en estado `EN_REVISION` porque tiene un `issueCode` que indica un \"hecho actual no relacionado\". Antes de actuar, yo comprobaría exactamente a qué se refiere ese \"hecho actual no relacionado\" para entender la razón específica de la revisión.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 70,
+            "reasoning": 308
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2749,
+              "promptChars": 3149,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 70,
+              "cachedInputTokens": null,
+              "reasoningTokens": 308
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2749,
+                    "promptChars": 3149,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 70,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 308
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2749
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1140,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 686,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70003",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-reference-ambiguous",
+      "domain": "CONVERSATION_REFERENCE",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "AMBIGUOUS_REFERENCE",
+      "expectedBehavior": "ASK_WHICH_ENTITY",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_CAUSES_CLARIFICATION",
+      "requiredPattern": "cu[aá]l|folio|precisa",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 12241,
+          "currentEvidenceDigest": "027562b0b31286ff0b3e9483827dede3621c3103f072a6b6fcc9ded2bfbb0ed6",
+          "rawModel": "Hola, Evaluador. La solicitud S70007 está en estado EN_REVISION porque tiene un `issueCode` de AMBIGUOUS_REFERENCE. Esto significa que hay alguna referencia dentro de la solicitud que no está clara o podría interpretarse de varias maneras, y por eso se detuvo para revisión manual. Antes de cualquier acción, yo comprobaría los detalles específicos de la solicitud S70007 para identificar cuál es la referencia ambigua y entender la naturaleza de la ambigüedad.",
+          "served": "Hola, Evaluador. La solicitud S70007 está en estado EN_REVISION porque tiene un `issueCode` de AMBIGUOUS_REFERENCE. Esto significa que hay alguna referencia dentro de la solicitud que no está clara o podría interpretarse de varias maneras, y por eso se detuvo para revisión manual. Antes de cualquier acción, yo comprobaría los detalles específicos de la solicitud S70007 para identificar cuál es la referencia ambigua y entender la naturaleza de la ambigüedad.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 106,
+            "reasoning": 423
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 12237,
+              "promptChars": 3146,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 106,
+              "cachedInputTokens": null,
+              "reasoningTokens": 423
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 12237,
+                    "promptChars": 3146,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 106,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 423
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 12238
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1137,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 683,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "AMBIGUOUS_REFERENCE"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 2751,
+          "currentEvidenceDigest": "027562b0b31286ff0b3e9483827dede3621c3103f072a6b6fcc9ded2bfbb0ed6",
+          "rawModel": "Hola, Evaluador. La solicitud S70007 está en estado `EN_REVISION` porque tiene un `issueCode` de `AMBIGUOUS_REFERENCE`. Esto significa que hay una referencia poco clara o que podría aplicarse a más de una cosa, y necesitamos confirmación para saber cuál es la correcta. Antes de hacer cualquier cosa, yo comprobaría cuál es la referencia específica que está causando la ambigüedad y pediría que se aclarara para poder proceder con seguridad.",
+          "served": "Hola, Evaluador. La solicitud S70007 está en estado `EN_REVISION` porque tiene un `issueCode` de `AMBIGUOUS_REFERENCE`. Esto significa que hay una referencia poco clara o que podría aplicarse a más de una cosa, y necesitamos confirmación para saber cuál es la correcta. Antes de hacer cualquier cosa, yo comprobaría cuál es la referencia específica que está causando la ambigüedad y pediría que se aclarara para poder proceder con seguridad.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 103,
+            "reasoning": 198
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2750,
+              "promptChars": 3146,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 103,
+              "cachedInputTokens": null,
+              "reasoningTokens": 198
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2750,
+                    "promptChars": 3146,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 103,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 198
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2750
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1137,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 683,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "AMBIGUOUS_REFERENCE"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 4196,
+          "currentEvidenceDigest": "5a37f9b6b2525f7b28e2e0ca67a9cc9f1dd0cea78482ae55157729be9d8b8ff3",
+          "rawModel": "Hola, Evaluador. La solicitud S70007 está en estado `EN_REVISION` debido a un `issueCode` que indica `UNRELATED_CURRENT_FACT`. Esto significa que hay un factor externo o una condición actual, no directamente relacionada con la solicitud en sí, que la mantiene en ese estado. Antes de cualquier acción, yo comprobaría cuál es ese \"hecho actual no relacionado\" específico que está afectando la solicitud para entender la causa raíz.",
+          "served": "Hola, Evaluador. La solicitud S70007 está en estado `EN_REVISION` debido a un `issueCode` que indica `UNRELATED_CURRENT_FACT`. Esto significa que hay un factor externo o una condición actual, no directamente relacionada con la solicitud en sí, que la mantiene en ese estado. Antes de cualquier acción, yo comprobaría cuál es ese \"hecho actual no relacionado\" específico que está afectando la solicitud para entender la causa raíz.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 99,
+            "reasoning": 414
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4195,
+              "promptChars": 3149,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 99,
+              "cachedInputTokens": null,
+              "reasoningTokens": 414
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 4195,
+                    "promptChars": 3149,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 99,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 414
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 4196
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1140,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 686,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70007",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-complement-missing-stable",
+      "domain": "PAYMENT_COMPLEMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "COMPLEMENT_MISSING",
+      "expectedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "complemento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 3780,
+          "currentEvidenceDigest": "10bdd654f9aeb7ae54e584d0b4fe74e70d65a2cbe8effaca82cd314718b7b186",
+          "rawModel": "Hola, Evaluador. El pago P70011 está en `EN_REVISION` porque tiene un `issueCode` de `COMPLEMENT_MISSING`. Esto significa que le falta un complemento y, según la información, aún no se le ha enviado al proveedor. Antes de cualquier acción, yo comprobaría si ya se generó el complemento o si hay alguna instrucción para solicitarlo o procesarlo.",
+          "served": "Hola, Evaluador. El pago P70011 está en `EN_REVISION` porque tiene un `issueCode` de `COMPLEMENT_MISSING`. Esto significa que le falta un complemento y, según la información, aún no se le ha enviado al proveedor. Antes de cualquier acción, yo comprobaría si ya se generó el complemento o si hay alguna instrucción para solicitarlo o procesarlo.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 87,
+            "reasoning": 411
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3778,
+              "promptChars": 3180,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 87,
+              "cachedInputTokens": null,
+              "reasoningTokens": 411
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3778,
+                    "promptChars": 3180,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 87,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 411
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3779
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1171,
+            "approximateInputTokens": 293,
+            "currentFactsChars": 659,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70011",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "COMPLEMENT_MISSING"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 16097,
+          "currentEvidenceDigest": "10bdd654f9aeb7ae54e584d0b4fe74e70d65a2cbe8effaca82cd314718b7b186",
+          "rawModel": "El folio P70011 está en `EN_REVISION` porque tiene un `COMPLEMENT_MISSING`. Esto significa que el complemento de pago necesario para su procesamiento aún no ha sido recibido y, según nuestros registros, tampoco se ha enviado al proveedor. Antes de cualquier acción, yo verificaría si ya se solicitó el complemento al proveedor o si hay alguna gestión en curso para obtenerlo.",
+          "served": "El folio P70011 está en `EN_REVISION` porque tiene un `COMPLEMENT_MISSING`. Esto significa que el complemento de pago necesario para su procesamiento aún no ha sido recibido y, según nuestros registros, tampoco se ha enviado al proveedor. Antes de cualquier acción, yo verificaría si ya se solicitó el complemento al proveedor o si hay alguna gestión en curso para obtenerlo.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 84,
+            "reasoning": 401
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 16096,
+              "promptChars": 3180,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 84,
+              "cachedInputTokens": null,
+              "reasoningTokens": 401
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 16096,
+                    "promptChars": 3180,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 84,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 401
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 16096
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1171,
+            "approximateInputTokens": 293,
+            "currentFactsChars": 659,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70011",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "COMPLEMENT_MISSING"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 7784,
+          "currentEvidenceDigest": "bb19648e842bc76dab1e55d7fd2ce5d15586837494c3f753752eed11a6ac1d03",
+          "rawModel": "Hola, Evaluador. El pago P70011 está en estado `EN_REVISION` debido a un `issueCode` interno que indica `UNRELATED_CURRENT_FACT`. Antes de hacer cualquier cosa, yo necesitaría entender qué significa exactamente ese `issueCode` en este contexto, ya que la información disponible no detalla su implicación para este pago.",
+          "served": "Hola, Evaluador. El pago P70011 está en estado `EN_REVISION` debido a un `issueCode` interno que indica `UNRELATED_CURRENT_FACT`. Antes de hacer cualquier cosa, yo necesitaría entender qué significa exactamente ese `issueCode` en este contexto, ya que la información disponible no detalla su implicación para este pago.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 78,
+            "reasoning": 928
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 7781,
+              "promptChars": 3188,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 78,
+              "cachedInputTokens": null,
+              "reasoningTokens": 928
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 7781,
+                    "promptChars": 3188,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 78,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 928
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 7782
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1179,
+            "approximateInputTokens": 295,
+            "currentFactsChars": 663,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70011",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-payment-caution",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_RISK_A",
+      "expectedBehavior": "DO_NOT_RETRY_UNTIL_BANK_REASON_VERIFIED",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_INCREASES_CAUTION",
+      "requiredPattern": "no.*reintent|antes de reintentar|cautela",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 3486,
+          "currentEvidenceDigest": "1edc76cddd3775ea7652e9e213674b3db525bab03e00043e3cbd1d1c2a859e5a",
+          "rawModel": "Hola, Evaluador. El pago P70015 está en estado `EN_REVISION` debido al código de riesgo `LOCAL_RISK_A`. Para entender la causa exacta y qué comprobar antes de actuar, necesitaría consultar la definición de `LOCAL_RISK_A`, ya que esa información no está detallada en mi contexto actual.",
+          "served": "Hola, Evaluador. El pago P70015 está en estado `EN_REVISION` debido al código de riesgo `LOCAL_RISK_A`. Para entender la causa exacta y qué comprobar antes de actuar, necesitaría consultar la definición de `LOCAL_RISK_A`, ya que esa información no está detallada en mi contexto actual.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 722,
+            "output": 76,
+            "reasoning": 449
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3490,
+              "promptChars": 3134,
+              "outputLimit": 1200,
+              "inputTokens": 722,
+              "outputTokens": 76,
+              "cachedInputTokens": null,
+              "reasoningTokens": 449
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3490,
+                    "promptChars": 3134,
+                    "outputLimit": 1200,
+                    "inputTokens": 722,
+                    "outputTokens": 76,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 449
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3486
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1125,
+            "approximateInputTokens": 282,
+            "currentFactsChars": 671,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70015",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_RISK_A"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 4890,
+          "currentEvidenceDigest": "1edc76cddd3775ea7652e9e213674b3db525bab03e00043e3cbd1d1c2a859e5a",
+          "rawModel": "Hola, Evaluador. El pago P70015 está en revisión por un código de riesgo local, específicamente `LOCAL_RISK_A`. Antes de hacer cualquier cosa, yo verificaría qué implica exactamente ese código de riesgo `LOCAL_RISK_A` en nuestras políticas internas para entender la naturaleza del riesgo.",
+          "served": "Hola, Evaluador. El pago P70015 está en revisión por un código de riesgo local, específicamente `LOCAL_RISK_A`. Antes de hacer cualquier cosa, yo verificaría qué implica exactamente ese código de riesgo `LOCAL_RISK_A` en nuestras políticas internas para entender la naturaleza del riesgo.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 722,
+            "output": 69,
+            "reasoning": 298
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 4889,
+              "promptChars": 3134,
+              "outputLimit": 1200,
+              "inputTokens": 722,
+              "outputTokens": 69,
+              "cachedInputTokens": null,
+              "reasoningTokens": 298
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 4889,
+                    "promptChars": 3134,
+                    "outputLimit": 1200,
+                    "inputTokens": 722,
+                    "outputTokens": 69,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 298
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 4890
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1125,
+            "approximateInputTokens": 282,
+            "currentFactsChars": 671,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70015",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_RISK_A"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 2809,
+          "currentEvidenceDigest": "7af1a268e42590842520923b9c47f749ef33fa220fca42f05353dc16971db59b",
+          "rawModel": "Hola, Evaluador. El pago P70015 está en estado `EN_REVISION` porque se ha detectado un `UNRELATED_CURRENT_FACT`. Esto significa que hay un hecho actual, no directamente relacionado con el pago en sí, que ha provocado que se ponga en revisión. Antes de cualquier acción, yo comprobaría exactamente cuál es ese \"hecho actual no relacionado\" que está causando la revisión, ya que la información disponible no lo especifica.",
+          "served": "Hola, Evaluador. El pago P70015 está en estado `EN_REVISION` porque se ha detectado un `UNRELATED_CURRENT_FACT`. Esto significa que hay un hecho actual, no directamente relacionado con el pago en sí, que ha provocado que se ponga en revisión. Antes de cualquier acción, yo comprobaría exactamente cuál es ese \"hecho actual no relacionado\" que está causando la revisión, ya que la información disponible no lo especifica.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 721,
+            "output": 100,
+            "reasoning": 343
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2809,
+              "promptChars": 3144,
+              "outputLimit": 1200,
+              "inputTokens": 721,
+              "outputTokens": 100,
+              "cachedInputTokens": null,
+              "reasoningTokens": 343
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2809,
+                    "promptChars": 3144,
+                    "outputLimit": 1200,
+                    "inputTokens": 721,
+                    "outputTokens": 100,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 343
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2809
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1135,
+            "approximateInputTokens": 284,
+            "currentFactsChars": 681,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70015",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-complement-conflict",
+      "domain": "PAYMENT_COMPLEMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_COMP_B",
+      "expectedBehavior": "ASK_FOR_HUMAN_REVIEW_ON_CONFLICT",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "HUMAN_REQUIRED",
+      "caseType": "MULTIPLE_EXPERIENCES_CONFLICT",
+      "requiredPattern": "revisi[oó]n humana|experiencias.*contradic",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 2939,
+          "currentEvidenceDigest": "15ec76a972bffe45604c79f9c00227ed314f0986e3d9df5a3f0863cce226bac2",
+          "rawModel": "Hola, Evaluador. El pago P70018 está en `EN_REVISION` porque tiene un `issueCode` `LOCAL_COMP_B`. Esto significa que hay un complemento pendiente para este pago que aún no se ha enviado al proveedor. Antes de actuar, yo comprobaría los detalles de ese complemento pendiente para entender la razón por la que no se ha enviado al proveedor.",
+          "served": "Hola, Evaluador. El pago P70018 está en `EN_REVISION` porque tiene un `issueCode` `LOCAL_COMP_B`. Esto significa que hay un complemento pendiente para este pago que aún no se ha enviado al proveedor. Antes de actuar, yo comprobaría los detalles de ese complemento pendiente para entender la razón por la que no se ha enviado al proveedor.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 83,
+            "reasoning": 422
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2938,
+              "promptChars": 3168,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 83,
+              "cachedInputTokens": null,
+              "reasoningTokens": 422
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2938,
+                    "promptChars": 3168,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 83,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 422
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2938
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1159,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 653,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70018",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_COMP_B"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 3332,
+          "currentEvidenceDigest": "15ec76a972bffe45604c79f9c00227ed314f0986e3d9df5a3f0863cce226bac2",
+          "rawModel": "Hola, Evaluador. El pago P70018 está en `EN_REVISION` porque tiene un `issueCode` de `LOCAL_COMP_B`. Esto significa que hay un complemento local tipo B pendiente que aún no se ha enviado al proveedor. Antes de actuar, yo comprobaría el estado de ese complemento local B para entender por qué no se ha enviado y si ya está listo para su emisión.",
+          "served": "Hola, Evaluador. El pago P70018 está en `EN_REVISION` porque tiene un `issueCode` de `LOCAL_COMP_B`. Esto significa que hay un complemento local tipo B pendiente que aún no se ha enviado al proveedor. Antes de actuar, yo comprobaría el estado de ese complemento local B para entender por qué no se ha enviado y si ya está listo para su emisión.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 88,
+            "reasoning": 307
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3332,
+              "promptChars": 3168,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 88,
+              "cachedInputTokens": null,
+              "reasoningTokens": 307
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3332,
+                    "promptChars": 3168,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 88,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 307
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3332
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1159,
+            "approximateInputTokens": 290,
+            "currentFactsChars": 653,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70018",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_COMP_B"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 3221,
+          "currentEvidenceDigest": "0856ed01b4c71f77b4521defd31881326dccc04ec8258b4c5f591391af7e7915",
+          "rawModel": "Hola, Evaluador. El pago P70018 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_CURRENT_FACT`. Esto significa que la revisión se debe a un hecho actual que no está directamente relacionado con los detalles del pago en sí. Antes de actuar, yo comprobaría en nuestros sistemas internos qué `fact` específico está causando este `issueCode` para el folio P70018, ya que la evidencia actual no lo detalla.",
+          "served": "Hola, Evaluador. El pago P70018 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_CURRENT_FACT`. Esto significa que la revisión se debe a un hecho actual que no está directamente relacionado con los detalles del pago en sí. Antes de actuar, yo comprobaría en nuestros sistemas internos qué `fact` específico está causando este `issueCode` para el folio P70018, ya que la evidencia actual no lo detalla.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 732,
+            "output": 106,
+            "reasoning": 336
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3220,
+              "promptChars": 3188,
+              "outputLimit": 1200,
+              "inputTokens": 732,
+              "outputTokens": 106,
+              "cachedInputTokens": null,
+              "reasoningTokens": 336
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3220,
+                    "promptChars": 3188,
+                    "outputLimit": 1200,
+                    "inputTokens": 732,
+                    "outputTokens": 106,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 336
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3221
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1179,
+            "approximateInputTokens": 295,
+            "currentFactsChars": 663,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "folio": "P70018",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ]
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [],
+              "pagos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "complementos": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Resultado completo únicamente dentro de RECENT_SAMPLE.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-solicitud-superseded",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_REQ_B",
+      "expectedBehavior": "USE_REPLACEMENT_DOCUMENT_CHECK",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "SUPERSEDED_EXPERIENCE",
+      "requiredPattern": "documento sustituto|reemplazo.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 23034,
+          "currentEvidenceDigest": "375baf81dbf3f2173981a15ad214d2955c1f1fe8decff43ce01d9ea78135d325",
+          "rawModel": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` porque tiene un `issueCode` asociado que es `LOCAL_REQ_B`. Este código es la razón por la que el sistema la marcó para revisión. Antes de actuar, yo comprobaría qué significa exactamente el `issueCode LOCAL_REQ_B` en nuestros manuales o sistemas internos para entender la naturaleza específica del problema y cómo proceder.",
+          "served": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` porque tiene un `issueCode` asociado que es `LOCAL_REQ_B`. Este código es la razón por la que el sistema la marcó para revisión. Antes de actuar, yo comprobaría qué significa exactamente el `issueCode LOCAL_REQ_B` en nuestros manuales o sistemas internos para entender la naturaleza específica del problema y cómo proceder.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 94,
+            "reasoning": 484
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 23033,
+              "promptChars": 3138,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 94,
+              "cachedInputTokens": null,
+              "reasoningTokens": 484
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 23033,
+                    "promptChars": 3138,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 94,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 484
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 23033
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1129,
+            "approximateInputTokens": 283,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70022",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_REQ_B"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 3061,
+          "currentEvidenceDigest": "375baf81dbf3f2173981a15ad214d2955c1f1fe8decff43ce01d9ea78135d325",
+          "rawModel": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` debido al código de incidencia `LOCAL_REQ_B`. Antes de actuar, comprobaría qué significa exactamente el código `LOCAL_REQ_B`, ya que no tengo su definición en este momento, para entender la causa específica y determinar los pasos a seguir.",
+          "served": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` debido al código de incidencia `LOCAL_REQ_B`. Antes de actuar, comprobaría qué significa exactamente el código `LOCAL_REQ_B`, ya que no tengo su definición en este momento, para entender la causa específica y determinar los pasos a seguir.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 76,
+            "reasoning": 358
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 3061,
+              "promptChars": 3138,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 76,
+              "cachedInputTokens": null,
+              "reasoningTokens": 358
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 3061,
+                    "promptChars": 3138,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 76,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 358
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 3061
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1129,
+            "approximateInputTokens": 283,
+            "currentFactsChars": 675,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70022",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "LOCAL_REQ_B"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 5846,
+          "currentEvidenceDigest": "cea82f2d9daa8688977afe56bb4f205b2f79064e3336c06db49b8ff63a45857c",
+          "rawModel": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` porque el sistema indica un `issueCode` de `UNRELATED_CURRENT_FACT`. Antes de actuar, yo verificaría qué significa exactamente ese `issueCode` en este caso particular, ya que es un código general. Buscaría si hay alguna nota interna o detalle adicional que explique cuál es ese \"hecho actual no relacionado\" que está deteniendo el proceso.",
+          "served": "Hola, Evaluador. La solicitud S70022 está en estado `EN_REVISION` porque el sistema indica un `issueCode` de `UNRELATED_CURRENT_FACT`. Antes de actuar, yo verificaría qué significa exactamente ese `issueCode` en este caso particular, ya que es un código general. Buscaría si hay alguna nota interna o detalle adicional que explique cuál es ese \"hecho actual no relacionado\" que está deteniendo el proceso.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 97,
+            "reasoning": 815
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 5846,
+              "promptChars": 3149,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 97,
+              "cachedInputTokens": null,
+              "reasoningTokens": 815
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 5846,
+                    "promptChars": 3149,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 97,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 815
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 5846
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1140,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 686,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70022",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    },
+    {
+      "id": "p7-document-language-only",
+      "domain": "DOCUMENTS",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "DOCUMENT_PRESENT",
+      "expectedBehavior": "SUMMARIZE_DOCUMENT_STATE",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "GENERATION_ONLY",
+      "caseType": "GENERATION_ONLY",
+      "requiredPattern": "documento.*presente|presente.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "arms": [
+        {
+          "arm": "BEFORE",
+          "elapsedMs": 2568,
+          "currentEvidenceDigest": "5445fbe6f26665f9bdff6cedf0655994e8ae6c137fa1dbfeaac77c539d1d0c65",
+          "rawModel": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene el código de incidencia `DOCUMENT_PRESENT`. Esto significa que se ha presentado un documento y está pendiente de revisión. Antes de actuar, yo comprobaría el documento asociado para entender su contenido y determinar los siguientes pasos.",
+          "served": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene el código de incidencia `DOCUMENT_PRESENT`. Esto significa que se ha presentado un documento y está pendiente de revisión. Antes de actuar, yo comprobaría el documento asociado para entender su contenido y determinar los siguientes pasos.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 721,
+            "output": 69,
+            "reasoning": 272
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2567,
+              "promptChars": 3143,
+              "outputLimit": 1200,
+              "inputTokens": 721,
+              "outputTokens": 69,
+              "cachedInputTokens": null,
+              "reasoningTokens": 272
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2567,
+                    "promptChars": 3143,
+                    "outputLimit": 1200,
+                    "inputTokens": 721,
+                    "outputTokens": 69,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 272
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2568
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1134,
+            "approximateInputTokens": 284,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70026",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "DOCUMENT_PRESENT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "AFTER",
+          "elapsedMs": 5009,
+          "currentEvidenceDigest": "5445fbe6f26665f9bdff6cedf0655994e8ae6c137fa1dbfeaac77c539d1d0c65",
+          "rawModel": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene un `issueCode` de `DOCUMENT_PRESENT`. Esto indica que se ha presentado un documento. Antes de cualquier acción, yo verificaría qué documento específico se presentó y si este cumple con los requisitos para resolver la situación que lo originó.",
+          "served": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene un `issueCode` de `DOCUMENT_PRESENT`. Esto indica que se ha presentado un documento. Antes de cualquier acción, yo verificaría qué documento específico se presentó y si este cumple con los requisitos para resolver la situación que lo originó.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 721,
+            "output": 75,
+            "reasoning": 483
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 5008,
+              "promptChars": 3143,
+              "outputLimit": 1200,
+              "inputTokens": 721,
+              "outputTokens": 75,
+              "cachedInputTokens": null,
+              "reasoningTokens": 483
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 5008,
+                    "promptChars": 3143,
+                    "outputLimit": 1200,
+                    "inputTokens": 721,
+                    "outputTokens": 75,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 483
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 5008
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1134,
+            "approximateInputTokens": 284,
+            "currentFactsChars": 680,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70026",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "DOCUMENT_PRESENT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        },
+        {
+          "arm": "COUNTEREXAMPLE",
+          "elapsedMs": 2963,
+          "currentEvidenceDigest": "fe8c443dbe02cfdf26efe84f988162a5c0f2a88c06bda8e527d0ade84e980f95",
+          "rawModel": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_CURRENT_FACT`. Antes de actuar, yo comprobaría a qué se refiere exactamente ese \"hecho actual no relacionado\" y si sigue siendo relevante para el estado de la solicitud.",
+          "served": "Hola, Evaluador. La solicitud S70026 está en estado `EN_REVISION` porque tiene un `issueCode` de `UNRELATED_CURRENT_FACT`. Antes de actuar, yo comprobaría a qué se refiere exactamente ese \"hecho actual no relacionado\" y si sigue siendo relevante para el estado de la solicitud.",
+          "source": "MODEL_RESPONSE",
+          "responsePolicy": null,
+          "modelError": null,
+          "canonicalProviderError": null,
+          "tokenUsage": {
+            "input": 723,
+            "output": 71,
+            "reasoning": 277
+          },
+          "attempts": [
+            {
+              "finishReason": "STOP",
+              "latencyMs": 2962,
+              "promptChars": 3149,
+              "outputLimit": 1200,
+              "inputTokens": 723,
+              "outputTokens": 71,
+              "cachedInputTokens": null,
+              "reasoningTokens": 277
+            }
+          ],
+          "evalRetry": {
+            "calls": [
+              {
+                "attempt": 1,
+                "error": null,
+                "attempts": [
+                  {
+                    "finishReason": "STOP",
+                    "latencyMs": 2962,
+                    "promptChars": 3149,
+                    "outputLimit": 1200,
+                    "inputTokens": 723,
+                    "outputTokens": 71,
+                    "cachedInputTokens": null,
+                    "reasoningTokens": 277
+                  }
+                ]
+              }
+            ],
+            "totalElapsedMs": 2963
+          },
+          "learningUsage": null,
+          "budget": {
+            "limitChars": 10000,
+            "outputReserveTokens": 1200,
+            "totalChars": 1140,
+            "approximateInputTokens": 285,
+            "currentFactsChars": 686,
+            "memoryChars": 2,
+            "experienceChars": 2,
+            "historyDropped": 0,
+            "memoriesDropped": 0,
+            "experiencesDropped": 0,
+            "exceeded": false
+          },
+          "context": {
+            "currentFacts": {
+              "solicitudes": [
+                {
+                  "folio": "S70026",
+                  "monto": 120,
+                  "estado": "EN_REVISION",
+                  "issueCode": "UNRELATED_CURRENT_FACT"
+                }
+              ],
+              "pagos": []
+            },
+            "learningExperiences": [],
+            "boundaries": {
+              "solicitudes": [
+                {
+                  "completeness": "COMPLETE",
+                  "scope": "EXACT_FOLIO",
+                  "meaning": "Resultado completo únicamente dentro de EXACT_FOLIO.",
+                  "totalAllowed": false
+                }
+              ],
+              "pagos": [],
+              "complementos": [
+                {
+                  "completeness": "PARTIAL",
+                  "scope": "RECENT_SAMPLE",
+                  "meaning": "Muestra limitada: no establece totales, ausencia global ni exhaustividad.",
+                  "totalAllowed": false
+                }
+              ],
+              "capacidadesIq": [
+                {
+                  "completeness": "UNKNOWN",
+                  "scope": "CONFIGURATION",
+                  "meaning": "Evidencia insuficiente para establecer este hecho.",
+                  "totalAllowed": false
+                }
+              ]
+            }
+          },
+          "fullFlowOutcome": "MODEL_AND_SYSTEM_COMPLETED"
+        }
+      ]
+    }
+  ]
+}

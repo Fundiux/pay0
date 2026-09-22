@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
@@ -15,6 +16,7 @@ import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
 import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
+import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -357,5 +359,44 @@ export const supersedeAgent007LearningExperience = onCall(
     const { uid, rootId } = await actor(request);
     const record = await hugoLearning.supersede(rootId, clean(request.data?.experienceId, 160), clean(request.data?.replacementId, 160), uid);
     return { ok: true, id: record.experienceId, state: record.state, revision: record.revision, supersededById: record.supersededById };
+  },
+);
+
+export const saveAgent007HumanReview = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, user, rootId } = await actor(request);
+    const raw = request.data || {};
+    const input: HumanReviewInput = {
+      evalRunId: clean(raw.evalRunId, 160), caseId: clean(raw.caseId, 160),
+      status: clean(raw.status, 20) as HumanReviewInput["status"], choice: clean(raw.choice, 40) as HumanReviewInput["choice"] || undefined,
+      reasons: Array.isArray(raw.reasons) ? raw.reasons.map((value: unknown) => clean(value, 40)) as HumanReviewInput["reasons"] : [],
+      note: clean(raw.note, 1000) || undefined,
+    };
+    const errors = validateHumanReview(input);
+    if (errors.length) throw new HttpsError("invalid-argument", `RevisiÃ³n invÃ¡lida: ${errors.join(",")}`);
+    const reviewId = createHash("sha256").update(`${rootId}\u0000${input.evalRunId}\u0000${input.caseId}`).digest("hex");
+    const ref = db.collection("agent007EvalReviews").doc(reviewId), reviewedAt = new Date().toISOString();
+    const saved = await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref), previous = snapshot.data(), revision = Number(previous?.revision || 0) + 1;
+      const record = { reviewId, rootId, evalRunId: input.evalRunId, caseId: input.caseId, choice: input.choice || null, reasons: input.reasons,
+        note: input.note || null, reviewerUid: uid, reviewerEmail: clean(user?.email, 200) || null, reviewedAt, revision, status: input.status };
+      tx.set(ref, record);
+      tx.create(db.collection("agent007EvalReviewEvents").doc(`${reviewId}_${String(revision).padStart(4, "0")}`),
+        { ...record, eventType: revision === 1 ? "REVIEW_CREATED" : "REVIEW_REVISED", previousChoice: previous?.choice || null });
+      return record;
+    });
+    return { ok: true, review: saved };
+  },
+);
+
+export const listAgent007HumanReviews = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    const evalRunId = clean(request.data?.evalRunId, 160);
+    if (!evalRunId) throw new HttpsError("invalid-argument", "EvaluaciÃ³n requerida.");
+    const snapshot = await db.collection("agent007EvalReviews").where("rootId", "==", rootId).where("evalRunId", "==", evalRunId).limit(100).get();
+    return { ok: true, reviews: snapshot.docs.map(doc => doc.data()) };
   },
 );

@@ -124,3 +124,11 @@ Remaining limits: no real Gemini learning-effect A/B on a verified experience, n
 Phase 6 ran ten safe synthetic BEFORE/AFTER/COUNTEREXAMPLE families through real Gemini 2.5 Flash and the Hugo Core/context/router pipeline, with Firestore persistence separately tested in the emulator. The narrow, repeatable behavior rubric found one positive effect (`duplicate-document`, 3/3 paired runs), seven no-effect families, one inconclusive family and one HTTP 429 model-error family. Relevant experience was included in all ten AFTER branches and excluded in all ten counterexamples. This is a controlled specialized effect, not proof of general or production learning. No human reviewed the Phase 6 pairs (0/10) or Phase 4 pairs (0/18); Phase 4 remains PARTIAL. Raw and served outputs, repeats and failed attempts are preserved under `evals/hugo/phase6/`.
 
 The Phase 4 `MAX_TOKENS` pattern was reproduced. In compact-context failed attempts, about 1,150 reasoning tokens plus 43–46 visible output tokens consumed the 1,200-token output ceiling; smaller context did not prevent it. An isolated 512-token thinking budget completed twice, but production configuration was not changed because broader answer-quality evaluation is pending. The full report, architecture map, portability checklist, privacy review and Phase 7 decision are in `docs/HUGO_PHASE6.md`. Phase 6 is COMPLETE for this controlled foundation; production Gemini reliability, human semantic review and operational data governance remain open.
+## Phase 7 status — 2026-09-22
+
+- Phase 7 controlled Learning Hardening II evaluation: **COMPLETE**.
+- Model tournament readiness: **NOT_READY**.
+- Human blind review: **AWAITING_HUMAN_REVIEW (0/28)**.
+- MAX_TOKENS: **UNDERSTOOD_NOT_MITIGATED**; production configuration unchanged.
+- Phase 4 remains **PARTIAL**; Phase 6 historical artifacts and conclusions remain preserved.
+- Recommended Phase 8: **Human Review and Token Reliability Gate**.

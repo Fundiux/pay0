@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "hugo-phase7-privacy-v1",
+  "syntheticOnly": true,
+  "checklist": [
+    {
+      "category": "structured task, behavior and outcome codes",
+      "handling": "ALLOW_AFTER_REVIEW"
+    },
+    {
+      "category": "root and entity identifiers",
+      "handling": "PSEUDONYMIZE_WITH_MANAGED_SALT"
+    },
+    {
+      "category": "names, email, tax and account identifiers",
+      "handling": "EXCLUDE_OR_REDACT"
+    },
+    {
+      "category": "documents, URLs, free text and transcripts",
+      "handling": "EXCLUDE_BY_DEFAULT"
+    },
+    {
+      "category": "amount and financial state",
+      "handling": "BUCKET_AND_REVIEW"
+    },
+    {
+      "category": "external training authorization",
+      "handling": "SEPARATE_EXPLICIT_APPROVAL_REQUIRED"
+    }
+  ],
+  "sanitized": {
+    "taskCode": "VERIFY_DOCUMENT",
+    "behaviorCode": "CHECK_BEFORE_APPROVAL",
+    "outcomeCode": "COMPLETED",
+    "instrumentType": "TRANSFER",
+    "bankType": "NATIONAL",
+    "rootRef": "p_8b56cb2257957131",
+    "entityRef": "p_f3aa56037f214212",
+    "amountBucket": "HIGH",
+    "financialStateCategory": "REQUIRES_REVIEW"
+  },
+  "assertions": {
+    "directIdentifiersAbsent": true,
+    "rawFreeTextAbsent": true,
+    "rawAmountAbsent": true,
+    "rawDocumentAbsent": true
+  },
+  "productionExportReadiness": "NOT_READY",
+  "limitation": "Synthetic demonstration only; managed salt, operational sampling, retention and privacy approval are not implemented."
+}

@@ -1,0 +1,527 @@
+{
+  "schemaVersion": "hugo-phase7-ablation-v1",
+  "syntheticOnly": true,
+  "controlledVariables": "Same model, prompt, current facts and output limit within case; only experience representation changes.",
+  "results": [
+    {
+      "caseId": "document-review",
+      "variant": "NONE",
+      "pattern": "verificar.*documento|comprobar.*documento",
+      "contextChars": 375,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71001 está en revisión porque le falta un documento, según el `issueCode` \"DOCUMENT_MISSING\". Antes de actuar, deberías verificar qué documento específico es el que falta y si ya se solicitó al cliente o si ya lo tenemos en otro lugar.",
+      "tokenUsage": {
+        "input": 542,
+        "output": 66,
+        "reasoning": 182
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2151,
+          "promptChars": 2362,
+          "outputLimit": 1200,
+          "inputTokens": 542,
+          "outputTokens": 66,
+          "cachedInputTokens": null,
+          "reasoningTokens": 182
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "document-review",
+      "variant": "COMPACT",
+      "pattern": "verificar.*documento|comprobar.*documento",
+      "contextChars": 991,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71001 está en revisión porque falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de tomar cualquier acción, debemos verificar que el documento faltante haya sido recibido y sea correcto. Esto es una lección aprendida y verificada de una experiencia anterior.",
+      "tokenUsage": {
+        "input": 724,
+        "output": 69,
+        "reasoning": 328
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2804,
+          "promptChars": 2978,
+          "outputLimit": 1200,
+          "inputTokens": 724,
+          "outputTokens": 69,
+          "cachedInputTokens": null,
+          "reasoningTokens": 328
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "document-review",
+      "variant": "FULL",
+      "pattern": "verificar.*documento|comprobar.*documento",
+      "contextChars": 1584,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71001 está en revisión porque falta un documento (`DOCUMENT_MISSING`). Antes de tomar cualquier decisión, es importante verificar el documento.",
+      "tokenUsage": {
+        "input": 867,
+        "output": 40,
+        "reasoning": 254
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2072,
+          "promptChars": 3571,
+          "outputLimit": 1200,
+          "inputTokens": 867,
+          "outputTokens": 40,
+          "cachedInputTokens": null,
+          "reasoningTokens": 254
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "document-review",
+      "variant": "EXPLICIT_RELEVANCE",
+      "pattern": "verificar.*documento|comprobar.*documento",
+      "contextChars": 1139,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71001` está en revisión porque tiene un `issueCode` de `DOCUMENT_MISSING`, lo que significa que falta un documento. Antes de tomar cualquier acción, es importante verificar el documento faltante. Esto es una práctica que se estableció a partir de una experiencia de aprendizaje verificada en el pasado.",
+      "tokenUsage": {
+        "input": 754,
+        "output": 76,
+        "reasoning": 352
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 3333,
+          "promptChars": 3126,
+          "outputLimit": 1200,
+          "inputTokens": 754,
+          "outputTokens": 76,
+          "cachedInputTokens": null,
+          "reasoningTokens": 352
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "document-review",
+      "variant": "POSITION_FIRST",
+      "pattern": "verificar.*documento|comprobar.*documento",
+      "contextChars": 1021,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71001` está en revisión porque le falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de actuar, es importante que se verifique el documento. Esto es una corrección que se implementó para asegurar que siempre se revisen los documentos antes de tomar una decisión, en lugar de copiar acciones anteriores.",
+      "tokenUsage": {
+        "input": 729,
+        "output": 81,
+        "reasoning": 349
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2785,
+          "promptChars": 3008,
+          "outputLimit": 1200,
+          "inputTokens": 729,
+          "outputTokens": 81,
+          "cachedInputTokens": null,
+          "reasoningTokens": 349
+        }
+      ],
+      "behaviorPresent": false
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "variant": "NONE",
+      "pattern": "factura.*solicitud|solicitud.*factura",
+      "contextChars": 375,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71002` está en revisión porque hay una `INVOICE_MISMATCH`, es decir, una discrepancia con la factura. Antes de actuar, sería importante comprobar los detalles de la factura que se adjuntó contra los datos de la solicitud para identificar la diferencia.",
+      "tokenUsage": {
+        "input": 544,
+        "output": 69,
+        "reasoning": 686
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 4753,
+          "promptChars": 2362,
+          "outputLimit": 1200,
+          "inputTokens": 544,
+          "outputTokens": 69,
+          "cachedInputTokens": null,
+          "reasoningTokens": 686
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "variant": "COMPACT",
+      "pattern": "factura.*solicitud|solicitud.*factura",
+      "contextChars": 1018,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71002 está en revisión porque se detectó una discrepancia con la factura (`INVOICE_MISMATCH`). Antes de cualquier acción, es importante comparar la factura con la solicitud para asegurar que todo coincida.",
+      "tokenUsage": {
+        "input": 739,
+        "output": 56,
+        "reasoning": 360
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2623,
+          "promptChars": 3005,
+          "outputLimit": 1200,
+          "inputTokens": 739,
+          "outputTokens": 56,
+          "cachedInputTokens": null,
+          "reasoningTokens": 360
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "variant": "FULL",
+      "pattern": "factura.*solicitud|solicitud.*factura",
+      "contextChars": 1625,
+      "modelError": null,
+      "text": "Hola. La solicitud S71002 está en revisión porque se detectó una discrepancia en la factura (`INVOICE_MISMATCH`). Antes de cualquier acción, es necesario comparar la factura con la solicitud.",
+      "tokenUsage": {
+        "input": 888,
+        "output": 45,
+        "reasoning": 412
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2867,
+          "promptChars": 3612,
+          "outputLimit": 1200,
+          "inputTokens": 888,
+          "outputTokens": 45,
+          "cachedInputTokens": null,
+          "reasoningTokens": 412
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "variant": "EXPLICIT_RELEVANCE",
+      "pattern": "factura.*solicitud|solicitud.*factura",
+      "contextChars": 1166,
+      "modelError": null,
+      "text": "La solicitud S71002 está en revisión porque se detectó una `INVOICE_MISMATCH`. Antes de actuar, es importante que se compare la factura con la solicitud para asegurar que todo coincida correctamente. Esto es una práctica que hemos verificado que ayuda a evitar problemas futuros, según una experiencia de aprendizaje pasada.",
+      "tokenUsage": {
+        "input": 771,
+        "output": 69,
+        "reasoning": 329
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 5428,
+          "promptChars": 3153,
+          "outputLimit": 1200,
+          "inputTokens": 771,
+          "outputTokens": 69,
+          "cachedInputTokens": null,
+          "reasoningTokens": 329
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "invoice-mismatch",
+      "variant": "POSITION_FIRST",
+      "pattern": "factura.*solicitud|solicitud.*factura",
+      "contextChars": 1048,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71002 está en revisión porque se detectó una discrepancia entre la factura y la solicitud (issueCode: `INVOICE_MISMATCH`). Antes de aprobarla, es crucial **comparar la factura con la solicitud**. Esto es una corrección verificada de una experiencia de aprendizaje pasada.",
+      "tokenUsage": {
+        "input": 744,
+        "output": 73,
+        "reasoning": 312
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2968,
+          "promptChars": 3035,
+          "outputLimit": 1200,
+          "inputTokens": 744,
+          "outputTokens": 73,
+          "cachedInputTokens": null,
+          "reasoningTokens": 312
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "variant": "NONE",
+      "pattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+      "contextChars": 379,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71003` está en revisión porque está pendiente la confirmación del proveedor (`PROVIDER_ACK_PENDING`). Antes de cualquier acción, te sugiero comprobar si el proveedor ya ha confirmado la recepción o aceptación de la solicitud.",
+      "tokenUsage": {
+        "input": 544,
+        "output": 58,
+        "reasoning": 130
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 1330,
+          "promptChars": 2366,
+          "outputLimit": 1200,
+          "inputTokens": 544,
+          "outputTokens": 58,
+          "cachedInputTokens": null,
+          "reasoningTokens": 130
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "variant": "COMPACT",
+      "pattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+      "contextChars": 998,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71003` está en revisión porque estamos esperando la confirmación del proveedor (`PROVIDER_ACK_PENDING`). Antes de cualquier acción, es importante verificar la confirmación del proveedor.",
+      "tokenUsage": {
+        "input": 732,
+        "output": 50,
+        "reasoning": 272
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2152,
+          "promptChars": 2985,
+          "outputLimit": 1200,
+          "inputTokens": 732,
+          "outputTokens": 50,
+          "cachedInputTokens": null,
+          "reasoningTokens": 272
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "variant": "FULL",
+      "pattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+      "contextChars": 1589,
+      "modelError": null,
+      "text": "Hola, Evaluador. El folio S71003 está en revisión porque estamos esperando la confirmación del proveedor (`PROVIDER_ACK_PENDING`). Antes de cualquier acción, es importante verificar si ya se recibió la confirmación del proveedor.",
+      "tokenUsage": {
+        "input": 877,
+        "output": 52,
+        "reasoning": 290
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 1891,
+          "promptChars": 3576,
+          "outputLimit": 1200,
+          "inputTokens": 877,
+          "outputTokens": 52,
+          "cachedInputTokens": null,
+          "reasoningTokens": 290
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "supplier-ack",
+      "variant": "EXPLICIT_RELEVANCE",
+      "pattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+      "contextChars": 1150,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud `S71003` está en revisión porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Antes de actuar, la experiencia verificada nos indica que hay que **verificar el acuse de recibo del proveedor**.",
+      "tokenUsage": {
+        "input": 765,
+        "output": 61,
+        "reasoning": 371
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 3126,
+          "promptChars": 3137,
+          "outputLimit": 1200,
+          "inputTokens": 765,
+          "outputTokens": 61,
+          "cachedInputTokens": null,
+          "reasoningTokens": 371
+        }
+      ],
+      "behaviorPresent": false
+    },
+    {
+      "caseId": "supplier-ack",
+      "variant": "POSITION_FIRST",
+      "pattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+      "contextChars": 1028,
+      "modelError": null,
+      "text": "Hola, Evaluador. La solicitud S71003 está en revisión porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Antes de cualquier acción, es importante verificar la confirmación del proveedor. Esto es una lección aprendida de una experiencia previa, donde se determinó que es crucial confirmar el acuse de recibo del proveedor antes de intentar cualquier reintento.",
+      "tokenUsage": {
+        "input": 737,
+        "output": 84,
+        "reasoning": 379
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2518,
+          "promptChars": 3015,
+          "outputLimit": 1200,
+          "inputTokens": 737,
+          "outputTokens": 84,
+          "cachedInputTokens": null,
+          "reasoningTokens": 379
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "variant": "NONE",
+      "pattern": "concili|monto correcto",
+      "contextChars": 374,
+      "modelError": null,
+      "text": "Hola, Evaluador. El folio P71004 está en revisión porque se detectó una discrepancia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, sería importante verificar el monto correcto de este pago.",
+      "tokenUsage": {
+        "input": 542,
+        "output": 48,
+        "reasoning": 190
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 1838,
+          "promptChars": 2361,
+          "outputLimit": 1200,
+          "inputTokens": 542,
+          "outputTokens": 48,
+          "cachedInputTokens": null,
+          "reasoningTokens": 190
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "variant": "COMPACT",
+      "pattern": "concili|monto correcto",
+      "contextChars": 986,
+      "modelError": null,
+      "text": "Hola, Evaluador. El folio P71004 está en revisión porque hay una diferencia en el monto, según el `issueCode: AMOUNT_MISMATCH`. Antes de cualquier acción, es importante conciliar el monto.",
+      "tokenUsage": {
+        "input": 723,
+        "output": 49,
+        "reasoning": 157
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 1581,
+          "promptChars": 2973,
+          "outputLimit": 1200,
+          "inputTokens": 723,
+          "outputTokens": 49,
+          "cachedInputTokens": null,
+          "reasoningTokens": 157
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "variant": "FULL",
+      "pattern": "concili|monto correcto",
+      "contextChars": 1578,
+      "modelError": null,
+      "text": "Hola, Evaluador. El folio P71004 está en revisión porque hay una discrepancia en el monto (`AMOUNT_MISMATCH`). Antes de actuar, es necesario conciliar el monto.",
+      "tokenUsage": {
+        "input": 866,
+        "output": 43,
+        "reasoning": 272
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2152,
+          "promptChars": 3565,
+          "outputLimit": 1200,
+          "inputTokens": 866,
+          "outputTokens": 43,
+          "cachedInputTokens": null,
+          "reasoningTokens": 272
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "variant": "EXPLICIT_RELEVANCE",
+      "pattern": "concili|monto correcto",
+      "contextChars": 1133,
+      "modelError": null,
+      "text": "Hola, Evaluador. El folio P71004 está en revisión porque detectamos una diferencia en el monto, lo que llamamos un `AMOUNT_MISMATCH`. Antes de cualquier otra acción, es importante que se concilie el monto.",
+      "tokenUsage": {
+        "input": 753,
+        "output": 53,
+        "reasoning": 194
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 1534,
+          "promptChars": 3120,
+          "outputLimit": 1200,
+          "inputTokens": 753,
+          "outputTokens": 53,
+          "cachedInputTokens": null,
+          "reasoningTokens": 194
+        }
+      ],
+      "behaviorPresent": true
+    },
+    {
+      "caseId": "amount-mismatch",
+      "variant": "POSITION_FIRST",
+      "pattern": "concili|monto correcto",
+      "contextChars": 1016,
+      "modelError": null,
+      "text": "Hola, Evaluador. El pago `P71004` está en revisión porque se detectó una `AMOUNT_MISMATCH`, es decir, una diferencia en el monto. Antes de cualquier acción, es importante conciliar el monto.",
+      "tokenUsage": {
+        "input": 728,
+        "output": 52,
+        "reasoning": 316
+      },
+      "attempts": [
+        {
+          "finishReason": "STOP",
+          "latencyMs": 2107,
+          "promptChars": 3003,
+          "outputLimit": 1200,
+          "inputTokens": 728,
+          "outputTokens": 52,
+          "cachedInputTokens": null,
+          "reasoningTokens": 316
+        }
+      ],
+      "behaviorPresent": true
+    }
+  ]
+}

@@ -29,3 +29,12 @@ export async function listAgent007LearningLineage(experienceId: string) { return
 export async function supersedeAgent007LearningExperience(experienceId: string, replacementId: string) {
   return (await httpsCallable<{ experienceId: string; replacementId: string }, { ok: boolean; id: string; state: string; revision: number; supersededById: string }>(functions, "supersedeAgent007LearningExperience")({ experienceId, replacementId })).data;
 }
+
+export type HugoHumanReviewChoice = "A_BETTER" | "B_BETTER" | "EQUIVALENT" | "BOTH_ACCEPTABLE" | "BOTH_UNACCEPTABLE";
+export type HugoHumanReview = { reviewId: string; evalRunId: string; caseId: string; choice: HugoHumanReviewChoice | null; reasons: string[]; note: string | null; reviewerUid: string; reviewedAt: string; revision: number; status: "REVIEWED" | "SKIPPED" };
+export async function saveAgent007HumanReview(input: { evalRunId: string; caseId: string; status: "REVIEWED" | "SKIPPED"; choice?: HugoHumanReviewChoice; reasons: string[]; note?: string }) {
+  return (await httpsCallable<typeof input, { ok: boolean; review: HugoHumanReview }>(functions, "saveAgent007HumanReview")(input)).data;
+}
+export async function listAgent007HumanReviews(evalRunId: string) {
+  return (await httpsCallable<{ evalRunId: string }, { ok: boolean; reviews: HugoHumanReview[] }>(functions, "listAgent007HumanReviews")({ evalRunId })).data;
+}

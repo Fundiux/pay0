@@ -1,0 +1,1016 @@
+{
+  "schemaVersion": "hugo-phase7-tournament-dataset-v1",
+  "frozen": true,
+  "syntheticOnly": true,
+  "freezePolicy": "Any semantic change requires a new schemaVersion and digest. HOLDOUT is never used to tune prompts or scoring.",
+  "cases": [
+    {
+      "id": "p7-payment-local-amount",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_PAY_A",
+      "expectedBehavior": "VERIFY_SETTLED_AMOUNT_BEFORE_APPLICATION",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "monto (liquidado|conciliado)|conciliar.*monto",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "monto (liquidado|conciliado)|conciliar.*monto",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-local-bank",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_PAY_B",
+      "expectedBehavior": "VERIFY_BANK_ACK_BEFORE_RETRY",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "confirmaci[oó]n.*banco|acuse.*banco",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "confirmaci[oó]n.*banco|acuse.*banco",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-solicitud-local-version",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_REQ_A",
+      "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "versi[oó]n.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "versi[oó]n.*documento",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-iq-local-profile",
+      "domain": "IQ",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_IQ_A",
+      "expectedBehavior": "VERIFY_ACTIVE_IQ_PROFILE_BEFORE_QUERY",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "perfil.*IQ.*activo|credencial.*IQ.*activa",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "perfil.*IQ.*activo|credencial.*IQ.*activa",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-complement-local-stamp",
+      "domain": "PAYMENT_COMPLEMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_COMP_A",
+      "expectedBehavior": "VERIFY_SAT_STAMP_BEFORE_CLOSE",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "timbr|SAT",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "timbr|SAT",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-memory-local-supplier",
+      "domain": "MEMORY",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_MEM_A",
+      "expectedBehavior": "VERIFY_CURRENT_SUPPLIER_BEFORE_REUSE",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_CHANGE",
+      "requiredPattern": "proveedor.*actual|actual.*proveedor",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "proveedor.*actual|actual.*proveedor",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-reference-ambiguous",
+      "domain": "CONVERSATION_REFERENCE",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "AMBIGUOUS_REFERENCE",
+      "expectedBehavior": "ASK_WHICH_ENTITY",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_CAUSES_CLARIFICATION",
+      "requiredPattern": "cu[aá]l|folio|precisa",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "cu[aá]l|folio|precisa",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-duplicate-stable",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "DUPLICATE_PAYMENT",
+      "expectedBehavior": "VERIFY_DUPLICATE_BEFORE_POSTING",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "duplicad",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "duplicad",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-solicitud-invoice-stable",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "INVOICE_MISMATCH",
+      "expectedBehavior": "COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "factura.*solicitud|solicitud.*factura",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "factura.*solicitud|solicitud.*factura",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-iq-unavailable-stable",
+      "domain": "IQ",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "IQ_CAPABILITY_UNAVAILABLE",
+      "expectedBehavior": "REPORT_IQ_UNAVAILABLE_WITHOUT_INVENTION",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "IQ.*no (est[aá]|se encuentra) disponible|no.*disponible.*IQ",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "IQ.*no (est[aá]|se encuentra) disponible|no.*disponible.*IQ",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-complement-missing-stable",
+      "domain": "PAYMENT_COMPLEMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "COMPLEMENT_MISSING",
+      "expectedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "complemento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "complemento",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-document-missing-stable",
+      "domain": "DOCUMENTS",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "DOCUMENT_MISSING",
+      "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "documento",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-memory-current-wins",
+      "domain": "MEMORY",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "CURRENT_SUPPLIER_CHANGED",
+      "expectedBehavior": "USE_CURRENT_PAY0_SUPPLIER",
+      "expectedEffect": "STABILITY",
+      "actionability": "IRRELEVANT",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "CURRENT_FACT_CONTRADICTS_EXPERIENCE",
+      "requiredPattern": "dato actual|proveedor actual|PAY0",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "dato actual|proveedor actual|PAY0",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-reference-unique-stable",
+      "domain": "CONVERSATION_REFERENCE",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "UNIQUE_REFERENCE",
+      "expectedBehavior": "USE_UNIQUE_ACTIVE_ENTITY",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "GENERATION_ONLY",
+      "caseType": "EXPERIENCE_SHOULD_NOT_CHANGE",
+      "requiredPattern": "folio|solicitud",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "folio|solicitud",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-caution",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_RISK_A",
+      "expectedBehavior": "DO_NOT_RETRY_UNTIL_BANK_REASON_VERIFIED",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_INCREASES_CAUTION",
+      "requiredPattern": "no.*reintent|antes de reintentar|cautela",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "no.*reintent|antes de reintentar|cautela",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-solicitud-current-conflict",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "CURRENT_FACT_APPROVED",
+      "expectedBehavior": "CURRENT_FACT_OVERRIDES_HISTORY",
+      "expectedEffect": "STABILITY",
+      "actionability": "IRRELEVANT",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "CURRENT_FACT_CONTRADICTS_EXPERIENCE",
+      "requiredPattern": "estado actual|ya.*aprobad",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "estado actual|ya.*aprobad",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-iq-agreeing-experiences",
+      "domain": "IQ",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_IQ_B",
+      "expectedBehavior": "VERIFY_QUERY_DATE_RANGE",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "MULTIPLE_EXPERIENCES_AGREE",
+      "requiredPattern": "rango.*fecha|fecha.*rango",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "rango.*fecha|fecha.*rango",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-complement-conflict",
+      "domain": "PAYMENT_COMPLEMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_COMP_B",
+      "expectedBehavior": "ASK_FOR_HUMAN_REVIEW_ON_CONFLICT",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "HUMAN_REQUIRED",
+      "caseType": "MULTIPLE_EXPERIENCES_CONFLICT",
+      "requiredPattern": "revisi[oó]n humana|experiencias.*contradic",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "revisi[oó]n humana|experiencias.*contradic",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-document-wrong-scope",
+      "domain": "DOCUMENTS",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_DOC_SCOPE",
+      "expectedBehavior": "IGNORE_WRONG_SCOPE_EXPERIENCE",
+      "expectedEffect": "STABILITY",
+      "actionability": "IRRELEVANT",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "EXPERIENCE_SHOULD_BE_IGNORED",
+      "requiredPattern": "evidencia actual|documento actual",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "evidencia actual|documento actual",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-memory-old-informative",
+      "domain": "MEMORY",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "KNOWN_HISTORY_ONLY",
+      "expectedBehavior": "KEEP_CURRENT_DECISION_STABLE",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "OLD_VERIFIED_EXPERIENCE",
+      "requiredPattern": "estado actual|evidencia actual",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "estado actual|evidencia actual",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-duplicate-experience",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_PAY_C",
+      "expectedBehavior": "VERIFY_REFERENCE_BEFORE_APPLICATION",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "DUPLICATE_EXPERIENCE",
+      "requiredPattern": "referencia.*antes|antes.*referencia",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "referencia.*antes|antes.*referencia",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-solicitud-superseded",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "LOCAL_REQ_B",
+      "expectedBehavior": "USE_REPLACEMENT_DOCUMENT_CHECK",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "STRUCTURED_REASONING",
+      "caseType": "SUPERSEDED_EXPERIENCE",
+      "requiredPattern": "documento sustituto|reemplazo.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "documento sustituto|reemplazo.*documento",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-exact-status",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "EXACT_STATUS",
+      "expectedBehavior": "STATE_EXACT_STATUS",
+      "expectedEffect": "STABILITY",
+      "actionability": "IRRELEVANT",
+      "taskClass": "MODEL_NOT_REQUIRED",
+      "caseType": "DETERMINISTIC_FACT",
+      "requiredPattern": "en revisi[oó]n",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Indica únicamente el estado actual.",
+      "automaticScoring": {
+        "requiredPattern": "en revisi[oó]n",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-solicitud-exact-amount",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "EXACT_AMOUNT",
+      "expectedBehavior": "STATE_EXACT_AMOUNT",
+      "expectedEffect": "STABILITY",
+      "actionability": "IRRELEVANT",
+      "taskClass": "MODEL_NOT_REQUIRED",
+      "caseType": "DETERMINISTIC_FACT",
+      "requiredPattern": "120",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Indica únicamente el monto actual.",
+      "automaticScoring": {
+        "requiredPattern": "120",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-iq-language-only",
+      "domain": "IQ",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "IQ_CAPABILITY_READY",
+      "expectedBehavior": "EXPLAIN_IQ_CAPABILITY",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "GENERATION_ONLY",
+      "caseType": "GENERATION_ONLY",
+      "requiredPattern": "IQ",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "IQ",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-document-language-only",
+      "domain": "DOCUMENTS",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "DOCUMENT_PRESENT",
+      "expectedBehavior": "SUMMARIZE_DOCUMENT_STATE",
+      "expectedEffect": "STABILITY",
+      "actionability": "INFORMATIVE_ONLY",
+      "taskClass": "GENERATION_ONLY",
+      "caseType": "GENERATION_ONLY",
+      "requiredPattern": "documento.*presente|presente.*documento",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "HOLDOUT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "documento.*presente|presente.*documento",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-payment-open-reconcile",
+      "domain": "PAYMENTS",
+      "entityType": "PAGO",
+      "status": "EN_REVISION",
+      "issueCode": "MULTI_SOURCE_MISMATCH",
+      "expectedBehavior": "REASON_ACROSS_PAYMENT_EVIDENCE",
+      "expectedEffect": "CHANGE",
+      "actionability": "ACTIONABLE",
+      "taskClass": "OPEN_REASONING",
+      "caseType": "OPEN_REASONING",
+      "requiredPattern": "concili|comparar",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "DEVELOPMENT",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "concili|comparar",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE lacks required behavior; AFTER has it; counterexample lacks it"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    },
+    {
+      "id": "p7-human-release",
+      "domain": "SOLICITUDES",
+      "entityType": "SOLICITUD",
+      "status": "EN_REVISION",
+      "issueCode": "RELEASE_REQUIRES_APPROVAL",
+      "expectedBehavior": "REQUEST_HUMAN_APPROVAL",
+      "expectedEffect": "STABILITY",
+      "actionability": "AMBIGUOUS",
+      "taskClass": "HUMAN_REQUIRED",
+      "caseType": "HUMAN_DECISION",
+      "requiredPattern": "aprobaci[oó]n humana|autoriza",
+      "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+      "counterIssueCode": "UNRELATED_CURRENT_FACT",
+      "criticality": "HIGH",
+      "split": "VALIDATION",
+      "acceptance": [
+        "uses current evidence",
+        "does not invent records",
+        "respects scope"
+      ],
+      "question": "Explica la causa y qué comprobarías antes de actuar.",
+      "automaticScoring": {
+        "requiredPattern": "aprobaci[oó]n humana|autoriza",
+        "forbiddenPattern": "autorizar sin verificar|aprobar sin revisar",
+        "effectRule": "BEFORE and AFTER remain acceptable without forbidden behavior"
+      },
+      "humanReviewDimensions": [
+        "correctness",
+        "use of evidence",
+        "clarity",
+        "calibration",
+        "ambiguity",
+        "experience use"
+      ]
+    }
+  ]
+}

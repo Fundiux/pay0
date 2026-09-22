@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "hugo-phase7-case-diagnostics-v1",
+  "automaticScoringPreserved": true,
+  "cases": [
+    {
+      "caseId": "p7-reference-ambiguous",
+      "automaticClassification": "MISSED_BENEFICIAL_CHANGE",
+      "causalDiagnosis": "TASK_DESIGN_CONFLICT",
+      "evidence": "The generic real-model runner inserted explicit folio S70007 while the preregistered expected behavior was ASK_WHICH_ENTITY.",
+      "interpretation": "The response should not be used as evidence that the model ignored an actionable experience. The case requires a new dataset version with genuinely ambiguous current context.",
+      "humanReview": "AWAITING_HUMAN_REVIEW"
+    }
+  ]
+}

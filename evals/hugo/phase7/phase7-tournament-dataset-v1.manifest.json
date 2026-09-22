@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "hugo-phase7-freeze-manifest-v1",
+  "frozenAt": "2026-09-22T18:00:00.000Z",
+  "datasetDigest": "d91845bc21be9fbcfe1f99377608a8fe72ddf57989f4c5c67c2d3072fd6b2096",
+  "caseCount": 28,
+  "splitCounts": {
+    "DEVELOPMENT": 13,
+    "VALIDATION": 8,
+    "HOLDOUT": 7
+  },
+  "frozenInputs": {
+    "scoring": "appropriate-effect-v1",
+    "promptSemantics": "hugo-v2",
+    "contextPolicy": "phase6-10k-current-facts-first",
+    "retrievalPolicy": "learning-v1-structured-match",
+    "retryPolicy": "retry RATE_LIMIT/TIMEOUT/SERVICE_UNAVAILABLE twice with 1000ms/2000ms backoff; total latency includes retries",
+    "stochasticPolicy": "one run all cases; three total runs for preregistered model-sensitive subset",
+    "reasoningIntent": "STANDARD_REASONING"
+  },
+  "holdoutPolicy": "No prompt or scoring changes after HOLDOUT responses are observed. HOLDOUT case IDs are protected by tests."
+}

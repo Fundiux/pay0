@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "hugo-phase7-structured-reanalysis-v1",
+  "syntheticOnly": true,
+  "newProviderCalls": 0,
+  "diagnosis": [
+    "CONTEXT_ID_MISMATCH",
+    "SCHEMA_ALLOWED_UNCONSTRAINED_EVIDENCE_STRING"
+  ],
+  "modelHallucinatedEvidenceId": false,
+  "explanation": "solicitudes[0] was a real context location but not a canonical evidence ID. The validator now accepts only explicitly declared aliases and continues rejecting unknown aliases.",
+  "original": {
+    "valid": false,
+    "reasons": [
+      "CLAIM_EVIDENCE_UNKNOWN"
+    ]
+  },
+  "withCanonicalAlias": {
+    "valid": true,
+    "reasons": []
+  },
+  "unknownAliasStillRejected": {
+    "valid": false,
+    "reasons": [
+      "CLAIM_EVIDENCE_UNKNOWN"
+    ]
+  },
+  "conclusion": "MECHANICAL_ATTRIBUTION_IMPROVED_NOT_CLAIM_CORRECTNESS",
+  "productionStructuredOutputEnabled": false
+}

@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "hugo-phase7-experiment-summary-v1",
+  "ablation": {
+    "cases": 4,
+    "variants": [
+      {
+        "variant": "NONE",
+        "cases": 4,
+        "behaviorPresent": 4,
+        "providerErrors": 0,
+        "averageContextChars": 376,
+        "averageInputTokens": 543,
+        "averageReasoningTokens": 297
+      },
+      {
+        "variant": "COMPACT",
+        "cases": 4,
+        "behaviorPresent": 4,
+        "providerErrors": 0,
+        "averageContextChars": 998,
+        "averageInputTokens": 729.5,
+        "averageReasoningTokens": 279.3
+      },
+      {
+        "variant": "FULL",
+        "cases": 4,
+        "behaviorPresent": 4,
+        "providerErrors": 0,
+        "averageContextChars": 1594,
+        "averageInputTokens": 874.5,
+        "averageReasoningTokens": 307
+      },
+      {
+        "variant": "EXPLICIT_RELEVANCE",
+        "cases": 4,
+        "behaviorPresent": 3,
+        "providerErrors": 0,
+        "averageContextChars": 1147,
+        "averageInputTokens": 760.8,
+        "averageReasoningTokens": 311.5
+      },
+      {
+        "variant": "POSITION_FIRST",
+        "cases": 4,
+        "behaviorPresent": 3,
+        "providerErrors": 0,
+        "averageContextChars": 1028,
+        "averageInputTokens": 734.5,
+        "averageReasoningTokens": 339
+      }
+    ],
+    "interpretation": "All no-effect cases already produced the expected behavior with NONE. Representation changes therefore could not create a beneficial behavioral difference in this set.",
+    "compactVsFull": {
+      "behavior": "EQUIVALENT_ON_FOUR_CASES",
+      "averageInputTokenReductionPercent": 16.6,
+      "averageContextCharReductionPercent": 37.4
+    }
+  },
+  "tokenInvestigation": {
+    "configs": [
+      {
+        "id": "baseline-compact-1200",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 691,
+        "medianReasoningTokens": 371,
+        "medianLatencyMs": 3038,
+        "contextChars": 915
+      },
+      {
+        "id": "bounded512-compact-1200",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 691,
+        "medianReasoningTokens": 366,
+        "medianLatencyMs": 3048,
+        "contextChars": 915
+      },
+      {
+        "id": "bounded256-compact-1200",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 691,
+        "medianReasoningTokens": 239,
+        "medianLatencyMs": 2401,
+        "contextChars": 915
+      },
+      {
+        "id": "bounded512-compact-800",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 691,
+        "medianReasoningTokens": 257,
+        "medianLatencyMs": 2776,
+        "contextChars": 915
+      },
+      {
+        "id": "bounded512-full-1200",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 842,
+        "medianReasoningTokens": 298,
+        "medianLatencyMs": 2749,
+        "contextChars": 1524
+      },
+      {
+        "id": "bounded512-compact-noisy-1200",
+        "runs": 3,
+        "stop": 3,
+        "maxTokens": 0,
+        "providerErrors": 0,
+        "behaviorPresent": 3,
+        "medianInputTokens": 1896,
+        "medianReasoningTokens": 372,
+        "medianLatencyMs": 2878,
+        "contextChars": 6389
+      }
+    ],
+    "controlledMatrixMaxTokens": 0,
+    "fullFlowMaxTokens": 8,
+    "outcome": "UNDERSTOOD_NOT_MITIGATED",
+    "explanation": "Reasoning-token variability remains the observed immediate mechanism. All 18 matrix calls completed and bounded budgets retained the required behavior, but the unchanged production full-flow suite still had MAX_TOKENS failures. Wider quality validation is required before changing production."
+  }
+}

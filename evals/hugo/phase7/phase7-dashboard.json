@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "hugo-phase7-analysis-v1",
+  "familyCount": 28,
+  "classifications": {
+    "APPROPRIATE_CHANGE": 10,
+    "APPROPRIATE_STABILITY": 5,
+    "INAPPROPRIATE_CHANGE": 0,
+    "MISSED_BENEFICIAL_CHANGE": 1,
+    "INCONCLUSIVE": 5,
+    "PROVIDER_ERROR": 7
+  },
+  "taskDistribution": {
+    "MODEL_NOT_REQUIRED": {
+      "count": 2,
+      "percent": 7.1
+    },
+    "GENERATION_ONLY": {
+      "count": 3,
+      "percent": 10.7
+    },
+    "STRUCTURED_REASONING": {
+      "count": 20,
+      "percent": 71.4
+    },
+    "OPEN_REASONING": {
+      "count": 1,
+      "percent": 3.6
+    },
+    "HUMAN_REQUIRED": {
+      "count": 2,
+      "percent": 7.1
+    }
+  },
+  "retrieval": {
+    "expectedRelevant": 24,
+    "retrieved": 24,
+    "included": 24,
+    "referencedByExplicitId": 0,
+    "behaviorallyUsed": 10
+  },
+  "repeats": {
+    "cases": 7,
+    "stableAppropriate": 2,
+    "unstable": 3,
+    "stableWrong": 1,
+    "providerError": 1
+  },
+  "tokenAndLatency": {
+    "completedGenerativeArms": 109,
+    "medianInputTokens": 723,
+    "medianVisibleOutputTokens": 83,
+    "medianReasoningTokens": 431,
+    "medianFullFlowLatencyMs": 3480,
+    "maxTokensIncidence": 8
+  },
+  "domains": [
+    {
+      "domain": "PAYMENTS",
+      "cases": 7,
+      "appropriateEffects": 6,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 0,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "SOLICITUDES",
+      "cases": 6,
+      "appropriateEffects": 2,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 2,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "IQ",
+      "cases": 4,
+      "appropriateEffects": 2,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 2,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "PAYMENT_COMPLEMENTS",
+      "cases": 3,
+      "appropriateEffects": 3,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 0,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "MEMORY",
+      "cases": 3,
+      "appropriateEffects": 2,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 1,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "CONVERSATION_REFERENCE",
+      "cases": 2,
+      "appropriateEffects": 0,
+      "missedBeneficialEffects": 1,
+      "negativeTransfer": 0,
+      "providerErrors": 1,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    },
+    {
+      "domain": "DOCUMENTS",
+      "cases": 3,
+      "appropriateEffects": 0,
+      "missedBeneficialEffects": 0,
+      "negativeTransfer": 0,
+      "providerErrors": 1,
+      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+    }
+  ],
+  "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+}

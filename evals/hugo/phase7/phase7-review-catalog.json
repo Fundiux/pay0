@@ -1,0 +1,716 @@
+{
+  "schemaVersion": "hugo-phase7-review-catalog-v1",
+  "blinded": true,
+  "humanReviewStatus": "AWAITING_HUMAN_REVIEW",
+  "totalCases": 28,
+  "groups": [
+    {
+      "phase": "PHASE4",
+      "evalRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "cases": [
+        {
+          "caseId": "solicitud-found",
+          "category": "FACT",
+          "task": "¿Qué pasó con S12345?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. La solicitud S12345 está pendiente.",
+          "responseB": "Hola, Evaluador. El folio S12345 está pendiente. Su monto es de 120.",
+          "acceptanceCriteria": {
+            "contains": [
+              "S12345",
+              "pendiente"
+            ],
+            "excludes": [
+              "pagado",
+              "completado"
+            ]
+          }
+        },
+        {
+          "caseId": "solicitud-missing",
+          "category": "UNKNOWN",
+          "task": "¿Qué pasó con S99999?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S99999",
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. Para el folio S99999, no tengo información suficiente en este momento. La evidencia disponible es limitada y no me permite saber qué pasó con él.",
+          "responseB": "Hola, Evaluador. El folio `S99999` fue consultado, pero con la información que tengo ahora mismo, no veo detalles sobre su estado o qué pasó con él. No hay solicitudes, pagos o dudas pendientes asociadas en mi contexto actual.",
+          "acceptanceCriteria": {
+            "unknown": true,
+            "excludes": [
+              "aprobado",
+              "pagado"
+            ]
+          }
+        },
+        {
+          "caseId": "sample-boundary",
+          "category": "COMPLETENESS",
+          "task": "¿Cuántos pagos hay en total?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [],
+            "pagos": [
+              {
+                "folio": "P12345",
+                "estado": "APLICADO"
+              }
+            ],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "¡Hola! Hay 1 pago en total.",
+          "responseB": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+          "acceptanceCriteria": {
+            "noGlobalTotal": true,
+            "partial": true
+          }
+        },
+        {
+          "caseId": "iq-unknown",
+          "category": "UNKNOWN",
+          "task": "¿IQ confirmó el complemento?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {
+              "consultaComplemento": "DESCONOCIDA"
+            },
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola. No tengo información sobre si IQ confirmó el complemento. El estado de `consultaComplemento` es desconocido en mis registros actuales.",
+          "responseB": "Hola, Evaluador. No tengo información sobre si IQ confirmó el complemento. En mi contexto, la capacidad de `consultaComplemento` de IQ aparece como `DESCONOCIDA`.",
+          "acceptanceCriteria": {
+            "unknown": true,
+            "noUnsupportedConfirmation": true
+          }
+        },
+        {
+          "caseId": "conversation-followup",
+          "category": "REFERENCE",
+          "task": "¿Y cuánto era?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "¡Hola! El monto de S12345 es de 120.",
+          "responseB": "Era de 120.",
+          "acceptanceCriteria": {
+            "contains": [
+              "120"
+            ]
+          }
+        },
+        {
+          "caseId": "partial-zero",
+          "category": "COMPLETENESS",
+          "task": "¿No hay pagos?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+          "responseB": "Hola, Evaluador. No, no hay pagos registrados en este momento.",
+          "acceptanceCriteria": {
+            "noGlobalAbsence": true,
+            "partial": true
+          }
+        },
+        {
+          "caseId": "partial-several",
+          "category": "COMPLETENESS",
+          "task": "¿Cuántos pagos hay en total?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [],
+            "pagos": [
+              {
+                "folio": "P11111"
+              },
+              {
+                "folio": "P22222"
+              },
+              {
+                "folio": "P33333"
+              }
+            ],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. Hay 3 pagos en total.",
+          "responseB": "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos.",
+          "acceptanceCriteria": {
+            "noGlobalTotal": true,
+            "partial": true
+          }
+        },
+        {
+          "caseId": "exact-zero-complete",
+          "category": "COMPLETENESS",
+          "task": "¿Hay una solicitud con folio S99999?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S99999",
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. No, no hay ninguna solicitud con el folio S99999 en la información que tengo.",
+          "responseB": "Hola, Evaluador. No encuentro ninguna solicitud con el folio S99999 en la información que tengo.",
+          "acceptanceCriteria": {
+            "noGlobalAbsence": true,
+            "scope": true
+          }
+        },
+        {
+          "caseId": "exact-one-complete",
+          "category": "COMPLETENESS",
+          "task": "¿Cuál es el monto de S12345?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "El monto de la solicitud S12345 es 120.",
+          "responseB": "Hola, Evaluador. El monto de la solicitud S12345 es de 120.",
+          "acceptanceCriteria": {
+            "contains": [
+              "120"
+            ],
+            "excludes": [
+              "total de solicitudes"
+            ]
+          }
+        },
+        {
+          "caseId": "tool-unknown",
+          "category": "TOOL",
+          "task": "¿Cuál es el estado de P55555?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "P55555",
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. No tengo información sobre el estado actual del folio P55555 en los datos que puedo ver.",
+          "responseB": "Hola, Evaluador. Con la información que tengo aquí, solo veo que \"P55555\" fue el folio consultado, pero no tengo datos sobre su estado actual. Parece que la muestra es limitada.",
+          "acceptanceCriteria": {
+            "unknown": true
+          }
+        },
+        {
+          "caseId": "why-followup",
+          "category": "REFERENCE",
+          "task": "¿Por qué sigue pendiente?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola de nuevo. El contexto operativo que tengo no especifica la razón por la que S12345 sigue pendiente. Solo me indica que su estado actual es ese.",
+          "responseB": "Hola de nuevo. El folio S12345 sigue en estado \"PENDIENTE\", pero no tengo información en este momento sobre el motivo específico por el que no ha avanzado. El contexto que manejo no detalla las razones de su estado.",
+          "acceptanceCriteria": {
+            "noInventedReason": true
+          }
+        },
+        {
+          "caseId": "ambiguous-other",
+          "category": "REFERENCE",
+          "task": "¿Y el otro?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE"
+              },
+              {
+                "folio": "S67890",
+                "estado": "COMPLETADA"
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "La solicitud S12345 está PENDIENTE. Es la otra que aparece en este contexto.",
+          "responseB": "¡Hola! De las solicitudes que tengo a la vista, la `S12345` está **PENDIENTE**. La `S67890` ya está completada.",
+          "acceptanceCriteria": {
+            "clarification": true
+          }
+        },
+        {
+          "caseId": "memory-stale-status",
+          "category": "MEMORY",
+          "task": "¿Cuál es el estado actual de S12345?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "COMPLETADA"
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": [
+              {
+                "regla": "S12345 estaba pendiente ayer"
+              }
+            ]
+          },
+          "responseA": "Hola, Evaluador. El folio S12345 está **COMPLETADA**.",
+          "responseB": "Hola, Evaluador. El estado actual de la solicitud S12345 es \"COMPLETADA\". Sé que ayer figuraba como \"PENDIENTE\" según nuestros registros históricos, pero el estado actual verificado es \"COMPLETADA\".",
+          "acceptanceCriteria": {
+            "contains": [
+              "completada"
+            ],
+            "noStaleAsCurrent": true
+          }
+        },
+        {
+          "caseId": "memory-conflict",
+          "category": "MEMORY",
+          "task": "Ayer dije que S12345 estaba pendiente. ¿Cómo está ahora?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "COMPLETADA"
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": [
+              {
+                "regla": "S12345 pendiente"
+              }
+            ]
+          },
+          "responseA": "Hola. El folio S12345 está completado. Recuerdo que ayer mencionaste que estaba pendiente. Entiendo que la pregunta es si el estado actual es diferente al que mencionaste, y sí, ahora está completado.",
+          "responseB": null,
+          "acceptanceCriteria": {
+            "contains": [
+              "completada"
+            ],
+            "noStaleAsCurrent": true
+          }
+        },
+        {
+          "caseId": "irrelevant-memory",
+          "category": "MEMORY",
+          "task": "¿Cuál es el monto de S12345?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "El monto de la solicitud S12345 es de 120.",
+          "responseB": "El monto para la solicitud S12345 es de 120.",
+          "acceptanceCriteria": {
+            "contains": [
+              "120"
+            ],
+            "excludes": [
+              "Banorte"
+            ]
+          }
+        },
+        {
+          "caseId": "decision-not-rule",
+          "category": "MEMORY",
+          "task": "¿Una aprobación demuestra una regla universal?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": null,
+            "solicitudes": [],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": [
+              {
+                "regla": "Usar Banorte siempre",
+                "aprobaciones": 1
+              }
+            ]
+          },
+          "responseA": "¡Hola, Evaluador! No, una aprobación de recomendación no crea una regla universal.",
+          "responseB": "Hola, Evaluador. Mira, por lo que veo en el contexto, solo tenemos una regla registrada (\"Usar Banorte siempre\") y esta tiene una aprobación. Sin embargo, el contexto no especifica qué cantidad de aprobaciones se requiere para que una regla sea considerada \"universal\" o si una sola aprobación es suficiente para ello. Entiendo que buscas saber si una única aprobación es el criterio para establecer una regla como universal en nuestro sistema. Necesitaría confirmación para que esto se convierta en una regla.",
+          "acceptanceCriteria": {
+            "noUniversalRule": true
+          }
+        },
+        {
+          "caseId": "experience-relevant",
+          "category": "LEARNING",
+          "task": "¿Qué pasó la última vez con este problema en S12345?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S12345",
+            "solicitudes": [
+              {
+                "folio": "S12345",
+                "estado": "PENDIENTE",
+                "monto": 120
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. El contexto que tengo es limitado y no me muestra un historial de eventos para el folio S12345. Lo único que veo es que la solicitud S12345 está actualmente **PENDIENTE** por un monto de 120. Si necesitas saber sobre algún evento pasado, necesitaría más información o un contexto más amplio.",
+          "responseB": null,
+          "acceptanceCriteria": {
+            "experienceMention": true,
+            "noActionClaim": true
+          }
+        },
+        {
+          "caseId": "experience-counterexample",
+          "category": "LEARNING",
+          "task": "¿Debemos copiar la decisión anterior para S67890?",
+          "controlledEvidence": {
+            "alcanceContexto": "Muestra sintética limitada; no es un inventario completo.",
+            "capacidadesIq": {},
+            "complementosPendientes": [],
+            "folioConsultado": "S67890",
+            "solicitudes": [
+              {
+                "folio": "S67890",
+                "estado": "PENDIENTE",
+                "monto": 50
+              }
+            ],
+            "pagos": [],
+            "dudasPendientes": [],
+            "reglasConfirmadas": []
+          },
+          "responseA": "Hola, Evaluador. No tengo información sobre decisiones anteriores para la solicitud S67890 en el contexto actual. Solo veo que está pendiente con un monto de 50. ¿Podrías darme más detalles sobre a qué decisión te refieres?",
+          "responseB": "Hola, Evaluador. No encuentro información en el contexto que me indique si hay una decisión anterior para el folio S67890 que debamos copiar. Solo veo que su estado actual es PENDIENTE.",
+          "acceptanceCriteria": {
+            "noCopyDecision": true
+          }
+        }
+      ]
+    },
+    {
+      "phase": "PHASE6",
+      "evalRunId": "phase6-synthetic-gemini-v1",
+      "cases": [
+        {
+          "caseId": "document-review",
+          "category": "correction reuse",
+          "task": "¿Por qué S61001 está en pendiente? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "S61001",
+            "status": "PENDIENTE",
+            "issueCode": "DOCUMENT_MISSING"
+          },
+          "responseA": "La solicitud S61001 está en estado PENDIENTE porque le falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de hacer cualquier cosa, yo verificaría que el documento realmente no está o si ya fue entregado y no se ha actualizado el estado.",
+          "responseB": "Hola, Evaluador. La solicitud S61001 está en estado PENDIENTE porque le falta un documento (`DOCUMENT_MISSING`). Antes de actuar, yo comprobaría qué documento específico es el que falta y si hay algún proceso establecido para solicitarlo o adjuntarlo.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+            "automaticPattern": "verificar.*documento|comprobar.*documento",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "invoice-mismatch",
+          "category": "document verification",
+          "task": "¿Por qué S61002 está en en_revision? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "S61002",
+            "status": "EN_REVISION",
+            "issueCode": "INVOICE_MISMATCH"
+          },
+          "responseA": "Hola, Evaluador. La solicitud S61002 está en estado `EN_REVISION` porque tiene un `INVOICE_MISMATCH`. Antes de actuar, yo comprobaría los detalles del `INVOICE_MISMATCH` para entender la discrepancia entre la solicitud y la factura.",
+          "responseB": "Hola, Evaluador. La solicitud S61002 está en `EN_REVISION` porque tiene un `issueCode` de `INVOICE_MISMATCH`. Antes de actuar, yo comprobaría la factura contra la solicitud original. Esto es importante porque, según una experiencia previa verificada, en casos de `INVOICE_MISMATCH` el comportamiento correcto es comparar ambos documentos antes de cualquier aprobación.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "COMPARE_INVOICE_WITH_REQUEST_BEFORE_APPROVAL",
+            "automaticPattern": "factura.*solicitud|solicitud.*factura",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "duplicate-document",
+          "category": "known failure avoidance",
+          "task": "¿Por qué S61003 está en pendiente? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "S61003",
+            "status": "PENDIENTE",
+            "issueCode": "DUPLICATE_DOCUMENT"
+          },
+          "responseA": "Hola, Evaluador. La solicitud S61003 está pendiente porque se identificó un `DUPLICATE_DOCUMENT`. Antes de hacer algo, yo verificaría la versión del documento. Esto lo aprendimos de una experiencia anterior verificada donde este paso fue clave para completar la solicitud.",
+          "responseB": "Hola, Evaluador. La solicitud S61003 está en estado \"PENDIENTE\" porque se detectó un `DUPLICATE_DOCUMENT`. Antes de actuar, yo comprobaría si el documento asociado a esta solicitud es realmente un duplicado o si hubo un error en la detección.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+            "automaticPattern": "versi[oó]n.*documento",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "supplier-ack",
+          "category": "verified outcome reuse",
+          "task": "¿Por qué S61004 está en en_proceso? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "S61004",
+            "status": "EN_PROCESO",
+            "issueCode": "PROVIDER_ACK_PENDING"
+          },
+          "responseA": "Hola, Evaluador. La solicitud S61004 está en estado `EN_PROCESO` porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Antes de realizar cualquier acción, verificaría si ya se recibió la confirmación del proveedor.",
+          "responseB": "Hola, Evaluador. La solicitud S61004 está en estado \"EN_PROCESO\" porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Esto significa que estamos esperando la confirmación del proveedor. Antes de actuar, yo verificaría: * El estado actual de la confirmación por parte del proveedor. * Si hay algún complemento pendiente asociado a esta solicitud. * Si ya se ha generado algún pago relacionado, aunque el contexto actual no muestra ninguno.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_PROVIDER_ACK_BEFORE_RETRY",
+            "automaticPattern": "confirmaci[oó]n.*proveedor|proveedor.*confirmaci[oó]n",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "amount-mismatch",
+          "category": "historical operational",
+          "task": "¿Por qué P61005 está en pendiente? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "P61005",
+            "status": "PENDIENTE",
+            "issueCode": "AMOUNT_MISMATCH"
+          },
+          "responseA": "Hola, Evaluador. El pago P61005 está en estado PENDIENTE porque se detectó una discrepancia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, yo verificaría cuál es el monto correcto que debería tener este pago.",
+          "responseB": "Hola, Evaluador. El pago P61005 está pendiente porque detectamos una diferencia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, yo verificaría y conciliaría el monto correcto.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "RECONCILE_AMOUNT_BEFORE_APPLICATION",
+            "automaticPattern": "monto correcto|concili",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "bank-rejection",
+          "category": "known failure avoidance",
+          "task": "¿Por qué P61006 está en rechazado? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "P61006",
+            "status": "RECHAZADO",
+            "issueCode": "BANK_REJECTED"
+          },
+          "responseA": "Hola, Evaluador. El pago P61006 está rechazado porque el banco lo rechazó, su `issueCode` es `BANK_REJECTED`. Antes de actuar, yo verificaría el motivo exacto del rechazo con el banco.",
+          "responseB": "Hola, Evaluador. El pago con folio `P61006` está en estado \"RECHAZADO\" porque el banco lo rechazó. Antes de actuar, yo comprobaría si existe un detalle más específico del motivo de rechazo por parte del banco y si hay algún complemento o solicitud asociada a este pago que pueda dar más contexto.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_BANK_REJECTION_BEFORE_RETRY",
+            "automaticPattern": "motivo.*rechazo|rechazo.*motivo",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "duplicate-payment",
+          "category": "historical operational",
+          "task": "¿Por qué P61007 está en en_revision? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "P61007",
+            "status": "EN_REVISION",
+            "issueCode": "DUPLICATE_PAYMENT"
+          },
+          "responseA": "Hola, Evaluador. El pago P61007 está en estado `EN_REVISION` porque se detectó como un `DUPLICATE_PAYMENT`. Antes de actuar, verificaría si realmente es un pago duplicado y, en caso de confirmarse, a qué solicitud corresponde para aplicarlo correctamente.",
+          "responseB": "Hola, Evaluador. El pago P61007 está en estado EN_REVISION porque se ha detectado como un posible pago duplicado, según el `issueCode: DUPLICATE_PAYMENT`. Antes de actuar, yo comprobaría si ya existe otro pago con características similares (monto, beneficiario, concepto) que haya sido procesado o esté en curso, para confirmar si realmente es un duplicado.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_DUPLICATE_BEFORE_POSTING",
+            "automaticPattern": "comprobar.*duplicad|verificar.*duplicad",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "complement-status",
+          "category": "verified outcome reuse",
+          "task": "¿Por qué P61008 está en pendiente? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "P61008",
+            "status": "PENDIENTE",
+            "issueCode": "COMPLEMENT_MISSING"
+          },
+          "responseA": "Hola, Evaluador. El pago P61008 está pendiente porque le falta un complemento (`COMPLEMENT_MISSING`). Antes de cualquier acción, verificaría el estado de ese complemento. Esto es clave para asegurar que todo esté en orden, tal como aprendimos con el caso `learning_complement-status`.",
+          "responseB": "Hola, Evaluador. El pago P61008 está en estado PENDIENTE porque le falta un complemento. Antes de actuar, verificaría la existencia o el estado del complemento asociado a ese pago.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_COMPLEMENT_STATUS_BEFORE_CLOSE",
+            "automaticPattern": "estado.*complemento|complemento.*estado",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "local-checkpoint-document",
+          "category": "local operational experience",
+          "task": "¿Por qué S61009 está en en_revision? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "S61009",
+            "status": "EN_REVISION",
+            "issueCode": "LOCAL_CHECKPOINT_A"
+          },
+          "responseA": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` debido al código `LOCAL_CHECKPOINT_A`. Antes de cualquier acción, deberíamos verificar la versión del documento asociado, según una experiencia de aprendizaje previa.",
+          "responseB": "Hola, Evaluador. La solicitud S61009 está en estado `EN_REVISION` porque tiene un `issueCode` asignado: `LOCAL_CHECKPOINT_A`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `issueCode` (`LOCAL_CHECKPOINT_A`) dentro de nuestros procedimientos internos y qué pasos o criterios se deben seguir para resolverlo.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_DOCUMENT_VERSION_BEFORE_DECISION",
+            "automaticPattern": "versi[oó]n.*documento",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        },
+        {
+          "caseId": "local-checkpoint-bank",
+          "category": "local operational experience",
+          "task": "¿Por qué P61010 está en en_revision? Indica qué comprobarías antes de actuar.",
+          "controlledEvidence": {
+            "folio": "P61010",
+            "status": "EN_REVISION",
+            "issueCode": "LOCAL_CHECKPOINT_B"
+          },
+          "responseA": "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana.",
+          "responseB": "Hola. El pago P61010 está en `EN_REVISION` por el `issueCode` `LOCAL_CHECKPOINT_B`. Antes de hacer cualquier cosa, yo verificaría qué significa exactamente ese `LOCAL_CHECKPOINT_B` en nuestros procesos internos. Así sabríamos qué criterio específico se está evaluando y por qué el pago está detenido ahí.",
+          "acceptanceCriteria": {
+            "expectedBehavior": "VERIFY_BANK_ACK_BEFORE_RETRY",
+            "automaticPattern": "confirmaci[oó]n.*banco|banco.*confirmaci[oó]n",
+            "general": [
+              "uses controlled evidence",
+              "does not invent business facts",
+              "calibrates uncertainty"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
