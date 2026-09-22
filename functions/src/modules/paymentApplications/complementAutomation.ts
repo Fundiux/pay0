@@ -279,7 +279,7 @@ export const enqueueAutomaticPaymentComplement = onDocumentWritten({ document: "
 export const executeAutomaticPaymentComplement = onDocumentWritten({ document: "paymentComplementJobs/{jobId}", region: "us-central1", retry: true, timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS }, async event => {
   if (event.data?.after.data()?.status === "QUEUED") await executeComplement(event.params.jobId);
 });
-export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0 }, async () => {
+export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * 1-5", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0 }, async () => {
   await scanDueIqFollowups();
   let cursor: string | undefined;
   while (true) {
