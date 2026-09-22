@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "hugo-phase5-token-diagnostic-v1",
+  "syntheticOnly": true,
+  "sourceCaseId": "experience-relevant",
+  "maxOutputTokens": 1200,
+  "historicalFailure": "MAX_TOKENS",
+  "variants": [
+    {
+      "name": "original",
+      "contextChars": 996,
+      "elapsedMs": 3388,
+      "model": "gemini-2.5-flash",
+      "promptVersion": "hugo-v2",
+      "error": null,
+      "completed": true,
+      "tokenUsage": {
+        "input": 681,
+        "output": 48
+      },
+      "response": "Hola. No tengo registro de que haya habido un problema anterior con la solicitud S12345. Lo que sí veo es que la solicitud S12345 está pendiente, con un monto de 120."
+    },
+    {
+      "name": "compact-context",
+      "contextChars": 978,
+      "elapsedMs": 7728,
+      "model": "gemini-2.5-flash",
+      "promptVersion": "hugo-v2",
+      "error": null,
+      "completed": true,
+      "tokenUsage": {
+        "input": 677,
+        "output": 39
+      },
+      "response": "Hola. Para el folio S12345, el contexto que tengo no detalla qué pasó la última vez con un problema específico. Solo muestra que la solicitud está PENDIENTE."
+    },
+    {
+      "name": "compact-context-legacy-prompt",
+      "contextChars": 978,
+      "elapsedMs": 3730,
+      "model": "gemini-2.5-flash",
+      "promptVersion": "legacy-v1",
+      "error": null,
+      "completed": true,
+      "tokenUsage": {
+        "input": 473,
+        "output": 79
+      },
+      "response": "Hola, Evaluador. Según nuestras memorias, en un caso anterior similar, una discrepancia se resolvió con una revisión documental. La memoria nos indica que es importante verificar la evidencia actual antes de tomar una decisión similar. Aunque esta experiencia no está ligada directamente al folio S12345, podría ser relevante si el \"problema\" actual es una discrepancia."
+    }
+  ],
+  "inferenceLimit": "The adapter does not expose token usage for discarded MAX_TOKENS candidates or hidden reasoning; this comparison cannot isolate the cause."
+}

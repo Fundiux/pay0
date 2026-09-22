@@ -1,0 +1,23 @@
+{
+  "exportId": "phase5-synthetic-v1",
+  "datasetVersion": "hugo-learning-v1",
+  "schemaVersion": "hugo-learning-v1",
+  "createdAt": "2026-09-22T12:05:00.000Z",
+  "selectionPolicyVersion": "learning-eligibility-v1",
+  "sanitizationVersion": "structured-whitelist-v1",
+  "recordCount": 1,
+  "trainCount": 1,
+  "validationCount": 0,
+  "testCount": 0,
+  "holdoutExcludedCount": 1,
+  "goldenExcludedCount": 0,
+  "ineligibleExcludedCount": 0,
+  "sourceDigest": "1a22f2cf7bcf03698e0792eb2817df2e148e4b18f6aed530b46dd1a6334423f8",
+  "sourceExperienceDigests": [
+    "0aa6398dba0c48b5cd9b52dc"
+  ],
+  "contentDigest": "8fce9efb6b06f81342a6bf2fcd39e265a7238c56d78db68db6a04d74ceed100c",
+  "formats": [
+    "JSONL"
+  ]
+}

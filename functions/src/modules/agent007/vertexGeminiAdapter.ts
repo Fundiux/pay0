@@ -1,13 +1,18 @@
 import { getApp } from "firebase-admin/app";
 import { legacyPrompt, HUGO_PROMPT_VERSION } from "./hugoCore/legacyPrompt";
-import { HugoModelAdapter, ModelOutput } from "./hugoCore/modelContract";
+import { HugoModelAdapter, ModelOutput, HugoModelRequest, HugoModelResponse } from "./hugoCore/modelContract";
 import { hugoV2Prompt, HUGO_V2_PROMPT_VERSION } from "./hugoCore/hugoV2Prompt";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 export class VertexGeminiAdapter implements HugoModelAdapter {
+  async generateCanonical(request: HugoModelRequest): Promise<HugoModelResponse> {
+    const context = request.intelligence.contextSnapshot;
+    const response = await this.generate({ message: request.task.userInput, name: request.task.name, context, history: request.conversation.history, promptVersion: request.generation.promptVersion });
+    return { ...response, answer: response.text, claims: [], entityReferences: [], uncertainties: [], proposedActions: [] };
+  }
   async generate(input: { message: string; name: string; context: any; history: any[]; promptVersion?: string }): Promise<ModelOutput> {
     const version = input.promptVersion === HUGO_V2_PROMPT_VERSION ? HUGO_V2_PROMPT_VERSION : HUGO_PROMPT_VERSION;
-    const base = { model: "gemini-2.5-flash", modelVersion: "publisher-model", promptVersion: version, tokenUsage: null };
+    const base = { model: "gemini-2.5-flash", modelVersion: "publisher-model", provider: "GOOGLE_VERTEX", promptVersion: version, tokenUsage: null };
     try {
       if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FUNCTIONS_EMULATOR) return { ...base, text: null, error: "EMULATOR_DISABLED" };
       const credential: any = getApp().options.credential;

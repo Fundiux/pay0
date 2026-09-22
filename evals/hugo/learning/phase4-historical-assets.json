@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "hugo-eval-assets-v1",
+  "records": [
+    {
+      "caseId": "sample-boundary",
+      "promptVersion": "legacy-v1",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "7e749902f438f7d2fc90c4380f632f3171f25528b83422d4f0e260c5e931656d",
+      "responseClassification": "FAIL",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "sample-boundary",
+      "promptVersion": "hugo-v2",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "6ffe1b064b201b6ac07a6008869109912ae9642752e62ae19e42cb19d204f435",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "partial-zero",
+      "promptVersion": "legacy-v1",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "a8ff45f0523f5e742ce30f58cd31daf97c40ede2568424282bb324675c9d1e9a",
+      "responseClassification": "FAIL",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "partial-zero",
+      "promptVersion": "hugo-v2",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "7963f82d9fb7a3c6c9923a27b2ddebcf00da99435a7823b994415bc3a2611a4b",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "partial-several",
+      "promptVersion": "legacy-v1",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "5a6c733a65a2cb89308efc33df367145de3808e19295484bf0d21ceb0f35b502",
+      "responseClassification": "FAIL",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "partial-several",
+      "promptVersion": "hugo-v2",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "a15d4fd067580f3a86e344d947eef4d61419a40e8dd4c2e7ea1d174fcd6c6fe1",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL"
+    },
+    {
+      "caseId": "ambiguous-other",
+      "promptVersion": "legacy-v1",
+      "split": "HOLDOUT",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "094566aed7f8341397796c1737763e3f5282c2dd68d472f1d394b545b7910940",
+      "responseClassification": "FAIL",
+      "error": null,
+      "expectedBehavior": "CLARIFY_FOLIO"
+    },
+    {
+      "caseId": "ambiguous-other",
+      "promptVersion": "hugo-v2",
+      "split": "HOLDOUT",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "d00591f7166fd9b053eb2ec280a71677481c7d984782907b6212ddf5db9612be",
+      "responseClassification": "FAIL",
+      "error": null,
+      "expectedBehavior": "CLARIFY_FOLIO"
+    },
+    {
+      "caseId": "experience-relevant",
+      "promptVersion": "legacy-v1",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "3dff81af799ab6754a369d9fbbea8925ef85233fd56b0c7d42277c3d6ceae2a6",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION"
+    },
+    {
+      "caseId": "experience-relevant",
+      "promptVersion": "hugo-v2",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "responseClassification": "FAIL",
+      "error": "MAX_TOKENS",
+      "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION"
+    },
+    {
+      "caseId": "conversation-followup",
+      "promptVersion": "legacy-v1",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "4a4dba50fed1c52e0f786f0f9d71431ef1cdfb4d2a97455f4d88a277d4746909",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "RESOLVE_ACTIVE_ENTITY"
+    },
+    {
+      "caseId": "conversation-followup",
+      "promptVersion": "hugo-v2",
+      "split": "GOLDEN",
+      "sourceRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+      "sourceArtifact": "evals/hugo/phase4-model-results.json",
+      "rawDigest": "55da9ad96762c631fa588dec0b163222faae09e1e06640a1d0ec96485fb98b20",
+      "responseClassification": "PASS_CRITERIA",
+      "error": null,
+      "expectedBehavior": "RESOLVE_ACTIVE_ENTITY"
+    }
+  ]
+}

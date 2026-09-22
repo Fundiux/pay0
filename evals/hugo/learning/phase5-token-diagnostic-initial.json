@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "hugo-phase5-token-diagnostic-v1",
+  "sourceCaseId": "experience-relevant",
+  "syntheticOnly": true,
+  "provenance": "First diagnostic command output; the script was then extended with a third prompt variant and rerun. Detailed latency and token usage were not retained for this first comparison.",
+  "maxOutputTokens": 1200,
+  "variants": [
+    { "name": "original", "promptVersion": "hugo-v2", "completed": false, "error": "MAX_TOKENS" },
+    { "name": "compact-context", "promptVersion": "hugo-v2", "completed": false, "error": "MAX_TOKENS" }
+  ]
+}

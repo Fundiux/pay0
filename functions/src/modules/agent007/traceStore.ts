@@ -8,7 +8,7 @@ export function conversationTrace(traceId: string, input: ConversationInput, out
   return {
     schemaVersion: 1, traceId, conversationId: input.conversationId, rootId: input.identity.rootId, actorUid: input.identity.uid,
     actorRole: input.identity.role, channel: input.channel, timestamp: FieldValue.serverTimestamp(),
-    model: output.model.model, modelVersion: output.model.modelVersion, promptVersion: output.promptVersion,
+    model: output.model.model, modelVersion: output.model.modelVersion, modelProvider: output.model.provider || null, promptVersion: output.promptVersion,
     toolsRequested: output.toolsRequested.map(row => row.name),
     toolsExecuted: output.toolsExecuted.map(row => ({ tool: row.tool, sourceSystem: row.sourceSystem, completeness: row.completeness, latencyMs: row.trace.latencyMs, result: row.trace.result })),
     sourceSystems: [...new Set(output.toolsExecuted.map(row => row.sourceSystem))],
@@ -16,6 +16,7 @@ export function conversationTrace(traceId: string, input: ConversationInput, out
     resolvedEntities: output.recentEntities.map(row => ({ sourceSystem: row.system, entityType: row.type, entityId: row.id, folio: row.folio })).slice(0, 8),
     memoryReferences: output.pieces.filter(piece => piece.sourceSystem === "HUGO" && piece.entityId).map(piece => ({ kind: piece.kind, entityType: piece.entityType, entityId: piece.entityId })).slice(0, 18),
     ...(output.memoryUsage ? { memoryUsage: output.memoryUsage } : {}),
+    ...(output.learningUsage ? { learningUsage: output.learningUsage } : {}),
     ...(output.composition ? { contextComposition: output.composition } : {}),
     ...(Array.isArray(output.context?.memoryConflicts) ? { memoryConflictCount: output.context.memoryConflicts.length } : {}),
     ...(output.intelligenceConfig ? { intelligenceConfig: output.intelligenceConfig } : {}),

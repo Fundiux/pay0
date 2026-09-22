@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "hugo-phase5-eval-v1",
+  "syntheticOnly": true,
+  "policyVersion": "policy-v1",
+  "modelAdapter": "NONE",
+  "modelWeightsChanged": false,
+  "sourceExperience": "learning_case-a",
+  "experienceCreated": 1,
+  "experienceVerified": 1,
+  "correctionCaptured": 1,
+  "outcomeLinked": 1,
+  "learningEffect": {
+    "caseId": "case-b",
+    "experienceId": "learning_case-a",
+    "beforeCorrect": false,
+    "afterCorrect": true,
+    "currentFactsCorrect": true,
+    "overgeneralized": false,
+    "improved": true,
+    "modelAdapter": "NONE",
+    "promptVersion": "policy-v1",
+    "evidenceDigest": "53fc7402ee153813aedc35eb9617f2151fca710c21de85383010813ad444c493",
+    "before": "ESCALATE_UNKNOWN",
+    "after": "VERIFY_DOCUMENT_BEFORE_DECISION"
+  },
+  "counterexample": {
+    "caseId": "case-c",
+    "behavior": "ESCALATE_UNKNOWN",
+    "copiedPriorExperience": false
+  },
+  "ruleCandidates": 0,
+  "tasks": [
+    {
+      "caseId": "partial-total",
+      "modelNecessity": "MODEL_NOT_REQUIRED",
+      "observedModelFreeBehavior": "REFUSE_UNSUPPORTED_TOTAL",
+      "expectedBehavior": "REFUSE_UNSUPPORTED_TOTAL",
+      "modelFreeCorrect": true
+    },
+    {
+      "caseId": "ambiguous-reference",
+      "modelNecessity": "MODEL_NOT_REQUIRED",
+      "observedModelFreeBehavior": "CLARIFY_FOLIO",
+      "expectedBehavior": "CLARIFY_FOLIO",
+      "modelFreeCorrect": true
+    },
+    {
+      "caseId": "exact-status",
+      "modelNecessity": "MODEL_NOT_REQUIRED",
+      "observedModelFreeBehavior": "REPORT_STATUS_PENDIENTE",
+      "expectedBehavior": "REPORT_STATUS_PENDIENTE",
+      "modelFreeCorrect": true
+    },
+    {
+      "caseId": "verified-pattern",
+      "modelNecessity": "MODEL_OPTIONAL",
+      "observedModelFreeBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+      "expectedBehavior": "VERIFY_DOCUMENT_BEFORE_DECISION",
+      "modelFreeCorrect": true
+    },
+    {
+      "caseId": "material-counterexample",
+      "modelNecessity": "MODEL_OPTIONAL",
+      "observedModelFreeBehavior": "ESCALATE_UNKNOWN",
+      "expectedBehavior": "ESCALATE_UNKNOWN",
+      "modelFreeCorrect": true
+    },
+    {
+      "caseId": "novel-multisource-explanation",
+      "modelNecessity": "MODEL_REQUIRED",
+      "observedModelFreeBehavior": "ESCALATE_UNKNOWN",
+      "expectedBehavior": "SYNTHESIZE_CAUSE",
+      "modelFreeCorrect": false
+    }
+  ],
+  "modelNecessityCounts": {
+    "MODEL_REQUIRED": 1,
+    "MODEL_OPTIONAL": 2,
+    "MODEL_NOT_REQUIRED": 3
+  },
+  "modelNecessityPercent": {
+    "MODEL_REQUIRED": 16.7,
+    "MODEL_OPTIONAL": 33.3,
+    "MODEL_NOT_REQUIRED": 50
+  },
+  "interpretation": "Controlled synthetic policy effect, not evidence of Gemini improvement or production task distribution."
+}

@@ -13,11 +13,14 @@ import { conversationTrace } from "./traceStore";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
 import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
+import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
+import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 const conversationIdFor = (rootId: string, uid: string) => `${rootId}_${uid}`;
 const hugoData = new FirestoreHugoDataStore(db);
+const hugoLearning = new FirestoreHugoLearningStore(db);
 
 function displayName(user: any): string {
   return clean(user?.displayName || user?.name || user?.nombre || user?.firstName || user?.email?.split?.("@")[0] || "", 80) || "usuario";
@@ -158,7 +161,7 @@ export const sendAgent007Message = onCall(
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
     });
-    const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData);
+    const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData, hugoLearning);
     const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply, promptVersion: "hugo-v2" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
@@ -176,6 +179,9 @@ export const sendAgent007Message = onCall(
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
+    for (const experienceId of result.learningUsage?.includedIds || []) {
+      await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
+    }
     return { ok: true, conversationId, message: { id: saved.id, role: "assistant", text: reply, source, createdAt: saved.createdAt } };
   },
 );
@@ -263,5 +269,83 @@ export const linkAgent007VerifiedExperience = onCall(
     const result = await hugoData.linkVerifiedExperience(rootId, observationId, decisionId, outcomeId);
     if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "Hugo vinculó experiencia con resultado verificado" });
     return { ok: true, ...result };
+  },
+);
+
+export const createAgent007LearningExperience = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const raw = request.data || {};
+    const features = raw.features && typeof raw.features === "object" && !Array.isArray(raw.features) ?
+      Object.fromEntries(Object.entries(raw.features).map(([key, value]) => [key, clean(value, 80)])) : {};
+    const result = await hugoLearning.createFromVerifiedMemory({ rootId, actorUid: uid, memoryId: clean(raw.memoryId, 160), traceId: clean(raw.traceId, 160) || undefined,
+      domain: clean(raw.domain, 60), taskType: clean(raw.taskType, 60), intent: clean(raw.intent, 60), questionClass: clean(raw.questionClass, 60), features });
+    return { ok: true, id: result.id, created: result.created, state: result.record.state, trainingEligibility: result.record.trainingEligibility };
+  },
+);
+
+export const createAgent007LearningDraft = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const raw = request.data || {};
+    const features = raw.features && typeof raw.features === "object" && !Array.isArray(raw.features) ?
+      Object.fromEntries(Object.entries(raw.features).map(([key, value]) => [key, clean(value, 80)])) : {};
+    const result = await hugoLearning.createDraftFromDecision({ rootId, actorUid: uid, decisionId: clean(raw.decisionId, 160), traceId: clean(raw.traceId, 160) || undefined,
+      domain: clean(raw.domain, 60), taskType: clean(raw.taskType, 60), intent: clean(raw.intent, 60), questionClass: clean(raw.questionClass, 60), features });
+    return { ok: true, id: result.id, created: result.created, state: result.record.state, trainingEligibility: result.record.trainingEligibility };
+  },
+);
+
+export const linkAgent007LearningOutcome = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const record = await hugoLearning.linkOutcome(rootId, clean(request.data?.experienceId, 160), clean(request.data?.outcomeId, 160), uid);
+    return { ok: true, id: record.experienceId, state: record.state, revision: record.revision, trainingEligibility: record.trainingEligibility };
+  },
+);
+
+export const correctAgent007LearningExperience = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const raw = request.data || {};
+    const refs: LearningReference[] = Array.isArray(raw.evidenceReferences) ? raw.evidenceReferences.slice(0, 5).map((row: any) => ({ system: clean(row.system, 40), kind: clean(row.kind, 60), id: clean(row.id, 160), rootId })) : [];
+    const correction: LearningCorrection = { originalBehavior: clean(raw.originalBehavior, 80), correctedBehavior: clean(raw.correctedBehavior, 80),
+      reasonCode: clean(raw.reasonCode, 80), actorUid: uid, correctedAt: new Date().toISOString(), evidenceReferences: refs,
+      scope: ["ENTITY", "ENTITY_TYPE", "ROOT"].includes(raw.scope) ? raw.scope : "ENTITY" };
+    const record = await hugoLearning.addCorrection(rootId, clean(raw.experienceId, 160), correction, clean(raw.expectedBehavior, 80));
+    return { ok: true, id: record.experienceId, revision: record.revision, trainingEligibility: record.trainingEligibility };
+  },
+);
+
+export const listAgent007LearningDiagnostics = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    const records = await hugoLearning.list(rootId, 100);
+    return { ok: true, boundedTo: 100, experiences: records.map(row => ({ id: row.experienceId, domain: row.domain, taskType: row.taskType, state: row.state,
+      revision: row.revision, createdAt: row.createdAt, provenance: row.quality.provenance, outcome: row.quality.outcome, feedback: row.quality.feedback,
+      trainingEligible: row.trainingEligibility.eligible, reasons: row.trainingEligibility.reasons, memoryId: row.createdFrom.memoryId,
+      traceId: row.createdFrom.traceId, correctionCode: row.correction?.reasonCode || null, outcomeType: row.outcome?.type || null })) };
+  },
+);
+
+export const listAgent007LearningLineage = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { rootId } = await actor(request);
+    return { ok: true, events: await hugoLearning.listLedger(rootId, clean(request.data?.experienceId, 160)) };
+  },
+);
+
+export const assignAgent007LearningSplit = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const record = await hugoLearning.assignSplit(rootId, clean(request.data?.experienceId, 160), clean(request.data?.split, 20) as any, uid);
+    return { ok: true, id: record.experienceId, revision: record.revision, split: record.split, trainingEligibility: record.trainingEligibility };
   },
 );
