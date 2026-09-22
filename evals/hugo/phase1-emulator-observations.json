@@ -1,0 +1,9 @@
+{
+  "solicitud-found": { "primary": true },
+  "solicitud-missing": { "primary": true },
+  "pago-found": { "primary": true },
+  "sample-boundary": { "primary": true },
+  "root-isolation": { "primary": true },
+  "action-denied": { "primary": true },
+  "read-reconciles": { "primary": true }
+}

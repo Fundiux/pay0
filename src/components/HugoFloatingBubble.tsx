@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Check, Loader2, MessageCircle, Send, X } from "lucide-react";
 import { useUserProfile } from "@/lib/useUserProfile";
-import { listAgent007Messages, listAgent007Recommendations, markAgent007MessagesRead, resolveAgent007Recommendation, sendAgent007Message, type Agent007Message, type Agent007Recommendation } from "@/services/agent007";
+import { listAgent007Messages, listAgent007Recommendations, markAgent007MessagesRead, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, sendAgent007Message, type Agent007Message, type Agent007Recommendation } from "@/services/agent007";
 
 function messageTime(value: any) {
   const date = value?.toDate?.() || (value?.seconds ? new Date(value.seconds * 1000) : null);
@@ -24,6 +24,7 @@ export default function HugoFloatingBubble() {
   const load = useCallback(async () => {
     if (!allowed) return;
     try {
+      await reconcileAgent007RecommendationsNow();
       const [recommendations, conversation] = await Promise.all([listAgent007Recommendations(), listAgent007Messages()]);
       setItems(recommendations.recommendations || []);
       setMessages(conversation.messages || []);

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { useUserProfile } from "@/lib/useUserProfile";
-import { listAgent007Observations, listAgent007Recommendations, resolveAgent007Recommendation, type Agent007Observation, type Agent007Recommendation } from "@/services/agent007";
+import { listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, type Agent007Observation, type Agent007Recommendation } from "@/services/agent007";
 import HugoComplementInventory from "@/components/HugoComplementInventory";
 
 type Scope = "DIA" | "SEMANA" | "MES" | "ANO";
@@ -19,7 +19,7 @@ function RecommendationTable({ rows, resolve }: { rows: Agent007Recommendation[]
 export default function HugoPage() {
   const { profile } = useUserProfile(); const allowed = profile?.role === "superadmin";
   const [observations, setObservations] = useState<Agent007Observation[]>([]); const [recommendations, setRecommendations] = useState<Agent007Recommendation[]>([]); const [scope, setScope] = useState<Scope>("SEMANA"); const [message, setMessage] = useState("");
-  const refresh = async () => { if (!allowed) return; try { const [a, b] = await Promise.all([listAgent007Observations(), listAgent007Recommendations()]); setObservations(a.observations); setRecommendations(b.recommendations); } catch (error: any) { setMessage(error?.message || "No se pudo cargar Hugo."); } };
+  const refresh = async () => { if (!allowed) return; try { await reconcileAgent007RecommendationsNow(); const [a, b] = await Promise.all([listAgent007Observations(), listAgent007Recommendations()]); setObservations(a.observations); setRecommendations(b.recommendations); } catch (error: any) { setMessage(error?.message || "No se pudo cargar Hugo."); } };
   useEffect(() => { void refresh(); }, [allowed]);
   const scoped = useMemo(() => recommendations.filter((row) => inside(row.createdAt, scope)), [recommendations, scope]);
   const actionable = useMemo(() => scoped.filter((row) => row.status === "PENDING_REVIEW" && row.requiresHumanDecision !== false), [scoped]);

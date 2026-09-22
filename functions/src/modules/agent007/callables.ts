@@ -6,6 +6,7 @@ import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { reconcileAgent007Recommendations } from "./reconciliation";
 import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
+import { Pay0Connector } from "./pay0Connector";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -33,20 +34,20 @@ function extractFolio(message: string): string | null {
   return match?.[0] || null;
 }
 
-async function operationalContext(rootId: string, message: string) {
-  await reconcileAgent007Recommendations(db, rootId);
+async function operationalContext(identity: { uid: string; rootId: string; role: "superadmin" }, message: string) {
+  const { rootId } = identity;
+  const pay0 = new Pay0Connector(db, identity);
   const folio = extractFolio(message);
-  const byFolio = async (collection: string) => {
-    const snap = await db.collection(collection).where("rootId", "==", rootId).where("folio", "==", folio).limit(3).get();
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-  };
-  const [solicitudes, pagos, recommendations, rules, complements] = await Promise.all([
-    folio ? byFolio("solicitudes") : recentRows("solicitudes", rootId, 40),
-    folio ? byFolio("pagos") : recentRows("pagos", rootId, 30),
+  const [solicitudResult, pagoResult, recommendations, rules, complementResult] = await Promise.all([
+    folio ? pay0.getSolicitud(folio) : pay0.searchSolicitudes(40),
+    folio ? pay0.getPago(folio) : pay0.searchPagos(30),
     recentRows("agent007Recommendations", rootId, 20),
     recentRows("agent007LearnedRules", rootId, 20),
-    recentRows("paymentComplementRequests", rootId, 30),
+    pay0.getPaymentComplementStatus(folio || undefined),
   ]);
+  const solicitudes = Array.isArray(solicitudResult.data) ? solicitudResult.data : solicitudResult.data ? [solicitudResult.data] : [];
+  const pagos = Array.isArray(pagoResult.data) ? pagoResult.data : pagoResult.data ? [pagoResult.data] : [];
+  const complements = complementResult.data;
   const selectedSolicitudes = folio
     ? solicitudes.filter((row) => clean(row.folio || row.folioIq, 60).toUpperCase() === folio).slice(0, 3)
     : solicitudes.slice(0, 8);
@@ -222,9 +223,17 @@ export const listAgent007Recommendations = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { rootId } = await actor(request);
-    await reconcileAgent007Recommendations(db, rootId);
     const snapshot = await db.collection("agent007Recommendations").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(50).get();
     return { ok: true, recommendations: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })) };
+  },
+);
+
+export const reconcileAgent007RecommendationsNow = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => {
+    const { rootId } = await actor(request);
+    const changed = await reconcileAgent007Recommendations(db, rootId);
+    return { ok: true, changed };
   },
 );
 
@@ -306,7 +315,7 @@ export const sendAgent007Message = onCall(
       .map((doc) => doc.data() as any)
       .sort((a, b) => timestampMillis(a.createdAt) - timestampMillis(b.createdAt))
       .slice(-12);
-    const context = await operationalContext(rootId, text);
+    const context = await operationalContext({ uid, rootId, role: "superadmin" }, text);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
       ? await executeRequestIqComplement({ db, rootId, uid, message: text })

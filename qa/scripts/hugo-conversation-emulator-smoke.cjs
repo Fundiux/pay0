@@ -37,6 +37,7 @@ async function main() {
     facturaUuid: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
     facturamaStatus: "PRODUCTION_ISSUED",
   });
+  await callables.reconcileAgent007RecommendationsNow.run({ auth, data: {} });
   const recommendations = await callables.listAgent007Recommendations.run({ auth, data: {} });
   const reconciled = recommendations.recommendations.find((item) => item.id === "qa-old-fiscal-review");
   assert.equal(reconciled.status, "SUPERSEDED");

@@ -47,3 +47,11 @@ Completeness is `COMPLETE`, `PARTIAL` or `UNKNOWN`. Evidence kind is `FACT`, `ME
 2. PAY0 remains the authority for finance and IQ.
 3. Read tools must have zero writes; reconciliation becomes an explicit operation in a later phase.
 4. No new Hugo collection, endpoint or provider integration is needed for Phase 0.
+
+## PHASE 1 IMPLEMENTED — 2026-09-22
+
+`functions/src/modules/agent007/pay0Connector.ts` is an internal PAY0 read boundary. It receives server-derived `uid`, `rootId` and `superadmin` role; its six tools return PAY0 evidence, completeness and an in-memory trace with actor, tool, entity IDs, elapsed time and result/error. No trace collection or sensitive payload log was added. Exact folio queries return `UNKNOWN` for zero or multiple matches; bounded searches and complement status are `PARTIAL`. Errors propagate instead of becoming absence. This is a foundation, not a new public API.
+
+Hugo's conversation context now gets solicitudes, pagos and complement status through that connector. Its Hugo-owned proposals and rules, and its direct PAY0 configuration reads, remain transition debt. `listAgent007Recommendations` and the context builder no longer invoke reconciliation. A separate authenticated `reconcileAgent007RecommendationsNow` command preserves the maintenance step for `/hugo` and the bubble before their lists. Message send/read receipt are commands with intended message-state writes. The existing IQ complement command stays on its original PAY0 path.
+
+Phase 1 emulator checks compare business collections before and after connector reads, conversation context, recommendation listing and complement inventory; they verify cross-root isolation, missing evidence, propagated errors and explicit reconciliation. These checks do not establish model quality or provider behavior. The Phase 0 legacy baseline remains unchanged.
