@@ -35,6 +35,9 @@
                                }
                   },
     "hosting":  {
+                    "predeploy":  [
+                                       "npm run qa:release-guard"
+                                   ],
                     "ignore":  [
                                    "firebase.json",
                                    "**/.*",
