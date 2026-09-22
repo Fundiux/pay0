@@ -408,7 +408,6 @@ export const listIqCredentialProfiles = onCall(callableWithIqSecret, async (requ
   const snap = await db
     .collection("iqCredentialProfiles")
     .where("rootId", "==", auth.rootId)
-    .orderBy("createdAt", "desc")
     .get();
 
   return {
