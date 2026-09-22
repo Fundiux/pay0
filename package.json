@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/copy-canonical-assets.mjs && next build",
+    "build": "node qa/scripts/critical-release-guard.mjs && node scripts/copy-canonical-assets.mjs && next build",
     "start": "next start",
     "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "qa:pay0": "node qa/scripts/run-pay0-qa.mjs",
@@ -59,7 +59,8 @@
     "demo:cotizacion": "node scripts/render-cotizacion-demo.mjs",
     "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs",
     "qa:audit-security": "node qa/scripts/audit-security-regression.mjs",
-    "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1"
+    "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1",
+    "qa:release-guard": "node qa/scripts/critical-release-guard.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
