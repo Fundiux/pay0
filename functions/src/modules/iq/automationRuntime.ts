@@ -121,7 +121,8 @@ function processIntervalMinutes(
     return 5;
   }
 
-  return Math.max(5, Math.min(1440, Math.floor(configured)));
+  const minimum = process === "solicitudCreate" || process === "pagoCreate" ? 1 : 5;
+  return Math.max(minimum, Math.min(1440, Math.floor(configured)));
 }
 
 async function claimIqAutomationProcessIfDue(input: {

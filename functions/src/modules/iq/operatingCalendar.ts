@@ -210,14 +210,14 @@ export function normalizeIqOperatingCalendarConfig(
       discovery: clampInteger(intervalInput.discovery, 20, 5, 1440),
       invoiceImport: clampInteger(intervalInput.invoiceImport, 20, 5, 1440),
       statusMonitor: clampInteger(intervalInput.statusMonitor, 20, 5, 1440),
-      solicitudCreate: clampInteger(intervalInput.solicitudCreate, 5, 5, 1440),
+      solicitudCreate: clampInteger(intervalInput.solicitudCreate, 1, 1, 1440),
       solicitudReconciliation: clampInteger(
         intervalInput.solicitudReconciliation,
         10,
         5,
         1440,
       ),
-      pagoCreate: clampInteger(intervalInput.pagoCreate, 5, 5, 1440),
+      pagoCreate: clampInteger(intervalInput.pagoCreate, 1, 1, 1440),
       pagoReconciliation: clampInteger(
         intervalInput.pagoReconciliation,
         20,

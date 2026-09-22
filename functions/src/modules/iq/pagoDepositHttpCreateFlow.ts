@@ -11,8 +11,10 @@ import {
   type PagoReceiptDescriptor,
 } from "./depositHttpCreateFirebaseAdapters";
 import {
+  isIqAccessTokenUsable,
   loginIqHttpDirect,
   toIqAuthContext,
+  type IqHttpAuthSession,
   type IqHttpCredentials,
 } from "./iqHttpAuth";
 import {
@@ -32,6 +34,11 @@ export interface PagoDepositHttpCreateFlowInput {
   sum: number;
   iqAttemptId?: string;
   allowHttpPost: boolean;
+  sessionHolder?: {
+    username: string;
+    apiOrigin: string;
+    session?: IqHttpAuthSession;
+  };
 }
 
 function cleanText(value: unknown): string {
@@ -93,15 +100,38 @@ export async function runPagoDepositHttpCreateFlow(
       input.receipt,
     ),
     (async () => {
-      const session = await loginIqHttpDirect({
-        apiOrigin: input.apiOrigin,
-        credentials: input.credentials,
-      });
+      const holder = input.sessionHolder;
+      let session = holder?.session;
+      if (
+        !session ||
+        holder?.username !== input.credentials.username ||
+        holder.apiOrigin !== new URL(input.apiOrigin).origin ||
+        !isIqAccessTokenUsable(session, 10_000)
+      ) {
+        session = await loginIqHttpDirect({
+          apiOrigin: input.apiOrigin,
+          credentials: input.credentials,
+        });
+        if (holder) {
+          holder.username = input.credentials.username;
+          holder.apiOrigin = session.apiOrigin;
+          holder.session = session;
+        }
+      }
 
-      const catalog = await resolveIqDepositCatalogHttp(
-        session,
-        input.catalogTarget,
-      );
+      let catalog;
+      try {
+        catalog = await resolveIqDepositCatalogHttp(session, input.catalogTarget);
+      } catch (error) {
+        if (!holder || !/401/.test(String(error))) throw error;
+        holder.session = undefined;
+        session = await loginIqHttpDirect({
+          apiOrigin: input.apiOrigin,
+          credentials: input.credentials,
+        });
+        holder.session = session;
+        catalog = await resolveIqDepositCatalogHttp(session, input.catalogTarget);
+      }
 
       return {
         session,

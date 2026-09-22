@@ -2004,7 +2004,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
 export const processIqCreateQueue = onSchedule(
   {
-    schedule: "every 5 minutes", // H4_D87_A58_A15_HEARTBEAT_5_MIN
+    schedule: "every 1 minute",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",

@@ -26,6 +26,7 @@ import { runPagoDepositHttpCreateFlow } from "./pagoDepositHttpCreateFlow";
 import {
   loginIqHttpDirect,
   toIqAuthContext,
+  type IqHttpAuthSession,
 } from "./iqHttpAuth";
 import {
   resolveIqDepositCatalogHttp,
@@ -1291,6 +1292,11 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   actor: PagoIqOperationalActorH4D87;
   pagoId: string;
   source: "SCHEDULER" | "TASK";
+  sessionHolders?: Map<string, {
+    username: string;
+    apiOrigin: string;
+    session?: IqHttpAuthSession;
+  }>;
 }) {
   const pagoId = cleanText(input.pagoId);
   const reconcileSource = input.source;
@@ -1372,7 +1378,14 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     );
   }
 
+  let sessionHolder = input.sessionHolders?.get(ctx.access.profileId);
+  if (input.sessionHolders && !sessionHolder) {
+    sessionHolder = { username: "", apiOrigin: "" };
+    input.sessionHolders.set(ctx.access.profileId, sessionHolder);
+  }
+
   const httpResult = await runPagoDepositHttpCreateFlow({
+    sessionHolder,
     pagoId: ctx.pagoId,
     actorUid: input.actor.uid,
     source: `CREATE_PAGO_IQ_DEPOSIT_HTTP_${input.source}`,
@@ -3679,7 +3692,7 @@ export const processIqPagoDepositOnDemandTask =
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
-    schedule: "every 5 minutes", // H4_D87_A58_A15_HEARTBEAT_5_MIN
+    schedule: "every 1 minute",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",
@@ -3705,7 +3718,13 @@ export const processIqPagoDepositCreateQueue = onSchedule(
       .map((doc): Record<string, unknown> => ({ id: doc.id, ...asRecord(doc.data()) }))
       .filter((row) => enabledRoots.has(cleanText(row.rootId)))
       .filter((row) => shouldProcessPagoIqCreateQueueH4D62C(row))
-      .slice(0, 3);
+      .slice(0, 10);
+
+    const sessionHolders = new Map<string, {
+      username: string;
+      apiOrigin: string;
+      session?: IqHttpAuthSession;
+    }>();
 
     for (const row of candidates) {
       const pagoId = cleanText(row.id);
@@ -3715,6 +3734,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
         await createPagoIqDepositFromQueueCoreH4D62C({
           auth,
           pagoId,
+          sessionHolders,
           actor: {
             uid: "system",
             name: "System",

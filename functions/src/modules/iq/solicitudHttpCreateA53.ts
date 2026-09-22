@@ -1,6 +1,7 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { readFile } from "node:fs/promises";
 import {
+  isIqAccessTokenUsable,
   loginIqHttpDirect,
   type IqHttpAuthSession,
   type IqHttpCredentials,
@@ -462,6 +463,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
   username: string;
   password: string;
   timeZone?: string;
+  sessionHolder?: { session?: IqHttpAuthSession };
 } & Omit<IqSolicitudHttpItemA53, "key">): Promise<IqSolicitudHttpResultA53> {
   const item: IqSolicitudHttpItemA53 = {
     associatedName: input.associatedName,
@@ -498,13 +500,26 @@ export async function runIqCreateInvoiceHttpA53(input: {
       throw new Error("IQ_SOLICITUD_MARKER_REQUIRED");
     }
 
-    let session = await loginIqHttpDirect({
-      apiOrigin: origin,
-      credentials,
-    });
+    let session = input.sessionHolder?.session;
+    if (
+      !session ||
+      session.apiOrigin !== new URL(origin).origin ||
+      !isIqAccessTokenUsable(session, 10_000)
+    ) {
+      session = await loginIqHttpDirect({ apiOrigin: origin, credentials });
+      if (input.sessionHolder) input.sessionHolder.session = session;
+    }
     result.authenticated = true;
 
-    const catalog = await resolveCatalog(session, item);
+    let catalog;
+    try {
+      catalog = await resolveCatalog(session, item);
+    } catch (error) {
+      if (!input.sessionHolder?.session || !/401/.test(String(error))) throw error;
+      session = await loginIqHttpDirect({ apiOrigin: origin, credentials });
+      input.sessionHolder.session = session;
+      catalog = await resolveCatalog(session, item);
+    }
     result.associatedMatched = catalog.partnerName;
     result.clientMatched = catalog.clientName;
     result.companyMatched = catalog.companyName;
@@ -543,6 +558,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
         apiOrigin: origin,
         credentials,
       });
+      if (input.sessionHolder) input.sessionHolder.session = session;
       result.authenticated = true;
 
       try {
@@ -631,6 +647,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
 
     return result;
   } catch (error) {
+    if (input.sessionHolder) input.sessionHolder.session = undefined;
     result.status = "IQ_SOLICITUD_CREATE_REJECTED";
     result.outcome = "REJECTED";
     result.message =
@@ -663,8 +680,13 @@ export async function runIqCreateInvoiceBatchHttpA53(input: {
     errors: [],
   };
 
+  // Cada lote ya corresponde a un solo perfil IQ. Conservar la sesión solo
+  // durante este proceso evita un login por solicitud y no cruza perfiles.
+  const sessionHolder: { session?: IqHttpAuthSession } = {};
+
   for (const item of input.items.slice(0, 25)) {
     const row = await runIqCreateInvoiceHttpA53({
+      sessionHolder,
       erpUrl: input.erpUrl,
       apiOrigin: input.apiOrigin,
       username: input.username,
