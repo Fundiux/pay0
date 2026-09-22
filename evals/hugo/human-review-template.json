@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "caseId": "solicitud-found",
+  "responseArtifact": "path-to-controlled-model-output.json",
+  "reviewerId": "reviewer-pseudonym",
+  "ratings": {
+    "utility": null,
+    "clarity": null,
+    "contextualCorrectness": null,
+    "tone": null,
+    "overconfidence": null,
+    "explanation": null
+  },
+  "scale": "1-5; null means not reviewed",
+  "notes": "Do not copy credentials or sensitive production responses here."
+}

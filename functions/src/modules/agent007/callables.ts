@@ -1,4 +1,3 @@
-import { getApp } from "firebase-admin/app";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -7,6 +6,10 @@ import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallabl
 import { reconcileAgent007Recommendations } from "./reconciliation";
 import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
 import { Pay0Connector } from "./pay0Connector";
+import { HugoToolRouter } from "./hugoCore/toolRouter";
+import { HugoConversationCore } from "./hugoCore/conversationCore";
+import { VertexGeminiAdapter } from "./vertexGeminiAdapter";
+import { conversationTrace } from "./traceStore";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -27,157 +30,6 @@ async function recentRows(collection: string, rootId: string, limit = 20) {
   return snap.docs
     .map((doc) => ({ id: doc.id, ...doc.data() } as any))
     .sort((a, b) => timestampMillis(b.updatedAt || b.createdAt) - timestampMillis(a.updatedAt || a.createdAt));
-}
-
-function extractFolio(message: string): string | null {
-  const match = message.toUpperCase().match(/\b[SP]\d[A-Z0-9]{4,19}\b/);
-  return match?.[0] || null;
-}
-
-async function operationalContext(identity: { uid: string; rootId: string; role: "superadmin" }, message: string) {
-  const { rootId } = identity;
-  const pay0 = new Pay0Connector(db, identity);
-  const folio = extractFolio(message);
-  const [solicitudResult, pagoResult, recommendations, rules, complementResult] = await Promise.all([
-    folio ? pay0.getSolicitud(folio) : pay0.searchSolicitudes(40),
-    folio ? pay0.getPago(folio) : pay0.searchPagos(30),
-    recentRows("agent007Recommendations", rootId, 20),
-    recentRows("agent007LearnedRules", rootId, 20),
-    pay0.getPaymentComplementStatus(folio || undefined),
-  ]);
-  const solicitudes = Array.isArray(solicitudResult.data) ? solicitudResult.data : solicitudResult.data ? [solicitudResult.data] : [];
-  const pagos = Array.isArray(pagoResult.data) ? pagoResult.data : pagoResult.data ? [pagoResult.data] : [];
-  const complements = complementResult.data;
-  const selectedSolicitudes = folio
-    ? solicitudes.filter((row) => clean(row.folio || row.folioIq, 60).toUpperCase() === folio).slice(0, 3)
-    : solicitudes.slice(0, 8);
-  const selectedPagos = folio
-    ? pagos.filter((row) => clean(row.folio || row.folioIq, 60).toUpperCase() === folio).slice(0, 3)
-    : pagos.slice(0, 6);
-  const [complementConfigSnap, masterSnap] = await Promise.all([
-    db.doc(`paymentComplementConfigs/${rootId}`).get(), db.doc(`iqIntegrationConfigs/${rootId}`).get(),
-  ]);
-  const complementConfig = complementConfigSnap.data(), master = masterSnap.data();
-  const iqLookupAllowed = master?.enabled === true && !!complementConfig && complementConfig.iqLookupEnabled !== false;
-  const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && complementConfig?.iqRequestEnabled !== false;
-  return {
-    alcanceContexto: "Muestra reciente y búsqueda exacta por folio, no un inventario completo.",
-    capacidadesIq: { altaBeneficiario: "NO_CONECTADA", consultaComplemento: iqLookupAllowed ? "HABILITADA_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
-      solicitudComplemento: iqRequestAllowed ? "HABILITADA_SOLO_PPD_NUEVAS_CONFIRMADAS_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
-      complementoFacturama: complementConfig?.facturamaEnabled === true ? "AUTOMATICO_CON_VALIDACION_FISCAL" : "PAUSADO", dispersion: "TRANSFERENCIA_Y_TDC_CON_VALIDACIONES" },
-    complementosPendientes: complements.filter(row => row.status !== "VOIDED" && row.status !== "RECEIVED" && (!folio || row.solicitudFolio === folio || row.pagoFolio === folio)).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.automationStatus || row.status, error: row.automationError || null, proveedor: row.provider, enviadoAlProveedor: row.externalRequestSent === true })),
-    folioConsultado: folio,
-    solicitudes: selectedSolicitudes.map((row) => ({
-      folio: row.folio || null,
-      folioIq: row.folioIq || null,
-      cliente: row.clientName || row.clienteNombre || row.cliente || null,
-      empresa: row.companyName || row.empresaNombre || row.empresa || null,
-      monto: Number(row.amount || row.monto || row.total || 0),
-      estado: row.status || row.estatus || null,
-      factura: row.factura || row.invoiceNumber || null,
-      facturamaStatus: row.facturamaStatus || null,
-      claveSat: row.satProductCode || row.ocFiscalMetadata?.productCode || null,
-      unidadSat: row.satUnitCode || row.ocFiscalMetadata?.unitCode || null,
-    })),
-    pagos: selectedPagos.map((row) => ({
-      folio: row.folio || null,
-      folioIq: row.folioIq || null,
-      cliente: row.clientName || row.clienteNombre || row.cliente || null,
-      monto: Number(row.amount || row.monto || row.total || 0),
-      estado: row.status || row.estatus || null,
-    })),
-    dudasPendientes: recommendations.filter((row) => row.status === "PENDING_REVIEW").slice(0, 8).map((row) => ({
-      tipo: row.kind,
-      caso: row.caseId,
-      propuesta: row.proposal,
-      confianza: row.confidence,
-    })),
-    reglasConfirmadas: rules.filter((row) => Number(row.approvals || 0) > Number(row.rejections || 0)).slice(0, 10).map((row) => ({
-      tipo: row.kind,
-      regla: row.proposal,
-      correccion: row.correction || null,
-      aprobaciones: row.approvals || 0,
-    })),
-  };
-}
-
-function fallbackReply(message: string, name: string, context: any): string {
-  const normalized = message.toLocaleLowerCase("es-MX");
-  if (/^(hola|buen(os|as)?\s+(dias|tardes|noches)|qué tal|que tal)[!.\s]*$/.test(normalized)) {
-    return `Hola, ${name}. Estoy atento. Puedo revisar contigo solicitudes, pagos, facturación y las dudas que vaya detectando.`;
-  }
-  if (context.folioConsultado && context.solicitudes.length) {
-    const item = context.solicitudes[0];
-    const amount = Number(item.monto || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
-    return `Revisé ${item.folio}. Está en ${item.estado || "estado no especificado"}, por ${amount}${item.facturamaStatus ? ` y su estado fiscal es ${item.facturamaStatus}` : ""}. Si quieres, dime qué parte revisamos con más detalle.`;
-  }
-  if (/complement|beneficiari|dispersion|dispersión/.test(normalized)) {
-    return `En el contexto reciente veo ${context.complementosPendientes.length} complementos pendientes. Consulta IQ: ${context.capacidadesIq.consultaComplemento}; nuevas solicitudes IQ: ${context.capacidadesIq.solicitudComplemento}; Facturama: ${context.capacidadesIq.complementoFacturama}. Cada caso requiere perfil, permisos y cuota vigentes. Registrar un pendiente no significa que el proveedor lo recibió. No he enviado ninguna operación desde este chat.`;
-  }
-  if (/qué (pasó|hiciste)|que (paso|hiciste)|resumen|último|ultimo/.test(normalized)) {
-    return `Veo ${context.solicitudes.length} solicitudes recientes, ${context.pagos.length} pagos en el contexto actual y ${context.dudasPendientes.length} dudas pendientes. Puedo revisar un folio concreto si me lo indicas.`;
-  }
-  return `Entendido, ${name}. Guardé tu mensaje en esta conversación. Todavía no tengo evidencia suficiente para afirmarlo como una regla; cuando vea un caso relacionado te lo señalaré para que lo confirmemos.`;
-}
-
-async function vertexReply(message: string, name: string, context: any, history: any[]): Promise<string | null> {
-  try {
-    if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FUNCTIONS_EMULATOR) return null;
-    const credential: any = getApp().options.credential;
-    if (!credential?.getAccessToken) return null;
-    const token = await credential.getAccessToken();
-    const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "pay-0-system";
-    const endpoint = `https://us-central1-aiplatform.googleapis.com/v1/projects/${project}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent`;
-    const system = [
-      "Eres Hugo, asistente operativo interno de PAY0.",
-      `Conversas exclusivamente con ${name}, superadministrador de su raíz.`,
-      "Responde en español natural, cálido y breve. No suenes robótico.",
-      "Entrega siempre una respuesta completa: nunca termines a media frase ni a media lista.",
-      "Si hay muchos elementos, agrúpalos por estado, muestra como máximo 12 y explica cuántos adicionales existen.",
-      "Usa solamente los datos del contexto; si falta evidencia, dilo claramente.",
-      "Puedes observar, explicar y proponer. Nunca afirmes haber emitido, pagado, transferido, cancelado o modificado algo.",
-      "No solicites contraseñas, CSD, tokens ni secretos. No expongas datos bancarios completos salvo que el usuario los pida expresamente.",
-      "Cuando detectes una corrección o enseñanza, explica en una frase qué entendiste y que requiere confirmación antes de convertirse en regla.",
-    ].join(" ");
-    const historyText = history.slice(-10).map((row) => `${row.role === "assistant" ? "Hugo" : name}: ${clean(row.text, 1200)}`).join("\n");
-    const prompt = `${historyText ? `CONVERSACIÓN RECIENTE:\n${historyText}\n\n` : ""}CONTEXTO OPERATIVO DE SOLO LECTURA:\n${JSON.stringify(context)}\n\nMENSAJE DE ${name.toUpperCase()}: ${message}`;
-    const generate = async (requestPrompt: string, maxOutputTokens: number) => {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: requestPrompt }] }],
-          generationConfig: { temperature: 0.35, maxOutputTokens },
-        }),
-        signal: AbortSignal.timeout(35_000),
-      });
-      if (!response.ok) {
-        console.warn("[Hugo] Vertex response", response.status);
-        return { text: null, finishReason: `HTTP_${response.status}` };
-      }
-      const payload: any = await response.json();
-      const candidate = payload?.candidates?.[0];
-      const finishReason = clean(candidate?.finishReason, 40).toUpperCase();
-      const text = clean(candidate?.content?.parts?.map((part: any) => part?.text || "").join(" "), 6000) || null;
-      return { text, finishReason };
-    };
-    const first = await generate(prompt, 1200);
-    if (first.text && first.finishReason === "STOP") return first.text;
-    if (first.finishReason === "MAX_TOKENS") {
-      console.warn("[Hugo] Vertex output reached token limit; retrying compact response");
-      const compactPrompt = `${prompt}\n\nINSTRUCCIÓN DE FORMATO OBLIGATORIA: Responde de nuevo de forma completa y compacta. Resume por estado, incluye como máximo 8 folios representativos, indica cuántos adicionales hay y termina todas las frases.`;
-      const retry = await generate(compactPrompt, 1200);
-      if (retry.text && retry.finishReason === "STOP") return retry.text;
-      console.warn("[Hugo] Discarded incomplete retry", retry.finishReason || "UNKNOWN");
-    } else if (first.text) {
-      console.warn("[Hugo] Discarded non-final Vertex output", first.finishReason || "UNKNOWN");
-    }
-    return null;
-  } catch (error) {
-    console.warn("[Hugo] Vertex unavailable");
-    return null;
-  }
 }
 
 async function actor(request: any) {
@@ -307,21 +159,45 @@ export const sendAgent007Message = onCall(
     const { uid, user, rootId } = await actor(request);
     const text = clean(request.data?.text, 2000);
     if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
+    const startedAt = Date.now();
     const conversationId = conversationIdFor(rootId, uid);
     const conversationRef = db.collection("agent007Conversations").doc(conversationId);
     const messagesRef = db.collection("agent007Messages");
-    const prior = await messagesRef.where("conversationId", "==", conversationId).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(12).get();
+    const [prior, conversationSnap, recommendations, rules] = await Promise.all([
+      messagesRef.where("conversationId", "==", conversationId).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(12).get(),
+      conversationRef.get(), recentRows("agent007Recommendations", rootId, 20), recentRows("agent007LearnedRules", rootId, 20),
+    ]);
     const history = prior.docs
       .map((doc) => doc.data() as any)
       .sort((a, b) => timestampMillis(a.createdAt) - timestampMillis(b.createdAt))
       .slice(-12);
-    const context = await operationalContext({ uid, rootId, role: "superadmin" }, text);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
       ? await executeRequestIqComplement({ db, rootId, uid, message: text })
       : null;
-    const aiReply = capability ? null : await vertexReply(text, name, context, history);
-    const reply = capability?.reply || aiReply || fallbackReply(text, name, context);
+    const identity = { uid, rootId, role: "superadmin" as const };
+    const pay0 = new Pay0Connector(db, identity);
+    const router = new HugoToolRouter(identity, {
+      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
+      getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
+      getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
+      getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
+    });
+    const core = new HugoConversationCore(router, new VertexGeminiAdapter());
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, history, memory: { recommendations, rules },
+      recentEntities: conversationSnap.data()?.rootId === rootId && conversationSnap.data()?.ownerUid === uid ? conversationSnap.data()?.recentEntities || [] : [],
+      commandReply: capability?.reply };
+    const traceRef = db.collection("agent007Traces").doc();
+    const result = await core.respond(coreInput).catch(async error => {
+      await traceRef.create({ schemaVersion: 1, traceId: traceRef.id, conversationId, rootId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
+        timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "legacy-v1", resultStatus: "ERROR",
+        errorCode: error instanceof Error ? clean(error.name, 80) : "ERROR", latencyMs: Date.now() - startedAt,
+        toolsRequested: error instanceof Error ? (error as Error & { hugoToolsRequested?: string[] }).hugoToolsRequested || [] : [],
+        toolsExecuted: error instanceof Error ? (error as Error & { hugoToolsExecuted?: string[] }).hugoToolsExecuted || [] : [],
+        evidenceReferences: [], expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }).catch(() => undefined);
+      throw error;
+    });
+    const reply = result.text;
     const userMessage = messagesRef.doc();
     const assistantMessage = messagesRef.doc();
     const now = Timestamp.now();
@@ -329,6 +205,7 @@ export const sendAgent007Message = onCall(
     batch.set(conversationRef, {
       rootId, ownerUid: uid, participantUids: [uid], status: "ACTIVE",
       lastMessage: reply, lastMessageAt: now, updatedAt: now,
+      recentEntities: result.recentEntities.length ? result.recentEntities : coreInput.recentEntities,
       createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     batch.create(userMessage, {
@@ -337,13 +214,14 @@ export const sendAgent007Message = onCall(
     });
     batch.create(assistantMessage, {
       rootId, conversationId, role: "assistant", text: reply, recipientUid: uid,
-      source: aiReply ? "VERTEX_AI" : "HUGO_ENGINE", read: true,
+      source: result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE", read: true,
       capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true,
-      contextSummary: { folioConsultado: context.folioConsultado, solicitudes: context.solicitudes.length, pagos: context.pagos.length, dudas: context.dudasPendientes.length },
+      contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       createdAt: Timestamp.fromMillis(now.toMillis() + 1),
     });
+    batch.create(traceRef, conversationTrace(traceRef.id, coreInput, result, startedAt, capability));
     await batch.commit();
-    return { ok: true, conversationId, message: { id: assistantMessage.id, role: "assistant", text: reply, source: aiReply ? "VERTEX_AI" : "HUGO_ENGINE", createdAt: now } };
+    return { ok: true, conversationId, message: { id: assistantMessage.id, role: "assistant", text: reply, source: result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE", createdAt: now } };
   },
 );

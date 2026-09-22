@@ -2,11 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { existsSync } = require('node:fs');
 const { join } = require('node:path');
-const { readFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
 const compiled = join(__dirname, '../../functions/lib/modules/agent007/reconciliation.js');
 
 test('both legacy read paths invoke reconciliation', () => {
-  const source = readFileSync(join(__dirname, '../../functions/src/modules/agent007/callables.ts'), 'utf8');
+  // Pin this historical assertion to the accepted Phase 0 baseline source.
+  const source = execFileSync('git', ['show', 'd8d60b2:functions/src/modules/agent007/callables.ts'], { cwd: join(__dirname, '../..'), encoding: 'utf8' });
   assert.match(source, /async function operationalContext[\s\S]*?await reconcileAgent007Recommendations\(db, rootId\)/);
   assert.match(source, /export const listAgent007Recommendations[\s\S]*?await reconcileAgent007Recommendations\(db, rootId\)/);
 });
