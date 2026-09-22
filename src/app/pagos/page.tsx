@@ -1690,9 +1690,9 @@ export default function PagosPage() {
     if (isSuperAdmin(role)) {
       qy = query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId));
     } else if (isAdmin(role)) {
-      qy = query(collection(db, "pagoAplicaciones"), where("adminId", "==", myUid));
+      qy = query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId), where("adminId", "==", myUid));
     } else if (isOperador(role)) {
-      qy = query(collection(db, "pagoAplicaciones"), where("createdBy", "==", myUid));
+      qy = query(collection(db, "pagoAplicaciones"), where("rootId", "==", rootId), where("createdBy", "==", myUid));
     } else {
       setPagoAplicaciones([]);
       return;

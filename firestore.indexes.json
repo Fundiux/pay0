@@ -376,6 +376,34 @@
             ]
         },
         {
+            "collectionGroup": "pagoAplicaciones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "adminId",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "pagoAplicaciones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "rootId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdBy",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "solicitudes",
             "queryScope": "COLLECTION",
             "fields": [

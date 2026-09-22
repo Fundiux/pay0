@@ -390,6 +390,13 @@ service cloud.firestore {
       allow read: if hasModuleAction("pagos", "create") && (
         isSuperadmin()
         || (
+          resource.data.get("rootId", null) == myRootId()
+          && (
+            resource.data.get("adminId", null) == me()
+            || resource.data.get("createdBy", null) == me()
+          )
+        )
+        || (
           ("solicitudId" in resource.data)
           && (
             get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("adminId", null) == me()
@@ -403,6 +410,13 @@ service cloud.firestore {
 
       allow read: if hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
+        || (
+          resource.data.get("rootId", null) == myRootId()
+          && (
+            resource.data.get("adminId", null) == me()
+            || resource.data.get("createdBy", null) == me()
+          )
+        )
         || (
           ("solicitudId" in resource.data)
           && (
