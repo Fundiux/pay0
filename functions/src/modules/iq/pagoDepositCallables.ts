@@ -3692,7 +3692,7 @@ export const processIqPagoDepositOnDemandTask =
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
-    schedule: "every 1 minute",
+    schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",

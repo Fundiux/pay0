@@ -2053,7 +2053,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
 export const processIqCreateQueue = onSchedule(
   {
-    schedule: "every 1 minute",
+    schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",
