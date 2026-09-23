@@ -3,9 +3,9 @@
   "historicalArtifactMutated": false,
   "phase6OriginalPreserved": true,
   "semantics": "APPROPRIATE_EFFECT",
-  "humanReviewStatus": "PARTIAL",
-  "humanReviewsCompleted": 2,
-  "humanReviewsPending": 5,
+  "humanReviewStatus": "COMPLETE",
+  "humanReviewsCompleted": 7,
+  "humanReviewsPending": 0,
   "count": 7,
   "summary": {
     "appropriateStability": 7,
@@ -116,7 +116,9 @@
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
       "humanReview": {
-        "status": "AWAITING_HUMAN_REVIEW"
+        "status": "REVIEWED",
+        "choice": "A_BETTER",
+        "preferredSource": "AFTER"
       }
     },
     {
@@ -150,7 +152,9 @@
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
       "humanReview": {
-        "status": "AWAITING_HUMAN_REVIEW"
+        "status": "REVIEWED",
+        "choice": "B_BETTER",
+        "preferredSource": "AFTER"
       }
     },
     {
@@ -184,7 +188,9 @@
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
       "humanReview": {
-        "status": "AWAITING_HUMAN_REVIEW"
+        "status": "REVIEWED",
+        "choice": "A_BETTER",
+        "preferredSource": "AFTER"
       }
     },
     {
@@ -218,7 +224,9 @@
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
       "humanReview": {
-        "status": "AWAITING_HUMAN_REVIEW"
+        "status": "REVIEWED",
+        "choice": "A_BETTER",
+        "preferredSource": "AFTER"
       }
     },
     {
@@ -252,7 +260,9 @@
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
       "humanReview": {
-        "status": "AWAITING_HUMAN_REVIEW"
+        "status": "REVIEWED",
+        "choice": "B_BETTER",
+        "preferredSource": "BEFORE"
       }
     }
   ]

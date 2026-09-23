@@ -95,13 +95,14 @@ const report = {
   completionPercent: Number((100 * reviewed / totalCases).toFixed(1)),
   humanReviewStatus: reviewed === totalCases ? 'COMPLETE' : 'PARTIAL',
   sourceArtifacts: [
-    { file: 'human-reviews/phase4-user-export.json', sha256: hash(fs.readFileSync(path.join(__dirname, 'human-reviews/phase4-user-export.json'))) },
-    { file: 'human-reviews/phase6-user-export.json', sha256: hash(fs.readFileSync(path.join(__dirname, 'human-reviews/phase6-user-export.json'))) },
+    { file: 'human-reviews/phase4-user-export.json', status: 'CURRENT_COMPLETE', sha256: hash(fs.readFileSync(path.join(__dirname, 'human-reviews/phase4-user-export.json'))) },
+    { file: 'human-reviews/phase6-user-export-partial.json', status: 'SUPERSEDED_PARTIAL', sha256: hash(fs.readFileSync(path.join(__dirname, 'human-reviews/phase6-user-export-partial.json'))) },
+    { file: 'human-reviews/phase6-user-export.json', status: 'CURRENT_COMPLETE', sha256: hash(fs.readFileSync(path.join(__dirname, 'human-reviews/phase6-user-export.json'))) },
   ],
   limitations: [
     'Legacy exports do not capture reviewer identity.',
     'Legacy exports do not capture structured reason codes.',
-    'Phase 6 has only two reviewed cases, so its preference cannot be generalized.',
+    'Human preference is evidence for these synthetic pairs and does not by itself establish production generalization.',
   ],
   phases: { PHASE4: phase4, PHASE6: phase6 },
 };

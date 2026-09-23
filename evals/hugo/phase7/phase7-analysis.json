@@ -3,33 +3,40 @@
   "syntheticOnly": true,
   "preregisteredDatasetDigest": "d91845bc21be9fbcfe1f99377608a8fe72ddf57989f4c5c67c2d3072fd6b2096",
   "familyCount": 28,
-  "humanReviewStatus": "PARTIAL",
-  "humanReviewsCompleted": 20,
-  "humanReviewsPending": 8,
+  "humanReviewStatus": "COMPLETE",
+  "humanReviewsCompleted": 28,
+  "humanReviewsPending": 0,
   "humanReview": {
     "schemaVersion": "hugo-phase7-human-review-analysis-v1",
     "source": "USER_PROVIDED_LEGACY_EXPORTS",
     "validationStatus": "VALID",
     "totalCases": 28,
-    "reviewed": 20,
+    "reviewed": 28,
     "skipped": 0,
-    "incomplete": 8,
-    "completionPercent": 71.4,
-    "humanReviewStatus": "PARTIAL",
+    "incomplete": 0,
+    "completionPercent": 100,
+    "humanReviewStatus": "COMPLETE",
     "sourceArtifacts": [
       {
         "file": "human-reviews/phase4-user-export.json",
+        "status": "CURRENT_COMPLETE",
         "sha256": "da1773e2cab222c871d329ea38ccc8e4211b191b07c00d8ca14cbc353b8d2213"
       },
       {
-        "file": "human-reviews/phase6-user-export.json",
+        "file": "human-reviews/phase6-user-export-partial.json",
+        "status": "SUPERSEDED_PARTIAL",
         "sha256": "0a8ccddef4ce4c3d2488c7e326b0a9120918c2db78bbf00628330ffc5c4a8002"
+      },
+      {
+        "file": "human-reviews/phase6-user-export.json",
+        "status": "CURRENT_COMPLETE",
+        "sha256": "fd059ab1a1a0a665d94bb4e52fc2b83d6d1bc862d2d96c82660c105f33cedcec"
       }
     ],
     "limitations": [
       "Legacy exports do not capture reviewer identity.",
       "Legacy exports do not capture structured reason codes.",
-      "Phase 6 has only two reviewed cases, so its preference cannot be generalized."
+      "Human preference is evidence for these synthetic pairs and does not by itself establish production generalization."
     ],
     "phases": {
       "PHASE4": {
@@ -191,22 +198,22 @@
       "PHASE6": {
         "phase": "PHASE6",
         "evalRunId": "phase6-synthetic-gemini-v1",
-        "reviewedAt": "2026-09-23T01:45:02.540Z",
+        "reviewedAt": "2026-09-23T05:53:38.881Z",
         "totalCases": 10,
-        "reviewed": 2,
+        "reviewed": 10,
         "skipped": 0,
-        "incomplete": 8,
-        "completionPercent": 20,
+        "incomplete": 0,
+        "completionPercent": 100,
         "preferenceCounts": {
           "LEGACY": 0,
           "HUGO_V2": 0,
-          "BEFORE": 0,
-          "AFTER": 2,
+          "BEFORE": 1,
+          "AFTER": 9,
           "EQUIVALENT": 0,
           "BOTH_ACCEPTABLE": 0,
           "BOTH_UNACCEPTABLE": 0
         },
-        "acceptedWithPreference": 2,
+        "acceptedWithPreference": 10,
         "bothAcceptable": 0,
         "bothUnacceptable": 0,
         "equivalent": 0,
@@ -214,16 +221,7 @@
         "notesCaptured": 0,
         "reasonsCaptured": 0,
         "reviewerIdentity": "NOT_CAPTURED_IN_LEGACY_EXPORT",
-        "incompleteCaseIds": [
-          "duplicate-document",
-          "supplier-ack",
-          "amount-mismatch",
-          "bank-rejection",
-          "duplicate-payment",
-          "complement-status",
-          "local-checkpoint-document",
-          "local-checkpoint-bank"
-        ],
+        "incompleteCaseIds": [],
         "decisions": [
           {
             "caseId": "document-review",
@@ -235,6 +233,62 @@
           {
             "caseId": "invoice-mismatch",
             "choice": "B_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "duplicate-document",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "supplier-ack",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "amount-mismatch",
+            "choice": "B_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "bank-rejection",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "duplicate-payment",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "complement-status",
+            "choice": "B_BETTER",
+            "preferredSource": "BEFORE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "local-checkpoint-document",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "local-checkpoint-bank",
+            "choice": "A_BETTER",
             "preferredSource": "AFTER",
             "noteProvided": false,
             "reasonsProvided": false

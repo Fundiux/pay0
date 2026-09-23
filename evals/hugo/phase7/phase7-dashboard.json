@@ -118,11 +118,11 @@
       "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     }
   ],
-  "humanReviewStatus": "PARTIAL",
-  "humanReviewsCompleted": 20,
-  "humanReviewsPending": 8,
+  "humanReviewStatus": "COMPLETE",
+  "humanReviewsCompleted": 28,
+  "humanReviewsPending": 0,
   "humanReview": {
-    "completionPercent": 71.4,
+    "completionPercent": 100,
     "phases": {
       "PHASE4": {
         "phase": "PHASE4",
@@ -283,22 +283,22 @@
       "PHASE6": {
         "phase": "PHASE6",
         "evalRunId": "phase6-synthetic-gemini-v1",
-        "reviewedAt": "2026-09-23T01:45:02.540Z",
+        "reviewedAt": "2026-09-23T05:53:38.881Z",
         "totalCases": 10,
-        "reviewed": 2,
+        "reviewed": 10,
         "skipped": 0,
-        "incomplete": 8,
-        "completionPercent": 20,
+        "incomplete": 0,
+        "completionPercent": 100,
         "preferenceCounts": {
           "LEGACY": 0,
           "HUGO_V2": 0,
-          "BEFORE": 0,
-          "AFTER": 2,
+          "BEFORE": 1,
+          "AFTER": 9,
           "EQUIVALENT": 0,
           "BOTH_ACCEPTABLE": 0,
           "BOTH_UNACCEPTABLE": 0
         },
-        "acceptedWithPreference": 2,
+        "acceptedWithPreference": 10,
         "bothAcceptable": 0,
         "bothUnacceptable": 0,
         "equivalent": 0,
@@ -306,16 +306,7 @@
         "notesCaptured": 0,
         "reasonsCaptured": 0,
         "reviewerIdentity": "NOT_CAPTURED_IN_LEGACY_EXPORT",
-        "incompleteCaseIds": [
-          "duplicate-document",
-          "supplier-ack",
-          "amount-mismatch",
-          "bank-rejection",
-          "duplicate-payment",
-          "complement-status",
-          "local-checkpoint-document",
-          "local-checkpoint-bank"
-        ],
+        "incompleteCaseIds": [],
         "decisions": [
           {
             "caseId": "document-review",
@@ -327,6 +318,62 @@
           {
             "caseId": "invoice-mismatch",
             "choice": "B_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "duplicate-document",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "supplier-ack",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "amount-mismatch",
+            "choice": "B_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "bank-rejection",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "duplicate-payment",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "complement-status",
+            "choice": "B_BETTER",
+            "preferredSource": "BEFORE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "local-checkpoint-document",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "local-checkpoint-bank",
+            "choice": "A_BETTER",
             "preferredSource": "AFTER",
             "noteProvided": false,
             "reasonsProvided": false

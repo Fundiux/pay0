@@ -36,7 +36,7 @@ const rows = phase6.families.filter(row => row.classification === 'NO_EFFECT').m
   };
 });
 const report = { schemaVersion: 'hugo-phase7-phase6-reanalysis-v1', historicalArtifactMutated: false, phase6OriginalPreserved: true,
-  semantics: 'APPROPRIATE_EFFECT', humanReviewStatus: 'PARTIAL', humanReviewsCompleted: rows.filter(row => row.humanReview.status === 'REVIEWED').length,
+  semantics: 'APPROPRIATE_EFFECT', humanReviewStatus: rows.every(row => row.humanReview.status === 'REVIEWED') ? 'COMPLETE' : 'PARTIAL', humanReviewsCompleted: rows.filter(row => row.humanReview.status === 'REVIEWED').length,
   humanReviewsPending: rows.filter(row => row.humanReview.status !== 'REVIEWED').length, count: rows.length,
   summary: { appropriateStability: rows.filter(row => row.phase7Reanalysis === 'APPROPRIATE_STABILITY').length,
     missedBeneficialChange: rows.filter(row => row.phase7Reanalysis === 'MISSED_BENEFICIAL_CHANGE').length,

@@ -128,7 +128,7 @@ The Phase 4 `MAX_TOKENS` pattern was reproduced. In compact-context failed attem
 
 - Phase 7 controlled Learning Hardening II evaluation: **COMPLETE**.
 - Model tournament readiness: **NOT_READY**.
-- Human blind review: **PARTIAL (20/28)**. Phase 4 is 18/18: legacy 10, Hugo v2 4, both acceptable 1, both unacceptable 3. Phase 6 is 2/10, with AFTER preferred in both reviewed cases. Legacy exports did not capture reviewer identity or structured reasons.
+- Human blind review: **COMPLETE (28/28)**. Phase 4 is 18/18: legacy 10, Hugo v2 4, both acceptable 1, both unacceptable 3. Phase 6 is 10/10: AFTER 9, BEFORE 1. Legacy exports did not capture reviewer identity or structured reasons.
 - MAX_TOKENS: **UNDERSTOOD_NOT_MITIGATED**; production configuration unchanged.
 - Phase 4 remains **PARTIAL**; Phase 6 historical artifacts and conclusions remain preserved.
-- Recommended Phase 8: **Human Review and Token Reliability Gate**.
+- Recommended Phase 8: **Human Review Diagnosis and Token Reliability Gate**.

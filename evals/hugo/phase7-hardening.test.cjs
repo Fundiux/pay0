@@ -29,15 +29,16 @@ test('human review validation separates reviewed and skipped states', () => {
 });
 
 test('user-provided blind reviews are validated and decoded without inventing provenance', () => {
-  assert.equal(humanReview.validationStatus, 'VALID'); assert.equal(humanReview.reviewed, 20); assert.equal(humanReview.incomplete, 8);
+  assert.equal(humanReview.validationStatus, 'VALID'); assert.equal(humanReview.reviewed, 28); assert.equal(humanReview.incomplete, 0);
   assert.equal(humanReview.phases.PHASE4.reviewed, 18); assert.equal(humanReview.phases.PHASE4.preferenceCounts.LEGACY, 10);
   assert.equal(humanReview.phases.PHASE4.preferenceCounts.HUGO_V2, 4); assert.equal(humanReview.phases.PHASE4.bothAcceptable, 1);
-  assert.equal(humanReview.phases.PHASE4.bothUnacceptable, 3); assert.equal(humanReview.phases.PHASE6.reviewed, 2);
-  assert.equal(humanReview.phases.PHASE6.preferenceCounts.AFTER, 2); assert.equal(humanReview.phases.PHASE6.incomplete, 8);
+  assert.equal(humanReview.phases.PHASE4.bothUnacceptable, 3); assert.equal(humanReview.phases.PHASE6.reviewed, 10);
+  assert.equal(humanReview.phases.PHASE6.preferenceCounts.AFTER, 9); assert.equal(humanReview.phases.PHASE6.preferenceCounts.BEFORE, 1);
+  assert.equal(humanReview.phases.PHASE6.incomplete, 0); assert.equal(humanReview.sourceArtifacts.length, 3);
   assert.equal(humanReview.phases.PHASE4.reasonsCaptured, 0); assert.equal(humanReview.phases.PHASE6.reviewerIdentity, 'NOT_CAPTURED_IN_LEGACY_EXPORT');
-  assert.equal(analysis.humanReviewsCompleted, 20); assert.equal(analysis.humanReviewsPending, 8);
+  assert.equal(analysis.humanReviewsCompleted, 28); assert.equal(analysis.humanReviewsPending, 0);
   assert.ok(analysis.domains.every(row => row.humanReviewStatus === 'NOT_REVIEWED_DIRECTLY'));
-  assert.equal(reanalysis.humanReviewsCompleted, 2); assert.equal(reanalysis.humanReviewsPending, 5);
+  assert.equal(reanalysis.humanReviewsCompleted, 7); assert.equal(reanalysis.humanReviewsPending, 0);
 });
 
 test('declared evidence aliases resolve context positions without accepting unknown aliases', () => {
