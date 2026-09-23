@@ -1,0 +1,55 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { getClientCommissionRule, saveClientCommissionRule, type CommissionRuleLeg } from "@/services/commissions";
+import { watchClientBeneficiaries, watchClientBeneficiaryMethods, type ClientBeneficiaryRow, type ClientBeneficiaryMethodRow } from "@/services/beneficiaries";
+
+const emptyLeg = (kind: "BASE" | "COMMISSIONER" = "COMMISSIONER"): CommissionRuleLeg => ({ kind, alias: kind === "BASE" ? "BASE" : "", rateBps: 0, beneficiaryId: "", methodId: "", active: true });
+
+export default function ClientCommissionRulePanel({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+  const [totalRate, setTotalRate] = useState("0");
+  const [legs, setLegs] = useState<CommissionRuleLeg[]>([emptyLeg("BASE")]);
+  const [active, setActive] = useState(false);
+  const [automationEnabled, setAutomationEnabled] = useState(false);
+  const [beneficiaries, setBeneficiaries] = useState<ClientBeneficiaryRow[]>([]);
+  const [methods, setMethods] = useState<ClientBeneficiaryMethodRow[]>([]);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getClientCommissionRule(clientId).then(({ rule }) => {
+      if (!rule) return;
+      setTotalRate((rule.totalRateBps / 100).toFixed(2)); setLegs(rule.legs); setActive(rule.active); setAutomationEnabled(rule.automationEnabled);
+    }).catch((error) => setMessage(error?.message || "No se pudo cargar la regla."));
+    const stopA = watchClientBeneficiaries(clientId, setBeneficiaries, (error) => setMessage(error.message));
+    const stopB = watchClientBeneficiaryMethods(clientId, setMethods, (error) => setMessage(error.message));
+    return () => { stopA(); stopB(); };
+  }, [clientId]);
+
+  const assignedBps = useMemo(() => legs.reduce((sum, leg) => sum + Number(leg.rateBps || 0), 0), [legs]);
+  const totalBps = Math.round(Number(totalRate || 0) * 100);
+  const updateLeg = (index: number, patch: Partial<CommissionRuleLeg>) => setLegs((current) => current.map((leg, i) => i === index ? { ...leg, ...patch } : leg));
+  async function save() {
+    setSaving(true); setMessage("");
+    try {
+      const result = await saveClientCommissionRule({ clientId, totalRateBps: totalBps, legs: legs.map((leg, order) => ({ ...leg, order })), active, automationEnabled });
+      setMessage(`Regla v${result.version} guardada.`);
+    } catch (error: any) { setMessage(error?.message || "No se pudo guardar la regla."); }
+    finally { setSaving(false); }
+  }
+
+  return <section className="mt-6 rounded-2xl border border-orange-400/20 bg-orange-500/[0.04] p-4">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-sm font-semibold text-orange-100">Distribución de comisión</h3><p className="mt-1 text-xs text-slate-400">Regla versionada por cliente. La automatización permanece bloqueada si el instrumento no está verificado en IQ.</p></div><label className="text-xs text-slate-300">Comisión total %<input disabled={!canEdit} value={totalRate} onChange={(e) => setTotalRate(e.target.value)} type="number" step="0.01" className="ml-2 w-24 rounded-lg border border-white/10 bg-slate-950 px-2 py-1" /></label></div>
+    <div className="mt-4 space-y-2">{legs.map((leg, index) => <div key={index} className="grid gap-2 rounded-xl border border-white/10 bg-black/10 p-3 md:grid-cols-[110px_1fr_110px_1fr_1fr_auto]">
+      <select disabled={!canEdit || leg.kind === "BASE"} value={leg.kind} onChange={(e) => updateLeg(index, { kind: e.target.value as any })} className="rounded-lg bg-slate-950 px-2 py-2 text-sm"><option value="BASE">Base</option><option value="COMMISSIONER">Comisionista</option></select>
+      <input disabled={!canEdit} value={leg.alias} onChange={(e) => updateLeg(index, { alias: e.target.value })} placeholder="Alias" className="rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-sm" />
+      <input disabled={!canEdit} value={leg.rateBps / 100 || ""} onChange={(e) => updateLeg(index, { rateBps: Math.round(Number(e.target.value || 0) * 100) })} type="number" step="0.01" placeholder="%" className="rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-sm" />
+      <select disabled={!canEdit} value={leg.beneficiaryId} onChange={(e) => updateLeg(index, { beneficiaryId: e.target.value, methodId: "" })} className="rounded-lg bg-slate-950 px-2 py-2 text-sm"><option value="">Beneficiario</option>{beneficiaries.filter((row) => row.active !== false).map((row) => <option key={row.id} value={row.id}>{row.nombre}</option>)}</select>
+      <select disabled={!canEdit || !leg.beneficiaryId} value={leg.methodId} onChange={(e) => updateLeg(index, { methodId: e.target.value })} className="rounded-lg bg-slate-950 px-2 py-2 text-sm"><option value="">Instrumento</option>{methods.filter((row) => row.active !== false && row.beneficiaryId === leg.beneficiaryId).map((row) => <option key={row.id} value={row.id}>{row.bankName} · {row.masked} · IQ {row.iqLinkStatus || 'PENDIENTE'}</option>)}</select>
+      {leg.kind !== "BASE" && canEdit ? <button onClick={() => setLegs((rows) => rows.filter((_, i) => i !== index))} className="text-xs text-rose-300">Quitar</button> : <span />}
+    </div>)}</div>
+    <div className={`mt-3 text-sm ${assignedBps === totalBps ? "text-emerald-300" : "text-amber-300"}`}>Asignado {(assignedBps / 100).toFixed(2)}% · Disponible {((totalBps - assignedBps) / 100).toFixed(2)}%</div>
+    {canEdit && <div className="mt-4 flex flex-wrap items-center gap-3"><button onClick={() => setLegs((rows) => [...rows, emptyLeg()])} className="rounded-lg border border-white/10 px-3 py-2 text-sm">Agregar destino</button><label className="text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="mr-2" />Regla activa</label><label className="text-sm"><input type="checkbox" checked={automationEnabled} onChange={(e) => setAutomationEnabled(e.target.checked)} className="mr-2" />Automatización activa</label><button disabled={saving || assignedBps !== totalBps} onClick={save} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{saving ? "Guardando…" : "Guardar regla"}</button></div>}
+    {message && <p className="mt-3 text-sm text-slate-300">{message}</p>}
+  </section>;
+}

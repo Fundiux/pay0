@@ -59,7 +59,8 @@
     "demo:cotizacion": "node scripts/render-cotizacion-demo.mjs",
     "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs",
     "qa:audit-security": "node qa/scripts/audit-security-regression.mjs",
-    "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1"
+    "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1",
+    "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

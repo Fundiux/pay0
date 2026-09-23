@@ -14,6 +14,7 @@ import {
   saveWhatsAppDeliveryRoute,
 } from "@/services/whatsappQr";
 import ClientEntityDocumentsPanel from "@/components/ClientEntityDocumentsPanel";
+import ClientCommissionRulePanel from "@/components/ClientCommissionRulePanel";
 
 type DetailTab = "resumen" | "expediente" | "papeleria" | "kyc";
 
@@ -384,6 +385,11 @@ export default function ClienteDetallePage() {
             Vista base del cliente. Desde aqui se centralizara el expediente fiscal-operativo,
             contratos, KYC, operaciones y documentos relacionados.
           </p>
+
+          <ClientCommissionRulePanel
+            clientId={client.id}
+            canEdit={["superadmin", "admin"].includes(normalizeRole((profile as any)?.role))}
+          />
 
           {canManageWhatsappRoute && (
             <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.05] p-4">
