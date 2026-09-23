@@ -1,34 +1,95 @@
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from "@firebase/rules-unit-testing";
 import { collection, doc, getDocs, query, setDoc, where } from "firebase/firestore";
 
 const env = await initializeTestEnvironment({
-  projectId: "pay0-solicitud-documents-read",
+  projectId: process.env.GCLOUD_PROJECT || "pay0-system",
   firestore: { rules: fs.readFileSync(path.join(process.cwd(), "firestore.rules"), "utf8") },
 });
 
+const scopedSolicitudDocuments = (db, rootId, solicitudId) => getDocs(query(
+  collection(db, "uploads"),
+  where("rootId", "==", rootId),
+  where("solicitudId", "==", solicitudId),
+));
+
 try {
+  await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
-    await setDoc(doc(db, "users", "betell"), { role: "admin", rootId: "rootA" });
-    await setDoc(doc(db, "uploads", "mine"), {
-      rootId: "rootA", solicitudId: "solA", entityType: "solicitudes", createdBy: "otherUser",
+    for (const [uid, role, rootId] of [
+      ["superA", "superadmin", "rootA"],
+      ["adminA", "admin", "rootA"],
+      ["operatorA", "operador", "rootA"],
+      ["adminB", "admin", "rootB"],
+    ]) {
+      await setDoc(doc(db, "users", uid), { role, rootId, isActive: true, active: true });
+    }
+    await setDoc(doc(db, "users", "inactiveA"), {
+      role: "admin", rootId: "rootA", isActive: false, active: false,
     });
-    await setDoc(doc(db, "uploads", "other"), {
-      rootId: "rootB", solicitudId: "solB", entityType: "solicitudes", createdBy: "otherUser",
+
+    for (const [id, documentType] of [
+      ["solA-pdf", "FACTURA_PDF"],
+      ["solA-xml", "FACTURA_XML"],
+      ["solA-oc", "ORDEN_COMPRA"],
+      ["solA-quotation", "COTIZACION"],
+    ]) {
+      await setDoc(doc(db, "uploads", id), {
+        rootId: "rootA",
+        solicitudId: "solA",
+        entityType: "solicitudes",
+        documentType,
+        active: true,
+        status: "READY",
+      });
+    }
+    await setDoc(doc(db, "uploads", "solB-pdf"), {
+      rootId: "rootB",
+      solicitudId: "solB",
+      entityType: "solicitudes",
+      documentType: "FACTURA_PDF",
+      active: true,
+      status: "READY",
     });
   });
 
-  const uploads = collection(env.authenticatedContext("betell").firestore(), "uploads");
-  const mine = await assertSucceeds(getDocs(query(
-    uploads, where("rootId", "==", "rootA"), where("solicitudId", "==", "solA"),
-  )));
-  if (mine.size !== 1) throw new Error("La solicitud propia debe devolver un documento.");
+  for (const uid of ["superA", "adminA", "operatorA"]) {
+    const db = env.authenticatedContext(uid).firestore();
+    const result = await assertSucceeds(scopedSolicitudDocuments(db, "rootA", "solA"));
+    assert.equal(result.size, 4, `${uid} debe ver los cuatro documentos de la solicitud`);
+  }
 
-  await assertFails(getDocs(query(uploads, where("solicitudId", "==", "solA"))));
-  await assertFails(getDocs(query(uploads, where("rootId", "==", "rootB"))));
-  console.log("PASS lectura de documentos de solicitud acotada por rootId");
+  for (const uid of ["adminA", "operatorA"]) {
+    const db = env.authenticatedContext(uid).firestore();
+    await assertFails(getDocs(query(
+      collection(db, "uploads"),
+      where("solicitudId", "==", "solA"),
+    )));
+    await assertFails(scopedSolicitudDocuments(db, "rootB", "solB"));
+  }
+
+  const superDb = env.authenticatedContext("superA").firestore();
+  const globalForSuper = await assertSucceeds(getDocs(query(
+    collection(superDb, "uploads"),
+    where("solicitudId", "==", "solA"),
+  )));
+  assert.equal(globalForSuper.size, 4);
+
+  await assertFails(scopedSolicitudDocuments(
+    env.authenticatedContext("inactiveA").firestore(),
+    "rootA",
+    "solA",
+  ));
+  await assertFails(scopedSolicitudDocuments(env.unauthenticatedContext().firestore(), "rootA", "solA"));
+
+  console.log("PASS documentos de solicitud: superadmin, admin y operador con aislamiento por rootId");
 } finally {
   await env.cleanup();
 }

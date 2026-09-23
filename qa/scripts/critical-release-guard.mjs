@@ -25,6 +25,11 @@ requireText(
   "Los documentos de pagos se consultan dentro del root autorizado",
 );
 requireText(
+  "src/components/DispersionDocsModal.tsx",
+  'where("rootId", "==", dispersionRootId)',
+  "Los documentos de dispersiones se consultan dentro del root autorizado",
+);
+requireText(
   "src/components/DocsModal.tsx",
   '["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"]',
   "La solicitud conserva comprobantes y complementos relacionados",
@@ -53,6 +58,16 @@ requireText(
   "src/components/DocsModal.tsx",
   "No se pudieron cargar los documentos de esta solicitud.",
   "La interfaz muestra los errores de lectura y no los confunde con cero documentos",
+);
+requireText(
+  "src/components/PagoDocsModal.tsx",
+  "No se pudieron cargar documentos del pago.",
+  "Pagos muestra los errores de lectura y no los confunde con cero documentos",
+);
+requireText(
+  "src/components/DispersionDocsModal.tsx",
+  "No se pudieron cargar los documentos de esta dispersion.",
+  "Dispersiones muestra los errores de lectura y no los confunde con cero documentos",
 );
 requireText(
   "src/app/integraciones/iq/page.tsx",

@@ -5,7 +5,7 @@
                       "predeploy":  [
                                         "npm --prefix functions run build",
                                         "node qa/scripts/verify-client-csf-parser.cjs",
-                                        "npm run qa:release-guard"
+                                        "npm run qa:document-access"
                                     ]
                   },
     "firestore":  {
@@ -41,7 +41,7 @@
                   },
     "hosting":  {
                     "predeploy":  [
-                                       "npm run qa:release-guard"
+                                       "npm run qa:document-access"
                                    ],
                     "ignore":  [
                                    "firebase.json",
