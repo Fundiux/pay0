@@ -14,6 +14,7 @@ import { CirclePlus, Pencil, Power, PowerOff,
 import Modal from "@/components/Modal";
 import { useGlobalLoading } from "@/components/GlobalLoading";
 import UiSelect from "@/components/UiSelect";
+import WalletNavigation from "@/components/WalletNavigation";
 import {
   addClientBeneficiaryMethod,
   createClientBeneficiary,
@@ -1925,6 +1926,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
           ) : null}
         </div>
       </div>
+      <WalletNavigation />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { normalizeRole } from "@/lib/roles";
+import WalletNavigation from "@/components/WalletNavigation";
 
 type BalanceAccount = {
   id: string;
@@ -171,8 +172,8 @@ export default function WalletClientesPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] min-w-0 pb-10">
-      <header className="py-8">
+    <div className="mx-auto w-full min-w-0 pb-24">
+      <header className="py-3">
         <div>
           <h1 className="text-2xl font-bold text-white uppercase tracking-widest">
             Wallet / Clientes
@@ -180,14 +181,11 @@ export default function WalletClientesPage() {
           <p className="text-slate-500 text-[10px] font-bold uppercase mt-1">
             {scope.subtitle}
           </p>
-          <p className="text-slate-600 text-[10px] font-bold uppercase mt-2">
-            Fuente visible: balanceAccounts / CLIENT + clientAdvances.pendingAmount
-          </p>
         </div>
       </header>
 
-      <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-4 2xl:gap-6">
-        <div className="relative min-w-0 overflow-hidden rounded-[2rem] border-2 border-sky-500/20 bg-[#161d2b] p-5 shadow-2xl sm:p-6 xl:col-span-2 2xl:rounded-[2.5rem] 2xl:p-8">
+      <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="relative min-w-0 overflow-hidden rounded-2xl border border-sky-500/20 bg-[#161d2b] p-4">
           <div className="absolute top-0 right-0 p-8 opacity-5 text-sky-400">
             <WalletIcon size={120} />
           </div>
@@ -200,7 +198,7 @@ export default function WalletClientesPage() {
               </span>
             </div>
 
-            <div className="max-w-full break-words font-mono text-4xl font-black tracking-tighter text-white sm:text-5xl 2xl:text-7xl">
+            <div className="max-w-full break-words font-mono text-3xl font-black tracking-tighter text-white">
               {formatMoney(totalSaldoDisponible)}
             </div>
 
@@ -210,7 +208,7 @@ export default function WalletClientesPage() {
           </div>
         </div>
 
-        <div className="min-w-0 rounded-[2rem] border-2 border-white/5 bg-[#161d2b] p-5 shadow-2xl sm:p-6">
+        <div className="min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] p-4">
           <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">
             Adelanto pendiente visible
           </div>
@@ -222,7 +220,7 @@ export default function WalletClientesPage() {
           </div>
         </div>
 
-        <div className="min-w-0 rounded-[2rem] border-2 border-white/5 bg-[#161d2b] p-5 shadow-2xl sm:p-6">
+        <div className="min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] p-4">
           <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">
             Saldo neto visible
           </div>
@@ -336,6 +334,7 @@ export default function WalletClientesPage() {
           </table>
         </div>
       </div>
+      <WalletNavigation />
     </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import { formatDateTime24 } from "@/lib/dateTime";
 
-import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -17,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { normalizeRole } from "@/lib/roles";
+import WalletNavigation from "@/components/WalletNavigation";
 
 type WalletMovement = {
   id: string;
@@ -170,8 +170,8 @@ export default function WalletEstadoCuentaUsuarioPage() {
   }
 
   return (
-    <div className="w-[95%] mx-auto pb-10">
-      <header className="py-8">
+    <div className="mx-auto w-full min-w-0 pb-24">
+      <header className="py-3">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-white uppercase tracking-widest">
@@ -180,22 +180,12 @@ export default function WalletEstadoCuentaUsuarioPage() {
             <p className="text-slate-500 text-[10px] font-bold uppercase mt-1">
               {scope.subtitle}
             </p>
-            <p className="text-slate-600 text-[10px] font-bold uppercase mt-2">
-              Fuente canonica: balanceAccounts + balanceMovements / USER
-            </p>
           </div>
-
-          <Link
-            href="/wallet"
-            className="px-4 py-2 rounded-2xl border border-white/10 text-xs font-bold uppercase tracking-widest text-slate-300 hover:bg-white/5 transition-colors"
-          >
-            Volver a wallet general
-          </Link>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-[#161d2b] p-10 rounded-[2.5rem] border-2 border-sky-500/20 shadow-2xl relative overflow-hidden md:col-span-2">
+      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-[#161d2b] p-4 md:col-span-2">
           <div className="absolute top-0 right-0 p-8 opacity-5 text-sky-400">
             <WalletIcon size={140} />
           </div>
@@ -208,11 +198,11 @@ export default function WalletEstadoCuentaUsuarioPage() {
               </span>
             </div>
 
-            <div className="text-6xl md:text-7xl font-black text-white font-mono tracking-tighter">
+            <div className="font-mono text-3xl font-black tracking-tighter text-white md:text-4xl">
               {formatMoney(totalBalance)}
             </div>
 
-            <div className="flex items-center gap-2 mt-6 text-slate-400">
+            <div className="mt-2 flex items-center gap-2 text-slate-400">
               <span className="text-[10px] font-bold uppercase">
                 Cuentas usuario visibles: {accountsCount}
               </span>
@@ -220,16 +210,14 @@ export default function WalletEstadoCuentaUsuarioPage() {
           </div>
         </div>
 
-        <div className="bg-[#161d2b] p-6 rounded-[2rem] border-2 border-white/5 shadow-2xl">
+        <div className="rounded-2xl border border-white/5 bg-[#161d2b] p-4">
           <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">
             Movimientos cargados
           </div>
-          <div className="text-4xl font-black text-white font-mono">
+          <div className="font-mono text-3xl font-black text-white">
             {movements.length}
           </div>
-          <div className="mt-4 text-[10px] uppercase font-bold text-slate-500">
-            Solo holderType USER
-          </div>
+          <div className="mt-2 text-[10px] font-bold uppercase text-slate-500">Historial visible</div>
         </div>
       </div>
 
@@ -345,6 +333,7 @@ export default function WalletEstadoCuentaUsuarioPage() {
           </table>
         </div>
       </div>
+      <WalletNavigation />
     </div>
   );
 }

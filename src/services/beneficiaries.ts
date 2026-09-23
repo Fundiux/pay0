@@ -1,8 +1,19 @@
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "@/lib/firebase";
 
 const functions = getFunctions();
+
+function createdAtMillis(value: any) {
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function sortBeneficiaryRowsNewestFirst<T extends { id: string; createdAt?: any }>(rows: T[]) {
+  return [...rows].sort((a, b) => createdAtMillis(b.createdAt) - createdAtMillis(a.createdAt) || a.id.localeCompare(b.id));
+}
 
 export type BeneficiaryTipo = "DEBITO" | "TDC" | "AMEX" | "OTRO" | "EFECTIVO";
 export type DestinationKind = "CLABE" | "TARJETA" | "EFECTIVO";
@@ -177,8 +188,7 @@ export function watchClientBeneficiaries(
 ) {
   const q = query(
     collection(db, "clientBeneficiaries"),
-    where("clientId", "==", clientId),
-    orderBy("createdAt", "desc")
+    where("clientId", "==", clientId)
   );
 
   return onSnapshot(
@@ -188,7 +198,7 @@ export function watchClientBeneficiaries(
         id: doc.id,
         ...(doc.data() as Omit<ClientBeneficiaryRow, "id">),
       }));
-      onData(rows);
+      onData(sortBeneficiaryRowsNewestFirst(rows));
     },
     (error) => {
       if (onError) onError(error);
@@ -203,8 +213,7 @@ export function watchClientBeneficiaryMethods(
 ) {
   const q = query(
     collection(db, "clientBeneficiaryMethods"),
-    where("clientId", "==", clientId),
-    orderBy("createdAt", "desc")
+    where("clientId", "==", clientId)
   );
 
   return onSnapshot(
@@ -214,7 +223,7 @@ export function watchClientBeneficiaryMethods(
         id: doc.id,
         ...(doc.data() as Omit<ClientBeneficiaryMethodRow, "id">),
       }));
-      onData(rows);
+      onData(sortBeneficiaryRowsNewestFirst(rows));
     },
     (error) => {
       if (onError) onError(error);

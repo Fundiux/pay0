@@ -111,6 +111,13 @@ export default function DespachosPage() {
     setOpen(true);
   }
 
+  useEffect(() => {
+    if (!isSuperadmin) return;
+    const handleCreate = () => openCreate();
+    window.addEventListener("pay0:create-despacho", handleCreate);
+    return () => window.removeEventListener("pay0:create-despacho", handleCreate);
+  }, [isSuperadmin]);
+
   function openEdit(it: DespachoRow) {
     setEditing(it);
     setNombre(it.nombre || "");
@@ -155,23 +162,15 @@ export default function DespachosPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-slate-100 text-xl font-semibold">Despachos</div>
         </div>
 
-        {isSuperadmin && (
-          <button
-            onClick={openCreate}
-            className="rounded-2xl px-4 py-2.5 font-semibold border bg-sky-500/20 border-sky-400/30 text-sky-100 hover:bg-sky-500/25"
-          >
-            Nuevo despacho
-          </button>
-        )}
       </div>
 
-      <div className="pay0-table-card mt-6">
+      <div className="pay0-table-card mt-3">
         <div className="grid grid-cols-12 gap-2 border-b border-white/10 bg-white/5 px-3 py-2 text-[12px] font-normal uppercase tracking-widest text-slate-500">
           <div className="col-span-6">Nombre</div>
           <div className="col-span-2">Estatus</div>

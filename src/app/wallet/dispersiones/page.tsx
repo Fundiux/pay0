@@ -45,6 +45,7 @@ import { Ban,
 import DispersionDocsModal from "@/components/DispersionDocsModal";
 import Modal from "@/components/Modal";
 import UiSelect from "@/components/UiSelect";
+import WalletNavigation from "@/components/WalletNavigation";
 import DateScopeBar from "@/components/DateScopeBar";
 import {
   type CustomRange,
@@ -3173,6 +3174,7 @@ export default function WalletDispersionesPage() {
         dispersion={docsFor}
         onClose={() => setDocsFor(null)}
       />
+      <WalletNavigation />
 
     </div>
   );

@@ -257,6 +257,13 @@ export default function ClientesPage() {
     setOpen(true);
   }
 
+  useEffect(() => {
+    if (!canCreateClientes) return;
+    const handleCreate = () => openCreate();
+    window.addEventListener("pay0:create-client", handleCreate);
+    return () => window.removeEventListener("pay0:create-client", handleCreate);
+  }, [canCreateClientes]);
+
   function openEdit(it: ClientRow) {
     if (!canEditClientes) return;
     setEditing(it);
@@ -591,7 +598,7 @@ export default function ClientesPage() {
 
   return (
     <div
-      className="relative w-full min-w-0 p-6 text-white font-normal"
+      className="relative w-full min-w-0 p-3 text-white font-normal sm:p-4"
       onDragEnter={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -656,7 +663,7 @@ export default function ClientesPage() {
           </div>
         </div>
       ) : null}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 py-1">
         <div>
           <div className="text-slate-100 text-xl font-semibold">Clientes</div>
         </div>
@@ -670,18 +677,10 @@ export default function ClientesPage() {
             {isRepairing ? "Actualizando..." : "Reparar C00"}
           </button>
 
-          {canCreateClientes && (
-            <button
-              onClick={openCreate}
-              className="rounded-2xl px-4 py-2.5 font-semibold border bg-sky-500/20 border-sky-400/30 text-sky-100 hover:bg-sky-500/25 transition-all"
-            >
-              Nuevo cliente
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="pay0-table-card mt-6">
+      <div className="pay0-table-card mt-3">
         <div className="grid grid-cols-12 gap-2 border-b border-white/10 bg-white/5 px-3 py-2 text-[12px] font-normal uppercase tracking-widest text-slate-500">
           <div className="col-span-1 cursor-pointer flex items-center gap-1 hover:text-sky-400 transition-colors" onClick={() => requestSort("numeroCliente")}>
             ID <SortIcon column="numeroCliente" />
@@ -1005,6 +1004,5 @@ export default function ClientesPage() {
     </div>
   );
 }
-
 
 

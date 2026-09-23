@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 
@@ -89,6 +88,7 @@ export default function CatalogoTiposOperacionPage() {
     useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
 
   useEffect(() => {
     if (!canView) return;
@@ -251,6 +251,7 @@ export default function CatalogoTiposOperacionPage() {
       setNameValue("");
       setBaseType("TOTAL");
       setPricingMode("PERCENT");
+      setFormOpen(false);
     } catch (err: any) {
       setError(err?.message || "No se pudo crear el tipo.");
     } finally {
@@ -259,25 +260,17 @@ export default function CatalogoTiposOperacionPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#020b1d] text-white p-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex items-center justify-between gap-4">
+    <main className="min-h-screen bg-[#020b1d] p-3 text-white sm:p-4">
+      <div className="mx-auto w-full">
+        <div className="mb-3 flex items-center justify-between gap-4">
           <div>
             <div className="text-[11px] uppercase tracking-[0.2em] text-cyan-400/80">
               Catalogos / Tipos de operacion
             </div>
-            <h1 className="text-2xl font-semibold">Tipos de operacion</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Un solo catalogo tecnico con dos grupos logicos: Operacion y Dispersion.
-            </p>
+            <h1 className="text-lg font-semibold">Tipos de operacion</h1>
           </div>
 
-          <Link
-            href="/despachos"
-            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-200 hover:bg-white/[0.06]"
-          >
-            Ir a Despachos
-          </Link>
+          <button type="button" onClick={() => setFormOpen((value) => !value)} aria-expanded={formOpen} className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20">{formOpen ? "Cerrar alta" : "+ Nuevo tipo"}</button>
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -322,8 +315,8 @@ export default function CatalogoTiposOperacionPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <form onSubmit={onCreate} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="space-y-4">
+          {formOpen ? <form onSubmit={onCreate} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <div className="mb-4 text-sm font-semibold">
               Alta de tipo de {activeCategory === "OPERACION" ? "operacion" : "dispersion"}
             </div>
@@ -391,7 +384,7 @@ export default function CatalogoTiposOperacionPage() {
                 {saving ? "Guardando..." : activeCategory === "OPERACION" ? "Crear tipo de operacion" : "Crear tipo de dispersion"}
               </button>
             </div>
-          </form>
+          </form> : null}
 
           <section className="pay0-table-card">
             <div className="pay0-table-header">
@@ -438,7 +431,6 @@ export default function CatalogoTiposOperacionPage() {
     </main>
   );
 }
-
 
 
 
