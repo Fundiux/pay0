@@ -1,7 +1,12 @@
 {
     "functions":  {
                       "source":  "functions",
-                      "runtime":  "nodejs22"
+                      "runtime":  "nodejs22",
+                      "predeploy":  [
+                                        "npm --prefix functions run build",
+                                        "node qa/scripts/verify-client-csf-parser.cjs",
+                                        "npm run qa:release-guard"
+                                    ]
                   },
     "firestore":  {
                       "rules":  "firestore.rules",

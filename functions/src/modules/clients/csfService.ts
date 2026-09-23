@@ -117,6 +117,33 @@ function satAsciiRfc(source: string): string {
   return clean(anyMatch?.[1] || "").toUpperCase();
 }
 
+function coverTaxpayerName(source: string, rfc: string): string {
+  const lines = String(source || "")
+    .split("\n")
+    .map((line) => clean(normalizeSatAscii(line)))
+    .filter(Boolean);
+  const start = lines.findIndex((line) =>
+    /REGISTRO FEDERAL DE CONTRIBUYENTES/i.test(line),
+  );
+  if (start < 0) return "";
+
+  const candidates: string[] = [];
+  for (let index = start + 1; index < lines.length && index <= start + 5; index += 1) {
+    const line = lines[index];
+    const headingIndex = line.search(/NOMBRE,?\s*DENOMINACION\s*O\s*RAZON(?:\s*SOCIAL)?/i);
+    if (headingIndex >= 0) {
+      const prefix = clean(line.slice(0, headingIndex));
+      if (prefix && prefix.toUpperCase() !== rfc.toUpperCase()) candidates.push(prefix);
+      break;
+    }
+    if (/^(RFC|IDCIF)\s*:/i.test(line)) break;
+    if (line.toUpperCase() === rfc.toUpperCase()) continue;
+    candidates.push(line);
+  }
+
+  return clean(candidates.join(" "));
+}
+
 function monthNumber(name: string): number | null {
   const map: Record<string,number> = {
     ENERO:1,FEBRERO:2,MARZO:3,ABRIL:4,MAYO:5,JUNIO:6,
@@ -185,7 +212,7 @@ export function parseClientCsfText(rawText: string): ClientCsfParsed {
 
   const rfc = satAsciiRfc(text);
 
-  const razonSocial =
+  const detailedLegalName =
     satAsciiField(
       text,
       /DENOMINACION\s*\/\s*RAZON\s*SOCIAL\s*:\s*/i,
@@ -202,6 +229,32 @@ export function parseClientCsfText(rawText: string): ClientCsfParsed {
         /VALIDA\s*TU\s*INFORMACION/i,
       ],
     );
+
+  const personFirstNames = satAsciiField(
+    text,
+    /NOMBRE\s*\(\s*S\s*\)\s*:\s*/i,
+    [/PRIMER\s*APELLIDO\s*:\s*/i],
+  );
+  const personFirstSurname = satAsciiField(
+    text,
+    /PRIMER\s*APELLIDO\s*:\s*/i,
+    [/SEGUNDO\s*APELLIDO\s*:\s*/i],
+  );
+  const personSecondSurname = satAsciiField(
+    text,
+    /SEGUNDO\s*APELLIDO\s*:\s*/i,
+    [
+      /FECHA\s*INICIO\s*DE\s*OPERACIONES\s*:\s*/i,
+      /ESTATUS\s*EN\s*EL\s*PADRON\s*:\s*/i,
+    ],
+  );
+  const personName = clean(
+    [personFirstNames, personFirstSurname, personSecondSurname]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const coverName = coverTaxpayerName(text, rfc);
+  const razonSocial = personName || coverName || detailedLegalName;
 
   const regimenCapital = satAsciiField(
     text,

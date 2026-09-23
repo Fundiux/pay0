@@ -473,12 +473,14 @@ export default function WalletDispersionesPage() {
 
     const offBeneficiaries = watchClientBeneficiaries(
       clientId,
+      rootId,
       (nextRows) => setBeneficiaries(nextRows as BeneficiaryRow[]),
       (e) => setError(e.message || "No se pudieron cargar los beneficiarios.")
     );
 
     const offMethods = watchClientBeneficiaryMethods(
       clientId,
+      rootId,
       (nextRows) => setMethods(nextRows as MethodRow[]),
       (e) => setError(e.message || "No se pudieron cargar los metodos.")
     );
@@ -487,7 +489,7 @@ export default function WalletDispersionesPage() {
       offBeneficiaries();
       offMethods();
     };
-  }, [clientId]);
+  }, [clientId, rootId]);
 
   useEffect(() => {
     let cancelled = false;

@@ -148,6 +148,7 @@ export default function ClientesPage() {
   const [toggleBusyId, setToggleBusyId] = useState<string>("");
   const [iqBusyId, setIqBusyId] = useState<string>("");
   const [pageMsg, setPageMsg] = useState("");
+  const [clientsRefreshKey, setClientsRefreshKey] = useState(0);
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     message: string;
@@ -176,7 +177,7 @@ export default function ClientesPage() {
       (rows) => setItems(rows as ClientRow[]),
       (e) => console.warn("[clients] scoped snapshot:", (e as any)?.code || (e as any)?.message || e)
     );
-  }, [effectiveRootId, uid, role, canViewClientes]);
+  }, [effectiveRootId, uid, role, canViewClientes, clientsRefreshKey]);
 
   const sortedItems = useMemo(() => {
     let sortableItems = [...items];
@@ -432,6 +433,7 @@ export default function ClientesPage() {
       resetCsfState();
       setOpen(false);
       setEditing(null);
+      setClientsRefreshKey((value) => value + 1);
     } catch (e: any) {
       setErr(e?.message || "Error al guardar cliente.");
     } finally {
@@ -450,6 +452,7 @@ export default function ClientesPage() {
         result?.message ||
         "Sincronizacion IQ terminada.",
       );
+      setClientsRefreshKey((value) => value + 1);
     }catch(e:any){
       setPageMsg(
         e?.message ||

@@ -1,4 +1,4 @@
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "@/lib/firebase";
 
@@ -172,22 +172,25 @@ export async function toggleClientBeneficiaryMethodActive(input: { methodId: str
 
 export function watchClientBeneficiaries(
   clientId: string,
+  rootId: string,
   onData: (rows: ClientBeneficiaryRow[]) => void,
   onError?: (error: Error) => void
 ) {
   const q = query(
     collection(db, "clientBeneficiaries"),
+    where("rootId", "==", rootId),
     where("clientId", "==", clientId),
-    orderBy("createdAt", "desc")
   );
 
   return onSnapshot(
     q,
     (snap) => {
-      const rows: ClientBeneficiaryRow[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<ClientBeneficiaryRow, "id">),
-      }));
+      const rows: ClientBeneficiaryRow[] = snap.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<ClientBeneficiaryRow, "id">),
+        }))
+        .sort((a, b) => Number((b.createdAt as any)?.seconds || 0) - Number((a.createdAt as any)?.seconds || 0));
       onData(rows);
     },
     (error) => {
@@ -198,22 +201,25 @@ export function watchClientBeneficiaries(
 
 export function watchClientBeneficiaryMethods(
   clientId: string,
+  rootId: string,
   onData: (rows: ClientBeneficiaryMethodRow[]) => void,
   onError?: (error: Error) => void
 ) {
   const q = query(
     collection(db, "clientBeneficiaryMethods"),
+    where("rootId", "==", rootId),
     where("clientId", "==", clientId),
-    orderBy("createdAt", "desc")
   );
 
   return onSnapshot(
     q,
     (snap) => {
-      const rows: ClientBeneficiaryMethodRow[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<ClientBeneficiaryMethodRow, "id">),
-      }));
+      const rows: ClientBeneficiaryMethodRow[] = snap.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<ClientBeneficiaryMethodRow, "id">),
+        }))
+        .sort((a, b) => Number((b.createdAt as any)?.seconds || 0) - Number((a.createdAt as any)?.seconds || 0));
       onData(rows);
     },
     (error) => {

@@ -82,7 +82,6 @@ export default function PagoDocsModal(props: {
   const { profile } = useUserProfile();
   const globalLoading = useGlobalLoading();
   const iqRole = normalizeRole((profile as any)?.role);
-  const isIqSuperAdmin = iqRole === "superadmin";
   const { modules: iqModules } = useModuleAccess(profile, "pagos", "view");
   const isIqOperationalRole = ["superadmin", "admin", "operador"].includes(iqRole);
   const canCreateIqPago = isIqOperationalRole && !!iqModules?.pagos?.create;
@@ -101,11 +100,14 @@ export default function PagoDocsModal(props: {
   const [dragActive, setDragActive] = useState(false);
   const [livePago, setLivePago] = useState<any | null>(null);
   const [correctedAmount, setCorrectedAmount] = useState("");
+  const [correctedPayerName, setCorrectedPayerName] = useState("");
+  const [correctedBeneficiaryName, setCorrectedBeneficiaryName] = useState("");
   const [amountReason, setAmountReason] = useState("");
   const [amountBusy, setAmountBusy] = useState(false);
 
   const pagoId = String(pago?.id || pago?.pagoId || "").trim();
   const currentPago = livePago || pago;
+  const pagoRootId = String(currentPago?.rootId || pago?.rootId || (profile as any)?.rootId || "").trim();
   const pagoFolio = getPagoFolio(currentPago);
 
   const visibleDocs = useMemo(() => {
@@ -223,7 +225,8 @@ export default function PagoDocsModal(props: {
     ? canConciliateIqPago
     : iqCanCreateManually && canCreateIqPago;
 
-  const canCorrectRejectedAmount = isIqSuperAdmin &&
+  const canCorrectRejectedPayment = ["superadmin", "admin"].includes(iqRole) &&
+    !!iqModules?.pagos?.edit &&
     isTerminalLocked &&
     terminalOutcome === "REJECTED" &&
     String(currentPago?.status || "").toUpperCase() === "RECHAZADO";
@@ -249,7 +252,15 @@ export default function PagoDocsModal(props: {
     if (!open) return;
     const amount = Number(currentPago?.montoTotal || 0);
     setCorrectedAmount(Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "");
-  }, [open, pagoId, currentPago?.montoTotal]);
+    setCorrectedPayerName(String(currentPago?.receiptLearningSignals?.detectedSenderName || ""));
+    setCorrectedBeneficiaryName(String(currentPago?.receiptLearningSignals?.detectedBeneficiaryName || ""));
+  }, [
+    open,
+    pagoId,
+    currentPago?.montoTotal,
+    currentPago?.receiptLearningSignals?.detectedSenderName,
+    currentPago?.receiptLearningSignals?.detectedBeneficiaryName,
+  ]);
 
   useEffect(() => {
     if (!open || !pagoId) {
@@ -257,7 +268,17 @@ export default function PagoDocsModal(props: {
       return;
     }
 
-    const qDocs = query(collection(db, "uploads"), where("pagoId", "==", pagoId));
+    if (!pagoRootId) {
+      setDocs([]);
+      setMsg("El pago no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    const qDocs = query(
+      collection(db, "uploads"),
+      where("rootId", "==", pagoRootId),
+      where("pagoId", "==", pagoId),
+    );
 
     return onSnapshot(
       qDocs,
@@ -268,7 +289,7 @@ export default function PagoDocsModal(props: {
         setMsg(err?.message || "No se pudieron cargar documentos del pago.");
       }
     );
-  }, [open, pagoId]);
+  }, [open, pagoId, pagoRootId]);
 
   useEffect(() => {
     if (!open) return;
@@ -296,6 +317,8 @@ export default function PagoDocsModal(props: {
       setDragActive(false);
       setLivePago(null);
       setCorrectedAmount("");
+      setCorrectedPayerName("");
+      setCorrectedBeneficiaryName("");
       setAmountReason("");
       setAmountBusy(false);
     }
@@ -375,11 +398,17 @@ export default function PagoDocsModal(props: {
   }
 
   async function updateRejectedAmount() {
-    if (!canCorrectRejectedAmount || !pagoId || amountBusy || busy || iqBusy) return;
+    if (!canCorrectRejectedPayment || !pagoId || amountBusy || busy || iqBusy) return;
 
     const newAmount = Number(String(correctedAmount || "").replace(/[$,\s]/g, ""));
     const currentAmount = Number(currentPago?.montoTotal || 0);
     const reason = amountReason.trim();
+    const currentPayerName = String(currentPago?.receiptLearningSignals?.detectedSenderName || "").trim();
+    const currentBeneficiaryName = String(currentPago?.receiptLearningSignals?.detectedBeneficiaryName || "").trim();
+    const payerName = correctedPayerName.trim();
+    const beneficiaryName = correctedBeneficiaryName.trim();
+    const amountChanged = Math.round(newAmount * 100) !== Math.round(currentAmount * 100);
+    const namesChanged = payerName !== currentPayerName || beneficiaryName !== currentBeneficiaryName;
 
     setMsg("");
 
@@ -388,8 +417,8 @@ export default function PagoDocsModal(props: {
       return;
     }
 
-    if (Math.round(newAmount * 100) === Math.round(currentAmount * 100)) {
-      setMsg("El monto corregido es igual al monto actual.");
+    if (!amountChanged && !namesChanged) {
+      setMsg("No hay cambios en el monto, ordenante o beneficiario.");
       return;
     }
 
@@ -399,7 +428,7 @@ export default function PagoDocsModal(props: {
     }
 
     const ok = window.confirm(
-      `Corregir el monto de $${formatMoney(currentAmount)} a $${formatMoney(newAmount)}? El pago seguira bloqueado hasta subir un nuevo comprobante.`,
+      `Guardar la correccion del pago rechazado? Monto: $${formatMoney(currentAmount)} a $${formatMoney(newAmount)}. El pago seguira bloqueado hasta subir un nuevo comprobante.`,
     );
     if (!ok) return;
 
@@ -409,6 +438,8 @@ export default function PagoDocsModal(props: {
       const res = await fn({
         pagoId,
         montoTotal: newAmount,
+        payerName,
+        beneficiaryName,
         reason,
       });
       const data = (res.data as any) || {};
@@ -416,7 +447,7 @@ export default function PagoDocsModal(props: {
       setCorrectedAmount(Number(data.newAmount || newAmount).toFixed(2));
       setAmountReason("");
       setMsg(
-        `Monto corregido de $${formatMoney(data.previousAmount || currentAmount)} a $${formatMoney(data.newAmount || newAmount)}. Ahora sube el nuevo comprobante.`,
+        `Datos corregidos. Monto de $${formatMoney(data.previousAmount || currentAmount)} a $${formatMoney(data.newAmount || newAmount)}. Ahora sube el nuevo comprobante.`,
       );
     } catch (e: any) {
       setMsg(e?.message || "No se pudo corregir el monto.");
@@ -549,12 +580,12 @@ export default function PagoDocsModal(props: {
                 </div>
               ) : null}
 
-              {canCorrectRejectedAmount ? (
+              {canCorrectRejectedPayment ? (
                 <div className="mt-4 space-y-3 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3">
                   <div className="text-[11px] leading-5 text-amber-100/90">
-                    Si el rechazo fue por monto, corrige primero el monto y despues sube el nuevo comprobante. Si el monto es correcto, no lo cambies y sube directamente el nuevo comprobante.
+                    Corrige el monto y los nombres detectados del ordenante o beneficiario antes de subir el nuevo comprobante.
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-[170px_1fr_auto]">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <input
                       value={correctedAmount}
                       onChange={(event) => setCorrectedAmount(event.target.value)}
@@ -564,19 +595,35 @@ export default function PagoDocsModal(props: {
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
                     />
                     <input
+                      value={correctedPayerName}
+                      onChange={(event) => setCorrectedPayerName(event.target.value)}
+                      disabled={amountBusy || busy || iqBusy}
+                      placeholder="Quien pago / ordenante"
+                      className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
+                    />
+                    <input
+                      value={correctedBeneficiaryName}
+                      onChange={(event) => setCorrectedBeneficiaryName(event.target.value)}
+                      disabled={amountBusy || busy || iqBusy}
+                      placeholder="A quien pago / beneficiario"
+                      className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
+                    />
+                    <input
                       value={amountReason}
                       onChange={(event) => setAmountReason(event.target.value)}
                       disabled={amountBusy || busy || iqBusy}
                       placeholder="Motivo de la correccion"
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
                     />
+                  </div>
+                  <div className="flex justify-end">
                     <button
                       type="button"
                       onClick={updateRejectedAmount}
                       disabled={amountBusy || busy || iqBusy || !amountReason.trim()}
                       className="rounded-xl border border-amber-300/30 bg-amber-500/20 px-3 py-2 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {amountBusy ? "Corrigiendo..." : "Corregir monto"}
+                      {amountBusy ? "Corrigiendo..." : "Guardar correccion"}
                     </button>
                   </div>
                   <div className="text-[10px] text-amber-100/60">

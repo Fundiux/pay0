@@ -20,6 +20,36 @@ requireText(
   "Los documentos de solicitudes se consultan dentro del root autorizado",
 );
 requireText(
+  "src/components/PagoDocsModal.tsx",
+  'where("rootId", "==", pagoRootId)',
+  "Los documentos de pagos se consultan dentro del root autorizado",
+);
+requireText(
+  "src/components/DocsModal.tsx",
+  '["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"]',
+  "La solicitud conserva comprobantes y complementos relacionados",
+);
+requireText(
+  "src/services/beneficiaries.ts",
+  'where("rootId", "==", rootId)',
+  "Los beneficiarios se consultan dentro del root autorizado",
+);
+requireText(
+  "functions/src/modules/clients/csfService.ts",
+  "personFirstNames",
+  "El parser CSF conserva nombres de personas fisicas",
+);
+requireText(
+  "functions/src/modules/clients/csfService.ts",
+  "coverTaxpayerName",
+  "El parser CSF conserva espacios de la razon social de portada",
+);
+requireText(
+  "functions/src/index.ts",
+  "PAGO_RECEIPT_RFC_MISMATCH",
+  "Los RFC distintos del comprobante requieren aceptacion auditable",
+);
+requireText(
   "src/components/DocsModal.tsx",
   "No se pudieron cargar los documentos de esta solicitud.",
   "La interfaz muestra los errores de lectura y no los confunde con cero documentos",

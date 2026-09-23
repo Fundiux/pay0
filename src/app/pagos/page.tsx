@@ -334,8 +334,9 @@ export default function PagosPage() {
 
   const canCreatePagos = !!modules?.pagos?.create;
   const canConciliatePagos = !!modules?.pagos?.conciliate;
+  const canCancelPagos = !!modules?.pagos?.cancel;
   const canApplyPagos = !!modules?.pagos?.create || !!modules?.pagos?.conciliate;
-  const canManagePagoDocs = !!modules?.pagos?.create || !!modules?.pagos?.conciliate || !!modules?.pagos?.uploadDocs;
+  const canManagePagoDocs = !!modules?.pagos?.uploadDocs;
   const role = normalizeRole((profile as any)?.role);
   const canViewIqFolios = isSuperAdmin(role);
 
@@ -2014,7 +2015,7 @@ export default function PagosPage() {
     backgroundUpload?: boolean;
     onUploadError?: (error: any) => void;
   }) {
-    const createdPago: any = await createPago({
+    const createPayload = {
       clienteId: input.clienteId,
       companyId: input.companyId,
       despachoId: input.despachoId,
@@ -2036,7 +2037,31 @@ export default function PagosPage() {
       detectedBeneficiaryRfc: input.detectedBeneficiaryRfc || "",
       operatorSelectedBankName: input.operatorSelectedBankName || "",
       operatorSelectedAccount: input.operatorSelectedAccount || "",
-    });
+    };
+
+    let createdPago: any;
+    try {
+      createdPago = await createPago(createPayload);
+    } catch (error: any) {
+      const details = error?.details || error?.customData?.details || {};
+      if (String(details?.code || "") !== "PAGO_RECEIPT_RFC_MISMATCH") throw error;
+
+      const mismatchLines = Array.isArray(details?.mismatches)
+        ? details.mismatches.map((item: any) =>
+            `${item?.message || "RFC distinto"} Detectado: ${item?.detected || "---"}. Esperado: ${item?.expected || "---"}.`,
+          )
+        : [];
+      const accepted = window.confirm(
+        [
+          "El comprobante contiene RFC distintos a los registrados.",
+          ...mismatchLines,
+          "Si es un pago realizado por un tercero, puedes enviarlo de todos modos. La aceptacion quedara registrada para auditoria y aprendizaje de Hugo.",
+          "¿Enviar de todos modos?",
+        ].join("\n\n"),
+      );
+      if (!accepted) throw error;
+      createdPago = await createPago({ ...createPayload, acceptRfcMismatch: true });
+    }
 
     const createdPagoId = String(
       createdPago?.pagoId ||
@@ -2214,7 +2239,7 @@ export default function PagosPage() {
   };
 
   const requestRechazarPago = (pagoId: string) => {
-    if (!canConciliatePagos) return;
+    if (!canCancelPagos && !canConciliatePagos) return;
     if (actionId) return;
 
     setConfirmAction({
@@ -2226,7 +2251,7 @@ export default function PagosPage() {
     });
   };
   const rechazarPago = async (pagoId: string) => {
-    if (!canConciliatePagos) return;
+    if (!canCancelPagos && !canConciliatePagos) return;
     if (actionId) return;
 
     try {
@@ -2241,6 +2266,31 @@ export default function PagosPage() {
     } finally {
       setActionId("");
     }
+  };
+
+  const requestCancelarPago = (pagoId: string) => {
+    if (!canCancelPagos) return;
+    if (actionId) return;
+    setConfirmAction({
+      title: "Cancelar pago",
+      message: "¿Seguro que quieres cancelar este pago? Esta accion cierra su seguimiento.",
+      confirmLabel: "Cancelar pago",
+      danger: true,
+      onConfirm: async () => {
+        setActionId(pagoId);
+        try {
+          await changePagoStatus({
+            pagoId,
+            newStatus: "CANCELADO",
+            conciliationNote: "Pago cancelado desde modulo Pagos",
+          });
+        } catch (e: any) {
+          setPageMsg(e?.message || "No se pudo cancelar el pago.");
+        } finally {
+          setActionId("");
+        }
+      },
+    });
   };
 
   const applySelectedFolios = async () => {
@@ -2896,7 +2946,7 @@ export default function PagosPage() {
                     </td><td className="pay0-td pay0-pagos-actions-cell text-center">
                       <div className="flex justify-end gap-2 opacity-50 transition-opacity group-hover:opacity-100">
 
-{canConciliatePagos && status === "REGISTRADO" && (
+                        {canConciliatePagos && status === "REGISTRADO" && (
                           <button
                             title="Enviar a conciliacion"
                             onClick={() => moveToConciliacion(p.id)}
@@ -2907,25 +2957,51 @@ export default function PagosPage() {
                           </button>
                         )}
 
-                        {canConciliatePagos && status === "CONCILIACION_PENDIENTE" && (
-                          <>
-                            <button
-                              title="Conciliar pago"
-                              onClick={() => conciliarPago(p.id)}
-                              className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10"
-                              disabled={actionId === p.id}
-                            >
-                              <ShieldCheck size={16} />
-                            </button>
+                        {canCancelPagos && status === "REGISTRADO" && (
+                          <button
+                            title="Cancelar pago"
+                            onClick={() => requestCancelarPago(p.id)}
+                            className="rounded p-1 text-rose-300 hover:bg-rose-500/10"
+                            disabled={actionId === p.id}
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
 
-                            <button
-                              title="Rechazar pago"
-                              onClick={() => requestRechazarPago(p.id)}
-                              className="rounded p-1 text-rose-400 hover:bg-rose-500/10"
-                              disabled={actionId === p.id}
-                            >
-                              <Ban size={16} />
-                            </button>
+                        {(canConciliatePagos || canCancelPagos) && status === "CONCILIACION_PENDIENTE" && (
+                          <>
+                            {canConciliatePagos ? (
+                              <button
+                                title="Conciliar pago"
+                                onClick={() => conciliarPago(p.id)}
+                                className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <ShieldCheck size={16} />
+                              </button>
+                            ) : null}
+
+                            {canCancelPagos || canConciliatePagos ? (
+                              <button
+                                title="Rechazar pago"
+                                onClick={() => requestRechazarPago(p.id)}
+                                className="rounded p-1 text-rose-400 hover:bg-rose-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <Ban size={16} />
+                              </button>
+                            ) : null}
+
+                            {canCancelPagos ? (
+                              <button
+                                title="Cancelar pago"
+                                onClick={() => requestCancelarPago(p.id)}
+                                className="rounded p-1 text-rose-300 hover:bg-rose-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <X size={16} />
+                              </button>
+                            ) : null}
                           </>
                         )}                        {aplicacionesPago.length > 0 && (
                           <button

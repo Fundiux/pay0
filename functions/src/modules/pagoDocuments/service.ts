@@ -642,16 +642,17 @@ export function validateRejectedPagoAmountCorrectionH4D64A7(input: {
   role: string;
   pago: Record<string, unknown>;
   newAmount: number;
+  metadataChanged?: boolean;
   hasRegisteredApplications: boolean;
 }): {
   previousAmount: number;
   terminalIqId: string;
   correctionVersion: number;
 } {
-  if (cleanTextH4D64A6(input.role).toLowerCase() !== "superadmin") {
+  if (!["superadmin", "admin"].includes(cleanTextH4D64A6(input.role).toLowerCase())) {
     throw new HttpsError(
       "permission-denied",
-      "Solo superadmin puede corregir el monto de un pago rechazado.",
+      "Solo administradores autorizados pueden corregir un pago rechazado.",
     );
   }
 
@@ -702,7 +703,7 @@ export function validateRejectedPagoAmountCorrectionH4D64A7(input: {
     input.pago.montoTotal ?? input.pago.montoTotalCanonico,
   );
 
-  if (previousAmount === input.newAmount) {
+  if (previousAmount === input.newAmount && input.metadataChanged !== true) {
     throw new HttpsError(
       "failed-precondition",
       "El monto corregido es igual al monto actual.",
@@ -732,10 +733,10 @@ export async function updateRejectedPagoAmountForRetryCore(
   }
 
   const role = getRole(user);
-  if (role !== "superadmin") {
+  if (!["superadmin", "admin"].includes(role)) {
     throw new HttpsError(
       "permission-denied",
-      "Solo superadmin puede corregir el monto de un pago rechazado.",
+      "Solo administradores autorizados pueden corregir un pago rechazado.",
     );
   }
 
@@ -743,6 +744,8 @@ export async function updateRejectedPagoAmountForRetryCore(
   const data = request.data || {};
   const pagoId = cleanTextH4D64A6(data.pagoId);
   const newAmount = moneyH4D64A6(data.montoTotal ?? data.newAmount);
+  const correctedPayerName = cleanTextH4D64A6(data.payerName).slice(0, 180);
+  const correctedBeneficiaryName = cleanTextH4D64A6(data.beneficiaryName).slice(0, 180);
   const reason = cleanTextH4D64A6(data.reason ?? data.motivo);
 
   if (!pagoId) {
@@ -773,6 +776,24 @@ export async function updateRejectedPagoAmountForRetryCore(
     if (cleanTextH4D64A6(pago.rootId) !== rootId) {
       throw new HttpsError("permission-denied", "No autorizado para este pago.");
     }
+    if (
+      role === "admin" &&
+      cleanTextH4D64A6(pago.adminId) !== uid &&
+      cleanTextH4D64A6(pago.createdBy) !== uid
+    ) {
+      throw new HttpsError("permission-denied", "No autorizado para editar este pago.");
+    }
+
+    const previousSignals = pago.receiptLearningSignals && typeof pago.receiptLearningSignals === "object"
+      ? pago.receiptLearningSignals as Record<string, unknown>
+      : {};
+    const previousPayerName = cleanTextH4D64A6(previousSignals.detectedSenderName);
+    const previousBeneficiaryName = cleanTextH4D64A6(previousSignals.detectedBeneficiaryName);
+    const nextPayerName = correctedPayerName || previousPayerName;
+    const nextBeneficiaryName = correctedBeneficiaryName || previousBeneficiaryName;
+    const metadataChanged =
+      nextPayerName !== previousPayerName ||
+      nextBeneficiaryName !== previousBeneficiaryName;
 
     const applicationQuery = db
       .collection("pagoAplicaciones")
@@ -784,6 +805,7 @@ export async function updateRejectedPagoAmountForRetryCore(
       role,
       pago,
       newAmount,
+      metadataChanged,
       hasRegisteredApplications: !applicationSnap.empty,
     });
 
@@ -814,6 +836,16 @@ export async function updateRejectedPagoAmountForRetryCore(
       iqDepositAmountCorrectionPendingReceipt: true,
       iqDepositAmountCorrectionTerminalIqId: terminalIqId || null,
 
+      receiptLearningSignals: {
+        ...previousSignals,
+        detectedSenderName: nextPayerName || null,
+        detectedBeneficiaryName: nextBeneficiaryName || null,
+        operatorCorrectionAccepted: true,
+        operatorCorrectionReason: reason,
+        operatorCorrectionBy: uid,
+        operatorCorrectionAt: FieldValue.serverTimestamp(),
+      },
+
       financialPostingStatus: "PENDING",
       walletPostingStatus: "PENDING",
       financialSnapshotId: null,
@@ -833,7 +865,7 @@ export async function updateRejectedPagoAmountForRetryCore(
       referenceId: pagoId,
       referenceFolio: cleanTextH4D64A6(pago.folio ?? pago.referenceFolio ?? pagoId),
       referenceType: "pago",
-      description: `Monto de pago corregido de ${previousAmount.toFixed(2)} a ${newAmount.toFixed(2)} antes de nuevo comprobante.`,
+      description: `Datos de pago rechazado corregidos antes de nuevo comprobante. Monto ${previousAmount.toFixed(2)} a ${newAmount.toFixed(2)}.`,
       createdBy: uid,
       amount: newAmount,
       extra: {
@@ -843,13 +875,17 @@ export async function updateRejectedPagoAmountForRetryCore(
         reason,
         terminalIqId: terminalIqId || null,
         correctionVersion,
+        previousPayerName: previousPayerName || null,
+        newPayerName: nextPayerName || null,
+        previousBeneficiaryName: previousBeneficiaryName || null,
+        newBeneficiaryName: nextBeneficiaryName || null,
       },
     });
   });
 
   await pagoRef.collection("notas").add({
     rootId,
-    text: `Monto corregido de ${previousAmount.toFixed(2)} a ${newAmount.toFixed(2)} antes de subir el nuevo comprobante. Motivo: ${reason}`,
+    text: `Pago rechazado corregido antes de subir el nuevo comprobante. Monto: ${previousAmount.toFixed(2)} a ${newAmount.toFixed(2)}. Ordenante: ${correctedPayerName || "sin cambio"}. Beneficiario: ${correctedBeneficiaryName || "sin cambio"}. Motivo: ${reason}`,
     createdBy: uid,
     createdByName: getUsername(user, uid),
     createdByRole: role,
@@ -884,6 +920,8 @@ export async function updateRejectedPagoAmountForRetryCore(
     pagoId,
     previousAmount,
     newAmount,
+    payerName: correctedPayerName || null,
+    beneficiaryName: correctedBeneficiaryName || null,
     correctionVersion,
     terminalIqId: terminalIqId || null,
     requiresNewReceipt: true,
