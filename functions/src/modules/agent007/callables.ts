@@ -10,7 +10,7 @@ import { Pay0Connector } from "./pay0Connector";
 import { HugoToolRouter } from "./hugoCore/toolRouter";
 import { HugoConversationCore } from "./hugoCore/conversationCore";
 import { HugoModelRouter } from "./hugoModelRouter";
-import { HUGO_CAPABILITIES, classifyHugoProfile, normalizeHugoScope } from "./hugoCore/runtimeContract";
+import { HUGO_CAPABILITIES, classifyHugoProfile, classifyHugoRoutingSignals, normalizeHugoScope } from "./hugoCore/runtimeContract";
 import { conversationTrace } from "./traceStore";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
@@ -154,6 +154,7 @@ export const sendAgent007Message = onCall(
     const startedAt = Date.now();
     const scope = normalizeHugoScope(request.data?.scope);
     const profile = classifyHugoProfile(text);
+    const routingSignals = classifyHugoRoutingSignals(text, profile);
     const conversationId = conversationIdFor(rootId, uid, scope);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
@@ -169,7 +170,7 @@ export const sendAgent007Message = onCall(
     });
     const modelRouter = new HugoModelRouter();
     const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
       modelCapability: profile === "PROGRAMMER" ? "STRONG_EXTERNAL" as const : "FAST_EXTERNAL" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {

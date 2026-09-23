@@ -1,4 +1,5 @@
 import { HugoModelAdapter, HugoModelRequest, HugoModelResponse, ModelOutput } from "./hugoCore/modelContract";
+import { hugoV2Prompt } from "./hugoCore/hugoV2Prompt";
 
 const clean = (value: unknown, max = 6000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const configured = () => process.env.HUGO_OPENAI_ENABLED === "true" && Boolean(process.env.OPENAI_API_KEY);
@@ -20,10 +21,10 @@ export class OpenAiResponsesAdapter implements HugoModelAdapter {
     if (!configured()) return { ...base, error: "PROVIDER_NOT_CONFIGURED" };
     const started = Date.now();
     try {
+      const { system, prompt } = hugoV2Prompt(request.task.userInput, request.task.name, request.intelligence.contextSnapshot, request.conversation.history);
       const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
         body: JSON.stringify({ model, reasoning: { effort: process.env.HUGO_OPENAI_REASONING_EFFORT || "low" }, max_output_tokens: outputLimit,
-          input: [{ role: "developer", content: "Eres Hugo. Responde en español, de forma breve, con evidencia del contexto. No inventes hechos ni acciones." },
-            { role: "user", content: JSON.stringify({ task: request.task, context: request.intelligence.contextSnapshot, recentHistory: request.conversation.history.slice(-6) }) }] }), signal: AbortSignal.timeout(45_000) });
+          input: [{ role: "developer", content: system }, { role: "user", content: prompt }] }), signal: AbortSignal.timeout(45_000) });
       if (!response.ok) return { ...base, error: response.status === 429 ? "RATE_LIMIT" : response.status >= 500 ? "SERVICE_UNAVAILABLE" : `HTTP_${response.status}`, attempts: [{ finishReason: `HTTP_${response.status}`, latencyMs: Date.now() - started, promptChars: 0, outputLimit, inputTokens: null, outputTokens: null, cachedInputTokens: null, reasoningTokens: null }] };
       const payload: any = await response.json();
       const text = clean(payload.output_text || payload.output?.flatMap((item: any) => item.content || []).map((item: any) => item.text || "").join(" ")) || null;
