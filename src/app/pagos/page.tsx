@@ -2012,8 +2012,6 @@ export default function PagosPage() {
     operatorSelectedAccount?: string;
     file: File;
     onPagoCreated?: (pagoId: string) => void;
-    backgroundUpload?: boolean;
-    onUploadError?: (error: any) => void;
   }) {
     const createPayload = {
       clienteId: input.clienteId,
@@ -2092,15 +2090,12 @@ export default function PagosPage() {
         onProgress: () => undefined,
       });
 
-    if (input.backgroundUpload) {
-      void uploadReceipt().catch((error) => {
-        input.onUploadError?.(error);
-      });
-
-      return createdPagoId;
+    try {
+      await uploadReceipt();
+    } catch (error: any) {
+      error.pagoId = createdPagoId;
+      throw error;
     }
-
-    await uploadReceipt();
 
     return createdPagoId;
   }
@@ -2171,13 +2166,6 @@ export default function PagosPage() {
           operatorSelectedBankName: String(selectedCompanyLearning?.bankName || selectedCompanyLearning?.banco || ""),
           operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
-          backgroundUpload: true,
-          onUploadError: (error: any) => {
-            setPageMsg(
-              error?.message ||
-                "Pago creado, pero no se pudo subir el comprobante.",
-            );
-          },
         });
 
         setSelectedClientId("");
@@ -2194,7 +2182,12 @@ export default function PagosPage() {
         setOpenNewPago(false);
       });
     } catch (e: any) {
-      setPageMsg(e?.message || "No se pudo crear el pago.");
+      const createdPagoId = String(e?.pagoId || "").trim();
+      setPageMsg(
+        createdPagoId
+          ? `El pago ya fue creado, pero el comprobante no termino de guardarse. No vuelvas a crear el pago; abre Docs en la fila y sube el comprobante nuevamente. ${e?.message || ""}`.trim()
+          : e?.message || "No se pudo crear el pago.",
+      );
     } finally {
       setSaving(false);
     }

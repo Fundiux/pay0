@@ -85,6 +85,31 @@ rejectText(
   "El listado de cuentas IQ no vuelve a depender de un índice inexistente",
 );
 
+rejectText(
+  "src/app/pagos/page.tsx",
+  "backgroundUpload: true",
+  "El alta de pagos espera a que el comprobante quede guardado y finalizado",
+);
+
+const firestoreIndexes = JSON.parse(read("firestore.indexes.json"));
+const hasScopedDispersionIndex = firestoreIndexes.indexes.some((index) => {
+  if (index.collectionGroup !== "clientDispersions") return false;
+  const fields = (index.fields || []).map((field) => [
+    field.fieldPath,
+    field.order || field.arrayConfig || "",
+  ]);
+  return JSON.stringify(fields) === JSON.stringify([
+    ["rootId", "ASCENDING"],
+    ["createdAt", "DESCENDING"],
+    ["__name__", "ASCENDING"],
+  ]);
+});
+checks.push({
+  file: "firestore.indexes.json",
+  description: "Dispersiones tiene el indice exacto usado por el listado paginado",
+  ok: hasScopedDispersionIndex,
+});
+
 const failed = checks.filter((check) => !check.ok);
 
 for (const check of checks) {
