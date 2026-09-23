@@ -62,7 +62,8 @@
     "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1",
     "qa:release-guard": "node qa/scripts/critical-release-guard.mjs",
     "qa:regression-rules": "firebase emulators:exec --only firestore \"node qa/scripts/verify-regression-rules.mjs\"",
-    "qa:document-access": "npm run qa:release-guard && npm run qa:regression-rules"
+    "qa:document-access": "npm run qa:release-guard && npm run qa:regression-rules",
+    "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

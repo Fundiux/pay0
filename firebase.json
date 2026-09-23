@@ -5,6 +5,7 @@
                       "predeploy":  [
                                         "npm --prefix functions run build",
                                         "node qa/scripts/verify-client-csf-parser.cjs",
+                                        "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
                                         "npm run qa:document-access"
                                     ]
                   },

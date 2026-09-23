@@ -23,6 +23,7 @@ import { assertAuthorized } from "../../utils/authGuard";
 
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { runPagoDepositHttpCreateFlow } from "./pagoDepositHttpCreateFlow";
+import { resolveStoredIqClientIdForProfile } from "./iqClientProfileLink";
 import {
   loginIqHttpDirect,
   toIqAuthContext,
@@ -72,6 +73,7 @@ type IqCreateDepositBatchItem = Record<string, any>;
 
 type PagoIqDepositContext = {
   pagoId: string;
+  clienteId: string;
   pagoRef: admin.firestore.DocumentReference;
   pago: Record<string, unknown>;
   access: IqAccess;
@@ -857,11 +859,7 @@ async function buildPagoIqDepositContext(input: {
     cleanText(pago.clienteNombre ?? pago.clientName) ||
     getEntityName(client, clienteId);
 
-  const clientIqLink = asRecord(client.iqLink);
-  const iqClientId = cleanText(
-    clientIqLink.clientId ??
-      client.iqClientId,
-  );
+  const iqClientId = resolveStoredIqClientIdForProfile(client, access);
 
   const iqCompanyName =
     cleanText(pago.empresaNombre ?? pago.companyName) ||
@@ -1010,6 +1008,7 @@ async function buildPagoIqDepositContext(input: {
 
   return {
     pagoId: resolvedPagoIdH4D61B,
+    clienteId,
     pagoRef,
     pago,
     access,
@@ -1417,6 +1416,37 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     sum: ctx.amount,
     allowHttpPost: true,
   });
+
+  const resolvedClientId = cleanText(httpResult.catalog.clientId);
+  const clientMatchStrategy = cleanText(httpResult.catalog.clientMatchStrategy);
+  if (resolvedClientId && ctx.clienteId) {
+    const linkNow = FieldValue.serverTimestamp();
+    await Promise.all([
+      db.collection("clients").doc(ctx.clienteId).set({
+        iqLinksByProfile: {
+          [ctx.profileId]: {
+            status: "LINKED",
+            active: true,
+            profileId: ctx.profileId,
+            profileAlias: ctx.profileAlias || null,
+            clientId: resolvedClientId,
+            clientName: httpResult.catalog.clientName || ctx.iqClientName,
+            partnerName: httpResult.catalog.partnerName || ctx.iqAssociatedName,
+            source: clientMatchStrategy || "IQ_DEPOSIT_CATALOG",
+            updatedAt: linkNow,
+          },
+        },
+        updatedAt: linkNow,
+      }, { merge: true }),
+      ctx.pagoRef.set({
+        "iqDepositSync.iqClientId": resolvedClientId,
+        "iqDepositSync.clientMatchStrategy": clientMatchStrategy || null,
+        iqDepositResolvedClientId: resolvedClientId,
+        iqDepositClientMatchStrategy: clientMatchStrategy || null,
+        iqDepositUpdatedAt: linkNow,
+      }, { merge: true }),
+    ]);
+  }
 
   const httpIqId = cleanText(httpResult.iqId);
   const httpCreated =
