@@ -2,6 +2,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const phase6 = require('../phase6/phase6-analysis.json');
+const humanReview = require('./phase7-human-review-analysis.json');
+const reviewedPhase6 = new Map(humanReview.phases.PHASE6.decisions.map(row => [row.caseId, row]));
 const selectedRuns = [
   ...require('../phase6/phase6-real-model-results.json').families.slice(0, 5),
   ...require('../phase6/phase6-real-model-retry.json').families,
@@ -26,11 +28,16 @@ const rows = phase6.families.filter(row => row.classification === 'NO_EFFECT').m
     beforeServed: first.before, afterServed: first.after,
     expectedBehavioralChange: 'No new behavior required because BEFORE already met the preregistered behavior signal.',
     actualBehavioralChange: first.beforeSignal === first.afterSignal ? 'BEHAVIOR_SIGNAL_STABLE' : 'BEHAVIOR_SIGNAL_CHANGED',
-    humanReview: 'AWAITING_HUMAN_REVIEW',
+    humanReview: reviewedPhase6.has(row.caseId) ? {
+      status: 'REVIEWED',
+      choice: reviewedPhase6.get(row.caseId).choice,
+      preferredSource: reviewedPhase6.get(row.caseId).preferredSource,
+    } : { status: 'AWAITING_HUMAN_REVIEW' },
   };
 });
 const report = { schemaVersion: 'hugo-phase7-phase6-reanalysis-v1', historicalArtifactMutated: false, phase6OriginalPreserved: true,
-  semantics: 'APPROPRIATE_EFFECT', humanReviewStatus: 'AWAITING_HUMAN_REVIEW', count: rows.length,
+  semantics: 'APPROPRIATE_EFFECT', humanReviewStatus: 'PARTIAL', humanReviewsCompleted: rows.filter(row => row.humanReview.status === 'REVIEWED').length,
+  humanReviewsPending: rows.filter(row => row.humanReview.status !== 'REVIEWED').length, count: rows.length,
   summary: { appropriateStability: rows.filter(row => row.phase7Reanalysis === 'APPROPRIATE_STABILITY').length,
     missedBeneficialChange: rows.filter(row => row.phase7Reanalysis === 'MISSED_BENEFICIAL_CHANGE').length,
     inconclusive: rows.filter(row => row.phase7Reanalysis === 'INCONCLUSIVE').length }, rows };

@@ -6,6 +6,7 @@ const cases = require('./phase7/case-specs.cjs'); const manifest = require('./ph
 const analysis = require('./phase7/phase7-analysis.json'); const reanalysis = require('./phase7/phase7-phase6-reanalysis.json'); const experiments = require('./phase7/phase7-experiment-summary.json'); const privacy = require('./phase7/phase7-privacy-sanitization.json');
 const invalidIntentRun = require('./phase7/phase7-real-model-invalid-intent.json');
 const caseDiagnostics = require('./phase7/phase7-case-diagnostics.json');
+const humanReview = require('./phase7/phase7-human-review-analysis.json');
 
 test('appropriate-effect semantics distinguish useful change, correct stability and negative transfer', () => {
   assert.equal(classifyAppropriateEffect({ shouldChange: true, beforeAcceptable: false, afterAcceptable: true, materiallyChanged: true, counterexampleSafe: true }), 'APPROPRIATE_CHANGE');
@@ -25,6 +26,18 @@ test('human review validation separates reviewed and skipped states', () => {
   assert.deepEqual(validateHumanReview({ ...ids, status: 'SKIPPED', reasons: [] }), []);
   assert.ok(validateHumanReview({ ...ids, status: 'SKIPPED', choice: 'A_BETTER', reasons: [] }).includes('SKIPPED_WITH_CHOICE'));
   assert.ok(validateHumanReview({ evalRunId: ids.evalRunId, caseId: 'invented', status: 'SKIPPED', reasons: [] }).includes('CASE_NOT_IN_FROZEN_REVIEW_SET'));
+});
+
+test('user-provided blind reviews are validated and decoded without inventing provenance', () => {
+  assert.equal(humanReview.validationStatus, 'VALID'); assert.equal(humanReview.reviewed, 20); assert.equal(humanReview.incomplete, 8);
+  assert.equal(humanReview.phases.PHASE4.reviewed, 18); assert.equal(humanReview.phases.PHASE4.preferenceCounts.LEGACY, 10);
+  assert.equal(humanReview.phases.PHASE4.preferenceCounts.HUGO_V2, 4); assert.equal(humanReview.phases.PHASE4.bothAcceptable, 1);
+  assert.equal(humanReview.phases.PHASE4.bothUnacceptable, 3); assert.equal(humanReview.phases.PHASE6.reviewed, 2);
+  assert.equal(humanReview.phases.PHASE6.preferenceCounts.AFTER, 2); assert.equal(humanReview.phases.PHASE6.incomplete, 8);
+  assert.equal(humanReview.phases.PHASE4.reasonsCaptured, 0); assert.equal(humanReview.phases.PHASE6.reviewerIdentity, 'NOT_CAPTURED_IN_LEGACY_EXPORT');
+  assert.equal(analysis.humanReviewsCompleted, 20); assert.equal(analysis.humanReviewsPending, 8);
+  assert.ok(analysis.domains.every(row => row.humanReviewStatus === 'NOT_REVIEWED_DIRECTLY'));
+  assert.equal(reanalysis.humanReviewsCompleted, 2); assert.equal(reanalysis.humanReviewsPending, 5);
 });
 
 test('declared evidence aliases resolve context positions without accepting unknown aliases', () => {

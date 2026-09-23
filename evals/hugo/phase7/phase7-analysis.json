@@ -3,8 +3,246 @@
   "syntheticOnly": true,
   "preregisteredDatasetDigest": "d91845bc21be9fbcfe1f99377608a8fe72ddf57989f4c5c67c2d3072fd6b2096",
   "familyCount": 28,
-  "humanReviewStatus": "AWAITING_HUMAN_REVIEW",
-  "humanReviewsCompleted": 0,
+  "humanReviewStatus": "PARTIAL",
+  "humanReviewsCompleted": 20,
+  "humanReviewsPending": 8,
+  "humanReview": {
+    "schemaVersion": "hugo-phase7-human-review-analysis-v1",
+    "source": "USER_PROVIDED_LEGACY_EXPORTS",
+    "validationStatus": "VALID",
+    "totalCases": 28,
+    "reviewed": 20,
+    "skipped": 0,
+    "incomplete": 8,
+    "completionPercent": 71.4,
+    "humanReviewStatus": "PARTIAL",
+    "sourceArtifacts": [
+      {
+        "file": "human-reviews/phase4-user-export.json",
+        "sha256": "da1773e2cab222c871d329ea38ccc8e4211b191b07c00d8ca14cbc353b8d2213"
+      },
+      {
+        "file": "human-reviews/phase6-user-export.json",
+        "sha256": "0a8ccddef4ce4c3d2488c7e326b0a9120918c2db78bbf00628330ffc5c4a8002"
+      }
+    ],
+    "limitations": [
+      "Legacy exports do not capture reviewer identity.",
+      "Legacy exports do not capture structured reason codes.",
+      "Phase 6 has only two reviewed cases, so its preference cannot be generalized."
+    ],
+    "phases": {
+      "PHASE4": {
+        "phase": "PHASE4",
+        "evalRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+        "reviewedAt": "2026-09-23T01:43:08.296Z",
+        "totalCases": 18,
+        "reviewed": 18,
+        "skipped": 0,
+        "incomplete": 0,
+        "completionPercent": 100,
+        "preferenceCounts": {
+          "LEGACY": 10,
+          "HUGO_V2": 4,
+          "BEFORE": 0,
+          "AFTER": 0,
+          "EQUIVALENT": 0,
+          "BOTH_ACCEPTABLE": 1,
+          "BOTH_UNACCEPTABLE": 3
+        },
+        "acceptedWithPreference": 14,
+        "bothAcceptable": 1,
+        "bothUnacceptable": 3,
+        "equivalent": 0,
+        "correctionsNeeded": 3,
+        "notesCaptured": 0,
+        "reasonsCaptured": 0,
+        "reviewerIdentity": "NOT_CAPTURED_IN_LEGACY_EXPORT",
+        "incompleteCaseIds": [],
+        "decisions": [
+          {
+            "caseId": "solicitud-found",
+            "choice": "BOTH_ACCEPTABLE",
+            "preferredSource": "BOTH_ACCEPTABLE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "solicitud-missing",
+            "choice": "BOTH_UNACCEPTABLE",
+            "preferredSource": "BOTH_UNACCEPTABLE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "sample-boundary",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "iq-unknown",
+            "choice": "BOTH_UNACCEPTABLE",
+            "preferredSource": "BOTH_UNACCEPTABLE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "conversation-followup",
+            "choice": "B_BETTER",
+            "preferredSource": "HUGO_V2",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "partial-zero",
+            "choice": "B_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "partial-several",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "exact-zero-complete",
+            "choice": "B_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "exact-one-complete",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "tool-unknown",
+            "choice": "A_BETTER",
+            "preferredSource": "HUGO_V2",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "why-followup",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "ambiguous-other",
+            "choice": "B_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "memory-stale-status",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "memory-conflict",
+            "choice": "A_BETTER",
+            "preferredSource": "HUGO_V2",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "irrelevant-memory",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "decision-not-rule",
+            "choice": "A_BETTER",
+            "preferredSource": "HUGO_V2",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "experience-relevant",
+            "choice": "A_BETTER",
+            "preferredSource": "LEGACY",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "experience-counterexample",
+            "choice": "BOTH_UNACCEPTABLE",
+            "preferredSource": "BOTH_UNACCEPTABLE",
+            "noteProvided": false,
+            "reasonsProvided": false
+          }
+        ]
+      },
+      "PHASE6": {
+        "phase": "PHASE6",
+        "evalRunId": "phase6-synthetic-gemini-v1",
+        "reviewedAt": "2026-09-23T01:45:02.540Z",
+        "totalCases": 10,
+        "reviewed": 2,
+        "skipped": 0,
+        "incomplete": 8,
+        "completionPercent": 20,
+        "preferenceCounts": {
+          "LEGACY": 0,
+          "HUGO_V2": 0,
+          "BEFORE": 0,
+          "AFTER": 2,
+          "EQUIVALENT": 0,
+          "BOTH_ACCEPTABLE": 0,
+          "BOTH_UNACCEPTABLE": 0
+        },
+        "acceptedWithPreference": 2,
+        "bothAcceptable": 0,
+        "bothUnacceptable": 0,
+        "equivalent": 0,
+        "correctionsNeeded": 0,
+        "notesCaptured": 0,
+        "reasonsCaptured": 0,
+        "reviewerIdentity": "NOT_CAPTURED_IN_LEGACY_EXPORT",
+        "incompleteCaseIds": [
+          "duplicate-document",
+          "supplier-ack",
+          "amount-mismatch",
+          "bank-rejection",
+          "duplicate-payment",
+          "complement-status",
+          "local-checkpoint-document",
+          "local-checkpoint-bank"
+        ],
+        "decisions": [
+          {
+            "caseId": "document-review",
+            "choice": "A_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          },
+          {
+            "caseId": "invoice-mismatch",
+            "choice": "B_BETTER",
+            "preferredSource": "AFTER",
+            "noteProvided": false,
+            "reasonsProvided": false
+          }
+        ]
+      }
+    }
+  },
   "classifications": {
     "APPROPRIATE_CHANGE": 10,
     "APPROPRIATE_STABILITY": 5,
@@ -81,7 +319,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 0,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "SOLICITUDES",
@@ -90,7 +328,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 2,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "IQ",
@@ -99,7 +337,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 2,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "PAYMENT_COMPLEMENTS",
@@ -108,7 +346,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 0,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "MEMORY",
@@ -117,7 +355,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 1,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "CONVERSATION_REFERENCE",
@@ -126,7 +364,7 @@
       "missedBeneficialEffects": 1,
       "negativeTransfer": 0,
       "providerErrors": 1,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     },
     {
       "domain": "DOCUMENTS",
@@ -135,7 +373,7 @@
       "missedBeneficialEffects": 0,
       "negativeTransfer": 0,
       "providerErrors": 1,
-      "humanReviewStatus": "AWAITING_HUMAN_REVIEW"
+      "humanReviewStatus": "NOT_REVIEWED_DIRECTLY"
     }
   ],
   "rows": [

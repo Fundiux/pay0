@@ -9,7 +9,7 @@
     { "gate": "FULL_FLOW_STABLE", "status": "REVIEW", "evidence": "8 MAX_TOKENS arms were safely degraded but prevent stable comparison" },
     { "gate": "APPROPRIATE_EFFECT_SEMANTICS", "status": "PASS", "evidence": "appropriate change and appropriate stability are scored separately" },
     { "gate": "HUMAN_REVIEW_WORKFLOW", "status": "PASS", "evidence": "authenticated revision-preserving Firestore workflow passed emulator" },
-    { "gate": "MEANINGFUL_HUMAN_REVIEW", "status": "FAIL", "evidence": "0 of 28 historical blind comparisons reviewed" },
+    { "gate": "MEANINGFUL_HUMAN_REVIEW", "status": "REVIEW", "evidence": "20 of 28 historical blind comparisons reviewed; Phase 4 is complete at 18 of 18, while Phase 6 has only 2 of 10" },
     { "gate": "TOKEN_BEHAVIOR_SUFFICIENTLY_MITIGATED", "status": "FAIL", "evidence": "UNDERSTOOD_NOT_MITIGATED" },
     { "gate": "PROVIDER_NEUTRAL_METRICS", "status": "PASS", "evidence": "neutral success, safety, token, latency and error classes" },
     { "gate": "NO_PROVIDER_COUPLING_IN_HUGO_INTELLIGENCE", "status": "PASS", "evidence": "non-generative contracts run without Vertex" },

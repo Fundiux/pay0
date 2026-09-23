@@ -3,7 +3,9 @@
   "historicalArtifactMutated": false,
   "phase6OriginalPreserved": true,
   "semantics": "APPROPRIATE_EFFECT",
-  "humanReviewStatus": "AWAITING_HUMAN_REVIEW",
+  "humanReviewStatus": "PARTIAL",
+  "humanReviewsCompleted": 2,
+  "humanReviewsPending": 5,
   "count": 7,
   "summary": {
     "appropriateStability": 7,
@@ -41,7 +43,11 @@
       "afterServed": "La solicitud S61001 está en estado PENDIENTE porque le falta un documento, según el `issueCode: DOCUMENT_MISSING`. Antes de hacer cualquier cosa, yo verificaría que el documento realmente no está o si ya fue entregado y no se ha actualizado el estado.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "REVIEWED",
+        "choice": "A_BETTER",
+        "preferredSource": "AFTER"
+      }
     },
     {
       "caseId": "invoice-mismatch",
@@ -73,7 +79,11 @@
       "afterServed": "Hola, Evaluador. La solicitud S61002 está en `EN_REVISION` porque tiene un `issueCode` de `INVOICE_MISMATCH`. Antes de actuar, yo comprobaría la factura contra la solicitud original. Esto es importante porque, según una experiencia previa verificada, en casos de `INVOICE_MISMATCH` el comportamiento correcto es comparar ambos documentos antes de cualquier aprobación.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "REVIEWED",
+        "choice": "B_BETTER",
+        "preferredSource": "AFTER"
+      }
     },
     {
       "caseId": "supplier-ack",
@@ -105,7 +115,9 @@
       "afterServed": "Hola, Evaluador. La solicitud S61004 está en estado `EN_PROCESO` porque tiene un `issueCode` de `PROVIDER_ACK_PENDING`. Antes de realizar cualquier acción, verificaría si ya se recibió la confirmación del proveedor.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "AWAITING_HUMAN_REVIEW"
+      }
     },
     {
       "caseId": "amount-mismatch",
@@ -137,7 +149,9 @@
       "afterServed": "Hola, Evaluador. El pago P61005 está pendiente porque detectamos una diferencia en el monto (`AMOUNT_MISMATCH`). Antes de cualquier acción, yo verificaría y conciliaría el monto correcto.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "AWAITING_HUMAN_REVIEW"
+      }
     },
     {
       "caseId": "bank-rejection",
@@ -169,7 +183,9 @@
       "afterServed": "Hola, Evaluador. El pago P61006 está rechazado porque el banco lo rechazó, su `issueCode` es `BANK_REJECTED`. Antes de actuar, yo verificaría el motivo exacto del rechazo con el banco.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "AWAITING_HUMAN_REVIEW"
+      }
     },
     {
       "caseId": "duplicate-payment",
@@ -201,7 +217,9 @@
       "afterServed": "Hola, Evaluador. El pago P61007 está en estado `EN_REVISION` porque se detectó como un `DUPLICATE_PAYMENT`. Antes de actuar, verificaría si realmente es un pago duplicado y, en caso de confirmarse, a qué solicitud corresponde para aplicarlo correctamente.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "AWAITING_HUMAN_REVIEW"
+      }
     },
     {
       "caseId": "complement-status",
@@ -233,7 +251,9 @@
       "afterServed": "Hola, Evaluador. El pago P61008 está pendiente porque le falta un complemento (`COMPLEMENT_MISSING`). Antes de cualquier acción, verificaría el estado de ese complemento. Esto es clave para asegurar que todo esté en orden, tal como aprendimos con el caso `learning_complement-status`.",
       "expectedBehavioralChange": "No new behavior required because BEFORE already met the preregistered behavior signal.",
       "actualBehavioralChange": "BEHAVIOR_SIGNAL_STABLE",
-      "humanReview": "AWAITING_HUMAN_REVIEW"
+      "humanReview": {
+        "status": "AWAITING_HUMAN_REVIEW"
+      }
     }
   ]
 }

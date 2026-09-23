@@ -1,0 +1,79 @@
+{
+  "evalRunId": "hugo-phase4-2026-09-22T09-08-22-306Z",
+  "completed": 18,
+  "reviewedAt": "2026-09-23T01:43:08.296Z",
+  "decisions": {
+    "solicitud-found": {
+      "choice": "BOTH_ACCEPTABLE",
+      "note": ""
+    },
+    "solicitud-missing": {
+      "choice": "BOTH_UNACCEPTABLE",
+      "note": ""
+    },
+    "sample-boundary": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "iq-unknown": {
+      "choice": "BOTH_UNACCEPTABLE",
+      "note": ""
+    },
+    "conversation-followup": {
+      "choice": "B_BETTER",
+      "note": ""
+    },
+    "partial-zero": {
+      "choice": "B_BETTER",
+      "note": ""
+    },
+    "partial-several": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "exact-zero-complete": {
+      "choice": "B_BETTER",
+      "note": ""
+    },
+    "exact-one-complete": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "tool-unknown": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "why-followup": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "ambiguous-other": {
+      "choice": "B_BETTER",
+      "note": ""
+    },
+    "memory-stale-status": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "memory-conflict": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "irrelevant-memory": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "decision-not-rule": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "experience-relevant": {
+      "choice": "A_BETTER",
+      "note": ""
+    },
+    "experience-counterexample": {
+      "choice": "BOTH_UNACCEPTABLE",
+      "note": ""
+    }
+  }
+}

@@ -4,6 +4,7 @@ const cases = require('./case-specs.cjs');
 const { normalizeProviderError, classifyAppropriateEffect } = require('../../../functions/lib/modules/agent007/hugoCore/evaluationContract');
 const main = require('./phase7-real-model-results.json');
 const repeats = [require('./phase7-real-model-repeat-a.json'), require('./phase7-real-model-repeat-b.json')];
+const humanReview = require('./phase7-human-review-analysis.json');
 const median = values => { const rows = values.filter(Number.isFinite).sort((a,b)=>a-b); return rows.length ? rows[Math.floor((rows.length-1)/2)] : null; };
 const signal = (text, pattern) => new RegExp(pattern, 'i').test(text || '');
 function assess(family) {
@@ -37,10 +38,11 @@ const domainRows = [...new Set(cases.map(row => row.domain))].map(domain => { co
   appropriateEffects: selected.filter(row => row.classification.startsWith('APPROPRIATE_')).length,
   missedBeneficialEffects: selected.filter(row => row.classification === 'MISSED_BENEFICIAL_CHANGE').length,
   negativeTransfer: selected.filter(row => row.classification === 'INAPPROPRIATE_CHANGE').length,
-  providerErrors: selected.filter(row => row.classification === 'PROVIDER_ERROR').length, humanReviewStatus: 'AWAITING_HUMAN_REVIEW' }; });
+  providerErrors: selected.filter(row => row.classification === 'PROVIDER_ERROR').length, humanReviewStatus: 'NOT_REVIEWED_DIRECTLY' }; });
 const expectedRelevant = rows.filter(row => !['EXPERIENCE_SHOULD_BE_IGNORED','MULTIPLE_EXPERIENCES_CONFLICT','DETERMINISTIC_FACT'].includes(row.caseType));
 const report = { schemaVersion: 'hugo-phase7-analysis-v1', syntheticOnly: true, preregisteredDatasetDigest: main.preregisteredDatasetDigest,
-  familyCount: rows.length, humanReviewStatus: 'AWAITING_HUMAN_REVIEW', humanReviewsCompleted: 0,
+  familyCount: rows.length, humanReviewStatus: humanReview.humanReviewStatus, humanReviewsCompleted: humanReview.reviewed,
+  humanReviewsPending: humanReview.incomplete, humanReview,
   classifications: Object.fromEntries(effectLabels.map(label => [label, rows.filter(row => row.classification === label).length])),
   taskDistribution: Object.fromEntries(taskLabels.map(label => [label, { count: rows.filter(row => row.taskClass === label).length, percent: Number((100 * rows.filter(row => row.taskClass === label).length / rows.length).toFixed(1)) }])),
   retrieval: { expectedRelevant: expectedRelevant.length, retrieved: expectedRelevant.filter(row => row.retrieved > 0).length,
@@ -62,5 +64,7 @@ const report = { schemaVersion: 'hugo-phase7-analysis-v1', syntheticOnly: true, 
 fs.writeFileSync(path.join(__dirname, 'phase7-analysis.json'), JSON.stringify(report, null, 2) + '\n');
 fs.writeFileSync(path.join(__dirname, 'phase7-dashboard.json'), JSON.stringify({ schemaVersion: report.schemaVersion, familyCount: report.familyCount,
   classifications: report.classifications, taskDistribution: report.taskDistribution, retrieval: report.retrieval, repeats: report.repeats,
-  tokenAndLatency: report.tokenAndLatency, domains: report.domains, humanReviewStatus: report.humanReviewStatus }, null, 2) + '\n');
+  tokenAndLatency: report.tokenAndLatency, domains: report.domains, humanReviewStatus: report.humanReviewStatus,
+  humanReviewsCompleted: report.humanReviewsCompleted, humanReviewsPending: report.humanReviewsPending,
+  humanReview: { completionPercent: humanReview.completionPercent, phases: humanReview.phases } }, null, 2) + '\n');
 console.log(JSON.stringify({ classifications: report.classifications, repeats: report.repeats, retrieval: report.retrieval, providerErrors: report.providerErrors }));

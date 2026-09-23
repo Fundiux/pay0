@@ -4,11 +4,11 @@ Date: 2026-09-22. Status: **COMPLETE as a controlled Learning Hardening II evalu
 
 ## 1. Executive summary
 
-Phase 7 explains the seven Phase 6 `NO_EFFECT` families: all seven BEFORE responses already contained the expected behavior. Their most supported diagnosis is `EXPERIENCE_ALREADY_KNOWN`; the experience was `INFORMATIVE_ONLY`, and unchanged behavior was appropriate. The new analysis layer classifies all seven as `APPROPRIATE_STABILITY`, pending human review, while preserving the original Phase 6 classification.
+Phase 7 explains the seven Phase 6 `NO_EFFECT` families: all seven BEFORE responses already contained the expected behavior. Their most supported diagnosis is `EXPERIENCE_ALREADY_KNOWN`; the experience was `INFORMATIVE_ONLY`, and unchanged behavior was appropriate. The new analysis layer classifies all seven as `APPROPRIATE_STABILITY` while preserving the original Phase 6 classification. Two of these seven pairs now have human review; five remain pending.
 
 The real-model suite grew from 10 to 28 frozen synthetic families across PAYMENTS, SOLICITUDES, IQ, PAYMENT_COMPLEMENTS, DOCUMENTS, MEMORY and CONVERSATION_REFERENCE. The preregistered automatic result was 10 `APPROPRIATE_CHANGE`, 5 `APPROPRIATE_STABILITY`, 0 `INAPPROPRIATE_CHANGE`, 1 `MISSED_BENEFICIAL_CHANGE`, 5 `INCONCLUSIVE` and 7 `PROVIDER_ERROR`. A family is `PROVIDER_ERROR` when any required arm lacks a complete provider response. Eight arms reached `MAX_TOKENS`; Hugo served graceful degradation for all eight.
 
-This is automatic synthetic evidence. Human blind review is **0/28** and remains `AWAITING_HUMAN_REVIEW`. The model tournament gate therefore fails even though its dataset, criteria, HOLDOUT and neutral metrics are ready.
+The automatic results remain synthetic evidence. User-provided blind-review exports add judgments for **20/28** historical pairs: Phase 4 is complete at 18/18 and Phase 6 is partial at 2/10. The Phase 4 reviewer preferred legacy in 10 cases and Hugo v2 in 4, marked 1 pair as both acceptable and 3 as both unacceptable. Both reviewed Phase 6 cases preferred AFTER. The tournament remains blocked because Phase 6 review coverage and token reliability are insufficient.
 
 ## 2. Architecture changes justified by evidence
 
@@ -29,7 +29,7 @@ For `document-review`, `invoice-mismatch`, `supplier-ack`, `amount-mismatch`, `b
 | Phase 7 semantics | `APPROPRIATE_STABILITY` |
 | Actionability | `INFORMATIVE_ONLY` |
 | Most supported reason | `EXPERIENCE_ALREADY_KNOWN` |
-| Human status | `AWAITING_HUMAN_REVIEW` |
+| Human status | `PARTIAL`: 2 reviewed, 5 pending among these families |
 
 The detailed artifact records BEFORE/AFTER context, raw output, served output, added experience and actual signal for every family. This corrects the interpretation, not the historical files.
 
@@ -66,7 +66,7 @@ The single automatic `MISSED_BENEFICIAL_CHANGE` is `p7-reference-ambiguous`. Its
 
 All 24 families that expected a relevant experience retrieved and included one. Explicit experience-ID citation was 0; models generally used prose rather than internal IDs. Ten families showed the preregistered appropriate behavioral change. Retrieval is therefore measured separately from behavioral use.
 
-Adversarial fixtures covered foreign root, similar but materially different facts, conflicting experiences, current facts overriding history, duplicate experience and supersession. No `INAPPROPRIATE_CHANGE` was detected. Conflict withheld selection and produced review behavior; wrong scope selected nothing; duplicates were bounded; the superseded record did not replace the active revision. The result is limited by automatic scoring and zero human review.
+Adversarial fixtures covered foreign root, similar but materially different facts, conflicting experiences, current facts overriding history, duplicate experience and supersession. No `INAPPROPRIATE_CHANGE` was detected. Conflict withheld selection and produced review behavior; wrong scope selected nothing; duplicates were bounded; the superseded record did not replace the active revision. These Phase 7 fixtures still lack direct human judgments; the imported reviews cover the historical Phase 4 and Phase 6 pairs.
 
 ## 7. Representation ablation and compression
 
@@ -112,7 +112,9 @@ The percentages describe the selected eval workload, not production traffic. Exa
 
 `/hugo` now presents one blind workflow for the 18 Phase 4 and 10 Phase 6 comparisons, including task, evidence, A/B responses and acceptance criteria. It distinguishes reviewed, skipped and incomplete. A later change creates `REVIEW_REVISED` while preserving the prior event. The Firestore emulator confirmed persistence, reviewer identity, revisions and cross-root isolation.
 
-No person submitted a judgment during this phase. Human preference, acceptance rate, both-bad rate and correction rate remain **NOT_MEASURED**. Phase 4 therefore remains **PARTIAL**.
+Two user-provided legacy exports were validated against the exact frozen run IDs and case sets. Phase 4 is 18/18 complete: legacy was preferred in 10 cases, Hugo v2 in 4, both were acceptable in 1 and both were unacceptable in 3. Phase 6 is 2/10 complete, and AFTER was preferred in both reviewed cases (`document-review` and `invoice-mismatch`). Overall completion is 20/28 (71.4%), with 8 Phase 6 cases pending.
+
+The legacy export format contains neither reviewer identity nor structured reason codes; both are recorded as unavailable rather than inferred. Empty Phase 4 notes add no qualitative rationale. Source-file digests preserve import provenance. The exports were not written to Firebase; `/hugo` shows imported evidence separately from root-scoped persisted reviews. The Phase 4 result materially challenges v2 and keeps Phase 4 **PARTIAL**. The 2/2 Phase 6 preference is encouraging for those two cases but is too small and incomplete to support a general learning claim.
 
 ## 13. Dataset, governance and privacy
 
@@ -124,7 +126,7 @@ The privacy demonstration pseudonymizes root/entity IDs, removes names, email, t
 
 ## 14. Tournament readiness and Phase 8
 
-Readiness is **NOT_READY**. Dataset freeze, HOLDOUT, preregistration, workflow, provider-neutral metrics and adapter independence pass. Meaningful human review fails at 0/28. Token reliability fails because `MAX_TOKENS` remains intermittent in the unchanged full flow. Full-flow stability is `REVIEW`.
+Readiness is **NOT_READY**. Dataset freeze, HOLDOUT, preregistration, workflow, provider-neutral metrics and adapter independence pass. Meaningful human review moves to `REVIEW`: 20/28 are judged overall, but Phase 6 has only 2/10. Token reliability fails because `MAX_TOKENS` remains intermittent in the unchanged full flow. Full-flow stability is `REVIEW`.
 
 Phase 8 should be **Human Review and Token Reliability Gate**:
 
@@ -139,7 +141,7 @@ Do not add another provider in Phase 8 unless those gates are met.
 
 ## 15. Plain-language conclusions
 
-**Would testing GPT against Gemini now tell us something useful?** Not enough to justify the cost or select a model. The benchmark mechanics are much better, but no human has judged the existing pairs and intermittent token exhaustion would make provider comparison unfair.
+**Would testing GPT against Gemini now tell us something useful?** Not enough to justify the cost or select a model. Human review now exposes a material Phase 4 preference for legacy and an early 2/2 Phase 6 preference for AFTER, but Phase 6 still has eight pending judgments and intermittent token exhaustion would make provider comparison unfair.
 
 **Is Hugo failing to learn because it cannot remember, cannot retrieve, or the model does not use what Hugo knows?** Memory and retrieval worked: 24/24 expected relevant cases were included. Seven old no-effect cases did not need a changed answer. In the expanded suite, ten cases changed appropriately, one missed a beneficial change, and token failures prevented conclusions in others. The remaining bottleneck is a mix of model use, stochastic stability and token reliability, not memory loss.
 
