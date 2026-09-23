@@ -12,12 +12,13 @@ export class FirestoreHugoDataStore implements HugoDataStore {
   constructor(private readonly db: Firestore) {}
 
   private scope(rootId: string) { if (!valid(rootId)) throw new HttpsError("invalid-argument", "Ámbito inválido."); return rootId; }
+  private ownsConversation(rootId: string, uid: string, conversationId: string) { return conversationId === `${rootId}_${uid}` || conversationId === `${rootId}_${uid}_global`; }
   private async recent(collection: string, rootId: string, limit: number) {
     const snap = await this.db.collection(collection).where("rootId", "==", this.scope(rootId)).orderBy("createdAt", "desc").limit(limit).get();
     return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).sort((a, b) => timestampMillis(b.updatedAt || b.createdAt) - timestampMillis(a.updatedAt || a.createdAt));
   }
   async loadConversationState(identity: { uid: string; rootId: string }, conversationId: string): Promise<HugoConversationState> {
-    if (!valid(identity.uid) || conversationId !== `${this.scope(identity.rootId)}_${identity.uid}`) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
+    if (!valid(identity.uid) || !this.ownsConversation(this.scope(identity.rootId), identity.uid, conversationId)) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
     const [prior, conversationSnap, recommendations, rules] = await Promise.all([
       this.db.collection("agent007Messages").where("conversationId", "==", conversationId).where("rootId", "==", identity.rootId).orderBy("createdAt", "desc").limit(12).get(),
       this.db.collection("agent007Conversations").doc(conversationId).get(), this.recent("agent007Recommendations", identity.rootId, 20), this.recent("agent007LearnedRules", identity.rootId, 20),
@@ -48,8 +49,9 @@ export class FirestoreHugoDataStore implements HugoDataStore {
   newTraceId() { return this.db.collection("agent007Traces").doc().id; }
   memoryRef(id: string) { return this.db.collection("agent007Memory").doc(id); }
   pendingRecommendations(rootId: string, limit = 100) { return this.db.collection("agent007Recommendations").where("rootId", "==", this.scope(rootId)).where("status", "==", "PENDING_REVIEW").limit(limit); }
-  async listMessages(rootId: string, uid: string, limit = 80) {
-    const conversationId = `${this.scope(rootId)}_${uid}`;
+  async listMessages(rootId: string, uid: string, limit = 80, requestedConversationId?: string) {
+    const conversationId = requestedConversationId || `${this.scope(rootId)}_${uid}`;
+    if (!this.ownsConversation(rootId, uid, conversationId)) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
     const snap = await this.db.collection("agent007Messages").where("conversationId", "==", conversationId).where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(Math.min(Math.max(limit, 1), 80)).get();
     return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).sort((a, b) => timestampMillis(a.createdAt) - timestampMillis(b.createdAt));
   }
@@ -61,14 +63,14 @@ export class FirestoreHugoDataStore implements HugoDataStore {
     return unread.length;
   }
   async saveTurn(input: HugoTurnInput) {
-    if (input.conversationId !== `${this.scope(input.rootId)}_${input.uid}`) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
+    if (!this.ownsConversation(this.scope(input.rootId), input.uid, input.conversationId)) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
     const messages = this.db.collection("agent007Messages"), userMessage = messages.doc(), assistantMessage = messages.doc(), now = Timestamp.now();
     const batch = this.db.batch();
     batch.set(this.db.collection("agent007Conversations").doc(input.conversationId), { rootId: input.rootId, ownerUid: input.uid, participantUids: [input.uid], status: "ACTIVE", lastMessage: input.reply,
       lastMessageAt: now, updatedAt: now, recentEntities: input.recentEntities, ...(input.conversationState ? { conversationState: input.conversationState } : {}), createdAt: FieldValue.serverTimestamp() }, { merge: true });
-    batch.create(userMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "user", text: input.text, senderUid: input.uid, source: "USER", read: true, createdAt: now });
+    batch.create(userMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "user", text: input.text, senderUid: input.uid, source: "USER", visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, createdAt: now });
     batch.create(assistantMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "assistant", text: input.reply, recipientUid: input.uid, source: input.source,
-      read: true, capability: input.capability || null, capabilityExecuted: input.capabilityExecuted, contextSummary: input.contextSummary, createdAt: Timestamp.fromMillis(now.toMillis() + 1) });
+      visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, capability: input.capability || null, capabilityExecuted: input.capabilityExecuted, contextSummary: input.contextSummary, createdAt: Timestamp.fromMillis(now.toMillis() + 1) });
     batch.create(this.db.collection("agent007Traces").doc(input.traceId), { ...input.trace, rootId: input.rootId, actorUid: input.uid, conversationId: input.conversationId });
     await batch.commit();
     return { id: assistantMessage.id, createdAt: now };

@@ -9,7 +9,8 @@ import { executeRequestIqComplement, requestedComplementAction } from "./capabil
 import { Pay0Connector } from "./pay0Connector";
 import { HugoToolRouter } from "./hugoCore/toolRouter";
 import { HugoConversationCore } from "./hugoCore/conversationCore";
-import { VertexGeminiAdapter } from "./vertexGeminiAdapter";
+import { HugoModelRouter } from "./hugoModelRouter";
+import { HUGO_CAPABILITIES, classifyHugoProfile, normalizeHugoScope } from "./hugoCore/runtimeContract";
 import { conversationTrace } from "./traceStore";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
@@ -20,7 +21,7 @@ import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewCon
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
-const conversationIdFor = (rootId: string, uid: string) => `${rootId}_${uid}`;
+const conversationIdFor = (rootId: string, uid: string, scope: "GLOBAL" | "PAY0" = "PAY0") => scope === "GLOBAL" ? `${rootId}_${uid}_global` : `${rootId}_${uid}`;
 const hugoData = new FirestoreHugoDataStore(db);
 const hugoLearning = new FirestoreHugoLearningStore(db);
 
@@ -128,8 +129,9 @@ export const listAgent007Messages = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { uid, rootId } = await actor(request);
-    const conversationId = conversationIdFor(rootId, uid);
-    const messages = await hugoData.listMessages(rootId, uid);
+    const scope = normalizeHugoScope(request.data?.scope);
+    const conversationId = conversationIdFor(rootId, uid, scope);
+    const messages = await hugoData.listMessages(rootId, uid, 80, conversationId);
     return { ok: true, conversationId, messages };
   },
 );
@@ -150,7 +152,9 @@ export const sendAgent007Message = onCall(
     const text = clean(request.data?.text, 2000);
     if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
     const startedAt = Date.now();
-    const conversationId = conversationIdFor(rootId, uid);
+    const scope = normalizeHugoScope(request.data?.scope);
+    const profile = classifyHugoProfile(text);
+    const conversationId = conversationIdFor(rootId, uid, scope);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
       ? await executeRequestIqComplement({ db, rootId, uid, message: text })
@@ -163,12 +167,14 @@ export const sendAgent007Message = onCall(
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
     });
-    const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData, hugoLearning);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply, promptVersion: "hugo-v2" as const };
+    const modelRouter = new HugoModelRouter();
+    const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
+      modelCapability: profile === "PROGRAMMER" ? "STRONG_EXTERNAL" as const : "FAST_EXTERNAL" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
       await hugoData.saveErrorTrace(rootId, traceId, { schemaVersion: 1, conversationId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
-        timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "hugo-v2", resultStatus: "ERROR",
+        timestamp: FieldValue.serverTimestamp(), scope, profile, task: "DIRECT_CONVERSATION", model: "unavailable", promptVersion: "hugo-v2", resultStatus: "ERROR",
         errorCode: error instanceof Error ? clean(error.name, 80) : "ERROR", latencyMs: Date.now() - startedAt,
         toolsRequested: error instanceof Error ? (error as Error & { hugoToolsRequested?: string[] }).hugoToolsRequested || [] : [],
         toolsExecuted: error instanceof Error ? (error as Error & { hugoToolsExecuted?: string[] }).hugoToolsExecuted || [] : [],
@@ -176,15 +182,39 @@ export const sendAgent007Message = onCall(
       throw error;
     });
     const reply = result.text;
-    const source = result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE";
-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+    const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     for (const experienceId of result.learningUsage?.includedIds || []) {
       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
     }
-    return { ok: true, conversationId, message: { id: saved.id, role: "assistant", text: reply, source, createdAt: saved.createdAt } };
+    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, source, scope, profile, createdAt: saved.createdAt } };
+  },
+);
+
+export const getHugoDashboard = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const [recommendations, traces, globalMessages] = await Promise.all([
+      hugoData.listRecommendations(rootId, 50),
+      hugoData.listTraces(rootId, { limit: 50, from: new Date(Date.now() - 30 * 86400000), to: new Date() }),
+      hugoData.listMessages(rootId, uid, 20, conversationIdFor(rootId, uid, "GLOBAL")),
+    ]);
+    const attention = recommendations.filter(row => row.status === "PENDING_REVIEW" && row.requiresHumanDecision !== false);
+    const byProvider: Record<string, any> = {};
+    for (const trace of traces.traces) {
+      const provider = String(trace.modelProvider || (trace.model === "none" ? "NO_MODEL" : "UNKNOWN"));
+      const metric = byProvider[provider] ||= { requests: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, errors: 0, latencyMs: 0 };
+      metric.requests++; metric.inputTokens += Number(trace.tokenUsage?.input || 0); metric.outputTokens += Number(trace.tokenUsage?.output || 0);
+      metric.reasoningTokens += Number(trace.tokenUsage?.reasoning || 0); metric.errors += trace.errorCode ? 1 : 0; metric.latencyMs += Number(trace.latencyMs || 0);
+    }
+    Object.values(byProvider).forEach((row: any) => { row.averageLatencyMs = row.requests ? Math.round(row.latencyMs / row.requests) : 0; delete row.latencyMs; });
+    return { ok: true, scope: "GLOBAL", attention: attention.slice(0, 12), activity: traces.traces.slice(0, 12), consumption: byProvider,
+      providers: new HugoModelRouter().status(), capabilities: HUGO_CAPABILITIES, conversations: [{ id: conversationIdFor(rootId, uid, "GLOBAL"), scope: "GLOBAL", messageCount: globalMessages.length,
+        lastMessage: globalMessages.at(-1)?.text || null }], systems: [{ id: "PAY0", status: "CONNECTED" }, { id: "ASSETS", status: "NOT_CONNECTED" }, { id: "TTT", status: "NOT_CONNECTED" }] };
   },
 );
 

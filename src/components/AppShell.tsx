@@ -259,7 +259,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {MobileBottomNav}
-      <HugoFloatingBubble />
+      {pathname !== "/hugo" && <HugoFloatingBubble />}
     </div>
   );
 }

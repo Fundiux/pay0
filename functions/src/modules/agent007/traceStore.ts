@@ -7,7 +7,7 @@ import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 export function conversationTrace(traceId: string, input: ConversationInput, output: ConversationOutput, startedAt: number, capability?: { executed?: boolean } | null) {
   return {
     schemaVersion: 1, traceId, conversationId: input.conversationId, rootId: input.identity.rootId, actorUid: input.identity.uid,
-    actorRole: input.identity.role, channel: input.channel, timestamp: FieldValue.serverTimestamp(),
+    actorRole: input.identity.role, channel: input.channel, scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", task: "DIRECT_CONVERSATION", timestamp: FieldValue.serverTimestamp(),
     model: output.model.model, modelVersion: output.model.modelVersion, modelProvider: output.model.provider || null, promptVersion: output.promptVersion,
     toolsRequested: output.toolsRequested.map(row => row.name),
     toolsExecuted: output.toolsExecuted.map(row => ({ tool: row.tool, sourceSystem: row.sourceSystem, completeness: row.completeness, latencyMs: row.trace.latencyMs, result: row.trace.result })),

@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 import { usePathname } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import AssetsShell from "@/components/assets/AssetsShell";
+import HugoShell from "@/components/hugo/HugoShell";
 import { GlobalLoadingProvider } from "@/components/GlobalLoading";
 import MaintenanceGate from "@/components/MaintenanceGate";
 import RequireAuth from "@/components/RequireAuth";
@@ -21,10 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isPublicVerificationRoute = pathname === "/verificar" || pathname?.startsWith("/verificar/");
   const isLoginPage = pathname === "/login" || isMatRoute || isSignatureRoute || isPublicVerificationRoute;
   const isAssetsRoute = pathname === "/assets" || pathname?.startsWith("/assets/");
+  const isHugoRoute = pathname === "/hugo" || pathname?.startsWith("/hugo/");
   const isSystemLauncher = pathname === "/systems";
 
   const authenticatedContent = isAssetsRoute ? (
     <AssetsShell>{children}</AssetsShell>
+  ) : isHugoRoute ? (
+    <HugoShell>{children}</HugoShell>
   ) : isSystemLauncher ? (
     children
   ) : (

@@ -29,7 +29,7 @@ function fallbackReply(message: string, name: string, context: any): string {
   return `Entendido, ${name}. Guardé tu mensaje en esta conversación. Todavía no tengo evidencia suficiente para afirmarlo como una regla; cuando vea un caso relacionado te lo señalaré para que lo confirmemos.`;
 }
 
-export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
+export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
 export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
 
 export class HugoConversationCore {
@@ -100,7 +100,7 @@ export class HugoConversationCore {
       !this.model ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: "MODEL_UNAVAILABLE" } :
         { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null };
     if (!skipModel && this.model) {
-      try { model = this.model.generateCanonical ? await this.model.generateCanonical(canonicalModelRequest({ message: input.message, name: input.name, context: built.context, history, promptVersion, capability: input.modelCapability })) :
+      try { model = this.model.generateCanonical ? await this.model.generateCanonical(canonicalModelRequest({ message: input.message, name: input.name, context: built.context, history, promptVersion, capability: input.modelCapability, profile: input.profile, scope: input.scope })) :
         await this.model.generate({ message: input.message, name: input.name, context: built.context, history, promptVersion }); }
       catch (error) { model = { text: null, model: "unavailable", modelVersion: "unknown", promptVersion, tokenUsage: null,
         error: error instanceof Error && /timeout|abort/i.test(error.name + " " + error.message) ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE" }; }
