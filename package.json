@@ -63,7 +63,8 @@
     "qa:release-guard": "node qa/scripts/critical-release-guard.mjs",
     "qa:regression-rules": "firebase emulators:exec --only firestore \"node qa/scripts/verify-regression-rules.mjs\"",
     "qa:document-access": "npm run qa:release-guard && npm run qa:regression-rules",
-    "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs"
+    "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
+    "qa:dispersion-dispatch-routing": "npm --prefix functions run build && node qa/scripts/verify-dispersion-dispatch-routing.cjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

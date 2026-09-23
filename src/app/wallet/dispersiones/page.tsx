@@ -75,6 +75,13 @@ interface DespachoOption {
   active?: boolean;
 }
 
+const AUTO_IQ_DESPACHO_ID = "__AUTO_IQ__";
+const AUTO_IQ_DESPACHO: DespachoOption = {
+  id: AUTO_IQ_DESPACHO_ID,
+  label: "IQ",
+  active: true,
+};
+
 type DispersionPricingPreview = Awaited<
   ReturnType<
     typeof previewClientDispersionPricing
@@ -389,6 +396,11 @@ export default function WalletDispersionesPage() {
   }, [uid, role, rootId, profileLoading]);
 
   useEffect(() => {
+    if (!isSuperadmin) {
+      setDespachos([]);
+      return;
+    }
+
     const qd = query(
       collection(db, "despachos"),
       orderBy("nombre", "asc"),
@@ -419,7 +431,7 @@ export default function WalletDispersionesPage() {
       },
       () => setDespachos([]),
     );
-  }, []);
+  }, [isSuperadmin]);
 
   useEffect(() => {
     if (!clientId) {
@@ -609,6 +621,10 @@ export default function WalletDispersionesPage() {
   );
 
   const eligibleMassiveDespachos = useMemo(() => {
+    if (!isSuperadmin) {
+      return [AUTO_IQ_DESPACHO];
+    }
+
     const ids = new Set(
       clientDispersionCosts
         .filter(
@@ -627,6 +643,7 @@ export default function WalletDispersionesPage() {
     clientDispersionCosts,
     despachos,
     massiveOperationTypeKey,
+    isSuperadmin,
   ]);
 
   useEffect(() => {
@@ -673,6 +690,10 @@ export default function WalletDispersionesPage() {
   const eligibleDespachos = useMemo(() => {
     if (!operationTypeKey) return [];
 
+    if (!isSuperadmin) {
+      return [AUTO_IQ_DESPACHO];
+    }
+
     const ids = new Set(
       clientDispersionCosts
         .filter(
@@ -692,6 +713,7 @@ export default function WalletDispersionesPage() {
     clientDispersionCosts,
     despachos,
     operationTypeKey,
+    isSuperadmin,
   ]);
 
   useEffect(() => {
@@ -2456,30 +2478,32 @@ export default function WalletDispersionesPage() {
             placeholder={beneficiaryId && filteredMethods.length === 0 ? "Sin metodos activos" : "Metodo"}
           />
 
-          <UiSelect
-            value={despachoId}
-            onChange={(value) => {
-              setDespachoId(value);
-              setPricingPreview(null);
-              setPricingPreviewError("");
-            }}
-            disabled={
-              !methodId ||
-              eligibleDespachos.length === 0
-            }
-            options={eligibleDespachos.map(
-              (item) => ({
-                value: item.id,
-                label: item.label,
-              }),
-            )}
-            placeholder={
-              methodId &&
-              eligibleDespachos.length === 0
-                ? "Configura costo final del cliente"
-                : "Despacho"
-            }
-          />
+          {isSuperadmin ? (
+            <UiSelect
+              value={despachoId}
+              onChange={(value) => {
+                setDespachoId(value);
+                setPricingPreview(null);
+                setPricingPreviewError("");
+              }}
+              disabled={
+                !methodId ||
+                eligibleDespachos.length === 0
+              }
+              options={eligibleDespachos.map(
+                (item) => ({
+                  value: item.id,
+                  label: item.label,
+                }),
+              )}
+              placeholder={
+                methodId &&
+                eligibleDespachos.length === 0
+                  ? "Configura costo final del cliente"
+                  : "Despacho"
+              }
+            />
+          ) : null}
 
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -2575,10 +2599,12 @@ export default function WalletDispersionesPage() {
             <div className="flex justify-between gap-3">
               <span className="text-slate-500">Despacho</span>
               <span className="truncate text-white">
-                {eligibleDespachos.find(
-                  (item) =>
-                    item.id === despachoId,
-                )?.label || "-"}
+                {!isSuperadmin
+                  ? "IQ"
+                  : eligibleDespachos.find(
+                      (item) =>
+                        item.id === despachoId,
+                    )?.label || "-"}
               </span>
             </div>
             <div className="flex justify-between gap-3">
@@ -2677,31 +2703,33 @@ export default function WalletDispersionesPage() {
           </div>
 
           
-          <div>
-            <div className="mb-1 text-[11px] text-slate-500">Despacho</div>
-            <UiSelect
-              value={dispersionImportDespachoId}
-              onChange={(value) => {
-                setDispersionImportDespachoId(value);
-                setDispersionImportPreview(null);
-                setDispersionImportFileName("");
-                setIsDispersionImportDragging(false);
-                setError("");
-                setSuccess("");
-              }}
-              options={eligibleMassiveDespachos.map(
-                (item) => ({
-                  value: item.id,
-                  label: item.label,
-                }),
-              )}
-              placeholder={
-                eligibleMassiveDespachos.length === 0
-                  ? "Configura costo final del cliente"
-                  : "Selecciona despacho"
-              }
-            />
-          </div>
+          {isSuperadmin ? (
+            <div>
+              <div className="mb-1 text-[11px] text-slate-500">Despacho</div>
+              <UiSelect
+                value={dispersionImportDespachoId}
+                onChange={(value) => {
+                  setDispersionImportDespachoId(value);
+                  setDispersionImportPreview(null);
+                  setDispersionImportFileName("");
+                  setIsDispersionImportDragging(false);
+                  setError("");
+                  setSuccess("");
+                }}
+                options={eligibleMassiveDespachos.map(
+                  (item) => ({
+                    value: item.id,
+                    label: item.label,
+                  }),
+                )}
+                placeholder={
+                  eligibleMassiveDespachos.length === 0
+                    ? "Configura costo final del cliente"
+                    : "Selecciona despacho"
+                }
+              />
+            </div>
+          ) : null}
 
           <div>
             <div className="mb-1 text-[11px] text-slate-500">Tipo de metodo archivo</div>

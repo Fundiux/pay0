@@ -6,6 +6,7 @@
                                         "npm --prefix functions run build",
                                         "node qa/scripts/verify-client-csf-parser.cjs",
                                         "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
+                                        "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
                                         "npm run qa:document-access"
                                     ]
                   },

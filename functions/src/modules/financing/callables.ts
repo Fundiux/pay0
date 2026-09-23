@@ -37,6 +37,7 @@ import {
   projectCanonicalDispersionFinancialBatchState,
   type CanonicalFinancialBatchAccountState,
 } from "./dispersionFinancial";
+import { resolveDispersionDespachoId } from "./dispersionDispatchResolver";
 
 if (!getApps().length) {
   initializeApp();
@@ -368,14 +369,7 @@ export const createClientDispersion = onCall(
     const reference = String(data.reference || "").trim() || null;
     const empresaId = String(data.empresaId || "").trim() || null;
     const asociadoId = String(data.asociadoId || "").trim() || null;
-    const despachoId = String(data.despachoId || "").trim();
-
-    if (!despachoId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "despachoId requerido.",
-      );
-    }
+    const requestedDespachoId = String(data.despachoId || "").trim();
 
     const userSnap = await db.doc(`users/${uid}`).get();
     if (!userSnap.exists) {
@@ -390,6 +384,12 @@ export const createClientDispersion = onCall(
     }
 
     const rootId = String(profile.rootId || uid).trim();
+    const despachoId = await resolveDispersionDespachoId({
+      db,
+      rootId,
+      role,
+      requestedDespachoId,
+    });
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
@@ -912,13 +912,7 @@ export const createClientDispersionsMassive = onCall(
     const idempotencyDocRef = idempotencyKey ? operationIdempotencyRef(idempotencyOperation, uid, idempotencyKey) : null;
     const clienteId = assertClienteId(data.clienteId);
     // H4_D87_A58_A33_MASSIVE_DESPACHO_CONTRACT
-    const despachoId = String(data.despachoId || "").trim();
-    if (!despachoId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "despachoId requerido para dispersion masiva.",
-      );
-    }
+    const requestedDespachoId = String(data.despachoId || "").trim();
     const rawItems: any[] = Array.isArray(data.items) ? data.items : [];
 
     if (rawItems.length === 0) {
@@ -943,6 +937,12 @@ export const createClientDispersionsMassive = onCall(
     }
 
     const rootId = String(profile.rootId || uid).trim();
+    const despachoId = await resolveDispersionDespachoId({
+      db,
+      rootId,
+      role,
+      requestedDespachoId,
+    });
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
