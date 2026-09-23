@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   resolveStoredIqClientIdForProfile,
@@ -70,6 +72,16 @@ assert.throws(
   }),
   /IQ_CATALOG_CLIENT_STALE_ID_NAME_NOT_UNIQUE/,
   "El fallback debe cerrarse ante nombres duplicados.",
+);
+
+const paymentCallablesSource = fs.readFileSync(
+  path.join(__dirname, "../../functions/src/modules/iq/pagoDepositCallables.ts"),
+  "utf8",
+);
+assert.doesNotMatch(
+  paymentCallablesSource,
+  /"iqDepositSync\.(?:iqClientId|clientMatchStrategy)"\s*:/,
+  "Los campos de iqDepositSync deben escribirse como mapa y no como claves literales con punto.",
 );
 
 console.log("PASS pagos IQ respetan cliente por credencial y reparan IDs obsoletos sin ambiguedad.");

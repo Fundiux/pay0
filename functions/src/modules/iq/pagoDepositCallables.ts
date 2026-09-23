@@ -1439,8 +1439,10 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
         updatedAt: linkNow,
       }, { merge: true }),
       ctx.pagoRef.set({
-        "iqDepositSync.iqClientId": resolvedClientId,
-        "iqDepositSync.clientMatchStrategy": clientMatchStrategy || null,
+        iqDepositSync: {
+          iqClientId: resolvedClientId,
+          clientMatchStrategy: clientMatchStrategy || null,
+        },
         iqDepositResolvedClientId: resolvedClientId,
         iqDepositClientMatchStrategy: clientMatchStrategy || null,
         iqDepositUpdatedAt: linkNow,
@@ -1507,6 +1509,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   };
 
   if (created) {
+    patch.iqDepositAutoCreateLastError = null;
+    patch.iqDepositAutoCreateLastErrorAt = null;
     patch.iqDepositId = iqId;
     patch.iqDepositFolio = iqId;
     patch.iqPagoDepositId = iqId;
