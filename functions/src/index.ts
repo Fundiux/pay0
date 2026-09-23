@@ -2710,6 +2710,7 @@ export {
   saveClientCommissionRule,
   previewPaymentCommissionDistribution,
   processPaymentCommissionDistribution,
+  preflightPaymentCommissionDistribution,
   getCommissionDistributionsReport,
 } from "./modules/commissionDistributions/callables";
 export { onPaymentReadyForCommissionDistribution } from "./modules/commissionDistributions/triggers";
@@ -2815,6 +2816,7 @@ export { releaseForwardOnlyDispersionReservationOnTerminal } from "./modules/dis
 export {
   createClientDispersionIq,
   processIqDispersionCreate,
+  resolveCommissionInstrumentIq,
 } from "./modules/iq/dispersionCreationCallables";
 
 

@@ -49,6 +49,19 @@ export type IqDispersionCreateResultH4D82A4A1 = {
   errors: string[];
 };
 
+export type IqBeneficiaryInstrumentResolution = {
+  status: "VERIFIED";
+  iqBeneficiaryId: string;
+  iqBeneficiaryName: string;
+  iqAccountId: string;
+  iqAccountLabel: string;
+  instrumentLast4: string;
+  partnerId: string;
+  partnerName: string;
+  clientIqId: string;
+  verifiedAt: string;
+};
+
 type AnyRow = Record<string, unknown>;
 
 type LoginPayload = {
@@ -1335,4 +1348,64 @@ export async function runIqCreateDispersionHttpH4D85A50(
       errors: [message],
     };
   }
+}
+
+export function selectUniqueIqBeneficiaryForLink(rows: AnyRow[], candidates: string[]) {
+  const row = findUniqueByNormalizedNames(rows, candidates, "IQ_BENEFICIARY");
+  const id = rowId(row);
+  if (!id) throw new Error("IQ_BENEFICIARY_ID_INVALID");
+  return { id: String(id), name: rowName(row) };
+}
+
+export function selectUniqueIqAccountForLink(rows: AnyRow[], expectedLast4: string) {
+  const account = resolveBeneficiaryAccount(rows, expectedLast4);
+  return { id: String(account.id), label: account.label };
+}
+
+export async function resolveIqBeneficiaryInstrument(input: {
+  apiOrigin?: string;
+  username: string;
+  password: string;
+  associatedName: string;
+  clientIqId: string;
+  beneficiaryCandidates: string[];
+  currency?: string;
+  operationTypeKey: "TRANSFERENCIA" | "TDC";
+  expectedDestinationLast4: string;
+}): Promise<IqBeneficiaryInstrumentResolution> {
+  const apiOrigin = (() => {
+    const raw = clean(input.apiOrigin) || clean(process.env.PAY0_IQ_API_ORIGIN) || DEFAULT_IQ_API_ORIGIN;
+    try { return new URL(raw).origin; } catch { return DEFAULT_IQ_API_ORIGIN; }
+  })();
+  const token = await login({ apiOrigin, username: input.username, password: input.password });
+  const initial = await fetchJson(buildWizardUrl(apiOrigin, {}), token);
+  const partner = resolvePartner((initial.json ?? {}) as WizardPayload, input.associatedName);
+  const clientId = positiveInt(input.clientIqId);
+  if (!clientId) throw new Error("IQ_CLIENT_CANONICAL_LINK_REQUIRED");
+  const opTypeId = operationTypeId(input.operationTypeKey);
+  const searchTerm = beneficiarySearchTerm(input.beneficiaryCandidates);
+  const lookup = await fetchJson(buildWizardUrl(apiOrigin, {
+    partner_id: partner.id, client_id: clientId, currency: clean(input.currency || "MXN").toLowerCase(),
+    operation_type_id: opTypeId, beneficiary_search: searchTerm,
+  }), token);
+  const beneficiary = findUniqueByNormalizedNames(asRows(((lookup.json ?? {}) as WizardPayload).beneficiaries), input.beneficiaryCandidates, "IQ_BENEFICIARY");
+  const beneficiaryId = rowId(beneficiary);
+  if (!beneficiaryId) throw new Error("IQ_BENEFICIARY_ID_INVALID");
+  const detail = await fetchJson(buildWizardUrl(apiOrigin, {
+    partner_id: partner.id, client_id: clientId, currency: clean(input.currency || "MXN").toLowerCase(),
+    operation_type_id: opTypeId, beneficiary_search: searchTerm, beneficiary_id: beneficiaryId,
+  }), token);
+  const account = resolveBeneficiaryAccount(asRows(((detail.json ?? {}) as WizardPayload).beneficiary_accounts), input.expectedDestinationLast4);
+  return {
+    status: "VERIFIED",
+    iqBeneficiaryId: String(beneficiaryId),
+    iqBeneficiaryName: rowName(beneficiary),
+    iqAccountId: String(account.id),
+    iqAccountLabel: `****${digits(input.expectedDestinationLast4).slice(-4)}`,
+    instrumentLast4: digits(input.expectedDestinationLast4).slice(-4),
+    partnerId: String(partner.id),
+    partnerName: partner.name,
+    clientIqId: String(clientId),
+    verifiedAt: new Date().toISOString(),
+  };
 }

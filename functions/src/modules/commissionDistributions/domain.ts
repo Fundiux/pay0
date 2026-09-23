@@ -6,6 +6,8 @@ export type CommissionRuleLegInput = {
   methodId: string;
   active?: boolean;
   order?: number;
+  deliveryPreference?: "EMAIL" | "WHATSAPP" | "MANUAL" | "NONE";
+  deliveryContact?: string | null;
 };
 
 export type CommissionRuleInput = {
@@ -84,3 +86,60 @@ export function calculateCommissionDistribution(grossMinor: number, input: Commi
   };
 }
 
+export function allocatePostedCommission(totalCommissionMinor: number, input: CommissionRuleInput) {
+  const total = assertInteger(totalCommissionMinor, "totalCommissionMinor");
+  if (total <= 0) throw new Error("La comisión contabilizada debe ser mayor a cero.");
+  const rule = validateCommissionRule(input);
+  const provisional = rule.legs.map((leg) => {
+    const exact = (total * leg.rateBps) / rule.totalRateBps;
+    return { ...leg, amountMinor: Math.floor(exact), fraction: exact - Math.floor(exact) };
+  });
+  let remainder = total - provisional.reduce((sum, leg) => sum + leg.amountMinor, 0);
+  const ranked = [...provisional].sort((a, b) => b.fraction - a.fraction || (a.order || 0) - (b.order || 0));
+  for (let index = 0; remainder > 0; index += 1, remainder -= 1) ranked[index % ranked.length].amountMinor += 1;
+  const amountByKey = new Map(ranked.map((leg) => [`${leg.kind}|${leg.alias}|${leg.methodId}`, leg.amountMinor]));
+  const legs = provisional.map(({ fraction, ...leg }) => ({ ...leg, amountMinor: amountByKey.get(`${leg.kind}|${leg.alias}|${leg.methodId}`) || 0, roundingMinor: (amountByKey.get(`${leg.kind}|${leg.alias}|${leg.methodId}`) || 0) - Math.floor((total * leg.rateBps) / rule.totalRateBps) }));
+  const distributedAmountMinor = legs.reduce((sum, leg) => sum + leg.amountMinor, 0);
+  return { totalRateBps: rule.totalRateBps, totalAmountMinor: total, distributedAmountMinor, differenceMinor: total - distributedAmountMinor, legs };
+}
+
+export type CommissionLegExecutionState = "PENDING" | "READY" | "PROCESSING" | "COMPLETED" | "BLOCKED" | "UNCERTAIN" | "FAILED";
+
+export function aggregateCommissionStatus(states: CommissionLegExecutionState[]) {
+  if (!states.length) return "BLOCKED";
+  if (states.every((state) => state === "COMPLETED")) return "COMPLETED";
+  if (states.some((state) => state === "UNCERTAIN")) return "UNCERTAIN";
+  if (states.some((state) => state === "COMPLETED")) return "PARTIALLY_COMPLETED";
+  if (states.some((state) => state === "PROCESSING")) return "PROCESSING";
+  if (states.every((state) => state === "READY")) return "READY";
+  if (states.some((state) => state === "FAILED")) return "FAILED";
+  if (states.some((state) => state === "BLOCKED")) return "BLOCKED";
+  return "PENDING";
+}
+
+export function evaluateIqLink(input: { status?: string | null; verifiedAtMs?: number | null; nowMs: number; maxAgeMs: number; storedLast4?: string | null; currentLast4?: string | null }) {
+  const reasons: string[] = [];
+  if (String(input.status || "").toUpperCase() !== "VERIFIED") reasons.push(`IQ_LINK_${String(input.status || "PENDING").toUpperCase()}`);
+  if (!input.verifiedAtMs || input.nowMs - input.verifiedAtMs > input.maxAgeMs) reasons.push("IQ_LINK_STALE");
+  if (String(input.storedLast4 || "") !== String(input.currentLast4 || "")) reasons.push("IQ_INSTRUMENT_CHANGED");
+  return { ready: reasons.length === 0, reasons };
+}
+
+export function evaluateCommissionLegSubmission(input: { status: CommissionLegExecutionState; iqFolio?: string | null; postAccepted?: boolean; retryBlocked?: boolean }) {
+  if (input.iqFolio || input.status === "COMPLETED") return { allowed: false, reason: "ALREADY_COMPLETED" };
+  if (input.status === "UNCERTAIN" || input.postAccepted || input.retryBlocked) return { allowed: false, reason: "OUTCOME_RECONCILIATION_REQUIRED" };
+  if (input.status === "PROCESSING") return { allowed: false, reason: "EXECUTION_IN_PROGRESS" };
+  if (!["READY", "FAILED"].includes(input.status)) return { allowed: false, reason: "LEG_NOT_READY" };
+  return { allowed: true, reason: null };
+}
+
+export function recoverCommissionLegFolio(input: { status: CommissionLegExecutionState; recoveredIqFolio?: string | null }) {
+  const folio = String(input.recoveredIqFolio || "").trim();
+  if (!folio) return { status: input.status, retryBlocked: input.status === "UNCERTAIN" };
+  return { status: "COMPLETED" as const, iqFolio: folio, retryBlocked: true };
+}
+
+export function decideCommissionPreflight(distributionReasonCodes: string[], legReasonCodes: string[][]) {
+  const ready = distributionReasonCodes.length === 0 && legReasonCodes.length > 0 && legReasonCodes.every((reasons) => reasons.length === 0);
+  return { status: ready ? "READY_FOR_EXECUTION" as const : "BLOCKED" as const, ready };
+}

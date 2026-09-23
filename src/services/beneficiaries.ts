@@ -48,7 +48,7 @@ export interface ClientBeneficiaryMethodRow {
   last4?: string | null;
   masked?: string | null;
   dedupeKey?: string | null;
-  iqLinkStatus?: "PENDING" | "SYNCING" | "VERIFIED" | "ERROR" | "REVIEW_REQUIRED" | null;
+  iqLinkStatus?: "PENDING" | "SYNCING" | "VERIFIED" | "AMBIGUOUS" | "NOT_FOUND" | "STALE" | "ERROR" | "REVIEW_REQUIRED" | null;
   iqBeneficiaryId?: string | null;
   iqAccountId?: string | null;
   iqLastSyncedAt?: any;

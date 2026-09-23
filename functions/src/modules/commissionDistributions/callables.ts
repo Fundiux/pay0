@@ -2,7 +2,7 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { validateCommissionRule } from "./domain";
-import { materializeCommissionDistribution } from "./service";
+import { materializeCommissionDistribution, preflightCommissionDistribution } from "./service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -98,6 +98,18 @@ export const processPaymentCommissionDistribution = onCall({ cors: true }, async
   }
 });
 
+export const preflightPaymentCommissionDistribution = onCall({ cors: true, timeoutSeconds: 60 }, async (request) => {
+  const actor = await auth(request, "configure");
+  const distributionId = text(request.data?.distributionId);
+  if (!distributionId) throw new HttpsError("invalid-argument", "distributionId es obligatorio.");
+  const distributionSnap = await db.doc(`commissionDistributions/${distributionId}`).get();
+  const distribution: any = distributionSnap.data() || {};
+  if (!distributionSnap.exists || text(distribution.rootId) !== actor.rootId) throw new HttpsError("permission-denied", "Distribución fuera de alcance.");
+  await requireClientOperationalAccess({ uid: actor.uid, role: actor.role as any, rootId: actor.rootId, clientId: text(distribution.clientId), permission: "operateDispersiones" });
+  try { return await preflightCommissionDistribution({ distributionId, actorUid: actor.uid }); }
+  catch (error: any) { throw new HttpsError("failed-precondition", error?.message || "No se pudo completar el preflight."); }
+});
+
 export const getCommissionDistributionsReport = onCall({ cors: true, timeoutSeconds: 60 }, async (request) => {
   const actor = await auth(request);
   const from = text(request.data?.dateFrom);
@@ -122,7 +134,8 @@ export const getCommissionDistributionsReport = onCall({ cors: true, timeoutSeco
         pay0Folio: data.pay0Folio, originalReference: data.originalReference, clientId: data.clientId,
         clientName: data.clientName, kind: leg.kind, commissioner: leg.alias, rateBps: leg.rateBps,
         amount: Number(leg.amount || 0), beneficiaryName: leg.beneficiaryName, instrumentMasked: leg.instrumentMasked,
-        iqFolio: leg.iqFolio || null, status: leg.status, reportStatus: leg.reportStatus || "NOT_INCLUDED",
+        iqFolio: leg.iqFolio || null, iqOperationId: leg.iqOperationId || null, iqReceiptPath: leg.iqReceiptPath || null,
+        status: leg.status, reportStatus: leg.reportStatus || "NOT_INCLUDED", deliveryStatus: leg.deliveryStatus || "DELIVERY_PENDING",
       });
     }
   }

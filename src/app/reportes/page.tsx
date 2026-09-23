@@ -30,7 +30,7 @@ import {
   type PagoReportDateBackfillResult,
 } from "@/services/reports";
 import { getControlCenterOverview, refreshControlCenterOverview, type ControlCenterSnapshot } from "@/services/controlCenter";
-import { getCommissionDistributionsReport, type CommissionReportResult } from "@/services/commissions";
+import { getCommissionDistributionsReport, preflightPaymentCommissionDistribution, type CommissionReportResult } from "@/services/commissions";
 
 type ReportTab = "control" | "commissions" | "earnings" | "operational" | "metrics" | "postingIssues";
 
@@ -132,6 +132,7 @@ export default function ReportesPage() {
   const [metricsResult, setMetricsResult] = useState<OperationalMetricsReportResult | null>(null);
   const [controlSnapshot, setControlSnapshot] = useState<ControlCenterSnapshot | null>(null);
   const [commissionsResult, setCommissionsResult] = useState<CommissionReportResult | null>(null);
+  const [commissionActionMessage, setCommissionActionMessage] = useState("");
   const [controlRefreshVersion, setControlRefreshVersion] = useState(0);
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
@@ -398,6 +399,13 @@ export default function ReportesPage() {
     finally { setExporting(false); }
   }
 
+  async function runCommissionPreflight(distributionId: string) {
+    setCommissionsLoading(true); setCommissionActionMessage("");
+    try { const result = await preflightPaymentCommissionDistribution(distributionId); setCommissionActionMessage(result.status === "READY_FOR_EXECUTION" ? "Preflight listo. No se ejecutó ningún POST financiero." : `Preflight bloqueado: ${(result.reasons || []).map((reason: any) => reason.code).join(', ')}`); await loadCurrentTab(); }
+    catch (err: any) { setCommissionActionMessage(err?.message || "No se pudo ejecutar el preflight."); }
+    finally { setCommissionsLoading(false); }
+  }
+
   useEffect(() => {
     if (!profileLoading && canViewReports) {
       void loadCurrentTab();
@@ -595,11 +603,12 @@ export default function ReportesPage() {
       ) : activeTab === "commissions" ? (
         <section className="space-y-4">
           {commissionsError ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{commissionsError}</div> : null}
+          {commissionActionMessage ? <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 p-4 text-sm text-sky-100">{commissionActionMessage}</div> : null}
           <div className="grid gap-3 md:grid-cols-5">
             {[['Movimientos', commissionsResult?.summary.movements || 0], ['Destinos', commissionsResult?.summary.legs || 0], ['Total', money(commissionsResult?.summary.totalAmount)], ['Pendientes', commissionsResult?.summary.pending || 0], ['Errores', commissionsResult?.summary.errors || 0]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-[#111827] p-4"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-1 text-xl font-bold">{value}</div></div>)}
           </div>
           <div className="flex justify-end"><button type="button" onClick={exportCommissionsPdf} disabled={exporting || !(commissionsResult?.rows.length)} className="rounded-xl border border-orange-400/40 bg-orange-400/10 px-4 py-2 text-xs font-bold uppercase text-orange-200 disabled:opacity-40">Exportar PDF</button></div>
-          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111827]"><table className="pay0-table min-w-[1200px]"><thead><tr><th>FECHA</th><th>REFERENCIA</th><th>CLIENTE</th><th>FOLIO PAY0</th><th>DESTINO</th><th>%</th><th>IMPORTE</th><th>FOLIO IQ</th><th>ESTADO</th></tr></thead><tbody>{commissionsLoading && !commissionsResult ? <tr><td colSpan={9} className="py-8 text-center">Cargando…</td></tr> : !(commissionsResult?.rows.length) ? <tr><td colSpan={9} className="py-8 text-center text-slate-400">Sin distribuciones en el periodo.</td></tr> : commissionsResult.rows.map((row, index) => <tr key={`${row.distributionId}-${index}`}><td>{row.operationalDate}</td><td>{row.originalReference || '-'}</td><td>{row.clientName || row.clientId}</td><td>{row.pay0Folio}</td><td>{row.kind === 'BASE' ? 'BASE' : row.commissioner}</td><td>{(row.rateBps / 100).toFixed(2)}%</td><td>{money(row.amount)}</td><td>{row.iqFolio || '-'}</td><td><span className={`rounded-full border px-2 py-1 text-[10px] ${statusClass(row.status)}`}>{row.status}</span></td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111827]"><table className="pay0-table min-w-[1300px]"><thead><tr><th>FECHA</th><th>REFERENCIA</th><th>CLIENTE</th><th>FOLIO PAY0</th><th>DESTINO</th><th>%</th><th>IMPORTE</th><th>FOLIO IQ</th><th>ESTADO</th><th>PREFLIGHT</th></tr></thead><tbody>{commissionsLoading && !commissionsResult ? <tr><td colSpan={10} className="py-8 text-center">Cargando…</td></tr> : !(commissionsResult?.rows.length) ? <tr><td colSpan={10} className="py-8 text-center text-slate-400">Sin distribuciones en el periodo.</td></tr> : commissionsResult.rows.map((row, index) => <tr key={`${row.distributionId}-${index}`}><td>{row.operationalDate}</td><td>{row.originalReference || '-'}</td><td>{row.clientName || row.clientId}</td><td>{row.pay0Folio}</td><td>{row.kind === 'BASE' ? 'BASE' : row.commissioner}</td><td>{(row.rateBps / 100).toFixed(2)}%</td><td>{money(row.amount)}</td><td>{row.iqFolio || '-'}</td><td><span className={`rounded-full border px-2 py-1 text-[10px] ${statusClass(row.status)}`}>{row.status}</span></td><td><button onClick={() => void runCommissionPreflight(row.distributionId)} disabled={commissionsLoading} className="text-xs text-sky-300 disabled:opacity-40">Validar sin dispersar</button></td></tr>)}</tbody></table></div>
         </section>
       ) : activeTab === "metrics" ? (
         <section className="mb-5">
