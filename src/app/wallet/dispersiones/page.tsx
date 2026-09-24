@@ -126,6 +126,7 @@ interface MethodRow {
 
 
 interface DispersionRow {
+  rootId?: string | null;
   clienteNombre?: string | null;
   clienteId?: string | null;
   clientId?: string | null;

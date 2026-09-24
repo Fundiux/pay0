@@ -2788,6 +2788,7 @@ export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, get
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
 export { refreshMaterialityFromUpload } from "./modules/materiality/triggers";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
+export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
 export {
   createIqCredentialProfile,
   updateIqCredentialProfile,

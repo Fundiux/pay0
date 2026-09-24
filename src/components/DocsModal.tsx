@@ -5,7 +5,6 @@ import { formatDateTime24 } from "@/lib/dateTime";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where,
   getDocs} from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import {
@@ -13,7 +12,8 @@ import {
   retryWhatsAppJobErrors,
 } from "@/services/whatsappQr";
 import { ChevronDown, Download, UploadCloud, X } from "lucide-react";
-import { db, functions, storage } from "@/lib/firebaseClient";
+import { db, functions } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
 import { CALLABLES } from "@/lib/callableNames";
 type RelatedPagoReceipt = {
   id: string;
@@ -692,7 +692,7 @@ useEffect(() => {
   async function downloadRelatedPagoReceipt(row: RelatedPagoReceipt) {
     if (!row.storagePath) return;
 
-    const url = await getDownloadURL(ref(storage, row.storagePath));
+    const url = await getAuthorizedDocumentDownloadUrl(row.id);
     const a = document.createElement("a");
     a.href = url;
     a.download = getRelatedReceiptName(row);
@@ -897,7 +897,7 @@ const downloadDoc = async (doc: UploadRow) => {
 
     setDownloadingId(doc.id);
     try {
-      const url = await getDownloadURL(ref(storage, doc.storagePath));
+      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
       await forceDownloadFromUrl(
         url,
         doc.originalName ||

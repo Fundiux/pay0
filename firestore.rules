@@ -60,6 +60,7 @@ service cloud.firestore {
           || (moduleKey == "clientes" && actionKey in ["view", "create"])
           || (moduleKey == "despachos" && actionKey == "view")
           || (moduleKey == "empresas" && actionKey == "view")
+          || (moduleKey == "wallet" && actionKey in ["view", "dispersiones", "beneficiarios"])
           || (moduleKey == "telegram" && actionKey in ["view", "link"])
           || (moduleKey == "actividad" && actionKey == "view")
         ));

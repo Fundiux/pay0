@@ -51,6 +51,16 @@
       "capability": "Enrutamiento automatico de dispersiones"
     },
     {
+      "file": "qa/scripts/verify-authorized-document-download.cjs",
+      "text": "signedDownloads",
+      "capability": "Descarga documental real autorizada y denegaciones por modulo, delegacion y root"
+    },
+    {
+      "file": "qa/scripts/verify-authorized-dispersion-capability.cjs",
+      "text": "IQ_MODULE_DENIED",
+      "capability": "Dispersion IQ autorizada sin dependencia de Super Admin ni asignacion manual de despacho"
+    },
+    {
       "file": "src/components/hugo/HugoRealtimeVoice.tsx",
       "text": "Hugo",
       "capability": "Hugo Voice"

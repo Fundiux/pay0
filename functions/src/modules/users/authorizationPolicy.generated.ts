@@ -44,7 +44,7 @@ export const ROLE_DEFAULT_MODULES = {
     "empresas": { "view": true },
     "usuarios": { "view": false, "create": false, "activate": false, "permissions": false, "costs": false, "clientDelegations": false },
     "modulos": { "view": false, "edit": false },
-    "wallet": { "view": false, "saldos": false, "adelantos": false, "dispersiones": false, "beneficiarios": false, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
+    "wallet": { "view": true, "saldos": false, "adelantos": false, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
     "telegram": { "view": true, "link": true },
     "actividad": { "view": true }
   }
