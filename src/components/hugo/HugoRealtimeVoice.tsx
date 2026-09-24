@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
-import { createHugoRealtimeSession } from "@/services/agent007";
+import { createHugoRealtimeSession, saveHugoVoiceHistory } from "@/services/agent007";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -15,12 +15,14 @@ type TraceEntry = {
   type: string;
   detail?: Record<string, unknown>;
 };
+type VoiceTurnDraft = { turnId: string; responseId: string | null; speaker: "USER" | "HUGO"; text: string; timestampMs: number; durationMs: number; interrupted: boolean; status: string; transcriptionStatus: string };
+type VoiceHistoryDraft = { sessionId: string; model: string; startedAt: number; turns: Map<string, VoiceTurnDraft>; events: Map<string, { eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string }> };
 
 declare global {
   interface Window { __HUGO_REALTIME_TRACE__?: TraceEntry[]; }
 }
 
-export default function HugoRealtimeVoice() {
+export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?: () => void } = {}) {
   const [state, setState] = useState<VoiceState>("IDLE");
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +32,15 @@ export default function HugoRealtimeVoice() {
   const channelRef = useRef<RTCDataChannel | null>(null);
   const startingRef = useRef(false);
   const generationRef = useRef(0);
+  const historyRef = useRef<VoiceHistoryDraft | null>(null);
+
+  const persistHistory = async (status: "ACTIVE" | "COMPLETED" | "FAILED") => {
+    const history = historyRef.current;
+    if (!history?.sessionId) return;
+    await saveHugoVoiceHistory({ sessionId: history.sessionId, model: history.model, status,
+      durationMs: Math.max(0, Date.now() - history.startedAt), turns: [...history.turns.values()], events: [...history.events.values()] });
+    onHistorySaved?.();
+  };
 
   const cleanup = () => {
     generationRef.current += 1;
@@ -61,6 +72,7 @@ export default function HugoRealtimeVoice() {
   };
 
   const stop = () => {
+    void persistHistory("COMPLETED").catch(() => undefined);
     cleanup();
     setMuted(false);
     setState("IDLE");
@@ -99,6 +111,7 @@ export default function HugoRealtimeVoice() {
       let responseId: string | null = null;
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
+      historyRef.current = { sessionId: "", model: session.model, startedAt: Date.now(), turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -127,15 +140,38 @@ export default function HugoRealtimeVoice() {
           seenEventIds.add(event.event_id);
         }
         if (type === "session.created" && event.session?.id) sessionId = event.session.id;
+        if (type === "session.created" && event.session?.id && historyRef.current) { historyRef.current.sessionId = event.session.id; void persistHistory("ACTIVE").catch(() => undefined); }
         if (type === "input_audio_buffer.speech_started") {
           turnSequence += 1;
           turnId = event.item_id || `${sessionId}:turn:${turnSequence}`;
           if (audioRef.current) audioRef.current.muted = true;
+          const active = responseId ? historyRef.current?.turns.get(`HUGO:${responseId}`) : null;
+          if (active) { active.interrupted = true; active.status = "INTERRUPTED"; }
+          historyRef.current?.turns.set(`USER:${turnId}`, { turnId, responseId: null, speaker: "USER", text: "", timestampMs: Math.round(performance.now() - startedAt), durationMs: 0, interrupted: false, status: "RECORDING", transcriptionStatus: "NOT_ENABLED_NO_SECOND_INFERENCE" });
         }
-        if (type === "input_audio_buffer.speech_stopped" && event.item_id) turnId = event.item_id;
+        if (type === "input_audio_buffer.speech_stopped") {
+          if (event.item_id) turnId = event.item_id;
+          const userTurn = turnId ? historyRef.current?.turns.get(`USER:${turnId}`) : null;
+          if (userTurn) { userTurn.durationMs = Math.max(0, Math.round(performance.now() - startedAt) - userTurn.timestampMs); userTurn.status = "COMPLETED"; }
+        }
+        if (type === "conversation.item.input_audio_transcription.completed") {
+          const id = event.item_id || turnId;
+          const userTurn = id ? historyRef.current?.turns.get(`USER:${id}`) : null;
+          if (userTurn) { userTurn.text = String(event.transcript || ""); userTurn.transcriptionStatus = "REALTIME_NATIVE"; }
+        }
         if (type === "response.created") {
           responseId = event.response?.id || null;
           if (audioRef.current) audioRef.current.muted = false;
+          if (responseId) historyRef.current?.turns.set(`HUGO:${responseId}`, { turnId: turnId || responseId, responseId, speaker: "HUGO", text: "", timestampMs: Math.round(performance.now() - startedAt), durationMs: 0, interrupted: false, status: "IN_PROGRESS", transcriptionStatus: "REALTIME_NATIVE" });
+        }
+        if (type === "response.output_audio_transcript.delta" && responseId) {
+          const assistant = historyRef.current?.turns.get(`HUGO:${responseId}`);
+          if (assistant) assistant.text += String(event.delta || "");
+        }
+        if (type === "response.output_audio_transcript.done") {
+          const id = event.response_id || responseId;
+          const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
+          if (assistant && event.transcript) assistant.text = String(event.transcript);
         }
         trace(type, {
           eventId: event.event_id || null,
@@ -143,7 +179,18 @@ export default function HugoRealtimeVoice() {
           responseStatus: event.response?.status || null,
           errorCode: event.error?.code || null,
         });
-        if (type === "response.done" || type === "response.cancelled") responseId = null;
+        const persistedTypes = new Set(["session.created", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped", "conversation.item.input_audio_transcription.completed", "response.created", "response.output_audio_transcript.done", "response.done", "response.cancelled", "error"]);
+        if (persistedTypes.has(type) && historyRef.current) {
+          const eventId = String(event.event_id || `${type}:${Math.round(performance.now() - startedAt)}`);
+          historyRef.current.events.set(eventId, { eventId, type, turnId, responseId, timestampMs: Math.round(performance.now() - startedAt), detail: event.error?.code || event.response?.status || undefined });
+        }
+        if (type === "response.done" || type === "response.cancelled") {
+          const id = event.response?.id || responseId;
+          const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
+          if (assistant) { assistant.durationMs = Math.max(0, Math.round(performance.now() - startedAt) - assistant.timestampMs); assistant.interrupted ||= type === "response.cancelled" || event.response?.status === "cancelled"; assistant.status = assistant.interrupted ? "INTERRUPTED" : "COMPLETED"; }
+          void persistHistory("ACTIVE").catch(() => undefined);
+          responseId = null;
+        }
       };
       peer.onconnectionstatechange = () => {
         trace("peer.connection_state", { state: peer.connectionState });
@@ -176,6 +223,7 @@ export default function HugoRealtimeVoice() {
       if (generationRef.current !== generation) return;
       await peer.setRemoteDescription({ type: "answer", sdp: responseBody });
     } catch (cause: any) {
+      void persistHistory("FAILED").catch(() => undefined);
       cleanup();
       setState("ERROR");
       setError(cause?.message || "No se pudo iniciar la conversacion por voz.");

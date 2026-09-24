@@ -1,4 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -18,6 +18,7 @@ import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
+import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -129,10 +130,40 @@ export const listAgent007Messages = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { uid, rootId } = await actor(request);
-    const scope = normalizeHugoScope(request.data?.scope);
+    const data = request.data || {};
+    const scope = normalizeHugoScope(data.scope);
     const conversationId = conversationIdFor(rootId, uid, scope);
-    const messages = await hugoData.listMessages(rootId, uid, 80, conversationId);
-    return { ok: true, conversationId, messages };
+    const dateKey = clean(data.dateKey, 10) || hugoDateKey();
+    let bounds: { from: Date; to: Date };
+    try { bounds = hugoDayBounds(dateKey); }
+    catch { throw new HttpsError("invalid-argument", "Fecha de historial invalida."); }
+    const messageLimit = Math.min(Math.max(Number(data.limit) || 40, 1), 80), includeMessages = data.messagesDone !== true;
+    let messagesQuery = db.collection("agent007Messages")
+      .where("rootId", "==", rootId).where("conversationId", "==", conversationId)
+      .where("createdAt", ">=", Timestamp.fromDate(bounds.from)).where("createdAt", "<", Timestamp.fromDate(bounds.to))
+      .orderBy("createdAt", "desc").limit(messageLimit + 1);
+    const messageCursor = clean(data.messageCursor, 180);
+    if (messageCursor) {
+      const cursor = await db.collection("agent007Messages").doc(messageCursor).get();
+      if (!cursor.exists || cursor.data()?.rootId !== rootId || cursor.data()?.conversationId !== conversationId) throw new HttpsError("invalid-argument", "Cursor fuera de ambito.");
+      messagesQuery = messagesQuery.startAfter(cursor);
+    }
+    const voiceLimit = Math.min(Math.max(Number(data.voiceLimit) || 20, 1), 40), includeVoice = data.voiceDone !== true;
+    const voiceCollection = db.collection("agent007Conversations").doc(conversationId).collection("voiceSessions");
+    let voiceQuery = voiceCollection.where("startedAt", ">=", Timestamp.fromDate(bounds.from)).where("startedAt", "<", Timestamp.fromDate(bounds.to)).orderBy("startedAt", "desc").limit(voiceLimit + 1);
+    const voiceCursor = clean(data.voiceCursor, 180);
+    if (voiceCursor) {
+      const cursor = await voiceCollection.doc(voiceCursor).get();
+      if (!cursor.exists || cursor.data()?.rootId !== rootId || cursor.data()?.ownerUid !== uid) throw new HttpsError("invalid-argument", "Cursor de voz fuera de ambito.");
+      voiceQuery = voiceQuery.startAfter(cursor);
+    }
+    const [messageSnap, voiceSnap] = await Promise.all([includeMessages ? messagesQuery.get() : null, includeVoice ? voiceQuery.get() : null]);
+    const messageDocs = messageSnap?.docs.slice(0, messageLimit) || [], voiceDocs = voiceSnap?.docs.slice(0, voiceLimit) || [];
+    const messages = messageDocs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+    const voiceSessions = voiceDocs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+    return { ok: true, conversationId, dateKey, timeZone: "America/Mexico_City", messages, voiceSessions,
+      nextMessageCursor: messageSnap && messageSnap.docs.length > messageLimit ? messageDocs.at(-1)?.id || null : null,
+      nextVoiceCursor: voiceSnap && voiceSnap.docs.length > voiceLimit ? voiceDocs.at(-1)?.id || null : null };
   },
 );
 
