@@ -12,7 +12,8 @@ test("frozen comparison records both exact providers and immutable conditions", 
   assert.deepEqual(config.providers.map(row => [row.id, row.model]), [["GOOGLE_VERTEX", "gemini-2.5-flash"], ["OPENAI", "gpt-6-sol"]]);
   assert.equal(config.retryPolicy, "no retry inside an A/B arm");
   assert.equal(config.fallbackPolicy, "disabled during A/B evaluation");
-  assert.equal(crypto.createHash("sha256").update(fs.readFileSync(path.join(__dirname, "phase9/benchmark-cases.json"))).digest("hex"), config.datasetSha256);
+  const datasetBytes = fs.readFileSync(path.join(__dirname, "phase9/benchmark-cases.json"), "utf8").replace(/\r\n/g, "\n");
+  assert.equal(crypto.createHash("sha256").update(datasetBytes).digest("hex"), config.datasetSha256);
 });
 
 test("benchmark covers six capabilities with DEVELOPMENT and VALIDATION only", () => {

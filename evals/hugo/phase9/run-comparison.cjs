@@ -63,7 +63,8 @@ async function main() {
   const state = readiness();
   if (!execute) { console.log(JSON.stringify({ status: "READY_FOR_CONTROLLED_EXECUTION", readiness: state }, null, 2)); return; }
   if (Object.values(state).some(value => value !== true)) throw new Error(`EVALUATION_BLOCKED:${JSON.stringify(state)}`);
-  const datasetDigest = crypto.createHash("sha256").update(fs.readFileSync(path.join(__dirname, "benchmark-cases.json"))).digest("hex");
+  const datasetBytes = fs.readFileSync(path.join(__dirname, "benchmark-cases.json"), "utf8").replace(/\r\n/g, "\n");
+  const datasetDigest = crypto.createHash("sha256").update(datasetBytes).digest("hex");
   if (datasetDigest !== config.datasetSha256) throw new Error("EVALUATION_BLOCKED:DATASET_DIGEST_MISMATCH");
   verifySecretNotPersisted();
   const evaluatedCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
