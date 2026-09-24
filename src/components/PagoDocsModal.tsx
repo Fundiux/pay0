@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { Download, FileText, Trash2, UploadCloud, X } from "lucide-react";
 
-import { db, functions, storage } from "@/lib/firebaseClient";
+import { db, functions } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
 import { CALLABLES } from "@/lib/callableNames";
 import UiSelect from "@/components/UiSelect";
 import { PagoDocumentType, uploadPagoDoc } from "@/lib/uploadPagoDoc";
@@ -464,7 +464,7 @@ export default function PagoDocsModal(props: {
 
     try {
       setMsg("");
-      const url = await getDownloadURL(ref(storage, row.storagePath));
+      const url = await getAuthorizedDocumentDownloadUrl(row.id);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e: any) {
       setMsg(e?.message || "No se pudo abrir el documento.");

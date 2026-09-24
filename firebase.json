@@ -8,6 +8,7 @@
                                         "node qa/scripts/verify-client-csf-parser.cjs",
                                         "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
                                         "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
+                                        "node qa/scripts/verify-authorized-dispersion-capability.cjs",
                                         "npm run qa:document-access"
                                     ]
                   },

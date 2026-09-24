@@ -4,11 +4,11 @@ import { formatDateTime24 } from "@/lib/dateTime";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
 import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import { httpsCallable } from "firebase/functions";
 import { Download, Trash2, UploadCloud, X } from "lucide-react";
-import { db, functions, storage } from "@/lib/firebaseClient";
+import { db, functions } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
 import { CALLABLES } from "@/lib/callableNames";
 import {
   DISPERSION_DOCUMENT_TYPES,
@@ -177,7 +177,7 @@ export default function DispersionDocsModal(props: {
     setDownloadingId(doc.id);
 
     try {
-      const url = await getDownloadURL(ref(storage, doc.storagePath));
+      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
       console.error("Download dispersion doc error", err);

@@ -30,6 +30,22 @@ requireText(
   "Los documentos de dispersiones se consultan dentro del root autorizado",
 );
 requireText(
+  "src/app/wallet/dispersiones/page.tsx",
+  "rootId?: string | null;",
+  "El listado de dispersiones conserva el rootId requerido por el circuito documental",
+);
+for (const file of [
+  "src/components/DocsModal.tsx",
+  "src/components/PagoDocsModal.tsx",
+  "src/components/DispersionDocsModal.tsx",
+]) {
+  requireText(
+    file,
+    "getAuthorizedDocumentDownloadUrl",
+    "La descarga documental atraviesa el callable que revalida modulo, scope y recurso padre",
+  );
+}
+requireText(
   "src/components/DocsModal.tsx",
   '["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"]',
   "La solicitud conserva comprobantes y complementos relacionados",

@@ -62,11 +62,11 @@
       "usuarios": { "view": false, "create": false, "activate": false, "permissions": false, "costs": false, "clientDelegations": false },
       "modulos": { "view": false, "edit": false },
       "wallet": {
-        "view": false,
+        "view": true,
         "saldos": false,
         "adelantos": false,
-        "dispersiones": false,
-        "beneficiarios": false,
+        "dispersiones": true,
+        "beneficiarios": true,
         "estadoCuentaCliente": false,
         "estadoCuentaUsuario": false,
         "configuracion": false

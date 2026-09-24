@@ -12,6 +12,8 @@ import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { assertDispersionDestination } from "./dispersionDestinationGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { assertAuthorized } from "../../utils/authGuard";
+import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -338,6 +340,12 @@ async function buildDispersionSchedulerAuth(
     );
   }
 
+  assertAuthorized({ uid }, user, {
+    allowedRoles: ["superadmin", "admin", "operador"],
+    requiredModule: "wallet",
+    requiredAction: "dispersiones",
+  });
+
   const principalRootId =
     clean(principal.rootId);
 
@@ -457,29 +465,6 @@ async function verifyDespachoAccess(
       "failed-precondition",
       "El despacho esta inactivo.",
     );
-  }
-
-  if (auth.role !== "superadmin") {
-    const accessSnap = await db
-      .collection(
-        "userDespachoAccess",
-      )
-      .doc(auth.uid)
-      .collection("despachos")
-      .doc(despachoId)
-      .get();
-
-    if (
-      !accessSnap.exists ||
-      record(
-        accessSnap.data(),
-      ).active !== true
-    ) {
-      throw new HttpsError(
-        "permission-denied",
-        "El usuario no tiene acceso activo al despacho del tramo.",
-      );
-    }
   }
 
   const marker = upper(
@@ -625,45 +610,17 @@ async function loadIqAccess(
   const access = record(
     accessSnap.data(),
   );
-
-  if (
-    !accessSnap.exists ||
-    access.active !== true ||
-    access.iqEnabled !== true
-  ) {
+  const executionAccess = decideIqDispersionExecutionAccess({
+    uid: auth.uid,
+    role: auth.role,
+    rootId: auth.rootId,
+    despacho,
+    iqAccess: accessSnap.exists ? access : null,
+  });
+  if (!executionAccess.allowed) {
     throw new HttpsError(
-      "failed-precondition",
-      "El usuario no tiene acceso IQ activo.",
-    );
-  }
-
-  if (
-    clean(access.rootId) &&
-    clean(access.rootId) !==
-      auth.rootId
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "El acceso IQ esta fuera de scope.",
-    );
-  }
-
-  const allowedModules =
-    record(access.allowedModules);
-
-  if (
-    auth.role !== "superadmin" &&
-    allowedModules.dispersiones !==
-      true &&
-    allowedModules.dispersions !==
-      true &&
-    allowedModules.walletDispersiones !==
-      true &&
-    allowedModules.wallet !== true
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "El usuario no tiene habilitado el modulo IQ Dispersiones.",
+      executionAccess.code === "IQ_ACCESS_INACTIVE" ? "failed-precondition" : "permission-denied",
+      executionAccess.message,
     );
   }
 
