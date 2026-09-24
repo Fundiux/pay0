@@ -12,6 +12,15 @@ import { applyHugoContextBudget, compactLearningExperience, HugoBudgetReport } f
 
 function fallbackReply(message: string, name: string, context: any): string {
   const normalized = message.toLocaleLowerCase("es-MX");
+  const platform = context.platformFacts || {};
+  if (platform.clientCount?.matchStatus === "EXACT") return `${platform.clientCount.user?.displayName || "El usuario"} tiene ${Number(platform.clientCount.clientCount || 0)} clientes activos visibles dentro del alcance autorizado.`;
+  if (platform.clientCount?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario dentro de tu ámbito con esa referencia. Indica el nombre completo o correo para evitar consultar a la persona equivocada.";
+  if (platform.clientCount?.matchStatus === "NOT_FOUND") return "No encontré un usuario con esa referencia dentro de tu ámbito autorizado.";
+  if (platform.authorizedCapabilities) {
+    const modules = Object.entries(platform.authorizedCapabilities.modules || {}).filter(([, actions]: any) => actions?.view === true).map(([key]) => key);
+    return `Tu acceso efectivo actual incluye: ${modules.length ? modules.join(", ") : "ningún módulo operativo"}. Las acciones específicas siguen limitadas por los permisos de cada módulo.`;
+  }
+  if (Array.isArray(platform.systems)) return `Los sistemas registrados son: ${platform.systems.map((row: any) => `${row.id} (${row.allowed ? row.status : "SIN_ACCESO"})`).join(", ")}.`;
   if (/^(hola|buen(os|as)?\s+(dias|tardes|noches)|qué tal|que tal)[!.\s]*$/.test(normalized)) {
     return `Hola, ${name}. Estoy atento. Puedo revisar contigo solicitudes, pagos, facturación y las dudas que vaya detectando.`;
   }

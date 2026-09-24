@@ -19,6 +19,7 @@ import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
 import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
+import { PlatformReadConnector } from "./platformReadConnector";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -193,11 +194,14 @@ export const sendAgent007Message = onCall(
       : null;
     const identity = { uid, rootId, role: "superadmin" as const };
     const pay0 = new Pay0Connector(db, identity);
+    const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
+      getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
+      countClientsForUser: ({ query }) => platform.countClientsForUser(query),
     });
     const modelRouter = new HugoModelRouter();
     const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);

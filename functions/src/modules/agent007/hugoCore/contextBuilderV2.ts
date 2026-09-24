@@ -43,7 +43,11 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
       composition: { currentFacts: 0, verifiedRules: 0, experiences: 0, userStatements: 0, hypotheses: 0, unknowns: 0, approximateTokens: 0 }, referenceReason: resolution.reason };
   }
   const folios = resolution.folios;
-  const requests: ToolRequest[] = folios.length ? [
+  const userClientQuestion = /\bclientes?\b/i.test(input.message) && /\busuari[oa]\b/i.test(input.message);
+  const accessQuestion = /\b(a qu(?:e|\u00e9) (tienes|tengo) acceso|permisos?|capacidades)\b/i.test(input.message);
+  const systemsQuestion = /\b(sistemas?|plataformas?)\b/i.test(input.message);
+  const userQuery = input.message.match(/\busuari[oa]\s+([^?.,]{2,80})/i)?.[1]?.trim();
+  const requests: ToolRequest[] = userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : folios.length ? [
     ...folios.filter(x => x.startsWith("S")).map(folio => ({ name: "getSolicitud" as const, input: { folio } })),
     ...folios.filter(x => x.startsWith("P")).map(folio => ({ name: "getPago" as const, input: { folio } })),
     { name: "getPaymentComplementStatus", input: folios.length === 1 ? { folio: folios[0] } : {} }, { name: "getIqCapabilities", input: {} },
@@ -88,6 +92,7 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const boundaries = { solicitudes: scopeFor(solicitudResults, "RECENT_SAMPLE"), pagos: scopeFor(pagoResults, "RECENT_SAMPLE"),
     complementos: by("getPaymentComplementStatus").map(row => boundary(row.completeness, "RECENT_SAMPLE")), capacidadesIq: by("getIqCapabilities").map(row => boundary(row.completeness, "CONFIGURATION")) };
   const context = { schemaVersion: CONTEXT_BUILDER_VERSION, questionIntent: resolution.intent, referenceResolution: resolution.reason, folioConsultado: folios.length === 1 ? folios[0] : null,
+    platformFacts: { clientCount: by("countClientsForUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null },
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),
     solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus,

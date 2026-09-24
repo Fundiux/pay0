@@ -9,6 +9,7 @@ import { HugoModelRouter } from "./hugoModelRouter";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
+import { PlatformReadConnector } from "./platformReadConnector";
 
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
@@ -35,11 +36,14 @@ export const delegateHugoVoiceTurn = onCall(
 
     const identity = { uid, rootId, role: "superadmin" as const };
     const pay0 = new Pay0Connector(db, identity);
+    const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
+      getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
+      countClientsForUser: ({ query }) => platform.countClientsForUser(query),
     });
     const started = Date.now(), modelRouter = new HugoModelRouter();
     const result = await new HugoConversationCore(router, route === "BRAIN_MODEL" ? modelRouter : null, dataStore, learningStore).respond({
