@@ -56,7 +56,10 @@ wss.on("connection", browser => {
       sideband = new WebSocket(`wss://api.openai.com/v1/realtime?call_id=${encodeURIComponent(realtime.callId)}`, { headers: { Authorization: `Bearer ${apiKey}` } });
       await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(Error("SIDEBAND_TIMEOUT")), 10000); sideband.once("open", () => { clearTimeout(timer); resolve(); }); sideband.once("error", () => { clearTimeout(timer); reject(Error("SIDEBAND_CONNECT_FAILED")); }); });
       sideband.on("message", async message => { const item = JSON.parse(message.toString()), type = String(item.type || "");
-        if (type === "conversation.item.created" && item.item?.type === "message" && item.item?.role === "user") { turnId = item.item.id || turnId || randomUUID(); log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT" }); }
+        if (["conversation.item.created", "conversation.item.added", "conversation.item.done"].includes(type) && item.item?.type === "message" && item.item?.role === "user") {
+          const recognizedTurnId = item.item.id || turnId || randomUUID();
+          if (recognizedTurnId !== turnId) { turnId = recognizedTurnId; log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT" }); }
+        }
         if (type === "input_audio_buffer.speech_started") { const previous = turnId; turnId = item.item_id || randomUUID(); const interrupted = registry.interrupt(previous); for (const id of interrupted.cancelled) controllers.get(id)?.abort(); log("gateway.interruption", { sessionId, turnId: previous, ...interrupted }); send({ type: "gateway.interruption", turnId: previous, ...interrupted }); }
         if (type === "response.created") responseId = item.response?.id || responseId;
         if (type === "response.output_audio.delta" && firstAudioAt === null) { firstAudioAt = Date.now(); log("gateway.first_audio", { sessionId, turnId, responseId, latencyMs: firstAudioAt - connectedAt }); }
