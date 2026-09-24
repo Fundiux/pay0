@@ -45,7 +45,18 @@ export const createHugoRealtimeSession = onCall(
             "No afirmes haber consultado datos operativos que no recibiste en esta sesion.",
             "No ejecutes pagos, solicitudes, dispersiones ni cambios en sistemas.",
           ].join(" "),
-          audio: { output: { voice: REALTIME_VOICE } },
+          audio: {
+            input: {
+              noise_reduction: { type: "near_field" },
+              turn_detection: {
+                type: "semantic_vad",
+                eagerness: "low",
+                create_response: true,
+                interrupt_response: true,
+              },
+            },
+            output: { voice: REALTIME_VOICE },
+          },
         },
       }),
     });
