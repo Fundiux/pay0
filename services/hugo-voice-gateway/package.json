@@ -1,0 +1,1 @@
+{"name":"hugo-voice-gateway","private":true,"type":"module","engines":{"node":"22"},"scripts":{"start":"node src/server.mjs","test":"node --test test/*.test.mjs"},"dependencies":{"firebase-admin":"14.5.0","ws":"8.21.3"}}

@@ -17,3 +17,8 @@ test('acceso efectivo y catálogo de sistemas tienen herramientas separadas', as
   assert.deepEqual((await context('¿A qué tienes acceso?', {})).calls.map(x => x.name), ['getAuthorizedCapabilities']);
   assert.deepEqual((await context('¿Cuáles son los sistemas que manejamos?', [])).calls.map(x => x.name), ['getSystemCatalog']);
 });
+test('variaciones naturales conservan la misma capacidad y no una frase exacta', async () => {
+  assert.deepEqual((await context('Dime los clientes asignados a Betel', {})).calls.map(x => x.name), ['countClientsForUser']);
+  assert.deepEqual((await context('Que puedes consultar dentro de mi cuenta?', {})).calls.map(x => x.name), ['getAuthorizedCapabilities']);
+  assert.deepEqual((await context('Que otras plataformas forman parte de la empresa?', [])).calls.map(x => x.name), ['getSystemCatalog']);
+});

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
-import { createHugoRealtimeSession, delegateHugoVoiceTurn, saveHugoVoiceHistory } from "@/services/agent007";
+import { auth } from "@/lib/firebaseClient";
+import { saveHugoVoiceHistory } from "@/services/agent007";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -30,6 +31,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
+  const gatewayRef = useRef<WebSocket | null>(null);
   const startingRef = useRef(false);
   const generationRef = useRef(0);
   const historyRef = useRef<VoiceHistoryDraft | null>(null);
@@ -46,6 +48,14 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     generationRef.current += 1;
     startingRef.current = false;
     const channel = channelRef.current;
+    const gateway = gatewayRef.current;
+    if (gateway) {
+      gateway.onopen = null;
+      gateway.onclose = null;
+      gateway.onerror = null;
+      gateway.onmessage = null;
+      if (gateway.readyState < WebSocket.CLOSING) gateway.close();
+    }
     if (channel) {
       channel.onopen = null;
       channel.onclose = null;
@@ -66,6 +76,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       audioRef.current.srcObject = null;
     }
     channelRef.current = null;
+    gatewayRef.current = null;
     peerRef.current = null;
     streamRef.current = null;
     audioRef.current = null;
@@ -89,7 +100,11 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     setError("");
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
-      const session = await createHugoRealtimeSession();
+      const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
+      const currentUser = auth.currentUser;
+      if (!gatewayUrl) throw new Error("El gateway de voz de Hugo no esta configurado.");
+      if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
+      const idToken = await currentUser.getIdToken();
       if (generationRef.current !== generation) return;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -111,8 +126,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       let responseId: string | null = null;
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
-      const handledCalls = new Set<string>();
-      historyRef.current = { sessionId: "", model: session.model, startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
+      historyRef.current = { sessionId: "", model: "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -174,24 +188,6 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
           if (assistant && event.transcript) assistant.text = String(event.transcript);
         }
-        if (type === "response.function_call_arguments.done" && event.name === "delegate_to_hugo_core") {
-          const callId = String(event.call_id || event.item_id || "");
-          if (callId && !handledCalls.has(callId)) {
-            handledCalls.add(callId);
-            let args: any = {};
-            try { args = JSON.parse(String(event.arguments || "{}")); } catch {}
-            const delegatedTurnId = String(args.turn_id || turnId || callId);
-            void delegateHugoVoiceTurn({ request: String(args.request || ""), sessionId, turnId: delegatedTurnId, responseId, delegationId: callId })
-              .then(result => {
-                if (channel.readyState !== "open") return;
-                channel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ route: result.route, text: result.text }) } }));
-                channel.send(JSON.stringify({ type: "response.create" }));
-              })
-              .catch(() => {
-                if (channel.readyState === "open") channel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: "HUGO_CORE_UNAVAILABLE" }) } }));
-              });
-          }
-        }
         trace(type, {
           eventId: event.event_id || null,
           itemId: event.item_id || event.item?.id || null,
@@ -234,19 +230,25 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const response = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST",
-        body: offer.sdp,
-        headers: { Authorization: `Bearer ${session.clientSecret}`, "Content-Type": "application/sdp" },
+      const answer = await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
+        const gateway = new WebSocket(gatewayUrl);
+        gatewayRef.current = gateway;
+        const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
+        gateway.onopen = () => gateway.send(JSON.stringify({ type: "authenticate", idToken }));
+        gateway.onerror = () => { window.clearTimeout(timeout); reject(new Error("No se pudo conectar con el gateway de voz.")); };
+        gateway.onmessage = incoming => {
+          let event: any;
+          try { event = JSON.parse(String(incoming.data)); } catch { return; }
+          if (event.type === "authenticated") gateway.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
+          if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model) }); }
+          if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`Hugo no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
+          if (event.type === "gateway.interruption") trace("gateway.interruption", event);
+        };
       });
-      const responseBody = await response.text();
-      if (!response.ok) {
-        let errorCode = `HTTP_${response.status}`;
-        try { errorCode = JSON.parse(responseBody)?.error?.code || errorCode; } catch {}
-        throw new Error(`OpenAI no pudo establecer la llamada (${errorCode}).`);
-      }
       if (generationRef.current !== generation) return;
-      await peer.setRemoteDescription({ type: "answer", sdp: responseBody });
+      sessionId = answer.sessionId;
+      if (historyRef.current) { historyRef.current.sessionId = answer.sessionId; historyRef.current.model = answer.model; }
+      await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     } catch (cause: any) {
       void persistHistory("FAILED").catch(() => undefined);
       cleanup();

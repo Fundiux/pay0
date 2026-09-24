@@ -43,10 +43,12 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
       composition: { currentFacts: 0, verifiedRules: 0, experiences: 0, userStatements: 0, hypotheses: 0, unknowns: 0, approximateTokens: 0 }, referenceReason: resolution.reason };
   }
   const folios = resolution.folios;
-  const userClientQuestion = /\bclientes?\b/i.test(input.message) && /\busuari[oa]\b/i.test(input.message);
-  const accessQuestion = /\b(a qu(?:e|\u00e9) (tienes|tengo) acceso|permisos?|capacidades)\b/i.test(input.message);
-  const systemsQuestion = /\b(sistemas?|plataformas?)\b/i.test(input.message);
-  const userQuery = input.message.match(/\busuari[oa]\s+([^?.,]{2,80})/i)?.[1]?.trim();
+  const normalizedMessage = input.message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const userClientQuestion = /\bclientes?\b/i.test(normalizedMessage) && /\b(usuario|usuaria|asignados?|pertenecen?)\b/i.test(normalizedMessage);
+  const accessQuestion = /\b(a que (tienes|tengo) acceso|que puedes (ver|hacer|consultar)|permisos?|capacidades)\b/i.test(normalizedMessage);
+  const systemsQuestion = /\b(sistemas?|plataformas?|aplicaciones?)\b/i.test(normalizedMessage);
+  const userQuery = normalizedMessage.match(/\b(?:usuario|usuaria)\s+([^?.,]{2,80})/i)?.[1]?.trim()
+    || normalizedMessage.match(/\bclientes?\s+(?:asignados?\s+)?(?:a|de)\s+([^?.,]{2,80})/i)?.[1]?.trim();
   const requests: ToolRequest[] = userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : folios.length ? [
     ...folios.filter(x => x.startsWith("S")).map(folio => ({ name: "getSolicitud" as const, input: { folio } })),
     ...folios.filter(x => x.startsWith("P")).map(folio => ({ name: "getPago" as const, input: { folio } })),

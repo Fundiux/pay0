@@ -8,14 +8,11 @@ Production remains on `gpt-realtime-2.1`. The candidate adds the Realtime functi
 `delegate_to_hugo_core`, an authenticated backend callable, three explicit routes,
 and separate cost fields. PAY0 data access starts only after backend authorization.
 
-The current candidate uses the WebRTC data channel as a relay for the function call.
-The browser receives only the authorized result returned for that turn; it receives
-no PAY0 credential, global dataset, permission record, or direct Tool Router access.
-
-This relay is not a persistent OpenAI sideband connection. A true sideband transport
-needs a long-lived backend service that joins the Realtime call and owns tool events.
-Cloud Functions callables are request scoped, so the sideband service must be evaluated
-as a separate Cloud Run service before production deployment.
+The local candidate now includes `services/hugo-voice-gateway`, a long-lived WebSocket
+service intended for Cloud Run. The browser sends its Firebase token and WebRTC offer
+to this gateway and no longer receives or executes function calls. The gateway checks
+the session through `authorizeHugoVoiceGatewaySession`, opens the Realtime call, joins
+the server sideband, and becomes the sole owner of `delegate_to_hugo_core`.
 
 For the stated requirement that tool execution must not depend on browser listeners,
 sideband is required. Cloud Run is the appropriate PAY0 runtime because the WebSocket
@@ -30,9 +27,9 @@ must remain open for the life of the call. The production topology should be:
    authorizes role plus module plus entity scope, and returns `function_call_output`.
 5. Browser owns microphone, playback and local UI events. It never executes a PAY0 tool.
 
-The existing browser relay remains evaluation scaffolding and must be removed when the
-sideband gateway is ready. Deploying only the callable bridge would leave correctness
-dependent on the tab remaining alive and would permit duplicate ownership of tool calls.
+The old browser relay has been removed locally. Production remains unchanged until the
+gateway image, authorization callable, delegation callable and frontend configuration
+are explicitly approved and deployed as one rollbackable release.
 
 ## Routes
 
@@ -63,7 +60,7 @@ These are capability-level changes. They contain no UID, email, or user-specific
 
 ## Cost linkage
 
-`sessionId -> turnId -> responseId -> delegationId`
+`sessionId -> turnId -> responseId -> delegationId -> toolCallId`
 
 The voice session stores audio usage and `voiceCostUsd`. Delegations store provider,
 model, token usage, latency, `delegatedModelCostUsd`, `externalToolCostUsd`, and
@@ -76,3 +73,20 @@ for `gpt-realtime-2.1` and `gpt-realtime-2.1-mini`. A live run must record natur
 Spanish comprehension, interruptions, repetitions, latency, context, names, amounts,
 tool selection, delegation, and actual usage cost. It must run in an isolated evaluation
 deployment before changing the production model.
+
+## Cancellation contract
+
+Every OpenAI `call_id` is an idempotency key. A duplicate event is ignored. Barge-in
+cancels work only while it is still `PENDING`. Work already `RUNNING` is retained and
+its real outcome remains auditable; completed or irreversible effects are never reported
+as cancelled. This Phase 2 surface exposes read tools only. Any future command tool must
+add its own durable idempotency key and terminal status before joining this gateway.
+
+## Deployment dependencies and rollback
+
+The gateway requires `OPENAI_API_KEY`, Application Default Credentials,
+`HUGO_AUTHORIZE_URL`, `HUGO_DELEGATE_URL`, and optional pinned model/voice variables.
+The frontend requires `NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL`. Deploying the frontend before
+the gateway would disable new calls, so the safe order is callables, gateway health check,
+then frontend. Rollback restores the previous frontend bundle and scales the gateway to
+zero; the existing Realtime session callable remains available during the migration.

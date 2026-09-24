@@ -15,6 +15,15 @@ const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace
 const dataStore = new FirestoreHugoDataStore(db);
 const learningStore = new FirestoreHugoLearningStore(db);
 
+export const authorizeHugoVoiceGatewaySession = onCall(
+  { region: "us-central1", timeoutSeconds: 15, memory: "256MiB" },
+  async request => {
+    const uid = requireAuth(request), user = await getMyUser(uid);
+    const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
+    return { ok: true, uid, rootId: clean(user?.rootId || uid, 128), role };
+  },
+);
+
 export function classifyVoiceRoute(message: string) {
   const profile = classifyHugoProfile(message), signals = classifyHugoRoutingSignals(message, profile);
   const route = signals.requiredCapabilities.includes("PAY0_READ") && signals.complexity !== "HIGH"
@@ -30,6 +39,7 @@ export const delegateHugoVoiceTurn = onCall(
     const rootId = clean(user?.rootId || uid, 128), message = clean(request.data?.request);
     const sessionId = clean(request.data?.sessionId, 180), turnId = clean(request.data?.turnId, 180);
     const responseId = clean(request.data?.responseId, 180), delegationId = clean(request.data?.delegationId, 180);
+    const toolCallId = clean(request.data?.toolCallId || delegationId, 180);
     if (!message || !sessionId || !turnId || !delegationId) throw new HttpsError("invalid-argument", "Delegacion de voz incompleta.");
     const { route, profile, signals } = classifyVoiceRoute(message);
     if (route === "ECONOMIC_VOICE") return { ok: true, delegationId, route, text: "Puedo responder este turno directamente en la sesion de voz.", cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
@@ -52,7 +62,7 @@ export const delegateHugoVoiceTurn = onCall(
       modelCapability: route === "BRAIN_MODEL" ? "STRONG_EXTERNAL" : "FAST_EXTERNAL",
     });
     const usage = result.model?.tokenUsage || null;
-    const ledger = { rootId, ownerUid: uid, sessionId, turnId, responseId: responseId || null, delegationId, route,
+    const ledger = { rootId, ownerUid: uid, sessionId, turnId, responseId: responseId || null, delegationId, toolCallId, route,
       voiceCostUsd: null, delegatedModelCostUsd: route === "DETERMINISTIC_TOOL" ? 0 : null, externalToolCostUsd: 0, transcriptionCostUsd: 0,
       provider: result.model?.provider || null, model: result.model?.model || null, tokenUsage: usage, latencyMs: Date.now() - started,
       authorization: { role: identity.role, rootId }, createdAt: FieldValue.serverTimestamp() };

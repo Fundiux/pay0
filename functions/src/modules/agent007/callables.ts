@@ -20,6 +20,7 @@ import { LearningCorrection, LearningReference } from "./hugoCore/learningContra
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
 import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
 import { PlatformReadConnector } from "./platformReadConnector";
+import { publicHugoSystemCatalog } from "./systemCatalog";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -250,7 +251,7 @@ export const getHugoDashboard = onCall(
     Object.values(byProvider).forEach((row: any) => { row.averageLatencyMs = row.requests ? Math.round(row.latencyMs / row.requests) : 0; delete row.latencyMs; });
     return { ok: true, scope: "GLOBAL", attention: attention.slice(0, 12), activity: traces.traces.slice(0, 12), consumption: byProvider,
       providers: new HugoModelRouter().status(), capabilities: HUGO_CAPABILITIES, conversations: [{ id: conversationIdFor(rootId, uid, "GLOBAL"), scope: "GLOBAL", messageCount: globalMessages.length,
-        lastMessage: globalMessages.at(-1)?.text || null }], systems: [{ id: "PAY0", status: "CONNECTED" }, { id: "ASSETS", status: "NOT_CONNECTED" }, { id: "TTT", status: "NOT_CONNECTED" }] };
+        lastMessage: globalMessages.at(-1)?.text || null }], systems: publicHugoSystemCatalog() };
   },
 );
 

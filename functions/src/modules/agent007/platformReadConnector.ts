@@ -3,14 +3,15 @@ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { getEffectiveUserModules } from "../users/authorization";
 import { resolveClientOperationalAccess } from "../clientDelegations/access";
 import type { Pay0ToolResult } from "./pay0Connector";
+import { HUGO_SYSTEM_CATALOG } from "./systemCatalog";
 
 const normalize = (value: unknown) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-const SYSTEMS = [
-  { id: "PAY0", module: "dashboard", status: "CONNECTED" },
-  { id: "ASSETS", module: "assets", status: "CONNECTED" },
-  { id: "HUGO", module: "hugo", status: "CONNECTED" },
-  { id: "TTT", module: "ttt", status: "NOT_CONNECTED" },
-] as const;
+export function isUserVisibleToCaller(identity: { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" }, targetId: string, target: any) {
+  if (String(target?.rootId || "") !== identity.rootId) return false;
+  if (identity.role === "superadmin") return true;
+  if (identity.role === "admin") return targetId === identity.uid || String(target?.parentUserId || "") === identity.uid;
+  return targetId === identity.uid;
+}
 
 export class PlatformReadConnector {
   constructor(private db: Firestore, private auth: any, private user: any, private identity: { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" }) {}
@@ -26,7 +27,7 @@ export class PlatformReadConnector {
   }
   async getSystemCatalog() {
     const modules = getEffectiveUserModules(this.user);
-    const systems = SYSTEMS.map(system => ({ id: system.id, status: system.status, allowed: this.identity.role === "superadmin" || modules[system.module]?.view === true }));
+    const systems = HUGO_SYSTEM_CATALOG.map(system => ({ id: system.id, status: system.status, allowed: this.identity.role === "superadmin" || modules[system.module]?.view === true }));
     return this.result("getSystemCatalog", systems, "systemCatalog");
   }
   async countClientsForUser(query: string) {
@@ -36,7 +37,7 @@ export class PlatformReadConnector {
     const needle = normalize(query);
     const matches = users.docs.filter(doc => {
       const row: any = doc.data();
-      if (this.identity.role === "admin" && doc.id !== this.identity.uid && row.parentUserId !== this.identity.uid) return false;
+      if (!isUserVisibleToCaller(this.identity, doc.id, row)) return false;
       return [doc.id, row.displayName, row.nombreUsuario, row.email].some(value => normalize(value) === needle || normalize(value).split("@")[0] === needle);
     });
     if (matches.length !== 1) return this.result("countClientsForUser", { matchStatus: matches.length ? "AMBIGUOUS" : "NOT_FOUND", matches: matches.map(doc => ({ uid: doc.id, displayName: doc.data().displayName || doc.data().nombreUsuario || null })) }, "user", matches.map(doc => doc.id));
