@@ -60,7 +60,11 @@ try {
         const events = realtimeEvents.slice(startIndex);
         const tool = events.find(event => event.type === "response.function_call_arguments.done" && event.name === expectedTool);
         const toolDone = controlEvents.find(event => event.type === "gateway.tool_completed" && event.tool === expectedTool && event.toolCallId === tool?.call_id);
-        const final = [...events].reverse().find(event => event.type === "response.done" && event.response?.status === "completed" && event.response?.output?.some(item => item.type === "message"));
+        const final = [...events].reverse().find(event => event.type === "response.done"
+          && event.response?.status === "completed"
+          && event.response?.id !== toolDone?.responseId
+          && event.response?.output?.some(item => item.type === "message")
+          && !event.response?.output?.some(item => item.type === "function_call"));
         return tool && toolDone && final ? { events, tool, toolDone, final } : null;
       }, 60000, `TURN_${sequence}_TIMEOUT`); }
       catch (error) {
@@ -68,8 +72,7 @@ try {
       }
       const transcript = completed.events.filter(event => event.type === "response.output_audio_transcript.done").at(-1)?.transcript
         || completed.final.response.output?.flatMap(item => item.content || []).find(content => content.transcript)?.transcript || "";
-      const created = completed.events.find(event => event.type === "conversation.item.created" && event.item?.role === "user");
-      return { turnId: created?.item?.id || null, responseId: completed.final.response?.id || null, toolCallId: completed.tool.call_id,
+      return { turnId: completed.toolDone.turnId, responseId: completed.final.response?.id || null, toolCallId: completed.tool.call_id,
         tool: completed.tool.name, route: completed.toolDone.route, sourceSystem: completed.toolDone.sourceSystem, transcript, usage: completed.final.response?.usage || null };
     };
     const turns = [];
