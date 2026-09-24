@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { auth } from "@/lib/firebaseClient";
-import { saveHugoVoiceHistory } from "@/services/agent007";
+import { createHugoRealtimeSession, saveHugoVoiceHistory } from "@/services/agent007";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -101,10 +101,11 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
       const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
+      const useGateway = new URLSearchParams(window.location.search).get("voiceCanary") === "1" && Boolean(gatewayUrl);
       const currentUser = auth.currentUser;
-      if (!gatewayUrl) throw new Error("El gateway de voz de Hugo no esta configurado.");
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
-      const idToken = await currentUser.getIdToken();
+      const idToken = useGateway ? await currentUser.getIdToken() : "";
+      const legacySession = useGateway ? null : await createHugoRealtimeSession();
       if (generationRef.current !== generation) return;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -126,7 +127,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       let responseId: string | null = null;
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
-      historyRef.current = { sessionId: "", model: "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
+      historyRef.current = { sessionId: "", model: legacySession?.model || "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -230,8 +231,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const answer = await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
-        const gateway = new WebSocket(gatewayUrl);
+      const answer = useGateway ? await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
+        const gateway = new WebSocket(gatewayUrl!);
         gatewayRef.current = gateway;
         const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
         gateway.onopen = () => gateway.send(JSON.stringify({ type: "authenticate", idToken }));
@@ -244,7 +245,13 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`Hugo no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
           if (event.type === "gateway.interruption") trace("gateway.interruption", event);
         };
-      });
+      }) : await (async () => {
+        const response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp,
+          headers: { Authorization: `Bearer ${legacySession!.clientSecret}`, "Content-Type": "application/sdp" } });
+        const sdp = await response.text();
+        if (!response.ok) throw new Error(`OpenAI no pudo establecer la llamada (HTTP_${response.status}).`);
+        return { sdp, sessionId: fallbackSessionId, model: legacySession!.model };
+      })();
       if (generationRef.current !== generation) return;
       sessionId = answer.sessionId;
       if (historyRef.current) { historyRef.current.sessionId = answer.sessionId; historyRef.current.model = answer.model; }

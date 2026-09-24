@@ -10,6 +10,7 @@ const port = Number(process.env.PORT || 8080), apiKey = process.env.OPENAI_API_K
 const delegateUrl = process.env.HUGO_DELEGATE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/delegateHugoVoiceTurn";
 const authorizeUrl = process.env.HUGO_AUTHORIZE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/authorizeHugoVoiceGatewaySession";
 const model = process.env.HUGO_REALTIME_MODEL || "gpt-realtime-2.1", voice = process.env.HUGO_REALTIME_VOICE || "marin";
+const canaryUids = new Set(String(process.env.HUGO_CANARY_UIDS || "").split(",").map(value => value.trim()).filter(Boolean));
 const tool = { type: "function", name: "delegate_to_hugo_core", description: "Consulta Hugo Core para capacidades y datos autorizados.", parameters: { type: "object", additionalProperties: false, properties: { request: { type: "string" } }, required: ["request"] } };
 
 async function openRealtime(sdp) {
@@ -28,11 +29,12 @@ const server = http.createServer((req, res) => { res.writeHead(req.url === "/hea
 const wss = new WebSocketServer({ server, path: "/voice", maxPayload: 1024 * 1024 });
 wss.on("connection", browser => {
   let token = "", identity = null, sideband = null, sessionId = "", turnId = "", responseId = "";
+  const connectedAt = Date.now(); let firstAudioAt = null;
   const registry = new ToolCallRegistry(), controllers = new Map();
   const send = value => browser.readyState === WebSocket.OPEN && browser.send(JSON.stringify(value));
   browser.on("message", async raw => { try {
     const event = JSON.parse(raw.toString());
-    if (event.type === "authenticate") { token = String(event.idToken || ""); identity = await getAuth().verifyIdToken(token, true); const scope = await authorize(token); identity = { ...identity, rootId: scope.rootId, role: scope.role }; log("gateway.authenticated", { uid: identity.uid, rootId: identity.rootId, role: identity.role }); send({ type: "authenticated" }); return; }
+    if (event.type === "authenticate") { token = String(event.idToken || ""); identity = await getAuth().verifyIdToken(token, true); if (canaryUids.size && !canaryUids.has(identity.uid)) throw Error("CANARY_NOT_ALLOWED"); const scope = await authorize(token); identity = { ...identity, rootId: scope.rootId, role: scope.role }; log("gateway.authenticated", { uid: identity.uid, rootId: identity.rootId, role: identity.role }); send({ type: "authenticated" }); return; }
     if (!identity) throw Error("UNAUTHENTICATED");
     if (event.type === "offer") {
       const realtime = await openRealtime(String(event.sdp || "")); sessionId = realtime.callId;
@@ -41,12 +43,14 @@ wss.on("connection", browser => {
       sideband.on("message", async message => { const item = JSON.parse(message.toString()), type = String(item.type || "");
         if (type === "input_audio_buffer.speech_started") { const previous = turnId; turnId = item.item_id || randomUUID(); const interrupted = registry.interrupt(previous); for (const id of interrupted.cancelled) controllers.get(id)?.abort(); log("gateway.interruption", { sessionId, turnId: previous, ...interrupted }); send({ type: "gateway.interruption", turnId: previous, ...interrupted }); }
         if (type === "response.created") responseId = item.response?.id || responseId;
+        if (type === "response.output_audio.delta" && firstAudioAt === null) { firstAudioAt = Date.now(); log("gateway.first_audio", { sessionId, turnId, responseId, latencyMs: firstAudioAt - connectedAt }); }
+        if (type === "response.done") log("gateway.response_done", { sessionId, turnId, responseId: item.response?.id || responseId, status: item.response?.status || null, usage: item.response?.usage || null });
         if (type === "response.function_call_arguments.done" && item.name === "delegate_to_hugo_core") {
           const toolCallId = String(item.call_id || item.item_id || ""), started = registry.begin(toolCallId, turnId); if (!started.accepted) { log("gateway.tool_duplicate", { sessionId, turnId, responseId, toolCallId }); return; }
           const controller = new AbortController(); controllers.set(toolCallId, controller); registry.running(toolCallId);
-          try { const args = JSON.parse(item.arguments || "{}"); log("gateway.tool_started", { sessionId, turnId, responseId, toolCallId }); const result = await callable(token, { request: args.request, sessionId, turnId, responseId, delegationId: toolCallId, toolCallId }, controller.signal); registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
+          try { const args = JSON.parse(item.arguments || "{}"), toolStartedAt = Date.now(); log("gateway.tool_started", { sessionId, turnId, responseId, toolCallId }); const result = await callable(token, { request: args.request, sessionId, turnId, responseId, delegationId: toolCallId, toolCallId }, controller.signal); registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
             sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ route: result.route, text: result.text }) } })); sideband.send(JSON.stringify({ type: "response.create" }));
-            log("gateway.tool_completed", { sessionId, turnId, responseId, toolCallId, route: result.route });
+            log("gateway.tool_completed", { sessionId, turnId, responseId, toolCallId, route: result.route, latencyMs: Date.now() - toolStartedAt, cost: result.cost || null });
           } catch (error) { registry.fail(toolCallId); if (error.name !== "AbortError") { sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ error: "HUGO_CORE_UNAVAILABLE" }) } })); sideband.send(JSON.stringify({ type: "response.create" })); log("gateway.tool_failed", { sessionId, turnId, responseId, toolCallId, code: error.message }); } } finally { controllers.delete(toolCallId); }
         }
       });
@@ -54,6 +58,6 @@ wss.on("connection", browser => {
       log("gateway.session_ready", { sessionId, uid: identity.uid, rootId: identity.rootId, model, voice }); send({ type: "answer", sdp: realtime.answer, sessionId, model, voice });
     }
   } catch (error) { send({ type: "gateway.error", code: error instanceof Error ? error.message : "ERROR" }); } });
-  browser.on("close", () => { for (const controller of controllers.values()) controller.abort(); sideband?.close(); });
+  browser.on("close", () => { log("gateway.session_closed", { sessionId: sessionId || null, uid: identity?.uid || null, activeMs: Date.now() - connectedAt }); for (const controller of controllers.values()) controller.abort(); sideband?.close(); });
 });
 server.listen(port);
