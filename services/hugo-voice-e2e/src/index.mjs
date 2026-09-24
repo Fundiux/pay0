@@ -22,6 +22,9 @@ async function firebaseIdToken() {
   });
   const body = await response.json();
   if (!response.ok || !body.idToken) throw Error(`FIREBASE_EXCHANGE_FAILED_${response.status}`);
+  const verified = await getAuth().verifyIdToken(body.idToken, true);
+  if (verified.uid !== canaryUid) throw Error("FIREBASE_UID_MISMATCH");
+  console.log(JSON.stringify({ type: "HUGO_E2E_IDENTITY_VERIFIED", uid: verified.uid, aud: verified.aud, iss: verified.iss }));
   return body.idToken;
 }
 

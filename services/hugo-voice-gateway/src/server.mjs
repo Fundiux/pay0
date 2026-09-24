@@ -6,7 +6,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { ToolCallRegistry } from "./toolCallRegistry.mjs";
 import { delegationForRealtimeTool, realtimeToolNames, realtimeTools } from "./realtimeTools.mjs";
 
-if (!getApps().length) initializeApp({ credential: applicationDefault() });
+if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: process.env.GOOGLE_CLOUD_PROJECT || "pay-0-system" });
 const port = Number(process.env.PORT || 8080), apiKey = process.env.OPENAI_API_KEY || "";
 const delegateUrl = process.env.HUGO_DELEGATE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/delegateHugoVoiceTurn";
 const authorizeUrl = process.env.HUGO_AUTHORIZE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/authorizeHugoVoiceGatewaySession";
@@ -27,7 +27,7 @@ function log(type, detail = {}) { console.log(JSON.stringify({ severity: "INFO",
 function classifyRequestError(error) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   const message = error instanceof Error ? error.message : "";
-  if (code.startsWith("auth/")) return "INVALID_FIREBASE_TOKEN";
+  if (code.startsWith("auth/")) return code.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
   if (message === "CANARY_NOT_ALLOWED" || message === "UNAUTHENTICATED") return message;
   if (/^[A-Z][A-Z0-9_]+$/.test(message)) return message;
   return "GATEWAY_REQUEST_FAILED";
