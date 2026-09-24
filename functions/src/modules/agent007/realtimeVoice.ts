@@ -44,7 +44,23 @@ export const createHugoRealtimeSession = onCall(
             "Esta sesion de voz es conversacional y de solo consulta.",
             "No afirmes haber consultado datos operativos que no recibiste en esta sesion.",
             "No ejecutes pagos, solicitudes, dispersiones ni cambios en sistemas.",
+            "Cuando una solicitud requiera datos de PAY0, una herramienta o razonamiento complejo, llama exactamente una vez a delegate_to_hugo_core y comunica unicamente su resultado.",
           ].join(" "),
+          tools: [{
+            type: "function",
+            name: "delegate_to_hugo_core",
+            description: "Delega a Hugo Core una consulta PAY0, accion deterministica autorizada o tarea cognitiva compleja.",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                request: { type: "string", description: "Solicitud completa del usuario en espanol." },
+                turn_id: { type: "string", description: "Identificador del turno Realtime." },
+              },
+              required: ["request", "turn_id"],
+            },
+          }],
+          tool_choice: "auto",
           audio: {
             input: {
               noise_reduction: { type: "near_field" },

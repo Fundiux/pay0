@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
-import { createHugoRealtimeSession, saveHugoVoiceHistory } from "@/services/agent007";
+import { createHugoRealtimeSession, delegateHugoVoiceTurn, saveHugoVoiceHistory } from "@/services/agent007";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -16,7 +16,7 @@ type TraceEntry = {
   detail?: Record<string, unknown>;
 };
 type VoiceTurnDraft = { turnId: string; responseId: string | null; speaker: "USER" | "HUGO"; text: string; timestampMs: number; durationMs: number; interrupted: boolean; status: string; transcriptionStatus: string };
-type VoiceHistoryDraft = { sessionId: string; model: string; startedAt: number; turns: Map<string, VoiceTurnDraft>; events: Map<string, { eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string }> };
+type VoiceHistoryDraft = { sessionId: string; model: string; startedAt: number; audioUsage: { input: number; cachedInput: number; output: number }; turns: Map<string, VoiceTurnDraft>; events: Map<string, { eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string }> };
 
 declare global {
   interface Window { __HUGO_REALTIME_TRACE__?: TraceEntry[]; }
@@ -38,7 +38,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     const history = historyRef.current;
     if (!history?.sessionId) return;
     await saveHugoVoiceHistory({ sessionId: history.sessionId, model: history.model, status,
-      durationMs: Math.max(0, Date.now() - history.startedAt), turns: [...history.turns.values()], events: [...history.events.values()] });
+      durationMs: Math.max(0, Date.now() - history.startedAt), audioUsage: history.audioUsage, turns: [...history.turns.values()], events: [...history.events.values()] });
     onHistorySaved?.();
   };
 
@@ -111,7 +111,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       let responseId: string | null = null;
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
-      historyRef.current = { sessionId: "", model: session.model, startedAt: Date.now(), turns: new Map(), events: new Map() };
+      const handledCalls = new Set<string>();
+      historyRef.current = { sessionId: "", model: session.model, startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -173,6 +174,24 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
           if (assistant && event.transcript) assistant.text = String(event.transcript);
         }
+        if (type === "response.function_call_arguments.done" && event.name === "delegate_to_hugo_core") {
+          const callId = String(event.call_id || event.item_id || "");
+          if (callId && !handledCalls.has(callId)) {
+            handledCalls.add(callId);
+            let args: any = {};
+            try { args = JSON.parse(String(event.arguments || "{}")); } catch {}
+            const delegatedTurnId = String(args.turn_id || turnId || callId);
+            void delegateHugoVoiceTurn({ request: String(args.request || ""), sessionId, turnId: delegatedTurnId, responseId, delegationId: callId })
+              .then(result => {
+                if (channel.readyState !== "open") return;
+                channel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ route: result.route, text: result.text }) } }));
+                channel.send(JSON.stringify({ type: "response.create" }));
+              })
+              .catch(() => {
+                if (channel.readyState === "open") channel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: "HUGO_CORE_UNAVAILABLE" }) } }));
+              });
+          }
+        }
         trace(type, {
           eventId: event.event_id || null,
           itemId: event.item_id || event.item?.id || null,
@@ -185,6 +204,12 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           historyRef.current.events.set(eventId, { eventId, type, turnId, responseId, timestampMs: Math.round(performance.now() - startedAt), detail: event.error?.code || event.response?.status || undefined });
         }
         if (type === "response.done" || type === "response.cancelled") {
+          if (type === "response.done" && historyRef.current) {
+            const usage = event.response?.usage || {};
+            historyRef.current.audioUsage.input += Number(usage.input_token_details?.audio_tokens || 0);
+            historyRef.current.audioUsage.cachedInput += Number(usage.input_token_details?.cached_tokens_details?.audio_tokens || 0);
+            historyRef.current.audioUsage.output += Number(usage.output_token_details?.audio_tokens || 0);
+          }
           const id = event.response?.id || responseId;
           const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
           if (assistant) { assistant.durationMs = Math.max(0, Math.round(performance.now() - startedAt) - assistant.timestampMs); assistant.interrupted ||= type === "response.cancelled" || event.response?.status === "cancelled"; assistant.status = assistant.interrupted ? "INTERRUPTED" : "COMPLETED"; }

@@ -7,6 +7,10 @@ import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
 const clean = (value: unknown, max = 500) => String(value ?? "").trim().slice(0, max);
 const validId = (value: string) => Boolean(value && value.length <= 180 && !value.includes("/"));
 const allowedEvents = new Set(["session.created", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped", "conversation.item.input_audio_transcription.completed", "response.created", "response.output_audio_transcript.done", "response.done", "response.cancelled", "error", "peer.connection_state", "peer.ice_state"]);
+const voiceRates: Record<string, { input: number; cached: number; output: number }> = {
+  "gpt-realtime-2.1": { input: 32, cached: 0.4, output: 64 },
+  "gpt-realtime-2.1-mini": { input: 10, cached: 0.3, output: 20 },
+};
 
 async function identity(request: any) {
   const uid = requireAuth(request), user = await getMyUser(uid);
@@ -26,14 +30,18 @@ export const saveHugoVoiceHistory = onCall(
     await db.runTransaction(async tx => {
       const existing = await tx.get(sessionRef), now = Timestamp.now();
       tx.set(conversationRef, { rootId: actor.rootId, ownerUid: actor.uid, participantUids: [actor.uid], status: "ACTIVE", updatedAt: now, createdAt: FieldValue.serverTimestamp() }, { merge: true });
+      const model = clean(data.model, 80) || "gpt-realtime-2.1";
+      const audioUsage = { input: Math.max(0, Number(data.audioUsage?.input) || 0), cachedInput: Math.max(0, Number(data.audioUsage?.cachedInput) || 0), output: Math.max(0, Number(data.audioUsage?.output) || 0) };
+      const rates = voiceRates[model], voiceCostUsd = rates ? ((audioUsage.input * rates.input) + (audioUsage.cachedInput * rates.cached) + (audioUsage.output * rates.output)) / 1_000_000 : null;
       tx.set(sessionRef, {
         rootId: actor.rootId, ownerUid: actor.uid, conversationId: actor.conversationId, sessionId,
-        modality: "VOICE", system: "HUGO", context: "GLOBAL", voice: "marin", model: clean(data.model, 80) || "gpt-realtime-2.1",
+        modality: "VOICE", system: "HUGO", context: "GLOBAL", voice: "marin", model,
         status: ["ACTIVE", "COMPLETED", "FAILED"].includes(data.status) ? data.status : "ACTIVE",
         startedAt: existing.exists ? existing.data()?.startedAt : now, updatedAt: now,
         endedAt: data.status === "COMPLETED" || data.status === "FAILED" ? now : null,
         durationMs: Math.max(0, Math.min(Number(data.durationMs) || 0, 4 * 60 * 60 * 1000)),
         transcriptPolicy: "REALTIME_EVENTS_ONLY", audioStored: false,
+        costs: { voiceCostUsd, delegatedModelCostUsd: null, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, audioUsage,
       }, { merge: true });
     });
     const batch = db.batch();
@@ -77,4 +85,3 @@ export const getHugoVoiceSession = onCall(
     return { ok: true, session: { id: session.id, ...session.data() }, turns: turns.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
   },
 );
-
