@@ -28,7 +28,7 @@ function log(type, detail = {}) { console.log(JSON.stringify({ severity: "INFO",
 const server = http.createServer((req, res) => {
   const pathname = new URL(req.url || "/", "http://gateway.internal").pathname;
   log("gateway.http", { method: req.method, pathname });
-  const healthy = pathname === "/" || pathname === "/healthz";
+  const healthy = pathname === "/" || pathname === "/healthz" || pathname === "/healthz/";
   res.writeHead(healthy ? 200 : 404, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(healthy ? "ok" : "not found");
 });
