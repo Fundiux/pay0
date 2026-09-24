@@ -32,7 +32,7 @@ async function connect(idToken) {
   const channel = peer.createDataChannel("oai-events");
   const gatewayEvents = [], realtimeEvents = [];
   control.on("message", raw => gatewayEvents.push(JSON.parse(String(raw))));
-  channel.message.subscribe(raw => realtimeEvents.push(JSON.parse(Buffer.from(raw).toString())));
+  channel.onMessage.subscribe(raw => realtimeEvents.push(JSON.parse(Buffer.from(raw).toString())));
   await new Promise((resolve, reject) => { control.once("open", resolve); control.once("error", reject); });
   control.send(JSON.stringify({ type: "authenticate", idToken }));
   await waitFor(handler => {
