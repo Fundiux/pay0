@@ -31,6 +31,7 @@ type UploadRow = {
 
 type DispersionLike = {
   id: string;
+  rootId?: string | null;
   folio?: string | null;
   dispersionFolio?: string | null;
   clienteId?: string | null;
@@ -60,11 +61,13 @@ export default function DispersionDocsModal(props: {
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [docs, setDocs] = useState<UploadRow[]>([]);
+  const [docsError, setDocsError] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deliveryBusyId, setDeliveryBusyId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const dispersionId = dispersion?.id || "";
+  const dispersionRootId = String(dispersion?.rootId || "").trim();
 
   const title = useMemo(() => {
     if (!dispersion) return "Docs";
@@ -74,11 +77,20 @@ export default function DispersionDocsModal(props: {
   useEffect(() => {
     if (!open || !dispersionId) {
       setDocs([]);
+      setDocsError("");
       return;
     }
 
+    if (!dispersionRootId) {
+      setDocs([]);
+      setDocsError("La dispersion no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    setDocsError("");
     const qDocs = query(
       collection(db, "uploads"),
+      where("rootId", "==", dispersionRootId),
       where("dispersionId", "==", dispersionId)
     );
 
@@ -96,10 +108,14 @@ export default function DispersionDocsModal(props: {
           }) as UploadRow[];
 
         setDocs(rows);
+        setDocsError("");
       },
-      () => setDocs([])
+      () => {
+        setDocs([]);
+        setDocsError("No se pudieron cargar los documentos de esta dispersion.");
+      }
     );
-  }, [open, dispersionId]);
+  }, [open, dispersionId, dispersionRootId]);
 
   useEffect(() => {
     if (!open) {
@@ -261,7 +277,9 @@ export default function DispersionDocsModal(props: {
               Comprobantes cargados
             </div>
 
-            {activeDocs.length === 0 ? (
+            {docsError ? (
+              <div className="px-3 py-4 text-sm text-rose-300">{docsError}</div>
+            ) : activeDocs.length === 0 ? (
               <div className="px-3 py-4 text-sm text-slate-500">Sin comprobantes cargados.</div>
             ) : (
               <div className="overflow-x-auto">

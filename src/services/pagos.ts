@@ -29,6 +29,7 @@ export async function createPago(input: {
   detectedBeneficiaryRfc?: string;
   operatorSelectedBankName?: string;
   operatorSelectedAccount?: string;
+  acceptRfcMismatch?: boolean;
 }) {
   const fn = httpsCallable(functions, "createPago");
   const res: any = await fn(input);

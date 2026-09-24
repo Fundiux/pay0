@@ -105,7 +105,7 @@ export default function UsuariosPage() {
 
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "operador">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "deleted">("active");
 
   const [openCreate, setOpenCreate] = useState(false);
   const [openPermsUid, setOpenPermsUid] = useState<string>("");
@@ -216,6 +216,7 @@ export default function UsuariosPage() {
 
       if (statusFilter === "active" && (!u.isActive || deleted)) return false;
       if (statusFilter === "inactive" && (u.isActive || deleted)) return false;
+      if (statusFilter === "deleted" && !deleted) return false;
       
       if (qq) {
         const hay =
@@ -512,6 +513,7 @@ export default function UsuariosPage() {
               options={[
                 { value: "active", label: "Activos" },
                 { value: "inactive", label: "Inactivos" },
+                { value: "deleted", label: "Eliminados" },
                 { value: "all", label: "Todos" },
               ]}
               placeholder="Estado"

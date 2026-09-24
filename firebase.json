@@ -1,7 +1,14 @@
 {
     "functions":  {
                       "source":  "functions",
-                      "runtime":  "nodejs22"
+                      "runtime":  "nodejs22",
+                      "predeploy":  [
+                                        "npm --prefix functions run build",
+                                        "node qa/scripts/verify-client-csf-parser.cjs",
+                                        "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
+                                        "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
+                                        "npm run qa:document-access"
+                                    ]
                   },
     "firestore":  {
                       "rules":  "firestore.rules",
@@ -35,6 +42,9 @@
                                }
                   },
     "hosting":  {
+                    "predeploy":  [
+                                       "npm run qa:document-access"
+                                   ],
                     "ignore":  [
                                    "firebase.json",
                                    "**/.*",

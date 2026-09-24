@@ -238,12 +238,14 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
 
     const off1 = watchClientBeneficiaries(
       clientId,
+      rootId,
       (rows) => setBeneficiaries(rows),
       (e) => setError(e.message || "No se pudieron cargar los beneficiarios.")
     );
 
     const off2 = watchClientBeneficiaryMethods(
       clientId,
+      rootId,
       (rows) => setMethods(rows),
       (e) => setError(e.message || "No se pudieron cargar los metodos.")
     );
@@ -252,7 +254,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       off1();
       off2();
     };
-  }, [clientId]);
+  }, [clientId, rootId]);
 
   useEffect(() => {
     if (!tipo) {

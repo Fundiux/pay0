@@ -183,11 +183,13 @@ export async function toggleClientBeneficiaryMethodActive(input: { methodId: str
 
 export function watchClientBeneficiaries(
   clientId: string,
+  rootId: string,
   onData: (rows: ClientBeneficiaryRow[]) => void,
   onError?: (error: Error) => void
 ) {
   const q = query(
     collection(db, "clientBeneficiaries"),
+    where("rootId", "==", rootId),
     where("clientId", "==", clientId)
   );
 
@@ -208,11 +210,13 @@ export function watchClientBeneficiaries(
 
 export function watchClientBeneficiaryMethods(
   clientId: string,
+  rootId: string,
   onData: (rows: ClientBeneficiaryMethodRow[]) => void,
   onError?: (error: Error) => void
 ) {
   const q = query(
     collection(db, "clientBeneficiaryMethods"),
+    where("rootId", "==", rootId),
     where("clientId", "==", clientId)
   );
 

@@ -24,6 +24,7 @@ type RelatedPagoReceipt = {
   fileName?: string | null;
   storagePath?: string | null;
   documentType?: string | null;
+  documentTypeLabel?: string | null;
   status?: string | null;
   active?: boolean;
 };
@@ -38,7 +39,7 @@ function chunkForInQuery<T>(items: T[], size = 10): T[][] {
 }
 
 function getRelatedReceiptName(row: RelatedPagoReceipt) {
-  return row.originalName || row.filename || row.fileName || row.storagePath?.split("/").pop() || "Comprobante de pago";
+  return row.documentTypeLabel || row.originalName || row.filename || row.fileName || row.storagePath?.split("/").pop() || "Documento del pago";
 }
 
 import { forceDownloadFromUrl } from "@/lib/downloadFile";
@@ -104,6 +105,7 @@ export default function DocsModal(props: {
   const [documentType, setDocumentType] = useState<SolicitudDocumentType>("FACTURA_PDF");
   const [otherLabel, setOtherLabel] = useState("");
   const [docs, setDocs] = useState<UploadRow[]>([]);
+  const [docsError, setDocsError] = useState("");
   const [relatedPagoReceipts, setRelatedPagoReceipts] = useState<RelatedPagoReceipt[]>([]);
   const [loadingRelatedPagoReceipts, setLoadingRelatedPagoReceipts] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -127,6 +129,7 @@ export default function DocsModal(props: {
   const signatureHasInkRef = useRef(false);
 
   const solicitudId = solicitud?.id;
+  const solicitudRootId = String(solicitud?.rootId || "").trim();
 
   async function handleGenerateQuotation() {
     if (!solicitudId || quotationGenerating) return;
@@ -169,7 +172,7 @@ export default function DocsModal(props: {
     async function loadRelatedPagoReceipts() {
       const sid = String(solicitudId || "").trim();
 
-      if (!sid) {
+      if (!sid || !solicitudRootId) {
         setRelatedPagoReceipts([]);
         setLoadingRelatedPagoReceipts(false);
         return;
@@ -179,7 +182,11 @@ export default function DocsModal(props: {
 
       try {
         const aplicacionesSnap = await getDocs(
-          query(collection(db, "pagoAplicaciones"), where("solicitudId", "==", sid))
+          query(
+            collection(db, "pagoAplicaciones"),
+            where("rootId", "==", solicitudRootId),
+            where("solicitudId", "==", sid),
+          )
         );
 
         const pagoIds = Array.from(new Set(
@@ -199,14 +206,18 @@ export default function DocsModal(props: {
 
         for (const chunk of chunkForInQuery(pagoIds, 10)) {
           const uploadsSnap = await getDocs(
-            query(collection(db, "uploads"), where("pagoId", "in", chunk))
+            query(
+              collection(db, "uploads"),
+              where("rootId", "==", solicitudRootId),
+              where("pagoId", "in", chunk),
+            )
           );
 
           uploadsSnap.docs.forEach((doc) => {
             const row = { id: doc.id, ...(doc.data() as any) } as RelatedPagoReceipt;
 
             if (String((row as any).entityType || "") !== "pagos") return;
-            if (String(row.documentType || "").toUpperCase() !== "COMPROBANTE_PAGO") return;
+            if (!["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(String(row.documentType || "").toUpperCase())) return;
             if (row.active !== true) return;
 
             const status = String(row.status || "READY").toUpperCase();
@@ -242,15 +253,25 @@ export default function DocsModal(props: {
     return () => {
       cancelled = true;
     };
-  }, [solicitudId]);
+  }, [solicitudId, solicitudRootId]);
 useEffect(() => {
     if (!open || !solicitudId) {
       setDocs([]);
+      setDocsError("");
       return;
     }
 
+    if (!solicitudRootId) {
+      setDocs([]);
+      setDocsError("La solicitud no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    setDocsError("");
+
     const qDocs = query(
       collection(db, "uploads"),
+      where("rootId", "==", solicitudRootId),
       where("solicitudId", "==", solicitudId)
     );
 
@@ -267,10 +288,14 @@ useEffect(() => {
           }) as UploadRow[];
 
         setDocs(rows);
+        setDocsError("");
       },
-      () => setDocs([])
+      () => {
+        setDocs([]);
+        setDocsError("No se pudieron cargar los documentos de esta solicitud.");
+      }
     );
-  }, [open, solicitudId]);
+  }, [open, solicitudId, solicitudRootId]);
 
   useEffect(() => {
     if (!open) {
@@ -1160,10 +1185,10 @@ const downloadDoc = async (doc: UploadRow) => {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[12px] uppercase tracking-[0.12em] text-emerald-200">
-                  Comprobantes relacionados por pagos
+                  Documentos relacionados por pagos
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  Se detectan desde los pagos aplicados a esta solicitud. No se duplica el archivo.
+                  Incluye comprobantes y complementos de pago vinculados a esta solicitud. No se duplica el archivo.
                 </div>
               </div>
               <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200">
@@ -1173,11 +1198,11 @@ const downloadDoc = async (doc: UploadRow) => {
 
             {loadingRelatedPagoReceipts ? (
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-400">
-                Buscando comprobantes relacionados...
+                Buscando documentos relacionados...
               </div>
             ) : relatedPagoReceipts.length === 0 ? (
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-500">
-                Sin comprobantes relacionados por pagos aplicados.
+                Sin documentos relacionados por pagos aplicados.
               </div>
             ) : (
               <div className="space-y-2">
@@ -1303,7 +1328,11 @@ const downloadDoc = async (doc: UploadRow) => {
               <div className="text-[10px] text-slate-500">{docs.length} registros</div>
             </div>
 
-            {docs.length === 0 ? (
+            {docsError ? (
+              <div className="px-3 py-6 text-center text-[11px] text-rose-300">
+                {docsError}
+              </div>
+            ) : docs.length === 0 ? (
               <div className="px-3 py-6 text-center text-[11px] text-slate-500">
                 Sin documentos cargados.
               </div>

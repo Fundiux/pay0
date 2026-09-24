@@ -1714,6 +1714,7 @@ export const createPago = onCall(
       detectedBeneficiaryRfc,
       operatorSelectedBankName,
       operatorSelectedAccount,
+      acceptRfcMismatch,
       despachoId,
       asociadoId,
       operationTypeKey,
@@ -1989,8 +1990,30 @@ export const createPago = onCall(
     const detectedBeneficiaryRfcValue = String(detectedBeneficiaryRfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
     const clientRfcValue = String(clientData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
     const companyRfcValue = String(companyData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
-    if (detectedPayerRfcValue && detectedPayerRfcValue !== clientRfcValue) throw new HttpsError("failed-precondition", "El RFC del ordenante del comprobante no coincide con el cliente facturado.");
-    if (detectedBeneficiaryRfcValue && detectedBeneficiaryRfcValue !== companyRfcValue) throw new HttpsError("failed-precondition", "El RFC beneficiario del comprobante no coincide con la empresa emisora.");
+    const receiptRfcMismatches: Array<{ field: string; detected: string; expected: string; message: string }> = [];
+    if (detectedPayerRfcValue && detectedPayerRfcValue !== clientRfcValue) {
+      receiptRfcMismatches.push({
+        field: "payerRfc",
+        detected: detectedPayerRfcValue,
+        expected: clientRfcValue,
+        message: "El RFC del ordenante no coincide con el cliente facturado.",
+      });
+    }
+    if (detectedBeneficiaryRfcValue && detectedBeneficiaryRfcValue !== companyRfcValue) {
+      receiptRfcMismatches.push({
+        field: "beneficiaryRfc",
+        detected: detectedBeneficiaryRfcValue,
+        expected: companyRfcValue,
+        message: "El RFC beneficiario no coincide con la empresa emisora.",
+      });
+    }
+    if (receiptRfcMismatches.length > 0 && acceptRfcMismatch !== true) {
+      throw new HttpsError(
+        "failed-precondition",
+        `${receiptRfcMismatches.map((item) => item.message).join(" ")} Revisa el comprobante y, si corresponde a un pago de tercero, confirma para enviarlo de todos modos.`,
+        { code: "PAGO_RECEIPT_RFC_MISMATCH", mismatches: receiptRfcMismatches },
+      );
+    }
     const operatorSelectedBankNameValue = String(operatorSelectedBankName || "").trim().slice(0, 120);
     const operatorSelectedAccountValue = String(operatorSelectedAccount || "").trim().slice(0, 80);
 
@@ -2166,6 +2189,11 @@ export const createPago = onCall(
           bankIdentificationNeedsReview:
             !!operatorSelectedBankNameValue &&
             detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+          rfcMismatchDetected: receiptRfcMismatches.length > 0,
+          rfcMismatchAccepted: receiptRfcMismatches.length > 0 && acceptRfcMismatch === true,
+          rfcMismatchAcceptedBy: receiptRfcMismatches.length > 0 ? uid : null,
+          rfcMismatchAcceptedAt: receiptRfcMismatches.length > 0 ? FieldValue.serverTimestamp() : null,
+          rfcMismatches: receiptRfcMismatches,
         },
         receiptDuplicateId: receiptDuplicateId || null,
         moneda: String(moneda || "MXN"),
@@ -2233,6 +2261,8 @@ export const createPago = onCall(
           bankIdentificationNeedsReview:
             !!operatorSelectedBankNameValue &&
             detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+          rfcMismatchAccepted: receiptRfcMismatches.length > 0 && acceptRfcMismatch === true,
+          rfcMismatches: receiptRfcMismatches,
         },
       });
     });
@@ -2413,7 +2443,14 @@ export const changePagoStatus = onCall(
     const uid = requireAuth(request);
     const rootId = await getRootId(uid);
     const me = await getMyUser(uid);
-    assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "conciliate" });
+    const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {};
+    const requestedStatus = String(newStatus || "").trim().toUpperCase();
+    const requiredAction = requestedStatus === "RECHAZADO" || requestedStatus === "CANCELADO"
+      ? "cancel"
+      : requestedStatus
+        ? "conciliate"
+        : "view";
+    assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction });
 
     const role = String(me?.role || "").trim().toLowerCase();
     const isSuperadmin = role === "superadmin";
@@ -2422,7 +2459,6 @@ export const changePagoStatus = onCall(
     const actorRole = String(me?.role || "unknown");
     const actorName = String(me?.name || me?.displayName || me?.email || uid);
     const adminId = getActivityAdminId(me, uid, rootId);
-const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {};
     if (!pagoId) throw new HttpsError("invalid-argument", "pagoId requerido.");
     if (!newStatus && typeof hasUnreadMsg !== "boolean") {
       throw new HttpsError("invalid-argument", "newStatus o hasUnreadMsg requerido.");
@@ -2435,7 +2471,16 @@ const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {}
     const data = snap.data()!;
 
     if (data.rootId !== rootId) throw new HttpsError("permission-denied", "No autorizado.");
-    const pagoAdminId = String(data.adminId || "").trim();     const pagoCreatedBy = String(data.createdBy || "").trim();      const canManagePagoScope =       isSuperadmin ||       pagoAdminId === uid ||       pagoAdminId === rootId ||       pagoCreatedBy === uid;      if (!canManagePagoScope) {       throw new HttpsError("permission-denied", "No autorizado para modificar este pago.");     }      const isUnreadOnly =       !newStatus &&       typeof hasUnreadMsg === "boolean" &&       hasUnreadMsg === false;      if (!isSuperadmin && !isUnreadOnly) {       throw new HttpsError("permission-denied", "Solo superadmin puede cambiar estado de pagos.");     }
+    const pagoAdminId = String(data.adminId || "").trim();
+    const pagoCreatedBy = String(data.createdBy || "").trim();
+    const canManagePagoScope =
+      isSuperadmin ||
+      pagoAdminId === uid ||
+      pagoAdminId === rootId ||
+      pagoCreatedBy === uid;
+    if (!canManagePagoScope) {
+      throw new HttpsError("permission-denied", "No autorizado para modificar este pago.");
+    }
 
     const patch: any = {
       updatedAt: FieldValue.serverTimestamp(),

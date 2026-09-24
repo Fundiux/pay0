@@ -49,6 +49,7 @@ export type IqSolicitudHttpResultA53 = {
   finalPath: string;
   associatedMatched: string;
   clientMatched: string;
+  iqClientIdMatched: string;
   clientMatchStrategy: string;
   companyMatched: string;
   invoiceTypeMatched: string;
@@ -177,6 +178,55 @@ function exactUniqueByName(
   return matches[0];
 }
 
+export function resolveIqPartnerForInvoiceA53(
+  rows: Array<Record<string, unknown>>,
+  associatedName: string,
+): Record<string, unknown> {
+  const candidates = Array.from(new Set([
+    clean(associatedName),
+    clean(associatedName).replace(/^ASOCIADO\s+/i, ""),
+  ].filter(Boolean)));
+  const matches = rows.filter((row) =>
+    candidates.some((candidate) =>
+      normalized(row.name) === normalized(candidate),
+    ),
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      `IQ_PARTNER_NO_UNICO:${associatedName}:coincidencias=${matches.length}`,
+    );
+  }
+
+  return matches[0];
+}
+
+export function resolveIqClientForInvoiceA53(
+  rows: Array<Record<string, unknown>>,
+  input: { iqClientId?: string; clientName: string },
+): { row: Record<string, unknown>; strategy: string } {
+  const requestedClientId = Number(clean(input.iqClientId));
+
+  if (Number.isFinite(requestedClientId) && requestedClientId > 0) {
+    const byId = rows.find(
+      (row) => Number(row.id) === requestedClientId,
+    );
+    if (byId) {
+      return { row: byId, strategy: "HTTP_CATALOG_PROFILE_ID" };
+    }
+
+    return {
+      row: exactUniqueByName(rows, input.clientName, "IQ_CLIENT"),
+      strategy: "HTTP_CATALOG_STALE_ID_EXACT_NAME",
+    };
+  }
+
+  return {
+    row: exactUniqueByName(rows, input.clientName, "IQ_CLIENT"),
+    strategy: "HTTP_CATALOG_EXACT_NAME",
+  };
+}
+
 async function resolveCatalog(
   session: IqHttpAuthSession,
   item: IqSolicitudHttpItemA53,
@@ -185,7 +235,8 @@ async function resolveCatalog(
   partnerName: string;
   clientId: number;
   clientName: string;
-  iqClientId?: string;
+  iqClientId: string;
+  clientMatchStrategy: string;
   companyId: number;
   companyName: string;
 }> {
@@ -197,10 +248,9 @@ async function resolveCatalog(
   const partners = Array.isArray(base.body?.partners)
     ? base.body.partners
     : [];
-  const partner = exactUniqueByName(
+  const partner = resolveIqPartnerForInvoiceA53(
     partners,
     item.associatedName,
-    "IQ_PARTNER",
   );
   const partnerId = Number(partner.id);
   if (!Number.isFinite(partnerId) || partnerId <= 0) {
@@ -221,27 +271,14 @@ async function resolveCatalog(
   const companies = Array.isArray(detailed.body?.companies)
     ? detailed.body.companies
     : [];
-const requestedClientId = Number(
-  clean(item.iqClientId),
-);
-
-const client =
-  Number.isFinite(requestedClientId) &&
-  requestedClientId > 0
-    ? clients.find(
-        (row: Record<string, unknown>) => Number(row.id) === requestedClientId,
-      )
-    : exactUniqueByName(
-        clients,
-        item.clientName,
-        "IQ_CLIENT",
-      );
-
-if (!client) {
-  throw new Error(
-    `IQ_CLIENT_ID_NO_ENCONTRADO:${clean(item.iqClientId)}`,
+  const resolvedClient = resolveIqClientForInvoiceA53(
+    clients,
+    {
+      iqClientId: item.iqClientId,
+      clientName: item.clientName,
+    },
   );
-}
+  const client = resolvedClient.row;
   const company = exactUniqueByName(
     companies,
     item.companyName,
@@ -263,6 +300,8 @@ if (!client) {
     partnerName: clean(partner.name),
     clientId,
     clientName: clean(client.name),
+    iqClientId: String(clientId),
+    clientMatchStrategy: resolvedClient.strategy,
     companyId,
     companyName: clean(company.name),
   };
@@ -436,6 +475,7 @@ function baseResult(
     finalPath: "/invoices",
     associatedMatched: "",
     clientMatched: "",
+    iqClientIdMatched: "",
     clientMatchStrategy: "HTTP_CATALOG_EXACT",
     companyMatched: "",
     invoiceTypeMatched: "",
@@ -522,6 +562,8 @@ export async function runIqCreateInvoiceHttpA53(input: {
     }
     result.associatedMatched = catalog.partnerName;
     result.clientMatched = catalog.clientName;
+    result.iqClientIdMatched = catalog.iqClientId;
+    result.clientMatchStrategy = catalog.clientMatchStrategy;
     result.companyMatched = catalog.companyName;
     result.invoiceTypeMatched = item.invoiceType;
     result.amountMatched = item.amount;

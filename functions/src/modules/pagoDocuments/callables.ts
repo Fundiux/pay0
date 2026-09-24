@@ -15,7 +15,7 @@ export const initPagoDocumentUpload = onCall(
   { region: "us-central1" },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
-    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "uploadDocs" });
     return await initPagoDocumentUploadCore(request);
   }
 );
@@ -27,7 +27,7 @@ export const finalizePagoDocumentUpload = onCall(
   },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
-    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "uploadDocs" });
     return await finalizePagoDocumentUploadCore(request, {
       telegramBotToken: TELEGRAM_BOT_TOKEN.value(),
     });
@@ -41,7 +41,7 @@ export const updateRejectedPagoAmountForRetry = onCall(
   },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
-    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin"], requiredModule: "pagos", requiredAction: "conciliate" });
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin"], requiredModule: "pagos", requiredAction: "edit" });
     return await updateRejectedPagoAmountForRetryCore(request, {
       telegramBotToken: TELEGRAM_BOT_TOKEN.value(),
     });
@@ -52,7 +52,7 @@ export const deactivatePagoDocument = onCall(
   { region: "us-central1" },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
-    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "uploadDocs" });
     return await deactivatePagoDocumentCore(request);
   }
 );

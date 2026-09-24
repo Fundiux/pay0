@@ -41,8 +41,8 @@ service cloud.firestore {
         || (isAdmin() && (
           (moduleKey == "dashboard" && actionKey == "view")
           || (moduleKey == "reportes" && actionKey == "view")
-          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "cancel", "uploadDocs"])
-          || (moduleKey == "pagos" && actionKey in ["view", "create"])
+          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "edit", "comment", "cancel", "uploadDocs"])
+          || (moduleKey == "pagos" && actionKey in ["view", "create", "edit", "cancel", "uploadDocs"])
           || (moduleKey == "clientes" && actionKey in ["view", "create", "edit", "costs"])
           || (moduleKey == "despachos" && actionKey in ["view", "costs"])
           || (moduleKey == "empresas" && actionKey == "view")
@@ -56,7 +56,7 @@ service cloud.firestore {
           (moduleKey == "dashboard" && actionKey == "view")
           || (moduleKey == "reportes" && actionKey == "view")
           || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "uploadDocs"])
-          || (moduleKey == "pagos" && actionKey in ["view", "create"])
+          || (moduleKey == "pagos" && actionKey in ["view", "create", "uploadDocs"])
           || (moduleKey == "clientes" && actionKey in ["view", "create"])
           || (moduleKey == "despachos" && actionKey == "view")
           || (moduleKey == "empresas" && actionKey == "view")
@@ -183,6 +183,29 @@ service cloud.firestore {
 
     function hasClientAccess(clientId) {
       return hasClientBasicAccess(clientId);
+    }
+
+    function hasWalletClientReadAccess(clientId) {
+      let clientPath = /databases/$(database)/documents/clients/$(clientId);
+      let client = get(clientPath).data;
+      return clientId != null
+        && exists(clientPath)
+        && client.rootId == myRootId()
+        && (
+          hasClientBasicAccess(clientId)
+          || (isAdmin() && (
+            client.get("adminId", null) == me()
+            || client.get("ownerId", null) == me()
+            || client.get("managedByUserId", null) == me()
+            || client.get("createdBy", null) == me()
+            || client.get("operadorId", null) == me()
+          ))
+          || (isOperador() && (
+            client.get("managedByUserId", null) == me()
+            || client.get("operadorId", null) == me()
+            || client.get("createdBy", null) == me()
+          ))
+        );
     }
 
     function hasClientSolicitudAccess(clientId) {
@@ -590,8 +613,8 @@ service cloud.firestore {
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
-        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
-        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+        || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
       );
       allow create, update, delete: if false;
     }
@@ -602,8 +625,8 @@ service cloud.firestore {
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
-        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
-        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+        || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
       );
       allow create, update, delete: if false;
       match /notas/{notaId} {
@@ -612,8 +635,8 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.adminId == me()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.operadorId == me()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.createdBy == me()
-          || hasClientAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clientId)
-          || hasClientAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clienteId)
+          || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clientId)
+          || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clienteId)
         );
 
         allow create, update, delete: if false;
@@ -626,8 +649,8 @@ service cloud.firestore {
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
-        || (("clientId" in resource.data) && hasClientAccess(resource.data.clientId))
-        || (("clienteId" in resource.data) && hasClientAccess(resource.data.clienteId))
+        || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
+        || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
       );
       allow create, update, delete: if false;
     }
