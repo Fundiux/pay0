@@ -1,0 +1,12 @@
+{
+  "name": "hugo-voice-e2e",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22" },
+  "scripts": { "start": "node src/index.mjs" },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "werift": "0.24.4",
+    "ws": "8.21.3"
+  }
+}

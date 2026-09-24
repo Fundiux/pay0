@@ -55,6 +55,7 @@ wss.on("connection", browser => {
       sideband = new WebSocket(`wss://api.openai.com/v1/realtime?call_id=${encodeURIComponent(realtime.callId)}`, { headers: { Authorization: `Bearer ${apiKey}` } });
       await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(Error("SIDEBAND_TIMEOUT")), 10000); sideband.once("open", () => { clearTimeout(timer); resolve(); }); sideband.once("error", () => { clearTimeout(timer); reject(Error("SIDEBAND_CONNECT_FAILED")); }); });
       sideband.on("message", async message => { const item = JSON.parse(message.toString()), type = String(item.type || "");
+        if (type === "conversation.item.created" && item.item?.type === "message" && item.item?.role === "user") { turnId = item.item.id || turnId || randomUUID(); log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT" }); }
         if (type === "input_audio_buffer.speech_started") { const previous = turnId; turnId = item.item_id || randomUUID(); const interrupted = registry.interrupt(previous); for (const id of interrupted.cancelled) controllers.get(id)?.abort(); log("gateway.interruption", { sessionId, turnId: previous, ...interrupted }); send({ type: "gateway.interruption", turnId: previous, ...interrupted }); }
         if (type === "response.created") responseId = item.response?.id || responseId;
         if (type === "response.output_audio.delta" && firstAudioAt === null) { firstAudioAt = Date.now(); log("gateway.first_audio", { sessionId, turnId, responseId, latencyMs: firstAudioAt - connectedAt }); }
@@ -63,8 +64,11 @@ wss.on("connection", browser => {
           const toolCallId = String(item.call_id || item.item_id || ""), started = registry.begin(toolCallId, turnId); if (!started.accepted) { log("gateway.tool_duplicate", { sessionId, turnId, responseId, toolCallId }); return; }
           const controller = new AbortController(); controllers.set(toolCallId, controller); registry.running(toolCallId);
           try { const args = JSON.parse(item.arguments || "{}"), delegation = delegationForRealtimeTool(item.name, args), toolStartedAt = Date.now(); log("gateway.tool_started", { sessionId, turnId, responseId, toolCallId, tool: item.name }); const result = await callable(token, { ...delegation, sessionId, turnId, responseId, delegationId: toolCallId, toolCallId }, controller.signal); registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
-            sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ route: result.route, text: result.text }) } })); sideband.send(JSON.stringify({ type: "response.create" }));
-            log("gateway.tool_completed", { sessionId, turnId, responseId, toolCallId, route: result.route, latencyMs: Date.now() - toolStartedAt, cost: result.cost || null });
+            sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ route: result.route, text: result.text }) } }));
+            log("gateway.tool_output_sent", { sessionId, turnId, responseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null });
+            send({ type: "gateway.tool_completed", sessionId, turnId, responseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null });
+            sideband.send(JSON.stringify({ type: "response.create" }));
+            log("gateway.tool_completed", { sessionId, turnId, responseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null, latencyMs: Date.now() - toolStartedAt, cost: result.cost || null });
           } catch (error) { registry.fail(toolCallId); if (error.name !== "AbortError") { sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ error: "HUGO_CORE_UNAVAILABLE" }) } })); sideband.send(JSON.stringify({ type: "response.create" })); log("gateway.tool_failed", { sessionId, turnId, responseId, toolCallId, code: error.message }); } } finally { controllers.delete(toolCallId); }
         }
       });
