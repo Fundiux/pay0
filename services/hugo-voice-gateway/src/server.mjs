@@ -24,6 +24,14 @@ async function openRealtime(sdp) {
 function callable(token, data, signal) { return fetch(delegateUrl, { method: "POST", signal, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ data }) }).then(async response => { const body = await response.json(); if (!response.ok || body.error) throw Error(body.error?.status || "HUGO_CORE_FAILED"); return body.result; }); }
 function authorize(token) { return fetch(authorizeUrl, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ data: {} }) }).then(async response => { const body = await response.json(); if (!response.ok || body.error || !body.result?.ok) throw Error(body.error?.status || "HUGO_VOICE_FORBIDDEN"); return body.result; }); }
 function log(type, detail = {}) { console.log(JSON.stringify({ severity: "INFO", type, at: new Date().toISOString(), ...detail })); }
+function classifyRequestError(error) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  const message = error instanceof Error ? error.message : "";
+  if (code.startsWith("auth/")) return "INVALID_FIREBASE_TOKEN";
+  if (message === "CANARY_NOT_ALLOWED" || message === "UNAUTHENTICATED") return message;
+  if (/^[A-Z][A-Z0-9_]+$/.test(message)) return message;
+  return "GATEWAY_REQUEST_FAILED";
+}
 
 const server = http.createServer((req, res) => {
   const pathname = new URL(req.url || "/", "http://gateway.internal").pathname;
@@ -64,7 +72,7 @@ wss.on("connection", browser => {
       log("gateway.session_ready", { sessionId, uid: identity.uid, rootId: identity.rootId, model, voice }); send({ type: "answer", sdp: realtime.answer, sessionId, model, voice });
     }
   } catch (error) {
-    const internalCode = error instanceof Error ? error.message : "ERROR";
+    const internalCode = classifyRequestError(error);
     const clientCode = internalCode === "CANARY_NOT_ALLOWED" ? "CANARY_NOT_ALLOWED" : internalCode === "UNAUTHENTICATED" ? "UNAUTHENTICATED" : "GATEWAY_REQUEST_REJECTED";
     log("gateway.request_rejected", { uid: identity?.uid || null, sessionId: sessionId || null, code: internalCode });
     send({ type: "gateway.error", code: clientCode });
