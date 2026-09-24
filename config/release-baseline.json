@@ -79,6 +79,16 @@
       "file": "qa/scripts/verify-hugo-voice-runtime-contract.cjs",
       "text": "browserDirectRealtimeDisabled: true",
       "capability": "La experiencia humana usa el gateway server-side y no el Realtime directo del navegador"
+    },
+    {
+      "file": "qa/scripts/client-csf-create-regression.cjs",
+      "text": "equivalentCreatePaths",
+      "capability": "Alta manual y alta por CSF comparten clientes.create sin elevar privilegios"
+    },
+    {
+      "file": "qa/scripts/authorized-document-ui-integration.mjs",
+      "text": "ephemeralUrlDelivered: true",
+      "capability": "La UI entrega documentos solo despues del callable autorizado"
     }
   ],
   "forbiddenText": [

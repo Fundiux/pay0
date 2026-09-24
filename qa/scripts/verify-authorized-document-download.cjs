@@ -30,6 +30,7 @@ async function expectDenied(promise, label) {
     operatorA: { role: "operador", rootId: rootA, active: true },
     revokedA: { role: "operador", rootId: rootA, active: true },
     disabledA: { role: "admin", rootId: rootA, active: true, modules: { pagos: { view: false } } },
+    disabledOperatorA: { role: "operador", rootId: rootA, active: true, modules: { wallet: { view: false } } },
     adminB: { role: "admin", rootId: rootB, active: true },
   };
   for (const [uid, data] of Object.entries(users)) await seed(`users/${runId}-${uid}`, data);
@@ -41,40 +42,46 @@ async function expectDenied(promise, label) {
     active: true, revokedAt: admin.firestore.Timestamp.now(), permissions: { operatePagos: true },
   });
 
-  const docs = [
-    ["sol", { entityType: "solicitudes", solicitudId: `${runId}-sol` }],
-    ["pago", { entityType: "pagos", pagoId: `${runId}-pago` }],
-    ["disp", { entityType: "clientDispersions", dispersionId: `${runId}-disp` }],
+  const documentMatrix = [
+    ...["FACTURA_PDF", "FACTURA_XML", "ORDEN_COMPRA", "COTIZACION", "EVIDENCIA_ENTREGA", "EVIDENCIA_OPERATIVA", "CONSTANCIA_RECEPCION_SATISFACCION", "OTRO"]
+      .map(type => ({ id: `sol-${type}`, family: "solicitudes", parentId: `${runId}-sol`, fields: { entityType: "solicitudes", solicitudId: `${runId}-sol` }, type })),
+    ...["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF", "OTRO"]
+      .map(type => ({ id: `pago-${type}`, family: "pagos", parentId: `${runId}-pago`, fields: { entityType: "pagos", pagoId: `${runId}-pago` }, type })),
+    { id: "disp-COMPROBANTE_DISPERSION", family: "dispersiones", parentId: `${runId}-disp`, fields: { entityType: "clientDispersions", dispersionId: `${runId}-disp` }, type: "COMPROBANTE_DISPERSION" },
   ];
-  for (const [id, fields] of docs) await seed(`uploads/${runId}-${id}`, {
-    ...fields, rootId: rootA, active: true, status: "READY",
-    storagePath: id === "sol"
-      ? `roots/${rootA}/solicitudes/${runId}-sol/docs/FACTURA_PDF/document.pdf`
-      : id === "pago"
-        ? `roots/${rootA}/pagos/${runId}-pago/docs/COMPROBANTE_PAGO/document.pdf`
-        : `roots/${rootA}/dispersiones/${runId}-disp/docs/COMPROBANTE_DISPERSION/document.pdf`,
+  for (const row of documentMatrix) await seed(`uploads/${runId}-${row.id}`, {
+    ...row.fields, rootId: rootA, active: true, status: "READY", documentType: row.type,
+    storagePath: `roots/${rootA}/${row.family}/${row.parentId}/docs/${row.type}/document`,
   });
 
-  for (const [uid, uploadId] of [
-    ["superA", "sol"], ["adminA", "pago"], ["operatorA", "disp"],
-  ]) {
-    const result = await getAuthorizedDocumentDownloadUrlCore({
-      auth: auth(`${runId}-${uid}`), data: { uploadId: `${runId}-${uploadId}` },
-    }, signer);
-    assert.match(result.url, /^https:\/\/signed\.invalid\//);
+  for (const uid of ["superA", "adminA", "operatorA"]) {
+    for (const row of documentMatrix) {
+      const result = await getAuthorizedDocumentDownloadUrlCore({
+        auth: auth(`${runId}-${uid}`), data: { uploadId: `${runId}-${row.id}` },
+      }, signer);
+      assert.match(result.url, /^https:\/\/signed\.invalid\//);
+    }
   }
 
   await expectDenied(getAuthorizedDocumentDownloadUrlCore({
-    auth: auth(`${runId}-disabledA`), data: { uploadId: `${runId}-pago` },
-  }, signer), "modulo revocado");
+    auth: auth(`${runId}-disabledA`), data: { uploadId: `${runId}-pago-COMPROBANTE_PAGO` },
+  }, signer), "modulo admin revocado");
   await expectDenied(getAuthorizedDocumentDownloadUrlCore({
-    auth: auth(`${runId}-revokedA`), data: { uploadId: `${runId}-pago` },
+    auth: auth(`${runId}-disabledOperatorA`), data: { uploadId: `${runId}-disp-COMPROBANTE_DISPERSION` },
+  }, signer), "modulo operador revocado");
+  await expectDenied(getAuthorizedDocumentDownloadUrlCore({
+    auth: auth(`${runId}-revokedA`), data: { uploadId: `${runId}-pago-COMPROBANTE_PAGO` },
   }, signer), "delegacion revocada");
   await expectDenied(getAuthorizedDocumentDownloadUrlCore({
-    auth: auth(`${runId}-adminB`), data: { uploadId: `${runId}-pago` },
+    auth: auth(`${runId}-adminB`), data: { uploadId: `${runId}-pago-COMPROBANTE_PAGO` },
   }, signer), "otro root");
-  assert.equal(signed.length, 3, "solo accesos autorizados deben llegar al firmador");
-  console.log(JSON.stringify({ ok: true, signedDownloads: signed.length, denied: 3, externalActions: 0 }));
+  await seed(`solicitudes/${runId}-foreign-parent`, { rootId: rootB, clientId: clientA });
+  await seed(`uploads/${runId}-foreign-parent-doc`, { rootId: rootA, active: true, status: "READY", entityType: "solicitudes", solicitudId: `${runId}-foreign-parent`, storagePath: `roots/${rootA}/solicitudes/${runId}-foreign-parent/docs/OTRO/document` });
+  await expectDenied(getAuthorizedDocumentDownloadUrlCore({
+    auth: auth(`${runId}-adminA`), data: { uploadId: `${runId}-foreign-parent-doc` },
+  }, signer), "recurso padre fuera de scope");
+  assert.equal(signed.length, documentMatrix.length * 3, "solo accesos autorizados deben llegar al firmador");
+  console.log(JSON.stringify({ ok: true, signedDownloads: signed.length, documentTypes: documentMatrix.map(row => row.type), roles: ["superadmin", "admin", "operador"], denied: 5, externalActions: 0 }));
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

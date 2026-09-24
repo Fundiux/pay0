@@ -7,6 +7,7 @@ import { Download, FileText, Trash2, UploadCloud, X } from "lucide-react";
 
 import { db, functions } from "@/lib/firebaseClient";
 import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 import UiSelect from "@/components/UiSelect";
 import { PagoDocumentType, uploadPagoDoc } from "@/lib/uploadPagoDoc";
@@ -464,8 +465,9 @@ export default function PagoDocsModal(props: {
 
     try {
       setMsg("");
-      const url = await getAuthorizedDocumentDownloadUrl(row.id);
-      window.open(url, "_blank", "noopener,noreferrer");
+      await runAuthorizedDocumentAction(row.id, getAuthorizedDocumentDownloadUrl, url => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
     } catch (e: any) {
       setMsg(e?.message || "No se pudo abrir el documento.");
     }

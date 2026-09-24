@@ -11,6 +11,8 @@
                                         "node qa/scripts/verify-authorized-dispersion-capability.cjs",
                                         "node qa/scripts/verify-simulated-dispersion-e2e.cjs",
                                         "node qa/scripts/verify-hugo-voice-runtime-contract.cjs",
+                                        "npm run qa:client-csf-create",
+                                        "npm run qa:document-ui",
                                         "npm run qa:document-access"
                                     ]
                   },

@@ -14,6 +14,7 @@ import {
 import { ChevronDown, Download, UploadCloud, X } from "lucide-react";
 import { db, functions } from "@/lib/firebaseClient";
 import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 type RelatedPagoReceipt = {
   id: string;
@@ -692,14 +693,15 @@ useEffect(() => {
   async function downloadRelatedPagoReceipt(row: RelatedPagoReceipt) {
     if (!row.storagePath) return;
 
-    const url = await getAuthorizedDocumentDownloadUrl(row.id);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = getRelatedReceiptName(row);
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    await runAuthorizedDocumentAction(row.id, getAuthorizedDocumentDownloadUrl, url => {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getRelatedReceiptName(row);
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
   }
 
   async function sendFacturaWhatsapp(forceResend = false) {
@@ -897,13 +899,14 @@ const downloadDoc = async (doc: UploadRow) => {
 
     setDownloadingId(doc.id);
     try {
-      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
-      await forceDownloadFromUrl(
-        url,
-        doc.originalName ||
-          doc.filename ||
-          (doc.storagePath ? doc.storagePath.split("/").pop() : null) ||
-          "documento",
+      await runAuthorizedDocumentAction(doc.id, getAuthorizedDocumentDownloadUrl, url =>
+        forceDownloadFromUrl(
+          url,
+          doc.originalName ||
+            doc.filename ||
+            (doc.storagePath ? doc.storagePath.split("/").pop() : null) ||
+            "documento",
+        ),
       );
     } catch (err: any) {
       console.error("Download error", err);

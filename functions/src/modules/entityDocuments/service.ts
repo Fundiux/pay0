@@ -3,6 +3,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
+import { resolveClientCsfContinuationAction } from "../clients/csfService";
 import {
   EntityDocumentEntityType,
   EntityDocumentFiscalAdminType,
@@ -145,9 +146,8 @@ async function requireAuthContext(request: any): Promise<AuthContext> {
   }
 
   const user = userSnap.data() || {};
-  assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
+  const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"] });
   const rootId = cleanText(user.rootId) || uid;
-  const role = cleanText(user.role).toLowerCase();
 
   return {
     uid,
@@ -156,6 +156,39 @@ async function requireAuthContext(request: any): Promise<AuthContext> {
     user,
     username: getUsername(user, uid),
   };
+}
+
+async function requireEntityDocumentWrite(ctx: AuthContext, input: {
+  entityType: EntityDocumentEntityType;
+  entityId: string;
+  documentType: EntityDocumentType;
+  documentCreatedBy?: string;
+  allowFinalizedCreate?: boolean;
+}) {
+  if (ctx.role === "superadmin") return;
+  if (
+    input.entityType !== "CLIENTE" ||
+    input.documentType !== "CONSTANCIA_SITUACION_FISCAL" ||
+    (input.documentCreatedBy && input.documentCreatedBy !== ctx.uid)
+  ) {
+    requireEntityDocumentManager(ctx);
+    return;
+  }
+
+  const clientSnap = await db.doc(`clients/${input.entityId}`).get();
+  const intakeId = cleanText(clientSnap.data()?.fiscalProfile?.csfIntakeId);
+  const requiredAction = await resolveClientCsfContinuationAction({
+    intakeId,
+    clientId: input.entityId,
+    uid: ctx.uid,
+    rootId: ctx.rootId,
+    allowFinalizedCreate: input.allowFinalizedCreate,
+  });
+  assertAuthorized({ uid: ctx.uid }, ctx.user, {
+    allowedRoles: ["superadmin", "admin", "operador"],
+    requiredModule: "clientes",
+    requiredAction,
+  });
 }
 
 function requireEntityDocumentManager(ctx: AuthContext) {
@@ -280,7 +313,6 @@ async function getCurrentAndNextVersion(params: {
 
 export async function initEntityDocumentUploadCore(request: any) {
   const ctx = await requireAuthContext(request);
-  requireEntityDocumentManager(ctx);
 
   const data = request.data || {};
 
@@ -309,6 +341,7 @@ export async function initEntityDocumentUploadCore(request: any) {
   }
 
   await ensureEntityInRoot(ctx.rootId, entityType, entityId);
+  await requireEntityDocumentWrite(ctx, { entityType, entityId, documentType });
 
   const { documentPeriod, periodYear, periodMonth } = parsePeriod(documentType, data);
 
@@ -391,7 +424,6 @@ export async function initEntityDocumentUploadCore(request: any) {
 
 export async function finalizeEntityDocumentUploadCore(request: any) {
   const ctx = await requireAuthContext(request);
-  requireEntityDocumentManager(ctx);
 
   const data = request.data || {};
   const documentId = cleanText(data.entityDocumentId || data.documentId || data.uploadId);
@@ -412,6 +444,17 @@ export async function finalizeEntityDocumentUploadCore(request: any) {
   if (cleanText(document.rootId) !== ctx.rootId) {
     throw new HttpsError("permission-denied", "No autorizado.");
   }
+  const entityType = parseEntityType(document.entityType);
+  const entityId = cleanText(document.entityId);
+  const documentType = parseDocumentType(document.documentType);
+  await ensureEntityInRoot(ctx.rootId, entityType, entityId);
+  await requireEntityDocumentWrite(ctx, {
+    entityType,
+    entityId,
+    documentType,
+    documentCreatedBy: cleanText(document.createdBy),
+    allowFinalizedCreate: true,
+  });
 
   const storagePath = cleanText(document.storagePath);
   if (storagePathIn && storagePathIn !== storagePath) {

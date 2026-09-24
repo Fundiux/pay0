@@ -68,6 +68,8 @@
     "qa:authorized-dispersion-capability": "npm --prefix functions run build && node qa/scripts/verify-authorized-dispersion-capability.cjs",
     "qa:simulated-dispersion-e2e": "npm --prefix functions run build && node qa/scripts/verify-simulated-dispersion-e2e.cjs",
     "qa:hugo-voice-runtime": "node qa/scripts/verify-hugo-voice-runtime-contract.cjs && npm --prefix services/hugo-voice-gateway test",
+    "qa:client-csf-create": "npm --prefix functions run build && firebase emulators:exec --project demo-pay0 --only firestore,storage \"node qa/scripts/client-csf-create-regression.cjs\"",
+    "qa:document-ui": "node --experimental-strip-types qa/scripts/authorized-document-ui-integration.mjs",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
     "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs"
   },

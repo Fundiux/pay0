@@ -9,6 +9,7 @@ import { httpsCallable } from "firebase/functions";
 import { Download, Trash2, UploadCloud, X } from "lucide-react";
 import { db, functions } from "@/lib/firebaseClient";
 import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 import {
   DISPERSION_DOCUMENT_TYPES,
@@ -177,8 +178,9 @@ export default function DispersionDocsModal(props: {
     setDownloadingId(doc.id);
 
     try {
-      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
-      window.open(url, "_blank", "noopener,noreferrer");
+      await runAuthorizedDocumentAction(doc.id, getAuthorizedDocumentDownloadUrl, url => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
     } catch (err: any) {
       console.error("Download dispersion doc error", err);
       alert(err?.message || "No se pudo descargar el archivo.");
