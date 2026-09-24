@@ -55,13 +55,17 @@ try {
       const startIndex = realtimeEvents.length;
       channel.send(JSON.stringify({ type: "conversation.item.create", event_id: `e2e-user-${sequence}`, item: { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] } }));
       channel.send(JSON.stringify({ type: "response.create", event_id: `e2e-response-${sequence}` }));
-      const completed = await waitFor(() => {
+      let completed;
+      try { completed = await waitFor(() => {
         const events = realtimeEvents.slice(startIndex);
         const tool = events.find(event => event.type === "response.function_call_arguments.done" && event.name === expectedTool);
         const toolDone = controlEvents.find(event => event.type === "gateway.tool_completed" && event.tool === expectedTool && event.toolCallId === tool?.call_id);
         const final = [...events].reverse().find(event => event.type === "response.done" && event.response?.status === "completed" && event.response?.output?.some(item => item.type === "message"));
         return tool && toolDone && final ? { events, tool, toolDone, final } : null;
-      }, 60000, `TURN_${sequence}_TIMEOUT`);
+      }, 60000, `TURN_${sequence}_TIMEOUT`); }
+      catch (error) {
+        throw new Error(JSON.stringify({ code: error.message, realtime: realtimeEvents.slice(startIndex).map(event => ({ type: event.type, name: event.name, callId: event.call_id, responseId: event.response?.id, status: event.response?.status, outputTypes: event.response?.output?.map(item => item.type) })), control: controlEvents.slice(-20) }));
+      }
       const transcript = completed.events.filter(event => event.type === "response.output_audio_transcript.done").at(-1)?.transcript
         || completed.final.response.output?.flatMap(item => item.content || []).find(content => content.transcript)?.transcript || "";
       const created = completed.events.find(event => event.type === "conversation.item.created" && event.item?.role === "user");
