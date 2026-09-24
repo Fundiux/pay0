@@ -3,6 +3,7 @@
                       "source":  "functions",
                       "runtime":  "nodejs22",
                       "predeploy":  [
+                                        "node qa/scripts/verify-release-baseline.mjs",
                                         "npm --prefix functions run build",
                                         "node qa/scripts/verify-client-csf-parser.cjs",
                                         "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
@@ -43,6 +44,7 @@
                   },
     "hosting":  {
                     "predeploy":  [
+                                       "node qa/scripts/verify-release-baseline.mjs",
                                        "npm run qa:document-access"
                                    ],
                     "ignore":  [

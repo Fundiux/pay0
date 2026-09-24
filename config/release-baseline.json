@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "requiredCommits": [
+    {
+      "commit": "fe2b98b7544712fba6ef50f70cac8e8dd33a2624",
+      "capability": "Ciclo de distribucion de comisiones"
+    },
+    {
+      "commit": "6dc1764ab9cee7eb336c23a880ab9f7f3037715f",
+      "capability": "Correcciones operativas Betell, IQ y documentos"
+    },
+    {
+      "commit": "ca0cb423f2c15b19a33beb3a492cc6ef64c5f886",
+      "capability": "Hugo Voice y herramientas canonicas PAY0"
+    }
+  ],
+  "requiredText": [
+    {
+      "file": "src/components/ClientCommissionRulePanel.tsx",
+      "text": "Distribución de comisión",
+      "capability": "Configuracion de comisiones en el detalle del cliente"
+    },
+    {
+      "file": "src/app/clientes/[id]/page.tsx",
+      "text": "<ClientCommissionRulePanel",
+      "capability": "Montaje de comisiones en Clientes > Detalle > Resumen"
+    },
+    {
+      "file": "src/app/reportes/page.tsx",
+      "text": "setActiveTab(\"commissions\")",
+      "capability": "Pestana Reportes > Comisiones"
+    },
+    {
+      "file": "src/app/reportes/page.tsx",
+      "text": "Validar sin dispersar",
+      "capability": "Preflight no financiero de comisiones"
+    },
+    {
+      "file": "functions/src/index.ts",
+      "text": "processPaymentCommissionDistribution",
+      "capability": "Functions del ciclo de comisiones"
+    },
+    {
+      "file": "src/services/beneficiaries.ts",
+      "text": "where(\"rootId\", \"==\", rootId)",
+      "capability": "Beneficiarios acotados al root autorizado"
+    },
+    {
+      "file": "functions/src/modules/financing/dispersionDispatchResolver.ts",
+      "text": "resolve",
+      "capability": "Enrutamiento automatico de dispersiones"
+    },
+    {
+      "file": "src/components/hugo/HugoRealtimeVoice.tsx",
+      "text": "Hugo",
+      "capability": "Hugo Voice"
+    },
+    {
+      "file": "functions/src/modules/agent007/voiceDelegation.ts",
+      "text": "delegate",
+      "capability": "Delegacion canonica de Hugo Voice"
+    }
+  ],
+  "forbiddenText": [
+    {
+      "file": "src/app/pagos/page.tsx",
+      "text": "backgroundUpload: true",
+      "capability": "El comprobante de pago debe finalizar antes de continuar"
+    }
+  ]
+}

@@ -65,7 +65,8 @@
     "qa:document-access": "npm run qa:release-guard && npm run qa:regression-rules",
     "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
     "qa:dispersion-dispatch-routing": "npm --prefix functions run build && node qa/scripts/verify-dispersion-dispatch-routing.cjs",
-    "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs"
+    "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
+    "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
