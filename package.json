@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node qa/scripts/critical-release-guard.mjs && node scripts/copy-canonical-assets.mjs && next build",
+    "build": "node qa/scripts/verify-release-baseline.mjs && node qa/scripts/critical-release-guard.mjs && node scripts/copy-canonical-assets.mjs && next build",
     "start": "next start",
     "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "qa:pay0": "node qa/scripts/run-pay0-qa.mjs",
