@@ -59,6 +59,11 @@ export const finalizeClientCsfIntakeCallable = onCall(
     const rootId=String(user?.rootId||uid);
     const intakeId=String(request.data?.intakeId||"");
     const clientId=String(request.data?.clientId||"");
+    assertAuthorized(request.auth,user,{
+      allowedRoles:["superadmin","admin","operador"],
+      requiredModule:"clientes",
+      requiredAction:["create","edit"],
+    });
     const requiredAction=await resolveClientCsfContinuationAction({
       intakeId,
       clientId,

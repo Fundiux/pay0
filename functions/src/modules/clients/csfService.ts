@@ -496,7 +496,7 @@ export async function resolveClientCsfContinuationAction(params: {
   const intakeId = clean(params.intakeId);
   const clientId = clean(params.clientId);
   if (!intakeId || !clientId) {
-    throw new HttpsError("invalid-argument", "Continuacion CSF incompleta.");
+    throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
   }
 
   const [intakeSnap, clientSnap] = await Promise.all([
@@ -504,7 +504,7 @@ export async function resolveClientCsfContinuationAction(params: {
     db.doc(`clients/${clientId}`).get(),
   ]);
   if (!intakeSnap.exists || !clientSnap.exists) {
-    throw new HttpsError("not-found", "Continuacion CSF no encontrada.");
+    throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
   }
 
   const intake: any = intakeSnap.data() || {};
