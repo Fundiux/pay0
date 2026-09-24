@@ -25,7 +25,13 @@ function callable(token, data, signal) { return fetch(delegateUrl, { method: "PO
 function authorize(token) { return fetch(authorizeUrl, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ data: {} }) }).then(async response => { const body = await response.json(); if (!response.ok || body.error || !body.result?.ok) throw Error(body.error?.status || "HUGO_VOICE_FORBIDDEN"); return body.result; }); }
 function log(type, detail = {}) { console.log(JSON.stringify({ severity: "INFO", type, at: new Date().toISOString(), ...detail })); }
 
-const server = http.createServer((req, res) => { res.writeHead(req.url === "/healthz" ? 200 : 404); res.end(req.url === "/healthz" ? "ok" : "not found"); });
+const server = http.createServer((req, res) => {
+  const pathname = new URL(req.url || "/", "http://gateway.internal").pathname;
+  log("gateway.http", { method: req.method, pathname });
+  const healthy = pathname === "/" || pathname === "/healthz";
+  res.writeHead(healthy ? 200 : 404, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end(healthy ? "ok" : "not found");
+});
 const wss = new WebSocketServer({ server, path: "/voice", maxPayload: 1024 * 1024 });
 wss.on("connection", browser => {
   let token = "", identity = null, sideband = null, sessionId = "", turnId = "", responseId = "";
