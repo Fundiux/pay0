@@ -30,7 +30,7 @@ async function firebaseIdToken() {
 
 async function connect(idToken) {
   const control = new WebSocket(gatewayUrl);
-  const peer = new RTCPeerConnection();
+  const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   peer.addTransceiver("audio", { direction: "recvonly" });
   const channel = peer.createDataChannel("oai-events");
   const gatewayEvents = [], realtimeEvents = [];
@@ -44,7 +44,8 @@ async function connect(idToken) {
   }, 15000, "GATEWAY_AUTH_TIMEOUT");
   const offer = await peer.createOffer();
   await peer.setLocalDescription(offer);
-  control.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
+  if (peer.iceGatheringState !== "complete") await waitFor(handler => peer.iceGatheringStateChange.subscribe(state => { if (state === "complete") handler(state); }), 15000, "ICE_GATHERING_TIMEOUT");
+  control.send(JSON.stringify({ type: "offer", sdp: peer.localDescription.sdp }));
   const answer = await waitFor(handler => {
     const listener = raw => { const event = JSON.parse(String(raw)); if (event.type === "answer") { control.off("message", listener); handler(event); } };
     control.on("message", listener);
