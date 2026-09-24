@@ -388,6 +388,7 @@ export default function ClienteDetallePage() {
 
           <ClientCommissionRulePanel
             clientId={client.id}
+            rootId={client.rootId}
             canEdit={["superadmin", "admin"].includes(normalizeRole((profile as any)?.role))}
           />
 

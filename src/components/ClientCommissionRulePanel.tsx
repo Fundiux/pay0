@@ -6,7 +6,7 @@ import { watchClientBeneficiaries, watchClientBeneficiaryMethods, type ClientBen
 
 const emptyLeg = (kind: "BASE" | "COMMISSIONER" = "COMMISSIONER"): CommissionRuleLeg => ({ kind, alias: kind === "BASE" ? "BASE" : "", rateBps: 0, beneficiaryId: "", methodId: "", active: true });
 
-export default function ClientCommissionRulePanel({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+export default function ClientCommissionRulePanel({ clientId, rootId, canEdit }: { clientId: string; rootId: string; canEdit: boolean }) {
   const [totalRate, setTotalRate] = useState("0");
   const [legs, setLegs] = useState<CommissionRuleLeg[]>([emptyLeg("BASE")]);
   const [active, setActive] = useState(false);
@@ -22,10 +22,10 @@ export default function ClientCommissionRulePanel({ clientId, canEdit }: { clien
       if (!rule) return;
       setTotalRate((rule.totalRateBps / 100).toFixed(2)); setLegs(rule.legs); setActive(rule.active); setAutomationEnabled(rule.automationEnabled);
     }).catch((error) => setMessage(error?.message || "No se pudo cargar la regla."));
-    const stopA = watchClientBeneficiaries(clientId, setBeneficiaries, (error) => setMessage(error.message));
-    const stopB = watchClientBeneficiaryMethods(clientId, setMethods, (error) => setMessage(error.message));
+    const stopA = watchClientBeneficiaries(clientId, rootId, setBeneficiaries, (error) => setMessage(error.message));
+    const stopB = watchClientBeneficiaryMethods(clientId, rootId, setMethods, (error) => setMessage(error.message));
     return () => { stopA(); stopB(); };
-  }, [clientId]);
+  }, [clientId, rootId]);
 
   const assignedBps = useMemo(() => legs.reduce((sum, leg) => sum + Number(leg.rateBps || 0), 0), [legs]);
   const totalBps = Math.round(Number(totalRate || 0) * 100);
