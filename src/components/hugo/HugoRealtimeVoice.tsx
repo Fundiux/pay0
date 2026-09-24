@@ -27,6 +27,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const [state, setState] = useState<VoiceState>("IDLE");
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
+  const [canaryRequested, setCanaryRequested] = useState(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -89,7 +90,12 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     setState("IDLE");
   };
 
-  useEffect(() => () => cleanup(), []);
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("voiceCanary") === "1";
+    if (requested) window.sessionStorage.setItem("hugoVoiceCanary", "1");
+    setCanaryRequested(requested || window.sessionStorage.getItem("hugoVoiceCanary") === "1");
+    return () => cleanup();
+  }, []);
 
   const start = async () => {
     if (startingRef.current || peerRef.current) return;
@@ -101,7 +107,9 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
       const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
-      const useGateway = new URLSearchParams(window.location.search).get("voiceCanary") === "1" && Boolean(gatewayUrl);
+      const requestedNow = new URLSearchParams(window.location.search).get("voiceCanary") === "1" || window.sessionStorage.getItem("hugoVoiceCanary") === "1";
+      if (requestedNow && !gatewayUrl) throw new Error("El canario server-side no esta configurado en esta version.");
+      const useGateway = requestedNow;
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
       const idToken = useGateway ? await currentUser.getIdToken() : "";
@@ -271,6 +279,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   };
 
   return <div className="flex flex-col items-end gap-2">
+    {canaryRequested && <span data-testid="hugo-voice-runtime" className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200">Canary server-side</span>}
     <div className="flex flex-wrap items-center justify-end gap-2">
       {state !== "LISTENING" ? <button type="button" onClick={() => void start()} disabled={state === "CONNECTING"} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 hover:bg-violet-500 disabled:opacity-60">
         {state === "CONNECTING" ? <Loader2 className="animate-spin" size={17}/> : <Mic size={17}/>} {state === "CONNECTING" ? "Conectando..." : "Hablar con Hugo"}

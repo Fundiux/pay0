@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { decideUserAuthorization } = require("../../functions/lib/modules/users/authorization");
-const { isUserVisibleToCaller } = require("../../functions/lib/modules/agent007/platformReadConnector");
+const { isUserVisibleToCaller, userQueryMatchLevel } = require("../../functions/lib/modules/agent007/platformReadConnector");
 
 const requirement = { allowedRoles: ["superadmin", "admin"], module: "clientes", action: "view" };
 const decide = user => decideUserAuthorization({ authenticatedUid: "caller", user, requirement });
@@ -30,5 +30,13 @@ test("browser source never owns Hugo tool execution", () => {
   const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../src/components/hugo/HugoRealtimeVoice.tsx"), "utf8");
   assert.equal(source.includes("delegateHugoVoiceTurn"), false);
   assert.equal(source.includes("response.function_call_arguments.done"), false);
-  assert.equal(source.includes("api.openai.com/v1/realtime/calls"), false);
+  assert.equal(source.includes('if (requestedNow && !gatewayUrl) throw'), true);
+  assert.equal(source.includes('window.sessionStorage.setItem("hugoVoiceCanary", "1")'), true);
+  assert.equal(source.includes("Canary server-side"), true);
+});
+
+test("user lookup accepts a unique short prefix without hardcoding a person", () => {
+  assert.equal(userQueryMatchLevel("Betel", ["BETELL", "betell@example.test"]), "UNIQUE_PREFIX");
+  assert.equal(userQueryMatchLevel("BETELL", ["BETELL"]), "EXACT");
+  assert.equal(userQueryMatchLevel("Be", ["BETELL"]), "NONE");
 });

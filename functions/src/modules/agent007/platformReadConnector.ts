@@ -6,6 +6,13 @@ import type { Pay0ToolResult } from "./pay0Connector";
 import { HUGO_SYSTEM_CATALOG } from "./systemCatalog";
 
 const normalize = (value: unknown) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+export function userQueryMatchLevel(query: string, values: unknown[]) {
+  const needle = normalize(query);
+  const candidates = values.flatMap(value => { const normalized = normalize(value); return normalized ? [normalized, normalized.split("@")[0]] : []; });
+  if (candidates.some(value => value === needle)) return "EXACT";
+  if (needle.length >= 4 && candidates.some(value => Math.abs(value.length - needle.length) <= 2 && (value.startsWith(needle) || needle.startsWith(value)))) return "UNIQUE_PREFIX";
+  return "NONE";
+}
 export function isUserVisibleToCaller(identity: { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" }, targetId: string, target: any) {
   if (String(target?.rootId || "") !== identity.rootId) return false;
   if (identity.role === "superadmin") return true;
@@ -35,11 +42,14 @@ export class PlatformReadConnector {
     assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin"], requiredModule: "clientes", requiredAction: "view" });
     const users = await this.db.collection("users").where("rootId", "==", this.identity.rootId).limit(200).get();
     const needle = normalize(query);
-    const matches = users.docs.filter(doc => {
+    const visible = users.docs.filter(doc => {
       const row: any = doc.data();
       if (!isUserVisibleToCaller(this.identity, doc.id, row)) return false;
-      return [doc.id, row.displayName, row.nombreUsuario, row.email].some(value => normalize(value) === needle || normalize(value).split("@")[0] === needle);
+      return true;
     });
+    const values = (doc: any) => { const row = doc.data(); return [doc.id, row.displayName, row.nombreUsuario, row.email]; };
+    const exact = visible.filter(doc => userQueryMatchLevel(needle, values(doc)) === "EXACT");
+    const matches = exact.length ? exact : visible.filter(doc => userQueryMatchLevel(needle, values(doc)) === "UNIQUE_PREFIX");
     if (matches.length !== 1) return this.result("countClientsForUser", { matchStatus: matches.length ? "AMBIGUOUS" : "NOT_FOUND", matches: matches.map(doc => ({ uid: doc.id, displayName: doc.data().displayName || doc.data().nombreUsuario || null })) }, "user", matches.map(doc => doc.id));
     const target = matches[0], targetData: any = target.data(), targetRole = getUserRole(targetData);
     const candidates = await this.db.collection("clients").where("rootId", "==", this.identity.rootId).get();
