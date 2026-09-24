@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { auth } from "@/lib/firebaseClient";
-import { createHugoRealtimeSession, saveHugoVoiceHistory } from "@/services/agent007";
+import { saveHugoVoiceHistory } from "@/services/agent007";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -27,7 +27,6 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const [state, setState] = useState<VoiceState>("IDLE");
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
-  const [canaryRequested, setCanaryRequested] = useState(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -91,9 +90,6 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   };
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("voiceCanary") === "1";
-    if (requested) window.sessionStorage.setItem("hugoVoiceCanary", "1");
-    setCanaryRequested(requested || window.sessionStorage.getItem("hugoVoiceCanary") === "1");
     return () => cleanup();
   }, []);
 
@@ -107,13 +103,10 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
       const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
-      const requestedNow = new URLSearchParams(window.location.search).get("voiceCanary") === "1" || window.sessionStorage.getItem("hugoVoiceCanary") === "1";
-      if (requestedNow && !gatewayUrl) throw new Error("El canario server-side no esta configurado en esta version.");
-      const useGateway = requestedNow;
+      if (!gatewayUrl) throw new Error("El gateway server-side de Hugo no esta configurado en esta version.");
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
-      const idToken = useGateway ? await currentUser.getIdToken() : "";
-      const legacySession = useGateway ? null : await createHugoRealtimeSession();
+      const idToken = await currentUser.getIdToken();
       if (generationRef.current !== generation) return;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -135,7 +128,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       let responseId: string | null = null;
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
-      historyRef.current = { sessionId: "", model: legacySession?.model || "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
+      historyRef.current = { sessionId: "", model: "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -239,7 +232,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const answer = useGateway ? await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
+      const answer = await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
         const gateway = new WebSocket(gatewayUrl!);
         gatewayRef.current = gateway;
         const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
@@ -253,13 +246,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`Hugo no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
           if (event.type === "gateway.interruption") trace("gateway.interruption", event);
         };
-      }) : await (async () => {
-        const response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp,
-          headers: { Authorization: `Bearer ${legacySession!.clientSecret}`, "Content-Type": "application/sdp" } });
-        const sdp = await response.text();
-        if (!response.ok) throw new Error(`OpenAI no pudo establecer la llamada (HTTP_${response.status}).`);
-        return { sdp, sessionId: fallbackSessionId, model: legacySession!.model };
-      })();
+      });
       if (generationRef.current !== generation) return;
       sessionId = answer.sessionId;
       if (historyRef.current) { historyRef.current.sessionId = answer.sessionId; historyRef.current.model = answer.model; }
@@ -279,7 +266,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   };
 
   return <div className="flex flex-col items-end gap-2">
-    {canaryRequested && <span data-testid="hugo-voice-runtime" className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200">Canary server-side</span>}
+    <span data-testid="hugo-voice-runtime" className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200">Gateway server-side</span>
     <div className="flex flex-wrap items-center justify-end gap-2">
       {state !== "LISTENING" ? <button type="button" onClick={() => void start()} disabled={state === "CONNECTING"} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 hover:bg-violet-500 disabled:opacity-60">
         {state === "CONNECTING" ? <Loader2 className="animate-spin" size={17}/> : <Mic size={17}/>} {state === "CONNECTING" ? "Conectando..." : "Hablar con Hugo"}

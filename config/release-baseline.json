@@ -61,6 +61,11 @@
       "capability": "Dispersion IQ autorizada sin dependencia de Super Admin ni asignacion manual de despacho"
     },
     {
+      "file": "qa/scripts/verify-simulated-dispersion-e2e.cjs",
+      "text": "terminalStatus: \"COMPLETADA\"",
+      "capability": "E2E simulado de dispersion hasta comprobante persistido y estado terminal"
+    },
+    {
       "file": "src/components/hugo/HugoRealtimeVoice.tsx",
       "text": "Hugo",
       "capability": "Hugo Voice"
@@ -69,6 +74,11 @@
       "file": "functions/src/modules/agent007/voiceDelegation.ts",
       "text": "delegate",
       "capability": "Delegacion canonica de Hugo Voice"
+    },
+    {
+      "file": "qa/scripts/verify-hugo-voice-runtime-contract.cjs",
+      "text": "browserDirectRealtimeDisabled: true",
+      "capability": "La experiencia humana usa el gateway server-side y no el Realtime directo del navegador"
     }
   ],
   "forbiddenText": [

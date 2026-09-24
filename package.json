@@ -66,6 +66,8 @@
     "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
     "qa:dispersion-dispatch-routing": "npm --prefix functions run build && node qa/scripts/verify-dispersion-dispatch-routing.cjs",
     "qa:authorized-dispersion-capability": "npm --prefix functions run build && node qa/scripts/verify-authorized-dispersion-capability.cjs",
+    "qa:simulated-dispersion-e2e": "npm --prefix functions run build && node qa/scripts/verify-simulated-dispersion-e2e.cjs",
+    "qa:hugo-voice-runtime": "node qa/scripts/verify-hugo-voice-runtime-contract.cjs && npm --prefix services/hugo-voice-gateway test",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
     "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs"
   },

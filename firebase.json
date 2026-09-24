@@ -9,6 +9,8 @@
                                         "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
                                         "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
                                         "node qa/scripts/verify-authorized-dispersion-capability.cjs",
+                                        "node qa/scripts/verify-simulated-dispersion-e2e.cjs",
+                                        "node qa/scripts/verify-hugo-voice-runtime-contract.cjs",
                                         "npm run qa:document-access"
                                     ]
                   },
