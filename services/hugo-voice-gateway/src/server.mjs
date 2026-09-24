@@ -63,7 +63,12 @@ wss.on("connection", browser => {
       sideband.on("close", () => send({ type: "gateway.sideband_closed" }));
       log("gateway.session_ready", { sessionId, uid: identity.uid, rootId: identity.rootId, model, voice }); send({ type: "answer", sdp: realtime.answer, sessionId, model, voice });
     }
-  } catch (error) { send({ type: "gateway.error", code: error instanceof Error ? error.message : "ERROR" }); } });
+  } catch (error) {
+    const internalCode = error instanceof Error ? error.message : "ERROR";
+    const clientCode = internalCode === "CANARY_NOT_ALLOWED" ? "CANARY_NOT_ALLOWED" : internalCode === "UNAUTHENTICATED" ? "UNAUTHENTICATED" : "GATEWAY_REQUEST_REJECTED";
+    log("gateway.request_rejected", { uid: identity?.uid || null, sessionId: sessionId || null, code: internalCode });
+    send({ type: "gateway.error", code: clientCode });
+  } });
   browser.on("close", () => { log("gateway.session_closed", { sessionId: sessionId || null, uid: identity?.uid || null, activeMs: Date.now() - connectedAt }); for (const controller of controllers.values()) controller.abort(); sideband?.close(); });
 });
 server.listen(port);
