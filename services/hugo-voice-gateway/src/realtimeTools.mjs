@@ -14,7 +14,7 @@ export const realtimeTools = [
   {
     type: "function",
     name: "count_clients_for_user",
-    description: "Cuenta en PAY0 los clientes activos visibles para un usuario autorizado del mismo arbol. Usa el nombre, correo o UID en query. Si el usuario dice usuarios cuando parece referirse a clientes asignados, usa esta herramienta; si el significado es ambiguo, pide aclaracion.",
+    description: "Cuenta en PAY0 los clientes activos visibles para un usuario autorizado del mismo arbol. Usa el nombre, correo o UID en query. En PAY0, preguntas como 'cuantos usuarios tiene [persona]' significan cuantos clientes activos tiene asignados esa persona y siempre requieren esta herramienta.",
     parameters: {
       type: "object",
       additionalProperties: false,
