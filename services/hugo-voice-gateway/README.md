@@ -12,11 +12,10 @@ Candidate long-lived Realtime sideband service. It is intentionally not deployed
   `gpt-realtime-2.1` and `marin` until the controlled comparison is complete.
 - Browser endpoint: `wss://<service>/voice`.
 
-Build from the repository root because the Dockerfile copies the service by its
-repository path:
+Build using the service directory as context:
 
 ```text
-docker build -f services/hugo-voice-gateway/Dockerfile .
+docker build services/hugo-voice-gateway
 ```
 
 The browser owns media and presentation. This process owns session creation,
