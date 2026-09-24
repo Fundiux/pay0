@@ -30,8 +30,9 @@ import {
   type PagoReportDateBackfillResult,
 } from "@/services/reports";
 import { getControlCenterOverview, refreshControlCenterOverview, type ControlCenterSnapshot } from "@/services/controlCenter";
+import { getCommissionDistributionsReport, preflightPaymentCommissionDistribution, type CommissionReportResult } from "@/services/commissions";
 
-type ReportTab = "control" | "earnings" | "operational" | "metrics" | "postingIssues";
+type ReportTab = "control" | "commissions" | "earnings" | "operational" | "metrics" | "postingIssues";
 
 function money(value: number | null | undefined) {
   const amount = Number(value || 0);
@@ -110,6 +111,7 @@ export default function ReportesPage() {
   const [operationalLoading, setOperationalLoading] = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
+  const [commissionsLoading, setCommissionsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const [earningsError, setEarningsError] = useState("");
@@ -117,6 +119,7 @@ export default function ReportesPage() {
   const [operationalError, setOperationalError] = useState("");
   const [metricsError, setMetricsError] = useState("");
   const [controlError, setControlError] = useState("");
+  const [commissionsError, setCommissionsError] = useState("");
   const [exportError, setExportError] = useState("");
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillError, setBackfillError] = useState("");
@@ -128,6 +131,8 @@ export default function ReportesPage() {
   const [operationalResult, setOperationalResult] = useState<OperationalIntelligenceReportResult | null>(null);
   const [metricsResult, setMetricsResult] = useState<OperationalMetricsReportResult | null>(null);
   const [controlSnapshot, setControlSnapshot] = useState<ControlCenterSnapshot | null>(null);
+  const [commissionsResult, setCommissionsResult] = useState<CommissionReportResult | null>(null);
+  const [commissionActionMessage, setCommissionActionMessage] = useState("");
   const [controlRefreshVersion, setControlRefreshVersion] = useState(0);
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
@@ -205,6 +210,13 @@ export default function ReportesPage() {
   }
 
   async function loadCurrentTab() {
+    if (activeTab === "commissions") {
+      setCommissionsLoading(true); setCommissionsError("");
+      try { setCommissionsResult(await getCommissionDistributionsReport({ dateFrom: formatExportDate(range.from), dateTo: formatExportDate(range.to) })); }
+      catch (err: any) { setCommissionsError(err?.message || "No se pudo cargar el reporte de comisiones."); }
+      finally { setCommissionsLoading(false); }
+      return;
+    }
     if (activeTab === "control") {
       if (String(profile?.role || "").toLowerCase() !== "superadmin") return;
       setControlRefreshVersion(value => value + 1);
@@ -252,11 +264,14 @@ export default function ReportesPage() {
   async function exportActiveTab() {
     setExportError("");
     setExporting(true);
+    const from = formatExportDate(range.from);
+    const to = formatExportDate(range.to);
 
     try {
-      const from = formatExportDate(range.from);
-      const to = formatExportDate(range.to);
-
+      if (activeTab === "commissions") {
+        await exportToExcel(`pay0-comisiones-${from}-a-${to}.xlsx`, "Comisiones", (commissionsResult?.rows || []).map((row) => ({ Fecha: row.operationalDate, Referencia: row.originalReference, Cliente: row.clientName, FolioPAY0: row.pay0Folio, Tipo: row.kind, Comisionista: row.commissioner, Porcentaje: row.rateBps / 100, Importe: row.amount, FolioIQ: row.iqFolio, Estado: row.status })));
+        return;
+      }
       if (activeTab === "earnings") {
         const rows = (earningsResult?.rows || []).map((row) => ({
           Cliente: row.clienteNombre || row.clienteId,
@@ -368,6 +383,29 @@ export default function ReportesPage() {
     }
   }
 
+  async function exportCommissionsPdf() {
+    const rows = commissionsResult?.rows || [];
+    if (!rows.length) return;
+    setExporting(true); setExportError("");
+    try {
+      const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(15); doc.text("PAY0 · Estado de cuenta de comisiones", 14, 16);
+      doc.setFontSize(9); doc.text(`${formatExportDate(range.from)} a ${formatExportDate(range.to)} · Generado ${new Date().toLocaleString("es-MX")}`, 14, 23);
+      const autoTable = autoTableModule.default;
+      autoTable(doc, { startY: 28, head: [["Fecha", "Referencia", "Cliente", "Folio PAY0", "Destino", "%", "Importe", "Folio IQ", "Estado"]], body: rows.map((row) => [row.operationalDate, row.originalReference || "-", row.clientName || "-", row.pay0Folio, row.commissioner, (row.rateBps / 100).toFixed(2), money(row.amount), row.iqFolio || "-", row.status]), foot: [["", "", "", "", "TOTAL", "", money(commissionsResult?.summary.totalAmount), "", ""]] });
+      doc.save(`pay0-comisiones-${formatExportDate(range.from)}-a-${formatExportDate(range.to)}.pdf`);
+    } catch (err: any) { setExportError(err?.message || "No se pudo exportar el PDF."); }
+    finally { setExporting(false); }
+  }
+
+  async function runCommissionPreflight(distributionId: string) {
+    setCommissionsLoading(true); setCommissionActionMessage("");
+    try { const result = await preflightPaymentCommissionDistribution(distributionId); setCommissionActionMessage(result.status === "READY_FOR_EXECUTION" ? "Preflight listo. No se ejecutó ningún POST financiero." : `Preflight bloqueado: ${(result.reasons || []).map((reason: any) => reason.code).join(', ')}`); await loadCurrentTab(); }
+    catch (err: any) { setCommissionActionMessage(err?.message || "No se pudo ejecutar el preflight."); }
+    finally { setCommissionsLoading(false); }
+  }
+
   useEffect(() => {
     if (!profileLoading && canViewReports) {
       void loadCurrentTab();
@@ -401,6 +439,8 @@ export default function ReportesPage() {
   const currentLoading =
     activeTab === "control"
       ? controlLoading
+      : activeTab === "commissions"
+      ? commissionsLoading
       : activeTab === "earnings"
       ? earningsLoading
       : activeTab === "operational"
@@ -412,6 +452,8 @@ export default function ReportesPage() {
   const activeRowsCount =
     activeTab === "control"
       ? 0
+      : activeTab === "commissions"
+      ? (commissionsResult?.rows.length || 0)
       : activeTab === "earnings"
       ? earningsRows.length
       : activeTab === "operational"
@@ -502,6 +544,9 @@ export default function ReportesPage() {
         <button type="button" onClick={() => setActiveTab("control")} className={activeTab === "control" ? "h-11 flex-1 rounded-xl bg-sky-400/15 px-4 text-[11px] font-bold uppercase tracking-wide text-sky-300" : "h-11 flex-1 rounded-xl px-4 text-[11px] font-bold uppercase tracking-wide text-slate-400 hover:bg-white/5"}>
           Centro de control
         </button>
+        <button type="button" onClick={() => setActiveTab("commissions")} className={activeTab === "commissions" ? "h-11 flex-1 rounded-xl bg-orange-400/15 px-4 text-[11px] font-bold uppercase tracking-wide text-orange-300" : "h-11 flex-1 rounded-xl px-4 text-[11px] font-bold uppercase tracking-wide text-slate-400 hover:bg-white/5"}>
+          Comisiones
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab("earnings")}
@@ -555,6 +600,16 @@ export default function ReportesPage() {
           <PaymentComplementFollowup />
           <details className="rounded-xl border border-white/10 p-4"><summary className="mb-4 cursor-pointer font-bold">Resumen operativo global · sin filtro de fechas</summary><ControlCenterOverview snapshot={controlSnapshot} loading={controlLoading} error={controlError} onRefresh={refreshControlCenter} canRefresh /></details>
         </div> : <p className="rounded-xl border border-white/10 p-4">El Control Center consolidado está habilitado únicamente para Superadmin. Tus reportes autorizados continúan disponibles en las demás pestañas.</p>
+      ) : activeTab === "commissions" ? (
+        <section className="space-y-4">
+          {commissionsError ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{commissionsError}</div> : null}
+          {commissionActionMessage ? <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 p-4 text-sm text-sky-100">{commissionActionMessage}</div> : null}
+          <div className="grid gap-3 md:grid-cols-5">
+            {[['Movimientos', commissionsResult?.summary.movements || 0], ['Destinos', commissionsResult?.summary.legs || 0], ['Total', money(commissionsResult?.summary.totalAmount)], ['Pendientes', commissionsResult?.summary.pending || 0], ['Errores', commissionsResult?.summary.errors || 0]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-[#111827] p-4"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-1 text-xl font-bold">{value}</div></div>)}
+          </div>
+          <div className="flex justify-end"><button type="button" onClick={exportCommissionsPdf} disabled={exporting || !(commissionsResult?.rows.length)} className="rounded-xl border border-orange-400/40 bg-orange-400/10 px-4 py-2 text-xs font-bold uppercase text-orange-200 disabled:opacity-40">Exportar PDF</button></div>
+          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111827]"><table className="pay0-table min-w-[1300px]"><thead><tr><th>FECHA</th><th>REFERENCIA</th><th>CLIENTE</th><th>FOLIO PAY0</th><th>DESTINO</th><th>%</th><th>IMPORTE</th><th>FOLIO IQ</th><th>ESTADO</th><th>PREFLIGHT</th></tr></thead><tbody>{commissionsLoading && !commissionsResult ? <tr><td colSpan={10} className="py-8 text-center">Cargando…</td></tr> : !(commissionsResult?.rows.length) ? <tr><td colSpan={10} className="py-8 text-center text-slate-400">Sin distribuciones en el periodo.</td></tr> : commissionsResult.rows.map((row, index) => <tr key={`${row.distributionId}-${index}`}><td>{row.operationalDate}</td><td>{row.originalReference || '-'}</td><td>{row.clientName || row.clientId}</td><td>{row.pay0Folio}</td><td>{row.kind === 'BASE' ? 'BASE' : row.commissioner}</td><td>{(row.rateBps / 100).toFixed(2)}%</td><td>{money(row.amount)}</td><td>{row.iqFolio || '-'}</td><td><span className={`rounded-full border px-2 py-1 text-[10px] ${statusClass(row.status)}`}>{row.status}</span></td><td><button onClick={() => void runCommissionPreflight(row.distributionId)} disabled={commissionsLoading} className="text-xs text-sky-300 disabled:opacity-40">Validar sin dispersar</button></td></tr>)}</tbody></table></div>
+        </section>
       ) : activeTab === "metrics" ? (
         <section className="mb-5">
           {metricsError ? <div className="mb-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{metricsError}</div> : null}

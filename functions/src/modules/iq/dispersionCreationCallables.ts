@@ -7,9 +7,11 @@ import {
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { resolveIqBeneficiaryInstrument } from "./dispersionHttpCreateCore";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { assertDispersionDestination } from "./dispersionDestinationGuard";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -2105,6 +2107,69 @@ export const createClientDispersionIq =
       });
     },
   );
+
+export const resolveCommissionInstrumentIq = onCall(
+  { cors: true, timeoutSeconds: 120, memory: "1GiB", maxInstances: 2, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] },
+  async (request) => {
+    const auth = await requireAuth(request);
+    const methodId = clean(request.data?.methodId);
+    const paymentId = clean(request.data?.paymentId);
+    if (!methodId || !paymentId) throw new HttpsError("invalid-argument", "methodId y paymentId son obligatorios.");
+    const [methodSnap, paymentSnap] = await Promise.all([
+      db.doc(`clientBeneficiaryMethods/${methodId}`).get(), db.doc(`pagos/${paymentId}`).get(),
+    ]);
+    if (!methodSnap.exists || !paymentSnap.exists) throw new HttpsError("not-found", "No se encontró el instrumento o pago de referencia.");
+    const method = record(methodSnap.data());
+    const payment = record(paymentSnap.data());
+    const clientId = clean(method.clientId ?? method.clienteId);
+    if (clean(method.rootId) !== auth.rootId || clean(payment.rootId) !== auth.rootId || clean(payment.clienteId ?? payment.clientId) !== clientId) {
+      throw new HttpsError("permission-denied", "El instrumento y pago no pertenecen al mismo alcance.");
+    }
+    await requireClientOperationalAccess({ uid: auth.uid, role: auth.role as any, rootId: auth.rootId, clientId, permission: "operateBeneficiarios" });
+    const beneficiaryId = clean(method.beneficiaryId);
+    const despachoId = clean(payment.despachoId);
+    if (!beneficiaryId || !despachoId) throw new HttpsError("failed-precondition", "No se pudo resolver beneficiario u origen IQ desde el pago.");
+    const [beneficiarySnap, clientSnap, despachoSnap] = await Promise.all([
+      db.doc(`clientBeneficiaries/${beneficiaryId}`).get(), db.doc(`clients/${clientId}`).get(), db.doc(`despachos/${despachoId}`).get(),
+    ]);
+    if (!beneficiarySnap.exists || !clientSnap.exists || !despachoSnap.exists) throw new HttpsError("failed-precondition", "El expediente de vinculación está incompleto.");
+    const beneficiary = record(beneficiarySnap.data());
+    const client = record(clientSnap.data());
+    const despacho = record(despachoSnap.data());
+    const sourceMarker = upper([despacho.erpProvider, despacho.provider, despacho.nombre, despacho.integrationType, despacho.channel].filter(Boolean).join(" "));
+    if (!sourceMarker.includes("IQ")) throw new HttpsError("failed-precondition", "El pago de referencia no proviene de un despacho IQ.");
+    const clientIqId = clean(record(client.iqLink).clientId ?? client.iqClientId);
+    if (!clientIqId) throw new HttpsError("failed-precondition", "El cliente todavía no tiene vínculo canónico con IQ.");
+    const expectedLast4 = clean(method.last4 ?? method.masked).replace(/\D+/g, "").slice(-4);
+    const operationTypeKey = upper(method.destinationKind) === "TARJETA" ? "TDC" : upper(method.destinationKind) === "CLABE" ? "TRANSFERENCIA" : "";
+    if (!expectedLast4 || !operationTypeKey) throw new HttpsError("failed-precondition", "El instrumento no tiene tipo o terminación compatible con IQ.");
+    const access = await loadIqAccess(auth, despachoId, "IQ");
+    const methodRef = methodSnap.ref;
+    await methodRef.set({ iqLinkStatus: "SYNCING", iqLastError: null, iqSyncStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    try {
+      const resolved = await resolveIqBeneficiaryInstrument({
+        apiOrigin: access.erpUrl, username: access.username, password: access.password, associatedName: access.associatedName,
+        clientIqId, beneficiaryCandidates: [beneficiary.iqNombre, beneficiary.nombre, beneficiary.name].map(clean).filter(Boolean),
+        currency: clean(payment.moneda) || "MXN", operationTypeKey: operationTypeKey as "TRANSFERENCIA" | "TDC", expectedDestinationLast4: expectedLast4,
+      });
+      const evidenceFingerprint = crypto.createHash("sha256").update(JSON.stringify({ rootId: auth.rootId, despachoId, profileId: access.profileId, clientIqId, beneficiaryId: resolved.iqBeneficiaryId, accountId: resolved.iqAccountId, last4: resolved.instrumentLast4, operationTypeKey })).digest("hex");
+      await methodRef.set({
+        iqLinkStatus: "VERIFIED", iqBeneficiaryId: resolved.iqBeneficiaryId, iqAccountId: resolved.iqAccountId,
+        iqBeneficiaryName: resolved.iqBeneficiaryName, iqAccountLabel: resolved.iqAccountLabel, iqInstrumentLast4: resolved.instrumentLast4,
+        iqInstrumentType: operationTypeKey, iqDespachoId: despachoId, iqCredentialProfileId: access.profileId,
+        iqPartnerId: resolved.partnerId, iqPartnerName: resolved.partnerName, iqClientId: resolved.clientIqId,
+        iqEvidenceFingerprint: evidenceFingerprint, iqVerifiedAt: FieldValue.serverTimestamp(), iqLastSyncedAt: FieldValue.serverTimestamp(), iqLastError: null,
+        updatedAt: FieldValue.serverTimestamp(), updatedBy: auth.uid,
+      }, { merge: true });
+      return { ok: true, status: "VERIFIED", beneficiaryName: resolved.iqBeneficiaryName, instrumentMasked: method.masked || `****${expectedLast4}`, verifiedAt: resolved.verifiedAt };
+    } catch (error: any) {
+      const code = clean(error?.message).split(":")[0] || "IQ_LINK_ERROR";
+      const status = code.includes("AMBIGUOUS") ? "AMBIGUOUS" : code.includes("NOT_FOUND") ? "NOT_FOUND" : "ERROR";
+      await methodRef.set({ iqLinkStatus: status, iqLastError: code, iqLastSyncedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: auth.uid }, { merge: true });
+      return { ok: false, status, reason: code };
+    }
+  },
+);
 
 // H4_D87_A58_A48_DISPERSION_CREATE_SCHEDULER_RUNNER
 export const processIqDispersionCreate =

@@ -2750,6 +2750,15 @@ export { getEarningsByClientReport } from "./modules/reports/callables";
 export { getPaymentsFinancialPostingIssuesReport } from "./modules/reports/callables";
 export { getOperationalIntelligenceReport } from "./modules/reports/callables";
 export { getOperationalMetricsReport } from "./modules/reports/callables";
+export {
+  getClientCommissionRule,
+  saveClientCommissionRule,
+  previewPaymentCommissionDistribution,
+  processPaymentCommissionDistribution,
+  preflightPaymentCommissionDistribution,
+  getCommissionDistributionsReport,
+} from "./modules/commissionDistributions/callables";
+export { onPaymentReadyForCommissionDistribution } from "./modules/commissionDistributions/triggers";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
@@ -2852,6 +2861,7 @@ export { releaseForwardOnlyDispersionReservationOnTerminal } from "./modules/dis
 export {
   createClientDispersionIq,
   processIqDispersionCreate,
+  resolveCommissionInstrumentIq,
 } from "./modules/iq/dispersionCreationCallables";
 
 
