@@ -62,7 +62,7 @@ export class PlatformReadConnector {
     let count = 0;
     for (const client of candidates.docs) {
       const row: any = client.data();
-      if (row.active === false) continue;
+      if (row.active !== true) continue;
       const access = await resolveClientOperationalAccess({ uid: target.id, role: targetRole as any, rootId: this.identity.rootId, clientId: client.id, client: row });
       if (access.allowed && access.permissions.view === true) count++;
     }
@@ -74,7 +74,7 @@ export class PlatformReadConnector {
     let count = 0;
     for (const client of candidates.docs) {
       const row: any = client.data();
-      if (row.active === false) continue;
+      if (row.active !== true) continue;
       const access = await resolveClientOperationalAccess({ uid: this.identity.uid, role: this.identity.role, rootId: this.identity.rootId, clientId: client.id, client: row });
       if (access.allowed && access.permissions.view === true) count++;
     }

@@ -4,6 +4,7 @@ const { buildHugoContextV2 } = require('../../functions/lib/modules/agent007/hug
 const { normalizeConversationState } = require('../../functions/lib/modules/agent007/hugoCore/conversationState');
 const { formatVoicePlatformResult } = require('../../functions/lib/modules/agent007/voiceDelegation');
 const { PlatformReadConnector } = require('../../functions/lib/modules/agent007/platformReadConnector');
+const { HUGO_SYSTEM_CATALOG } = require('../../functions/lib/modules/agent007/systemCatalog');
 
 function result(tool, data) { return { sourceSystem: 'PAY0', tool, retrievedAt: new Date().toISOString(), scope: { rootId: 'root-a' }, completeness: 'COMPLETE', evidence: [], data, trace: { latencyMs: 0, result: 'OK' } }; }
 async function context(message, data) {
@@ -51,6 +52,7 @@ test('la salida de voz deterministica se deriva del resultado canonico de PAY0',
 test('el conteo omite clientes inactivos antes de resolver su acceso', async () => {
   const docs = [
     { id: 'inactive', data: () => ({ rootId: 'root-a', active: false }) },
+    { id: 'unspecified', data: () => ({ rootId: 'root-a' }) },
     { id: 'active', data: () => ({ rootId: 'root-a', active: true }) },
   ];
   const db = { collection: name => { assert.equal(name, 'clients'); return { where: (field, op, value) => { assert.deepEqual([field, op, value], ['rootId', '==', 'root-a']); return { get: async () => ({ docs }) }; } }; } };
@@ -66,4 +68,11 @@ test('la reanudacion conserva solo contexto reciente y del propietario autentica
   assert.equal((await fresh.getSessionContext()).data.lastResolvedEntity.safeId, 'opaque');
   const stale = new PlatformReadConnector(make({ ...recent, updatedAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() }), { uid: 'actor' }, { role: 'superadmin', active: true }, identity);
   assert.equal((await stale.getSessionContext()).data.lastResolvedEntity, null);
+});
+test('el estado de conexión se deriva de capacidades registradas, no de la UI', () => {
+  const status = Object.fromEntries(HUGO_SYSTEM_CATALOG.map(row => [row.id, row.status]));
+  assert.equal(status.PAY0, 'CONNECTED');
+  assert.equal(status.HUGO, 'CONNECTED');
+  assert.equal(status.ASSETS, 'NOT_CONNECTED');
+  assert.equal(status.TTT, 'NOT_CONNECTED');
 });
