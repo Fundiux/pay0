@@ -18,10 +18,10 @@ export function classifyRequestError(error) {
 
 export function safeToolFailure(error) {
   const code = classifyRequestError(error);
-  if (code === "PERMISSION_DENIED") return { errorCategory: "AUTHORIZATION_DENIED", errorCode: code, retryable: false };
-  if (code === "DEADLINE_EXCEEDED") return { errorCategory: "BACKEND_TIMEOUT", errorCode: code, retryable: true };
-  if (code === "UNAVAILABLE") return { errorCategory: "CONNECTOR_UNAVAILABLE", errorCode: code, retryable: true };
-  return { errorCategory: "INTERNAL_ERROR", errorCode: code, retryable: true };
+  if (code === "PERMISSION_DENIED") return { errorCategory: "PERMISSION_DENIED", errorCode: code, retryable: false };
+  if (code === "DEADLINE_EXCEEDED") return { errorCategory: "TIMEOUT", errorCode: code, retryable: true };
+  if (code === "UNAVAILABLE") return { errorCategory: "CONNECTOR_ERROR", errorCode: code, retryable: true };
+  return { errorCategory: "INTERNAL", errorCode: code, retryable: true };
 }
 
 function withTimeout(operation, timeoutMs, code) {

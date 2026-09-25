@@ -13,7 +13,7 @@ assert.doesNotMatch(component, /createHugoRealtimeSession/);
 assert.doesNotMatch(component, /api\.openai\.com\/v1\/realtime\/calls/);
 assert.doesNotMatch(component, /voiceCanary/);
 
-const expectedTools = ["get_authorized_capabilities", "get_system_catalog", "count_clients_for_user", "count_my_visible_clients", "query_received_payments", "get_payment_details", "get_payment_complement_status", "get_recent_session_context", "explain_last_operation", "delegate_to_hugo_core"];
+const expectedTools = ["get_authorized_capabilities", "get_system_catalog", "count_clients_for_user", "count_my_visible_clients", "get_latest_solicitud", "query_received_payments", "get_payment_details", "get_payment_complement_status", "get_recent_session_context", "explain_last_operation", "delegate_to_hugo_core"];
 for (const tool of expectedTools) {
   assert.match(tools, new RegExp(`name: "${tool}"`));
 }

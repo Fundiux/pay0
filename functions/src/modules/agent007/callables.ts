@@ -197,7 +197,7 @@ export const sendAgent007Message = onCall(
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
-      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
+      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),

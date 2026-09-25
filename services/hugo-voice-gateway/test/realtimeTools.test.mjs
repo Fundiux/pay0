@@ -12,6 +12,7 @@ test("Realtime registers the canonical PAY0 read capabilities", () => {
   assert.deepEqual(delegationForRealtimeTool("get_system_catalog"), { request: "¿Cuáles son los sistemas disponibles?", toolName: "getSystemCatalog", toolInput: {} });
   assert.equal(delegationForRealtimeTool("count_clients_for_user", { query: "Betel" }).toolInput.query, "Betel");
   assert.deepEqual(delegationForRealtimeTool("count_my_visible_clients"), { request: "¿Cuántos clientes activos puedo ver?", toolName: "countClientsForCurrentUser", toolInput: {} });
+  assert.deepEqual(delegationForRealtimeTool("get_latest_solicitud"), { request: "¿Qué cliente hizo la última solicitud?", toolName: "getLatestSolicitud", toolInput: {} });
   assert.deepEqual(delegationForRealtimeTool("query_received_payments", { operation: "LATEST" }).toolInput, { position: "LATEST", limit: 1 });
   assert.deepEqual(delegationForRealtimeTool("query_received_payments", { operation: "LIST", limit: 5 }).toolInput, { position: "LATEST", limit: 5 });
   assert.deepEqual(delegationForRealtimeTool("query_received_payments", { operation: "PREVIOUS" }).toolInput, { position: "PREVIOUS", limit: 1 });
@@ -27,6 +28,8 @@ test("payment list limits are bounded and tool schemas remain fail closed", () =
   assert.equal(delegationForRealtimeTool("query_received_payments", { operation: "UNKNOWN" }).toolInput.limit, 1);
   assert.ok(realtimeToolNames.includes("query_received_payments"));
   assert.ok(realtimeToolNames.includes("explain_last_operation"));
+  assert.equal(realtimeToolNames.length, 11);
+  assert.match(realtimeTools.find(tool => tool.name === "query_received_payments").description, /Nunca interpretes movimiento/);
 });
 
 test("unknown Realtime tools fail closed", () => {

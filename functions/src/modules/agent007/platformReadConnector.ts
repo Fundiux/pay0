@@ -7,6 +7,22 @@ import { HUGO_SYSTEM_CATALOG } from "./systemCatalog";
 import { HUGO_READ_TOOLS } from "./hugoCore/toolRouter";
 
 const normalize = (value: unknown) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+const phonetic = (value: unknown) => normalize(value).replace(/[bv]/g, "b");
+const currentUserAlias = (value: unknown) => /^(yo|mi usuario|mi cuenta|usuario actual|esta sesion)$/i.test(normalize(value));
+export type UserReferenceCandidate = { id: string; displayName: string | null; values: unknown[] };
+export function resolveUserReference(query: string, currentUid: string, candidates: UserReferenceCandidate[]) {
+  if (currentUserAlias(query)) return { matchStatus: "CURRENT_USER" as const, ids: [currentUid] };
+  const exact = candidates.filter(row => userQueryMatchLevel(query, row.values) === "EXACT");
+  const prefix = candidates.filter(row => userQueryMatchLevel(query, row.values) === "UNIQUE_PREFIX");
+  const phoneticMatches = candidates.filter(row => row.values.some(value => phonetic(value) === phonetic(query)));
+  const matches = exact.length ? exact : prefix.length ? prefix : phoneticMatches;
+  if (!exact.length && matches.length === 1 && matches[0].id === currentUid && phoneticMatches.includes(matches[0])) {
+    return { matchStatus: "CONFIRM_CURRENT_USER" as const, ids: [], suggestedDisplayName: matches[0].displayName };
+  }
+  return matches.length === 1
+    ? { matchStatus: "EXACT" as const, ids: [matches[0].id] }
+    : { matchStatus: matches.length ? "AMBIGUOUS" as const : "NOT_FOUND" as const, ids: matches.map(row => row.id) };
+}
 export function userQueryMatchLevel(query: string, values: unknown[]) {
   const needle = normalize(query);
   const candidates = values.flatMap(value => { const normalized = normalize(value); return normalized ? [normalized, normalized.split("@")[0]] : []; });
@@ -46,16 +62,17 @@ export class PlatformReadConnector {
   async countClientsForUser(query: string) {
     assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "view" });
     assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin"], requiredModule: "clientes", requiredAction: "view" });
+    if (currentUserAlias(query)) return this.countClientsForCurrentUser();
     const users = await this.db.collection("users").where("rootId", "==", this.identity.rootId).limit(200).get();
-    const needle = normalize(query);
     const visible = users.docs.filter(doc => {
       const row: any = doc.data();
       if (!isUserVisibleToCaller(this.identity, doc.id, row)) return false;
       return true;
     });
     const values = (doc: any) => { const row = doc.data(); return [doc.id, row.displayName, row.nombreUsuario, row.email]; };
-    const exact = visible.filter(doc => userQueryMatchLevel(needle, values(doc)) === "EXACT");
-    const matches = exact.length ? exact : visible.filter(doc => userQueryMatchLevel(needle, values(doc)) === "UNIQUE_PREFIX");
+    const resolution = resolveUserReference(query, this.identity.uid, visible.map(doc => ({ id: doc.id, displayName: doc.data().displayName || doc.data().nombreUsuario || null, values: values(doc) })));
+    if (resolution.matchStatus === "CONFIRM_CURRENT_USER") return this.result("countClientsForUser", resolution, "user");
+    const matches = visible.filter(doc => resolution.ids.includes(doc.id));
     if (matches.length !== 1) return this.result("countClientsForUser", { matchStatus: matches.length ? "AMBIGUOUS" : "NOT_FOUND", matches: matches.map(doc => ({ uid: doc.id, displayName: doc.data().displayName || doc.data().nombreUsuario || null })) }, "user", matches.map(doc => doc.id));
     const target = matches[0], targetData: any = target.data(), targetRole = getUserRole(targetData);
     const candidates = await this.db.collection("clients").where("rootId", "==", this.identity.rootId).get();

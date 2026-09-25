@@ -8,6 +8,7 @@ export type HugoRoutingSignals = { intent: string; profile: HugoProfile; risk: H
 export const HUGO_CAPABILITIES = [
   { id: "pay0.getSolicitud", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.searchSolicitudes", system: "PAY0", risk: "READ", status: "AVAILABLE" },
+  { id: "pay0.getLatestSolicitud", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getPago", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.searchPagos", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.searchReceivedPagos", system: "PAY0", risk: "READ", status: "AVAILABLE" },

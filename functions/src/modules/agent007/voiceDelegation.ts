@@ -11,20 +11,21 @@ import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
 import { PlatformReadConnector } from "./platformReadConnector";
+import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./hugoCore/interactionSemantics";
 
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
 const learningStore = new FirestoreHugoLearningStore(db);
-const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "countClientsForCurrentUser", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
+const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "countClientsForCurrentUser", "getLatestSolicitud", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
 
-type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "countClientsForCurrentUser" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
+type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
 const paymentStatusesConciliated = new Set(["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]);
 const money = (value: unknown, currency = "MXN") => Number(value || 0).toLocaleString("es-MX", { style: "currency", currency });
 function voiceError(error: unknown) {
   const raw = error instanceof Error ? `${error.name} ${error.message}` : "INTERNAL_ERROR";
   const code = raw.match(/(AUTHORIZATION_DENIED|PERMISSION_DENIED|HUGO_TOOL_NOT_ALLOWED|HUGO_TOOL_UNKNOWN|HUGO_TOOL_INVALID_INPUT|PAY0_PAYMENT_REFERENCE_NOT_FOUND|DEADLINE_EXCEEDED|TIMEOUT|UNAVAILABLE|PAY0_READ_FAILED)/i)?.[1]?.toUpperCase() || "INTERNAL_ERROR";
-  const category = /AUTHORIZATION|PERMISSION/.test(code) ? "AUTHORIZATION_DENIED" : /NOT_ALLOWED|UNKNOWN/.test(code) ? "CAPABILITY_NOT_FOUND" : /INVALID_INPUT/.test(code) ? "AMBIGUOUS_QUERY" : /REFERENCE_NOT_FOUND/.test(code) ? "EMPTY_RESULT" : /TIMEOUT|DEADLINE/.test(code) ? "BACKEND_TIMEOUT" : /UNAVAILABLE|PAY0_READ_FAILED/.test(code) ? "CONNECTOR_UNAVAILABLE" : "INTERNAL_ERROR";
-  return { errorCategory: category, errorCode: code, retryable: ["BACKEND_TIMEOUT", "CONNECTOR_UNAVAILABLE", "INTERNAL_ERROR"].includes(category), connectorStatus: ["BACKEND_TIMEOUT", "CONNECTOR_UNAVAILABLE"].includes(category) ? "UNAVAILABLE" : "HEALTHY" };
+  const category = canonicalErrorCategory(error);
+  return { errorCategory: category, errorCode: code, retryable: ["TIMEOUT", "CONNECTOR_ERROR", "INTERNAL"].includes(category), connectorStatus: ["TIMEOUT", "CONNECTOR_ERROR"].includes(category) ? "UNAVAILABLE" : "HEALTHY" };
 }
 async function executeReadWithOneRetry(router: HugoToolRouter, request: { name: VoiceDirectTool; input: any }) {
   try { return { result: await router.execute(request), attemptCount: 1 }; }
@@ -34,21 +35,21 @@ async function executeReadWithOneRetry(router: HugoToolRouter, request: { name: 
   }
 }
 
-export function formatVoicePlatformResult(tool: string, data: any) {
+function formatVoicePlatformResultRaw(tool: string, data: any) {
   if (tool === "countClientsForUser") {
     if (data?.matchStatus === "EXACT") return `${data.user?.displayName || "El usuario"} tiene ${Number(data.clientCount || 0)} clientes activos visibles en PAY0.`;
-    if (data?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario con ese identificador dentro de tu alcance. Necesito que indiques el correo o UID.";
+    if (data?.matchStatus === "CONFIRM_CURRENT_USER") return `¿Te refieres a ${data.suggestedDisplayName || "tu usuario actual"}, tu usuario actual?`;
+    if (data?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario con esa referencia dentro de tu alcance. Necesito que indiques el nombre completo o correo.";
     return "No encontré un usuario visible con ese identificador dentro de tu alcance autorizado.";
   }
   if (tool === "getAuthorizedCapabilities") {
-    const enabled = Object.entries(data?.modules || {}).filter(([, permissions]: any) => permissions?.view === true).map(([name]) => name);
-    return `Tu acceso efectivo es ${data?.role || "desconocido"}. Puedes consultar los módulos: ${enabled.length ? enabled.join(", ") : "ninguno"}.`;
+    return formatAuthorizedCapabilities(data);
   }
   if (tool === "getSystemCatalog") {
-    const rows = Array.isArray(data) ? data : [];
-    return `Los sistemas registrados son: ${rows.map(row => `${row.id} (${row.status}, ${row.allowed ? "permitido" : "sin acceso"})`).join(", ")}.`;
+    return formatSystemCatalog(data);
   }
   if (tool === "countClientsForCurrentUser") return `${Number(data?.clientCount || 0)}.`;
+  if (tool === "getLatestSolicitud") return formatLatestSolicitud(data);
   if (tool === "searchReceivedPagos") {
     const rows = Array.isArray(data?.items) ? data.items : [];
     if (!rows.length) return "No hay pagos recibidos que coincidan con esa consulta dentro de tu alcance autorizado.";
@@ -75,12 +76,16 @@ export function formatVoicePlatformResult(tool: string, data: any) {
   if (tool === "getLastOperationDiagnostic") {
     if (!data) return "No hay un fallo operativo reciente registrado en esta sesión.";
     if (data.status === "OK") return `La última consulta terminó correctamente mediante ${data.capability || "la capacidad autorizada"}.`;
-    if (data.errorCategory === "BACKEND_TIMEOUT") return "La consulta estaba autorizada, pero PAY0 no respondió antes del tiempo límite. Puedes reintentarla.";
-    if (data.errorCategory === "AUTHORIZATION_DENIED") return "La capacidad existe, pero esta sesión no está autorizada para esa consulta.";
-    if (data.errorCategory === "CAPABILITY_NOT_FOUND") return "Esa operación específica no está disponible en esta sesión.";
+    if (data.errorCategory === "TIMEOUT") return "La consulta estaba autorizada, pero PAY0 no respondió antes del tiempo límite. Puedes reintentarla.";
+    if (data.errorCategory === "PERMISSION_DENIED") return "La capacidad existe, pero esta sesión no está autorizada para esa consulta.";
+    if (data.errorCategory === "CAPABILITY_NOT_AVAILABLE") return "Esa operación específica no está disponible en esta sesión; esto no implica que falte un permiso.";
     return `No pude completar la consulta porque ${data.connectorStatus === "UNAVAILABLE" ? "el conector de PAY0 no estuvo disponible" : "ocurrió un error interno"}${data.retryable ? ". Puedes reintentarla" : ""}.`;
   }
   throw Error("HUGO_VOICE_TOOL_UNSUPPORTED");
+}
+
+export function formatVoicePlatformResult(tool: string, data: any) {
+  return normalizePay0Brand(formatVoicePlatformResultRaw(tool, data));
 }
 
 export const authorizeHugoVoiceGatewaySession = onCall(
@@ -121,7 +126,7 @@ export const delegateHugoVoiceTurn = onCall(
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
-      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
+      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
@@ -156,7 +161,7 @@ export const delegateHugoVoiceTurn = onCall(
         text: formatVoicePlatformResult(directTool, result.data), cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
       } catch (error) {
         const safe = voiceError(error);
-        await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: { conversationId: `${rootId}_${uid}_global`, sessionId, safeUserRef, system: "PAY0", intent, requestedOperation: intent, selectedCapability: directTool, capability: directTool, status: "ERROR", ...safe, authorization: safe.errorCategory === "AUTHORIZATION_DENIED" ? "DENIED" : "ALLOWED", scope: "CURRENT_AUTHORIZED_ROOT", fallbackUsed: false, attemptCount: 1, latencyMs: Date.now() - started, resultCount: 0, timestamp: new Date().toISOString() } }).catch(() => undefined);
+        await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: { conversationId: `${rootId}_${uid}_global`, sessionId, safeUserRef, system: "PAY0", intent, requestedOperation: intent, selectedCapability: directTool, capability: directTool, status: "ERROR", ...safe, authorization: safe.errorCategory === "PERMISSION_DENIED" ? "DENIED" : "ALLOWED", scope: "CURRENT_AUTHORIZED_ROOT", fallbackUsed: false, attemptCount: 1, latencyMs: Date.now() - started, resultCount: 0, timestamp: new Date().toISOString() } }).catch(() => undefined);
         throw error;
       }
     }

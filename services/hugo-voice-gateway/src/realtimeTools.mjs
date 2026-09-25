@@ -8,13 +8,13 @@ export const realtimeTools = [
   {
     type: "function",
     name: "get_system_catalog",
-    description: "Obtiene desde PAY0 el catalogo real de sistemas y el acceso efectivo del usuario autenticado.",
+    description: "Obtiene desde PAY0 el catalogo real de sistemas, su conectividad y el acceso efectivo. Usala para preguntas sobre PAY0, HUGO, ASSETS o TTT.",
     parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
   },
   {
     type: "function",
     name: "count_clients_for_user",
-    description: "Cuenta en PAY0 los clientes activos visibles para un usuario autorizado del mismo arbol. Usa el nombre, correo o UID en query. En PAY0, preguntas como 'cuantos usuarios tiene [persona]' significan cuantos clientes activos tiene asignados esa persona y siempre requieren esta herramienta.",
+    description: "Cuenta en PAY0 los clientes activos visibles para un usuario autorizado del mismo arbol. Usa nombre o correo. Para yo, mi usuario o mi cuenta usa count_my_visible_clients. Si una variante fonetica apunta al usuario actual, confirma antes de contar.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -30,8 +30,14 @@ export const realtimeTools = [
   },
   {
     type: "function",
+    name: "get_latest_solicitud",
+    description: "Obtiene deterministicamente la solicitud PAY0 mas reciente visible, ordenada por createdAt descendente dentro del rootId autorizado. Para preguntas como que cliente hizo la ultima solicitud. Devuelve solo la respuesta autorizada; no escribe.",
+    parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+  },
+  {
+    type: "function",
     name: "query_received_payments",
-    description: "Consulta deterministicamente pagos PAY0 ordenados por la fecha canonica recibida. Usa LATEST para el ultimo, LIST para los ultimos hasta cinco y PREVIOUS para el inmediatamente anterior. Es lectura; nunca crea, concilia ni aplica pagos.",
+    description: "Consulta deterministicamente pagos PAY0 solo cuando el usuario dice pago o pagos, ordenados por la fecha canonica recibida. Nunca interpretes movimiento o actividad ambiguos como pago. Es lectura; nunca crea, concilia ni aplica pagos.",
     parameters: {
       type: "object", additionalProperties: false,
       properties: {
@@ -68,7 +74,7 @@ export const realtimeTools = [
   {
     type: "function",
     name: "delegate_to_hugo_core",
-    description: "Delega exclusivamente una tarea cognitiva compleja o una consulta PAY0 que no cubran las herramientas deterministicas disponibles.",
+    description: "Delega una consulta PAY0 no cubierta. Delega siempre 'ultimo movimiento' o 'ultima actividad' sin dominio para que Hugo Core pida aclarar pago, solicitud, dispersion o actividad operativa; no asumas pagos.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -85,6 +91,7 @@ export function delegationForRealtimeTool(name, args = {}) {
   if (name === "get_system_catalog") return { request: "¿Cuáles son los sistemas disponibles?", toolName: "getSystemCatalog", toolInput: {} };
   if (name === "count_clients_for_user") return { request: `¿Cuántos clientes tiene el usuario ${String(args.query || "").trim()}?`, toolName: "countClientsForUser", toolInput: { query: String(args.query || "").trim() } };
   if (name === "count_my_visible_clients") return { request: "¿Cuántos clientes activos puedo ver?", toolName: "countClientsForCurrentUser", toolInput: {} };
+  if (name === "get_latest_solicitud") return { request: "¿Qué cliente hizo la última solicitud?", toolName: "getLatestSolicitud", toolInput: {} };
   if (name === "query_received_payments") {
     const operation = ["LATEST", "LIST", "PREVIOUS"].includes(args.operation) ? args.operation : "LATEST";
     return { request: operation === "PREVIOUS" ? "¿Y el pago recibido anterior?" : operation === "LIST" ? "Muéstrame los últimos pagos recibidos." : "¿Cuál fue el último pago recibido en PAY0?",

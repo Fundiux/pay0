@@ -1,6 +1,7 @@
 export const HUGO_READ_TOOLS = {
   getSolicitud: { description: "Consulta una solicitud por folio", input: "folio", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   searchSolicitudes: { description: "Muestra solicitudes recientes", input: "limit", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
+  getLatestSolicitud: { description: "Obtiene la solicitud mas reciente por createdAt dentro de la raiz autorizada", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getPago: { description: "Consulta un pago por folio", input: "folio", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   searchPagos: { description: "Muestra pagos recientes", input: "limit", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   searchReceivedPagos: { description: "Consulta pagos por fecha canónica de recepción", input: "receivedPaymentQuery", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },

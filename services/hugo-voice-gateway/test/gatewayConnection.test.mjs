@@ -10,10 +10,10 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 test("tool failures expose only the stable operational taxonomy", () => {
-  assert.deepEqual(safeToolFailure(Object.assign(Error("secret"), { code: "permission-denied" })), { errorCategory: "AUTHORIZATION_DENIED", errorCode: "PERMISSION_DENIED", retryable: false });
-  assert.deepEqual(safeToolFailure(Error("DEADLINE_EXCEEDED")), { errorCategory: "BACKEND_TIMEOUT", errorCode: "DEADLINE_EXCEEDED", retryable: true });
-  assert.deepEqual(safeToolFailure(Error("UNAVAILABLE")), { errorCategory: "CONNECTOR_UNAVAILABLE", errorCode: "UNAVAILABLE", retryable: true });
-  assert.deepEqual(safeToolFailure(Error("sensitive backend detail")), { errorCategory: "INTERNAL_ERROR", errorCode: "GATEWAY_REQUEST_FAILED", retryable: true });
+  assert.deepEqual(safeToolFailure(Object.assign(Error("secret"), { code: "permission-denied" })), { errorCategory: "PERMISSION_DENIED", errorCode: "PERMISSION_DENIED", retryable: false });
+  assert.deepEqual(safeToolFailure(Error("DEADLINE_EXCEEDED")), { errorCategory: "TIMEOUT", errorCode: "DEADLINE_EXCEEDED", retryable: true });
+  assert.deepEqual(safeToolFailure(Error("UNAVAILABLE")), { errorCategory: "CONNECTOR_ERROR", errorCode: "UNAVAILABLE", retryable: true });
+  assert.deepEqual(safeToolFailure(Error("sensitive backend detail")), { errorCategory: "INTERNAL", errorCode: "GATEWAY_REQUEST_FAILED", retryable: true });
 });
 
 class Socket extends EventEmitter {

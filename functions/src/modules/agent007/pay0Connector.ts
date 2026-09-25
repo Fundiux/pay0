@@ -1,4 +1,4 @@
-import { Firestore } from "firebase-admin/firestore";
+import { FieldPath, Firestore } from "firebase-admin/firestore";
 
 export type Pay0Identity = { uid: string; rootId: string; role: "superadmin" };
 export type Completeness = "COMPLETE" | "PARTIAL" | "UNKNOWN";
@@ -12,7 +12,7 @@ const safeId = (value: string) => Boolean(value && value.length <= 160 && !value
 const solicitudView = (row: any) => ({ id: row.id, rootId: row.rootId, folio: row.folio || null, folioIq: row.folioIq || null,
   cliente: row.clientName || row.clienteNombre || row.cliente || null, empresa: row.companyName || row.empresaNombre || row.empresa || null,
   monto: Number(row.amount || row.monto || row.total || 0), estado: row.status || row.estatus || null, status: row.status || row.estatus || null,
-  factura: row.factura || row.invoiceNumber || null, facturamaStatus: row.facturamaStatus || null,
+  factura: row.factura || row.invoiceNumber || null, facturamaStatus: row.facturamaStatus || null, createdAt: date(row.createdAt),
   claveSat: row.satProductCode || row.ocFiscalMetadata?.productCode || null, unidadSat: row.satUnitCode || row.ocFiscalMetadata?.unitCode || null });
 const pagoView = (row: any) => {
   const receivedAt = date(row.reportDateAt || row.fechaPago || row.createdAt);
@@ -74,6 +74,11 @@ export class Pay0Connector {
   searchSolicitudes(limit = 40) { return this.query("searchSolicitudes", "solicitud", async () => {
     const rows = await this.recent("solicitudes", limit);
     return { rows, data: rows.map(solicitudView), completeness: "PARTIAL" as const };
+  }); }
+  getLatestSolicitud() { return this.query("getLatestSolicitud", "solicitud", async () => {
+    const snap = await this.db.collection("solicitudes").where("rootId", "==", this.identity.rootId).orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(1).get();
+    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Record<string, any> & { id: string }));
+    return { rows, data: { item: rows[0] ? solicitudView(rows[0]) : null, order: { field: "createdAt", direction: "desc", semantic: "SOLICITUD_CREATED_AT" }, statusPolicy: "ALL_CANONICAL_STATUSES" }, completeness: "COMPLETE" as const };
   }); }
   getPago(folio: string) { return this.query("getPago", "pago", async () => {
     const rows = await this.byFolio("pagos", folio);
