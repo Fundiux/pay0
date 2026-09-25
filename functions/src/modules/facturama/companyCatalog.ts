@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { HttpsError } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -27,6 +27,10 @@ const ALLOWED_STATUS = new Set(["AUTORIZADO", "CONDICIONADO", "REVISIÓN"]);
 const ACTIVE_STATUS = "ACTIVE";
 const MAX_CATALOG_BYTES = 1024 * 1024;
 const MAX_CATALOG_ROWS = 500;
+
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 
 export type CompanyCatalogEntry = {
   productCode: string;
@@ -93,6 +97,7 @@ function readCellValue(cellXml: string, sharedStrings: string[]): string {
 }
 
 export async function parseCompanyInvoiceCatalogWorkbook(buffer: Buffer): Promise<CompanyCatalogEntry[]> {
+    const JSZip = getJsZip();
     const zip = await JSZip.loadAsync(buffer);
     const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
     const sharedStrings = [...sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((match) => xmlText(match[1]));

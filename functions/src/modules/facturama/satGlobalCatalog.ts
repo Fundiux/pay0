@@ -8,8 +8,13 @@ import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallabl
 
 // Both libraries are pure JavaScript/WASM.  A native SQLite module would make
 // Cloud Functions deployments platform-dependent.
-const Bunzip: { decode(input: Buffer): Buffer } = require("seek-bzip");
-const initSqlJs: (config: { locateFile: (name: string) => string }) => Promise<any> = require("sql.js");
+function getBunzip(): { decode(input: Buffer): Buffer } {
+  return require("seek-bzip");
+}
+
+function getSqlJs(): (config: { locateFile: (name: string) => string }) => Promise<any> {
+  return require("sql.js");
+}
 
 const MAX_BZIP_BYTES = 40 * 1024 * 1024;
 const MAX_SQLITE_BYTES = 140 * 1024 * 1024;
@@ -83,9 +88,9 @@ function rows(dbHandle: any, query: string, params: unknown[]): any[][] {
 async function parseSatSqlite(bzip: Buffer, asOf: string): Promise<{ products: SatProduct[]; units: SatUnit[] }> {
   if (bzip.length > MAX_BZIP_BYTES || bzip.subarray(0, 3).toString("ascii") !== "BZh") throw new HttpsError("invalid-argument", "El archivo no es una base SQLite comprimida BZip2 válida.");
   let raw: Buffer;
-  try { raw = Bunzip.decode(bzip); } catch { throw new HttpsError("invalid-argument", "No se pudo descomprimir el catálogo SAT."); }
+  try { raw = getBunzip().decode(bzip); } catch { throw new HttpsError("invalid-argument", "No se pudo descomprimir el catálogo SAT."); }
   if (raw.length > MAX_SQLITE_BYTES || raw.subarray(0, 16).toString("ascii") !== "SQLite format 3\u0000") throw new HttpsError("invalid-argument", "La descompresión no contiene una base SQLite válida.");
-  const SQL = await initSqlJs({ locateFile: (name) => require.resolve(`sql.js/dist/${name}`) });
+  const SQL = await getSqlJs()({ locateFile: (name) => require.resolve(`sql.js/dist/${name}`) });
   const database = new SQL.Database(new Uint8Array(raw));
   try {
     const names = new Set(rows(database, "SELECT name FROM sqlite_master WHERE type='table'", []).map((row) => String(row[0])));

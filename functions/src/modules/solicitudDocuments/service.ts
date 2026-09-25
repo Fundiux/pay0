@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
@@ -13,6 +13,10 @@ import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/serv
 if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
+
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 function isSolicitudIqTerminalForReplacementH4D58H(solicitud: Record<string, unknown>): boolean {
   if (solicitud.iqTerminalLocked === true) return true;
   if (solicitud.iqSolicitudTerminalLocked === true) return true;
@@ -130,7 +134,7 @@ async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<O
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
 export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
-  const zip = await JSZip.loadAsync(buffer);
+  const zip = await getJsZip().loadAsync(buffer);
   const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
   const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => xmlValue(match[1]));
   const sheetNames = Object.keys(zip.files).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));

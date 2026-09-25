@@ -71,6 +71,7 @@
     "qa:client-csf-create": "npm --prefix functions run build && firebase emulators:exec --project demo-pay0 --only firestore,storage \"node qa/scripts/client-csf-create-regression.cjs\"",
     "qa:document-ui": "node --experimental-strip-types qa/scripts/authorized-document-ui-integration.mjs",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
+    "qa:functions-discovery": "node qa/scripts/verify-functions-discovery-startup.cjs",
     "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs"
   },
   "dependencies": {

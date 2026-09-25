@@ -1,8 +1,20 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
-const pdfParse = require("pdf-parse");
-const { ImageAnnotatorClient } = require("@google-cloud/vision").v1;
-const visionClient = new ImageAnnotatorClient();
+let pdfParser: any;
+let visionClient: any;
+
+function getPdfParser(): any {
+  if (!pdfParser) pdfParser = require("pdf-parse");
+  return pdfParser;
+}
+
+function getVisionClient(): any {
+  if (!visionClient) {
+    const { ImageAnnotatorClient } = require("@google-cloud/vision").v1;
+    visionClient = new ImageAnnotatorClient();
+  }
+  return visionClient;
+}
 
 type ReceiptData = {
   senderName: string;
@@ -330,8 +342,9 @@ function detectReceiptContentType(input: {
 }
 
 async function extractVisionOcrText(buffer: Buffer, contentType: string): Promise<string> {
+  const client = getVisionClient();
   if (contentType === "application/pdf") {
-    const [result] = await visionClient.batchAnnotateFiles({
+    const [result] = await client.batchAnnotateFiles({
       requests: [
         {
           inputConfig: {
@@ -370,7 +383,7 @@ async function extractVisionOcrText(buffer: Buffer, contentType: string): Promis
       .join("\n");
   }
 
-  const [response] = await visionClient.documentTextDetection({
+  const [response] = await client.documentTextDetection({
     image: {
       content: buffer,
     },
@@ -599,7 +612,7 @@ export const parsePagoReceiptPdf = onCall(
 
     if (contentType === "application/pdf") {
       try {
-        const parsed = await pdfParse(buffer);
+        const parsed = await getPdfParser()(buffer);
         text = clean(parsed?.text);
 
         if (text) {

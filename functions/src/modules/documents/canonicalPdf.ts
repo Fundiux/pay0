@@ -1,6 +1,5 @@
-import PDFDocument from "pdfkit";
+import type PDFKit from "pdfkit";
 import QRCode from "qrcode";
-import { PDFDocument as PDFLibDocument, StandardFonts, rgb } from "pdf-lib";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
@@ -11,6 +10,14 @@ const muted = "#5D6A75";
 
 type Pdf = PDFKit.PDFDocument;
 const trostreLogoPath = resolve(__dirname, "../../assets/Trostre.png");
+
+function getPdfKit(): any {
+  return require("pdfkit");
+}
+
+function getPdfLib(): any {
+  return require("pdf-lib");
+}
 
 function companyBrand(doc: Pdf, fallback: string, companyRfc: string, x: number, y: number): void {
   const canonicalLogoPath = resolve(__dirname, `../../assets/companies/${companyRfc}.png`);
@@ -40,6 +47,7 @@ function date(value = new Date()): string {
 
 function document(draw: (doc: Pdf) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const PDFDocument = getPdfKit();
     const doc = new PDFDocument({ size: "A4", margin: 36, info: { Creator: "PAY0", Producer: "PAY0 canonical document renderer" } });
     const parts: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => parts.push(chunk));
@@ -157,6 +165,7 @@ async function renderCanonicalQuoteHtmlPdf(input: QuotePdfInput): Promise<Buffer
  * colors, tables, and layout do not silently fall back to a generic PAY0 PDF.
  */
 async function renderPublishedQuoteTemplate(input: QuotePdfInput, templatePath: string): Promise<Buffer> {
+  const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = getPdfLib();
   const pdf = await PDFLibDocument.load(readFileSync(templatePath));
   const page = pdf.getPage(0);
   const { height } = page.getSize();

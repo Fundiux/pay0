@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { createHash } from "crypto";
 import { defineSecret } from "firebase-functions/params";
 import { db } from "../sharedCallables/helpers";
@@ -12,6 +12,10 @@ import { saveComplementDocuments, validateRep } from "./complementDocuments";
 import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
 import { readIqRepDepositFields } from "./iqRepDepositFields";
 import { sanitizeIqOperationalError } from "./iqOperationalError";
+
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME"), PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
 export const COMPLEMENT_SECRETS = [IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY, USERNAME, PASSWORD];
@@ -145,7 +149,7 @@ async function boundedDownload(initial: string, job?: any) {
 }
 export async function validateIqRepAttachmentDownload(url: string, source: any, job: any) {
   const archive = await boundedDownload(url, job);
-  const zip = await JSZip.loadAsync(archive);
+  const zip = await getJsZip().loadAsync(archive);
   const files = Object.values(zip.files).filter(file => !file.dir);
   if (files.length > 30 || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000)
     throw Error("REP_ZIP_LIMIT");
@@ -167,7 +171,7 @@ export async function validateIqRepAttachmentDownload(url: string, source: any, 
     xmlBytes: match.xml.length, pdfBytes: match.pdf.length, validated: true };
 }
 export async function importIqComplement(url: string, sources: any[], job?: any) {
-  const zip = await JSZip.loadAsync(await boundedDownload(url, job));
+  const zip = await getJsZip().loadAsync(await boundedDownload(url, job));
   const files = Object.values(zip.files).filter(file => !file.dir);
   if (files.length > 30 || files.some(file => Number((file as any)._data?.uncompressedSize || 0) > 10_000_000) || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000) throw Error("REP_ZIP_LIMIT");
   const xmlFiles = files.filter(file => /\.xml$/i.test(file.name)), result = [];
