@@ -199,10 +199,12 @@ export const sendAgent007Message = onCall(
     const router = new HugoToolRouter(identity, {
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
+      searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
       getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
-      countClientsForUser: ({ query }) => platform.countClientsForUser(query),
+      countClientsForUser: ({ query }) => platform.countClientsForUser(query), countClientsForCurrentUser: () => platform.countClientsForCurrentUser(),
+      getSessionContext: () => platform.getSessionContext(), getLastOperationDiagnostic: () => platform.getLastOperationDiagnostic(),
     });
     const modelRouter = new HugoModelRouter();
     const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);

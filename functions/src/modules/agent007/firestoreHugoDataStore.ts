@@ -75,6 +75,12 @@ export class FirestoreHugoDataStore implements HugoDataStore {
     await batch.commit();
     return { id: assistantMessage.id, createdAt: now };
   }
+  async saveVoiceOperationalState(input: { rootId: string; uid: string; resumeContext?: Record<string, any>; diagnostic: Record<string, any> }) {
+    const conversationId = `${this.scope(input.rootId)}_${input.uid}_global`;
+    if (!valid(input.uid) || !this.ownsConversation(input.rootId, input.uid, conversationId)) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
+    await this.db.collection("agent007Conversations").doc(conversationId).set({ rootId: input.rootId, ownerUid: input.uid, participantUids: [input.uid], status: "ACTIVE",
+      ...(input.resumeContext ? { resumeContext: input.resumeContext } : {}), lastOperationDiagnostic: input.diagnostic, updatedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
   async saveErrorTrace(rootId: string, traceId: string, payload: Record<string, any>) {
     await this.db.collection("agent007Traces").doc(traceId).create({ ...payload, rootId: this.scope(rootId), traceId });
   }

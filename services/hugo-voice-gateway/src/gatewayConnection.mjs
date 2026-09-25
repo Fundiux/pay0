@@ -9,7 +9,19 @@ const safeErrorCodes = new Set(["CANARY_NOT_ALLOWED", "UNAUTHENTICATED", "AUTHEN
 export function classifyRequestError(error) {
   if (safeErrorCodes.has(error?.message)) return error.message;
   if (typeof error?.code === "string" && error.code.startsWith("auth/")) return "AUTHENTICATION_FAILED";
+  if (typeof error?.code === "string") {
+    const normalized = error.code.replace(/^functions\//, "").replace(/-/g, "_").toUpperCase();
+    if (safeErrorCodes.has(normalized)) return normalized;
+  }
   return "GATEWAY_REQUEST_FAILED";
+}
+
+export function safeToolFailure(error) {
+  const code = classifyRequestError(error);
+  if (code === "PERMISSION_DENIED") return { errorCategory: "AUTHORIZATION_DENIED", errorCode: code, retryable: false };
+  if (code === "DEADLINE_EXCEEDED") return { errorCategory: "BACKEND_TIMEOUT", errorCode: code, retryable: true };
+  if (code === "UNAVAILABLE") return { errorCategory: "CONNECTOR_UNAVAILABLE", errorCode: code, retryable: true };
+  return { errorCategory: "INTERNAL_ERROR", errorCode: code, retryable: true };
 }
 
 function withTimeout(operation, timeoutMs, code) {
@@ -109,7 +121,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
           send({ type: "gateway.tool_completed", sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null });
           if (continuations.outputDelivered(callResponseId, toolCallId)) sideband.send(JSON.stringify({ type: "response.create" }));
           log("gateway.tool_completed", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null, latencyMs: Date.now() - toolStartedAt, cost: result.cost || null });
-        } catch (error) { if (!active() || controller.signal.aborted) return; registry.fail(toolCallId); if (error.name !== "AbortError") { sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ error: "HUGO_CORE_UNAVAILABLE" }) } })); if (continuations.outputDelivered(callResponseId, toolCallId)) sideband.send(JSON.stringify({ type: "response.create" })); log("gateway.tool_failed", { sessionId, turnId, responseId: callResponseId, toolCallId, code: classifyRequestError(error) }); } } finally { controllers.delete(toolCallId); }
+        } catch (error) { if (!active() || controller.signal.aborted) return; registry.fail(toolCallId); if (error.name !== "AbortError") { const failure = safeToolFailure(error); sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ status: "ERROR", ...failure }) } })); if (continuations.outputDelivered(callResponseId, toolCallId)) sideband.send(JSON.stringify({ type: "response.create" })); log("gateway.tool_failed", { sessionId, turnId, responseId: callResponseId, toolCallId, code: failure.errorCode, errorCategory: failure.errorCategory, retryable: failure.retryable }); } } finally { controllers.delete(toolCallId); }
       }
     } catch (error) { reject(error); }
   };

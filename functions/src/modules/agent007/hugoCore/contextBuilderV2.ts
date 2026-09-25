@@ -5,7 +5,7 @@ import { HugoEntityReference, memoryPriority, RetrievedMemory } from "./memoryCo
 import { ContextPiece, RecentEntity } from "./contextBuilder";
 
 export const CONTEXT_BUILDER_VERSION = "context-v2";
-export type EvidenceBoundary = { completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; scope: "ROOT_AGGREGATE" | "EXACT_FOLIO" | "RECENT_SAMPLE" | "CONFIGURATION"; meaning: string; totalAllowed: boolean };
+export type EvidenceBoundary = { completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; scope: "ROOT_AGGREGATE" | "EXACT_FOLIO" | "ORDERED_WINDOW" | "RECENT_SAMPLE" | "CONFIGURATION"; meaning: string; totalAllowed: boolean };
 export type MemoryUsage = { considered: number; selected: number; included: number; idsConsidered: string[]; includedReferences: Array<{ id: string; kind: string; status: string; reason: string }>; legacyObservationsConsidered: number; legacyObservationsIncluded: number; approximateTokens: number };
 const boundary = (completeness: EvidenceBoundary["completeness"], scope: EvidenceBoundary["scope"]): EvidenceBoundary => ({ completeness, scope,
   meaning: completeness === "PARTIAL" ? "Muestra limitada: no establece totales, ausencia global ni exhaustividad." : completeness === "UNKNOWN" ? "Evidencia insuficiente para establecer este hecho." : `Resultado completo únicamente dentro de ${scope}.`,
@@ -45,26 +45,36 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const folios = resolution.folios;
   const normalizedMessage = input.message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const userClientQuestion = (/\bclientes?\b/i.test(normalizedMessage) && /\b(usuario|usuaria|asignados?|pertenecen?)\b/i.test(normalizedMessage))
-    || /\bcuantos?\s+usuarios?\s+tiene\b/i.test(normalizedMessage);
+    || /\bcuantos?\s+usuarios?\s+tiene\b/i.test(normalizedMessage)
+    || /\bclientes?\s+(?:activos?\s+)?visibles?\s+(?:para|por|tiene)\b/i.test(normalizedMessage);
   const accessQuestion = /\b(a que (tienes|tengo) acceso|que puedes (ver|hacer|consultar)|permisos?|capacidades)\b/i.test(normalizedMessage);
   const systemsQuestion = /\b(sistemas?|plataformas?|aplicaciones?)\b/i.test(normalizedMessage);
+  const currentUserClientQuestion = /\bclientes?\b/i.test(normalizedMessage) && /\b(cuantos?|total)\b/i.test(normalizedMessage) && /\b(puedo ver|tengo|mi usuario|mi cuenta|mi sesion|mios?)\b/i.test(normalizedMessage);
+  const paymentQuestion = /\bpagos?\b/i.test(normalizedMessage);
+  const previousPaymentQuestion = /\b(anterior|previo)\b/i.test(normalizedMessage) && resolution.state.activeEntity?.entityType === "PAGO";
+  const latestPaymentQuestion = paymentQuestion && /\b(ultimo|reciente|recibido)\b/i.test(normalizedMessage);
+  const listPaymentQuestion = paymentQuestion && /\b(ultimos?|muestra|muestrame|lista)\b/i.test(normalizedMessage);
+  const requestedPaymentLimit = Math.min(Math.max(Number(normalizedMessage.match(/\b([1-5])\b/)?.[1] || (listPaymentQuestion ? 5 : 1)), 1), 5);
+  const paymentDetailFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(cuanto|monto|importe|quien|hizo|pagador|conciliad|estado|estatus)\b/i.test(normalizedMessage);
+  const paymentComplementFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(complemento|rep)\b/i.test(normalizedMessage);
   const userQuery = normalizedMessage.match(/\b(?:usuario|usuaria)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bclientes?\s+(?:asignados?\s+)?(?:a|de)\s+([^?.,]{2,80})/i)?.[1]?.trim()
+    || normalizedMessage.match(/\bclientes?\s+(?:activos?\s+)?visibles?\s+(?:para|por|tiene)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bcuantos?\s+usuarios?\s+tiene\s+([^?.,]{2,80})/i)?.[1]?.trim();
-  const requests: ToolRequest[] = userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : folios.length ? [
+  const requests: ToolRequest[] = currentUserClientQuestion ? [{ name: "countClientsForCurrentUser", input: {} }] : userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : previousPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: 1, beforePaymentId: resolution.state.activeEntity!.entityId, position: "PREVIOUS" } }] : latestPaymentQuestion || listPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: requestedPaymentLimit, position: "LATEST" } }] : paymentDetailFollowup ? [{ name: "getPagoById", input: { paymentId: resolution.state.activeEntity!.entityId } }] : paymentComplementFollowup ? [{ name: "getPaymentComplementStatus", input: { folio: resolution.state.activeEntity!.folio } }] : folios.length ? [
     ...folios.filter(x => x.startsWith("S")).map(folio => ({ name: "getSolicitud" as const, input: { folio } })),
     ...folios.filter(x => x.startsWith("P")).map(folio => ({ name: "getPago" as const, input: { folio } })),
     { name: "getPaymentComplementStatus", input: folios.length === 1 ? { folio: folios[0] } : {} }, { name: "getIqCapabilities", input: {} },
   ] : [{ name: "searchSolicitudes", input: { limit: 40 } }, { name: "searchPagos", input: { limit: 30 } }, { name: "getPaymentComplementStatus", input: {} }, { name: "getIqCapabilities", input: {} }];
   const results = await Promise.all(requests.map(row => input.router.execute(row)));
   const by = (name: ToolRequest["name"]) => results.filter(row => row.tool === name);
-  const solicitudResults = [...by("getSolicitud"), ...by("searchSolicitudes")], pagoResults = [...by("getPago"), ...by("searchPagos")];
+  const solicitudResults = [...by("getSolicitud"), ...by("searchSolicitudes")], pagoResults = [...by("getPago"), ...by("searchPagos"), ...by("getPagoById"), ...by("searchReceivedPagos")];
   const solicitudes = solicitudResults.flatMap(row => asRows(row.data)).slice(0, 8);
-  const pagos = pagoResults.flatMap(row => asRows(row.data)).slice(0, 6);
+  const pagos = pagoResults.flatMap(row => row.tool === "searchReceivedPagos" ? asRows(row.data?.items) : asRows(row.data)).slice(0, 6);
   const references: HugoEntityReference[] = [...solicitudes.map(row => ({ sourceSystem: "PAY0", entityType: "SOLICITUD", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) })),
     ...pagos.map(row => ({ sourceSystem: "PAY0", entityType: "PAGO", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) }))].filter(row => row.entityId && row.displayReference).slice(0, folios.length ? 3 : 2);
-  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "")).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
-    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: "PAY0_EXACT_TOOL", confidence: 1 }));
+  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
+    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
   const nextState = advanceConversationState(resolution, resolved, input.rootId);
   const relevantRefs = folios.length ? references : [];
   const retrieval = input.dataStore && relevantRefs.length ? await input.dataStore.retrieveMemory({ rootId: input.rootId, entityReferences: relevantRefs, intent: resolution.intent, limit: 4, now: new Date(now).toISOString() }) :
@@ -93,15 +103,15 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   }
   const observationContext = legacyIncluded.map(row => ({ id: row.id, sourceEvent: row.sourceEvent, status: row.verificationStatus, outcome: compact(row.outcome), relevanceReason: row.relevanceReason }));
   const scopeFor = (rows: ToolResult[], fallback: EvidenceBoundary["scope"]) => rows.map(row => boundary(row.completeness, row.tool.startsWith("get") ? "EXACT_FOLIO" : fallback));
-  const boundaries = { solicitudes: scopeFor(solicitudResults, "RECENT_SAMPLE"), pagos: scopeFor(pagoResults, "RECENT_SAMPLE"),
+  const boundaries = { solicitudes: scopeFor(solicitudResults, "RECENT_SAMPLE"), pagos: pagoResults.map(row => boundary(row.completeness, row.tool === "searchReceivedPagos" ? "ORDERED_WINDOW" : row.tool.startsWith("get") ? "EXACT_FOLIO" : "RECENT_SAMPLE")),
     complementos: by("getPaymentComplementStatus").map(row => boundary(row.completeness, "RECENT_SAMPLE")), capacidadesIq: by("getIqCapabilities").map(row => boundary(row.completeness, "CONFIGURATION")) };
   const context = { schemaVersion: CONTEXT_BUILDER_VERSION, questionIntent: resolution.intent, referenceResolution: resolution.reason, folioConsultado: folios.length === 1 ? folios[0] : null,
-    platformFacts: { clientCount: by("countClientsForUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null },
+    platformFacts: { clientCount: by("countClientsForUser")[0]?.data || by("countClientsForCurrentUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null },
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),
     solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
-    pagos: pagos.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado,
+    pagos: pagos.map(row => ({ id: row.id, folio: row.folio, monto: row.monto, moneda: row.moneda, estado: row.estado, pagador: row.pagador, pagadorFuente: row.pagadorFuente, conciliado: row.conciliado, recibidoAt: row.recibidoAt, registradoAt: row.registradoAt,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     complementosPendientes: asRows(by("getPaymentComplementStatus")[0]?.data).filter(row => row.status !== "RECEIVED" && row.status !== "VOIDED").slice(0, 6).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.status, enviadoAlProveedor: row.externalRequestSent === true })),
     capacidadesIq: by("getIqCapabilities")[0]?.data || {}, memoriasHistoricas: memoryContext, observacionesHistoricasNoVerificadas: observationContext, memoryConflicts,

@@ -4,6 +4,7 @@ import { getEffectiveUserModules } from "../users/authorization";
 import { resolveClientOperationalAccess } from "../clientDelegations/access";
 import type { Pay0ToolResult } from "./pay0Connector";
 import { HUGO_SYSTEM_CATALOG } from "./systemCatalog";
+import { HUGO_READ_TOOLS } from "./hugoCore/toolRouter";
 
 const normalize = (value: unknown) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 export function userQueryMatchLevel(query: string, values: unknown[]) {
@@ -30,7 +31,12 @@ export class PlatformReadConnector {
   }
   async getAuthorizedCapabilities() {
     const modules = getEffectiveUserModules(this.user);
-    return this.result("getAuthorizedCapabilities", { role: this.identity.role, modules }, "authorization", [this.identity.uid]);
+    const capabilities = Object.entries(HUGO_READ_TOOLS).map(([id, spec]) => {
+      const module = /Pago|Complement/.test(id) ? "pagos" : /Client/.test(id) ? "clientes" : /Authorized|System|Session|Diagnostic/.test(id) ? "hugo" : "solicitudes";
+      const authorized = this.identity.role === "superadmin" || modules[module]?.view === true;
+      return { id: `pay0.${id}`, system: spec.owner, kind: "DATA", risk: spec.sideEffect === "NONE" ? "READ" : "SIDE_EFFECT", registered: true, authorized, availability: authorized ? "REGISTERED" : "DENIED", health: "NOT_PROBED" };
+    });
+    return this.result("getAuthorizedCapabilities", { role: this.identity.role, modules, capabilities }, "authorization", [this.identity.uid]);
   }
   async getSystemCatalog() {
     const modules = getEffectiveUserModules(this.user);
@@ -56,9 +62,51 @@ export class PlatformReadConnector {
     let count = 0;
     for (const client of candidates.docs) {
       const row: any = client.data();
+      if (row.active === false) continue;
       const access = await resolveClientOperationalAccess({ uid: target.id, role: targetRole as any, rootId: this.identity.rootId, clientId: client.id, client: row });
-      if (access.allowed && access.permissions.view === true && row.active !== false) count++;
+      if (access.allowed && access.permissions.view === true) count++;
     }
     return this.result("countClientsForUser", { matchStatus: "EXACT", user: { uid: target.id, displayName: targetData.displayName || targetData.nombreUsuario || null }, clientCount: count }, "user", [target.id]);
+  }
+  async countClientsForCurrentUser() {
+    assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "clientes", requiredAction: "view" });
+    const candidates = await this.db.collection("clients").where("rootId", "==", this.identity.rootId).get();
+    let count = 0;
+    for (const client of candidates.docs) {
+      const row: any = client.data();
+      if (row.active === false) continue;
+      const access = await resolveClientOperationalAccess({ uid: this.identity.uid, role: this.identity.role, rootId: this.identity.rootId, clientId: client.id, client: row });
+      if (access.allowed && access.permissions.view === true) count++;
+    }
+    return this.result("countClientsForCurrentUser", { matchStatus: "CURRENT_USER", clientCount: count }, "authorization", [this.identity.uid]);
+  }
+  async getSessionContext() {
+    const conversationId = `${this.identity.rootId}_${this.identity.uid}_global`;
+    const snap = await this.db.collection("agent007Conversations").doc(conversationId).get();
+    const row: any = snap.data();
+    const owned = snap.exists && row?.rootId === this.identity.rootId && row?.ownerUid === this.identity.uid;
+    const candidate = owned && row?.resumeContext && typeof row.resumeContext === "object" ? row.resumeContext : null;
+    const updatedAtMs = candidate?.updatedAt ? Date.parse(String(candidate.updatedAt)) : NaN;
+    const resume = candidate && Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs <= 30 * 60 * 1000 ? candidate : null;
+    return this.result("getSessionContext", resume ? {
+      activeSystem: resume.activeSystem || null, activeIntent: resume.activeIntent || null, language: resume.language || "es-MX",
+      lastResolvedEntity: resume.lastResolvedEntity && typeof resume.lastResolvedEntity === "object" ? {
+        system: resume.lastResolvedEntity.system || null, type: resume.lastResolvedEntity.type || null,
+        safeId: resume.lastResolvedEntity.safeId || null, folio: resume.lastResolvedEntity.folio || null,
+        operation: resume.lastResolvedEntity.operation || null,
+      } : null,
+    } : { activeSystem: null, activeIntent: null, language: "es-MX", lastResolvedEntity: null }, "sessionContext");
+  }
+  async getLastOperationDiagnostic() {
+    const conversationId = `${this.identity.rootId}_${this.identity.uid}_global`;
+    const snap = await this.db.collection("agent007Conversations").doc(conversationId).get();
+    const row: any = snap.data();
+    const diagnostic = snap.exists && row?.rootId === this.identity.rootId && row?.ownerUid === this.identity.uid && row?.lastOperationDiagnostic && typeof row.lastOperationDiagnostic === "object"
+      ? row.lastOperationDiagnostic : null;
+    return this.result("getLastOperationDiagnostic", diagnostic ? {
+      system: diagnostic.system || null, intent: diagnostic.intent || null, capability: diagnostic.capability || null,
+      status: diagnostic.status || null, errorCategory: diagnostic.errorCategory || null, errorCode: diagnostic.errorCode || null,
+      retryable: diagnostic.retryable === true, authorization: diagnostic.authorization || null, connectorStatus: diagnostic.connectorStatus || null,
+    } : null, "operationDiagnostic");
   }
 }
