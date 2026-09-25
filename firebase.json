@@ -50,6 +50,7 @@
                   },
     "hosting":  {
                     "predeploy":  [
+                                       "npm run qa:frontend-build-env",
                                        "node qa/scripts/verify-release-baseline.mjs",
                                        "npm run qa:document-access"
                                    ],
