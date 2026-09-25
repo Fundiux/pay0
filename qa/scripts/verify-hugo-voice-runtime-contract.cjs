@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 const component = fs.readFileSync("src/components/hugo/HugoRealtimeVoice.tsx", "utf8");
-const gateway = fs.readFileSync("services/hugo-voice-gateway/src/server.mjs", "utf8");
+const gateway = fs.readFileSync("services/hugo-voice-gateway/src/server.mjs", "utf8") + fs.readFileSync("services/hugo-voice-gateway/src/gatewayConnection.mjs", "utf8");
 const tools = fs.readFileSync("services/hugo-voice-gateway/src/realtimeTools.mjs", "utf8");
 const history = fs.readFileSync("functions/src/modules/agent007/voiceHistory.ts", "utf8");
 
@@ -16,8 +16,8 @@ assert.doesNotMatch(component, /voiceCanary/);
 for (const tool of ["get_authorized_capabilities", "get_system_catalog", "count_clients_for_user", "delegate_to_hugo_core"]) {
   assert.match(tools, new RegExp(`name: "${tool}"`));
 }
-assert.match(gateway, /authorize\(token\)/);
-assert.match(gateway, /rootId: identity\.rootId/);
+assert.match(gateway, /authorize\(candidateToken, controller\.signal\)/);
+assert.match(gateway, /rootId: scope\.rootId/);
 assert.match(gateway, /function_call_output/);
 assert.match(gateway, /response\.create/);
 assert.match(history, /agent007Conversations/);

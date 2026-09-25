@@ -13,6 +13,11 @@ export const REQUIRED_FRONTEND_FIREBASE_VARIABLES = [
   "NEXT_PUBLIC_FIREBASE_APP_ID",
 ];
 
+export const REQUIRED_FRONTEND_BUILD_VARIABLES = [
+  ...REQUIRED_FRONTEND_FIREBASE_VARIABLES,
+  "NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL",
+];
+
 const PLACEHOLDER_VALUE = /^(?:undefined|null|todo|changeme|replace(?:[-_ ]?me)?|example|your[-_ ].*|<.*>)$/i;
 
 function readEnvironmentFile(filePath) {
@@ -32,6 +37,25 @@ function expectedFirebaseProjectId(cwd) {
     return String(firebaseRc?.projects?.default || "").trim() || null;
   } catch {
     throw new Error("La configuracion .firebaserc no es JSON valido.");
+  }
+}
+
+function expectedHugoVoiceGatewayUrl(cwd, expectedProjectId) {
+  try {
+    const target = JSON.parse(fs.readFileSync(path.join(cwd, "config/hugo-voice-build-target.json"), "utf8"));
+    const origin = new URL(target.origin);
+    if (
+      !target.projectId || !target.region || !target.service ||
+      (expectedProjectId && target.projectId !== expectedProjectId) ||
+      origin.protocol !== "https:" || origin.origin !== target.origin ||
+      origin.username || origin.password || origin.search || origin.hash ||
+      target.path !== "/voice"
+    ) {
+      throw new Error("invalid-target");
+    }
+    return `${origin.origin}${target.path}`;
+  } catch {
+    throw new Error("Configuracion config/hugo-voice-build-target.json no valida para NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL.");
   }
 }
 
@@ -63,7 +87,7 @@ export async function validateFrontendBuildEnvironment(environment, { cwd = proc
   const missing = [];
   const invalid = [];
 
-  for (const name of REQUIRED_FRONTEND_FIREBASE_VARIABLES) {
+  for (const name of REQUIRED_FRONTEND_BUILD_VARIABLES) {
     const value = String(environment[name] || "").trim();
     if (!value) {
       missing.push(name);
@@ -81,13 +105,20 @@ export async function validateFrontendBuildEnvironment(environment, { cwd = proc
     invalid.push("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
   }
 
+  const gatewayName = "NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL";
+  const gatewayValue = String(environment[gatewayName] || "");
+  const expectedGatewayUrl = expectedHugoVoiceGatewayUrl(cwd, expectedProjectId);
+  if (gatewayValue && gatewayValue !== expectedGatewayUrl) {
+    invalid.push(gatewayName);
+  }
+
   const uniqueInvalid = [...new Set(invalid)].filter((name) => !missing.includes(name));
   if (missing.length || uniqueInvalid.length) {
     const details = [
       missing.length ? `faltantes: ${missing.join(", ")}` : "",
       uniqueInvalid.length ? `invalidas: ${uniqueInvalid.join(", ")}` : "",
     ].filter(Boolean).join("; ");
-    throw new Error(`Configuracion Firebase frontend no valida (${details}).`);
+    throw new Error(`Configuracion frontend no valida (${details}).`);
   }
 
   const probeName = `pay0-frontend-build-env-${process.pid}-${Date.now()}`;
@@ -109,5 +140,5 @@ export async function validateFrontendBuildEnvironment(environment, { cwd = proc
     if (probeApp) await deleteApp(probeApp);
   }
 
-  return { required: REQUIRED_FRONTEND_FIREBASE_VARIABLES.length };
+  return { required: REQUIRED_FRONTEND_BUILD_VARIABLES.length };
 }
