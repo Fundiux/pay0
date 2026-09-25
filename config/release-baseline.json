@@ -89,9 +89,19 @@
       "file": "qa/scripts/authorized-document-ui-integration.mjs",
       "text": "ephemeralUrlDelivered: true",
       "capability": "La UI entrega documentos solo despues del callable autorizado"
+    },
+    {
+      "file": "qa/scripts/authorized-document-ui-integration.mjs",
+      "text": "\"MATERIALIDAD\"",
+      "capability": "BASE8601-01: Materialidad entrega documentos mediante URL HTTPS efimera"
     }
   ],
   "forbiddenText": [
+    {
+      "file": "src/app/materialidad/[id]/page.tsx",
+      "text": "getDownloadURL(",
+      "capability": "BASE8601-01: Materialidad no accede directamente a Storage"
+    },
     {
       "file": "src/app/pagos/page.tsx",
       "text": "backgroundUpload: true",

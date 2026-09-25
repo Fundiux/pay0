@@ -46,6 +46,16 @@ for (const file of [
   );
 }
 requireText(
+  "src/app/materialidad/[id]/page.tsx",
+  "getAuthorizedDocumentDownloadUrl",
+  "Materialidad descarga mediante el callable autorizado",
+);
+rejectText(
+  "src/app/materialidad/[id]/page.tsx",
+  "getDownloadURL(",
+  "Materialidad no descarga directamente desde Storage",
+);
+requireText(
   "src/components/DocsModal.tsx",
   '["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"]',
   "La solicitud conserva comprobantes y complementos relacionados",

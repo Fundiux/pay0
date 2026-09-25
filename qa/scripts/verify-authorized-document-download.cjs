@@ -22,6 +22,12 @@ async function seed(path, data) { await db.doc(path).set(data); }
 async function expectDenied(promise, label) {
   await assert.rejects(promise, /No tienes permisos|No autorizado|fuera del root|fuera de scope|no esta activo/i, label);
 }
+async function expectCode(promise, code, label) {
+  await assert.rejects(promise, (error) => {
+    assert.equal(error?.code, code, label);
+    return true;
+  });
+}
 
 (async () => {
   const users = {
@@ -45,6 +51,7 @@ async function expectDenied(promise, label) {
   const documentMatrix = [
     ...["FACTURA_PDF", "FACTURA_XML", "ORDEN_COMPRA", "COTIZACION", "EVIDENCIA_ENTREGA", "EVIDENCIA_OPERATIVA", "CONSTANCIA_RECEPCION_SATISFACCION", "OTRO"]
       .map(type => ({ id: `sol-${type}`, family: "solicitudes", parentId: `${runId}-sol`, fields: { entityType: "solicitudes", solicitudId: `${runId}-sol` }, type })),
+    { id: "sol-HISTORICO_OTRO", family: "solicitudes", parentId: `${runId}-sol`, fields: { solicitudId: `${runId}-sol` }, type: "OTRO_HISTORICO" },
     ...["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF", "OTRO"]
       .map(type => ({ id: `pago-${type}`, family: "pagos", parentId: `${runId}-pago`, fields: { entityType: "pagos", pagoId: `${runId}-pago` }, type })),
     { id: "disp-COMPROBANTE_DISPERSION", family: "dispersiones", parentId: `${runId}-disp`, fields: { entityType: "clientDispersions", dispersionId: `${runId}-disp` }, type: "COMPROBANTE_DISPERSION" },
@@ -80,8 +87,23 @@ async function expectDenied(promise, label) {
   await expectDenied(getAuthorizedDocumentDownloadUrlCore({
     auth: auth(`${runId}-adminA`), data: { uploadId: `${runId}-foreign-parent-doc` },
   }, signer), "recurso padre fuera de scope");
+  await expectCode(getAuthorizedDocumentDownloadUrlCore({
+    auth: auth(`${runId}-adminA`), data: { uploadId: `${runId}-missing-upload` },
+  }, signer), "not-found", "documento inexistente");
+  await seed(`uploads/${runId}-incomplete`, { rootId: rootA, active: true, status: "READY", solicitudId: `${runId}-sol` });
+  await expectCode(getAuthorizedDocumentDownloadUrlCore({
+    auth: auth(`${runId}-adminA`), data: { uploadId: `${runId}-incomplete` },
+  }, signer), "failed-precondition", "metadata incompleta");
+  const missingObjectId = `${runId}-missing-object`;
+  await seed(`uploads/${missingObjectId}`, {
+    rootId: rootA, active: true, status: "READY", solicitudId: `${runId}-sol`,
+    storagePath: `roots/${rootA}/solicitudes/${runId}-sol/docs/OTRO/missing`,
+  });
+  await expectCode(getAuthorizedDocumentDownloadUrlCore({
+    auth: auth(`${runId}-adminA`), data: { uploadId: missingObjectId },
+  }, async () => { const error = new Error("storage object missing"); error.code = 404; throw error; }), "not-found", "objeto Storage inexistente");
   assert.equal(signed.length, documentMatrix.length * 3, "solo accesos autorizados deben llegar al firmador");
-  console.log(JSON.stringify({ ok: true, signedDownloads: signed.length, documentTypes: documentMatrix.map(row => row.type), roles: ["superadmin", "admin", "operador"], denied: 5, externalActions: 0 }));
+  console.log(JSON.stringify({ ok: true, signedDownloads: signed.length, documentTypes: documentMatrix.map(row => row.type), historicalMetadata: true, roles: ["superadmin", "admin", "operador"], denied: 8, missingObjectCode: "not-found", incompleteMetadataCode: "failed-precondition", externalActions: 0 }));
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

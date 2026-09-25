@@ -55,7 +55,10 @@ function inferFamily(upload: Record<string, any>): DocumentFamily | null {
 export async function getAuthorizedDocumentDownloadUrlCore(
   request: any,
   signUrl: (storagePath: string) => Promise<string> = async (storagePath) => {
-    const [url] = await admin.storage().bucket().file(storagePath).getSignedUrl({
+    const file = admin.storage().bucket().file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) throw new HttpsError("not-found", "Archivo no encontrado.");
+    const [url] = await file.getSignedUrl({
       action: "read",
       expires: Date.now() + 5 * 60 * 1000,
     });
@@ -125,7 +128,16 @@ export async function getAuthorizedDocumentDownloadUrlCore(
       throw new HttpsError("failed-precondition", "Ruta documental invalida.");
     }
 
-    const url = await signUrl(storagePath);
+    let url: string;
+    try {
+      url = await signUrl(storagePath);
+    } catch (error: any) {
+      if (error instanceof HttpsError) throw error;
+      if (Number(error?.code) === 404 || Number(error?.statusCode) === 404) {
+        throw new HttpsError("not-found", "Archivo no encontrado.");
+      }
+      throw new HttpsError("internal", "No fue posible generar temporalmente el enlace de descarga.");
+    }
 
     return { ok: true, uploadId, url, expiresInSeconds: 300 };
 }

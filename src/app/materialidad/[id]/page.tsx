@@ -15,15 +15,14 @@ import {
   RefreshCcw,
   ShieldCheck,
 } from "lucide-react";
-import { getDownloadURL, ref } from "firebase/storage";
-
 import { formatDateTime24 } from "@/lib/dateTime";
 import { formatMoneyMXN } from "@/lib/money";
 import { mergeModules } from "@/lib/roles";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { getLocalMaterialityOverview } from "@/lib/materialityLocalPreview";
 import { getMaterialityClientCompanyOverview, linkSolicitudToMaterialityOperation } from "@/services/materiality";
-import { storage } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 
 const DEFAULT_REQUIRED_TYPES = [
   "ORDEN_COMPRA",
@@ -106,6 +105,23 @@ function StatBox({
 
 function OperationCard({ operation }: { operation: any }) {
   const missing = uniqueValues(operation.missingTypes || []);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadingId, setDownloadingId] = useState("");
+
+  async function downloadDocument(doc: any) {
+    const uploadId = String(doc?.id || doc?.uploadId || "").trim();
+    setDownloadError("");
+    setDownloadingId(uploadId);
+    try {
+      await runAuthorizedDocumentAction(uploadId, getAuthorizedDocumentDownloadUrl, (url) => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+    } catch (error: any) {
+      setDownloadError(error?.message || "No fue posible generar temporalmente el enlace de descarga.");
+    } finally {
+      setDownloadingId("");
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#121827] p-4">
@@ -150,14 +166,12 @@ function OperationCard({ operation }: { operation: any }) {
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-200">Documentos de esta operación</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {(operation.documentRefs || []).length > 0 ? (operation.documentRefs || []).map((doc: any) => (
-            <button key={doc.id} type="button" onClick={async () => {
-              const url = await getDownloadURL(ref(storage, doc.storagePath));
-              window.open(url, "_blank", "noopener,noreferrer");
-            }} className="inline-flex items-center gap-1 rounded-lg border border-sky-300/25 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-              <Download size={13} /> {doc.documentTypeLabel || documentLabel(doc.documentType)}
+            <button key={doc.id} type="button" disabled={downloadingId === String(doc?.id || doc?.uploadId || "")} onClick={() => void downloadDocument(doc)} className="inline-flex items-center gap-1 rounded-lg border border-sky-300/25 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60">
+              <Download size={13} /> {downloadingId === String(doc?.id || doc?.uploadId || "") ? "Preparando..." : doc.documentTypeLabel || documentLabel(doc.documentType)}
             </button>
           )) : <span className="text-xs text-slate-400">Actualiza el expediente para cargar sus enlaces.</span>}
         </div>
+        {downloadError ? <p role="alert" className="mt-3 text-xs font-medium text-rose-200">{downloadError}</p> : null}
       </div>
 
       {operation.facturamaInvoiceId ? (
