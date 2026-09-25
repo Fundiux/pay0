@@ -10,6 +10,8 @@ export const HUGO_CAPABILITIES = [
   { id: "pay0.searchSolicitudes", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getPago", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.searchPagos", system: "PAY0", risk: "READ", status: "AVAILABLE" },
+  { id: "pay0.searchReceivedPagos", system: "PAY0", risk: "READ", status: "AVAILABLE" },
+  { id: "pay0.getPagoById", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getPaymentComplementStatus", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getOperationalSummary", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getIqCapabilities", system: "PAY0", risk: "READ", status: "AVAILABLE" },
@@ -17,6 +19,9 @@ export const HUGO_CAPABILITIES = [
   { id: "pay0.getAuthorizedCapabilities", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.getSystemCatalog", system: "PAY0", risk: "READ", status: "AVAILABLE" },
   { id: "pay0.countClientsForUser", system: "PAY0", risk: "READ", status: "AVAILABLE" },
+  { id: "pay0.countClientsForCurrentUser", system: "PAY0", risk: "READ", status: "AVAILABLE" },
+  { id: "hugo.getSessionContext", system: "HUGO", risk: "READ", status: "AVAILABLE" },
+  { id: "hugo.getLastOperationDiagnostic", system: "HUGO", risk: "READ", status: "AVAILABLE" },
 ] as const;
 
 export function normalizeHugoScope(value: unknown): HugoScope {

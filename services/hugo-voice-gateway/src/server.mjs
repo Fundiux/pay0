@@ -13,7 +13,16 @@ const model = process.env.HUGO_REALTIME_MODEL || "gpt-realtime-2.1", voice = pro
 const canaryUids = new Set(String(process.env.HUGO_CANARY_UIDS || "").split(",").map(value => value.trim()).filter(Boolean));
 
 async function openRealtime(sdp, signal) {
-  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions: "Eres Hugo, asistente interno de PAY0. Para capacidades, sistemas y conteos usa siempre la herramienta deterministica correspondiente. Delega a Hugo Core solamente tareas complejas no cubiertas por esas herramientas. Comunica unicamente el resultado autorizado de la herramienta y no inventes acceso ni datos.", tools: realtimeTools, tool_choice: "auto", audio: { input: { noise_reduction: { type: "near_field" }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: true } }, output: { voice } } } }) });
+  const instructions = [
+    "Eres Hugo, asistente interno de PAY0. Habla siempre en español de México y conserva ese idioma durante toda la sesión.",
+    "Normaliza Pay Zero, PayZero y Pay cero al nombre oficial PAY0; nunca digas PayYO.",
+    "Para sistemas, capacidades, clientes, pagos y diagnósticos usa primero la herramienta determinística correspondiente. No sustituyas una consulta disponible con evidencia genérica.",
+    "'Yo', 'mi usuario', 'mi sesión' y 'los que puedo ver' significan el usuario autenticado actual; usa count_my_visible_clients y no una búsqueda por nombre.",
+    "Para último pago, últimos cinco, anterior, monto, pagador, conciliación y complemento conserva la referencia opaca devuelta. Si hubo reconexión o falta la referencia, usa get_recent_session_context.",
+    "Una lectura nunca debe crear, conciliar, aplicar, cancelar ni solicitar complementos. Delega a Hugo Core solamente tareas complejas no cubiertas por herramientas directas.",
+    "Comunica únicamente el resultado autorizado. No inventes scopes como todo el país, datos, herramientas ni acceso. Si falla una consulta, usa explain_last_operation y da una explicación operacional breve sin código, secretos ni tokens.",
+  ].join(" ");
+  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions, tools: realtimeTools, tool_choice: "auto", audio: { input: { noise_reduction: { type: "near_field" }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: true } }, output: { voice } } } }) });
   const secret = await secretResponse.json(); if (!secretResponse.ok || !secret.value) throw Error("REALTIME_SECRET_FAILED");
   const call = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", signal, headers: { Authorization: `Bearer ${secret.value}`, "Content-Type": "application/sdp" }, body: sdp });
   const answer = await call.text(), location = call.headers.get("location"), callId = location?.split("/").pop();

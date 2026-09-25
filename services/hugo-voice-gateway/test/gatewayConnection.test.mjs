@@ -1,13 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { attachGatewayConnection, ConnectionState, classifyRequestError } from "../src/gatewayConnection.mjs";
+import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure } from "../src/gatewayConnection.mjs";
 
 const TOKEN = "test-token-never-log-this", UID = "configured-canary-user", ROOT = "configured-root";
 const auth = { type: "authenticate", idToken: TOKEN };
 const offer = { type: "offer", sdp: "v=0\r\no=simulated-offer\r\n" };
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test("tool failures expose only the stable operational taxonomy", () => {
+  assert.deepEqual(safeToolFailure(Object.assign(Error("secret"), { code: "permission-denied" })), { errorCategory: "AUTHORIZATION_DENIED", errorCode: "PERMISSION_DENIED", retryable: false });
+  assert.deepEqual(safeToolFailure(Error("DEADLINE_EXCEEDED")), { errorCategory: "BACKEND_TIMEOUT", errorCode: "DEADLINE_EXCEEDED", retryable: true });
+  assert.deepEqual(safeToolFailure(Error("UNAVAILABLE")), { errorCategory: "CONNECTOR_UNAVAILABLE", errorCode: "UNAVAILABLE", retryable: true });
+  assert.deepEqual(safeToolFailure(Error("sensitive backend detail")), { errorCategory: "INTERNAL_ERROR", errorCode: "GATEWAY_REQUEST_FAILED", retryable: true });
+});
 
 class Socket extends EventEmitter {
   readyState = 1;
