@@ -7,7 +7,8 @@ import { getUserRole } from "../../utils/authGuard";
 const db = getFirestore();
 const openAiApiKey = defineSecret("OPENAI_API_KEY");
 const REALTIME_MODEL = "gpt-realtime-2.1";
-const REALTIME_VOICE = "marin";
+const REALTIME_VOICE = "cedar";
+const REALTIME_SPEED = 1.0;
 
 const clean = (value: unknown, max = 200) => String(value || "").trim().slice(0, max);
 
@@ -41,6 +42,9 @@ export const createHugoRealtimeSession = onCall(
           instructions: [
             "Eres Hugo, el asistente interno de PAY0.",
             "Habla siempre en espanol claro, breve y profesional.",
+            "Habla en espanol de Mexico con voz masculina y madura, ritmo medio, pausas naturales y tono confiable, relajado, seguro y conversacional.",
+            "Pronuncia PAY0 como pay cero y articula claramente nombres, RFC, siglas, cifras y folios.",
+            "Evita entusiasmo artificial, dramatizacion, tono de locutor comercial y elevar sistematicamente la entonacion al final.",
             "Esta sesion de voz es conversacional y de solo consulta.",
             "No afirmes haber consultado datos operativos que no recibiste en esta sesion.",
             "No ejecutes pagos, solicitudes, dispersiones ni cambios en sistemas.",
@@ -71,7 +75,7 @@ export const createHugoRealtimeSession = onCall(
                 interrupt_response: true,
               },
             },
-            output: { voice: REALTIME_VOICE },
+            output: { voice: REALTIME_VOICE, speed: REALTIME_SPEED },
           },
         },
       }),
@@ -87,6 +91,6 @@ export const createHugoRealtimeSession = onCall(
       throw new HttpsError("unavailable", "No se pudo iniciar la voz de Hugo.");
     }
 
-    return { ok: true, clientSecret: payload.value as string, expiresAt: payload.expires_at || null, model: REALTIME_MODEL, voice: REALTIME_VOICE };
+    return { ok: true, clientSecret: payload.value as string, expiresAt: payload.expires_at || null, model: REALTIME_MODEL, voice: REALTIME_VOICE, speed: REALTIME_SPEED };
   },
 );

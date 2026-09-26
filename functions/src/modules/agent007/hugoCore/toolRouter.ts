@@ -12,6 +12,8 @@ export const HUGO_READ_TOOLS = {
   getAuthorizedCapabilities: { description: "Capacidades efectivas del usuario actual", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getSystemCatalog: { description: "Sistemas registrados y acceso efectivo", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   countClientsForUser: { description: "Cuenta clientes visibles de un usuario autorizado del mismo arbol", input: "query", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
+  getLatestSolicitudForUser: { description: "Obtiene la solicitud mas reciente del scope operativo de un usuario visible", input: "query", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
+  getLatestPagoForUser: { description: "Obtiene el pago mas reciente del scope operativo de un usuario visible", input: "query", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   countClientsForCurrentUser: { description: "Cuenta clientes activos visibles del usuario autenticado", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getSessionContext: { description: "Recupera contexto conversacional reciente y seguro de la sesion autenticada", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getLastOperationDiagnostic: { description: "Explica de forma sanitizada el ultimo intento operativo", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },

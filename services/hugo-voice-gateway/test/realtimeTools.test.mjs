@@ -28,10 +28,15 @@ test("payment list limits are bounded and tool schemas remain fail closed", () =
   assert.equal(delegationForRealtimeTool("query_received_payments", { operation: "UNKNOWN" }).toolInput.limit, 1);
   assert.ok(realtimeToolNames.includes("query_received_payments"));
   assert.ok(realtimeToolNames.includes("explain_last_operation"));
-  assert.equal(realtimeToolNames.length, 11);
+  assert.equal(realtimeToolNames.length, 13);
   assert.match(realtimeTools.find(tool => tool.name === "query_received_payments").description, /Nunca interpretes movimiento/);
 });
 
 test("unknown Realtime tools fail closed", () => {
   assert.throws(() => delegationForRealtimeTool("invented_tool", {}), /UNKNOWN_REALTIME_TOOL/);
+});
+
+test("subordinate latest reads preserve the named user and remain deterministic", () => {
+  assert.deepEqual(delegationForRealtimeTool("get_latest_solicitud_for_user", { query: "BETELL" }), { request: "¿Cuál fue la última solicitud de BETELL?", toolName: "getLatestSolicitudForUser", toolInput: { query: "BETELL" } });
+  assert.deepEqual(delegationForRealtimeTool("get_latest_payment_for_user", { query: "BETELL" }), { request: "¿Cuál fue el último pago de BETELL?", toolName: "getLatestPagoForUser", toolInput: { query: "BETELL" } });
 });

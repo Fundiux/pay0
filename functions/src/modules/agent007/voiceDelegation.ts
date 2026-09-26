@@ -16,9 +16,9 @@ import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolic
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
 const learningStore = new FirestoreHugoLearningStore(db);
-const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "countClientsForCurrentUser", "getLatestSolicitud", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
+const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "getLatestSolicitudForUser", "getLatestPagoForUser", "countClientsForCurrentUser", "getLatestSolicitud", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
 
-type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
+type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "getLatestSolicitudForUser" | "getLatestPagoForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
 const paymentStatusesConciliated = new Set(["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]);
 const money = (value: unknown, currency = "MXN") => Number(value || 0).toLocaleString("es-MX", { style: "currency", currency });
 function voiceError(error: unknown) {
@@ -41,6 +41,12 @@ function formatVoicePlatformResultRaw(tool: string, data: any) {
     if (data?.matchStatus === "CONFIRM_CURRENT_USER") return `¿Te refieres a ${data.suggestedDisplayName || "tu usuario actual"}, tu usuario actual?`;
     if (data?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario con esa referencia dentro de tu alcance. Necesito que indiques el nombre completo o correo.";
     return "No encontré un usuario visible con ese identificador dentro de tu alcance autorizado.";
+  }
+  if (tool === "getLatestSolicitudForUser" || tool === "getLatestPagoForUser") {
+    if (data?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario con esa referencia; indica el nombre completo o correo.";
+    if (data?.matchStatus !== "EXACT") return "No encontré ese usuario dentro del root PAY0 autorizado; esto no es una denegación de permisos.";
+    if (!data.item) return `No encontré ${tool === "getLatestPagoForUser" ? "pagos" : "solicitudes"} para el alcance operativo de ${data.user?.displayName || "ese usuario"}.`;
+    return `La ${tool === "getLatestPagoForUser" ? "operación de pago" : "solicitud"} más reciente de ${data.user?.displayName || "ese usuario"} es ${data.item.folio || "sin folio"}, cliente ${data.item.cliente || "no registrado"}, estado ${data.item.estado || "no registrado"}.`;
   }
   if (tool === "getAuthorizedCapabilities") {
     return formatAuthorizedCapabilities(data);
@@ -133,6 +139,8 @@ export const delegateHugoVoiceTurn = onCall(
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
       getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
       countClientsForUser: ({ query }) => platform.countClientsForUser(query),
+      getLatestSolicitudForUser: ({ query }) => platform.getLatestOperationForUser(query, "SOLICITUD"),
+      getLatestPagoForUser: ({ query }) => platform.getLatestOperationForUser(query, "PAGO"),
       countClientsForCurrentUser: () => platform.countClientsForCurrentUser(), getSessionContext: () => platform.getSessionContext(),
       getLastOperationDiagnostic: () => platform.getLastOperationDiagnostic(),
     });

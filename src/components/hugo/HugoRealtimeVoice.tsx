@@ -17,7 +17,7 @@ type TraceEntry = {
   detail?: Record<string, unknown>;
 };
 type VoiceTurnDraft = { turnId: string; responseId: string | null; speaker: "USER" | "HUGO"; text: string; timestampMs: number; durationMs: number; interrupted: boolean; status: string; transcriptionStatus: string };
-type VoiceHistoryDraft = { sessionId: string; model: string; startedAt: number; audioUsage: { input: number; cachedInput: number; output: number }; turns: Map<string, VoiceTurnDraft>; events: Map<string, { eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string }> };
+type VoiceHistoryDraft = { sessionId: string; model: string; voice: string; startedAt: number; audioUsage: { input: number; cachedInput: number; output: number }; turns: Map<string, VoiceTurnDraft>; events: Map<string, { eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string }> };
 
 declare global {
   interface Window { __HUGO_REALTIME_TRACE__?: TraceEntry[]; }
@@ -39,7 +39,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const persistHistory = async (status: "ACTIVE" | "COMPLETED" | "FAILED") => {
     const history = historyRef.current;
     if (!history?.sessionId) return;
-    await saveHugoVoiceHistory({ sessionId: history.sessionId, model: history.model, status,
+    await saveHugoVoiceHistory({ sessionId: history.sessionId, model: history.model, voice: history.voice, status,
       durationMs: Math.max(0, Date.now() - history.startedAt), audioUsage: history.audioUsage, turns: [...history.turns.values()], events: [...history.events.values()] });
     onHistorySaved?.();
   };
@@ -126,9 +126,10 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       let sessionId = fallbackSessionId;
       let turnId: string | null = null;
       let responseId: string | null = null;
+      let expectedVoice = "";
       let turnSequence = 0;
       const seenEventIds = new Set<string>();
-      historyRef.current = { sessionId: "", model: "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
+      historyRef.current = { sessionId: "", model: "gateway-pending", voice: "gateway-pending", startedAt: Date.now(), audioUsage: { input: 0, cachedInput: 0, output: 0 }, turns: new Map(), events: new Map() };
       window.__HUGO_REALTIME_TRACE__ = [];
       const trace = (type: string, detail?: Record<string, unknown>) => {
         const entry: TraceEntry = {
@@ -156,7 +157,18 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           }
           seenEventIds.add(event.event_id);
         }
-        if (type === "session.created" && event.session?.id) sessionId = event.session.id;
+        if (type === "session.created" && event.session?.id) {
+          sessionId = event.session.id;
+          const actualVoice = String(event.session?.audio?.output?.voice || event.session?.voice || "");
+          if (!actualVoice || !expectedVoice || actualVoice !== expectedVoice) {
+            trace("session.voice_mismatch", { expectedVoice, actualVoice: actualVoice || null });
+            setError("La sesion de voz no confirmo la configuracion server-side esperada.");
+            cleanup();
+            setState("ERROR");
+            return;
+          }
+          trace("session.voice_verified", { voice: actualVoice });
+        }
         if (type === "session.created" && event.session?.id && historyRef.current) { historyRef.current.sessionId = event.session.id; void persistHistory("ACTIVE").catch(() => undefined); }
         if (type === "input_audio_buffer.speech_started") {
           turnSequence += 1;
@@ -232,7 +244,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const answer = await new Promise<{ sdp: string; sessionId: string; model: string }>((resolve, reject) => {
+      const answer = await new Promise<{ sdp: string; sessionId: string; model: string; voice: string }>((resolve, reject) => {
         const gateway = new WebSocket(gatewayUrl!);
         gatewayRef.current = gateway;
         const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
@@ -242,14 +254,15 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           let event: any;
           try { event = JSON.parse(String(incoming.data)); } catch { return; }
           if (event.type === "authenticated") gateway.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
-          if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model) }); }
+          if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model), voice: String(event.voice) }); }
           if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`Hugo no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
           if (event.type === "gateway.interruption") trace("gateway.interruption", event);
         };
       });
       if (generationRef.current !== generation) return;
       sessionId = answer.sessionId;
-      if (historyRef.current) { historyRef.current.sessionId = answer.sessionId; historyRef.current.model = answer.model; }
+      expectedVoice = answer.voice;
+      if (historyRef.current) { historyRef.current.sessionId = answer.sessionId; historyRef.current.model = answer.model; historyRef.current.voice = answer.voice; }
       await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     } catch (cause: any) {
       void persistHistory("FAILED").catch(() => undefined);

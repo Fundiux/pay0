@@ -4,12 +4,13 @@ import { getAuth } from "firebase-admin/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { realtimeTools } from "./realtimeTools.mjs";
 import { attachGatewayConnection } from "./gatewayConnection.mjs";
+import { HUGO_VOICE, HUGO_VOICE_INSTRUCTIONS, HUGO_VOICE_SPEED, REALTIME_MODEL } from "./voiceConfig.mjs";
 
 if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: process.env.GOOGLE_CLOUD_PROJECT || "pay-0-system" });
 const port = Number(process.env.PORT || 8080), apiKey = process.env.OPENAI_API_KEY || "";
 const delegateUrl = process.env.HUGO_DELEGATE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/delegateHugoVoiceTurn";
 const authorizeUrl = process.env.HUGO_AUTHORIZE_URL || "https://us-central1-pay-0-system.cloudfunctions.net/authorizeHugoVoiceGatewaySession";
-const model = process.env.HUGO_REALTIME_MODEL || "gpt-realtime-2.1", voice = process.env.HUGO_REALTIME_VOICE || "marin";
+const model = REALTIME_MODEL, voice = HUGO_VOICE;
 const canaryUids = new Set(String(process.env.HUGO_CANARY_UIDS || "").split(",").map(value => value.trim()).filter(Boolean));
 
 async function openRealtime(sdp, signal) {
@@ -22,8 +23,9 @@ async function openRealtime(sdp, signal) {
     "Para último pago, últimos cinco, anterior, monto, pagador, conciliación y complemento conserva la referencia opaca devuelta. Si hubo reconexión o falta la referencia, usa get_recent_session_context.",
     "Una lectura nunca debe crear, conciliar, aplicar, cancelar ni solicitar complementos. Delega a Hugo Core solamente tareas complejas no cubiertas por herramientas directas.",
     "Comunica únicamente el resultado autorizado. No inventes scopes como todo el país, datos, herramientas ni acceso. Si falla una consulta, usa explain_last_operation y da una explicación operacional breve sin código, secretos ni tokens.",
+    HUGO_VOICE_INSTRUCTIONS,
   ].join(" ");
-  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions, tools: realtimeTools, tool_choice: "auto", audio: { input: { noise_reduction: { type: "near_field" }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: true } }, output: { voice } } } }) });
+  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions, tools: realtimeTools, tool_choice: "auto", audio: { input: { noise_reduction: { type: "near_field" }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: true } }, output: { voice, speed: HUGO_VOICE_SPEED } } } }) });
   const secret = await secretResponse.json(); if (!secretResponse.ok || !secret.value) throw Error("REALTIME_SECRET_FAILED");
   const call = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", signal, headers: { Authorization: `Bearer ${secret.value}`, "Content-Type": "application/sdp" }, body: sdp });
   const answer = await call.text(), location = call.headers.get("location"), callId = location?.split("/").pop();

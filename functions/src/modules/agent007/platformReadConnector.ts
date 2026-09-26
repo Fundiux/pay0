@@ -85,6 +85,42 @@ export class PlatformReadConnector {
     }
     return this.result("countClientsForUser", { matchStatus: "EXACT", user: { uid: target.id, displayName: targetData.displayName || targetData.nombreUsuario || null }, clientCount: count }, "user", [target.id]);
   }
+  private async resolveVisibleUser(query: string) {
+    assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "view" });
+    const users = await this.db.collection("users").where("rootId", "==", this.identity.rootId).limit(200).get();
+    const visible = users.docs.filter(doc => isUserVisibleToCaller(this.identity, doc.id, doc.data()));
+    const resolution = resolveUserReference(query, this.identity.uid, visible.map(doc => { const row: any = doc.data(); return { id: doc.id, displayName: row.displayName || row.nombreUsuario || null, values: [doc.id, row.displayName, row.nombreUsuario, row.email] }; }));
+    const resolvedIds: string[] = [...resolution.ids];
+    const matches = visible.filter(doc => resolvedIds.includes(doc.id));
+    return { resolution, target: matches.length === 1 ? matches[0] : null, matches };
+  }
+  private async clientIdsVisibleToUser(target: any) {
+    const targetData: any = target.data(), targetRole = getUserRole(targetData);
+    const candidates = await this.db.collection("clients").where("rootId", "==", this.identity.rootId).get();
+    const ids: string[] = [];
+    for (const client of candidates.docs) {
+      const row: any = client.data();
+      if (row.active !== true) continue;
+      const access = await resolveClientOperationalAccess({ uid: target.id, role: targetRole as any, rootId: this.identity.rootId, clientId: client.id, client: row });
+      if (access.allowed && access.permissions.view === true) ids.push(client.id);
+    }
+    return ids;
+  }
+  async getLatestOperationForUser(query: string, entity: "SOLICITUD" | "PAGO") {
+    const tool = entity === "SOLICITUD" ? "getLatestSolicitudForUser" : "getLatestPagoForUser";
+    const { resolution, target, matches } = await this.resolveVisibleUser(query);
+    if (!target) return this.result(tool, { matchStatus: resolution.matchStatus, matches: matches.map(doc => ({ uid: doc.id, displayName: doc.data().displayName || doc.data().nombreUsuario || null })), item: null }, "user", matches.map(doc => doc.id));
+    const clientIds = new Set(await this.clientIdsVisibleToUser(target));
+    const collection = entity === "SOLICITUD" ? "solicitudes" : "pagos";
+    const snap = await this.db.collection(collection).where("rootId", "==", this.identity.rootId).get();
+    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).filter(row => clientIds.has(String(row.clientId || row.clienteId || "")))
+      .sort((a, b) => (b.createdAt?.toMillis?.() || b.reportDateAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || a.reportDateAt?.toMillis?.() || 0));
+    const targetData: any = target.data(), item = rows[0] || null;
+    return this.result(tool, { matchStatus: "EXACT", user: { uid: target.id, displayName: targetData.displayName || targetData.nombreUsuario || null }, item: item ? {
+      id: item.id, folio: item.folio || null, cliente: item.clientName || item.clienteNombre || item.cliente || null,
+      monto: Number(item.montoTotal ?? item.amount ?? item.monto ?? item.total ?? 0), estado: item.status || item.estatus || null,
+    } : null }, entity.toLowerCase(), [target.id, ...(item ? [item.id] : [])]);
+  }
   async countClientsForCurrentUser() {
     assertAuthorized(this.auth, this.user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "clientes", requiredAction: "view" });
     const candidates = await this.db.collection("clients").where("rootId", "==", this.identity.rootId).get();

@@ -44,7 +44,8 @@ export function formatAuthorizedCapabilities(data: any, diagnostic?: any) {
     : diagnostic?.status === "ERROR"
       ? ` La última operación falló por ${diagnostic.errorCategory || "INTERNAL"}, no por una denegación de permisos demostrada.`
       : " No hay una denegación backend reciente que demuestre falta de permisos.";
-  return `Tu rol efectivo es ${data?.role || "desconocido"} dentro de la raíz actual. Tu acceso incluye: ${modules.length ? modules.join(", ") : "ningún módulo operativo"}. Cada operación sigue su política de módulo y capacidad; que una herramienta no exista o un alias no coincida no demuestra una falta de permiso.${diagnosis}`;
+  const readScope = data?.role === "superadmin" ? " Como superadmin puedes consultar toda la información PAY0 dentro del root administrado, sin asignación personal ni delegación; esto no autoriza escrituras, ejecuciones financieras ni otros sistemas." : " Tus lecturas conservan los filtros de módulo, asignación y delegación aplicables a tu rol.";
+  return `Tu rol efectivo es ${data?.role || "desconocido"} dentro de la raíz actual. Tu acceso incluye: ${modules.length ? modules.join(", ") : "ningún módulo operativo"}.${readScope} Que una herramienta no exista o un alias no coincida no demuestra una falta de permiso.${diagnosis}`;
 }
 
 export function canonicalErrorCategory(error: unknown): HugoErrorCategory {

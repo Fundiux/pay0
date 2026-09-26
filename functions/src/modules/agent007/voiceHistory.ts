@@ -23,6 +23,8 @@ export const saveHugoVoiceHistory = onCall(
   async request => {
     const actor = await identity(request), data = request.data || {}, sessionId = clean(data.sessionId, 180);
     if (!validId(sessionId)) throw new HttpsError("invalid-argument", "Sesion de voz invalida.");
+    const requestedVoice = clean(data.voice, 32);
+    const voice = ["cedar", "marin"].includes(requestedVoice) ? requestedVoice : "cedar";
     const turns = Array.isArray(data.turns) ? data.turns.slice(0, 40) : [];
     const events = Array.isArray(data.events) ? data.events.slice(0, 80) : [];
     const conversationRef = db.collection("agent007Conversations").doc(actor.conversationId);
@@ -35,7 +37,7 @@ export const saveHugoVoiceHistory = onCall(
       const rates = voiceRates[model], voiceCostUsd = rates ? ((audioUsage.input * rates.input) + (audioUsage.cachedInput * rates.cached) + (audioUsage.output * rates.output)) / 1_000_000 : null;
       tx.set(sessionRef, {
         rootId: actor.rootId, ownerUid: actor.uid, conversationId: actor.conversationId, sessionId,
-        modality: "VOICE", system: "HUGO", context: "GLOBAL", voice: "marin", model,
+        modality: "VOICE", system: "HUGO", context: "GLOBAL", voice: existing.exists ? existing.data()?.voice || voice : voice, model,
         status: ["ACTIVE", "COMPLETED", "FAILED"].includes(data.status) ? data.status : "ACTIVE",
         startedAt: existing.exists ? existing.data()?.startedAt : now, updatedAt: now,
         endedAt: data.status === "COMPLETED" || data.status === "FAILED" ? now : null,
