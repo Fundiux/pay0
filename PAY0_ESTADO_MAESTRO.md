@@ -1,5 +1,13 @@
 # PAY0 — Estado maestro vivo
 
+### BASE860115-05 — Punto 1 cerrado: complementos PPD (2026-09-27)
+
+PAY0 opera ahora un único pipeline canónico para complementos PPD. La evidencia REP importada por la automatización legacy se adopta idempotentemente, se revalida y se publica como documentos del Pago ligados a la aplicación; las copias generales de Solicitud se retiran lógicamente. Los jobs IQ bloqueados únicamente por elegibilidad no verificable pueden seguir haciendo una consulta segura, sin autorizar un nuevo envío.
+
+El caso productivo `AP1C13U3E5` quedó reconciliado: request y job `RECEIVED`, dos documentos `READY` bajo Pago y cero legacy activos. El XML timbrado difiere un centavo del importe histórico PAY0; la tolerancia queda limitada a adopción legacy y marcada en la aplicación. El detalle de `/pagos` permite descargar XML/PDF mediante el callable autorizado.
+
+Evidencia: smoke integral Firestore+Storage PASS (26 controles, cero acciones externas), builds frontend/Functions PASS, política y gates acumulativos PASS. Functions canónicas `ACTIVE` en `enqueueautomaticpaymentcomplement-00005-lal` y `checkpaymentcomplementsdaily-00009-gak`; scheduler `ENABLED`; las tres Functions legacy fueron eliminadas. Hosting/SSR `ACTIVE` en `ssrpay0system-00556-fax`; `/pagos` HTTP 200 y sin logs `ERROR` posteriores. No se solicitó un REP nuevo ni se timbró durante la validación.
+
 ### ASSETS interactivo, fechas y permisos por sistema (2026-09-20)
 
 ASSETS ya usa una identidad predominantemente grafito/gris con acentos naranja en todas sus pantallas; el verde queda reservado para utilidad o entradas. El Dashboard permite cambiar entre `Todo`, `Vehículos` y `Préstamos`: KPIs, rendimientos, actividad, posiciones y las dos gráficas se recalculan con el alcance elegido. La distribución de capital es horizontal y usa las etiquetas cortas `Vehículos`, `Préstamos+INT` y `Préstamos`; la utilidad generada se presenta en verde en ambas gráficas.

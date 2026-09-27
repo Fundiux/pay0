@@ -1,7 +1,16 @@
 ﻿# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-20
+Actualizado: 2026-09-27
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
+
+## BASE860115-05 / Punto 1 — Complementos de pago PPD — 2026-09-27
+
+- Estado: **cerrado, validado y desplegado en producción**.
+- Se consolidó un solo pipeline canónico de REP. La automatización adopta evidencia válida del importador retirado, la revalida y la guarda como XML/PDF del Pago ligados por `applicationId`; las copias legacy de Solicitud quedan inactivas y auditadas.
+- El caso productivo `AP1C13U3E5` quedó `RECEIVED` en seguimiento y job, con exactamente dos documentos canónicos `READY` y cero documentos legacy activos. Su diferencia fiscal de un centavo se acepta sólo en la ruta legacy, con marca explícita; los flujos nuevos conservan igualdad exacta.
+- La consulta segura continúa para jobs IQ bloqueados exclusivamente por elegibilidad no verificable, permitiendo descubrir un REP generado posteriormente sin repetir el POST. El detalle del pago muestra descargas autorizadas XML/PDF por aplicación.
+- Verificación: Functions/frontend builds PASS, autorización y baseline PASS, 22 controles críticos PASS y smoke Firestore+Storage PASS con 26 escenarios y cero acciones externas. Emuladores apagados.
+- Producción: `enqueueAutomaticPaymentComplement` `00005-lal`, `checkPaymentComplementsDaily` `00009-gak` y SSR `ssrpay0system-00556-fax` están `ACTIVE`; scheduler `ENABLED` a las 19:00 `America/Mexico_City`; `/pagos` HTTP 200; sin errores posteriores en logs. Se eliminaron las tres Functions legacy duplicadas. Commits: `ebdeaf4`, `3e085d5`.
 
 ## ASSETS — dashboard interactivo, fechas operativas y acceso gobernado — 2026-09-20
 

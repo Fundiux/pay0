@@ -12,7 +12,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 
 | Punto | Título | Estado | Commit | Deploy | Evidencia |
 |---:|---|---|---|---|---|
-| 1 | Complementos de pago PPD | EN_PRUEBAS | — | — | Auditoría productiva en lectura: 17 seguimientos, 4 recibidos por pipeline canónico y 1 REP importado por pipeline legacy pero bloqueado en el seguimiento nuevo. Smoke integral previo PASS; última ampliación pendiente de corrida integral por atasco de Storage Emulator. |
+| 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
 | 2 | Identidad de pestaña/navegador | PENDIENTE | — | — | — |
 | 3 | Logo/símbolo/favicon | PENDIENTE | — | — | — |
 | 4 | UUID visibles | PENDIENTE | — | — | — |
@@ -37,18 +37,18 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 
 ## Punto 1 — Complementos de pago PPD
 
-- Estado: `EN_PRUEBAS`
+- Estado: `CERRADO`
 - Fecha/hora de entrada: 2026-09-27
 - Componentes iniciales: frontend, Functions, Firestore, Storage, Cloud Tasks, scheduler, IQ, Facturama, documentos de Pago y aplicaciones de pago.
 - Diagnóstico: producción conserva dos pipelines IQ REP. El pipeline legacy importó el REP de `AP1C13U3E5` bajo documentos generales de Solicitud; el pipeline canónico mantuvo su job en `BLOCKED / IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED`. Cuatro aplicaciones históricas ya constan `RECEIVED` en el pipeline canónico. La UI del detalle de aplicaciones no consultaba documentos REP.
 - Causa raíz: coexistencia de dos automatizaciones desplegadas, ausencia de reconciliación de evidencia legacy, documentos legacy con `entityType: solicitudes` y compuerta LOOKUP que no admitía el estado bloqueado por elegibilidad aun cuando IQ podía generar el REP posteriormente.
 - Implementación: adopción idempotente de XML/PDF legacy hacia documentos de Pago ligados por `applicationId`; retiro lógico de copias legacy; reconciliación de request/job a `RECEIVED`; polling seguro para jobs bloqueados por elegibilidad; columna Complemento con descarga XML/PDF autorizada en el detalle del pago.
-- Pruebas de emulador: smoke Firestore+Storage PASS para pipeline, concurrencia, idempotencia, documentos bajo Pago y adopción legacy antes del último ajuste de compuerta. Se añadió cobertura de recuperación por elegibilidad; su corrida integral final está pendiente porque Storage Emulator se atasca durante su arranque local. Intentos fallidos no ejecutaron red externa ni mutaciones productivas.
+- Pruebas de emulador: smoke integral Firestore+Storage PASS con 26 controles y `externalActions: 0`: concurrencia, idempotencia, documentos bajo Pago, adopción legacy, recuperación del bloqueo de elegibilidad y tolerancia legacy explícita de un centavo. La coincidencia normal sigue siendo exacta.
 - Emuladores utilizados: Firestore y Storage.
 - Cierre de emuladores: confirmado después de cada corrida/atasco; puertos sin listeners del ciclo. Firebase dejó conexiones `TIME_WAIT` transitorias, sin procesos Java propios persistentes.
 - Compuertas: Functions build PASS; frontend build PASS (43 páginas); autorización PASS; release baseline y 22 controles críticos PASS; `git diff --check` PASS.
-- Deploy: pendiente.
-- Verificación post-deploy: pendiente.
-- Riesgos residuales: pendiente.
-- Bloqueadores: deploy de Hosting ajeno detectado y aún activo; no se desplegará concurrentemente. Storage Emulator local presenta atasco intermitente de arranque después de compilar reglas.
-- Siguiente acción: repetir smoke integral cuando Storage Emulator arranque, confirmar fin del deploy ajeno, commit, deploy dirigido de Functions/Hosting, retirar las tres Functions legacy, reconciliar el caso productivo importado y verificar producción.
+- Deploy: `enqueueAutomaticPaymentComplement` revisión `00005-lal`, `checkPaymentComplementsDaily` revisión `00009-gak` y SSR `ssrpay0system-00556-fax`, todos `ACTIVE`. Hosting liberado el 2026-09-27.
+- Verificación post-deploy: `AP1C13U3E5` quedó `RECEIVED` en request/job, con XML/PDF activos bajo `pagos/{pagoId}` y cero documentos legacy activos. Se eliminaron `enqueueIqPaymentComplements`, `requestIqPaymentComplementOnApplication` y `processIqPaymentComplementQueue`. Scheduler `ENABLED`, lunes a viernes 19:00 `America/Mexico_City`; `/pagos` HTTP 200; cero logs `ERROR` de los servicios desplegados en la ventana posterior.
+- Riesgos residuales: la excepción de redondeo de un centavo existe únicamente para adoptar REP legacy ya timbrados y queda marcada en la aplicación; no modifica el criterio exacto de respuestas nuevas. No se realizó una solicitud IQ ni un timbrado real durante las pruebas.
+- Bloqueadores: ninguno para el Punto 1.
+- Cierre: 2026-09-27. Siguiente punto autorizado: Punto 2 — Identidad de pestaña/navegador.
