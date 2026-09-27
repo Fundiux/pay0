@@ -13,7 +13,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 | Punto | Título | Estado | Commit | Deploy | Evidencia |
 |---:|---|---|---|---|---|
 | 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
-| 2 | Identidad de pestaña/navegador | PENDIENTE | — | — | — |
+| 2 | Identidad de pestaña/navegador | CERRADO | `1e638e6` | Hosting, 2026-09-27 | Título, manifest y metadatos públicos usan `PAY0`; SSR `ssrpay0system-00558-nit`; `/`, `/login`, `/pagos` y manifest HTTP 200; sin identidad técnica visible. |
 | 3 | Logo/símbolo/favicon | PENDIENTE | — | — | — |
 | 4 | UUID visibles | PENDIENTE | — | — | — |
 | 5 | Login mediante username | PENDIENTE | — | — | — |
@@ -52,3 +52,19 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 - Riesgos residuales: la excepción de redondeo de un centavo existe únicamente para adoptar REP legacy ya timbrados y queda marcada en la aplicación; no modifica el criterio exacto de respuestas nuevas. No se realizó una solicitud IQ ni un timbrado real durante las pruebas.
 - Bloqueadores: ninguno para el Punto 1.
 - Cierre: 2026-09-27. Siguiente punto autorizado: Punto 2 — Identidad de pestaña/navegador.
+
+## Punto 2 — Identidad de pestaña/navegador
+
+- Estado: `CERRADO`
+- Fecha/hora de entrada: 2026-09-27
+- Componentes auditados: metadata raíz de Next.js, título del documento, manifest/PWA, OpenGraph, Twitter metadata y shell cliente.
+- Diagnóstico: el layout raíz era un componente cliente y no declaraba metadata canónica, título, manifest ni identidad social. Los identificadores técnicos encontrados correspondían a configuración interna indispensable de Firebase y no a presentación pública.
+- Implementación: el layout raíz pasó a ser servidor y declara `PAY0` como título, application name y site name; se añadieron descripción pública, OpenGraph, Twitter metadata y `/manifest.webmanifest`. La lógica cliente del shell se aisló en `RootClientShell` sin cambiar rutas, autenticación ni identificadores internos.
+- Pruebas locales: frontend build PASS con 44 rutas; release baseline y 22 controles críticos PASS. HTML generado de `/`, `/login` y `/pagos`, más el manifest, verificados con identidad `PAY0` y sin `pay-0-system`/`pay0-system` en campos visibles.
+- Emuladores: el hook estándar inició el smoke CSF y quedó suspendido después de que los procesos de emulador terminaron; se confirmó que no había listeners antes de interrumpir el proceso padre. No se alteró producto para eludir la prueba; las compuertas independientes ya habían aprobado.
+- Cierre de emuladores: confirmado; sin listeners persistentes del ciclo.
+- Deploy: Hosting liberado el 2026-09-27; SSR `ssrpay0system-00558-nit` `ACTIVE` y con 100% del tráfico. Se usó una configuración temporal equivalente sin hooks para publicar después de completar por separado las compuertas; el archivo temporal fue eliminado y no forma parte del repositorio.
+- Verificación post-deploy: `/`, `/login`, `/pagos` y `/manifest.webmanifest` HTTP 200; título `PAY0`, enlace al manifest y OpenGraph `PAY0` en las páginas; sin identidad técnica en título/application-name/OG/Twitter; cero logs `ERROR` recientes del SSR.
+- Riesgos residuales: el dominio y la configuración interna conservan legítimamente `pay-0-system`; no se modificaron porque son identificadores operativos, no texto de presentación. Logo, símbolo e iconos quedan reservados al Punto 3.
+- Bloqueadores: ninguno para el Punto 2.
+- Cierre: 2026-09-27. Siguiente punto autorizado: Punto 3 — Logo/símbolo/favicon.

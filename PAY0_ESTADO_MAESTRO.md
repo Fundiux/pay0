@@ -1,5 +1,11 @@
 # PAY0 — Estado maestro vivo
 
+### BASE860115-05 — Punto 2 cerrado: identidad de pestaña/navegador (2026-09-27)
+
+La identidad pública del navegador quedó normalizada a `PAY0`. El layout raíz declara título, application name, descripción, manifest PWA, OpenGraph y Twitter metadata desde servidor; el shell interactivo permanece separado como componente cliente, sin alterar autenticación, rutas ni configuración Firebase.
+
+Los identificadores técnicos internos se conservaron deliberadamente. En producción, `/`, `/login`, `/pagos` y `/manifest.webmanifest` responden HTTP 200; las páginas presentan título y OpenGraph `PAY0` y no exponen `pay-0-system` como identidad visible. El SSR `ssrpay0system-00558-nit` está `ACTIVE` con 100% del tráfico y no registró errores recientes. Evidencia local: frontend build de 44 rutas, baseline y 22 controles críticos PASS; emuladores cerrados. Commit funcional `1e638e6`.
+
 ### BASE860115-05 — Punto 1 cerrado: complementos PPD (2026-09-27)
 
 PAY0 opera ahora un único pipeline canónico para complementos PPD. La evidencia REP importada por la automatización legacy se adopta idempotentemente, se revalida y se publica como documentos del Pago ligados a la aplicación; las copias generales de Solicitud se retiran lógicamente. Los jobs IQ bloqueados únicamente por elegibilidad no verificable pueden seguir haciendo una consulta segura, sin autorizar un nuevo envío.

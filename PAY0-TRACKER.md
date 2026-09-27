@@ -3,6 +3,14 @@
 Actualizado: 2026-09-27
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
+## BASE860115-05 / Punto 2 — Identidad de pestaña/navegador — 2026-09-27
+
+- Estado: **cerrado, validado y desplegado en producción**.
+- La identidad pública del navegador es ahora `PAY0`: título canónico y plantilla, application name, descripción, manifest PWA, OpenGraph y Twitter metadata. La lógica cliente del layout quedó encapsulada en `RootClientShell` para permitir metadata de servidor sin cambiar autenticación ni navegación.
+- Los identificadores internos de Firebase permanecen intactos. El dominio técnico puede contener `pay-0-system`, pero ese texto no aparece como nombre en título ni metadatos visibles.
+- Verificación: frontend build PASS con 44 rutas, baseline y 22 controles críticos PASS; `/`, `/login`, `/pagos` y `/manifest.webmanifest` HTTP 200 en producción. Las tres páginas muestran título y OpenGraph `PAY0`; no se detectó identidad técnica en los campos públicos auditados. Emuladores apagados y sin errores SSR recientes.
+- Producción: Hosting/SSR `ssrpay0system-00558-nit` `ACTIVE` con 100% del tráfico. Commit funcional: `1e638e6`.
+
 ## BASE860115-05 / Punto 1 — Complementos de pago PPD — 2026-09-27
 
 - Estado: **cerrado, validado y desplegado en producción**.
