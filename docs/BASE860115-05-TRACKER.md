@@ -15,7 +15,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 | 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
 | 2 | Identidad de pestaña/navegador | CERRADO | `1e638e6` | Hosting, 2026-09-27 | Título, manifest y metadatos públicos usan `PAY0`; SSR `ssrpay0system-00558-nit`; `/`, `/login`, `/pagos` y manifest HTTP 200; sin identidad técnica visible. |
 | 3 | Logo/símbolo/favicon | PENDIENTE | — | — | Espera la decisión del símbolo visual; Eliut autorizó continuar con los puntos siguientes. |
-| 4 | UUID visibles | LISTO_PARA_DEPLOY | `5df6ffd` | Hosting/SSR `00560-mum`, verificación inicial PASS | Correcciones post-deploy verificadas con build de 44 rutas, smoke de emulador PASS y puertos libres; pendiente redeploy final. |
+| 4 | UUID visibles | CERRADO | `5df6ffd`, `6ae63ed` | Hosting final `95413a190fd561ea` / SSR `00566-tig`, 2026-09-27 | Reconciliado en `fix/astra-activity-log-reconciliation`; flujo estándar completo PASS, 26 archivos servidos coinciden con el build y siete rutas públicas sin sesión redirigen al login sin errores en Chromium. |
 | 5 | Login mediante username | PENDIENTE | — | — | — |
 | 6 | Cambio de contraseña | PENDIENTE | — | — | — |
 | 7 | Filtro por usuario | PENDIENTE | — | — | — |
@@ -78,7 +78,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 
 ## Punto 4 — UUID visibles
 
-- Estado: `LISTO_PARA_DEPLOY` (corrección posterior al primer deploy)
+- Estado: `CERRADO` (corrección posterior publicada durante la reconciliación ASTRA)
 - Fecha de entrada: 2026-09-27
 - Rama/worktree: `cycle/base860115-05` / `C:\Users\ebarr\Desktop\pay0-system\.worktrees\base860115-05`
 - Diagnóstico: varias vistas muestran IDs de Firestore como renglón secundario o sustituto de folios/nombres; algunos exports también los incluyen. Los UUID de CFDI son identificadores fiscales canónicos y los diagnósticos técnicos de IQ tienen utilidad operacional, por lo que se revisan por separado.
@@ -89,3 +89,5 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 - Primer deploy: flujo estándar completo PASS y SSR `ssrpay0system-00560-mum` con 100% de tráfico. Ocho rutas HTTP 200, cero logs `ERROR` recientes y emuladores cerrados.
 - Hallazgo post-deploy: un tooltip, un chat sin nombre y etiquetas accesibles de beneficiarios/dispersiones aún podían revelar IDs al faltar su referencia humana. Se corrigen antes del cierre definitivo.
 - Corrección final: también se cubrieron los mensajes de exceso en pagos, el selector de adelantos, el nombre del despacho en costos y la confirmación de borrado de beneficiario. Build de frontend PASS con 44 rutas; baseline y 22 controles críticos PASS. Smoke Firestore + Chromium PASS, `git diff --check` PASS y emuladores cerrados.
+- Cierre de publicación: `6ae63ed` quedó incluido en Hosting `a601e3d72f58fffc`, liberado el 2026-09-27 a las 23:02:20 UTC y fijado a SSR `00564-vuv`. La rama `fix/astra-activity-log-reconciliation` conserva esta base, coordina las reglas/consultas de Actividad y repara los bloqueos de verificación de despliegue. No reemplazó las Functions REP publicadas por el frente concurrente. Evidencia ampliada en `docs/ASTRA-RECONCILIATION-2026-09-27.md`.
+- Versión final de ese cierre: Hosting `95413a190fd561ea` / SSR `00566-tig`, 23:18:35 UTC, con los mismos cambios de interfaz y la corrección de encabezados de seguridad en la raíz. Diez rutas públicas y manifest HTTP 200; encabezados, hashes de 26 archivos y navegación pública Chromium PASS.
