@@ -226,7 +226,7 @@ function NoteBubble({ note, myUid }: any) {
 
 
 function getPagoFolio(p: any) {
-  return String(p?.folio || p?.referenceFolio || p?.pagoFolio || p?.id || p?.pagoId || '---');
+  return String(p?.folio || p?.referenceFolio || p?.pagoFolio || 'Sin folio');
 }
 function getTodayDateInputValue() {
   const now = new Date();
@@ -1817,7 +1817,7 @@ export default function PagosPage() {
   const facturaSubtotalOperation = useMemo(() => {
     const matched = findFacturaSubtotalOperation(
       operationTypes.map((x: any) => ({
-        label: String(x?.name || x?.key || x?.id || ""),
+        label: String(x?.name || x?.key || "Operación sin nombre"),
         value: String(x?.key || x?.id || ""),
         operation: x,
       })),
@@ -1930,7 +1930,7 @@ export default function PagosPage() {
         const solicitud = solicitudes.find((s) => String(s?.id || "") === String(x?.solicitudId || ""));
         return {
           ...x,
-          folioSolicitud: solicitud?.folio || x?.solicitudId || "---",
+          folioSolicitud: solicitud?.folio || "Sin folio",
           solicitudStatus: solicitud?.status || "---",
           empresaNombre: solicitud?.empresaNombre || viewAplicacionesFor?.empresaNombre || "---",
           clienteNombre: solicitud?.clienteNombre || viewAplicacionesFor?.clienteNombre || "---",
@@ -2869,13 +2869,13 @@ export default function PagosPage() {
 
                 return (
                   <tr
-                    key={getPagoFolio(p)}
+                    key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
                   ><td className="pay0-td-date text-sky-400 text-left">{getPagoFolio(p)}</td><td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">
-                      <div>{p?.empresaNombre || p?.companyId || "---"}</div>
+                      <div>{p?.empresaNombre || "Empresa sin nombre"}</div>
                     </td><td className="pay0-td-money text-white text-center">{toCurrency(p?.montoTotal)}</td><td className="pay0-td-money text-emerald-400 text-center">{toCurrency(p?.montoAplicado)}</td><td className="pay0-td-money text-amber-400 text-center">{toCurrency(p?.montoDisponible)}</td><td className="pay0-td text-center">
                       {foliosPendientes.length === 0 ? (
                         <span className="text-slate-500">Sin pendientes</span>
@@ -2926,7 +2926,7 @@ export default function PagosPage() {
                                           className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-2 py-1.5"
                                         >
                                           <span className="max-w-[150px] truncate font-mono text-[11px] text-sky-300">
-                                            {s.folio || s.id}
+                                            {s.folio || "Solicitud sin folio"}
                                           </span>
                                           <span className="whitespace-nowrap font-mono text-[11px] text-amber-300">
                                             ${toCurrency(getSolicitudPendiente(s))}
@@ -3216,7 +3216,7 @@ export default function PagosPage() {
                                   }
                                   options={operationTypes.map((x: any) => ({
                                     value: String(x.key || x.id),
-                                    label: String(x.name || x.key || x.id),
+                                    label: String(x.name || x.key || "Operación sin nombre"),
                                   }))}
                                   placeholder="Selecciona tipo de operacion..."
                                 />
@@ -3340,7 +3340,7 @@ export default function PagosPage() {
                 onChange={setSelectedOperationTypeKey}
                 options={operationTypes.map((x: any) => ({
                   value: String(x.key || x.id),
-                  label: String(x.name || x.key || x.id),
+                  label: String(x.name || x.key || "Operación sin nombre"),
                 }))}
                 placeholder="Selecciona tipo de operacion..."
               />
@@ -3512,7 +3512,7 @@ export default function PagosPage() {
 
   return (
                           <tr key={s.id} className="border-b border-white/5 text-[11px] text-white"><td className="p-3">
-                              <div className="font-mono text-sky-400">{s?.folio || s?.id}</div>
+                              <div className="font-mono text-sky-400">{s?.folio || "Solicitud sin folio"}</div>
                               <div className="mt-0.5 text-[10px] text-slate-500">{s?.clienteNombre || "---"}</div>
                             </td>{canViewIqFolios && (
                               <td className="p-3">
@@ -3634,7 +3634,6 @@ export default function PagosPage() {
                             >
                               {a?.folioSolicitud || "---"}
                             </a>
-                            <div className="mt-0.5 text-[10px] text-slate-500">{a?.solicitudId || "---"}</div>
                           </td><td className="p-3">{a?.clienteNombre || "---"}</td><td className="p-3">{a?.empresaNombre || "---"}</td><td className="p-3 text-center font-mono text-emerald-400">
                             ${toCurrency(a?.montoAplicado || 0)}
                           </td><td className="p-3 text-center">

@@ -557,9 +557,9 @@ if (!file) {
                       </span>
                     </td>
 
-                    <td className="pay0-td truncate text-slate-300" title={row.originalName || row.filename || row.fileName || row.id}>
+                    <td className="pay0-td truncate text-slate-300" title={row.originalName || row.filename || row.fileName || "Documento sin nombre"}>
                       <div className="truncate">
-                        {row.originalName || row.filename || row.fileName || row.id}
+                        {row.originalName || row.filename || row.fileName || "Documento sin nombre"}
                       </div>
                     </td>
 

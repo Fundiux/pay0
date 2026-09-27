@@ -45,8 +45,7 @@ function getVisibleReference(m: any) {
     m.pagoFolio ||
     m.solicitudFolio ||
     m.dispersionFolio ||
-    m.sourceFolio ||
-    m.referenceId
+    m.sourceFolio
   );
 }
 function formatMoney(value: number) {
@@ -309,7 +308,7 @@ export default function WalletEstadoCuentaUsuarioPage() {
                         <div className="text-[13px] font-normal text-slate-300">
                           {referenceType}
                         </div>
-                        <div className="mt-0.5 whitespace-nowrap font-mono text-[12px] font-normal text-slate-500" title={referenceId}>
+                        <div className="mt-0.5 whitespace-nowrap font-mono text-[12px] font-normal text-slate-500">
                           {referenceId}
                         </div>
                       </td>

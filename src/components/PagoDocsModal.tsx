@@ -797,7 +797,7 @@ export default function PagoDocsModal(props: {
                           {row.documentTypeLabel || row.documentType || "Documento"}
                         </div>
                         <div className="mt-0.5 max-w-[220px] truncate text-[10px] text-slate-500">
-                          {row.originalName || row.filename || row.id} - {formatSize(row.sizeBytes)}
+                          {row.originalName || row.filename || "Documento sin nombre"} - {formatSize(row.sizeBytes)}
                         </div>
                         {row.documentStateLabel ? (
                           <div className={`mt-1 text-[10px] ${

@@ -219,7 +219,7 @@ export default function UsuarioCostosPage() {
       return onSnapshot(qd, (snap) => {
         const rows = snap.docs.map((d) => ({
           id: d.id,
-          nombre: (d.data() as any)?.nombre || d.id,
+        nombre: (d.data() as any)?.nombre || "Despacho sin nombre",
         }));
         setAllDespachos(sortByName(rows));
       });
@@ -287,7 +287,7 @@ export default function UsuarioCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -318,7 +318,7 @@ export default function UsuarioCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -350,7 +350,7 @@ export default function UsuarioCostosPage() {
         return {
           id: d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           baseCost: Number(x?.baseCost || 0),
@@ -500,7 +500,7 @@ export default function UsuarioCostosPage() {
       { value: "", label: "Selecciona despacho", disabled: true },
       ...availableDespachos.map((d) => ({
         value: d.id,
-        label: d.nombre || d.id,
+        label: d.nombre || "Despacho sin nombre",
       })),
     ],
     [availableDespachos]

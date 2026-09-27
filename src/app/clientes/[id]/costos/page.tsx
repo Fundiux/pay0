@@ -203,7 +203,7 @@ export default function ClienteCostosPage() {
     return onSnapshot(qd, (snap) => {
       const rows = snap.docs.map((d) => ({
         id: d.id,
-        nombre: (d.data() as any)?.nombre || d.id,
+        nombre: (d.data() as any)?.nombre || "Despacho sin nombre",
       }));
       setAllDespachos(sortByName(rows));
     });
@@ -260,7 +260,7 @@ export default function ClienteCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -291,7 +291,7 @@ export default function ClienteCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -323,7 +323,7 @@ export default function ClienteCostosPage() {
         return {
           id: d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           baseCost: Number(x?.baseCost || 0),
@@ -482,7 +482,7 @@ export default function ClienteCostosPage() {
       { value: "", label: "Selecciona despacho", disabled: true },
       ...availableDespachos.map((d) => ({
         value: d.id,
-        label: d.nombre || d.id,
+        label: d.nombre || "Despacho sin nombre",
       })),
     ],
     [availableDespachos]
@@ -624,9 +624,8 @@ export default function ClienteCostosPage() {
         <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
           <div className="text-slate-400 text-xs uppercase">Cliente</div>
           <div className="text-slate-100 font-semibold mt-2">
-            {clientDoc?.name || clientDoc?.id || "-"}
+            {clientDoc?.name || "Cliente sin nombre"}
           </div>
-          <div className="text-slate-400 text-sm mt-1">{clientDoc?.id || "-"}</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/5 border border-white/10">

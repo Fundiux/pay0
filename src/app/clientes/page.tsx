@@ -717,7 +717,7 @@ export default function ClientesPage() {
                 <div className="col-span-2 flex items-center truncate text-[13px] font-normal text-slate-400">{getClientUsuarioLabel(it)}</div>
                 <div className="col-span-1 flex items-center truncate text-[11px] font-normal">
                   {it.iqLink?.status === "LINKED" ? (
-                    <span className="text-emerald-400" title={it.iqLink?.clientName || ""}>{it.iqLink?.clientId || it.iqClientId}</span>
+                    <span className="text-emerald-400" title={it.iqLink?.clientName || "Cliente vinculado en IQ"}>Vinculado</span>
                   ) : it.iqLink?.status === "REVIEW_REQUIRED" ? (
                     <button
                       type="button"

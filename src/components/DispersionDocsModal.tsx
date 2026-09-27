@@ -72,7 +72,7 @@ export default function DispersionDocsModal(props: {
 
   const title = useMemo(() => {
     if (!dispersion) return "Docs";
-    return `Docs - ${dispersion.folio || dispersion.dispersionFolio || dispersion.id}`;
+    return `Docs - ${dispersion.folio || dispersion.dispersionFolio || "Dispersión sin folio"}`;
   }, [dispersion]);
 
   useEffect(() => {

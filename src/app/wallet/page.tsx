@@ -224,7 +224,6 @@ export default function WalletPage() {
                 const label = formatMovementType(m.movementType);
                 const note = String(m.note || "").trim();
                 const holderName = String(m.holderName || "").trim();
-                const referenceId = String(m.referenceId || "").trim();
 
                 return (
                   <tr key={m.id} className="pay0-table-row">
@@ -259,7 +258,6 @@ export default function WalletPage() {
 
                       <div className="text-[10px] text-slate-500 mt-1 uppercase">
                         {holderName || "---"}
-                        {referenceId ? ` · Ref ${referenceId}` : ""}
                       </div>
                     </td>
 

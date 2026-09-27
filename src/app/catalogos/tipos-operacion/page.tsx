@@ -102,7 +102,7 @@ export default function CatalogoTiposOperacionPage() {
           return {
             id: d.id,
             key: String(data.key || d.id),
-            name: String(data.name || d.id),
+            name: String(data.name || "Tipo sin nombre"),
             aliases: Array.isArray(data.aliases) ? data.aliases.map((it: any) => String(it)) : [],
             category: normalizeCategory(data.category),
             calculationBaseType: normalizeBaseType(data.calculationBaseType),

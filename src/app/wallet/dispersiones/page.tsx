@@ -2457,7 +2457,7 @@ export default function WalletDispersionesPage() {
             }}
             options={beneficiaries.map((item) => ({
               value: item.id,
-              label: item.nombre || item.id,
+              label: item.nombre || "Cliente sin nombre",
             }))}
             placeholder="Beneficiario"
           />
@@ -2582,7 +2582,7 @@ export default function WalletDispersionesPage() {
             <div data-pay0="clientOriginSummary" className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Cliente origen</span>
                 <span className="truncate text-right text-white">
-                  {selectedClient?.label || clientId || "-"}
+                  {selectedClient?.label || "Cliente sin nombre"}
                 </span>
               </div>
               <div className="flex justify-between gap-3">
@@ -3142,7 +3142,7 @@ export default function WalletDispersionesPage() {
               <div>
                 <div className="text-sm font-bold text-white">Notas de dispersion</div>
                 <div className="text-xs text-slate-400">
-                  {notesFor?.folio || notesFor?.id} - {notesFor?.clienteNombre || "---"}
+                  {notesFor?.folio || "Dispersión sin folio"} - {notesFor?.clienteNombre || "---"}
                 </div>
               </div>
               <button

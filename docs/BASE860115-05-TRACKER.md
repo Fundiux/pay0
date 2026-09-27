@@ -14,8 +14,8 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 |---:|---|---|---|---|---|
 | 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
 | 2 | Identidad de pestaña/navegador | CERRADO | `1e638e6` | Hosting, 2026-09-27 | Título, manifest y metadatos públicos usan `PAY0`; SSR `ssrpay0system-00558-nit`; `/`, `/login`, `/pagos` y manifest HTTP 200; sin identidad técnica visible. |
-| 3 | Logo/símbolo/favicon | PENDIENTE | — | — | — |
-| 4 | UUID visibles | PENDIENTE | — | — | — |
+| 3 | Logo/símbolo/favicon | PENDIENTE | — | — | Espera la decisión del símbolo visual; Eliut autorizó continuar con los puntos siguientes. |
+| 4 | UUID visibles | LISTO_PARA_DEPLOY | — | — | Folios/nombres legibles; smoke de navegador y compuerta documental con Firestore Emulator PASS; frontend y Functions builds PASS; emuladores cerrados. |
 | 5 | Login mediante username | PENDIENTE | — | — | — |
 | 6 | Cambio de contraseña | PENDIENTE | — | — | — |
 | 7 | Filtro por usuario | PENDIENTE | — | — | — |
@@ -68,3 +68,21 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 - Riesgos residuales: el dominio y la configuración interna conservan legítimamente `pay-0-system`; no se modificaron porque son identificadores operativos, no texto de presentación. Logo, símbolo e iconos quedan reservados al Punto 3.
 - Bloqueadores: ninguno para el Punto 2.
 - Cierre: 2026-09-27. Siguiente punto autorizado: Punto 3 — Logo/símbolo/favicon.
+
+## Punto 3 — Logo/símbolo/favicon
+
+- Estado: `PENDIENTE` por instrucción de Eliut del 2026-09-27; continuar con los demás puntos.
+- Auditoría: no hay favicon ni app icons de PAY0. Los PNG presentes son un fondo del login y un recurso ajeno a la identidad de PAY0. Manifest y metadata admiten la integración técnica.
+- Pendiente: decisión del símbolo visual o entrega de un activo aprobado. No se eligió identidad definitiva, no hubo implementación ni deploy de este punto.
+- Siguiente acción: retomar después de recibir la decisión visual, sin bloquear el avance del Punto 4.
+
+## Punto 4 — UUID visibles
+
+- Estado: `LISTO_PARA_DEPLOY`
+- Fecha de entrada: 2026-09-27
+- Rama/worktree: `cycle/base860115-05` / `C:\Users\ebarr\Desktop\pay0-system\.worktrees\base860115-05`
+- Diagnóstico: varias vistas muestran IDs de Firestore como renglón secundario o sustituto de folios/nombres; algunos exports también los incluyen. Los UUID de CFDI son identificadores fiscales canónicos y los diagnósticos técnicos de IQ tienen utilidad operacional, por lo que se revisan por separado.
+- Implementación: presentación con folios/nombres y textos de ausencia de datos en Solicitudes, Pagos, Materialidad, Reportes, Wallet, catálogos, documentos, accesos y WhatsApp. Se mantuvieron los IDs como keys, valores de selección, rutas y payloads. Los exports financieros conservaron sus columnas de trazabilidad.
+- Emulador: Firestore local `demo-pay0` con fixture de dos aplicaciones PPD y renderizado real del componente en Chromium. Verificados folio humano, caso sin folio y ausencia de ambos IDs Firestore en el DOM. Resultado PASS. Emulador detenido y puertos liberados.
+- Compuertas: frontend build PASS (44 rutas), baseline y 22 controles críticos PASS, Functions build PASS; `qa:document-access` PASS con 42 descargas firmadas y 8 rechazos autorizados, `qa:document-ui` PASS, `git diff --check` PASS. Segunda ejecución de Firestore Emulator cerrada y puertos libres.
+- Deploy planeado: Hosting/SSR únicamente. Sin cambios en Functions, Rules, Indexes ni datos de producción.

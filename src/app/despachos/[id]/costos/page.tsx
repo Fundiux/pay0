@@ -114,7 +114,7 @@ export default function DespachoCostosPage() {
         return {
           id: d.id,
           key: String(data.key || d.id),
-          name: String(data.name || d.id),
+          name: String(data.name || "Tipo sin nombre"),
           category: normalizeCategory(data.category),
           calculationBaseType: normalizeBaseType(data.calculationBaseType),
           pricingMode: normalizePricingMode(data.pricingMode),
@@ -135,7 +135,7 @@ export default function DespachoCostosPage() {
         return {
           id: d.id,
           operationTypeKey: String(data.operationTypeKey || d.id),
-          operationTypeName: String(data.operationTypeName || d.id),
+          operationTypeName: String(data.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(data.calculationBaseType),
           pricingMode: normalizePricingMode(data.pricingMode),
           baseCost: Number(data.baseCost || 0),

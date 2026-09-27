@@ -162,7 +162,7 @@ export default function DocsModal(props: {
 
   const title = useMemo(() => {
     if (!solicitud) return "Documentos";
-    return `Docs - ${solicitud.folio || solicitud.id}`;
+    return `Docs - ${solicitud.folio || "Solicitud sin folio"}`;
   }, [solicitud]);
 
   
@@ -1219,7 +1219,7 @@ const downloadDoc = async (doc: UploadRow) => {
                         {getRelatedReceiptName(row)}
                       </div>
                       <div className="mt-0.5 text-[10px] text-slate-500">
-                        Pago: {row.pagoFolio || row.pagoId || "---"}
+                        Pago: {row.pagoFolio || "Sin folio"}
                       </div>
                     </div>
 

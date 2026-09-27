@@ -358,15 +358,15 @@ const [msg, setMsg] = useState("");
                       checked={!!state.active}
                       onChange={() => toggleClient(client.clientId)}
                       disabled={saving || loading}
-                      aria-label={`Activar ${client.clientName || client.clientId}`}
+                      aria-label={`Activar ${client.clientName || "cliente sin nombre"}`}
                     />
 
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-slate-100">
-                        {client.clientName || client.clientId}
+                        {client.clientName || "Cliente sin nombre"}
                       </div>
                       <div className="text-xs text-slate-500">
-                        {formatClientNumber(client.clientNumber) || client.clientId}
+                        {formatClientNumber(client.clientNumber) || "Sin número de cliente"}
                       </div>
                     </div>
 
@@ -412,7 +412,7 @@ const [msg, setMsg] = useState("");
                               : "border-white/10 bg-white/5 text-slate-500 hover:bg-white/10",
                           ].join(" ")}
                           title={perm.title}
-                          aria-label={`${perm.title}: ${client.clientName || client.clientId}`}
+                          aria-label={`${perm.title}: ${client.clientName || "cliente sin nombre"}`}
                         >
                           {perm.label}
                         </button>

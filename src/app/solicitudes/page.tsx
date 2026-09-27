@@ -1713,7 +1713,7 @@ export default function SolicitudesPage() {
 
             <div className="space-y-3">
               <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white">
-                <div className="truncate font-normal">{rejectFor?.folio || rejectFor?.id || "Solicitud"}</div>
+                <div className="truncate font-normal">{rejectFor?.folio || "Solicitud sin folio"}</div>
                 <div className="mt-1 text-xs text-slate-400">{rejectFor?.clienteNombre || "---"}</div>
               </div>
 
@@ -1888,7 +1888,7 @@ export default function SolicitudesPage() {
                           key={p.id}
                           className={`border-b border-white/5 text-[11px] ${selectedPagoId === p.id ? "bg-sky-500/10" : "hover:bg-white/[0.02]"}`}
                         >
-                          <td className="pay0-td font-mono text-sky-400">{p.id}</td>
+                          <td className="pay0-td font-mono text-sky-400">{p.folio || "Sin folio"}</td>
                           <td className="pay0-td text-slate-300">
                             {p?.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toLocaleString() : "---"}
                           </td>

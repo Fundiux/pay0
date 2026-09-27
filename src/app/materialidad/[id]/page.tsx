@@ -128,7 +128,7 @@ function OperationCard({ operation }: { operation: any }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-100">
-            {operation.solicitudFolio || operation.solicitudId || operation.id}
+            {operation.solicitudFolio || "Solicitud sin folio"}
           </p>
           <p className="mt-1 text-xs text-slate-500">{operation.concepto || "Operacion sin concepto"}</p>
         </div>
@@ -323,7 +323,6 @@ export default function MaterialityDetailPage() {
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
             {titleCliente} / {titleCompany}
           </p>
-          <p className="mt-1 text-xs text-slate-500">ID expediente: {materialityClientCompanyId}</p>
         </div>
 
         <button
