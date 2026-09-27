@@ -139,6 +139,8 @@ async function run(){
  const repXml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="22222222-2222-4222-8222-222222222222"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="1" ImpPagado="58" ImpSaldoAnt="116" ImpSaldoInsoluto="58" MonedaDR="MXN"/></Comprobante>`);
  assert.equal(docs.validateRep(repXml,{invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58}),'22222222-2222-4222-8222-222222222222');
  assert.throws(()=>docs.validateRep(repXml,{invoiceUuid:uuid,installment:2,amountMinor:5800}),/MISMATCH/);
+ assert.throws(()=>docs.validateRep(repXml,{invoiceUuid:uuid,installment:1,amountMinor:5801,balanceBefore:116.01,balanceAfter:58}),/MISMATCH/);
+ assert.equal(docs.validateRep(repXml,{invoiceUuid:uuid,installment:1,amountMinor:5801,balanceBefore:116.01,balanceAfter:58,legacyRoundingToleranceMinor:1}),'22222222-2222-4222-8222-222222222222');
  const saved=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'));
  assert.equal(saved.xmlUploadId.length,64);assert.equal(saved.pdfUploadId.length,64);
  for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId]){const upload=(await db.doc(`uploads/${uploadId}`).get()).data();assert.equal(upload.entityType,'pagos');assert.equal(upload.entityId,root);assert.equal(upload.pagoId,root);assert.equal(upload.solicitudId,root);assert.match(upload.storagePath,new RegExp(`/pagos/${root}/docs/COMPLEMENTO_PAGO_`));}

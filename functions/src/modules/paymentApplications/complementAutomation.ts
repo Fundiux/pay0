@@ -48,7 +48,10 @@ export async function adoptImportedIqComplement(applicationId: string, loaded: A
     bucket.file(text(xmlRow!.storagePath)).download().then(([bytes]) => bytes),
     bucket.file(text(pdfRow!.storagePath)).download().then(([bytes]) => bytes),
   ]);
-  const documents = await saveComplementDocuments(source, xmlBytes, pdfBytes);
+  // The retired importer accepted SAT-stamped REPs whose monetary fields differ
+  // by one cent because of decimal rounding. Keep that exception confined to
+  // adoption of already-issued evidence; new provider responses remain exact.
+  const documents = await saveComplementDocuments({ ...source, legacyRoundingToleranceMinor: 1 }, xmlBytes, pdfBytes);
   await db.runTransaction(async tx => {
     const latest = await tx.get(ref);
     if (!latest.exists || latest.data()?.rootId !== source.rootId || latest.data()?.applicationId !== applicationId)
@@ -58,6 +61,7 @@ export async function adoptImportedIqComplement(applicationId: string, loaded: A
     tx.set(db.doc(`pagoAplicaciones/${applicationId}`), { iqComplementXmlUploadId: documents.xmlUploadId,
       iqComplementPdfUploadId: documents.pdfUploadId, iqComplementUuid: documents.uuid,
       iqComplementDocumentOwner: "PAGO_APPLICATION", iqComplementReconciledAt: FieldValue.serverTimestamp(),
+      iqComplementLegacyRoundingToleranceMinor: 1,
       updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     for (const legacy of [xmlSnap, pdfSnap]) {
       if (![documents.xmlUploadId, documents.pdfUploadId].includes(legacy.id)) tx.update(legacy.ref, {
