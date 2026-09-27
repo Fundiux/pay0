@@ -547,10 +547,6 @@ service cloud.firestore {
     match /hugoActivityLog/{docId} {
       allow read, create, update, delete: if false;
     }
-    match /canonicalActivityLog/{docId} {
-      allow read, create, update, delete: if false;
-    }
-
     match /dispatchCompanyAccess/{despachoId} {
       allow read: if hasModuleView("empresas") && (
         isSuperadmin()

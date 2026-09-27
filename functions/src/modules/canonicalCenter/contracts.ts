@@ -1,31 +1,32 @@
-export const CANONICAL_CENTER_SCHEMA_VERSION = 1 as const;
+export const PAY0_CANONICAL_SCHEMA_VERSION = 1 as const;
 
-export type CanonicalResourceKind =
-  | "COMPANY_PROFILE"
-  | "INSTITUTIONAL_DOCUMENT"
+export type Pay0CanonicalResourceKind =
+  | "OWN_COMPANY_PROFILE"
+  | "OWN_COMPANY_DOCUMENT"
   | "CFDI_CONFIGURATION"
   | "SAT_CATALOG"
   | "SAT_PRODUCT_SERVICE"
   | "DOCUMENT_TEMPLATE"
   | "BRAND_STATIONERY"
-  | "INTEGRATION_CONFIGURATION"
+  | "INTEGRATION_REFERENCE"
   | "SYSTEM_PARAMETER";
 
-export type CanonicalVersionStatus = "DRAFT" | "REVIEW" | "ACTIVE" | "RETIRED";
+export type Pay0CanonicalVersionStatus = "DRAFT" | "REVIEW" | "ACTIVE" | "RETIRED";
 
-export type CanonicalScope = {
+export type Pay0CanonicalScope = {
+  system: "PAY0";
   rootId: string;
-  companyId?: string;
+  ownCompanyId?: string;
   environment?: "SANDBOX" | "PRODUCTION";
 };
 
-export type CanonicalVersion = {
-  schemaVersion: typeof CANONICAL_CENTER_SCHEMA_VERSION;
+export type Pay0CanonicalVersion = {
+  schemaVersion: typeof PAY0_CANONICAL_SCHEMA_VERSION;
   resourceId: string;
-  resourceKind: CanonicalResourceKind;
+  resourceKind: Pay0CanonicalResourceKind;
   version: number;
-  status: CanonicalVersionStatus;
-  scope: CanonicalScope;
+  status: Pay0CanonicalVersionStatus;
+  scope: Pay0CanonicalScope;
   payload: Record<string, unknown>;
   contentDigest: string;
   comment: string;
@@ -36,11 +37,11 @@ export type CanonicalVersion = {
   supersedesVersion?: number | null;
 };
 
-export type CanonicalResourcePointer = {
-  schemaVersion: typeof CANONICAL_CENTER_SCHEMA_VERSION;
+export type Pay0CanonicalResourcePointer = {
+  schemaVersion: typeof PAY0_CANONICAL_SCHEMA_VERSION;
   resourceId: string;
-  resourceKind: CanonicalResourceKind;
-  scope: CanonicalScope;
+  resourceKind: Pay0CanonicalResourceKind;
+  scope: Pay0CanonicalScope;
   activeVersion: number | null;
   createdAt: string;
   createdBy: string;
@@ -48,9 +49,9 @@ export type CanonicalResourcePointer = {
   updatedBy: string;
 };
 
-// Secrets never belong in CanonicalVersion.payload. Only a provider-neutral
-// secret reference and sanitized status may be stored in Firestore.
-export type CanonicalIntegrationReference = {
+// PAY0 Canonical stores only opaque secret references and sanitized state.
+// Secret values never belong in version payloads, Firestore, logs or clients.
+export type Pay0CanonicalIntegrationReference = {
   provider: "IQ" | "FACTURAMA" | "SAT" | "WHATSAPP" | "TELEGRAM" | "API";
   enabled: boolean;
   secretReference?: string | null;
@@ -58,23 +59,24 @@ export type CanonicalIntegrationReference = {
   health: "NOT_CONFIGURED" | "READY" | "DEGRADED" | "DISABLED";
 };
 
-export const CANONICAL_CENTER_STORAGE = Object.freeze({
-  resources: "canonicalResources",
-  versions: "canonicalResourceVersions",
-  audit: "canonicalAuditLog",
-  activity: "canonicalActivityLog",
-  blobsPrefix: "canonical-center/{rootId}/{companyId}/{resourceKind}/{resourceId}/{version}",
+export const PAY0_CANONICAL_STORAGE = Object.freeze({
+  resources: "pay0CanonicalResources",
+  versions: "pay0CanonicalResourceVersions",
+  audit: "pay0CanonicalAuditLog",
+  activity: "pay0ActivityLog",
+  blobsPrefix: "pay0-canonical/{rootId}/{ownCompanyId}/{resourceKind}/{resourceId}/{version}",
 });
 
-export const CANONICAL_CENTER_ROUTES = Object.freeze({
-  root: "/canonical-center",
-  companies: "/canonical-center/companies",
-  documents: "/canonical-center/documents",
-  satCatalogs: "/canonical-center/sat-catalogs",
-  cfdi: "/canonical-center/cfdi",
-  templates: "/canonical-center/templates",
-  stationery: "/canonical-center/stationery",
-  integrations: "/canonical-center/integrations",
-  parameters: "/canonical-center/parameters",
-  audit: "/canonical-center/audit",
+// Reserved names only. They are not enabled in RouteAccessGuard or navigation.
+export const PAY0_CANONICAL_ROUTES = Object.freeze({
+  root: "/administracion/canonicos",
+  companies: "/administracion/canonicos/empresas-propias",
+  documents: "/administracion/canonicos/documentos",
+  satCatalogs: "/administracion/canonicos/catalogos-sat",
+  cfdi: "/administracion/canonicos/facturacion",
+  templates: "/administracion/canonicos/plantillas",
+  stationery: "/administracion/canonicos/papeleria",
+  integrations: "/administracion/canonicos/integraciones",
+  parameters: "/administracion/canonicos/parametros",
+  audit: "/administracion/canonicos/auditoria",
 });

@@ -1,4 +1,4 @@
-export const ACTIVITY_SYSTEMS = ["PAY0", "ASSETS", "TTT", "HUGO", "CANONICAL"] as const;
+export const ACTIVITY_SYSTEMS = ["PAY0", "ASSETS", "TTT", "HUGO"] as const;
 
 export type ActivitySystem = (typeof ACTIVITY_SYSTEMS)[number];
 
@@ -7,7 +7,6 @@ const activityCollections: Record<ActivitySystem, string> = {
   ASSETS: "assetsActivityLog",
   TTT: "tttActivityLog",
   HUGO: "hugoActivityLog",
-  CANONICAL: "canonicalActivityLog",
 };
 
 export function inferActivitySystem(event: unknown, requested?: unknown): ActivitySystem {
@@ -18,7 +17,9 @@ export function inferActivitySystem(event: unknown, requested?: unknown): Activi
   if (key.startsWith("ASSET_")) return "ASSETS";
   if (key.startsWith("TTT_")) return "TTT";
   if (key.startsWith("AGENTE_007_") || key.startsWith("HUGO_")) return "HUGO";
-  if (key.startsWith("CANONICAL_")) return "CANONICAL";
+  if (key.startsWith("CANONICAL_")) {
+    throw new Error("GLOBAL_CANONICAL_ACTIVITY_FORBIDDEN");
+  }
   return "PAY0";
 }
 
