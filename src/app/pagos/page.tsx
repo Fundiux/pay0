@@ -46,6 +46,7 @@ import PagoApplicationIqFlowModal from "@/components/PagoApplicationIqFlowModal"
 import { uploadPagoDoc } from "@/lib/uploadPagoDoc";
 import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDate } from "@/lib/dateScope";
 import { PaymentRelationIndicator } from "@/components/PaymentRelationIndicator"; // H4-D67-A1B_RELATION_COLUMN
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
 
 function money2(value: any) {
   const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
@@ -352,6 +353,8 @@ export default function PagosPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [pagoAplicaciones, setPagoAplicaciones] = useState<any[]>([]);
+  const [applicationComplementDocs, setApplicationComplementDocs] = useState<any[]>([]);
+  const [downloadingComplementId, setDownloadingComplementId] = useState("");
   const [loadingPagos, setLoadingPagos] = useState(true);
   const [loadingMorePagos, setLoadingMorePagos] = useState(false);
   const [hasMorePagos, setHasMorePagos] = useState(false);
@@ -1710,6 +1713,36 @@ export default function PagosPage() {
       }
     );
   }, [rootId, myUid, role]);
+
+  useEffect(() => {
+    if (!rootId || !viewAplicacionesFor?.id) {
+      setApplicationComplementDocs([]);
+      return;
+    }
+    const docsQuery = query(
+      collection(db, "uploads"),
+      where("rootId", "==", rootId),
+      where("pagoId", "==", viewAplicacionesFor.id),
+    );
+    return onSnapshot(docsQuery, (snap) => {
+      setApplicationComplementDocs(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((row: any) =>
+        row.active === true && row.entityType === "pagos" && row.applicationId &&
+        ["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(String(row.documentType || "").toUpperCase())));
+    }, () => setApplicationComplementDocs([]));
+  }, [rootId, viewAplicacionesFor?.id]);
+
+  const downloadApplicationComplement = async (doc: any) => {
+    if (!doc?.id || downloadingComplementId) return;
+    setDownloadingComplementId(doc.id);
+    try {
+      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error: any) {
+      setPageMsg(error?.message || "No fue posible descargar el complemento.");
+    } finally {
+      setDownloadingComplementId("");
+    }
+  };
 
   const clientesOrdenados = useMemo(() => {
     return [...clientes].sort((a, b) => clientLabel(a).localeCompare(clientLabel(b)));
@@ -3589,7 +3622,7 @@ export default function PagosPage() {
                 <div className="overflow-x-auto rounded-2xl border border-white/10">
                   <table className="pay0-pagos-inner-table min-w-[900px] w-full text-left">
                     <thead>
-                      <tr><th className="p-3">Fecha</th><th className="p-3">Solicitud</th><th className="p-3">Cliente</th><th className="p-3">Empresa</th><th className="p-3 text-center">Monto aplicado</th><th className="pay0-th">Estatus</th></tr>
+                      <tr><th className="p-3">Fecha</th><th className="p-3">Solicitud</th><th className="p-3">Cliente</th><th className="p-3">Empresa</th><th className="p-3 text-center">Monto aplicado</th><th className="pay0-th">Complemento</th><th className="pay0-th">Estatus</th></tr>
                     </thead>
                     <tbody>
                       {aplicacionesDelPago.map((a) => (
@@ -3604,6 +3637,17 @@ export default function PagosPage() {
                             <div className="mt-0.5 text-[10px] text-slate-500">{a?.solicitudId || "---"}</div>
                           </td><td className="p-3">{a?.clienteNombre || "---"}</td><td className="p-3">{a?.empresaNombre || "---"}</td><td className="p-3 text-center font-mono text-emerald-400">
                             ${toCurrency(a?.montoAplicado || 0)}
+                          </td><td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {applicationComplementDocs.filter((doc: any) => doc.applicationId === a.id).map((doc: any) => (
+                                <button key={doc.id} type="button" disabled={downloadingComplementId === doc.id}
+                                  onClick={() => void downloadApplicationComplement(doc)}
+                                  className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200 hover:bg-sky-500/20 disabled:opacity-50">
+                                  {String(doc.documentType).endsWith("XML") ? "XML" : "PDF"}
+                                </button>
+                              ))}
+                              {applicationComplementDocs.every((doc: any) => doc.applicationId !== a.id) && <span className="text-slate-500">Pendiente</span>}
+                            </div>
                           </td><td className="p-3 text-center">
                             <span className={`inline-flex h-6 min-w-[110px] items-center justify-center rounded-full border px-3 py-1 text-[10px] uppercase tracking-tighter ${aplicacionStatusClass(a)}`}>
                               {aplicacionStatusLabel(a)}

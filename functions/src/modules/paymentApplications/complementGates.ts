@@ -72,7 +72,8 @@ export async function claimIqComplementGate(jobId: string, action: IqComplementA
     ]);
     let decision = decide(job, action, config.data(), master.data(), user.data(), access.data(), profile.data());
     if (decision.allowed && action === "REQUEST" && job.status !== "PREPARING") decision = { ...decision, allowed: false, reason: "REP_GATE_JOB_STATE" };
-    if (decision.allowed && action === "LOOKUP" && !["PREPARING", "REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status))
+    const eligibilityLookup = job.status === "BLOCKED" && job.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
+    if (decision.allowed && action === "LOOKUP" && !eligibilityLookup && !["PREPARING", "REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status))
       decision = { ...decision, allowed: false, reason: "REP_GATE_JOB_STATE" };
     if (decision.allowed && Number(quota.data()?.count || 0) >= decision.limit) decision = { ...decision, allowed: false, reason: "REP_GATE_QUOTA_EXHAUSTED" };
     if (decision.allowed) tx.set(quotaRef, { rootId: job.rootId, profileId: job.profileId, action, day,

@@ -1,3 +1,4 @@
+import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -12,6 +13,7 @@ import { claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } f
 import { iqRepRequestId, matchingIqRepJobs } from "./complementRequestIdentity";
 import { verifiedDocuments } from "./complementCanary";
 import { scanDueIqFollowups } from "./complementDailyLookup";
+import { saveComplementDocuments } from "./complementDocuments";
 
 const jobs = () => db.collection("paymentComplementJobs");
 const errorCode = (e: any) => /^[A-Z0-9_]+$/.test(e?.message || "") ? e.message : "REP_OPERATION_FAILED";
@@ -25,6 +27,53 @@ async function sourceFor(applicationId: string) {
   if (source.amountMinor !== Math.round(app.montoAplicado * 100) || source.installment !== app.numeroParcialidad || source.balanceBefore !== app.saldoAnterior || source.balanceAfter !== app.saldoInsoluto || source.invoiceUuid !== text(solicitud!.facturaUuid || solicitud!.uuidCfdi || solicitud!.iqInvoiceUuid).toUpperCase()) throw Error("REP_SOURCE_CHANGED");
   const enrichedSource: Record<string, any> = { ...source, currency: text(pago!.moneda).toUpperCase() };
   return { app, solicitud: solicitud!, pago: pago!, source: enrichedSource, ref };
+}
+
+export async function adoptImportedIqComplement(applicationId: string, loaded: Awaited<ReturnType<typeof sourceFor>>) {
+  const { app, source, ref } = loaded;
+  if (text(app.iqComplementStatus).toUpperCase() !== "IMPORTED") return false;
+  const xmlUploadId = text(app.iqComplementXmlUploadId), pdfUploadId = text(app.iqComplementPdfUploadId);
+  if (!xmlUploadId || !pdfUploadId) throw Error("REP_IMPORTED_DOCUMENT_IDS_MISSING");
+  const [xmlSnap, pdfSnap] = await Promise.all([
+    db.doc(`uploads/${xmlUploadId}`).get(), db.doc(`uploads/${pdfUploadId}`).get(),
+  ]);
+  const xmlRow = xmlSnap.data(), pdfRow = pdfSnap.data();
+  for (const [row, expectedType] of [[xmlRow, "COMPLEMENTO_PAGO_XML"], [pdfRow, "COMPLEMENTO_PAGO_PDF"]] as const) {
+    if (!row || row.rootId !== source.rootId || text(row.pagoId) !== text(source.pagoId) ||
+        text(row.pagoAplicacionId || row.applicationId) !== applicationId || text(row.documentType).toUpperCase() !== expectedType ||
+        !text(row.storagePath)) throw Error("REP_IMPORTED_DOCUMENT_SCOPE_MISMATCH");
+  }
+  const bucket = admin.storage().bucket();
+  const [xmlBytes, pdfBytes] = await Promise.all([
+    bucket.file(text(xmlRow!.storagePath)).download().then(([bytes]) => bytes),
+    bucket.file(text(pdfRow!.storagePath)).download().then(([bytes]) => bytes),
+  ]);
+  const documents = await saveComplementDocuments(source, xmlBytes, pdfBytes);
+  await db.runTransaction(async tx => {
+    const latest = await tx.get(ref);
+    if (!latest.exists || latest.data()?.rootId !== source.rootId || latest.data()?.applicationId !== applicationId)
+      throw Error("REP_IMPORTED_FOLLOWUP_CHANGED");
+    tx.update(ref, { ...documents, status: "RECEIVED", automationStatus: "RECEIVED", automationError: null,
+      repAttachmentStatus: "REP_VALIDATED", receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.set(db.doc(`pagoAplicaciones/${applicationId}`), { iqComplementXmlUploadId: documents.xmlUploadId,
+      iqComplementPdfUploadId: documents.pdfUploadId, iqComplementUuid: documents.uuid,
+      iqComplementDocumentOwner: "PAGO_APPLICATION", iqComplementReconciledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    for (const legacy of [xmlSnap, pdfSnap]) {
+      if (![documents.xmlUploadId, documents.pdfUploadId].includes(legacy.id)) tx.update(legacy.ref, {
+        active: false, status: "REPLACED", replacedByApplicationId: applicationId,
+        replacedByUploadIds: [documents.xmlUploadId, documents.pdfUploadId], replacedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    const jobId = text(latest.data()?.automationJobId);
+    if (jobId) tx.set(jobs().doc(jobId), { status: "RECEIVED", error: null, ...documents,
+      receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: source.rootId, actorUid: "SYSTEM", actorRole: "system",
+      referenceId: applicationId, referenceType: "pagoAplicacion", relatedEntityId: source.pagoId, relatedEntityType: "pago",
+      description: `REP ${documents.uuid} reconciliado como documento de la aplicación de pago; documentos legacy de Solicitud retirados de la vista general.` });
+  });
+  return true;
 }
 export async function updateJob(id: string, patch: any, message?: string) {
   const ref = jobs().doc(id);
@@ -53,10 +102,15 @@ export async function enqueueComplement(applicationId: string) {
   const initial = (await db.doc(`pagoAplicaciones/${applicationId}`).get()).data();
   if (!initial?.rootId) return;
   const config = (await db.doc(`paymentComplementConfigs/${initial.rootId}`).get()).data();
+  await reconcilePaymentComplement(applicationId);
+  const loaded = await sourceFor(applicationId);
+  // A previous IQ pipeline may already have imported a valid REP under the
+  // Solicitud. Adopt that evidence before applying the prospective-send gate;
+  // this path never performs an external request.
+  if (await adoptImportedIqComplement(applicationId, loaded)) return;
   // Inspect activation before touching historical follow-up or source records.
   if (!config || !millis(initial.createdAt) || millis(initial.createdAt) < millis(config.activatedAt)) return;
-  await reconcilePaymentComplement(applicationId);
-  const loaded = await sourceFor(applicationId), { app, solicitud, source, ref } = loaded;
+  const { app, solicitud, source, ref } = loaded;
   // Activation is prospective. Historical backfill never issues documents.
   let provider = "FACTURAMA", depositId = "", profileId = "", actorUid = text(app.createdBy);
   if (source.provider === "IQ") {
@@ -174,7 +228,8 @@ async function markReceived(id: string, rows: any[]) {
   if (!rows.length) throw Error("REP_RECEIPT_EMPTY");
   await db.runTransaction(async tx => {
     const jobRef = jobs().doc(id), job = (await tx.get(jobRef)).data();
-    if (!job || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status)) throw Error("REP_JOB_STATE_CHANGED");
+    const eligibilityLookup = job?.status === "BLOCKED" && job?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
+    if (!job || (!eligibilityLookup && !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status))) throw Error("REP_JOB_STATE_CHANGED");
     const linked = await tx.get(db.collection("paymentComplementRequests").where("automationJobId", "==", id));
     if (linked.empty || linked.size !== rows.length) throw Error("REP_RECEIPT_COVERAGE_MISMATCH");
     const expected = new Map(linked.docs.map(doc => [doc.data().applicationId, doc]));
@@ -208,15 +263,17 @@ async function markReceived(id: string, rows: any[]) {
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers) {
   const ref = jobs().doc(id), day = dayMexico(now);
   const current = (await ref.get()).data();
+  const currentEligibilityLookup = current?.status === "BLOCKED" && current?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
   if (current?.bReadState === "EXCEPTION") return;
   if (current?.nextCheckAt && millis(current.nextCheckAt) > now.getTime()) return;
-  if (current?.provider === "IQ" && ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(current.status)) {
+  if (current?.provider === "IQ" && (currentEligibilityLookup || ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(current.status))) {
     const gate = await inspectIqComplementGate(current, "LOOKUP");
     if (!gate.allowed) { await recordBlockedIqGate(id, "LOOKUP", gate.reason, now); return; }
   }
   const job = await db.runTransaction(async tx => {
     const row = (await tx.get(ref)).data();
-    if (!row || row.bReadState === "EXCEPTION" || !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status) || row.lastCheckDay === day ||
+    const eligibilityLookup = row?.status === "BLOCKED" && row?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
+    if (!row || row.bReadState === "EXCEPTION" || (!eligibilityLookup && !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status)) || row.lastCheckDay === day ||
         row.nextCheckAt && millis(row.nextCheckAt) > now.getTime()) return null;
     tx.update(ref, { lastCheckDay: day, lastCheckedAt: Timestamp.fromDate(now) }); return { ...row, id } as any;
   });
@@ -280,6 +337,11 @@ export const executeAutomaticPaymentComplement = onDocumentWritten({ document: "
   if (event.data?.after.data()?.status === "QUEUED") await executeComplement(event.params.jobId);
 });
 export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * 1-5", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0 }, async () => {
+  const imported = await db.collection("pagoAplicaciones").where("iqComplementStatus", "==", "IMPORTED").limit(50).get();
+  for (const row of imported.docs) {
+    try { await enqueueComplement(row.id); }
+    catch (error) { console.error("REP_IMPORTED_RECONCILIATION_EXCEPTION", row.id, errorCode(error)); }
+  }
   await scanDueIqFollowups();
   let cursor: string | undefined;
   while (true) {

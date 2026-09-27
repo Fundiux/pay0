@@ -146,6 +146,27 @@ async function run(){
  assert.deepEqual(savedAgain,saved,'document save is idempotent');
  const concurrentSaves=await Promise.all([1,2].map(()=>docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP smoke'))));
  for(const result of concurrentSaves)assert.deepEqual(result,saved,'concurrent retries preserve the same uploads');
+ const importedId=root+'-imported',legacyXmlId=importedId+'-xml',legacyPdfId=importedId+'-pdf';
+ const legacyXmlPath=`roots/${root}/solicitudes/${root}/docs/COMPLEMENTO_PAGO_XML/${legacyXmlId}-REP.xml`;
+ const legacyPdfPath=`roots/${root}/solicitudes/${root}/docs/COMPLEMENTO_PAGO_PDF/${legacyPdfId}-REP.pdf`;
+ await admin.storage().bucket().file(legacyXmlPath).save(repXml,{contentType:'application/xml'});
+ await admin.storage().bucket().file(legacyPdfPath).save(Buffer.from('%PDF-1.4\n% PAY0 REP legacy'),{contentType:'application/pdf'});
+ await db.doc(`uploads/${legacyXmlId}`).set({rootId:root,pagoId:root,solicitudId:root,pagoAplicacionId:importedId,entityType:'solicitudes',entityId:root,documentType:'COMPLEMENTO_PAGO_XML',storagePath:legacyXmlPath,active:true,status:'READY'});
+ await db.doc(`uploads/${legacyPdfId}`).set({rootId:root,pagoId:root,solicitudId:root,pagoAplicacionId:importedId,entityType:'solicitudes',entityId:root,documentType:'COMPLEMENTO_PAGO_PDF',storagePath:legacyPdfPath,active:true,status:'READY'});
+ await db.doc(`pagoAplicaciones/${importedId}`).set({...app,folio:'AP-IMPORTED',iqComplementStatus:'IMPORTED',iqComplementXmlUploadId:legacyXmlId,iqComplementPdfUploadId:legacyPdfId});
+ await api.enqueueComplement(importedId);
+ const importedRequest=(await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,importedId)}`).get()).data();
+ assert.equal(importedRequest.status,'RECEIVED');assert.equal(importedRequest.automationStatus,'RECEIVED');
+ for(const legacyId of [legacyXmlId,legacyPdfId])assert.equal((await db.doc(`uploads/${legacyId}`).get()).data().active,false,'legacy Solicitud document is hidden');
+ for(const uploadId of [importedRequest.xmlUploadId,importedRequest.pdfUploadId]){const upload=(await db.doc(`uploads/${uploadId}`).get()).data();assert.equal(upload.entityType,'pagos');assert.equal(upload.applicationId,importedId);assert.equal(upload.active,true);}
+ await api.enqueueComplement(importedId);
+ const importedActive=await db.collection('uploads').where('applicationId','==',importedId).where('active','==',true).get();assert.equal(importedActive.size,2,'legacy adoption retry remains idempotent');
+ const eligibilityJob=root+'-eligibility-blocked';
+ await db.doc(`paymentComplementJobs/${eligibilityJob}`).set({rootId:root,provider:'IQ',applicationId:importedId,profileId:'profile',actorUid:root,clientId:root,depositId:'220486',status:'BLOCKED',error:'IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED'});
+ await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,importedId)}`).update({automationJobId:eligibilityJob,status:'PENDING_PROVIDER_CONTRACT',automationStatus:'BLOCKED'});
+ const eligibilityReceipt={...adapter,availableIqComplement:async()=> 'https://iq.test/already-generated.zip',importIqComplement:async(_url,sources)=>sources.map(source=>({source,documents:{uuid:importedRequest.uuid,xmlUploadId:importedRequest.xmlUploadId,pdfUploadId:importedRequest.pdfUploadId}}))};
+ await api.checkComplementDaily(eligibilityJob,new Date(now.getTime()+86400000),eligibilityReceipt);
+ assert.equal((await db.doc(`paymentComplementJobs/${eligibilityJob}`).get()).data().status,'RECEIVED','eligibility-blocked jobs still discover an IQ-generated REP');
  const rep2Xml=Buffer.from(`<Comprobante TipoDeComprobante="P"><TimbreFiscalDigital UUID="33333333-3333-4333-8333-333333333333"/><DoctoRelacionado IdDocumento="${uuid}" NumParcialidad="2" ImpPagado="58" ImpSaldoAnt="58" ImpSaldoInsoluto="0" MonedaDR="MXN"/></Comprobante>`);
  const second=await docs.saveComplementDocuments({rootId:root,solicitudId:root,pagoId:root,pagoFolio:'P1',applicationId:root+'-2',invoiceUuid:uuid,installment:2,amountMinor:5800,balanceBefore:58,balanceAfter:0},rep2Xml,Buffer.from('%PDF-1.4\n% PAY0 REP second'));
  for(const uploadId of [saved.xmlUploadId,saved.pdfUploadId,second.xmlUploadId,second.pdfUploadId])assert.equal((await db.doc(`uploads/${uploadId}`).get()).data().active,true,'separate partialities remain active');
@@ -178,6 +199,6 @@ async function run(){
  assert.equal((await db.doc(`uploads/${root}-one`).get()).data().active,false);
  assert.equal((await db.doc(`uploads/${root}-two`).get()).data().active,true,'another partiality stays active');
  assert.equal((await db.doc(`uploads/${root}-three`).get()).data().active,true);
- console.log(JSON.stringify({ok:true,checks:['stable IQ request identity across profile changes','legacy job reused without canonical duplicate','IQ once per deposit under concurrency','double scheduler sends once','401 sends once','unknown eligibility blocks C','timeout and restart never resend','confirmed application gate','prospective activation','root isolation','daily once and seven-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','REP documents belong to Pago','REP document save is idempotent under concurrent retry','distinct partialities retain XML and PDF','unverified receipt cannot close a job','verified receipt closes all linked applications atomically','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
+ console.log(JSON.stringify({ok:true,checks:['stable IQ request identity across profile changes','legacy job reused without canonical duplicate','IQ once per deposit under concurrency','double scheduler sends once','401 sends once','unknown eligibility blocks C but keeps safe lookup','eligibility-blocked job discovers an IQ-generated REP','timeout and restart never resend','confirmed application gate','prospective activation','root isolation','daily once and seven-day warning','documented pending response only','Facturama PPD payload','missing SAT form blocks','foreign/mixed taxes block','XML partiality validation','REP documents belong to Pago','REP document save is idempotent under concurrent retry','legacy Solicitud REP is adopted under its payment application','legacy adoption retry is idempotent','distinct partialities retain XML and PDF','unverified receipt cannot close a job','verified receipt closes all linked applications atomically','provider ID persisted before downloads','no reissue after download failure'],externalActions:0}));
 }
 run().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)});
