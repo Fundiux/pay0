@@ -937,7 +937,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
     if (saving) return;
     setError("");
 
-    const name = String(row.nombre || row.id || "").trim();
+    const name = String(row.nombre || "sin nombre").trim();
     const confirmed = await askConfirm({
       title: "Eliminar beneficiario",
       message: `Eliminar beneficiario ${name}? Solo se permite si no tiene movimientos.`,
@@ -1765,7 +1765,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       disabled={saving}
                       className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
                       title="Agregar metodo"
-                      aria-label={`Agregar metodo ${beneficiary.nombre || beneficiary.id}`}
+                      aria-label={`Agregar metodo ${beneficiary.nombre || "beneficiario sin nombre"}`}
                     >
                       <CirclePlus size={15} strokeWidth={1.8} />
                     </button>
@@ -1776,7 +1776,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       disabled={!isSuperadmin || saving}
                       className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
                       title="Editar beneficiario"
-                      aria-label={`Editar beneficiario ${beneficiary.nombre || beneficiary.id}`}
+                      aria-label={`Editar beneficiario ${beneficiary.nombre || "beneficiario sin nombre"}`}
                     >
                       <Pencil size={15} strokeWidth={1.8} />
                     </button>
@@ -1787,7 +1787,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       disabled={!isSuperadmin || saving}
                       className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
                       title="Eliminar beneficiario"
-                      aria-label={`Eliminar beneficiario ${beneficiary.nombre || beneficiary.id}`}
+                      aria-label={`Eliminar beneficiario ${beneficiary.nombre || "beneficiario sin nombre"}`}
                     >
                       <Trash2 size={15} strokeWidth={1.8} />
                     </button>
@@ -1798,7 +1798,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       disabled={saving}
                       className={`inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${beneficiary.active ? "hover:text-rose-500" : "hover:text-emerald-400"}`}
                       title={beneficiary.active ? "Desactivar beneficiario" : "Activar beneficiario"}
-                      aria-label={`${beneficiary.active ? "Desactivar" : "Activar"} beneficiario ${beneficiary.nombre || beneficiary.id}`}
+                      aria-label={`${beneficiary.active ? "Desactivar" : "Activar"} beneficiario ${beneficiary.nombre || "sin nombre"}`}
                     >
                       {beneficiary.active ? <PowerOff size={15} strokeWidth={1.8} /> : <Power size={15} strokeWidth={1.8} />}
                     </button>
@@ -1861,7 +1861,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                                 disabled={!isSuperadmin || saving || methodEditSaving || isMethodReplaced(row)}
                                 className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
                                 title="Editar metodo"
-                                aria-label={`Editar metodo ${row.tipo || row.id}`}
+                                aria-label={`Editar metodo ${row.tipo || "sin nombre"}`}
                               >
                                 <Pencil size={15} strokeWidth={1.8} />
                               </button>
@@ -1872,7 +1872,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                                 disabled={!isSuperadmin || saving || methodEditSaving || isMethodReplaced(row)}
                                 className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                                 title="Corregir metodo"
-                                aria-label={`Corregir metodo ${row.tipo || row.id}`}
+                                aria-label={`Corregir metodo ${row.tipo || "sin nombre"}`}
                               >
                                 <Wrench size={15} strokeWidth={1.8} />
                               </button>
@@ -1883,7 +1883,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                                 disabled={!isSuperadmin || saving || methodEditSaving || isMethodReplaced(row)}
                                 className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
                                 title="Eliminar metodo"
-                                aria-label={`Eliminar metodo ${row.tipo || row.id}`}
+                                aria-label={`Eliminar metodo ${row.tipo || "sin nombre"}`}
                               >
                                 <Trash2 size={15} strokeWidth={1.8} />
                               </button>
@@ -1894,7 +1894,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                                 disabled={saving || methodEditSaving || isMethodReplaced(row)}
                                 className={`inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${row.active ? "hover:text-rose-500" : "hover:text-emerald-400"}`}
                                 title={row.active ? "Desactivar metodo" : "Activar metodo"}
-                                aria-label={`${row.active ? "Desactivar" : "Activar"} metodo ${row.tipo || row.id}`}
+                                aria-label={`${row.active ? "Desactivar" : "Activar"} metodo ${row.tipo || "sin nombre"}`}
                               >
                                 {row.active ? <PowerOff size={15} strokeWidth={1.8} /> : <Power size={15} strokeWidth={1.8} />}
                               </button>

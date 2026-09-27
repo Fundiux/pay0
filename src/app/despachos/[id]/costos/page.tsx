@@ -103,7 +103,7 @@ export default function DespachoCostosPage() {
     const unsubDespacho = onSnapshot(despachoRef, (snap) => {
       const data = snap.data() as any;
       if (data) {
-        setDespachoNombre(String(data.nombre || data.name || despachoId));
+        setDespachoNombre(String(data.nombre || data.name || "Despacho sin nombre"));
       }
     });
 

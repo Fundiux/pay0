@@ -15,7 +15,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 | 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
 | 2 | Identidad de pestaña/navegador | CERRADO | `1e638e6` | Hosting, 2026-09-27 | Título, manifest y metadatos públicos usan `PAY0`; SSR `ssrpay0system-00558-nit`; `/`, `/login`, `/pagos` y manifest HTTP 200; sin identidad técnica visible. |
 | 3 | Logo/símbolo/favicon | PENDIENTE | — | — | Espera la decisión del símbolo visual; Eliut autorizó continuar con los puntos siguientes. |
-| 4 | UUID visibles | LISTO_PARA_DEPLOY | — | — | Folios/nombres legibles; smoke de navegador y compuerta documental con Firestore Emulator PASS; frontend y Functions builds PASS; emuladores cerrados. |
+| 4 | UUID visibles | LISTO_PARA_DEPLOY | `5df6ffd` | Hosting/SSR `00560-mum`, verificación inicial PASS | Correcciones post-deploy verificadas con build de 44 rutas, smoke de emulador PASS y puertos libres; pendiente redeploy final. |
 | 5 | Login mediante username | PENDIENTE | — | — | — |
 | 6 | Cambio de contraseña | PENDIENTE | — | — | — |
 | 7 | Filtro por usuario | PENDIENTE | — | — | — |
@@ -78,7 +78,7 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 
 ## Punto 4 — UUID visibles
 
-- Estado: `LISTO_PARA_DEPLOY`
+- Estado: `LISTO_PARA_DEPLOY` (corrección posterior al primer deploy)
 - Fecha de entrada: 2026-09-27
 - Rama/worktree: `cycle/base860115-05` / `C:\Users\ebarr\Desktop\pay0-system\.worktrees\base860115-05`
 - Diagnóstico: varias vistas muestran IDs de Firestore como renglón secundario o sustituto de folios/nombres; algunos exports también los incluyen. Los UUID de CFDI son identificadores fiscales canónicos y los diagnósticos técnicos de IQ tienen utilidad operacional, por lo que se revisan por separado.
@@ -86,3 +86,6 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 - Emulador: Firestore local `demo-pay0` con fixture de dos aplicaciones PPD y renderizado real del componente en Chromium. Verificados folio humano, caso sin folio y ausencia de ambos IDs Firestore en el DOM. Resultado PASS. Emulador detenido y puertos liberados.
 - Compuertas: frontend build PASS (44 rutas), baseline y 22 controles críticos PASS, Functions build PASS; `qa:document-access` PASS con 42 descargas firmadas y 8 rechazos autorizados, `qa:document-ui` PASS, `git diff --check` PASS. Segunda ejecución de Firestore Emulator cerrada y puertos libres.
 - Deploy planeado: Hosting/SSR únicamente. Sin cambios en Functions, Rules, Indexes ni datos de producción.
+- Primer deploy: flujo estándar completo PASS y SSR `ssrpay0system-00560-mum` con 100% de tráfico. Ocho rutas HTTP 200, cero logs `ERROR` recientes y emuladores cerrados.
+- Hallazgo post-deploy: un tooltip, un chat sin nombre y etiquetas accesibles de beneficiarios/dispersiones aún podían revelar IDs al faltar su referencia humana. Se corrigen antes del cierre definitivo.
+- Corrección final: también se cubrieron los mensajes de exceso en pagos, el selector de adelantos, el nombre del despacho en costos y la confirmación de borrado de beneficiario. Build de frontend PASS con 44 rutas; baseline y 22 controles críticos PASS. Smoke Firestore + Chromium PASS, `git diff --check` PASS y emuladores cerrados.

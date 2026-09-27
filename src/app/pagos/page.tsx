@@ -2367,7 +2367,7 @@ export default function PagosPage() {
 
     const excedido = seleccionados.find((item) => item.monto > item.pendiente);
     if (excedido) {
-      setPageMsg(`El monto para ${excedido.solicitud?.folio || excedido.solicitud?.id} excede el pendiente.`);
+      setPageMsg(`El monto para ${excedido.solicitud?.folio || "la solicitud sin folio"} excede el pendiente.`);
       return;
     }
 
@@ -2896,7 +2896,7 @@ export default function PagosPage() {
                                   type="button"
                                   className="mx-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-sky-400/20 bg-sky-500/10 px-1.5 text-center text-[10px] font-normal leading-none text-sky-300 transition hover:bg-sky-500/20 hover:text-sky-100"
                                   title={foliosPendientes
-                                    .map((s) => `${s.folio || s.id}: $${toCurrency(getSolicitudPendiente(s))}`)
+                                    .map((s) => `${s.folio || "Solicitud sin folio"}: $${toCurrency(getSolicitudPendiente(s))}`)
                                     .join("\n")}
                                   aria-label={`${foliosPendientes.length} folios pendientes`}
                                   onClick={(event) => {

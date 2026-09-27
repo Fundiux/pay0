@@ -2000,10 +2000,10 @@ export default function WalletDispersionesPage() {
         readyLegs
           .map(
             (leg) =>
-              `Tramo ${leg.legIndex + 1}: ${leg.despachoName || leg.despachoId} | ${leg.currency || "MXN"} ${Number(leg.amount || 0).toLocaleString("es-MX", {
+              `Tramo ${leg.legIndex + 1}: ${leg.despachoName || "Despacho sin nombre"} | ${leg.currency || "MXN"} ${Number(leg.amount || 0).toLocaleString("es-MX", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-              })} | ${leg.operationTypeKey} ${leg.percentageLabel || "0"}% | ${leg.destinationKind} ****${leg.destinationLast4} | Asociado: ${leg.associatedName} | Perfil: ${leg.iqCredentialProfileAlias || leg.iqCredentialProfileId}`,
+              })} | ${leg.operationTypeKey} ${leg.percentageLabel || "0"}% | ${leg.destinationKind} ****${leg.destinationLast4} | Asociado: ${leg.associatedName} | Perfil: ${leg.iqCredentialProfileAlias || "Perfil sin alias"}`,
           )
           .join("\n");
       const skippedSummary =
@@ -2017,7 +2017,7 @@ export default function WalletDispersionesPage() {
           : "";
       const confirmed =
         window.confirm(
-          `PREVALIDACION IQ\n\nDispersion: ${folio || dispersionId}\nTipo: ${preview.operationTypeKey}\nDestino: ${preview.destination.kind} ****${preview.destination.last4}\nTramos IQ: ${readyLegs.length}\nTotal principal: MXN ${amountTotal.toLocaleString("es-MX", {
+          `PREVALIDACION IQ\n\nDispersion: ${folio || "Sin folio"}\nTipo: ${preview.operationTypeKey}\nDestino: ${preview.destination.kind} ****${preview.destination.last4}\nTramos IQ: ${readyLegs.length}\nTotal principal: MXN ${amountTotal.toLocaleString("es-MX", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}\n\n${legSummary}${skippedSummary}\n\nEsta accion pulsara Crear en IQ para cada tramo READY. Un resultado incierto bloqueara el reintento para evitar duplicados.\n\n¿Continuar?`,
@@ -2357,7 +2357,7 @@ export default function WalletDispersionesPage() {
                         item.id === row.despachoId,
                     )?.label ||
                     row.channel ||
-                    row.despachoId;
+                    "Despacho sin nombre";
 
               return (
                 <div
@@ -2999,7 +2999,7 @@ export default function WalletDispersionesPage() {
                         onClick={() => setDocsFor(row)}
                         className="text-sky-400 border border-dashed border-sky-400 rounded-full p-0.5 hover:bg-sky-400/10"
                         title="Comps"
-                        aria-label={`Comps ${row.folio || row.id}`}
+                        aria-label={`Comps ${row.folio || "dispersión sin folio"}`}
                       >
                         <Plus size={10} />
                       </button>
@@ -3011,7 +3011,7 @@ export default function WalletDispersionesPage() {
                           onClick={() => setNotesFor(row)}
                           className={`inline-flex items-center justify-center p-1 transition-colors duration-150 ${row.hasUnreadMsg ? "text-yellow-400 animate-[pulse_1.5s_infinite]" : "text-slate-500 hover:text-yellow-400"}`}
                           title="Notas / incidencias"
-                          aria-label={`Notas / incidencias ${row.folio || row.id}`}
+                          aria-label={`Notas / incidencias ${row.folio || "dispersión sin folio"}`}
                         >
                           <MessageSquarePlus size={16} strokeWidth={1.8} />
                         </button>
@@ -3023,7 +3023,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleRequestIncident(row.id, "DEVOLUCION")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Solicitar devolucion"
-                              aria-label={`Solicitar devolucion ${row.folio || row.id}`}
+                              aria-label={`Solicitar devolucion ${row.folio || "dispersión sin folio"}`}
                             >
                               <RotateCcw size={16} strokeWidth={1.8} />
                             </button>
@@ -3033,7 +3033,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleRequestIncident(row.id, "CANCELACION")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Solicitar cancelacion"
-                              aria-label={`Solicitar cancelacion ${row.folio || row.id}`}
+                              aria-label={`Solicitar cancelacion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Ban size={16} strokeWidth={1.8} />
                             </button>
@@ -3048,7 +3048,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "RECHAZADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-rose-500"
                               title="Rechazar incidencia"
-                              aria-label={`Rechazar incidencia ${row.folio || row.id}`}
+                              aria-label={`Rechazar incidencia ${row.folio || "dispersión sin folio"}`}
                             >
                               <XCircle size={16} strokeWidth={1.8} />
                             </button>
@@ -3058,7 +3058,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "DEVOLUCION_APLICADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Aplicar devolucion"
-                              aria-label={`Aplicar devolucion ${row.folio || row.id}`}
+                              aria-label={`Aplicar devolucion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Undo2 size={16} strokeWidth={1.8} />
                             </button>
@@ -3068,7 +3068,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "CANCELACION_APLICADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-rose-500"
                               title="Aplicar cancelacion"
-                              aria-label={`Aplicar cancelacion ${row.folio || row.id}`}
+                              aria-label={`Aplicar cancelacion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Ban size={16} strokeWidth={1.8} />
                             </button>

@@ -60,7 +60,7 @@ export default function WalletAdelantosPage() {
     if (!canViewWallet || !isSuperadmin || !rootId || !(user as any)?.uid) { setClients([]); setLoadingClients(false); return; }
     setLoadingClients(true);
     return listScopedClients({ uid: String((user as any).uid), role: String((profile as any)?.role || ""), rootId, requiredPermission: "viewBasic" }, (rows) => {
-      setClients(rows.map((client) => ({ id: client.id, nombre: client.name || client.id }))); setLoadingClients(false);
+      setClients(rows.map((client) => ({ id: client.id, nombre: client.name || "Cliente sin nombre" }))); setLoadingClients(false);
     }, () => { setClients([]); setLoadingClients(false); });
   }, [canViewWallet, isSuperadmin, rootId, user, profile]);
 

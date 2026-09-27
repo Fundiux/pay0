@@ -144,7 +144,7 @@ export default function ClienteDetallePage() {
 
         const chats = (dashboard.chats || []).map((chat: any) => ({
           id: String(chat.id || chat.safeDocId || ""),
-          name: String(chat.name || chat.chatId || "WhatsApp"),
+          name: String(chat.name || (chat.isGroup ? "Grupo sin nombre" : "Contacto sin nombre")),
           isGroup: chat.isGroup === true,
         }));
 
