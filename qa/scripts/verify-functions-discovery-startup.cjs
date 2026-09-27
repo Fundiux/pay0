@@ -140,6 +140,47 @@ async function warmFunctionsCompileCache() {
   }
 }
 
+async function readDiscoveryManifest({ port, startedAt, deadlineMs, assertRunning = () => {} }) {
+  const remainingMs = deadlineMs - (performance.now() - startedAt);
+  const timeoutError = new Error(`Firebase-compatible discovery timed out after ${deadlineMs} ms.`);
+  timeoutError.name = "TimeoutError";
+  if (remainingMs <= 0) throw timeoutError;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(timeoutError), remainingMs);
+  let attempts = 0;
+  try {
+    while (true) {
+      assertRunning();
+      if (controller.signal.aborted) throw timeoutError;
+      try {
+        attempts += 1;
+        // A connected request must finish under the original deadline. Aborting
+        // it every 500 ms leaves SDK loadStack running and discards its first
+        // manifest, whose global API/lifecycle declarations are consumed once.
+        const response = await fetch(`http://127.0.0.1:${port}/__/functions.yaml`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`discovery endpoint returned HTTP ${response.status}: ${await response.text()}`);
+        }
+        const manifest = JSON.parse(await response.text());
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        if (controller.signal.aborted || performance.now() - startedAt > deadlineMs) throw timeoutError;
+        return { manifest, elapsedMs, attempts };
+      } catch (error) {
+        if (controller.signal.aborted || error === timeoutError) throw timeoutError;
+        // Refused connections prove the SDK has not accepted this request.
+        // Resets, HTTP failures, parse failures and aborted requests are fatal:
+        // retrying them could observe a second, incomplete manifest.
+        if (error?.cause?.code !== "ECONNREFUSED" && error?.code !== "ECONNREFUSED") throw error;
+        await delay(25);
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function discover(phase, discoveryTimeoutMs) {
   const port = await availablePort();
   const startedAt = performance.now();
@@ -148,29 +189,17 @@ async function discover(phase, discoveryTimeoutMs) {
   let manifest;
   let discoveryElapsedMs = 0;
   try {
-    while (performance.now() - startedAt <= discoveryTimeoutMs) {
-      if (interrupted) throw new Error("discovery interrupted.");
-      if (run.error || run.result) {
-        throw new Error(`discovery server exited: ${run.error?.message || run.result?.signal || run.result?.code}; ${run.diagnostics.trim()}`);
-      }
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}/__/functions.yaml`, {
-          signal: AbortSignal.timeout(500),
-        });
-        if (!response.ok) {
-          throw new Error(`discovery endpoint returned HTTP ${response.status}: ${await response.text()}`);
+    const discovered = await readDiscoveryManifest({
+      port, startedAt, deadlineMs: discoveryTimeoutMs,
+      assertRunning: () => {
+        if (interrupted) throw new Error("discovery interrupted.");
+        if (run.error || run.result) {
+          throw new Error(`discovery server exited: ${run.error?.message || run.result?.signal || run.result?.code}; ${run.diagnostics.trim()}`);
         }
-        manifest = JSON.parse(await response.text());
-        discoveryElapsedMs = Math.round(performance.now() - startedAt);
-        break;
-      } catch (error) {
-        if (error instanceof SyntaxError || String(error).includes("HTTP ")) throw error;
-        await delay(25);
-      }
-    }
-    if (!manifest) {
-      throw new Error(`Firebase-compatible discovery timed out after ${discoveryTimeoutMs} ms: ${run.diagnostics.trim()}`);
-    }
+      },
+    });
+    manifest = discovered.manifest;
+    discoveryElapsedMs = discovered.elapsedMs;
   } finally {
     await stopProcess(run, port);
   }
@@ -227,4 +256,7 @@ async function main() {
   }
 }
 
-main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
+module.exports = { readDiscoveryManifest, availablePort, startProcess, stopProcess };
+if (require.main === module) {
+  main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
+}
