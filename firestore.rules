@@ -515,7 +515,7 @@ service cloud.firestore {
     }
     match /activityLog/{docId} {
       // Coleccion legada: solo lectura durante la transicion, sin nuevas escrituras cliente.
-      allow read: if hasModuleView("actividad") && (
+      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId() && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
@@ -526,7 +526,8 @@ service cloud.firestore {
     }
 
     match /pay0ActivityLog/{docId} {
-      allow read: if hasModuleView("actividad") && resource.data.sourceSystem == "PAY0" && (
+      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId()
+        && resource.data.sourceSystem == "PAY0" && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
