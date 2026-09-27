@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "systems": {
+    "PAY0": {
+      "routePrefix": "/",
+      "activityCollection": "pay0ActivityLog",
+      "owns": ["solicitudes", "pagos", "wallet", "materialidad", "facturacion", "reportes"]
+    },
+    "ASSETS": {
+      "routePrefix": "/assets",
+      "activityCollection": "assetsActivityLog",
+      "owns": ["positions", "movements", "vehicles", "loans", "assetDocuments"]
+    },
+    "TTT": {
+      "routePrefix": "/ttt",
+      "activityCollection": "tttActivityLog",
+      "owns": ["tttOperations"]
+    },
+    "CANONICAL": {
+      "routePrefix": "/canonical-center",
+      "activityCollection": "canonicalActivityLog",
+      "owns": ["companies", "institutionalDocuments", "satCatalogs", "cfdiConfiguration", "templates", "stationery", "integrationReferences", "parameters"]
+    },
+    "HUGO": {
+      "routePrefix": "/hugo",
+      "activityCollection": "hugoActivityLog",
+      "mayReadSystems": ["PAY0", "ASSETS", "TTT", "CANONICAL"],
+      "owns": ["conversation", "memory", "traces", "orchestration"]
+    }
+  }
+}

@@ -514,6 +514,7 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     match /activityLog/{docId} {
+      // Coleccion legada: solo lectura durante la transicion, sin nuevas escrituras cliente.
       allow read: if hasModuleView("actividad") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
@@ -522,6 +523,32 @@ service cloud.firestore {
         || (("actorId" in resource.data) && resource.data.actorId == me())
       );
       allow create, update, delete: if false;
+    }
+
+    match /pay0ActivityLog/{docId} {
+      allow read: if hasModuleView("actividad") && resource.data.sourceSystem == "PAY0" && (
+        isSuperadmin()
+        || (("adminId" in resource.data) && resource.data.adminId == me())
+        || (("createdBy" in resource.data) && resource.data.createdBy == me())
+        || (("actorUid" in resource.data) && resource.data.actorUid == me())
+        || (("actorId" in resource.data) && resource.data.actorId == me())
+      );
+      allow create, update, delete: if false;
+    }
+
+    // Las bitacoras hermanas no son superficies PAY0. Sus futuros frontends
+    // deberan usar callables/autorizacion propios; Hugo las consulta server-side.
+    match /assetsActivityLog/{docId} {
+      allow read, create, update, delete: if false;
+    }
+    match /tttActivityLog/{docId} {
+      allow read, create, update, delete: if false;
+    }
+    match /hugoActivityLog/{docId} {
+      allow read, create, update, delete: if false;
+    }
+    match /canonicalActivityLog/{docId} {
+      allow read, create, update, delete: if false;
     }
 
     match /dispatchCompanyAccess/{despachoId} {

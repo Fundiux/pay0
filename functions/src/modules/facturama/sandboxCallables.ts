@@ -243,7 +243,7 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
         referenceId: solicitudId, referenceType: "SOLICITUD", amount: xmlMetadata.total,
         description: `CFDI ${options.environment} vinculado al expediente.`,
         extra: { invoiceId, environment: options.environment, uuid },
-      }, db.collection("activityLog").doc(`factura-issued-${invoiceId}`));
+      }, db.collection("pay0ActivityLog").doc(`factura-issued-${invoiceId}`));
       await fiscalBatch.commit();
       if (options.environment === "PRODUCTION" && solicitud.replacementOfSolicitudId && uuid) {
         try {

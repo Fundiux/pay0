@@ -149,7 +149,6 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     iconKey: "facturacion",
     superadminOnly: true,
   },
-  { label: "Hugo", href: "/hugo", iconKey: "hugo", superadminOnly: true },
   {
     label: "Materialidad",
     href: "/materialidad",

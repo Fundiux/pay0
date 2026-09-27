@@ -1964,7 +1964,7 @@ export async function runCreateClientDispersionIqCore(input: {
     );
   
   await db
-    .collection("activityLog")
+    .collection("pay0ActivityLog")
     .doc()
     .set({
       rootId: auth.rootId,
@@ -1972,6 +1972,8 @@ export async function runCreateClientDispersionIqCore(input: {
         "DISPERSION_IQ_GENERACION",
       eventType:
         "DISPERSION_IQ_GENERACION",
+      sourceSystem: "PAY0",
+      activitySchemaVersion: 2,
       actorUid: auth.uid,
       actorUsername:
         auth.username,

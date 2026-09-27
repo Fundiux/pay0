@@ -75,7 +75,8 @@
     "qa:document-ui": "node --experimental-strip-types qa/scripts/authorized-document-ui-integration.mjs",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
     "qa:functions-discovery": "node qa/scripts/verify-functions-discovery-startup.cjs",
-    "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs"
+    "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs",
+    "qa:ecosystem-boundaries": "node qa/scripts/verify-ecosystem-boundaries.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

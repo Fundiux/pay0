@@ -690,7 +690,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
             iqExecutionStatus: "NOT_REQUESTED",
           },
         },
-        db.collection("activityLog").doc(
+        db.collection("pay0ActivityLog").doc(
           buildPaymentApplicationActivityId(applicationId, "APPLIED"),
         ),
       );
@@ -721,7 +721,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
               iqExecutionStatus: "NOT_REQUESTED",
             },
           },
-          db.collection("activityLog").doc(
+          db.collection("pay0ActivityLog").doc(
             buildPaymentApplicationActivityId(applicationId, "COMPLETED"),
           ),
         );

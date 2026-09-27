@@ -13,6 +13,7 @@ import {
   getActivityEventLabel,
   normalizeActivityEventKey,
 } from "@/lib/activityEventLabels";
+import { belongsToSystem, SYSTEM_ACTIVITY_COLLECTIONS } from "@/lib/systemActivity";
 
 type Props = {
   adminId?: string;
@@ -34,7 +35,7 @@ export default function ActivityLog({
   from,
   to,
   hideAuthEvents = true,
-  title = "Actividad del sistema",
+  title = "Actividad PAY0",
   maxRows = 200,
   searchTerm,
   eventFilter,
@@ -262,45 +263,42 @@ export default function ActivityLog({
 
     setLoading(true);
 
-    let qy: any;
+    const buildQuery = (collectionName: string) => {
+      if (role === "superadmin") {
+        return query(collection(db, collectionName), where("rootId", "==", myRootId), orderBy("createdAt", "desc"), limit(maxRows));
+      }
+      if (role === "admin") {
+        return query(collection(db, collectionName), where("adminId", "==", uid), orderBy("createdAt", "desc"), limit(maxRows));
+      }
+      return query(collection(db, collectionName), where("actorUid", "==", uid), orderBy("createdAt", "desc"), limit(maxRows));
+    };
 
-    if (role === "superadmin") {
-      qy = query(
-        collection(db, "activityLog"),
-        where("rootId", "==", myRootId),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    } else if (role === "admin") {
-      qy = query(
-        collection(db, "activityLog"),
-        where("adminId", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    } else {
-      qy = query(
-        collection(db, "activityLog"),
-        where("actorUid", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    }
+    const rowsByCollection = new Map<string, any[]>();
+    const collectionNames = [SYSTEM_ACTIVITY_COLLECTIONS.PAY0, "activityLog"];
+    const publish = () => {
+      const merged = collectionNames
+        .flatMap((name) => rowsByCollection.get(name) || [])
+        .filter((row) => belongsToSystem(row, "PAY0"))
+        .sort((a, b) => Number(b.createdAt?.seconds || 0) - Number(a.createdAt?.seconds || 0))
+        .slice(0, maxRows);
+      setActivity(merged);
+      setLoading(rowsByCollection.size < collectionNames.length);
+    };
 
-    const unsub = onSnapshot(
-      qy,
+    const unsubs = collectionNames.map((collectionName) => onSnapshot(
+      buildQuery(collectionName),
       (snap) => {
-        setActivity(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLoading(false);
+        rowsByCollection.set(collectionName, snap.docs.map((d) => ({ id: `${collectionName}:${d.id}`, ...d.data() })));
+        publish();
       },
       (error) => {
-        console.error("Error ActivityLog:", error);
-        setActivity([]);
-        setLoading(false);
-      }
-    );
+        console.error(`Error ActivityLog (${collectionName}):`, error);
+        rowsByCollection.set(collectionName, []);
+        publish();
+      },
+    ));
 
-    return () => unsub();
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
   }, [uid, role, myRootId, maxRows]);
 
   const eventOptions = useMemo(() => {
