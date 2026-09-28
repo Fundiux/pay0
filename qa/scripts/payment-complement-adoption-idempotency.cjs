@@ -118,6 +118,11 @@ async function assertStable(f, operation, label) {
 }
 
 async function run() {
+  const maintenance = await fixture('maintenance');
+  await api.adoptImportedIqComplementById(maintenance.applicationId);
+  await assertReceived(maintenance);
+  await assertStable(maintenance, () => api.adoptImportedIqComplementById(maintenance.applicationId),
+    'bounded maintenance adoption reuses the same no-op completion guard');
   const once = await fixture('once'), original = await once.appRef.get();
   await api.enqueueComplement(once.applicationId);
   await assertReceived(once);

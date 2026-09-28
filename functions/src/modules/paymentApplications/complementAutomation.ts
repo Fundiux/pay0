@@ -29,6 +29,14 @@ async function sourceFor(applicationId: string) {
   return { app, solicitud: solicitud!, pago: pago!, source: enrichedSource, ref };
 }
 
+// Maintenance entrypoint: the same validated adoption, with no provider lookup,
+// request, issuance or automation dispatch. It never resumes delivery.
+export async function adoptImportedIqComplementById(applicationId: string) {
+  const loaded = await sourceFor(applicationId);
+  if (text(loaded.app.iqComplementStatus).toUpperCase() !== "IMPORTED") throw Error("REP_IMPORTED_REQUIRED");
+  return adoptImportedIqComplement(applicationId, loaded);
+}
+
 export async function adoptImportedIqComplement(applicationId: string, loaded: Awaited<ReturnType<typeof sourceFor>>) {
   const { app, source, ref } = loaded;
   if (text(app.iqComplementStatus).toUpperCase() !== "IMPORTED") return false;
