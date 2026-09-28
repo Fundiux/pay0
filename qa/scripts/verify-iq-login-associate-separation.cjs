@@ -19,6 +19,7 @@ const callables = read("functions/src/modules/iq/callables.ts");
 const canonical = read("functions/src/modules/iq/iqCanonicalAccess.ts");
 const queue = read("functions/src/modules/iq/solicitudCreateQueueCallables.ts");
 const manual = read("functions/src/modules/iq/solicitudCreationCallables.ts");
+const clientLink = read("functions/src/modules/clients/iqLinkCallable.ts");
 const ui = read("src/app/integraciones/iq/page.tsx");
 
 assert.match(callables, /associatedName: String\(data\.associatedName \?\? ""\)/);
@@ -36,6 +37,8 @@ assert.match(queue, /iqAssociatedName: input\.prepared\.associatedName/);
 assert.match(queue, /associatedName: requireIqAssociatedName\(job\.associatedName\)/);
 assert.match(manual, /associatedName = requireIqAssociatedName\(profile\.associatedName\)/);
 assert.match(manual, /iqAssociatedName: associatedName/);
+assert.match(clientLink, /const partner = exactPartner\(access\.associatedName\)/);
+assert.doesNotMatch(clientLink, /exactPartner\(access\.associatedName\)\s*\|\|\s*exactPartner\(access\.profileAlias\)/);
 
 assert.match(ui, />Asociado IQ</);
 assert.match(ui, /profile\.associatedName \|\|/);
