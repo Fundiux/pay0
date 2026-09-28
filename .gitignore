@@ -1,6 +1,7 @@
 node_modules/
 .next/
 .env.local
+functions/.env.pay-0-system
 .wwebjs_auth/
 .wwebjs_cache/
 *.log

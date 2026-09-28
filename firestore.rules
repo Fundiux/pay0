@@ -17,6 +17,9 @@ service cloud.firestore {
       return authenticated()
         && userExists(me())
         && userDoc(me()).get("isDeleted", false) != true
+        && userDoc(me()).get("deleted", false) != true
+        && userDoc(me()).get("disabled", false) != true
+        && userDoc(me()).get("deletedAt", null) == null
         && userDoc(me()).get("isActive", true) != false
         && userDoc(me()).get("active", true) != false;
     }
@@ -287,6 +290,15 @@ service cloud.firestore {
         allow read: if hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid));
         allow write: if signedIn() && isSuperadmin();
       }
+    }
+
+    // Login aliases and throttling are server-only. Never expose an anonymous
+    // username directory, email resolution or client-writable reservations.
+    match /authUsernames/{id} {
+      allow read, write: if false;
+    }
+    match /authLoginLimits/{id} {
+      allow read, write: if false;
     }
 
     match /despachos/{docId} {

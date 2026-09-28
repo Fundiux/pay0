@@ -5,6 +5,7 @@ import { db, functions } from "@/lib/firebaseClient";
 
 export type UserDoc = {
   email: string | null;
+  username?: string | null;
   rootId?: string;
   role?: string;
   parentUserId?: string | null;

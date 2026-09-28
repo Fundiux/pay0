@@ -33,6 +33,7 @@ export function normalizeCanonicalRole(value: unknown): CanonicalUserRole | "" {
 export function isCanonicalUserActive(user: any): boolean {
   if (!user) return false;
   if (user.isDeleted === true) return false;
+  if (user.deleted === true || user.disabled === true || Boolean(user.deletedAt)) return false;
   if (user.isActive === false) return false;
   if (user.active === false) return false;
   return true;

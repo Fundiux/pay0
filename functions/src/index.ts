@@ -16,6 +16,7 @@ import {
 import { diagnosePagoFinancialContext as diagnosePagoFinancialContextCore } from "./modules/deposits/diagnose";
 import { assertAuthorized, normalizeRole, getUserRole } from "./utils/authGuard";
 import { getDefaultModules } from "./modules/users/defaultModules";
+import { createUserWithLogin, discardUnpublishedLoginUser } from "./modules/users/loginIdentity";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { logActivity, logActivityTx } from "./utils/logActivity";
@@ -92,12 +93,13 @@ async function getActiveClientDelegationAccess(
 }
 
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";
+export { loginWithUsername, setMyUsername } from "./modules/users/loginIdentity";
 
 export const upsertUser = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
-    const email = request.data?.email ? String(request.data.email) : null;
+    const email = (await admin.auth().getUser(uid)).email || null;
 
     const ref = db.doc(`users/${uid}`);
     const snap = await ref.get();
@@ -815,24 +817,10 @@ export const createAdmin = onCall(
       throw new HttpsError("invalid-argument", "email requerido y password minimo 6 caracteres.");
     }
 
-    let u: admin.auth.UserRecord;
-    try {
-      u = await admin.auth().createUser({
-        email,
-        password,
-        displayName: displayName || undefined,
-        disabled: false,
-      });
-    } catch (err: any) {
-      const code = err?.errorInfo?.code || err?.code || "";
-      if (code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "El email ya esta en uso.");
-      }
-      throw err;
-    }
-
-    const now = FieldValue.serverTimestamp();
     const rootId = String(caller?.rootId || callerUid);
+    const { user: u, username } = await createUserWithLogin({ email, password,
+      displayName: displayName || undefined, username: request.data?.username, rootId });
+    const now = FieldValue.serverTimestamp();
     const userRef = db.doc(`users/${u.uid}`);
     let userNumber = 0;
     let userSequenceCounterPath = "";
@@ -855,6 +843,8 @@ export const createAdmin = onCall(
           email,
           displayName: displayName || null,
           role: "admin",
+          username,
+          usernameNormalized: username,
           modules: getDefaultModules("admin"),        rootId,
           parentUserId: callerUid,
           parentRole: "superadmin",
@@ -872,6 +862,9 @@ export const createAdmin = onCall(
         },
         { merge: true }
       );
+    }).catch(async error => {
+      await discardUnpublishedLoginUser(u.uid, username);
+      throw error;
     });
 
     if (despachoId) {
@@ -887,6 +880,7 @@ export const createAdmin = onCall(
       uid: u.uid,
       userNumber,
       userFolio: `U${String(userNumber).padStart(2, "0")}`,
+      username,
       role: "admin",
       rootId,
       parentUserId: callerUid,
@@ -966,21 +960,8 @@ export const createOperador = onCall(
       }
     }
 
-    let u: admin.auth.UserRecord;
-    try {
-      u = await admin.auth().createUser({
-        email,
-        password,
-        displayName: displayName || undefined,
-        disabled: false,
-      });
-    } catch (err: any) {
-      const code = err?.errorInfo?.code || err?.code || "";
-      if (code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "El email ya esta en uso.");
-      }
-      throw err;
-    }
+    const { user: u, username } = await createUserWithLogin({ email, password,
+      displayName: displayName || undefined, username: request.data?.username, rootId });
 
     const now = FieldValue.serverTimestamp();
     const userRef = db.doc(`users/${u.uid}`);
@@ -1005,6 +986,8 @@ export const createOperador = onCall(
           email,
           displayName: displayName || null,
           role: "operador",
+          username,
+          usernameNormalized: username,
           rootId,
           parentUserId,
           parentRole,
@@ -1023,6 +1006,9 @@ export const createOperador = onCall(
         },
         { merge: true }
       );
+    }).catch(async error => {
+      await discardUnpublishedLoginUser(u.uid, username);
+      throw error;
     });
 
     if (despachoId) {
@@ -1038,6 +1024,7 @@ export const createOperador = onCall(
       uid: u.uid,
       userNumber,
       userFolio: `U${String(userNumber).padStart(2, "0")}`,
+      username,
       role: "operador",
       rootId,
       parentUserId,

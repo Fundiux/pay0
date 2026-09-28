@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, loginWithEmailPassword } from "@/lib/auth";
+import { useAuth, loginWithIdentifier } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { getFirstAllowedRoute } from "@/lib/roles";
 
@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const { profile, loading: loadingProfile } = useUserProfile();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,10 +26,11 @@ export default function LoginPage() {
     setErr("");
     setSubmitting(true);
     try {
-      await loginWithEmailPassword(email.trim().toLowerCase(), password);
+      await loginWithIdentifier(identifier, password);
     } catch (error: any) {
       setErr(error?.message || "No se pudo iniciar sesión.");
     } finally {
+      setPassword("");
       setSubmitting(false);
     }
   }
@@ -45,8 +46,8 @@ export default function LoginPage() {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-200">Correo electrónico</label>
-              <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-300/15" type="email" autoComplete="email" placeholder="tu@empresa.com" required />
+              <label htmlFor="login-identifier" className="mb-1.5 block text-sm font-medium text-slate-200">Usuario o correo electrónico</label>
+              <input id="login-identifier" value={identifier} onChange={(event) => setIdentifier(event.target.value)} className="w-full rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-300/15" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="Tu nombre de usuario" required />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-200">Contraseña</label>
