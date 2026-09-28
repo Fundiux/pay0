@@ -1017,7 +1017,75 @@
                 { "fieldPath": "createdAt", "order": "DESCENDING" },
                 { "fieldPath": "__name__", "order": "DESCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "pagos", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "createdBy", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "createdBy", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "adminId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "createdBy", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "solicitudes", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "pagos", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" },
+                { "fieldPath": "automaticApplicationEligible", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "uploads", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "pagoId", "order": "ASCENDING" },
+                { "fieldPath": "documentType", "order": "ASCENDING" },
+                { "fieldPath": "active", "order": "ASCENDING" }
+            ]
         }
     ],
-    "fieldOverrides": []
+    "fieldOverrides": [
+        {
+            "collectionGroup": "authLoginLimits",
+            "fieldPath": "expiresAt",
+            "ttl": true,
+            "indexes": []
+        }
+    ]
 }
