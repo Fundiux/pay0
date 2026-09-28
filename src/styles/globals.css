@@ -1069,7 +1069,8 @@ body {
 /* Shared row feedback and compact monetary columns. */
 :root { --pay0-row-hover: rgba(254, 240, 138, 0.055); }
 @media (hover: hover) {
-  table > tbody > tr:not([aria-selected="true"]):not([data-state="selected"]):hover > td {
+  table > tbody > tr:not([aria-selected="true"]):not([data-state="selected"]):hover > td,
+  .pay0-table-card div:is(.pay0-row-even, .pay0-row-odd):not([aria-selected="true"]):not([data-state="selected"]):hover {
     background-image: linear-gradient(var(--pay0-row-hover), var(--pay0-row-hover)) !important;
   }
 }
