@@ -1,4 +1,5 @@
 // H4_D85_A10_A43_CANONICAL_IQ_CLIENT_SYNC
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";

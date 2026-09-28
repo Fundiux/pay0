@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import {
   HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";

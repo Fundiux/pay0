@@ -1,0 +1,38 @@
+# Template only. No public invoker binding is created. The runtime account must
+# have no project roles. Supply a built image digest after billing is authorized.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: pay0-iq-staging-safety
+  namespace: pay-0-system-staging
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '1'
+    spec:
+      serviceAccountName: pay0-iq-staging-safety@pay-0-system-staging.iam.gserviceaccount.com
+      containerConcurrency: 1
+      timeoutSeconds: 30
+      containers:
+        - image: IMAGE_DIGEST_REQUIRED
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: '1'
+              memory: 128Mi
+          env:
+            - name: GCLOUD_PROJECT
+              value: pay-0-system-staging
+            - name: PAY0_ENVIRONMENT
+              value: staging
+            - name: PAY0_EXTERNAL_ACTIONS_MODE
+              value: disabled
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080

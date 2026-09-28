@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import type JSZip from "jszip";
 import { createHash } from "crypto";
 import { defineSecret } from "firebase-functions/params";

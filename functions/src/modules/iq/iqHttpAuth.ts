@@ -1,3 +1,5 @@
+import { fetchIqExternal as fetch } from "./externalActionsPolicy";
+
 export interface IqHttpCredentials {
   username: string;
   password: string;

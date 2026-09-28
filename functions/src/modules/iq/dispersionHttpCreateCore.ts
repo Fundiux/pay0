@@ -1,4 +1,5 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
+import { fetchIqExternal as fetch } from "./externalActionsPolicy";
 import { fetchIq } from "./iqHttpClient";
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
