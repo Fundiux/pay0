@@ -1,4 +1,8 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { createHash } from "node:crypto";
+import { db, getMyUser, getRootId } from "../sharedCallables/helpers";
+import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+import { identifyParsedReceipt } from "./receiptIdentification";
 
 let pdfParser: any;
 let visionClient: any;
@@ -26,6 +30,7 @@ type ReceiptData = {
   reference: string;
   concept: string;
   currency: string;
+  paymentForm: string;
   rfc: string;
   payerRfc: string;
   beneficiaryRfc: string;
@@ -34,6 +39,10 @@ type ReceiptData = {
   shortName: string;
   destinationAccount: string;
   warnings: string[];
+  identityConflict: boolean;
+  amountVerified: boolean;
+  executionConfirmed: boolean;
+  dateVerified: boolean;
 };
 
 function clean(value: unknown): string {
@@ -63,10 +72,17 @@ function parseMoney(value: unknown): number {
   const comma = compact.lastIndexOf(",");
   const dot = compact.lastIndexOf(".");
 
-  const normalized =
-    comma > dot
-      ? compact.replace(/\./g, "").replace(",", ".")
-      : compact.replace(/,/g, "");
+  let normalized = compact;
+  if (comma >= 0 && dot >= 0) {
+    const groupingValid = comma > dot ? /^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(compact) : /^\d{1,3}(?:,\d{3})+\.\d{1,2}$/.test(compact);
+    if (!groupingValid) return 0;
+    normalized = comma > dot ? compact.replace(/\./g, "").replace(",", ".") : compact.replace(/,/g, "");
+  } else if (comma >= 0 || dot >= 0) {
+    const separator = comma >= 0 ? "," : ".", parts = compact.split(separator);
+    if (/^\d{1,3}$/.test(parts[0]) && parts.slice(1).every(part => /^\d{3}$/.test(part))) normalized = parts.join("");
+    else if (parts.length === 2 && /^\d{1,2}$/.test(parts[1])) normalized = parts.join(".");
+    else return 0;
+  }
 
   const number = Number(normalized);
   if (!Number.isFinite(number) || number <= 0) return 0;
@@ -300,11 +316,11 @@ function parseTimeValue(value: string): string {
   return `${String(hour).padStart(2, "0")}:${match[2]}:${match[3] || "00"}`;
 }
 
-function labeledRfc(lines: string[], party: "payer" | "beneficiary"): string {
+function labeledRfcs(lines: string[], party: "payer" | "beneficiary"): string[] {
   const labels = party === "payer"
     ? /^(?:rfc\s+(?:ordenante|emisor|remitente|pagador|cliente)|(?:ordenante|emisor|remitente|pagador|cliente)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i
     : /^(?:rfc\s+(?:beneficiario|receptor)|(?:beneficiario|receptor)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i;
-  return firstMatch(lines.join("\n"), [labels]).toUpperCase();
+  return [...new Set(lines.map(line => firstMatch(line, [labels]).toUpperCase()).filter(Boolean))];
 }
 function detectReceiptContentType(input: {
   declaredContentType: string;
@@ -429,7 +445,7 @@ function extractReceiptAmount(lines: string[], text: string): string {
     /\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/,
   ]);
 }
-function parseReceiptText(textRaw: string): ReceiptData {
+export function parseReceiptText(textRaw: string): ReceiptData {
   const text = String(textRaw || "")
     .replace(/\r/g, "\n")
     .replace(/\n{2,}/g, "\n");
@@ -471,9 +487,18 @@ function parseReceiptText(textRaw: string): ReceiptData {
     /^cuenta\s+de\s+dep[oÃƒÂ³]sito\s*[:\-]\s*(.+)$/i,
     /^cuenta\s+destino\s*[:\-]\s*(.+)$/i,
     /^clabe\s+destino\s*[:\-]\s*(.+)$/i,
-  ]).replace(/\D/g, "");
+  ]);
 
   const amountRaw = extractReceiptAmount(lines, text);
+  // Unlabelled monetary values remain manual suggestions; they never authorize an automatic payment.
+  const explicitAmounts = lines.map(line => normalize(line).match(/^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\s*(?:mxn|mxp|m\.n\.)?\s*[:$ ]+\s*(?:mxn|mxp|m\.n\.)?\s*\$?\s*([\d,.]+)\s*(?:mxn|mxp|m\.n\.)?\s*$/)?.[1])
+    .filter(Boolean).map(value => parseMoney(value));
+  const amountVerified = explicitAmounts.length > 0 && explicitAmounts.every(value => value > 0 && value === explicitAmounts[0]);
+  const normalizedText = normalize(text);
+  const blockedExecution = /\b(?:pendiente|programad[oa]|por\s+autorizar|en\s+proceso|capturad[oa]|rechazad[oa]|cancelad[oa]|fallid[oa]|no\s+(?:realizad[oa]|procesad[oa]|efectuad[oa]|completad[oa]|liquidad[oa]|aplicad[oa]|exitos[oa]))\b/.test(normalizedText);
+  const positiveExecution = /\b(?:operacion|transferencia|pago|estado|resultado)\s*(?:[:\-]|de\s+la\s+operacion)?\s*(?:fue\s+)?(?:realizad[oa]|efectuad[oa]|exitos[oa]|completad[oa]|aplicad[oa]|liquidad[oa])\b/;
+  const declaredStates = lines.map(normalize).filter(line => /^(?:estado|resultado)\b.*[:\-]/.test(line));
+  const executionConfirmed = !blockedExecution && positiveExecution.test(normalizedText) && declaredStates.every(line => positiveExecution.test(line));
 
   const dateRaw =
     extractLabeled(lines, [
@@ -490,6 +515,8 @@ function parseReceiptText(textRaw: string): ReceiptData {
   const time = parseTimeValue(dateRaw) || parseTimeValue(extractLabeled(lines, [
     /^hora\s*(?:de\s+)?(?:operacion|transferencia|pago)?\s*[:\-]\s*(.+)$/i,
   ]));
+  const shortDate = dateRaw.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
+  const dateVerified = !!dateRaw && (!shortDate || Number(shortDate[1]) > 12 || shortDate[1] === shortDate[2]);
 
   const reference =
     extractLabeled(lines, [
@@ -504,7 +531,7 @@ function parseReceiptText(textRaw: string): ReceiptData {
   ]);
 
   const currency =
-    /\b(?:mxn|m\.n\.|pesos\s+mexicanos)\b/i.test(text)
+    /\b(?:mxn|m\.n\.|pesos\s+mexicanos)\b/i.test(text) && !/\b(?:usd|eur|dolares|euros)\b/i.test(normalizedText)
       ? "MXN"
       : "";
 
@@ -512,8 +539,10 @@ function parseReceiptText(textRaw: string): ReceiptData {
     /(?:rfc\s+(?:ordenante|emisor|remitente|beneficiario|receptor)?|rfc)\s*[:\-]\s*([A-Z&Ãƒâ€˜]{3,4}\d{6}[A-Z0-9]{3})/i,
     /\b([A-Z&Ãƒâ€˜]{3,4}\d{6}[A-Z0-9]{3})\b/i,
   ]).toUpperCase();
-  const payerRfc = labeledRfc(lines, "payer");
-  const beneficiaryRfc = labeledRfc(lines, "beneficiary");
+  const payerRfcs = labeledRfcs(lines, "payer"), beneficiaryRfcs = labeledRfcs(lines, "beneficiary");
+  const identityConflict = payerRfcs.length > 1 || beneficiaryRfcs.length > 1;
+  const payerRfc = payerRfcs.length === 1 ? payerRfcs[0] : "";
+  const beneficiaryRfc = beneficiaryRfcs.length === 1 ? beneficiaryRfcs[0] : "";
 
   const clabe = firstMatch(text, [
     /(?:clabe|clabe\s+interbancaria|cuenta\s+clabe)\s*[:\-]?\s*(\d[\d\s-]{16,22}\d)/i,
@@ -525,11 +554,15 @@ function parseReceiptText(textRaw: string): ReceiptData {
   ]).replace(/\s+/g, " ").trim();
 
   const warnings: string[] = [];
+  if (!amountVerified) warnings.push("Importe sin etiqueta inequívoca o importes contradictorios; requiere revisión.");
+  if (!executionConfirmed) warnings.push("Ejecución de la transferencia sin confirmar; requiere revisión.");
+  if (!dateVerified) warnings.push("Formato de fecha ambiguo; requiere revisión.");
+  if (identityConflict) warnings.push("RFC de ordenante o beneficiario ambiguo; requiere revisión.");
 
   if (!senderName) warnings.push("Ordenante/proveedor no detectado.");
   if (!beneficiaryName) warnings.push("Beneficiario/receptor no detectado.");
 
-  const amount = parseMoney(amountRaw);
+  const amount = amountVerified ? explicitAmounts[0] : parseMoney(amountRaw);
   if (!amount) warnings.push("Monto no detectado.");
 
   const date = parseDateValue(dateRaw);
@@ -552,14 +585,19 @@ function parseReceiptText(textRaw: string): ReceiptData {
     reference,
     concept,
     currency,
+    paymentForm: /\b(?:SPEI|TRANSFERENCIA)\b/i.test(text) && !/\b(?:RECHAZAD[OA]|CANCELAD[OA]|FALLID[OA]|CHEQUE|EFECTIVO)\b/i.test(text) ? "03" : "",
     rfc,
-    payerRfc: payerRfc || (!beneficiaryRfc ? rfc : ""),
+    payerRfc,
     beneficiaryRfc,
     clabe,
     account,
     shortName,
     destinationAccount,
     warnings,
+    identityConflict,
+    amountVerified,
+    executionConfirmed,
+    dateVerified,
   };
 }
 
@@ -574,6 +612,9 @@ export const parsePagoReceiptPdf = onCall(
     if (!uid) {
       throw new HttpsError("unauthenticated", "Sesion requerida.");
     }
+
+    const [user, rootId] = await Promise.all([getMyUser(uid), getRootId(uid)]);
+    assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
 
     const data = request.data || {};
     const base64 = clean(data.base64);
@@ -645,6 +686,10 @@ export const parsePagoReceiptPdf = onCall(
     }
 
     const receipt = parseReceiptText(text);
+    const identification = await identifyParsedReceipt({ db,
+      actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
+      receipt, contentSha256: createHash("sha256").update(buffer).digest("hex"), operationTypeKey: clean(data.operationTypeKey),
+    });
 
     return {
       ok: true,
@@ -654,6 +699,7 @@ export const parsePagoReceiptPdf = onCall(
       ocrUsed: textSource === "VISION_OCR",
       textLength: text.length,
       receipt,
+      identification,
     };
   },
 );

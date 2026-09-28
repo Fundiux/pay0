@@ -18,6 +18,7 @@ export async function createPago(input: {
   paymentTime?: string;
   paymentForm?: string;
   referencia?: string;
+  concepto?: string;
   moneda?: string;
   notaInicial?: string;
   detectedBankName?: string;
@@ -30,6 +31,7 @@ export async function createPago(input: {
   operatorSelectedBankName?: string;
   operatorSelectedAccount?: string;
   acceptRfcMismatch?: boolean;
+  receiptIdentificationId?: string;
 }) {
   const fn = httpsCallable(functions, "createPago");
   const res: any = await fn(input);
@@ -37,12 +39,14 @@ export async function createPago(input: {
 }
 
 export type PagosPageResult = {
+  creatorOptions?: import("@/lib/recordCreator").RecordCreatorOption[];
   items: any[];
   hasMore: boolean;
   nextCursor: { seconds: number; nanoseconds: number; id: string } | null;
 };
 
 export async function listPagos(input: {
+  creatorUid?: string;
   limit?: number;
   fromMillis?: number;
   toMillis?: number;

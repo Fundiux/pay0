@@ -95,6 +95,8 @@ body {
 }
 
 /* PAY0 canonical tables */
+/* One neutral tracking highlight; selection and status colors remain intact. */
+
 .pay0-table-card {
   @apply w-full min-w-0 bg-[#161d2b] rounded-3xl border-2 border-white/5 overflow-hidden shadow-2xl;
 }
@@ -1063,3 +1065,19 @@ body {
 /* H4-D77-A1_PAGOS_OPERATIVE_COLUMNS_END */
 
 /* H4-D67-A4_PAGOS_CANONICAL_LAYOUT_END */
+
+/* Shared row feedback and compact monetary columns. */
+:root { --pay0-row-hover: rgba(254, 240, 138, 0.055); }
+@media (hover: hover) {
+  table > tbody > tr:not([aria-selected="true"]):not([data-state="selected"]):hover > td {
+    background-image: linear-gradient(var(--pay0-row-hover), var(--pay0-row-hover)) !important;
+  }
+}
+table.pay0-solicitudes-main-table td.pay0-balance-cell, table.pay0-pagos-main-table td.pay0-balance-cell { padding: 5px 4px !important; text-align: right !important; font-size: 11px !important; line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table th.pay0-balance-heading { padding-left: 4px !important; padding-right: 4px !important; font-size: 11px !important; }
+.pay0-solicitudes-main-table .pay0-sol-col-monto,
+.pay0-solicitudes-main-table .pay0-sol-col-abono,
+.pay0-solicitudes-main-table .pay0-sol-col-pendiente { width: 84px !important; }
+.pay0-pagos-main-table .pay0-col-monto,
+.pay0-pagos-main-table .pay0-col-aplicado,
+.pay0-pagos-main-table .pay0-col-disponible { width: 84px !important; }

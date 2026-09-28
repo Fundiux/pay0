@@ -37,10 +37,10 @@ import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
 import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
-import {
-  buildIqOriginIdentityPatch,
-  captureIqOriginIdentity,
-} from "./modules/iq/originIdentity";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
+import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
+import { manualNoteAuthor } from "./modules/notes/domain";
+import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -581,7 +581,9 @@ export const createSolicitud = onCall(
         solicitudRef.collection("notas").add({
           rootId,
           adminId,
-          createdBy: uid,
+          ...manualNoteAuthor(uid, caller),
+          referenceType: "solicitud",
+          referenceId: solicitudRef.id,
           text: comentarioText,
           createdAt: now,
         }),
@@ -1712,6 +1714,11 @@ export const createPago = onCall(
     } = request.data || {};
 
     const montoTotalNum = toSafeMoneyNumber(montoTotal);
+    const receiptIdentificationId = String(request.data?.receiptIdentificationId || "").trim();
+    if (receiptIdentificationId && !/^[a-f0-9]{64}$/.test(receiptIdentificationId)) {
+      throw new HttpsError("invalid-argument", "Identificación de comprobante inválida.");
+    }
+    const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
 
     const costGuardOperationTypeKey = String(operationTypeKey || "").trim().toUpperCase();
     const costGuardDespachoId = String(despachoId || "").trim();
@@ -2096,6 +2103,9 @@ export const createPago = onCall(
     let pagoSequenceCounterPath = "";
 
     await db.runTransaction(async (tx) => {
+      if (receiptIdentificationRef) {
+        assertReceiptCreation(await tx.get(receiptIdentificationRef), { uid, rootId }, request.data || {});
+      }
       if (receiptDuplicateRef) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
 
@@ -2139,6 +2149,9 @@ export const createPago = onCall(
         actorRole,
         ...(iqOriginIdentity ? buildIqOriginIdentityPatch(iqOriginIdentity) : {}),
         ...(originClientIqLink ? { originClientIqLink } : {}),
+        automaticApplicationEligible: true,
+        automaticApplicationRevision: "ASTRA_V1",
+        ...(receiptIdentificationId ? { receiptIdentificationId, registrationSource: "RECEIPT_AUTOMATIC" } : {}),
         accessSource: businessFolioContextPago.accessSource,
         delegatedClientAccessPath: businessFolioContextPago.delegatedClientAccessPath,
         clienteId: String(clienteId),
@@ -2188,6 +2201,7 @@ export const createPago = onCall(
         // fecha del pago se conserva; de lo contrario se usa la creación real.
         reportDateAt: fechaPagoValue || FieldValue.serverTimestamp(),
         referencia: referenciaValue || null,
+        concepto: String(request.data?.concepto || "").trim().slice(0, 1000) || null,
         referenciaNormalized: referenciaNormalized || null,
         receiptLearningSignals: {
           detectedBankName: detectedBankNameValue || null,
@@ -2243,12 +2257,14 @@ export const createPago = onCall(
         tx.set(noteRef, {
           rootId,
           text: noteText,
-          createdBy: uid,
-          createdByName: actorId,
-          createdByRole: actorRole,
+          ...manualNoteAuthor(uid, me),
+          referenceType: "pago",
+          referenceId: ref.id,
           createdAt: FieldValue.serverTimestamp(),
         });
       }
+
+      if (receiptIdentificationRef) tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
 
       logActivityTx(tx, db, {
         event: "PAGO_CREADO",
@@ -2334,7 +2350,8 @@ export const listPagos = onCall(
       requiredAction: "view",
     });
 
-    const role = String(me.role || "").trim().toLowerCase();
+    const role = getUserRole(me);
+    const creatorUid = requestedRecordCreator(request.data?.creatorUid, role);
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 100, 1), 100);
     const fromMillis = Number(request.data?.fromMillis || 0);
@@ -2346,6 +2363,7 @@ export const listPagos = onCall(
     let queryRef: FirebaseFirestore.Query = db.collection("pagos").where("rootId", "==", rootId);
     if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
+    if (creatorUid) queryRef = queryRef.where("createdBy", "==", creatorUid);
 
     if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
     if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
@@ -2356,6 +2374,7 @@ export const listPagos = onCall(
 
     const snap = await queryRef.get();
     const docs = snap.docs.slice(0, pageSize);
+    const creators = await resolveRecordCreators(db, { uid, role, rootId }, docs);
     const despachoIds = [...new Set(docs.map((doc) => String(doc.get("despachoId") || "").trim()).filter(Boolean))];
     const despachoSnapshots = await Promise.all(despachoIds.map((id) => db.collection("despachos").doc(id).get()));
     const iqByDespacho = new Map(despachoSnapshots.map((dispatch, index) => [despachoIds[index], dispatch.exists && canRunIqAutomationForDispatch(dispatch.data())]));
@@ -2369,6 +2388,7 @@ export const listPagos = onCall(
         return {
           id: doc.id,
           ...data,
+          ...creatorDisplayFields(data, creators.labels, role),
           iqApplicable: iqByDespacho.get(String(data.despachoId || "").trim()) === true,
           createdAt: createdAt && typeof createdAt.seconds === "number"
             ? { seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds || 0 }
@@ -2376,6 +2396,7 @@ export const listPagos = onCall(
         };
       }),
       hasMore: snap.docs.length > pageSize,
+      creatorOptions: creators.creatorOptions,
       nextCursor: last ? {
         seconds: typeof lastCreatedAt?.seconds === "number" ? lastCreatedAt.seconds : 0,
         nanoseconds: typeof lastCreatedAt?.nanoseconds === "number" ? lastCreatedAt.nanoseconds : 0,
@@ -2399,7 +2420,8 @@ export const listSolicitudes = onCall(
     });
 
     const rootId = String(me.rootId || uid);
-    const role = String(me.role || "").trim().toLowerCase();
+    const role = getUserRole(me);
+    const creatorUid = requestedRecordCreator(request.data?.creatorUid, role);
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
     const fromMillisRaw = Number(request.data?.fromMillis || 0);
@@ -2414,11 +2436,12 @@ export const listSolicitudes = onCall(
       throw new HttpsError("invalid-argument", "Rango temporal invalido.");
     }
 
-    let queryRef: FirebaseFirestore.Query = db.collection("solicitudes");
-    if (role === "superadmin") queryRef = queryRef.where("rootId", "==", rootId);
+    let queryRef: FirebaseFirestore.Query = db.collection("solicitudes").where("rootId", "==", rootId);
+    if (role === "superadmin") { /* Root scope is already enforced. */ }
     else if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     else if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
     else throw new HttpsError("permission-denied", "Rol sin acceso a solicitudes.");
+    if (creatorUid) queryRef = queryRef.where("createdBy", "==", creatorUid);
 
     if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
     if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
@@ -2428,6 +2451,7 @@ export const listSolicitudes = onCall(
     }
     const snap = await queryRef.get();
     const docs = snap.docs.slice(0, pageSize);
+    const creators = await resolveRecordCreators(db, { uid, role, rootId }, docs);
     const last = docs[docs.length - 1];
     const createdAt: any = last?.get("createdAt");
     return {
@@ -2437,12 +2461,14 @@ export const listSolicitudes = onCall(
         return {
           id: entry.id,
           ...data,
+          ...creatorDisplayFields(data, creators.labels, role),
           createdAt: entryCreatedAt && typeof entryCreatedAt.seconds === "number"
             ? { seconds: entryCreatedAt.seconds, nanoseconds: entryCreatedAt.nanoseconds || 0 }
             : null,
         };
       }),
       hasMore: snap.docs.length > pageSize,
+      creatorOptions: creators.creatorOptions,
       nextCursor: last ? {
         seconds: Number(createdAt?.seconds || 0),
         nanoseconds: Number(createdAt?.nanoseconds || 0),
@@ -2728,8 +2754,10 @@ export {
   executePagoApplicationIqPlan,
   processPagoApplicationIqPlanOnDemandTask,
   processIqPaymentApplicationExecution,
+  enqueuePaymentApplicationImmediately,
   diagnosePagoApplicationIqMethods,
 } from "./modules/paymentApplications/callables";
+export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnReceipt, applyPaymentsAutomaticallyOnInvoice } from "./modules/paymentApplications/automaticApplication";
 
 export { addSolicitudNota, addPagoNota } from "./modules/notes/callables";
 export { repairUserNumbersByRootCallable } from "./modules/users/repairNumbers";
@@ -2801,7 +2829,7 @@ export {
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
-export { refreshMaterialityFromUpload } from "./modules/materiality/triggers";
+export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
 export { generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";

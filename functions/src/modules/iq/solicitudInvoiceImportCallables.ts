@@ -1162,7 +1162,6 @@ async function markImported(input: {
       facturaFecha: input.metadata.fecha,
       facturaMetadataSource: "IQ_INVOICE_ZIP",
       facturaMetadataUpdatedAt: FieldValue.serverTimestamp(),
-      hasUnreadMsg: true,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     tx.set(input.job.ref, {
@@ -1176,16 +1175,6 @@ async function markImported(input: {
       facturaUuid: input.metadata.uuid,
       finishedAt: FieldValue.serverTimestamp(),
       nextRunAt: null,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    tx.set(solicitudRef.collection("notas").doc(`factura-importada-${input.metadata.uuid || input.job.iqFolio}`), {
-      rootId: input.job.rootId,
-      createdBy: "system",
-      createdByName: "Sistema",
-      createdByRole: "system",
-      source: "DESPACHO",
-      text: "Factura PDF y Factura XML agregadas automaticamente a Documentos.",
-      createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     logActivityTx(tx, db, {

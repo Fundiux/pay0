@@ -624,7 +624,6 @@ async function finalizeIqCreation(input: {
   const creationRef = db
     .collection("iqSolicitudCreations")
     .doc(input.solicitudId);
-  const noteRef = input.solicitudRef.collection("notas").doc("iq-folio");
   const now = FieldValue.serverTimestamp();
 
   await db.runTransaction(async (tx: Transaction) => {
@@ -735,24 +734,8 @@ async function finalizeIqCreation(input: {
         formError: FieldValue.delete(),
       };
 
-      tx.set(
-        noteRef,
-        {
-          rootId: input.auth.rootId,
-          createdBy: input.auth.uid,
-          createdByName: getActorName(input.auth),
-          createdByRole: input.auth.role,
-          source: "IQ",
-          text: `FOLIO IQ: ${input.iqId}`,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          merge: true,
-        },
-      );
-
-      solicitationPatch.hasUnreadMsg = true;
+      // The IQ folio already lives on the request and its creation record.
+      // Linking it must not create a conversation or an unread-note badge.
     } else if (input.status === "OUTCOME_UNKNOWN") {
       solicitationPatch.iqReconciliationStatus = "PENDING";
       solicitationPatch.iqReconciliationAttemptCount = 0;

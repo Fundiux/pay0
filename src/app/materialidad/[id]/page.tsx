@@ -168,6 +168,7 @@ function OperationCard({ operation }: { operation: any }) {
           {(operation.documentRefs || []).length > 0 ? (operation.documentRefs || []).map((doc: any) => (
             <button key={doc.id} type="button" disabled={downloadingId === String(doc?.id || doc?.uploadId || "")} onClick={() => void downloadDocument(doc)} className="inline-flex items-center gap-1 rounded-lg border border-sky-300/25 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60">
               <Download size={13} /> {downloadingId === String(doc?.id || doc?.uploadId || "") ? "Preparando..." : doc.documentTypeLabel || documentLabel(doc.documentType)}
+              {doc.applicationFolio ? <span className="text-slate-300">· {doc.applicationFolio}</span> : doc.installment > 0 ? <span className="text-slate-300">· Parcialidad {doc.installment}</span> : null}
             </button>
           )) : <span className="text-xs text-slate-400">Actualiza el expediente para cargar sus enlaces.</span>}
         </div>

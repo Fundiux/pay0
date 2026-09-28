@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 import type { SolicitudStatus, SatMotivoCancelacion } from "@/lib/solicitudStatus";
+import type { RecordCreatorOption } from "@/lib/recordCreator";
 
 export type CreateSolicitudInput = {
   clienteId: string;
@@ -23,14 +24,15 @@ export async function createSolicitud(input: CreateSolicitudInput) {
 
 export type SolicitudPageCursor = { seconds: number; nanoseconds: number; id: string };
 export async function listSolicitudes(input: {
+  creatorUid?: string;
   limit?: number;
   fromMillis?: number;
   toMillis?: number;
   cursorSeconds?: number;
   cursorNanoseconds?: number;
   cursorId?: string;
-} = {}): Promise<{ items: any[]; hasMore: boolean; nextCursor: SolicitudPageCursor | null }> {
-  const fn = httpsCallable<typeof input, { items: any[]; hasMore: boolean; nextCursor: SolicitudPageCursor | null }>(functions, "listSolicitudes");
+} = {}): Promise<{ items: any[]; creatorOptions?: RecordCreatorOption[]; hasMore: boolean; nextCursor: SolicitudPageCursor | null }> {
+  const fn = httpsCallable<typeof input, { items: any[]; creatorOptions?: RecordCreatorOption[]; hasMore: boolean; nextCursor: SolicitudPageCursor | null }>(functions, "listSolicitudes");
   const response = await fn(input);
   return response.data;
 }

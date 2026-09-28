@@ -1,5 +1,7 @@
 "use client";
 
+import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { collection, query, where, onSnapshot, orderBy, doc, getDoc} from "firebase/firestore";
@@ -36,6 +38,9 @@ import DocsModal from "@/components/DocsModal";
 import DateScopeBar from "@/components/DateScopeBar";
 import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDate } from "@/lib/dateScope";
 import UiSelect from "@/components/UiSelect";
+import RecordCreatorFilter from "@/components/RecordCreatorFilter";
+import CompactBalanceCells from "@/components/CompactBalanceCells";
+import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
   const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
@@ -72,7 +77,7 @@ function noteDateTimeText(value: any) {
 }
 
 function NoteBubble({ note, myUid }: any) {
-  const isMine = String(note?.createdBy || "") === String(myUid || "");
+  const isMine = !isSystemNote(note) && String(note?.createdBy || "") === String(myUid || "");
   const wrapper = isMine ? "justify-end" : "justify-start";
   const bubble = isMine
     ? "bg-sky-500/15 border-sky-500/20 text-slate-100"
@@ -82,7 +87,7 @@ function NoteBubble({ note, myUid }: any) {
     <div className={`flex ${wrapper}`}>
       <div className={`max-w-[80%] rounded-2xl border px-4 py-3 ${bubble}`}>
         <div className={`mb-1 text-[11px] ${isMine ? "text-sky-300 text-right" : "text-slate-400 text-left"}`}>
-          {note?.createdByName || note?.createdByRole || "Sistema"}
+          {noteAuthorLabel(note)}
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
@@ -207,7 +212,7 @@ const SolicitudRow = React.memo(({
   return (
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
-        <td className="pay0-td-date w-[78px] max-w-[78px] truncate whitespace-nowrap px-2 text-sky-400" title={String(s.folio || "")}>{s.folio}</td>
+        <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div>{showIqFolio && <div className="mt-0.5 truncate font-sans text-[10px] text-slate-400" title={`Creó: ${recordCreatorLabel(s)}`}><span className="sr-only">Creó: </span>{recordCreatorLabel(s)}</div>}</td>
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -227,15 +232,7 @@ const SolicitudRow = React.memo(({
         <td className="pay0-td text-slate-500 truncate" title={String(s.empresaNombre || "")}>{s.empresaNombre}</td>
         <td className="pay0-td text-center text-slate-400">{s.tipoFactura}</td>
         <td className="pay0-td text-center text-sky-400 font-mono">{s.facturaDisplay || s.numFactura || s.facturaFolio || "S/F"}</td>
-        <td className="pay0-td-money text-white text-center">
-          ${toCurrency(s.monto || 0)}
-        </td>
-        <td className="pay0-td-money text-emerald-400 text-center">
-          ${toCurrency(s.totalAbonado || 0)}
-        </td>
-        <td className="pay0-td-money text-amber-400 text-center">
-          ${toCurrency(saldo || 0)}
-        </td>
+        <CompactBalanceCells amount={money2(s.monto)} paid={money2(s.totalAbonado)} pending={saldo} />
         <td className="pay0-td text-slate-500 italic text-center">
           {s.updatedAt?.seconds && saldo === 0 ? new Date(s.updatedAt.seconds * 1000).toLocaleDateString() : "---"}
         </td>
@@ -700,6 +697,8 @@ export default function SolicitudesPage() {
   const [pagos, setPagos] = useState<any[]>([]);
   const [applicationFoliosBySolicitud, setApplicationFoliosBySolicitud] = useState<Record<string, string[]>>({});
   const [filter, setFilter] = useState("");
+  const [creatorUid, setCreatorUid] = useState("");
+  const [creatorOptions, setCreatorOptions] = useState<RecordCreatorOption[]>([]);
 
   useEffect(() => {
     const q = String(searchParams.get("q") || "").trim();
@@ -828,6 +827,7 @@ export default function SolicitudesPage() {
     loadedSolicitudesRequestSeq.current = null;
     checkedCancellationIds.current.clear();
     setCancellationErrors({});
+    setLoadingMoreSolicitudes(false);
     if (!uid || !canViewSolicitudes) {
       setSolicitudes([]);
       setSolicitudesCursor(null);
@@ -840,10 +840,11 @@ export default function SolicitudesPage() {
     setSolicitudes([]);
     setSolicitudesCursor(null);
     setHasMoreSolicitudes(false);
-    void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() }).then((page) => {
+    void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined }).then((page) => {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       loadedSolicitudesRequestSeq.current = requestSeq;
       setSolicitudes(page.items || []);
+      setCreatorOptions(page.creatorOptions || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
       setPageMsg((current) => current.includes("solicitudes") ? "" : current);
@@ -858,7 +859,7 @@ export default function SolicitudesPage() {
       cancelled = true;
       solicitudesRequestSeq.current++;
     };
-  }, [uid, rootId, role, canViewSolicitudes, rangeKey]);
+  }, [uid, rootId, role, canViewSolicitudes, rangeKey, creatorUid]);
 
   const loadMoreSolicitudes = useCallback(async () => {
     if (!solicitudesCursor || loadingMoreSolicitudes) return;
@@ -866,6 +867,7 @@ export default function SolicitudesPage() {
     const requestSeq = solicitudesRequestSeq.current;
     try {
       const page = await listSolicitudes({
+        creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined,
         limit: 100,
         fromMillis: range.from.getTime(),
         toMillis: range.to.getTime(),
@@ -881,13 +883,14 @@ export default function SolicitudesPage() {
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
     } catch (error: any) {
+      if (requestSeq !== solicitudesRequestSeq.current) return;
       setPageMsg(error?.message || "No se pudieron cargar más solicitudes.");
     } finally {
       if (requestSeq === solicitudesRequestSeq.current) {
         setLoadingMoreSolicitudes(false);
       }
     }
-  }, [loadingMoreSolicitudes, solicitudesCursor, range]);
+  }, [loadingMoreSolicitudes, solicitudesCursor, range, creatorUid, role]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -1555,6 +1558,7 @@ export default function SolicitudesPage() {
         </div>
       </header>
 
+      {(isSuperAdmin(role) || isAdmin(role)) && <div className="mb-2 flex flex-wrap items-center gap-2"><RecordCreatorFilter value={creatorUid} onChange={setCreatorUid} options={creatorOptions} /></div>}
       {pageMsg && (
         <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}
@@ -1592,6 +1596,7 @@ export default function SolicitudesPage() {
                   Folio
                   {sortConfig.key === "folio" && (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                 </div>
+                {isSuperAdmin(role) && <span className="block text-[9px] normal-case text-slate-500">Usuario creador</span>}
               </th>
               {isSuperAdmin(role) ? (
                 <th className="pay0-th w-[76px] max-w-[76px] px-1 text-center !text-[12px] !py-[6px] font-normal">
@@ -1611,7 +1616,7 @@ export default function SolicitudesPage() {
               ].map(h => (
                 <th
                   key={h.key}
-                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
+                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Abono", "Pendiente"].includes(h.label) ? "pay0-balance-heading" : ""} ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
                   onClick={() => setSortConfig((prev) => ({
                     key: h.key,
                     dir: prev.key === h.key && prev.dir === "asc" ? "desc" : "asc"

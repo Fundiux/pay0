@@ -1,3 +1,4 @@
+import { manualNoteAuthor, systemNoteAuthor } from "../notes/domain";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
@@ -1535,15 +1536,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   await result.ctx.pagoRef.set(patch, { merge: true });
 
   if (created) {
-    await result.ctx.pagoRef.collection("notas").add({
-      rootId: input.auth.rootId,
-      text: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
-      createdBy: input.actor.uid,
-      createdByName: input.actor.name,
-      createdByRole: input.actor.role,
-      createdAt: FieldValue.serverTimestamp(),
-      system: input.source === "SCHEDULER",
-    }).catch(() => undefined);
+    // Deposit creation is recorded in structured IQ state and ActivityLog.
 
     await notifyIqPagoTelegramH4D59B({
       botToken: TELEGRAM_BOT_TOKEN.value(),
@@ -1618,11 +1611,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       await pagoRef.collection("notas").add({
         rootId: input.auth.rootId,
         text: input.source === "SCHEDULER" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
-        createdBy: input.actor.uid,
-        createdByName: input.actor.name,
-        createdByRole: input.actor.role,
+        ...systemNoteAuthor("IQ", "RECONCILIATION", input.actor.uid),
         createdAt: FieldValue.serverTimestamp(),
-        system: input.source === "SCHEDULER",
       }).catch(() => undefined);
 
       return {
@@ -1962,9 +1952,7 @@ async function resolvePagoIqDepositHistoricalH4D58E(
     text: selectedTerminalOutcomeH4D64A6
       ? `Pago ${selectedCancelled ? "cancelado" : "rechazado"} ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por adopcion de registro IQ ${iqDepositId}: ${patch.iqDepositTerminalReason || ""}`.trim()
       : `Pago actualizado ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por adopcion de registro IQ ${iqDepositId}`.trim(),
-    createdBy: actor.uid,
-    createdByName: actor.name,
-    createdByRole: actor.role,
+    ...systemNoteAuthor("IQ", selectedTerminalOutcomeH4D64A6 ? "REJECTION" : "RECONCILIATION", actor.uid),
     createdAt: FieldValue.serverTimestamp(),
     source: "IQ_DEPOSIT_HISTORICAL_RESOLUTION_H4_D64_A6",
   }).catch(() => undefined);
@@ -2565,10 +2553,8 @@ async function reconcilePagoIqDepositCoreH4D44(
   if (terminalOutcomeH4D64A6) {
     await ctx.pagoRef.collection("notas").add({
       rootId: auth.rootId,
-      text: `Pago ${terminalOutcomeH4D64A6 === "CANCELLED" ? "cancelado" : "rechazado"} ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por IQ Depositos ${iqDepositIdForPatch || ""}; tareas de seguimiento cerradas.`.trim(),
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdByRole: actor.role,
+      text: `Pago ${terminalOutcomeH4D64A6 === "CANCELLED" ? "cancelado" : "rechazado"}. Motivo: ${cleanText(match.rejectionReason || match.rejectionComment || patch.iqDepositTerminalReason) || "No informado por IQ"}. Seguimiento cerrado hasta recibir un nuevo comprobante.`,
+      ...systemNoteAuthor("IQ", "REJECTION", actor.uid),
       createdAt: FieldValue.serverTimestamp(),
       source: "IQ_DEPOSIT_TERMINAL_H4_D64_A6",
     }).catch(() => undefined);
@@ -2592,9 +2578,7 @@ async function reconcilePagoIqDepositCoreH4D44(
     await ctx.pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: (source === "SCHEDULER" ? `Pago conciliado automaticamente por IQ Depositos ${match.iqId || ""}` : `Pago conciliado manualmente por IQ Depositos ${match.iqId || ""}`).trim(),
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdByRole: actor.role,
+      ...systemNoteAuthor("IQ", "RECONCILIATION", actor.uid),
       createdAt: FieldValue.serverTimestamp(),
       source: "IQ_DEPOSIT_RECONCILE",
     }).catch(() => undefined);
@@ -4163,9 +4147,7 @@ export const manualLinkPagoIqDeposit = onCall(
     await pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: `Deposito IQ vinculado manualmente: ${iqDepositId}${note ? ` | ${note}` : ""}`,
-      createdBy: auth.uid,
-      createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-      createdByRole: auth.role,
+      ...manualNoteAuthor(auth.uid, auth.user),
       createdAt: now,
     }).catch(() => undefined);
 
@@ -4273,9 +4255,7 @@ export const omitPagoIqDepositAutomation = onCall(
     await pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: `Seguimiento IQ Pagos omitido manualmente: ${reason}`,
-      createdBy: auth.uid,
-      createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-      createdByRole: auth.role,
+      ...manualNoteAuthor(auth.uid, auth.user),
       createdAt: now,
     }).catch(() => undefined);
 
@@ -4554,9 +4534,7 @@ export const manualLinkPagoIqDepositHttp = onRequest(
       await pagoRef.collection("notas").add({
         rootId: auth.rootId,
         text: `Deposito IQ vinculado manualmente: ${iqDepositId}${note ? ` | ${note}` : ""}`,
-        createdBy: auth.uid,
-        createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-        createdByRole: auth.role,
+        ...manualNoteAuthor(auth.uid, auth.user),
         createdAt: now,
       }).catch(() => undefined);
 
@@ -4667,9 +4645,7 @@ export const omitPagoIqDepositAutomationHttp = onRequest(
       await pagoRef.collection("notas").add({
         rootId: auth.rootId,
         text: `Seguimiento IQ Pagos omitido manualmente: ${reason}`,
-        createdBy: auth.uid,
-        createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-        createdByRole: auth.role,
+        ...manualNoteAuthor(auth.uid, auth.user),
         createdAt: now,
       }).catch(() => undefined);
 

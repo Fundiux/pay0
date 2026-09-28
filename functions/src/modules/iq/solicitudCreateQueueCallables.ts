@@ -1438,7 +1438,6 @@ async function finalizeJobFromResult(input: {
 }): Promise<void> {
   const solicitudRef = db.collection("solicitudes").doc(input.job.solicitudId);
   const creationRef = db.collection("iqSolicitudCreations").doc(input.job.solicitudId);
-  const noteRef = solicitudRef.collection("notas").doc("iq-folio");
   const now = FieldValue.serverTimestamp();
   const iqId = cleanText(input.result.iqId);
   const submitted = input.result.submitClicked === true;
@@ -1564,18 +1563,7 @@ async function finalizeJobFromResult(input: {
       solicitudPatch.iqSyncStatus = "CREATED";
       solicitudPatch.iqReconciliationStatus = "LINKED";
       solicitudPatch.iqInvoiceStatus = "WAITING";
-      solicitudPatch.hasUnreadMsg = true;
-
-      tx.set(noteRef, {
-        rootId: input.job.rootId,
-        createdBy: input.job.requestedBy,
-        createdByName: input.job.requestedBy,
-        createdByRole: "system",
-        source: "IQ",
-        text: `FOLIO IQ: ${iqId}`,
-        createdAt: now,
-        updatedAt: now,
-      }, { merge: true });
+      // Creation/linkage is structured state, not a new conversation note.
     } else if (submitted) {
       solicitudPatch.iqReconciliationStatus = "PENDING";
       solicitudPatch.iqReconciliationAttemptCount = 0;

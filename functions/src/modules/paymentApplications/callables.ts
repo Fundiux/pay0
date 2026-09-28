@@ -1,7 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onTaskDispatched } from "firebase-functions/tasks";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { logger } from "firebase-functions";
+import { evaluateIqOperatingWindow, normalizeIqOperatingCalendarConfig } from "../iq/operatingCalendar";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertAuthorized } from "../../utils/authGuard";
 import {
@@ -892,13 +895,24 @@ export const diagnosePagoApplicationIqMethods = onCall(
 const PAYMENT_APPLICATION_AUTOMATION_SCAN_PAGE_SIZE = 100;
 const PAYMENT_APPLICATION_AUTOMATION_MAX_PER_ROOT = 10;
 
-function isPaymentApplicationAutomationCandidate(
+export function paymentApplicationAutomationSource(pago: Record<string, any>): string {
+  return createHash("sha256").update(JSON.stringify([
+    pago.rootId, pago.iqDepositId, pago.iqDepositFolio, pago.iqPagoDepositId, pago.iqPagoDepositFolio,
+    pago.iqPaymentApplicationStatus, pago.iqPaymentApplicationExecutionStatus,
+    pago.iqPaymentApplicationReservationId, pago.lastPaymentApplicationReservationId,
+    pago.originIqProfileId,
+  ])).digest("hex");
+}
+
+export function isPaymentApplicationAutomationCandidate(
   pago: Record<string, any>,
   rootId: string,
 ): boolean {
   if (cleanDispatchText(pago.rootId) !== rootId) {
     return false;
   }
+  if (pago.iqPaymentApplicationAutomationFailureSource === paymentApplicationAutomationSource(pago) &&
+      Number(pago.iqPaymentApplicationAutomationFailureCount || 0) >= 3) return false;
 
   // H4_D87_A59_R2_FORWARD_ONLY
   // Solo operaciones creadas por una version que conoce
@@ -932,6 +946,7 @@ function isPaymentApplicationAutomationCandidate(
     cleanDispatchUpper(
       pago.iqPaymentApplicationExecutionStatus,
     );
+  if (!["", "NOT_EXECUTED", "NOT_REQUESTED"].includes(executionStatus)) return false;
 
   if (
     applicationStatus ===
@@ -1159,6 +1174,40 @@ async function processPaymentApplicationAutomationCandidate(
   };
 }
 
+export async function continuePaymentApplicationImmediately(pagoId: string) {
+  const ref = db.doc(`pagos/${pagoId}`), snap = await ref.get(), pago = snap.data();
+  if (!pago || !isPaymentApplicationAutomationCandidate(pago, cleanDispatchText(pago.rootId))) return { action: "SKIPPED" };
+  const configSnap = await db.doc(`iqIntegrationConfigs/${pago.rootId}`).get();
+  const config = normalizeIqOperatingCalendarConfig(configSnap.data());
+  if (!configSnap.exists || !config.enabled || config.automation.aplicacionPagos !== true ||
+      !evaluateIqOperatingWindow(config, new Date(), "CREATION").allowed) return { action: "PAUSED" };
+  try {
+    return await processPaymentApplicationAutomationCandidate({ rootId: pago.rootId, pagoId, pago });
+  } catch (error) {
+    const source = paymentApplicationAutomationSource(pago);
+    await ref.update({
+      iqPaymentApplicationAutomationFailureSource: source,
+      iqPaymentApplicationAutomationFailureCount: pago.iqPaymentApplicationAutomationFailureSource === source ? Number(pago.iqPaymentApplicationAutomationFailureCount || 0) + 1 : 1,
+      iqPaymentApplicationAutomationLastAction: "ERROR",
+      iqPaymentApplicationAutomationLastError: error instanceof Error ? error.message : "No se pudo preparar la aplicación.",
+      iqPaymentApplicationAutomationLastAttemptAt: FieldValue.serverTimestamp(),
+    });
+    logger.warn("Immediate payment application continuation deferred", { pagoId, code: String((error as { code?: unknown })?.code || "PREPARATION_ERROR") });
+    return { action: "DEFERRED_TO_RECOVERY" };
+  }
+}
+
+export const enqueuePaymentApplicationImmediately = onDocumentWritten(
+  { document: "pagos/{pagoId}", region: "us-central1", timeoutSeconds: 120, memory: "512MiB", maxInstances: 2, retry: true },
+  async event => {
+    const before = event.data?.before.data() || {}, after = event.data?.after.data() || {};
+    if (!event.data?.after.exists || paymentApplicationAutomationSource(before) === paymentApplicationAutomationSource(after)) return;
+    const created = Date.parse(event.time);
+    if (!Number.isFinite(created) || Date.now() - created > 20 * 60_000) return;
+    await continuePaymentApplicationImmediately(event.params.pagoId);
+  },
+);
+
 export const processIqPaymentApplicationExecution =
   onSchedule(
     {
@@ -1348,6 +1397,8 @@ export const processIqPaymentApplicationExecution =
 
                 iqPaymentApplicationAutomationLastError:
                   null,
+                iqPaymentApplicationAutomationFailureCount: 0,
+                iqPaymentApplicationAutomationFailureSource: null,
 
                 iqPaymentApplicationAutomationLastAttemptAt:
                   FieldValue.serverTimestamp(),
@@ -1380,6 +1431,10 @@ export const processIqPaymentApplicationExecution =
                 {
                   iqPaymentApplicationAutomationLastAction:
                     "ERROR",
+                  iqPaymentApplicationAutomationFailureSource: paymentApplicationAutomationSource(candidate.data),
+                  iqPaymentApplicationAutomationFailureCount:
+                    (candidate.data as Record<string, any>).iqPaymentApplicationAutomationFailureSource === paymentApplicationAutomationSource(candidate.data)
+                      ? Number((candidate.data as Record<string, any>).iqPaymentApplicationAutomationFailureCount || 0) + 1 : 1,
 
                   iqPaymentApplicationAutomationLastError:
                     message,

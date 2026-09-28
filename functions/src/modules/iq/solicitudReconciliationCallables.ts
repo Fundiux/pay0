@@ -527,7 +527,6 @@ async function linkIqFolio(input: {
   const creationRef = db
     .collection("iqSolicitudCreations")
     .doc(input.job.solicitudId);
-  const noteRef = solicitudRef.collection("notas").doc("iq-folio");
   const now = FieldValue.serverTimestamp();
 
   await db.runTransaction(async (tx: Transaction) => {
@@ -601,21 +600,6 @@ async function linkIqFolio(input: {
           reconciledBy: input.actorUid,
           reconciliationVersion: IQ_RECONCILIATION_VERSION,
         },
-      },
-      { merge: true },
-    );
-
-    tx.set(
-      noteRef,
-      {
-        rootId: input.job.rootId,
-        createdBy: input.actorUid,
-        createdByName: input.actorName,
-        createdByRole: input.actorRole,
-        source: "IQ",
-        text: `FOLIO IQ: ${input.iqId}`,
-        createdAt: now,
-        updatedAt: now,
       },
       { merge: true },
     );

@@ -1,5 +1,6 @@
 import { HttpsError } from "firebase-functions/v2/https";
-import { FieldPath, FieldValue, getFirestore, type QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { createHash } from "crypto";
+import { FieldPath, FieldValue, getFirestore, type QueryDocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import {
   MATERIALITY_REQUIRED_TYPES,
   buildMaterialityClientCompanyId,
@@ -8,6 +9,8 @@ import {
   normalizeMaterialityDocumentType,
 } from "./domain";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { normalizeRole } from "../../utils/authGuard";
 
 const db = getFirestore();
 
@@ -248,12 +251,12 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string): Promise<Record<string, any>> {
-  const snap = await db
+async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string, tx: Transaction): Promise<Record<string, any>> {
+  const snap = await tx.get(db
     .collection("uploads")
     .where("solicitudId", "==", solicitudId)
     .limit(150)
-    .get();
+    );
 
   const byType: Record<string, any> = {};
 
@@ -268,51 +271,59 @@ async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string):
   return byType;
 }
 
-async function getActivePagoUploadsBySolicitud(rootId: string, solicitudId: string): Promise<Record<string, any>> {
-  const aplicacionesSnap = await db
+async function getActivePagoUploadsBySolicitud(rootId: string, solicitudId: string, tx: Transaction): Promise<Record<string, any>> {
+  const aplicacionesSnap = await tx.get(db
     .collection("pagoAplicaciones")
     .where("solicitudId", "==", solicitudId)
     .limit(100)
-    .get();
+    );
 
-  const pagoIds = Array.from(new Set(
-    aplicacionesSnap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
-      .filter((row) => cleanText(row.rootId) === rootId)
-      .filter((row) => !cleanText(row.status) || cleanText(row.status).toUpperCase() === "APLICADA")
-      .map((row) => cleanText(row.pagoId))
-      .filter(Boolean)
-  ));
+  const applications = aplicacionesSnap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
+    .filter((row) => cleanText(row.rootId) === rootId && (!cleanText(row.status) || cleanText(row.status).toUpperCase() === "APLICADA"));
+  const applicationById = new Map(applications.map(row => [row.id, row]));
+  const pagoIds = Array.from(new Set(applications.map(row => cleanText(row.pagoId)).filter(Boolean)));
 
   const byType: Record<string, any> = {};
   if (pagoIds.length === 0) return byType;
 
   for (const chunk of chunkArray(pagoIds, 10)) {
-    const uploadsSnap = await db
+    const uploadsSnap = await tx.get(db
       .collection("uploads")
       .where("pagoId", "in", chunk)
       .limit(150)
-      .get();
+      );
 
     uploadsSnap.docs.forEach((doc) => {
       const row = { id: doc.id, ...(doc.data() || {}) } as any;
       if (!isReadyActiveUpload(row, rootId)) return;
       if (cleanText(row.entityType) !== "pagos") return;
-      if (cleanText(row.documentType).toUpperCase() !== "COMPROBANTE_PAGO") return;
-
-      putLatestUploadByType(byType, row);
+      const type = cleanText(row.documentType).toUpperCase();
+      if (type === "COMPROBANTE_PAGO") {
+        putLatestUploadByType(byType, row);
+      } else if (["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(type)) {
+        const applicationId = cleanText(row.applicationId || row.pagoAplicacionId);
+        const application = applicationById.get(applicationId);
+        if (!application || cleanText(application.status).toUpperCase() !== "APLICADA" || cleanText(application.pagoId) !== cleanText(row.pagoId) ||
+            (row.solicitudId && row.solicitudId !== solicitudId)) return;
+        // Keep every partiality, including several applications of one payment.
+        const key = `${type}:${applicationId}`;
+        if (byType[key] && Number(byType[key].version || 0) > Number(row.version || 0)) return;
+        byType[key] = { ...row, applicationId,
+          applicationFolio: cleanText(application.folio), installment: Number(application.numeroParcialidad || 0) };
+      }
     });
   }
 
   return byType;
 }
 
-async function getPrimaryContract(materialityClientCompanyId: string): Promise<any | null> {
-  const snap = await db
+async function getPrimaryContract(materialityClientCompanyId: string, tx: Transaction): Promise<any | null> {
+  const snap = await tx.get(db
     .collection("materialityContracts")
     .where("materialityClientCompanyId", "==", materialityClientCompanyId)
     .limit(25)
-    .get();
+    );
 
   const active = snap.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
@@ -329,7 +340,8 @@ function buildCompletedTypes(activeUploadsByType: Record<string, any>, contract:
     completed.add("CONTRATO_MARCO");
   }
 
-  Object.keys(activeUploadsByType).forEach((type) => {
+  Object.values(activeUploadsByType).forEach((upload) => {
+    const type = normalizeMaterialityDocumentType(upload.documentType);
     if (type) completed.add(type);
   });
 
@@ -406,38 +418,84 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
   const companyId = cleanText(solicitud?.companyId);
 
   const { client, company } = await loadClientAndCompany(user, uid, rootId, clienteId, companyId);
+  return projectMaterialityOperation({ rootId, uid, username, solicitudId, solicitud, clienteId, companyId, client, company });
+}
 
-  const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
-  const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
-  const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
+// Internal projection maintenance has no browser-supplied impersonation switch.
+// Its sources must share a root; it never creates provider drafts or fiscal work.
+export async function refreshMaterialityProjectionFromSource(input: { rootId: string; solicitudId: string }) {
+  const rootId = cleanText(input.rootId), solicitudId = cleanText(input.solicitudId);
+  if (!rootId || !solicitudId) throw new HttpsError("invalid-argument", "Alcance documental requerido.");
+  const snap = await db.doc(`solicitudes/${solicitudId}`).get(), solicitud = snap.data();
+  if (!solicitud || cleanText(solicitud.rootId) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera del root.");
+  const clienteId = cleanText(solicitud.clienteId || solicitud.clientId), companyId = cleanText(solicitud.companyId);
+  if (!clienteId || !companyId) throw new HttpsError("failed-precondition", "Expediente sin cliente o empresa.");
+  const [clientSnap, companySnap] = await Promise.all([db.doc(`clients/${clienteId}`).get(), db.doc(`companies/${companyId}`).get()]);
+  const client = clientSnap.data(), company = companySnap.data();
+  if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+    throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+  return projectMaterialityOperation({ rootId, uid: "SYSTEM", username: "Sistema", solicitudId, solicitud, clienteId, companyId, client, company });
+}
 
-  const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
-    getActiveUploadsBySolicitud(rootId, solicitudId),
-    getActivePagoUploadsBySolicitud(rootId, solicitudId),
-    getPrimaryContract(materialityClientCompanyId),
-  ]);
-
-  const activeUploadsByType = {
-    ...activeSolicitudUploadsByType,
-    ...activePagoUploadsByType,
-  };
-
-  const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
-  const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
-  const operationStatus = buildOperationStatus(solicitud, missingTypes);
-  const contractId = cleanText(contract?.id || "");
-  const now = FieldValue.serverTimestamp();
-  const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
-    id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
-    documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
-    storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
-  })).filter((upload: any) => upload.id && upload.storagePath);
-
+async function projectMaterialityOperation(input: { rootId: string; uid: string; username: string; solicitudId: string;
+  solicitud: any; clienteId: string; companyId: string; client: any; company: any }) {
+  const { rootId, uid, username, solicitudId, clienteId, companyId } = input;
   const operationRef = db.collection("materialityOperations").doc(solicitudId);
   const solicitudRef = db.collection("solicitudes").doc(solicitudId);
+  return db.runTransaction(async (tx) => {
+    // Read all projection inputs under the same transaction snapshot. Concurrent
+    // finalization/replacement/reversal retries the complete calculation.
+    const [previousOperation, latestSolicitud] = await Promise.all([tx.get(operationRef), tx.get(solicitudRef)]);
+    const solicitud = latestSolicitud.data();
+    if (!solicitud || cleanText(solicitud.rootId) !== rootId || cleanText(solicitud.companyId) !== companyId || cleanText(solicitud.clienteId || solicitud.clientId) !== clienteId)
+      throw new HttpsError("aborted", "La solicitud cambió durante la actualización documental.");
+    if (previousOperation.exists && cleanText(previousOperation.data()?.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Expediente fuera del root.");
+    const [clientSnap, companySnap] = await Promise.all([tx.get(db.doc(`clients/${clienteId}`)), tx.get(db.doc(`companies/${companyId}`))]);
+    const client = clientSnap.data(), company = companySnap.data();
+    if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+    const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
+    const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
+    const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
 
-  await db.runTransaction(async (tx) => {
-    const previousOperation = await tx.get(operationRef);
+    const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
+      getActiveUploadsBySolicitud(rootId, solicitudId, tx),
+      getActivePagoUploadsBySolicitud(rootId, solicitudId, tx),
+      getPrimaryContract(materialityClientCompanyId, tx),
+    ]);
+
+    const activeUploadsByType = {
+      ...activeSolicitudUploadsByType,
+      ...activePagoUploadsByType,
+    };
+
+    const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
+    const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
+    const operationStatus = buildOperationStatus(solicitud, missingTypes);
+    const contractId = cleanText(contract?.id || "");
+    const now = FieldValue.serverTimestamp();
+    const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
+      id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
+      documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
+      storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
+      applicationId: cleanText(upload?.applicationId), applicationFolio: cleanText(upload?.applicationFolio), installment: Number(upload?.installment || 0),
+      pagoId: cleanText(upload?.pagoId), entityType: cleanText(upload?.entityType),
+    })).filter((upload: any) => upload.id && upload.storagePath);
+
+
+    const projectionDigest = createHash("sha256").update(JSON.stringify({
+      revision: 2, rootId, clienteId, clienteNombre, companyId, companyName, solicitudId,
+      folio: solicitud.folio || solicitudId, monto: toNumber(solicitud.monto), moneda: solicitud.moneda || "MXN",
+      concepto: solicitud.concepto || solicitud.comentario || solicitud.folio || solicitudId,
+      solicitudStatus: solicitud.status || "", operationStatus, contractId, documentRefs, missingTypes,
+      facturamaInvoiceId: solicitud.facturamaInvoiceId || null,
+      fiscalValidationStatus: solicitud.fiscalValidationStatus || null, fiscalValidationReason: solicitud.fiscalValidationReason || null,
+    })).digest("hex");
+
+    const result = { ok: true, materialityOperationId: solicitudId, materialityClientCompanyId,
+      status: operationStatus, completedTypes, missingTypes };
+    if (previousOperation.data()?.projectionDigest === projectionDigest) return result;
     await ensureMaterialityClientCompanyTx(tx, {
       rootId,
       uid,
@@ -468,6 +526,7 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
       constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
       firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
       documentRefs,
+      projectionDigest,
       presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
       facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
       facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
@@ -501,16 +560,8 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
       materialityMissingTypes: missingTypes,
       materialityUpdatedAt: now,
     }, { merge: true });
+    return result;
   });
-
-  return {
-    ok: true,
-    materialityOperationId: solicitudId,
-    materialityClientCompanyId,
-    status: operationStatus,
-    completedTypes,
-    missingTypes,
-  };
 }
 
 export async function getMaterialityOperationCore(request: any) {
@@ -530,6 +581,9 @@ export async function getMaterialityOperationCore(request: any) {
 
   const row = snap.data() || {};
   assertSameRoot(row, rootId, "Operacion de materialidad");
+  await loadClientAndCompany(user, uid, rootId, cleanText(row.clienteId || row.clientId), cleanText(row.companyId));
+  await requireClientOperationalAccess({ uid, role: normalizeRole(user.role) as "superadmin" | "admin" | "operador", rootId,
+    clientId: cleanText(row.clienteId || row.clientId), permission: "view", errorMessage: "No autorizado para este expediente de materialidad." });
 
   return {
     ok: true,

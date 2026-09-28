@@ -1,4 +1,6 @@
+import { manualNoteAuthor, systemNoteAuthor } from "../notes/domain";
 import * as admin from "firebase-admin";
+import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { getRole, getRootIdFromUser, getUser, getUsername, requireAuthLike } from "../../utils/auth";
@@ -237,6 +239,7 @@ export function buildPagoIqAutoQueuePatchH4D62B(input: {
 // H4_D62B_PAGO_DOC_COMPROBANTE_AUTO_QUEUE_HELPERS
 
 function canUploadPagoDocs(user: any): boolean {
+  if (user?.active === false || user?.isActive === false || user?.disabled === true || user?.deleted === true || user?.deletedAt) return false;
   const role = getRole(user);
   const modules = user?.modules || {};
 
@@ -419,7 +422,7 @@ export async function finalizePagoDocumentUploadCore(
     throw new HttpsError("failed-precondition", "Upload sin pagoId.");
   }
 
-  await loadPagoOrThrow({
+  const { pago: initialPago } = await loadPagoOrThrow({
     pagoId,
     uid,
     user,
@@ -430,6 +433,7 @@ export async function finalizePagoDocumentUploadCore(
     throw new HttpsError("invalid-argument", "storagePath no coincide con el registro.");
   }
 
+  let verifiedReceiptSha256 = "";
   try {
     const bucket = admin.storage().bucket();
     const [exists] = await bucket.file(String(upload.storagePath || "")).exists();
@@ -437,12 +441,22 @@ export async function finalizePagoDocumentUploadCore(
     if (!exists) {
       throw new HttpsError("failed-precondition", "El archivo no existe en Storage.");
     }
+    if (documentType === "COMPROBANTE_PAGO" && initialPago.receiptIdentificationId) {
+      const file = bucket.file(String(upload.storagePath || ""));
+      const [metadata] = await file.getMetadata();
+      if (Number(metadata.size || 0) <= 0 || Number(metadata.size) > MAX_PAGO_DOCUMENT_SIZE_BYTES) {
+        throw new HttpsError("failed-precondition", "Tamaño de comprobante inválido.");
+      }
+      const [bytes] = await file.download();
+      verifiedReceiptSha256 = createHash("sha256").update(bytes).digest("hex");
+    }
   } catch (e: any) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
   }
 
   let finalVersion = 1;
+  let finalUploadId = uploadId;
   let terminalUnlockAppliedH4D64A6 = false;
   let terminalContextH4D64A6: PagoIqTerminalContextH4D64A6 = {
     terminal: false,
@@ -454,9 +468,52 @@ export async function finalizePagoDocumentUploadCore(
   let pagoForNotificationH4D64A6: Record<string, unknown> = {};
 
   await db.runTransaction(async (tx) => {
+    terminalUnlockAppliedH4D64A6 = false;
     const pagoRefH4D58H = db.collection("pagos").doc(pagoId);
     const pagoSnapH4D58H = await tx.get(pagoRefH4D58H);
     const pagoH4D58H = pagoSnapH4D58H.exists ? ((pagoSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
+    const currentUpload = await tx.get(uploadRef);
+    if (!pagoSnapH4D58H.exists || pagoH4D58H.rootId !== rootId || !currentUpload.exists ||
+        currentUpload.get("rootId") !== rootId || currentUpload.get("entityType") !== "pagos" ||
+        String(currentUpload.get("pagoId") || currentUpload.get("entityId")) !== pagoId ||
+        currentUpload.get("documentType") !== documentType || currentUpload.get("storagePath") !== upload.storagePath ||
+        pagoH4D58H.receiptIdentificationId !== initialPago.receiptIdentificationId) {
+      throw new HttpsError("failed-precondition", "El pago o comprobante cambió; vuelve a verificar la carga.");
+    }
+    const identificationId = documentType === "COMPROBANTE_PAGO" ? cleanTextH4D64A6(pagoH4D58H.receiptIdentificationId) : "";
+    const identificationRef = identificationId ? db.collection("pagoReceiptIdentifications").doc(identificationId) : null;
+    const identification = identificationRef ? await tx.get(identificationRef) : null;
+    if (identification && (!identification.exists || identification.get("rootId") !== rootId ||
+        identification.get("pagoId") !== pagoId || identification.get("status") !== "REGISTERED")) {
+      throw new HttpsError("failed-precondition", "Identificación de comprobante fuera de alcance.");
+    }
+    const receiptAwaiting = identification?.get("stage") === "REGISTERED_AWAITING_RECEIPT";
+    if (receiptAwaiting && (!verifiedReceiptSha256 || identification?.get("contentSha256") !== verifiedReceiptSha256)) {
+      throw new HttpsError("failed-precondition", "El archivo no coincide con el comprobante que originó el pago.");
+    }
+    if (identification?.get("stage") === "RECEIPT_READY" && identification.get("receiptUploadId") === uploadId &&
+        identification.get("receiptSha256") !== verifiedReceiptSha256) {
+      throw new HttpsError("failed-precondition", "La integridad del comprobante publicado cambió.");
+    }
+    if (identification?.get("stage") === "RECEIPT_READY" && identification.get("receiptSha256") === verifiedReceiptSha256 &&
+        identification.get("receiptUploadId") !== uploadId && currentUpload.get("status") === "PENDING") {
+      const publishedId = cleanTextH4D64A6(identification.get("receiptUploadId"));
+      const published = publishedId ? await tx.get(db.collection("uploads").doc(publishedId)) : null;
+      if (published?.get("rootId") === rootId && published.get("pagoId") === pagoId &&
+          published.get("documentType") === "COMPROBANTE_PAGO" && published.get("status") === "READY" && published.get("active") === true) {
+        finalUploadId = publishedId;
+        finalVersion = Number(published.get("version") || 1);
+        return;
+      }
+    }
+    // A retried finalize must not replace itself, increment versions, unlock IQ or emit another audit event.
+    if (currentUpload.get("status") === "READY" && currentUpload.get("active") === true && !receiptAwaiting) {
+      finalVersion = Number(currentUpload.get("version") || 1);
+      return;
+    }
+    if (!["PENDING", "READY"].includes(String(currentUpload.get("status")))) {
+      throw new HttpsError("failed-precondition", "El comprobante ya no admite finalización.");
+    }
     const despachoId = cleanTextH4D64A6(pagoH4D58H.despachoId);
     const despachoSnap = despachoId ? await tx.get(db.collection("despachos").doc(despachoId)) : null;
     const iqDispatchEnabled = despachoSnap?.exists && canRunIqAutomationForDispatch(despachoSnap.data());
@@ -471,6 +528,18 @@ export async function finalizePagoDocumentUploadCore(
       .where("active", "==", true);
 
     const activeSnap = await tx.get(activeQuery);
+
+    if (receiptAwaiting && identificationRef) {
+      tx.update(identificationRef, {
+        stage: "RECEIPT_READY", receiptUploadId: uploadId, receiptSha256: verifiedReceiptSha256,
+        metricReceiptReady: true, receiptReadyAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+      // Repair a legacy partial finalize without replacing its already published document.
+      if (currentUpload.get("status") === "READY" && currentUpload.get("active") === true) {
+        finalVersion = Number(currentUpload.get("version") || 1);
+        return;
+      }
+    }
 
     let maxVersion = 0;
     const terminalReplacementH4D64A6 =
@@ -520,6 +589,7 @@ export async function finalizePagoDocumentUploadCore(
       finalizedUsername: getUsername(user, uid),
       finalizedAt: FieldValue.serverTimestamp(),
       integritySealStatus: upload.sha256 ? "SEALED" : "SEALED_NO_HASH",
+      ...(verifiedReceiptSha256 ? { sha256: verifiedReceiptSha256, integrityHashAlgorithm: "SHA-256", integritySealStatus: "SEALED" } : {}),
       integritySealedAt: FieldValue.serverTimestamp(),
       integritySealedBy: uid,
       integritySealedUsername: getUsername(user, uid),
@@ -596,9 +666,7 @@ export async function finalizePagoDocumentUploadCore(
     await db.collection("pagos").doc(pagoId).collection("notas").add({
       rootId,
       text: `Nuevo comprobante recibido. El folio IQ terminal ${terminalFolio} queda historico y se habilita un nuevo intento.`,
-      createdBy: uid,
-      createdByName: getUsername(user, uid),
-      createdByRole: getRole(user),
+      ...systemNoteAuthor("DOCUMENTS", "RETRY_ENABLED", uid),
       createdAt: FieldValue.serverTimestamp(),
       source: "PAGO_DOC_RETRY_H4_D64_A6",
       uploadId,
@@ -627,7 +695,7 @@ export async function finalizePagoDocumentUploadCore(
 
   return {
     ok: true,
-    uploadId,
+    uploadId: finalUploadId,
     pagoId,
     version: finalVersion,
     terminalUnlockApplied: terminalUnlockAppliedH4D64A6,
@@ -886,9 +954,7 @@ export async function updateRejectedPagoAmountForRetryCore(
   await pagoRef.collection("notas").add({
     rootId,
     text: `Pago rechazado corregido antes de subir el nuevo comprobante. Monto: ${previousAmount.toFixed(2)} a ${newAmount.toFixed(2)}. Ordenante: ${correctedPayerName || "sin cambio"}. Beneficiario: ${correctedBeneficiaryName || "sin cambio"}. Motivo: ${reason}`,
-    createdBy: uid,
-    createdByName: getUsername(user, uid),
-    createdByRole: role,
+    ...manualNoteAuthor(uid, user),
     createdAt: FieldValue.serverTimestamp(),
     source: "H4_D64_A6_CONTROLLED_AMOUNT_EDIT",
     previousAmount,

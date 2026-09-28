@@ -734,6 +734,8 @@ service cloud.firestore {
     match /pay0CanonicalAuditLog/{id} { allow read, write: if false; }
     match /pay0CanonicalUploadSessions/{id} { allow read, write: if false; }
 
+    match /pagoReceiptIdentifications/{id} { allow read, write: if false; }
+
     match /{document=**} {
       allow read, write: if false;
     }
