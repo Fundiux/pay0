@@ -1,5 +1,5 @@
 import { DEFAULT_IQ_ERP_URL } from "./config";
-import { resolveIqAssociatedName } from "./associatedName";
+import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -1259,7 +1259,7 @@ export const createSolicitudIq = onCall(
     const username = cleanText(profile.username);
     const profileAlias = cleanText(profile.alias);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
-    const associatedName = resolveIqAssociatedName(username, profile.associatedName);
+    const associatedName = requireIqAssociatedName(profile.associatedName);
 
     const pay0ClientId = cleanText(
       solicitud.clienteId ??
@@ -1449,6 +1449,7 @@ export const createSolicitudIq = onCall(
           iqId: reservation.iqId,
           iqProfileId: profileId,
           iqProfileAlias: profileAlias || null,
+          iqAssociatedName: associatedName,
           attemptCount: reservation.attemptCount,
           idempotent: true,
           fingerprint: reservation.fingerprint,
@@ -1499,6 +1500,7 @@ export const createSolicitudIq = onCall(
         attemptCount: reservation.attemptCount,
         iqProfileId: profileId,
         iqProfileAlias: profileAlias || null,
+        iqAssociatedName: associatedName,
         fingerprint,
         startedAtMs,
         targetDateIso,

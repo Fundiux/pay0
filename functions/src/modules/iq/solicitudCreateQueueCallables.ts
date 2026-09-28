@@ -1,5 +1,5 @@
 import { DEFAULT_IQ_ERP_URL } from "./config";
-import { resolveIqAssociatedName } from "./associatedName";
+import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -994,7 +994,7 @@ async function prepareSolicitudForIqQueue(input: {
     profileAlias: cleanText(profile.alias),
     erpUrl: normalizeErpUrl(cleanText(profile.erpUrl)),
     username,
-    associatedName: resolveIqAssociatedName(username, profile.associatedName),
+    associatedName: requireIqAssociatedName(profile.associatedName),
     clientId,
     clientName,
     iqClientId,
@@ -1827,7 +1827,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         });
         items.push({
           key: job.id,
-          associatedName: resolveIqAssociatedName(job.username, job.associatedName),
+          associatedName: requireIqAssociatedName(job.associatedName),
           clientName: job.clientName,
           iqClientId: job.iqClientId,
           companyName: job.companyName,

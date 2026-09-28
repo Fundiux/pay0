@@ -10,7 +10,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { resolveIqBeneficiaryInstrument } from "./dispersionHttpCreateCore";
-import { resolveIqAssociatedName } from "./associatedName";
+import { requireIqAssociatedName } from "./associatedName";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { assertDispersionDestination } from "./dispersionDestinationGuard";
@@ -627,10 +627,10 @@ async function loadIqAccess(
     return {
       profileId: identity.effectiveIqProfileId,
       profileAlias: identity.credentialProfile.profileAlias,
-      associatedName:
+      associatedName: requireIqAssociatedName(
         identity.originIqContext.associatedName ||
-        clean(despacho.iqAssociatedName ?? despacho.associatedName) ||
-        identity.credentialProfile.username,
+        clean(despacho.iqAssociatedName ?? despacho.associatedName),
+      ),
       username: identity.credentialProfile.username,
       password: identity.credentialProfile.password,
       erpUrl: identity.credentialProfile.erpUrl,
@@ -727,8 +727,7 @@ async function loadIqAccess(
     profileAlias:
       clean(profile.alias) ||
       profileId,
-    associatedName: resolveIqAssociatedName(
-      username,
+    associatedName: requireIqAssociatedName(
       clean(
         despacho.iqAssociatedName ??
           despacho.associatedName ??

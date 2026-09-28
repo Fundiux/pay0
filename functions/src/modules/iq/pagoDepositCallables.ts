@@ -292,8 +292,7 @@ async function getIqAccessForPagoOrigin(
     profileId: identity.effectiveIqProfileId,
     profileAlias: identity.credentialProfile.profileAlias,
     associatedName:
-      identity.originIqContext.associatedName ||
-      identity.credentialProfile.username,
+      identity.originIqContext.associatedName,
     username: identity.credentialProfile.username,
     password: identity.credentialProfile.password,
     erpUrl: identity.credentialProfile.erpUrl,

@@ -12,7 +12,7 @@ import {
   parseIqDateTimeMs,
 } from "../iq/iqDateTime";
 import type { PaymentApplicationActor } from "./service";
-import { resolveIqAssociatedName } from "../iq/associatedName";
+import { requireIqAssociatedName } from "../iq/associatedName";
 import {
   PAYMENT_APPLICATION_IQ_EXECUTION_VERSION,
   buildPaymentApplicationIqExecutionAttemptId,
@@ -505,7 +505,7 @@ export async function resolveIqAccess(
   return {
     profileId,
     profileAlias: cleanText(profile.alias),
-    associatedName: resolveIqAssociatedName(username, access.associatedName || profile.associatedName),
+    associatedName: requireIqAssociatedName(access.associatedName || profile.associatedName),
     username,
     password: decryptPassword(profile),
     erpUrl: normalizeErpUrl(profile.erpUrl),
