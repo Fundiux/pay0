@@ -3,6 +3,7 @@ import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSyn
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -12,6 +13,12 @@ if (args.length === 0) {
 
 const environment = { ...process.env };
 delete environment.DEBUG;
+const selectedOnlyIndex = args.indexOf("--only");
+const selectedOnly = selectedOnlyIndex >= 0 ? args[selectedOnlyIndex + 1] : args.find(arg => arg.startsWith("--only="))?.slice(7);
+if (args[0] === "emulators:exec" && String(selectedOnly || "").split(",").includes("storage")) {
+  const framingShim = fileURLToPath(new URL("./firebase-storage-rules-framing.cjs", import.meta.url)).replace(/\\/g, "/");
+  environment.NODE_OPTIONS = `${environment.NODE_OPTIONS || ""} --require "${framingShim}"`.trim();
+}
 
 const firebaseCliCandidates = [
   environment.APPDATA && join(environment.APPDATA, "npm", "node_modules", "firebase-tools", "lib", "bin", "firebase.js"),
@@ -145,6 +152,7 @@ async function waitForEmulatorPorts() {
     ports.add(9150);
   }
   if (!selected || selected.includes("storage")) ports.add(9199);
+  if (!selected || selected.includes("auth")) ports.add(9099);
   const startedAt = Date.now();
   let lastNoticeAt = 0;
   while (Date.now() - startedAt < 15 * 60_000) {
