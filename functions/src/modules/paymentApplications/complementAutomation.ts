@@ -32,33 +32,93 @@ async function sourceFor(applicationId: string) {
 export async function adoptImportedIqComplement(applicationId: string, loaded: Awaited<ReturnType<typeof sourceFor>>) {
   const { app, source, ref } = loaded;
   if (text(app.iqComplementStatus).toUpperCase() !== "IMPORTED") return false;
-  const xmlUploadId = text(app.iqComplementXmlUploadId), pdfUploadId = text(app.iqComplementPdfUploadId);
-  if (!xmlUploadId || !pdfUploadId) throw Error("REP_IMPORTED_DOCUMENT_IDS_MISSING");
-  const [xmlSnap, pdfSnap] = await Promise.all([
-    db.doc(`uploads/${xmlUploadId}`).get(), db.doc(`uploads/${pdfUploadId}`).get(),
-  ]);
-  const xmlRow = xmlSnap.data(), pdfRow = pdfSnap.data();
-  for (const [row, expectedType] of [[xmlRow, "COMPLEMENTO_PAGO_XML"], [pdfRow, "COMPLEMENTO_PAGO_PDF"]] as const) {
-    if (!row || row.rootId !== source.rootId || text(row.pagoId) !== text(source.pagoId) ||
-        text(row.pagoAplicacionId || row.applicationId) !== applicationId || text(row.documentType).toUpperCase() !== expectedType ||
-        !text(row.storagePath)) throw Error("REP_IMPORTED_DOCUMENT_SCOPE_MISMATCH");
-  }
+  const appRef = db.doc(`pagoAplicaciones/${applicationId}`);
+  const isCanonicalDocument = (document: FirebaseFirestore.DocumentSnapshot, type: string, uuid: string) => {
+    const row = document.data();
+    return !!row && document.id === hash(`${source.rootId}:${source.pagoId}:${applicationId}:${uuid}:${type}:PAGO_V2`) &&
+      row.rootId === source.rootId && row.pagoId === source.pagoId && row.documentType === type &&
+      row.applicationId === applicationId && row.entityType === "pagos" && row.entityId === source.pagoId &&
+      row.complementKey === uuid && row.status === "READY" && row.active === true && !!text(row.storagePath) &&
+      row.integritySealStatus === "SEALED" && /^[a-f0-9]{64}$/i.test(row.sha256 || "");
+  };
+  const readState = async (tx: FirebaseFirestore.Transaction) => {
+    const [currentSnap, latest] = await Promise.all([tx.get(appRef), tx.get(ref)]);
+    const current = currentSnap.data(), request = latest.data();
+    if (!current || current.rootId !== source.rootId || current.solicitudId !== source.solicitudId || current.pagoId !== source.pagoId ||
+        text(current.iqComplementStatus).toUpperCase() !== "IMPORTED") throw Error("REP_IMPORTED_SOURCE_CHANGED");
+    if (!request || request.rootId !== source.rootId || request.applicationId !== applicationId ||
+        ["solicitudId", "pagoId", "invoiceUuid", "amountMinor", "installment", "balanceBefore", "balanceAfter"].some(key => request[key] !== source[key]) ||
+        request.status === "VOIDED") throw Error("REP_IMPORTED_FOLLOWUP_CHANGED");
+    const jobId = text(request.automationJobId);
+    const xmlId = text(current.iqComplementXmlUploadId), pdfId = text(current.iqComplementPdfUploadId);
+    if (!xmlId || !pdfId) throw Error("REP_IMPORTED_DOCUMENT_IDS_MISSING");
+    const [solicitud, pago, xmlSnap, pdfSnap, jobSnap] = await Promise.all([
+      tx.get(db.doc(`solicitudes/${current.solicitudId}`)), tx.get(db.doc(`pagos/${current.pagoId}`)),
+      tx.get(db.doc(`uploads/${xmlId}`)), tx.get(db.doc(`uploads/${pdfId}`)),
+      jobId ? tx.get(jobs().doc(jobId)) : Promise.resolve(null),
+    ]);
+    assertSource(source.rootId, current, solicitud.data(), pago.data());
+    if (source.amountMinor !== Math.round(current.montoAplicado * 100) || source.installment !== current.numeroParcialidad ||
+        source.balanceBefore !== current.saldoAnterior || source.balanceAfter !== current.saldoInsoluto ||
+        source.invoiceUuid !== text(solicitud.data()?.facturaUuid || solicitud.data()?.uuidCfdi || solicitud.data()?.iqInvoiceUuid).toUpperCase() ||
+        source.currency !== text(pago.data()?.moneda).toUpperCase()) throw Error("REP_SOURCE_CHANGED");
+    const job = jobSnap?.data();
+    if (jobId && (!job || job.rootId !== source.rootId)) throw Error("REP_IMPORTED_JOB_SCOPE_MISMATCH");
+    // A sibling application can put a shared IQ job into review after a
+    // reversal. Keep that visible stop intact; valid evidence for this one
+    // application cannot resolve the financial review of the shared job.
+    const stopped = job?.status === "REVIEW_REQUIRED" || job?.error === "REP_SOURCE_REVERSED" ||
+      request.automationStatus === "REVIEW_REQUIRED" || request.automationError === "REP_SOURCE_REVERSED";
+    if (stopped) return { stopped: true, complete: false, xmlSnap, pdfSnap, jobId };
+    for (const [snap, type] of [[xmlSnap, "COMPLEMENTO_PAGO_XML"], [pdfSnap, "COMPLEMENTO_PAGO_PDF"]] as const) {
+      const row = snap.data();
+      if (!row || row.rootId !== source.rootId || text(row.pagoId) !== text(source.pagoId) ||
+          text(row.pagoAplicacionId || row.applicationId) !== applicationId || text(row.documentType).toUpperCase() !== type ||
+          !text(row.storagePath)) throw Error("REP_IMPORTED_DOCUMENT_SCOPE_MISMATCH");
+    }
+    const uuid = text(current.iqComplementUuid);
+    const canonicalDocuments = isCanonicalDocument(xmlSnap, "COMPLEMENTO_PAGO_XML", uuid) &&
+      isCanonicalDocument(pdfSnap, "COMPLEMENTO_PAGO_PDF", uuid);
+    // RECEIVED alone can still reference legacy/partial evidence. A shared IQ
+    // job may serve several applications, so its upload IDs are not an owner key.
+    const complete = current.iqComplementDocumentOwner === "PAGO_APPLICATION" &&
+      /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/.test(uuid) && canonicalDocuments &&
+      request.status === "RECEIVED" && request.automationStatus === "RECEIVED" && !request.automationError &&
+      request.repAttachmentStatus === "REP_VALIDATED" && request.uuid === uuid &&
+      request.xmlUploadId === xmlId && request.pdfUploadId === pdfId && (!jobId || (job?.status === "RECEIVED" && !job.error));
+    return { stopped: false, complete, xmlSnap, pdfSnap, jobId };
+  };
+  // A completed adoption must not download, write timestamps or emit another
+  // activity event: its application write invokes this same function again.
+  const initial = await db.runTransaction(readState);
+  if (initial.complete || initial.stopped) return true;
+  const { xmlSnap, pdfSnap } = initial;
   const bucket = admin.storage().bucket();
   const [xmlBytes, pdfBytes] = await Promise.all([
-    bucket.file(text(xmlRow!.storagePath)).download().then(([bytes]) => bytes),
-    bucket.file(text(pdfRow!.storagePath)).download().then(([bytes]) => bytes),
+    bucket.file(text(xmlSnap.data()!.storagePath)).download().then(([bytes]) => bytes),
+    bucket.file(text(pdfSnap.data()!.storagePath)).download().then(([bytes]) => bytes),
   ]);
   // The retired importer accepted SAT-stamped REPs whose monetary fields differ
   // by one cent because of decimal rounding. Keep that exception confined to
   // adoption of already-issued evidence; new provider responses remain exact.
   const documents = await saveComplementDocuments({ ...source, legacyRoundingToleranceMinor: 1 }, xmlBytes, pdfBytes);
   await db.runTransaction(async tx => {
-    const latest = await tx.get(ref);
-    if (!latest.exists || latest.data()?.rootId !== source.rootId || latest.data()?.applicationId !== applicationId)
-      throw Error("REP_IMPORTED_FOLLOWUP_CHANGED");
+    // Recheck inside the writing transaction. Concurrent deliveries may both
+    // reach the downloads, but only one may publish the completed transition.
+    const latest = await readState(tx);
+    if (latest.complete || latest.stopped) return;
+    if (latest.xmlSnap.id !== xmlSnap.id || latest.pdfSnap.id !== pdfSnap.id) throw Error("REP_IMPORTED_SOURCE_CHANGED");
+    const [canonicalXml, canonicalPdf] = await Promise.all([
+      tx.get(db.doc(`uploads/${documents.xmlUploadId}`)), tx.get(db.doc(`uploads/${documents.pdfUploadId}`)),
+    ]);
+    // The document saver intentionally leaves existing READY metadata intact.
+    // Reject an incomplete canonical row instead of publishing a transition
+    // that would fail the completed check and restart this trigger forever.
+    if (!isCanonicalDocument(canonicalXml, "COMPLEMENTO_PAGO_XML", documents.uuid) ||
+        !isCanonicalDocument(canonicalPdf, "COMPLEMENTO_PAGO_PDF", documents.uuid)) throw Error("REP_IMPORTED_CANONICAL_DOCUMENT_INVALID");
     tx.update(ref, { ...documents, status: "RECEIVED", automationStatus: "RECEIVED", automationError: null,
       repAttachmentStatus: "REP_VALIDATED", receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    tx.set(db.doc(`pagoAplicaciones/${applicationId}`), { iqComplementXmlUploadId: documents.xmlUploadId,
+    tx.set(appRef, { iqComplementXmlUploadId: documents.xmlUploadId,
       iqComplementPdfUploadId: documents.pdfUploadId, iqComplementUuid: documents.uuid,
       iqComplementDocumentOwner: "PAGO_APPLICATION", iqComplementReconciledAt: FieldValue.serverTimestamp(),
       iqComplementLegacyRoundingToleranceMinor: 1,
@@ -70,7 +130,7 @@ export async function adoptImportedIqComplement(applicationId: string, loaded: A
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
-    const jobId = text(latest.data()?.automationJobId);
+    const jobId = latest.jobId;
     if (jobId) tx.set(jobs().doc(jobId), { status: "RECEIVED", error: null, ...documents,
       receivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: source.rootId, actorUid: "SYSTEM", actorRole: "system",
