@@ -330,9 +330,8 @@ export async function syncIqClientById(params: {
   const profileLink = asRecord(profileLinks[access.profileId]);
   const legacyLink = asRecord(client.iqLink);
   const expectedPartnerNames = [
-    access.username,
+    access.associatedName,
     access.profileAlias,
-    access.username.replace(/^ASOCIADO\s+/i, ""),
   ].map(normalizeIqEntityName).filter(Boolean);
   const legacyMatchesProfile = expectedPartnerNames.includes(
     normalizeIqEntityName(legacyLink.partnerName),
@@ -433,20 +432,34 @@ export async function syncIqClientById(params: {
     (partnerPayload as any).partners,
   );
 
-  const partnerMatches = partnerRows.filter((row) =>
-    expectedPartnerNames.includes(normalizeIqEntityName(row.name)),
-  );
-  if(partnerMatches.length !== 1){
-    throw new Error(
-      `IQ_PARTNER_NO_UNICO:${access.profileAlias || access.username}:coincidencias=${partnerMatches.length}`,
+  const exactPartner = (name: string) => {
+    const wanted = normalizeIqEntityName(name);
+    if (!wanted) return null;
+    const matches = partnerRows.filter(
+      row => normalizeIqEntityName(row.name ?? row.value) === wanted,
     );
-  }
-  const partner = {
-    id:cleanText(partnerMatches[0].id),
-    name:cleanText(partnerMatches[0].name),
+    if (matches.length !== 1) return null;
+    const selected = matches[0];
+    const id = cleanText(selected.id ?? selected.value);
+    return id ? { id, name: cleanText(selected.name ?? selected.value) } : null;
   };
-  if(!partner.id || !partner.name){
-    throw new Error("IQ_PARTNER_ID_INVALID");
+
+  const partner = exactPartner(access.associatedName) || exactPartner(access.profileAlias);
+  if (!partner) {
+    await persistReview({
+      clientRef,
+      actor:params.actor,
+      reason:"IQ_PARTNER_NOT_FOUND",
+    });
+    return {
+      ok:false,
+      status:"REVIEW_REQUIRED",
+      clientId,
+      iqClientId:"",
+      iqClientName:"",
+      method:"IQ_PARTNER_NOT_FOUND",
+      message:"No se encontro un despacho IQ que coincida exactamente con el usuario o alias de la cuenta IQ. Revisa la cuenta asignada.",
+    };
   }
 
   let clients = await listIqClients({

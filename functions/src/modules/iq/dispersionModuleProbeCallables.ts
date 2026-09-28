@@ -3,6 +3,7 @@ import * as crypto from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { resolveIqAssociatedName } from "./associatedName";
 import { assertIqAuthorized } from "./authorization";
 import {
   loginIqHttpDirect,
@@ -276,9 +277,7 @@ async function loadIqAccess(
     profileAlias:
       clean(profile.alias) ||
       profileId,
-    associatedName: clean(
-      access.associatedName,
-    ),
+    associatedName: resolveIqAssociatedName(username, access.associatedName || profile.associatedName),
     username,
     password:
       decryptSecret(profile),

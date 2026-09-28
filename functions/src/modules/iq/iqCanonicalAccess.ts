@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { resolveIqAssociatedName } from "./associatedName";
 import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
@@ -187,7 +188,7 @@ export async function loadIqCanonicalProfileById(input: {
   return {
     profileId,
     profileAlias: clean(profile.alias) || profileId,
-    associatedName: "",
+    associatedName: resolveIqAssociatedName(username, profile.associatedName),
     username,
     password:
       input.includePassword === false
@@ -262,10 +263,10 @@ export async function loadIqCanonicalUserAccess(input: {
 
   return {
     ...profile,
-    associatedName:
-      clean(input.associatedNameOverride) ||
-      clean(access.associatedName) ||
+    associatedName: resolveIqAssociatedName(
       profile.username,
+      clean(input.associatedNameOverride) || clean(access.associatedName) || profile.associatedName,
+    ),
   };
 }
 
