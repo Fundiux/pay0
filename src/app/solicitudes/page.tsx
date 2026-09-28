@@ -12,6 +12,7 @@ import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitud
 import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
+import { canAutomaticallyRefreshCancellation } from "@/lib/solicitudCancellationFollowup";
 import { formatDateOnly } from "@/lib/dateTime";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
@@ -113,6 +114,7 @@ const SolicitudRow = React.memo(({
   cancelSatRelatedSolicitudId,
   setCancelSatRelatedSolicitudId,
   cancelSatSaving,
+  cancellationError,
   canComment,
   canCancel,
   canUploadDocs,
@@ -283,6 +285,12 @@ const SolicitudRow = React.memo(({
                 </span>
               )}
             </div>
+
+            {cancellationError && (
+              <p role="status" className="max-w-[220px] whitespace-normal text-[10px] text-amber-300">
+                {String(s.folio || "Solicitud sin folio")}: {cancellationError}
+              </p>
+            )}
 
             {displayStatus === "SUSTITUIDA" && targetFolio && (
               <button
@@ -607,6 +615,9 @@ export default function SolicitudesPage() {
   const [hasMoreSolicitudes, setHasMoreSolicitudes] = useState(false);
   const [loadingMoreSolicitudes, setLoadingMoreSolicitudes] = useState(false);
   const solicitudesRequestSeq = useRef(0);
+  const loadedSolicitudesRequestSeq = useRef<number | null>(null);
+  const checkedCancellationIds = useRef(new Set<string>());
+  const [cancellationErrors, setCancellationErrors] = useState<Record<string, string>>({});
 
   // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
 
@@ -814,6 +825,9 @@ export default function SolicitudesPage() {
   const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
 
   useEffect(() => {
+    loadedSolicitudesRequestSeq.current = null;
+    checkedCancellationIds.current.clear();
+    setCancellationErrors({});
     if (!uid || !canViewSolicitudes) {
       setSolicitudes([]);
       setSolicitudesCursor(null);
@@ -828,6 +842,7 @@ export default function SolicitudesPage() {
     setHasMoreSolicitudes(false);
     void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() }).then((page) => {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
+      loadedSolicitudesRequestSeq.current = requestSeq;
       setSolicitudes(page.items || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
@@ -839,7 +854,10 @@ export default function SolicitudesPage() {
       setSolicitudesCursor(null);
       setHasMoreSolicitudes(false);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      solicitudesRequestSeq.current++;
+    };
   }, [uid, rootId, role, canViewSolicitudes, rangeKey]);
 
   const loadMoreSolicitudes = useCallback(async () => {
@@ -1126,43 +1144,40 @@ export default function SolicitudesPage() {
     setCancelSatRelatedSolicitudId(String(sol?.relatedSolicitudFolio || sol?.relatedSolicitudId || ""));
   };
 
-  const refreshCancellation = async (sol: any) => {
+  const refreshCancellation = async (sol: any, requestSeq: number) => {
     try {
-      setPageMsg("");
       const result = await refreshFacturamaProductionCancellationStatus(sol.id);
+      if (requestSeq !== solicitudesRequestSeq.current) return;
       setSolicitudes((prev: any[]) => prev.map((item: any) => item.id === sol.id ? {
         ...item,
         facturamaCancellationStatus: result.status,
         ...(result.terminal ? { status: "CANCELADA", sustitucionStatus: "CANCELADA_SAT" } : {}),
       } : item));
-      setPageMsg(`Estado SAT actualizado: ${result.status}${result.isCancelable ? ` (${result.isCancelable})` : ""}.`);
     } catch (error: any) {
-      setPageMsg(error?.message || "No se pudo consultar el estado de cancelacion.");
+      if (requestSeq !== solicitudesRequestSeq.current) return;
+      setCancellationErrors((current) => ({
+        ...current,
+        [sol.id]: `No se pudo verificar la cancelación. ${String(error?.message || "Intenta de nuevo al recargar la lista.")}`,
+      }));
     }
   };
 
-  // A cancellation request is checked automatically once per loaded Solicitud.
-  // There is deliberately no operator button: this never sends a new request
-  // to Facturama, it only reads the SAT/Facturama result already in progress.
-  const checkedCancellationIds = useRef(new Set<string>());
+  // Only follow an actual cancellation of an issued production CFDI. Missing
+  // folio/date metadata is recovered by reconcileFacturamaIssuedMetadata in
+  // Facturación, not by consulting SAT for an unissued draft.
   useEffect(() => {
+    const requestSeq = solicitudesRequestSeq.current;
+    if (!canViewSolicitudes || loadedSolicitudesRequestSeq.current !== requestSeq) return;
     const pending = solicitudes.filter((item: any) =>
-      String(item?.facturamaInvoiceId || "").trim() &&
-      (
-        String(item?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" ||
-        String(item?.status || "").toUpperCase() === "EN_SUSTITUCION" ||
-        !String(item?.facturaDisplay || "").trim() ||
-        !String(item?.facturaFecha || "").trim() ||
-        (String(item?.status || "").toUpperCase() === "CANCELADA" && !String(item?.cancellationReceiptUploadId || "").trim())
-      ) &&
+      canAutomaticallyRefreshCancellation(item, isSuperAdmin(role)) &&
       !checkedCancellationIds.current.has(String(item?.id || "")),
     );
     for (const item of pending) {
       if (!item?.id) continue;
       checkedCancellationIds.current.add(String(item.id));
-      void refreshCancellation(item);
+      void refreshCancellation(item, requestSeq);
     }
-  }, [solicitudes]);
+  }, [solicitudes, role, canViewSolicitudes, rangeKey]);
 
   const closeCancelSat = () => {
     setCancelSatFor(null);
@@ -1618,7 +1633,7 @@ export default function SolicitudesPage() {
             {filteredSortedData.length === 0 ? (
               <tr>
                 <td colSpan={isSuperAdmin(role) ? 15 : 14} className="p-4 text-[12px] italic text-slate-500">
-                  no hay registros para este periodo
+                  No hay solicitudes que coincidan con este periodo y los filtros seleccionados.
                 </td>
               </tr>
             ) : (
@@ -1651,6 +1666,7 @@ export default function SolicitudesPage() {
                   cancelSatRelatedSolicitudId={cancelSatRelatedSolicitudId}
                   setCancelSatRelatedSolicitudId={setCancelSatRelatedSolicitudId}
                   cancelSatSaving={cancelSatSaving}
+                  cancellationError={cancellationErrors[s.id]}
                   onDocs={setDocsFor}
                   onDelete={handleHide}
                   canComment={canCommentSolicitud}
