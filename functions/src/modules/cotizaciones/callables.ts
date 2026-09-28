@@ -10,6 +10,7 @@ import { getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/h
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { renderCanonicalQuotePdf } from "../documents/canonicalPdf";
+import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -68,7 +69,7 @@ function username(user: any, uid: string): string {
 
 function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
   const r = role(user);
-  if (r === "superadmin") return clean(solicitud?.rootId, 128) === rootId || clean(solicitud?.createdBy, 128) === uid;
+  if (r === "superadmin") return clean(solicitud?.rootId, 128) === rootId;
   if (r === "admin") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.adminId, 128) === uid;
   if (r === "operador") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.createdBy, 128) === uid;
   return false;
@@ -118,6 +119,7 @@ export async function generateCotizacionForSolicitudCore(request: {
 
     const replaceExisting = request.data?.replaceExisting === true;
     const existing = await db.collection("uploads")
+      .where("rootId", "==", rootId)
       .where("solicitudId", "==", solicitudId)
       .where("documentType", "==", "COTIZACION")
       .where("active", "==", true)
@@ -136,6 +138,8 @@ export async function generateCotizacionForSolicitudCore(request: {
     ]);
     const company: any = companySnap?.exists ? companySnap.data() || {} : {};
     const client: any = clientSnap?.exists ? clientSnap.data() || {} : {};
+    if (company.rootId !== rootId || (clientSnap?.exists && client.rootId !== rootId))
+      throw new HttpsError("permission-denied", "La empresa o el cliente no pertenecen al expediente.");
     const companyRfc = normalizeRfc(company.rfc || solicitud.companyRfc || solicitud.empresaRfc);
     const deposit = activeDepositAccount(company);
 
@@ -146,17 +150,12 @@ export async function generateCotizacionForSolicitudCore(request: {
     const companyName = clean(company.nombre || company.razonSocial || solicitud.empresaNombre || solicitud.companyName, 180);
     const companySlug = canonicalSlug(companyName || companyRfc);
     const canonicalTemplate = canonicalQuotationTemplateByRfc(companyRfc);
+    const canonicalBundle = await resolveCorporateDocumentBundle(rootId, companyId, companyRfc, "COTIZACION");
 
     const templateSnapshot = {
       documentType: "COTIZACION",
-      templateId: canonicalTemplate?.templateId || `${companySlug}-cotizacion-v1.0`,
-      templateVersion: canonicalTemplate?.version || "1.0",
-      companyId: canonicalTemplate?.companyId || companyId || companySlug,
-      companyName: canonicalTemplate?.companyName || companyName,
-      companyRfc,
       referencePdf: canonicalTemplate?.referencePdf || `COTIZACION_CANONICA_${companySlug.replace(/-/g, "_").toUpperCase()}_v1.0.pdf`,
-      referencePdfSha256: canonicalTemplate?.referencePdfSha256 || null,
-      templateEngine: "PAY0_CANONICAL_HTML_CSS_PRINT_V1",
+      ...canonicalBundle.snapshot,
     };
 
     const folio = `COT-${clean(solicitud.folio || solicitudId, 80)}`;
@@ -176,12 +175,13 @@ export async function generateCotizacionForSolicitudCore(request: {
     const verificationUrl = `https://pay-0-system.web.app/verificar/cotizacion/${publicVerificationToken}`;
     const pdf = await renderCanonicalQuotePdf({
       folio,
+      canonicalBundle,
       companyName,
       companyRfc,
       // An active OC is the immediate commercial instruction. Prefer its
       // extracted client data so the document never says "Conforme a CSF" or
       // substitutes a generic service when the source has those values.
-      clientName: clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.nombre || client.name || "Cliente", 180),
+      clientName: clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180),
       clientRfc: normalizeRfc(solicitud.ocClientRfc || solicitud.clienteRfc || solicitud.clientRfc || client.rfc || client.fiscalProfile?.rfc) || "PENDIENTE",
       clientAddress: clean(solicitud.ocClientAddress || client.fiscalProfile?.address || client.domicilioFiscal || client.address || "", 300),
       deliveryLocation: clean(solicitud.ocDeliveryLocation || solicitud.lugarEntrega || "", 240),

@@ -58,7 +58,7 @@ import {
 import { useGlobalLoading } from "@/components/GlobalLoading";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
-import { createSolicitudSignatureLink, generateSolicitudQuotation } from "@/services/signatureLinks";
+import { createSolicitudSignatureLink, generateSolicitudQuotation, submitSolicitudSignature, generateSolicitudReceiptCertificate } from "@/services/signatureLinks";
 
 type UploadRow = {
   id: string;
@@ -123,6 +123,7 @@ export default function DocsModal(props: {
   const [signatureMessage, setSignatureMessage] = useState("");
   const [signatureLinkCreating, setSignatureLinkCreating] = useState(false);
   const [signatureLink, setSignatureLink] = useState("");
+  const [receipt, setReceipt] = useState({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
   const [quotationGenerating, setQuotationGenerating] = useState(false);
   const [ocReprocessing, setOcReprocessing] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -299,12 +300,13 @@ useEffect(() => {
   }, [open, solicitudId, solicitudRootId]);
 
   useEffect(() => {
+    setReceipt({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
     if (!open) {
       setDropdownOpen(false);
       setOtherLabel("");
       setPct(0);
     }
-  }, [open]);
+  }, [open, solicitudId]);
 
   useEffect(() => {
     if (!open) {
@@ -623,33 +625,19 @@ useEffect(() => {
       setSignatureMessage("Primero captura la firma en el recuadro.");
       return;
     }
+    if (!receipt.signerName.trim() || !receipt.signerRole.trim() || !receipt.receiptLocation.trim() || !receipt.receiptAddress.trim() || !receipt.acceptedNoClaimPolicy) {
+      setSignatureMessage("Completa nombre, cargo, lugar, dirección y aceptación de quien recibe.");
+      return;
+    }
 
     setSignatureSaving(true);
     setSignatureMessage("");
 
     try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((value) => {
-          if (value) resolve(value);
-          else reject(new Error("No se pudo preparar la imagen de firma."));
-        }, "image/png");
-      });
-
-      const folio = String(solicitud?.folio || solicitudId || "solicitud").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const file = new File(
-        [blob],
-        `firma-autorizada-cliente-${folio}-${Date.now()}.png`,
-        { type: "image/png" },
-      );
-
-      await uploadSolicitudDoc({
-        solicitudId: String(solicitudId),
-        documentType: "FIRMA_AUTORIZADA_CLIENTE" as SolicitudDocumentType,
-        file,
-        onProgress: setPct,
-      });
-
-      setSignatureMessage("Firma guardada como evidencia autorizada del cliente.");
+      const link = await createSolicitudSignatureLink(String(solicitudId));
+      const result = await submitSolicitudSignature({ token: link.token, ...receipt, signatureDataUrl: canvas.toDataURL("image/png") });
+      setSignatureMessage(result.constanciaPending ? "Firma guardada. Usa Generar constancia para completar el PDF sin volver a firmar." : "Firma y constancia guardadas en el expediente.");
+      setReceipt({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
       setSignatureOpen(false);
     } catch (error: any) {
       setSignatureMessage(error?.message || "No se pudo guardar la firma.");
@@ -1047,6 +1035,11 @@ const downloadDoc = async (doc: UploadRow) => {
               >
                 {signatureLinkCreating ? "Creando link..." : "Crear link"}
               </button>
+              <button type="button" disabled={signatureSaving || !solicitudId}
+                className="rounded-xl border border-white/10 px-3 py-2 text-[11px] disabled:opacity-50"
+                onClick={async () => { setSignatureSaving(true); try { await generateSolicitudReceiptCertificate(String(solicitudId)); setSignatureMessage("Constancia disponible en el expediente."); } catch (error: any) { setSignatureMessage(error?.message || "No se pudo generar la constancia."); } finally { setSignatureSaving(false); } }}>
+                Generar constancia
+              </button>
             </div>
 
             {signatureLink ? (
@@ -1057,6 +1050,12 @@ const downloadDoc = async (doc: UploadRow) => {
 
             {signatureOpen ? (
               <div className="mt-4 space-y-3">
+                <p className="text-xs text-slate-300">Datos declarados por quien recibe; el lugar real puede diferir del domicilio fiscal. No se captura geolocalización.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {([['signerName', 'Nombre de quien recibe', 180], ['signerRole', 'Cargo', 120], ['receiptLocation', 'Lugar de recepción o prestación', 240], ['receiptAddress', 'Dirección real de recepción o prestación', 500], ['observations', 'Observaciones (opcional)', 600]] as const).map(([key, label, max]) =>
+                    <label key={key} className="text-xs text-slate-300">{label}<input className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 p-2" value={receipt[key]} maxLength={max} onChange={e => setReceipt(value => ({ ...value, [key]: e.target.value }))}/></label>)}
+                </div>
+                <label className="flex gap-2 text-xs text-slate-300"><input type="checkbox" checked={receipt.acceptedNoClaimPolicy} onChange={e => setReceipt(value => ({ ...value, acceptedNoClaimPolicy: e.target.checked }))}/><span>Confirmo la recepción y conformidad de los bienes o servicios en el lugar y dirección declarados, salvo las observaciones registradas, y acepto la política de no reclamación posterior aplicable.</span></label>
                 <div className="rounded-2xl border border-white/10 bg-white p-2">
                   <canvas
                     ref={signatureCanvasRef}

@@ -23,14 +23,23 @@ export async function submitSolicitudSignature(input: {
   token: string;
   signerName: string;
   signerRole?: string;
+  receiptLocation: string;
+  receiptAddress: string;
+  observations?: string;
   acceptedNoClaimPolicy: boolean;
   signatureDataUrl: string;
 }) {
   const fn = httpsCallable<
     typeof input,
-    { ok: boolean; uploadId: string; version: number }
+    { ok: boolean; uploadId: string; version: number; constanciaPending?: boolean }
   >(functions, CALLABLES.submitSolicitudSignature);
   return (await fn(input)).data;
+}
+
+export async function generateSolicitudReceiptCertificate(solicitudId: string) {
+  return (await httpsCallable<{ solicitudId: string }, { ok: boolean; alreadyExists?: boolean }>(
+    functions, "generateSolicitudReceiptCertificate",
+  )({ solicitudId })).data;
 }
 
 export async function generateSolicitudQuotation(solicitudId: string, replaceExisting = false) {

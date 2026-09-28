@@ -637,6 +637,41 @@ service firebase.storage {
       allow read, write: if false;
     }
 
+    function preparedCorporateUpload(rootId, uid, sessionId) {
+      let user = userDoc();
+      let session = firestore.get(/databases/(default)/documents/pay0CanonicalUploadSessions/$(sessionId)).data;
+      return isSuperAdmin()
+        && myRootId() == rootId && request.auth.uid == uid
+        && (!("active" in user) || user.active != false)
+        && (!("isActive" in user) || user.isActive != false)
+        && (!("isDeleted" in user) || user.isDeleted != true)
+        && (!("disabled" in user) || user.disabled != true)
+        && (!("deleted" in user) || user.deleted != true)
+        && (!("deletedAt" in user) || user.deletedAt == null)
+        && (!("modules" in user) || !("corporateResources" in user.modules)
+          || (user.modules.corporateResources != false
+            && (!(user.modules.corporateResources is map)
+              || ((!("manage" in user.modules.corporateResources)
+                || user.modules.corporateResources.manage != false)
+                && (!("view" in user.modules.corporateResources)
+                  || user.modules.corporateResources.view != false)))))
+        && session.rootId == rootId && session.uid == uid
+        && session.status == "PENDING" && session.expiresAt > request.time
+        && session.storagePath == "pay0-canonical-staging/" + rootId + "/" + uid + "/" + sessionId + "/file"
+        && session.contentType == request.resource.contentType
+        && session.sizeBytes == request.resource.size;
+    }
+
+    match /pay0-canonical-staging/{rootId}/{uid}/{sessionId}/file {
+      allow create: if signedIn() && resource == null
+        && request.resource.size > 0 && request.resource.size <= 10000000
+        && request.resource.contentType in ["application/pdf", "image/png", "image/jpeg"]
+        && preparedCorporateUpload(rootId, uid, sessionId);
+      allow read, update, delete: if false;
+    }
+
+    match /pay0-canonical/{allPaths=**} { allow read, write: if false; }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

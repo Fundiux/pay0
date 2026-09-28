@@ -207,6 +207,14 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     iconKey: "administracion",
     children: [
       {
+        label: "Recursos corporativos",
+        href: "/administracion/recursos-corporativos",
+        iconKey: "empresas",
+        moduleKey: "corporateResources",
+        actionKey: "view",
+        superadminOnly: true,
+      },
+      {
         label: "Usuarios",
         href: "/usuarios",
         iconKey: "usuarios",
@@ -356,6 +364,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   }
 
   const routeRules: RouteCandidate[] = [
+    { href: "/administracion/recursos-corporativos", moduleKey: "corporateResources", actionKey: "view", superadminOnly: true },
     { href: "/integraciones/iq/diagnostico/pagos", superadminOnly: true },
     { href: "/integraciones/iq/automatizacion", superadminOnly: true },
   { href: "/integraciones/iq/diagnostico", superadminOnly: true },

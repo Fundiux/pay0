@@ -728,6 +728,12 @@ service cloud.firestore {
     }
 
 
+    // Canonical resources are served exclusively by root-scoped callables.
+    match /pay0CanonicalResources/{id} { allow read, write: if false; }
+    match /pay0CanonicalResourceVersions/{id} { allow read, write: if false; }
+    match /pay0CanonicalAuditLog/{id} { allow read, write: if false; }
+    match /pay0CanonicalUploadSessions/{id} { allow read, write: if false; }
+
     match /{document=**} {
       allow read, write: if false;
     }

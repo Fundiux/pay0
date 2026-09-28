@@ -20,8 +20,9 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-const expectedEndpointCount = 311;
+const expectedEndpointCount = 323;
 const requiredEndpoints = [
+  "listCorporateResources", "getCorporateResource", "generateSolicitudReceiptCertificate",
   'loginWithUsername', 'setMyUsername',
   "saveClientCallable",
   "parseClientCsfCallable",

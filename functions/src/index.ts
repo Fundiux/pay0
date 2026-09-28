@@ -2802,6 +2802,7 @@ export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
 export { refreshMaterialityFromUpload } from "./modules/materiality/triggers";
+export { generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
 export {
@@ -2900,6 +2901,12 @@ export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
 export { parsePagoReceiptPdf } from "./modules/pagos/receiptPdfCallables";
+export {
+  listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
+  importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
+  restoreCorporateResourceVersion, retireCorporateResourceVersion, getCorporateResourceDownloadUrl,
+  initCorporateResourceUpload, finalizeCorporateResourceUpload,
+} from "./modules/canonicalCenter/service";
 export { getFacturamaSandboxStatus, getFacturamaProductionStatus, saveFacturamaDraft, listFacturamaInvoices, importCompanyInvoiceCatalog, initGlobalSatCatalogUpload, finalizeGlobalSatCatalogImport } from "./modules/facturama/callables";
 export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturamaProductionInvoice, reconcileFacturamaIssuedMetadata, cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus, getFacturamaProductionCsdStatus, registerFacturamaProductionCsd } from "./modules/facturama/sandboxCallables";
 export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";

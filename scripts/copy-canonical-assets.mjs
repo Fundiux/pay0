@@ -51,6 +51,13 @@ for (const template of manifest.templates || []) {
     resolve(root, "src/canonicos/formatos/cotizaciones", String(template.referencePdf)),
     resolve(functionQuotationRoot, String(template.referencePdf)),
   );
+  for (const kind of ["constancia-entrega", "constancia-servicio"]) {
+    const original = resolve(canonicalCompaniesRoot, companyFolder, kind, "v1.1");
+    const destination = resolve(root, "functions/lib/assets/constancias", rfc, kind);
+    await mkdir(destination, { recursive: true });
+    for (const filename of ["template.html", "template.css", "manifest.json", "reference.pdf"])
+      await copyFile(resolve(original, filename), resolve(destination, filename));
+  }
 }
 
 await copyFile(manifestPath, resolve(root, "functions/lib/assets/cotizaciones-manifest.json"));

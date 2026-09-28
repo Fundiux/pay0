@@ -16,7 +16,8 @@ export const ROLE_DEFAULT_MODULES = {
     "modulos": { "view": true, "edit": true },
     "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": true, "manage": true }
   },
   "admin": {
     "dashboard": { "view": true },
@@ -31,7 +32,8 @@ export const ROLE_DEFAULT_MODULES = {
     "modulos": { "view": true, "edit": true },
     "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": false, "manage": false }
   },
   "operador": {
     "dashboard": { "view": true },
@@ -46,6 +48,7 @@ export const ROLE_DEFAULT_MODULES = {
     "modulos": { "view": false, "edit": false },
     "wallet": { "view": true, "saldos": false, "adelantos": false, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": false, "manage": false }
   }
 } as const;

@@ -8,6 +8,8 @@ import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { renderCanonicalConstanciaPdf } from "../documents/canonicalPdf";
+import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
+import { receiptAcceptance } from "../signatureLinks/acceptance";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -36,7 +38,7 @@ function username(user: any, uid: string): string {
 
 function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
   const r = role(user);
-  if (r === "superadmin") return clean(solicitud?.rootId, 128) === rootId || clean(solicitud?.createdBy, 128) === uid;
+  if (r === "superadmin") return clean(solicitud?.rootId, 128) === rootId;
   if (r === "admin") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.adminId, 128) === uid;
   if (r === "operador") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.createdBy, 128) === uid;
   return false;
@@ -107,13 +109,14 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   ]);
   const company: any = companySnap?.exists ? companySnap.data() || {} : {};
   const client: any = clientSnap?.exists ? clientSnap.data() || {} : {};
+  if (company.rootId !== rootId || (clientSnap?.exists && client.rootId !== rootId))
+    throw new HttpsError("permission-denied", "La empresa o el cliente no pertenecen al expediente.");
   const companyRfc = normalizeRfc(company.rfc || solicitud.companyRfc || solicitud.empresaRfc);
 
   if (!companySnap?.exists || !companyRfc) {
     throw new HttpsError("failed-precondition", "La empresa de la solicitud no tiene RFC o catalogo empresarial valido.");
   }
   const companyName = clean(company.nombre || company.razonSocial || solicitud.empresaNombre || solicitud.companyName, 180);
-  const companySlug = canonicalSlug(companyName || companyRfc);
 
   const signatureUploadId = clean(request.data?.signatureUploadId, 128);
   const signatureUpload = signatureUploadId
@@ -123,34 +126,39 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   if (!signatureUpload?.id || signatureUpload?.documentType !== "FIRMA_AUTORIZADA_CLIENTE") {
     throw new HttpsError("failed-precondition", "La constancia requiere firma autorizada del cliente.");
   }
+  if (signatureUpload.rootId !== rootId || signatureUpload.solicitudId !== solicitudId ||
+      signatureUpload.companyId !== companyId || signatureUpload.clienteId !== clientId ||
+      signatureUpload.active !== true || signatureUpload.status !== "READY" || signatureUpload.integritySealStatus !== "SEALED")
+    throw new HttpsError("permission-denied", "La firma no pertenece al expediente activo de esta operación.");
+  const acceptance = receiptAcceptance(signatureUpload.signatureCapture);
+  const existing = await findActiveUpload(solicitudId, ["CONSTANCIA_RECEPCION_SATISFACCION"]);
+  if (existing?.rootId === rootId && existing.status === "READY" && existing.integritySealStatus === "SEALED" &&
+      existing.constanciaSnapshot?.signatureUploadId === signatureUpload.id && existing.constanciaSnapshot?.acceptanceVersion === acceptance.acceptanceVersion)
+    return { ok: true, alreadyExists: true, uploadId: existing.id, storagePath: existing.storagePath, status: "READY", active: true,
+      version: existing.version, sizeBytes: existing.sizeBytes, sha256: existing.sha256, templateId: existing.constanciaTemplate?.templateId };
 
   let signaturePng: Buffer | null = null;
   try {
     const [downloaded] = await admin.storage().bucket().file(String((signatureUpload as any).storagePath || "")).download();
     signaturePng = Buffer.isBuffer(downloaded) ? downloaded : Buffer.from(downloaded);
+    if (sha256(signaturePng) !== signatureUpload.sha256) throw Error("SIGNATURE_INTEGRITY_MISMATCH");
   } catch {
     throw new HttpsError("failed-precondition", "No se pudo leer la firma autorizada para integrar la constancia.");
   }
 
   const constanciaKind = resolveConstanciaKind(solicitud);
+  const canonicalBundle = await resolveCorporateDocumentBundle(rootId, companyId, companyRfc, constanciaKind);
   const constanciaTemplate = {
     documentType: "CONSTANCIA_RECEPCION_SATISFACCION",
     templateType: constanciaKind,
-    templateId: constanciaKind === "CONSTANCIA_ENTREGA_BIENES"
-      ? `${companySlug}-constancia-entrega-v1.1`
-      : `${companySlug}-constancia-servicio-v1.1`,
-    templateVersion: "1.1",
-    companyId: companyId || companySlug,
-    companyName,
-    companyRfc,
     templateSource: "src/canonicos/formatos/CONSTANCIAS/PAY0_CONSTANCIAS_CANONICAS_REGENERADAS_FINAL",
-    templateEngine: "PAY0_COMPANY_CANONICAL_V1_1",
+    ...canonicalBundle.snapshot,
   };
 
   const cotizacion = await findActiveUpload(solicitudId, ["COTIZACION_FIRMADA", "COTIZACION"]);
   const factura = await findActiveUpload(solicitudId, ["FACTURA_XML", "FACTURA_PDF"]);
   const folio = `CONST-${clean(solicitud.folio || solicitudId, 80)}`;
-  const clienteNombre = clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.nombre || client.name || "Cliente", 180);
+  const clienteNombre = clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180);
   // The CSF canonical profile belongs to the client catalogue. Solicitudes can
   // carry a legacy partial snapshot, so use it only before the verified profile.
   const clienteRfc = normalizeRfc(solicitud.ocClientRfc || solicitud.clienteRfc || solicitud.clientRfc || client.rfc || client.fiscalProfile?.rfc) || "PENDIENTE";
@@ -173,6 +181,11 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
     description: clean(solicitud.ocConceptDescription || solicitud.ordenCompraConcepto || solicitud.operationTypeName || solicitud.tipoOperacion || solicitud.concepto || solicitud.descripcion || "Concepto segun Orden de Compra", 500),
     receptorName: receptorNombre,
     receptorRole: clean((signatureUpload as any)?.signatureCapture?.signerRole || "", 120),
+    receiptLocation: acceptance.receiptLocation,
+    receiptAddress: acceptance.receiptAddress,
+    observations: acceptance.observations,
+    acceptanceText: acceptance.acceptanceText,
+    canonicalBundle,
     signatureHash: clean((signatureUpload as any).sha256 || "PENDIENTE", 120),
     signaturePng,
     iqFolio: clean(solicitud.iqFolio || solicitud.iqId || "", 120),
@@ -233,7 +246,11 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
       signatureSha256: (signatureUpload as any).sha256 || null,
       cotizacionUploadId: cotizacion?.id || null,
       facturaUploadId: factura?.id || null,
-      noReclamoPolicyVersion: "PAY0-NO-RECLAMO-V1",
+      receiptLocation: acceptance.receiptLocation,
+      receiptAddress: acceptance.receiptAddress,
+      observations: acceptance.observations,
+      acceptanceVersion: acceptance.acceptanceVersion,
+      acceptanceText: acceptance.acceptanceText,
       documentSha256,
       cfdi,
     },
@@ -343,6 +360,12 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
     templateId: constanciaTemplate.templateId,
   };
 }
+
+/** Authorized recovery reuses the sealed receipt, never asks the recipient to sign again. */
+export const generateSolicitudReceiptCertificate = onCall(
+  { region: "us-central1", cors: true, timeoutSeconds: 90, memory: "1GiB" },
+  request => generateConstanciaRecepcionForSolicitudCore(request),
+);
 
 /** Token-scoped public validation. It exposes document integrity only, never the PAY0 dossier. */
 export const getPublicConstanciaVerification = onCall(

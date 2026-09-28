@@ -11,7 +11,7 @@ export type Pay0CanonicalResourceKind =
   | "INTEGRATION_REFERENCE"
   | "SYSTEM_PARAMETER";
 
-export type Pay0CanonicalVersionStatus = "DRAFT" | "REVIEW" | "ACTIVE" | "RETIRED";
+export type Pay0CanonicalVersionStatus = "DRAFT" | "REVIEW" | "APPROVED" | "ACTIVE" | "RETIRED";
 
 export type Pay0CanonicalScope = {
   system: "PAY0";
@@ -67,9 +67,10 @@ export const PAY0_CANONICAL_STORAGE = Object.freeze({
   blobsPrefix: "pay0-canonical/{rootId}/{ownCompanyId}/{resourceKind}/{resourceId}/{version}",
 });
 
-// Reserved names only. They are not enabled in RouteAccessGuard or navigation.
+// The root page is implemented. The remaining names describe future domains
+// and stay disabled until their own consumers and authorization are delivered.
 export const PAY0_CANONICAL_ROUTES = Object.freeze({
-  root: "/administracion/canonicos",
+  root: "/administracion/recursos-corporativos",
   companies: "/administracion/canonicos/empresas-propias",
   documents: "/administracion/canonicos/documentos",
   satCatalogs: "/administracion/canonicos/catalogos-sat",
