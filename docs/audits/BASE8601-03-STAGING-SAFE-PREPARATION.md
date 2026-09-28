@@ -1,5 +1,7 @@
 # BASE8601-03 — preparación segura de staging (2026-09-27)
 
+> Actualización 2026-09-28: el informe siguiente es histórico. La consulta oficial ya confirmó `billingEnabled:false` después de habilitar sólo la API de lectura de Cloud Billing. La barrera de transporte y el canario local se describen en [ASTRA voz/IQ staging](ASTRA-VOICE-IQ-STAGING-20260928.md); no se desplegó runtime remoto ni se vinculó facturación.
+
 ## Estado real
 
 Se creó el proyecto GCP/Firebase aislado `pay-0-system-staging` (número

@@ -1,6 +1,16 @@
 ﻿# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-27
+## Estado vigente ASTRA — 2026-09-28
+
+ASTRA sigue **abierto**. Esta entrada sustituye los estados históricos posteriores de cierre sólo donde exista contradicción. La tabla completa está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
+
+La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del próximo despliegue. Los cuatro vínculos históricos tienen migración acotada, reanudable y probada; aún no se aplicó.
+
+La integración contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Los builds y pruebas focalizadas pasaron; **no equivale a publicación**. En esta fase siguen pendientes Functions, Rules/Indexes/Storage, Hosting, planes de 13 aliases y 3 recursos corporativos, migración REP y postflight. Rama: `integration/astra-cycle-20260928`; main/remoto todavía no avanzados.
+
+Decisiones humanas separadas: símbolo visual; aceptación de voz P0/P0.5 y promoción; hora/días del corte diario; cuenta de facturación para staging (`billingEnabled:false`). Ninguna activa comisiones, REP ni un proveedor real automáticamente.
+
+Actualizado: 2026-09-28
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 ## BASE860115-05 / Punto 2 — Identidad de pestaña/navegador — 2026-09-27

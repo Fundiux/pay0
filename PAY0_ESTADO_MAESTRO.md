@@ -1,5 +1,15 @@
 # PAY0 — Estado maestro vivo
 
+## Estado vigente ASTRA — 2026-09-28
+
+ASTRA sigue **abierto**. Esta entrada sustituye los estados históricos posteriores de cierre sólo donde exista contradicción. La tabla completa está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
+
+La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del próximo despliegue. Los cuatro vínculos históricos tienen migración acotada, reanudable y probada; aún no se aplicó.
+
+La integración contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Los builds y pruebas focalizadas pasaron; **no equivale a publicación**. En esta fase siguen pendientes Functions, Rules/Indexes/Storage, Hosting, planes de 13 aliases y 3 recursos corporativos, migración REP y postflight. Rama: `integration/astra-cycle-20260928`; main/remoto todavía no avanzados.
+
+Decisiones humanas separadas: símbolo visual; aceptación de voz P0/P0.5 y promoción; hora/días del corte diario; cuenta de facturación para staging (`billingEnabled:false`). Ninguna activa comisiones, REP ni un proveedor real automáticamente.
+
 ### BASE860115-05 — Punto 2 cerrado: identidad de pestaña/navegador (2026-09-27)
 
 La identidad pública del navegador quedó normalizada a `PAY0`. El layout raíz declara título, application name, descripción, manifest PWA, OpenGraph y Twitter metadata desde servidor; el shell interactivo permanece separado como componente cliente, sin alterar autenticación, rutas ni configuración Firebase.

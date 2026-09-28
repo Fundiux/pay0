@@ -1,8 +1,13 @@
 # BASE860115-05 — Tracker de cierre
 
-Actualizado: 2026-09-27 (America/Mexico_City)
+Actualizado: 2026-09-28 (America/Mexico_City)
 
-- Rama: `cycle/base860115-05`
+> ASTRA continúa ABIERTO. Esta tabla refleja el estado vigente; los cierres históricos de abajo se conservan como trazabilidad y no sustituyen las incidencias posteriores. REP sigue pausado por instrucción explícita.
+
+- Rama de integración actual: `integration/astra-cycle-20260928`
+- Worktree de integración: `.worktrees/astra-reconciliation-20260927`
+- Base de main incorporada en `dd2f825` (la referencia main todavía no avanzó); identidad IQ certificada recuperada en `060313a`.
+- Rama inicial: `cycle/base860115-05`
 - Worktree: `C:\Users\ebarr\Desktop\pay0-system\.worktrees\base860115-05`
 - Base inicial: `integration/base8601-04-production-clean`
 - HEAD inicial: `b5091c835c8d076638e8355a9a7a37057941db14`
@@ -12,28 +17,28 @@ Actualizado: 2026-09-27 (America/Mexico_City)
 
 | Punto | Título | Estado | Commit | Deploy | Evidencia |
 |---:|---|---|---|---|---|
-| 1 | Complementos de pago PPD | CERRADO | `ebdeaf4`, `3e085d5` | Functions + Hosting, 2026-09-27 | Pipeline canónico único; AP1C13U3E5 reconciliado a 2 documentos de Pago `READY`; legacy retirado; `/pagos` HTTP 200. |
-| 2 | Identidad de pestaña/navegador | CERRADO | `1e638e6` | Hosting, 2026-09-27 | Título, manifest y metadatos públicos usan `PAY0`; SSR `ssrpay0system-00558-nit`; `/`, `/login`, `/pagos` y manifest HTTP 200; sin identidad técnica visible. |
-| 3 | Logo/símbolo/favicon | PENDIENTE | — | — | Espera la decisión del símbolo visual; Eliut autorizó continuar con los puntos siguientes. |
-| 4 | UUID visibles | CERRADO | `5df6ffd`, `6ae63ed` | Hosting final `95413a190fd561ea` / SSR `00566-tig`, 2026-09-27 | Reconciliado en `fix/astra-activity-log-reconciliation`; flujo estándar completo PASS, 26 archivos servidos coinciden con el build y siete rutas públicas sin sesión redirigen al login sin errores en Chromium. |
-| 5 | Login mediante username | PENDIENTE | — | — | — |
-| 6 | Cambio de contraseña | PENDIENTE | — | — | — |
-| 7 | Filtro por usuario | PENDIENTE | — | — | — |
-| 8 | Monto / Abono / Pendiente compacto | PENDIENTE | — | — | — |
-| 9 | Hover global en todas las tablas | PENDIENTE | — | — | — |
-| 10 | Sistema de notas | PENDIENTE | — | — | — |
-| 11 | Usuario creador visible para Superadmin | PENDIENTE | — | — | — |
-| 12 | Hugo pasa a llamarse María | PENDIENTE | — | — | — |
-| 13 | Aplicación automática de pagos | PENDIENTE | — | — | — |
-| 14 | Tracker y Estado Maestro | PENDIENTE | — | — | — |
-| 15 | Canónicos de cotizaciones y constancias | PENDIENTE | — | — | — |
-| 16 | Constancias: lugar de recepción/servicio | PENDIENTE | — | — | — |
-| 17 | Actualización de Materialidad / MAT | PENDIENTE | — | — | — |
-| 18 | Mensajes de María en Telegram más concretos | PENDIENTE | — | — | — |
-| 19 | IQ: task inmediato + scheduler | PENDIENTE | — | — | — |
-| 20 | Comisiones diarias a usuarios | PENDIENTE | — | — | — |
-| 21 | División automática de comisiones por usuario | PENDIENTE | — | — | — |
-| 22 | Identificación y registro automático de pagos | PENDIENTE | — | — | — |
+| 1 | Complementos de pago PPD | EN PROGRESO | 659bc40, b982fbe, 12d1b82, f14c885 | Contención publicada; migración pendiente | Bucle corregido; entrega pausada. Automatización 26, adopción 17 y plan reanudable 21 controles PASS. Cuatro históricos pendientes de aplicar con backend MAT actualizado. |
+| 2 | Identidad de pestaña/navegador | VALIDADO | 1e638e6 | Hosting actual | Identidad PAY0 comprobada; repetir postflight tras publicación. |
+| 3 | Logo/símbolo/favicon | BLOQUEADO EXCLUSIVAMENTE POR DECISIÓN HUMANA | — | No aplica todavía | Pendiente elegir símbolo; no se inventa aprobación visual. |
+| 4 | UUID visibles | VALIDADO | 5df6ffd, 6ae63ed | Hosting actual | Presentación humana conservada; repetir postflight transversal. |
+| 5 | Login mediante username | PROBADO | 732b24e | Pendiente | 37 controles Auth/Firestore PASS; plan de 13 aliases únicos sin cambiar emails/passwords. Falta publicar backend, aplicar plan y Hosting. |
+| 6 | Cambio de contraseña | PROBADO | 732b24e | Pendiente | Mi cuenta con reautenticación y cambio mediante Firebase Auth; sin alterar credenciales reales durante QA. |
+| 7 | Filtro por usuario | PROBADO | e7d408e | Pendiente | Filtro por creador con alcance servidor; 47 comprobaciones de filtros. |
+| 8 | Monto / Abono / Pendiente compacto | PROBADO | e7d408e | Pendiente | Presentación compacta; 9 controles de presentación y build frontend PASS. |
+| 9 | Hover global en todas las tablas | PROBADO | e7d408e | Pendiente | Estilo compartido incorporado; build frontend PASS. |
+| 10 | Sistema de notas | PROBADO | e7d408e | Pendiente | Notas reutilizadas con identidad visible y reglas existentes; 46 controles combinados notas/identidad/Telegram PASS. |
+| 11 | Usuario creador visible para Superadmin | PROBADO | e7d408e | Pendiente | Creadores visibles y filtro de alcance; pruebas de permisos y build PASS. |
+| 12 | Hugo pasa a llamarse María | PROBADO | Integración local | Pendiente | Textos públicos María; IDs técnicos estables. Gateway 48 y privacidad 10 PASS. Aceptación acústica humana y promoción separadas. |
+| 13 | Aplicación automática de pagos | PROBADO | e7d408e | Pendiente | 62 comprobaciones: evidencia exacta, transacción y reintento idempotente; no reprocesa históricos ni ejecuta IQ real en QA. |
+| 14 | Tracker y Estado Maestro | EN PROGRESO | Integración local | No aplica | Se distingue implementación/prueba/publicación. Actualización final pendiente de postflight y Git. |
+| 15 | Canónicos de cotizaciones y constancias | PROBADO | c938828 | Pendiente | UI y backend de recursos versionados; 72+5 controles y PDF 247 verificaciones/10 páginas inspeccionadas. Plan real de 3 recursos elegibles pendiente. |
+| 16 | Constancias: lugar de recepción/servicio | PROBADO | c938828 | Pendiente | Lugar, dirección, receptor y observaciones; firma de un solo ganador y recuperación de PDF sin refirmar. |
+| 17 | Actualización de Materialidad / MAT | PROBADO | e7d408e | Pendiente | 21 controles de proyección, cambios y permisos; todas las lecturas antes de escribir en la transacción. |
+| 18 | Mensajes de María en Telegram más concretos | PROBADO | Integración local | Pendiente | 46 controles combinados PASS; no se enviaron mensajes reales durante QA. |
+| 19 | IQ: task inmediato + scheduler | PROBADO | 060313a, e7d408e | Pendiente | Continuación inmediata y recuperación acotada; origen IQ certificado conservado y REP cerrado. Barrera staging 79 comprobaciones sin red. |
+| 20 | Comisiones diarias a usuarios | PROBADO | Integración local | Pendiente | 110 controles PASS; cursor continuo, 250 lecturas/máximo una solicitud por invocación. Configuración inicialmente deshabilitada; hora/días pendientes de decisión. |
+| 21 | División automática de comisiones por usuario | EN PROGRESO | Integración local | Pendiente | Regla por cliente/usuario, manual y automática, N destinos, reserva USER atómica. Identidad hist?rica exacta hasta el transporte IQ; 29 controles de adapter PASS. |
+| 22 | Identificación y registro automático de pagos | PROBADO | e7d408e | Pendiente | 75 controles de identificación y 17 de registro real concurrente; comprobante inequívoco y folio/costos canónicos. |
 
 ## Punto 1 — Complementos de pago PPD
 
