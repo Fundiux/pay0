@@ -26,6 +26,8 @@ jobs:
         run: node scripts/verify-authorization-policy.mjs
       - name: Verify cumulative release baseline
         run: npm run qa:release-baseline
+      - name: Configure public build-only environment
+        run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
       - name: Build frontend
         run: npm run build
       - name: Install Functions dependencies
