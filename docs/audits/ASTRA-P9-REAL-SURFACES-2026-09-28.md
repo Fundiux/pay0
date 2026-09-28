@@ -16,6 +16,8 @@ La búsqueda de tablas y clases compartidas abarcó `src/app` y `src/components`
 
 Requiere dependencias instaladas, Chromium de Playwright y un build frontend previo para las utilidades Tailwind de `.next/static/css`. El harness compila el código fuente actual de las páginas y sus componentes hijos con esbuild, añade el CSS compartido actual y sustituye sólo los límites Auth, servicios, lecturas Firebase y navegación Next por fixtures en memoria. No fabrica tablas de demostración. La red del navegador está bloqueada y cualquier API de escritura falla explícitamente.
 
+Reproducibilidad corregida: `esbuild` está declarado como dependencia de desarrollo exacta `0.28.2` y fijado en `package-lock.json`, con sus binarios opcionales por plataforma. La versión y compatibilidad `node >=18` se consultaron en el registro oficial `https://registry.npmjs.org`; la prueba usa Node 22.23.2. Se comprobó que `node_modules` es propio del worktree y que `require.resolve('esbuild')` apunta a esa instalación. La nueva ejecución con 0.28.2 repitió las 117 comprobaciones con resultado PASS; se eliminaron las condiciones que hacían depender el harness de una instalación en el directorio padre. No se cambiaron versiones ni metadatos de otros paquetes.
+
 Resultado: **117 comprobaciones PASS, nueve superficies**.
 
 | Superficie | Componente real |
