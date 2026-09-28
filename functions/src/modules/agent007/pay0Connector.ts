@@ -105,8 +105,15 @@ export class Pay0Connector {
   getPagoById(paymentId: string) { return this.query("getPagoById", "pago", async () => {
     if (!safeId(paymentId)) throw Error("PAY0_CONNECTOR_INVALID_PAYMENT_REFERENCE");
     const snap = await this.db.collection("pagos").doc(paymentId).get();
-    const row = snap.exists && snap.data()?.rootId === this.identity.rootId ? { id: snap.id, ...snap.data() } : null;
-    return { rows: row ? [row] : [], data: row ? pagoView(row) : null, completeness: row ? "COMPLETE" as const : "UNKNOWN" as const };
+    const direct = snap.exists && snap.data()?.rootId === this.identity.rootId ? { id: snap.id, ...snap.data() } : null;
+    if (direct) return { rows: [direct], data: pagoView(direct), completeness: "COMPLETE" as const };
+    const [folio, folioIq] = await Promise.all([
+      this.db.collection("pagos").where("rootId", "==", this.identity.rootId).where("folio", "==", paymentId).limit(3).get(),
+      this.db.collection("pagos").where("rootId", "==", this.identity.rootId).where("folioIq", "==", paymentId).limit(3).get(),
+    ]);
+    const unique = new Map([...folio.docs, ...folioIq.docs].map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
+    const rows = [...unique.values()];
+    return { rows, data: rows.length === 1 ? pagoView(rows[0]) : null, completeness: rows.length === 1 ? "COMPLETE" as const : "UNKNOWN" as const };
   }); }
   getPaymentComplementStatus(folio?: string) { return this.query("getPaymentComplementStatus", "paymentComplementRequest", async () => {
     const rows = (await this.recent("paymentComplementRequests", 30)).filter(row => !folio || row.solicitudFolio === folio || row.pagoFolio === folio);

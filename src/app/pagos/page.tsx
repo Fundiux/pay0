@@ -2653,9 +2653,10 @@ export default function PagosPage() {
         </div>
       )}
       <div className="pay0-pagos-table-wrap w-full min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] shadow-2xl overflow-x-auto">
-        <table className="pay0-pagos-main-table pay0-table w-full text-left min-w-[1355px]">
+        <table className="pay0-pagos-main-table pay0-table w-full text-left min-w-[1470px]">
           <colgroup className="pay0-pagos-colgroup">{/* H4-D67-A4_CANONICAL_15_COLUMNS */}
             <col className="pay0-col-folio" />
+            {(isSuperAdmin(role) || isAdmin(role)) && <col className="pay0-col-usuario" />}
             {/* IQ2G_H4_D43G_PAGOS_IQ_COLS_AFTER_FOLIO */}
             <col className="pay0-col-iq-folio" />
             <col className="pay0-col-relacion" />
@@ -2676,6 +2677,7 @@ export default function PagosPage() {
             <tr className="pay0-table-head-row">
               {[
                 { label: "Folio", key: "id" },
+                ...((isSuperAdmin(role) || isAdmin(role)) ? [{ label: "Usuario", key: "creatorName" }] : []),
                 // IQ2G_H4_D43G_PAGOS_IQ_HEADERS_AFTER_FOLIO
                 { label: "Folio IQ", key: "iqDepositFolio" },
                 { label: "Relacion", key: "montoAplicado" },
@@ -2689,7 +2691,7 @@ export default function PagosPage() {
               ].map((h) => (
                 <th
                   key={h.key}
-                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Aplicado", "Disponible"].includes(h.label) ? "pay0-balance-heading" : ""} ${["Folio", "Cliente", "Empresa"].includes(h.label) ? "text-left" : "text-center"} !py-[6px] font-normal`}
+                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Aplicado", "Disponible"].includes(h.label) ? "pay0-balance-heading" : ""} ${["Folio", "Usuario", "Cliente", "Empresa"].includes(h.label) ? "text-left" : "text-center"} !py-[6px] font-normal`}
                   onClick={() =>
                     setSortConfig((prev) => ({
                       key: h.key,
@@ -2697,12 +2699,11 @@ export default function PagosPage() {
                     }))
                   }
                 >
-                  <div className={`flex items-center gap-1 ${["Folio", "Cliente", "Empresa"].includes(h.label) ? "justify-start" : "justify-center"}`}>
+                  <div className={`flex items-center gap-1 ${["Folio", "Usuario", "Cliente", "Empresa"].includes(h.label) ? "justify-start" : "justify-center"}`}>
                     {h.label}
                     {sortConfig.key === h.key &&
                       (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                   </div>
-                  {h.key === "id" && isSuperAdmin(role) && <span className="block text-[9px] normal-case text-slate-500">Usuario creador</span>}
                 </th>
               ))}
               <th className="pay0-th text-center !text-[13px] !py-[6px] font-normal">Pendientes</th><th className="pay0-th pay0-pagos-docs-cell text-center !text-[13px] !py-[6px] font-normal">Docs / IQ</th><th className="pay0-th text-center !text-[13px] !py-[6px] font-normal">Nota</th><th className="pay0-th text-center !text-[13px] !py-[6px] font-normal">Estatus</th><th className="pay0-th pay0-pagos-actions-cell text-center !text-[13px] !py-[6px] font-normal">Acciones</th></tr>
@@ -2710,11 +2711,11 @@ export default function PagosPage() {
 
           <tbody className="[&>tr:nth-child(odd)]:bg-white/[0.025] [&>tr:nth-child(even)]:bg-slate-950/20">
             {loadingPagos ? (
-              <tr><td colSpan={15} className="pay0-empty-cell">
+              <tr><td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? 16 : 15} className="pay0-empty-cell">
                   Cargando pagos...
                 </td></tr>
             ) : pagosFiltradosOrdenados.length === 0 ? (
-              <tr><td colSpan={15} className="p-4 text-[12px] italic text-slate-500">
+              <tr><td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? 16 : 15} className="p-4 text-[12px] italic text-slate-500">
                   no hay registros para este periodo
                 </td></tr>
             ) : (
@@ -2743,7 +2744,7 @@ export default function PagosPage() {
                   <tr
                     key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div>{isSuperAdmin(role) && <div className="mt-0.5 truncate font-sans text-[10px] text-slate-400" title={`Cre?: ${recordCreatorLabel(p)}`}><span className="sr-only">Cre?: </span>{recordCreatorLabel(p)}</div>}</td><td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p)}>{recordCreatorLabel(p)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">

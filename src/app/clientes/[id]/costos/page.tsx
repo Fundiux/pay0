@@ -14,6 +14,7 @@ import { isAdmin, isOperador, isSuperAdmin, normalizeRole } from "@/lib/roles";
 import { setClientOperationCost } from "@/services/rates";
 import { watchClientById } from "@/services/clients";
 import { watchUserDespachos } from "@/services/despachosAccess";
+import ClientCommissionRulePanel from "@/components/ClientCommissionRulePanel";
 
 type ClientLite = {
   id: string;
@@ -606,7 +607,7 @@ export default function ClienteCostosPage() {
     <main className="p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-slate-100 text-2xl font-semibold">Clientes / Costos</div>
+          <div className="text-slate-100 text-2xl font-semibold">Costos y distribución</div>
           <div className="text-slate-400 text-sm mt-1">
             La asignacion se hace por despacho + tipo de operacion o dispersion.
           </div>
@@ -920,6 +921,15 @@ export default function ClienteCostosPage() {
           </div>
         </div>
       </div>
+
+      {clientDoc?.rootId && selectedAssignedRow?.pricingMode === "PERCENT" ? (
+        <ClientCommissionRulePanel clientId={clientId} rootId={clientDoc.rootId} canEdit={canManageClient}
+          canonicalRateBps={Math.round(Number(selectedAssignedRow.assignedCost || 0) * 100)} />
+      ) : (
+        <section className="mt-6 rounded-2xl border border-orange-400/20 bg-orange-500/[0.04] p-4 text-sm text-slate-400">
+          Selecciona y guarda un costo final porcentual para distribuir esa comisión.
+        </section>
+      )}
     </main>
   );
 }

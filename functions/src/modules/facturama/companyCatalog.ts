@@ -8,6 +8,7 @@ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { lookupGlobalSatConcept } from "./satGlobalCatalog";
 import { getCanonicalCatalogAttestation } from "./canonicalCatalogAttestations";
+import { isOwnInvoiceIssuerCompany } from "./service";
 
 const REQUIRED_HEADERS = [
   "CLAVE_SAT",
@@ -49,13 +50,6 @@ export type CompanyCatalogEntry = {
 
 function text(value: unknown, max = 1000): string {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
-}
-
-function isOwnInvoiceIssuerCompany(company: any): boolean {
-  const rfc = text(company?.rfc, 13).toUpperCase();
-  return company?.isOwnCompany === true || company?.ownedByRoot === true || company?.pay0OwnCompany === true ||
-    text(company?.ownership || company?.companyOwnership || company?.companyType).toUpperCase() === "PROPIA" ||
-    rfc === "TRO230717L64";
 }
 
 function normalizedHeader(value: unknown): string {

@@ -37,6 +37,6 @@ test("unknown Realtime tools fail closed", () => {
 });
 
 test("subordinate latest reads preserve the named user and remain deterministic", () => {
-  assert.deepEqual(delegationForRealtimeTool("get_latest_solicitud_for_user", { query: "BETELL" }), { request: "¿Cuál fue la última solicitud de BETELL?", toolName: "getLatestSolicitudForUser", toolInput: { query: "BETELL" } });
-  assert.deepEqual(delegationForRealtimeTool("get_latest_payment_for_user", { query: "BETELL" }), { request: "¿Cuál fue el último pago de BETELL?", toolName: "getLatestPagoForUser", toolInput: { query: "BETELL" } });
+  assert.deepEqual(delegationForRealtimeTool("get_latest_solicitud_for_user", { query: "BETELL" }), { request: "¿Cuáles solicitudes creó BETELL?", toolName: "getLatestSolicitudForUser", toolInput: { query: "BETELL", period: "ALL", limit: 1 } });
+  assert.deepEqual(delegationForRealtimeTool("get_latest_payment_for_user", { query: "BETELL", period: "PREVIOUS_WEEK", limit: 20 }), { request: "¿Cuáles pagos creó BETELL?", toolName: "getLatestPagoForUser", toolInput: { query: "BETELL", period: "PREVIOUS_WEEK", limit: 20 } });
 });

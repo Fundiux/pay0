@@ -36,13 +36,13 @@ export const realtimeTools = [
   },
   {
     type: "function", name: "get_latest_solicitud_for_user",
-    description: "Consulta la solicitud más reciente del alcance operativo de un usuario visible dentro del root PAY0 autorizado. La falta de resultado no implica falta de permisos.",
-    parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string" } }, required: ["query"] },
+    description: "Consulta solicitudes creadas por el usuario indicado e intersecta ese filtro con el root PAY0 autorizado. La falta de resultados no implica falta de permisos.",
+    parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string" }, period: { type: "string", enum: ["ALL", "TODAY", "YESTERDAY", "THIS_WEEK", "PREVIOUS_WEEK", "THIS_MONTH", "PREVIOUS_MONTH"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, required: ["query"] },
   },
   {
     type: "function", name: "get_latest_payment_for_user",
-    description: "Consulta el pago más reciente del alcance operativo de un usuario visible dentro del root PAY0 autorizado. Es sólo lectura.",
-    parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string" } }, required: ["query"] },
+    description: "Consulta pagos creados por el usuario indicado e intersecta ese filtro con el root PAY0 autorizado. Es sólo lectura.",
+    parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string" }, period: { type: "string", enum: ["ALL", "TODAY", "YESTERDAY", "THIS_WEEK", "PREVIOUS_WEEK", "THIS_MONTH", "PREVIOUS_MONTH"] }, limit: { type: "integer", minimum: 1, maximum: 20 } }, required: ["query"] },
   },
   {
     type: "function",
@@ -102,8 +102,8 @@ export function delegationForRealtimeTool(name, args = {}) {
   if (name === "count_clients_for_user") return { request: `¿Cuántos clientes tiene el usuario ${String(args.query || "").trim()}?`, toolName: "countClientsForUser", toolInput: { query: String(args.query || "").trim() } };
   if (name === "count_my_visible_clients") return { request: "¿Cuántos clientes activos puedo ver?", toolName: "countClientsForCurrentUser", toolInput: {} };
   if (name === "get_latest_solicitud") return { request: "¿Qué cliente hizo la última solicitud?", toolName: "getLatestSolicitud", toolInput: {} };
-  if (name === "get_latest_solicitud_for_user") return { request: `¿Cuál fue la última solicitud de ${String(args.query || "").trim()}?`, toolName: "getLatestSolicitudForUser", toolInput: { query: String(args.query || "").trim() } };
-  if (name === "get_latest_payment_for_user") return { request: `¿Cuál fue el último pago de ${String(args.query || "").trim()}?`, toolName: "getLatestPagoForUser", toolInput: { query: String(args.query || "").trim() } };
+  if (name === "get_latest_solicitud_for_user") return { request: `¿Cuáles solicitudes creó ${String(args.query || "").trim()}?`, toolName: "getLatestSolicitudForUser", toolInput: { query: String(args.query || "").trim(), period: args.period || "ALL", limit: Math.min(Math.max(Number(args.limit) || 1, 1), 20) } };
+  if (name === "get_latest_payment_for_user") return { request: `¿Cuáles pagos creó ${String(args.query || "").trim()}?`, toolName: "getLatestPagoForUser", toolInput: { query: String(args.query || "").trim(), period: args.period || "ALL", limit: Math.min(Math.max(Number(args.limit) || 1, 1), 20) } };
   if (name === "query_received_payments") {
     const operation = ["LATEST", "LIST", "PREVIOUS"].includes(args.operation) ? args.operation : "LATEST";
     return { request: operation === "PREVIOUS" ? "¿Y el pago recibido anterior?" : operation === "LIST" ? "Muéstrame los últimos pagos recibidos." : "¿Cuál fue el último pago recibido en PAY0?",

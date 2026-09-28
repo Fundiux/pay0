@@ -271,9 +271,10 @@ export const initCorporateResourceUpload = onCall({ region: "us-central1" }, asy
   await companyFor(ctx, companyId);
   const kind = clean(request.data?.kind), key = clean(request.data?.key, 80).toUpperCase();
   const contentType = clean(request.data?.contentType), sizeBytes = Number(request.data?.sizeBytes);
-  if (!["OWN_COMPANY_DOCUMENT", "BRAND_STATIONERY"].includes(kind) || !/^[A-Z0-9_-]{3,80}$/.test(key) ||
+  if (!["OWN_COMPANY_DOCUMENT", "DOCUMENT_TEMPLATE", "BRAND_STATIONERY"].includes(kind) || !/^[A-Z0-9_-]{3,80}$/.test(key) ||
       !["application/pdf", "image/png", "image/jpeg"].includes(contentType) || !Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 10_000_000 ||
-      (kind === "BRAND_STATIONERY" && contentType === "application/pdf")) throw new HttpsError("invalid-argument", "Usa PDF, PNG o JPG válidos, hasta 10 MB; los logos deben ser imágenes.");
+      (kind === "BRAND_STATIONERY" && contentType === "application/pdf") ||
+      (kind === "DOCUMENT_TEMPLATE" && contentType !== "application/pdf")) throw new HttpsError("invalid-argument", "Usa PDF, PNG o JPG válidos, hasta 10 MB; logos en imagen y plantillas en PDF.");
   const draft = await createDraft(ctx, { companyId, kind, key, title: clean(request.data?.title), comment: clean(request.data?.comment, 500) }, { source: "AUTHORIZED_UPLOAD", contentType });
   const sessionId = randomUUID(), storagePath = `pay0-canonical-staging/${ctx.rootId}/${ctx.uid}/${sessionId}/file`;
   await db.doc(`pay0CanonicalUploadSessions/${sessionId}`).set({ rootId: ctx.rootId, uid: ctx.uid, resourceId: draft.id,

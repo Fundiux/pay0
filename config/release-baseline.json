@@ -21,9 +21,9 @@
       "capability": "Configuracion de comisiones en el detalle del cliente"
     },
     {
-      "file": "src/app/clientes/[id]/page.tsx",
+      "file": "src/app/clientes/[id]/costos/page.tsx",
       "text": "<ClientCommissionRulePanel",
-      "capability": "Montaje de comisiones en Clientes > Detalle > Resumen"
+      "capability": "Montaje de comisiones en Costos y distribucion"
     },
     {
       "file": "src/app/reportes/page.tsx",

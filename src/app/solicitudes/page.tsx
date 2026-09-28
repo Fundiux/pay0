@@ -39,7 +39,6 @@ import DateScopeBar from "@/components/DateScopeBar";
 import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDate } from "@/lib/dateScope";
 import UiSelect from "@/components/UiSelect";
 import RecordCreatorFilter from "@/components/RecordCreatorFilter";
-import CompactBalanceCells from "@/components/CompactBalanceCells";
 import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
@@ -124,6 +123,7 @@ const SolicitudRow = React.memo(({
   canCancel,
   canUploadDocs,
   showIqFolio,
+  showCreator,
   allSolicitudes,
   sustitucionIndex
 }: any) => {
@@ -212,7 +212,8 @@ const SolicitudRow = React.memo(({
   return (
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
-        <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div>{showIqFolio && <div className="mt-0.5 truncate font-sans text-[10px] text-slate-400" title={`Creó: ${recordCreatorLabel(s)}`}><span className="sr-only">Creó: </span>{recordCreatorLabel(s)}</div>}</td>
+        <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div></td>
+        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s)}>{recordCreatorLabel(s)}</td> : null}
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -232,7 +233,7 @@ const SolicitudRow = React.memo(({
         <td className="pay0-td text-slate-500 truncate" title={String(s.empresaNombre || "")}>{s.empresaNombre}</td>
         <td className="pay0-td text-center text-slate-400">{s.tipoFactura}</td>
         <td className="pay0-td text-center text-sky-400 font-mono">{s.facturaDisplay || s.numFactura || s.facturaFolio || "S/F"}</td>
-        <CompactBalanceCells amount={money2(s.monto)} paid={money2(s.totalAbonado)} pending={saldo} />
+        <td className="pay0-td-money pay0-balance-cell text-slate-200"><span className="sr-only">Monto: </span>${toCurrency(money2(s.monto))}</td>
         <td className="pay0-td text-slate-500 italic text-center">
           {s.updatedAt?.seconds && saldo === 0 ? new Date(s.updatedAt.seconds * 1000).toLocaleDateString() : "---"}
         </td>
@@ -1565,9 +1566,10 @@ export default function SolicitudesPage() {
         </div>
       )}
       <div className="w-full min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] shadow-2xl overflow-x-auto">
-        <table className={`pay0-solicitudes-main-table pay0-table w-full text-left ${isSuperAdmin(role) ? "min-w-[1450px] xl:min-w-[1450px]" : "min-w-[1120px] xl:min-w-[1260px]"}`}>
+        <table className={`pay0-solicitudes-main-table pay0-table w-full text-left ${isSuperAdmin(role) || isAdmin(role) ? "min-w-[1360px] xl:min-w-[1360px]" : "min-w-[1040px] xl:min-w-[1160px]"}`}>
           <colgroup className="pay0-solicitudes-colgroup">
             <col className="pay0-sol-col-folio" style={{ width: "78px" }} />
+            {(isSuperAdmin(role) || isAdmin(role)) ? <col className="pay0-sol-col-usuario" style={{ width: "118px" }} /> : null}
             {isSuperAdmin(role) ? <col className="pay0-sol-col-folio-iq" style={{ width: "76px" }} /> : null}
             <col className="pay0-sol-col-fecha" style={{ width: "92px" }} />
             <col className="pay0-sol-col-cliente" style={{ width: "210px" }} />
@@ -1575,8 +1577,6 @@ export default function SolicitudesPage() {
             <col className="pay0-sol-col-metodo" style={{ width: "64px" }} />
             <col className="pay0-sol-col-factura" style={{ width: "70px" }} />
             <col className="pay0-sol-col-monto" style={{ width: "100px" }} />
-            <col className="pay0-sol-col-abono" style={{ width: "92px" }} />
-            <col className="pay0-sol-col-pendiente" style={{ width: "105px" }} />
             <col className="pay0-sol-col-fecha-pago" style={{ width: "72px" }} />
             <col className="pay0-sol-col-docs" style={{ width: "42px" }} />
             <col className="pay0-sol-col-nota" style={{ width: "42px" }} />
@@ -1596,8 +1596,8 @@ export default function SolicitudesPage() {
                   Folio
                   {sortConfig.key === "folio" && (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                 </div>
-                {isSuperAdmin(role) && <span className="block text-[9px] normal-case text-slate-500">Usuario creador</span>}
               </th>
+              {(isSuperAdmin(role) || isAdmin(role)) ? <th className="pay0-th text-left !text-[13px] !py-[6px] font-normal">Usuario</th> : null}
               {isSuperAdmin(role) ? (
                 <th className="pay0-th w-[76px] max-w-[76px] px-1 text-center !text-[12px] !py-[6px] font-normal">
                   Folio IQ
@@ -1610,19 +1610,17 @@ export default function SolicitudesPage() {
                 { label:"Metodo", key:"tipoFactura" },
                 { label:"Factura", key:"facturaDisplay" },
                 { label:"Monto", key:"monto" },
-                { label:"Abono", key:"totalAbonado" },
-                { label:"Pendiente", key:"pendiente" },
                 { label:"Pago", key:"updatedAt" }
               ].map(h => (
                 <th
                   key={h.key}
-                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Abono", "Pendiente"].includes(h.label) ? "pay0-balance-heading" : ""} ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
+                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${h.label === "Monto" ? "pay0-balance-heading" : ""} ${["Monto", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
                   onClick={() => setSortConfig((prev) => ({
                     key: h.key,
                     dir: prev.key === h.key && prev.dir === "asc" ? "desc" : "asc"
                   }))}
                 >
-                  <div className={`flex items-center gap-1 ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "justify-center" : ""}`}>
+                  <div className={`flex items-center gap-1 ${["Monto", "Pago"].includes(h.label) ? "justify-center" : ""}`}>
                     {h.label}
                     {sortConfig.key === h.key && (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                   </div>
@@ -1637,7 +1635,7 @@ export default function SolicitudesPage() {
           <tbody className="[&>tr:nth-child(odd)]:bg-white/[0.025] [&>tr:nth-child(even)]:bg-slate-950/20">
             {filteredSortedData.length === 0 ? (
               <tr>
-                <td colSpan={isSuperAdmin(role) ? 15 : 14} className="p-4 text-[12px] italic text-slate-500">
+                <td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? (isSuperAdmin(role) ? 14 : 13) : 12} className="p-4 text-[12px] italic text-slate-500">
                   No hay solicitudes que coincidan con este periodo y los filtros seleccionados.
                 </td>
               </tr>
@@ -1678,6 +1676,7 @@ export default function SolicitudesPage() {
                   canCancel={canCancelSolicitud}
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
+                  showCreator={isSuperAdmin(role) || isAdmin(role)}
                   allSolicitudes={filteredSortedData}
                   sustitucionIndex={sustitucionIndex}
                 />

@@ -7,7 +7,7 @@ import CommissionUserAssignments from "@/components/CommissionUserAssignments";
 
 const emptyLeg = (kind: "BASE" | "COMMISSIONER" = "COMMISSIONER"): CommissionRuleLeg => ({ kind, alias: kind === "BASE" ? "BASE" : "", rateBps: 0, beneficiaryId: "", methodId: "", active: true });
 
-export default function ClientCommissionRulePanel({ clientId, rootId, canEdit }: { clientId: string; rootId: string; canEdit: boolean }) {
+export default function ClientCommissionRulePanel({ clientId, rootId, canEdit, canonicalRateBps }: { clientId: string; rootId: string; canEdit: boolean; canonicalRateBps?: number | null }) {
   const [totalRate, setTotalRate] = useState("0");
   const [legs, setLegs] = useState<CommissionRuleLeg[]>([emptyLeg("BASE")]);
   const [active, setActive] = useState(false);
@@ -27,6 +27,9 @@ export default function ClientCommissionRulePanel({ clientId, rootId, canEdit }:
     const stopB = watchClientBeneficiaryMethods(clientId, rootId, setMethods, (error) => setMessage(error.message));
     return () => { stopA(); stopB(); };
   }, [clientId, rootId]);
+  useEffect(() => {
+    if (Number.isInteger(canonicalRateBps) && Number(canonicalRateBps) > 0) setTotalRate((Number(canonicalRateBps) / 100).toFixed(2));
+  }, [canonicalRateBps]);
 
   const assignedBps = useMemo(() => legs.reduce((sum, leg) => sum + Number(leg.rateBps || 0), 0), [legs]);
   const totalBps = Math.round(Number(totalRate || 0) * 100);
@@ -49,7 +52,7 @@ export default function ClientCommissionRulePanel({ clientId, rootId, canEdit }:
   }
 
   return <section className="mt-6 rounded-2xl border border-orange-400/20 bg-orange-500/[0.04] p-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-sm font-semibold text-orange-100">Distribución de comisión</h3><p className="mt-1 text-xs text-slate-400">Regla versionada por cliente. La automatización permanece bloqueada si el instrumento no está verificado en IQ.</p></div><label className="text-xs text-slate-300">Comisión total %<input disabled={!canEdit} value={totalRate} onChange={(e) => setTotalRate(e.target.value)} type="number" step="0.01" className="ml-2 w-24 rounded-lg border border-white/10 bg-slate-950 px-2 py-1" /></label></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-sm font-semibold text-orange-100">Distribución de comisión</h3><p className="mt-1 text-xs text-slate-400">La comisión total proviene del costo final seleccionado. Aquí sólo se distribuye; la automatización permanece bloqueada si el instrumento no está verificado en IQ.</p></div><div className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-xs text-slate-300">Comisión total canónica <strong className="ml-2 text-white">{totalRate}%</strong></div></div>
     {canEdit && <div className="mt-4"><label className="text-xs text-slate-400">Pago IQ conciliado para descubrir y verificar instrumentos<input value={referencePaymentId} onChange={(e) => setReferencePaymentId(e.target.value)} placeholder="ID interno del pago" className="ml-2 w-64 rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-sm text-white" /></label></div>}
     <div className="mt-4 space-y-2">{legs.map((leg, index) => { const selectedMethod = methods.find((row) => row.id === leg.methodId); const linkLabel = selectedMethod?.iqLinkStatus === 'VERIFIED' ? 'Verificado en IQ' : selectedMethod?.iqLinkStatus === 'AMBIGUOUS' ? 'Coincidencia ambigua' : selectedMethod?.iqLinkStatus === 'NOT_FOUND' ? 'No encontrado' : selectedMethod?.iqLinkStatus === 'STALE' ? 'Requiere revisión' : selectedMethod?.iqLinkStatus === 'ERROR' ? 'Error de verificación' : 'Pendiente de verificar'; return <div key={index} className="grid gap-2 rounded-xl border border-white/10 bg-black/10 p-3 md:grid-cols-[110px_1fr_110px_1fr_1fr_auto]">
       <select disabled={!canEdit || leg.kind === "BASE"} value={leg.kind} onChange={(e) => updateLeg(index, { kind: e.target.value as any })} className="rounded-lg bg-slate-950 px-2 py-2 text-sm"><option value="BASE">Base</option><option value="COMMISSIONER">Comisionista</option></select>

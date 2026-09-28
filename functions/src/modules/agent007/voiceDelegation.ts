@@ -55,7 +55,7 @@ function formatVoicePlatformResultRaw(tool: string, data: any) {
   if (tool === "getLatestSolicitudForUser" || tool === "getLatestPagoForUser") {
     if (data?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario con esa referencia; indica el nombre completo o correo.";
     if (data?.matchStatus !== "EXACT") return "No encontré ese usuario dentro del root PAY0 autorizado; esto no es una denegación de permisos.";
-    if (!data.item) return `No encontré ${tool === "getLatestPagoForUser" ? "pagos" : "solicitudes"} para el alcance operativo de ${data.user?.displayName || "ese usuario"}.`;
+    if (!data.item) return `No encontré ${tool === "getLatestPagoForUser" ? "pagos" : "solicitudes"} creadas por ${data.user?.displayName || "ese usuario"} con ese filtro.`;
     return `La ${tool === "getLatestPagoForUser" ? "operación de pago" : "solicitud"} más reciente de ${data.user?.displayName || "ese usuario"} es ${data.item.folio || "sin folio"}, cliente ${data.item.cliente || "no registrado"}, estado ${data.item.estado || "no registrado"}.`;
   }
   if (tool === "getAuthorizedCapabilities") {
@@ -149,8 +149,8 @@ export const delegateHugoVoiceTurn = onCall(
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
       getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
       countClientsForUser: ({ query }) => platform.countClientsForUser(query),
-      getLatestSolicitudForUser: ({ query }) => platform.getLatestOperationForUser(query, "SOLICITUD"),
-      getLatestPagoForUser: ({ query }) => platform.getLatestOperationForUser(query, "PAGO"),
+      getLatestSolicitudForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "SOLICITUD", period, limit),
+      getLatestPagoForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "PAGO", period, limit),
       countClientsForCurrentUser: () => platform.countClientsForCurrentUser(), getSessionContext: () => platform.getSessionContext(),
       getLastOperationDiagnostic: () => platform.getLastOperationDiagnostic(),
     });

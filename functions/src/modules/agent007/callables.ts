@@ -204,7 +204,7 @@ export const sendAgent007Message = onCall(
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
       getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
       countClientsForUser: ({ query }) => platform.countClientsForUser(query), countClientsForCurrentUser: () => platform.countClientsForCurrentUser(),
-      getLatestSolicitudForUser: ({ query }) => platform.getLatestOperationForUser(query, "SOLICITUD"), getLatestPagoForUser: ({ query }) => platform.getLatestOperationForUser(query, "PAGO"),
+      getLatestSolicitudForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "SOLICITUD", period, limit), getLatestPagoForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "PAGO", period, limit),
       getSessionContext: () => platform.getSessionContext(), getLastOperationDiagnostic: () => platform.getLastOperationDiagnostic(),
     });
     const modelRouter = new HugoModelRouter();
