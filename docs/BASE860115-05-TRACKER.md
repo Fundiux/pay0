@@ -2,43 +2,47 @@
 
 Actualizado: 2026-09-28 (America/Mexico_City)
 
-> ASTRA continúa ABIERTO. Esta tabla refleja el estado vigente; los cierres históricos de abajo se conservan como trazabilidad y no sustituyen las incidencias posteriores. REP sigue pausado por instrucción explícita.
+> ASTRA: trabajo técnico del producto completado y publicación verificada. Quedan decisiones humanas específicas y completar el cierre Git descrito abajo, sin aceptación inventada ni automatizaciones habilitadas por defecto. Esta tabla prevalece sobre los cierres históricos de abajo. REP sigue pausado por instrucción explícita.
 
 - Rama de integración actual: `integration/astra-cycle-20260928`
 - Worktree de integración: `.worktrees/astra-reconciliation-20260927`
-- Base de main incorporada en `dd2f825` (la referencia main todavía no avanzó); identidad IQ certificada recuperada en `060313a`.
+- Base de main incorporada en `dd2f825`; identidad IQ certificada recuperada en `060313a`. Integración final mediante fast-forward autorizado, sin force push ni cambios a worktrees ajenos.
+- Fuente del release: backend `51d7667`, frontend `a0b987b`; CI `3d0ce1d` y verificadores `a434f82`. Los commits posteriores sólo documentan el cierre.
+- Publicación: Hosting `ae9632f51fe79634`, SSR `00570-rol`; postflight 70/70 a las 09:21:16 UTC. [Evidencia y límites](audits/ASTRA-PUBLICATION-2026-09-28.md).
 - Rama inicial: `cycle/base860115-05`
 - Worktree: `C:\Users\ebarr\Desktop\pay0-system\.worktrees\base860115-05`
 - Base inicial: `integration/base8601-04-production-clean`
 - HEAD inicial: `b5091c835c8d076638e8355a9a7a37057941db14`
 - Proyecto Firebase: `pay-0-system`
 - Región: `us-central1`
-- Estado del ciclo: `ABIERTO`
+- Estado del runtime: preparado para validación humana. El cierre global requiere completar main/push y comprobar CI; el resultado se verifica después del commit de este informe y se comunica en la entrega.
+
+`VALIDADO` significa implementación, pruebas y publicación técnica comprobadas. No significa que se hayan hecho operaciones financieras reales, cambiado contraseñas reales o completado aceptación humana de voz. La navegación productiva se comprobó sin sesión; los componentes y permisos se probaron con fixtures/emuladores.
 
 | Punto | Título | Estado | Commit | Deploy | Evidencia |
 |---:|---|---|---|---|---|
-| 1 | Complementos de pago PPD | EN PROGRESO | 659bc40, b982fbe, 12d1b82, f14c885 | Contención publicada; migración pendiente | Bucle corregido; entrega pausada. Automatización 26, adopción 17 y plan reanudable 21 controles PASS. Cuatro históricos pendientes de aplicar con backend MAT actualizado. |
-| 2 | Identidad de pestaña/navegador | VALIDADO | 1e638e6 | Hosting actual | Identidad PAY0 comprobada; repetir postflight tras publicación. |
+| 1 | Complementos de pago PPD | VALIDADO | 659bc40, b982fbe, 12d1b82, f14c885 | Contención y migración publicadas | Cuatro históricos migrados: ocho documentos canónicos activos, cero legacy activos, finanzas conservadas. Sin seguimientos repetidos en la ventana posterior; entrega pausada y enqueue excluido del despliegue. |
+| 2 | Identidad de pestaña/navegador | VALIDADO | 1e638e6 | Hosting ae9632f51fe79634 | Identidad PAY0 y rutas públicas conservadas; postflight final PASS. |
 | 3 | Logo/símbolo/favicon | BLOQUEADO EXCLUSIVAMENTE POR DECISIÓN HUMANA | — | No aplica todavía | Pendiente elegir símbolo; no se inventa aprobación visual. |
-| 4 | UUID visibles | VALIDADO | 5df6ffd, 6ae63ed | Hosting actual | Presentación humana conservada; repetir postflight transversal. |
-| 5 | Login mediante username | PROBADO | 732b24e | Pendiente | 37 controles Auth/Firestore PASS; plan de 13 aliases únicos sin cambiar emails/passwords. Falta publicar backend, aplicar plan y Hosting. |
-| 6 | Cambio de contraseña | PROBADO | 732b24e | Pendiente | Mi cuenta con reautenticación y cambio mediante Firebase Auth; sin alterar credenciales reales durante QA. |
-| 7 | Filtro por usuario | PROBADO | e7d408e | Pendiente | Filtro por creador con alcance servidor; 47 comprobaciones de filtros. |
-| 8 | Monto / Abono / Pendiente compacto | PROBADO | e7d408e | Pendiente | Presentación compacta; 9 controles de presentación y build frontend PASS. |
-| 9 | Hover global en todas las tablas | PROBADO | e7d408e | Pendiente | Estilo compartido incorporado; build frontend PASS. |
-| 10 | Sistema de notas | PROBADO | e7d408e | Pendiente | Notas reutilizadas con identidad visible y reglas existentes; 46 controles combinados notas/identidad/Telegram PASS. |
-| 11 | Usuario creador visible para Superadmin | PROBADO | e7d408e | Pendiente | Creadores visibles y filtro de alcance; pruebas de permisos y build PASS. |
-| 12 | Hugo pasa a llamarse María | PROBADO | Integración local | Pendiente | Textos públicos María; IDs técnicos estables. Gateway 48 y privacidad 10 PASS. Aceptación acústica humana y promoción separadas. |
-| 13 | Aplicación automática de pagos | PROBADO | e7d408e | Pendiente | 62 comprobaciones: evidencia exacta, transacción y reintento idempotente; no reprocesa históricos ni ejecuta IQ real en QA. |
-| 14 | Tracker y Estado Maestro | EN PROGRESO | Integración local | No aplica | Se distingue implementación/prueba/publicación. Actualización final pendiente de postflight y Git. |
-| 15 | Canónicos de cotizaciones y constancias | PROBADO | c938828 | Pendiente | UI y backend de recursos versionados; 72+5 controles y PDF 247 verificaciones/10 páginas inspeccionadas. Plan real de 3 recursos elegibles pendiente. |
-| 16 | Constancias: lugar de recepción/servicio | PROBADO | c938828 | Pendiente | Lugar, dirección, receptor y observaciones; firma de un solo ganador y recuperación de PDF sin refirmar. |
-| 17 | Actualización de Materialidad / MAT | PROBADO | e7d408e | Pendiente | 21 controles de proyección, cambios y permisos; todas las lecturas antes de escribir en la transacción. |
-| 18 | Mensajes de María en Telegram más concretos | PROBADO | Integración local | Pendiente | 46 controles combinados PASS; no se enviaron mensajes reales durante QA. |
-| 19 | IQ: task inmediato + scheduler | PROBADO | 060313a, e7d408e | Pendiente | Continuación inmediata y recuperación acotada; origen IQ certificado conservado y REP cerrado. Barrera staging 79 comprobaciones sin red. |
-| 20 | Comisiones diarias a usuarios | PROBADO | Integración local | Pendiente | 110 controles PASS; cursor continuo, 250 lecturas/máximo una solicitud por invocación. Configuración inicialmente deshabilitada; hora/días pendientes de decisión. |
-| 21 | División automática de comisiones por usuario | EN PROGRESO | Integración local | Pendiente | Regla por cliente/usuario, manual y automática, N destinos, reserva USER atómica. Identidad hist?rica exacta hasta el transporte IQ; 29 controles de adapter PASS. |
-| 22 | Identificación y registro automático de pagos | PROBADO | e7d408e | Pendiente | 75 controles de identificación y 17 de registro real concurrente; comprobante inequívoco y folio/costos canónicos. |
+| 4 | UUID visibles | VALIDADO | 5df6ffd, 6ae63ed | Hosting final | Presentación humana conservada; nueve superficies reales y bundles publicados comprobados. |
+| 5 | Login mediante username | VALIDADO | 732b24e | Backend, reglas, TTL y Hosting | 37 controles locales; 13 aliases aplicados y leídos, sin cambiar correos/passwords; login público y rechazo anónimo comprobados. |
+| 6 | Cambio de contraseña | VALIDADO | 732b24e | Mi cuenta publicada | Reautenticación y cambio mediante Firebase Auth; pruebas de cuenta y bundle real; sin alterar contraseñas productivas durante QA. |
+| 7 | Filtro por usuario | VALIDADO | e7d408e | Backend y Hosting | Filtro por creador con alcance servidor; 47 comprobaciones. |
+| 8 | Monto / Abono / Pendiente compacto | VALIDADO | e7d408e | Hosting final | Nueve controles de presentación; componentes reales y build PASS. |
+| 9 | Hover global en todas las tablas | VALIDADO | c4d95ed, a0b987b | Hosting final | 117 comprobaciones en nueve superficies; selector grid y hash exacto del CSS servido verificados. |
+| 10 | Sistema de notas | VALIDADO | e7d408e | Backend y Hosting | Notas reutilizadas con identidad y alcance; 46 controles combinados notas/identidad/Telegram. |
+| 11 | Usuario creador visible para Superadmin | VALIDADO | e7d408e | Backend y Hosting | Creadores visibles y filtro autorizado; pruebas de permisos y componentes. |
+| 12 | Hugo pasa a llamarse María | VALIDADO; aceptación de voz humana pendiente | 46afdd2, 51d7667 | Textos en live; voz candidata en astra-p05 | Gateway 12/12 y preview 30/30; fuente P0/P0.5 preparada para conversación humana. La revisión habitual conserva 100% del tráfico. |
+| 13 | Aplicación automática de pagos | VALIDADO | e7d408e | Backend, índices y Hosting | 62 controles de evidencia exacta, transacción e idempotencia; no reprocesa históricos ni ejecutó IQ real durante QA. |
+| 14 | Tracker y Estado Maestro | VALIDADO | Informe de cierre | No requiere runtime | Los 22 puntos reflejan pruebas, publicación y límites humanos; versiones y migraciones enlazadas. |
+| 15 | Canónicos de cotizaciones y constancias | VALIDADO | c938828 | UI, 11 callables, reglas y Storage | Tres recursos de la empresa propia elegible migrados; seis artefactos verificados. 72+5 controles y 247 verificaciones PDF. |
+| 16 | Constancias: lugar de recepción/servicio | VALIDADO | c938828 | Backend y Hosting | Lugar, dirección, receptor y observaciones; firma de un solo ganador, PDF verificable y recuperación sin refirmar. |
+| 17 | Actualización de Materialidad / MAT | VALIDADO | e7d408e | Backend y Hosting | 21 controles; lecturas antes de escrituras y referencias canónicas REP migradas con backend actualizado. |
+| 18 | Mensajes de María en Telegram más concretos | VALIDADO | 46afdd2 | Backend y textos publicados | 46 controles combinados; no se enviaron mensajes reales durante QA. |
+| 19 | IQ: task inmediato + scheduler | VALIDADO; staging depende de autorización externa | 060313a, e7d408e, 3f6fa19 | Backend publicado; staging preparado | Continuación y recuperación acotadas; origen certificado y REP cerrado. Barrera staging 79 + runtime 30 PASS. Facturación staging deshabilitada; falta su autorización y un sandbox para pruebas IQ reales. |
+| 20 | Comisiones diarias a usuarios | BLOQUEADO EXCLUSIVAMENTE POR DECISIÓN HUMANA | a076c84 | Código y UI publicados, activación deshabilitada | 110 controles; cursor continuo y una solicitud por invocación. Cero configuraciones activas: falta definir hora/días y habilitar el corte. |
+| 21 | División automática de comisiones por usuario | VALIDADO | a076c84 | Backend, reglas, índices y Mi cuenta | Regla por cliente y propietario, solicitud manual y motor automático, N destinos y reserva USER. 110 + 29 controles; no descuenta del saldo CLIENT ni reescribe distribuciones históricas. |
+| 22 | Identificación y registro automático de pagos | VALIDADO | e7d408e | Backend y Hosting | 75 controles de identificación y 17 de registro real concurrente en emuladores; comprobante inequívoco, folio y costos canónicos. |
 
 ## Punto 1 — Complementos de pago PPD
 

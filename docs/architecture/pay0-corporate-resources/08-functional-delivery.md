@@ -1,6 +1,8 @@
 # Recursos corporativos: entrega funcional acotada
 
-Fecha: 2026-09-28. Estado: implementación local y pruebas de emulador; este documento no acredita despliegue ni migración de producción.
+Fecha: 2026-09-28. Estado: backend y reglas publicados; tres recursos corporativos
+migrados y verificados. La publicación de interfaz y el postflight conjunto se
+registran en [ASTRA-PUBLICATION-2026-09-28](../../audits/ASTRA-PUBLICATION-2026-09-28.md).
 
 La pantalla `/administracion/recursos-corporativos` permite administrar plantillas, imágenes y documentos de empresas propias dentro del mismo `rootId`. La gestión corresponde a superadministración. Administradores y operadores conservan los permisos actuales de sus solicitudes para generar documentos; no requieren acceso al centro corporativo.
 
@@ -29,6 +31,19 @@ Una firma sellada no se vuelve a pedir si falla la generación del PDF. La inter
 - `qa/scripts/materiality-oc-automatic-smoke.mjs` incorpora los campos obligatorios de recepción. La actualización específica de referencias REP y actor SYSTEM se verifica en el frente de Materialidad del mismo ciclo.
 - Ejecución local 2026-09-28: PDF `247 PASS` y nueve PDFs revisados visualmente; emulador `72 PASS`, incluidos nombre fiscal, migración autorizada y recuperación DRAFT/REVIEW. Un décimo PDF generado por el flujo real de firma también fue inspeccionado. Functions build y comprobación completa de tipos del frontend pasaron; el build final integrado corresponde al cierre del ciclo.
 - `qa/scripts/verify-firebase-storage-framing.cjs`: ocho casos de fragmentación UTF-8 y respuestas múltiples. El lanzador activa su adaptador sólo cuando se solicita Storage Emulator explícitamente; corrige el framing del proceso Java, sin editar Firebase CLI global ni suavizar reglas.
+
+## Migración productiva verificada
+
+El inventario real revisó 34 empresas: sólo una cumplía el criterio vigente de
+empresa propia y tenía los tres tipos de plantillas elegibles. Los 21 paquetes
+incluidos en Git no se confundieron con 21 empresas propias de producción.
+
+El plan con digest `8f90b624dbda2baaf6d50e63f52d2fc3b2aa503dfa00646fbc6a3ac50ce79a8d`
+se aplicó a las 08:49:15 UTC. Resultado: tres recursos migrados, tres versiones
+activas verificadas y seis artefactos comprobados byte a byte contra sus hashes,
+cero acciones financieras. Se utilizó el bucket real
+`pay-0-system.firebasestorage.app`, conservando respaldo del estado anterior,
+versiones inmutables y auditoría SYSTEM. No se alteraron documentos emitidos.
 
 ## Límites explícitos
 

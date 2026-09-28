@@ -2,11 +2,13 @@
 
 ## Estado vigente ASTRA — 2026-09-28
 
-ASTRA sigue **abierto**. Esta entrada sustituye los estados históricos posteriores de cierre sólo donde exista contradicción. La tabla completa está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
+ASTRA: **publicación técnica verificada; preparada para validación humana**. En el producto quedan las decisiones descritas abajo; el cierre global requiere completar main, push y comprobar CI después de este registro. Esta entrada prevalece sobre los cierres históricos cuando exista contradicción. La tabla completa de 22 puntos está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
 
-La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del próximo despliegue. Los cuatro vínculos históricos tienen migración acotada, reanudable y probada; aún no se aplicó.
+La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del despliegue. Los cuatro vínculos históricos ya se migraron: ocho documentos canónicos activos, cero copias legacy activas y estados financieros conservados.
 
-La integración contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Los builds y pruebas focalizadas pasaron; **no equivale a publicación**. En esta fase siguen pendientes Functions, Rules/Indexes/Storage, Hosting, planes de 13 aliases y 3 recursos corporativos, migración REP y postflight. Rama: `integration/astra-cycle-20260928`; main/remoto todavía no avanzados.
+La integración publicada contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Las reglas coinciden con la fuente, los 100 índices están listos y las 284 Functions tienen revisión nueva y tráfico verificado. Se aplicaron 13 aliases y tres recursos corporativos con seis artefactos verificados. El permiso técnico de 23 callables se completó con aprobación específica del usuario; 26 comprobaciones anónimas confirmaron que la autenticación sigue exigida. Hosting `ae9632f51fe79634` / SSR `00570-rol`: **70/70 postflight**, nueve rutas y 14 assets idénticos al build. Evidencia: [publicación ASTRA](docs/audits/ASTRA-PUBLICATION-2026-09-28.md).
+
+Rama de implementación: `integration/astra-cycle-20260928`. La integración a main usa fast-forward y push normal; las referencias definitivas se verifican después de registrar este informe y se reportan en la entrega. Los worktrees y cambios ajenos permanecen preservados.
 
 Decisiones humanas separadas: símbolo visual; aceptación de voz P0/P0.5 y promoción; hora/días del corte diario; cuenta de facturación para staging (`billingEnabled:false`). Ninguna activa comisiones, REP ni un proveedor real automáticamente.
 

@@ -38,13 +38,15 @@ fuente. Los eventos tienen una ventana de recuperación de veinte minutos.
 ## Evidencia
 
 - Functions build: PASS.
-- `automatic-payment-application-emulator.cjs`: 44 verificaciones PASS con
+- `automatic-payment-application-emulator.cjs`: 62 verificaciones PASS con
   Firestore real local: concurrencia, aplicación parcial y múltiple, ausencia de
   duplicados, fuente modificada, usuario revocado, comprobante faltante,
   decisiones sin escrituras repetidas y compuertas IQ.
+- La ampliación rechaza documentos sandbox, fuentes fiscales contradictorias y UUID ambiguos; admite fuentes productivas verificadas de IQ/XML. El watcher también reconoce correcciones de evidencia fiscal. Materialidad pasó otros 21 controles, con lecturas de todas las fuentes dentro de la transacción antes de escribir.
 - Identidad IQ recuperada: 15 pruebas de dominio/contrato PASS.
 - No se ejecutaron llamadas financieras externas. REP permanece pausado.
 
 La aprobación humana de un caso ambiguo sigue usando la aplicación manual.
-La validación productiva debe comprobar índices, revisiones y funcionamiento
-visible sin inventar una operación financiera de prueba.
+La validación productiva de índices, revisiones y publicación está registrada
+en [el informe conjunto](ASTRA-PUBLICATION-2026-09-28.md), sin inventar una
+operación financiera de prueba.

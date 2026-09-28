@@ -1,6 +1,16 @@
 # REP: bucle de seguimiento y consultas SAT
 
-**Estado final: correcciones publicadas y disparador REP suspendido por la orden de paro.** Rama `fix/rep-followup-and-sat-readiness`. Las horas operativas son UTC del **28 de septiembre de 2026**; corresponden a la sesión local del día 27. No se reanudó la entrega automática; la elección de restablecerla quedó sin respuesta.
+**Cierre del hotfix inicial: correcciones publicadas y disparador REP suspendido por la orden de paro.** Rama original `fix/rep-followup-and-sat-readiness`. Las horas operativas son UTC del **28 de septiembre de 2026**; corresponden a la sesión local del día 27. No se reanudó la entrega automática; la elección de restablecerla quedó sin respuesta. La integración posterior se registra en [ASTRA — publicación y reconciliación del ciclo](ASTRA-PUBLICATION-2026-09-28.md).
+
+## Actualización: adopción documental de cuatro REP históricos
+
+A las **08:46:47.478 UTC** se aplicó el plan acotado de cuatro aplicaciones históricas, con digest `b8f8976b4c2559f6f6e9962223f56af973d5451ef3d79b9c286437e010d66eaa`. La validación previa, a las 08:45:46.994, confirmó las 25 revisiones originales sin cambios y los hashes reales de los ocho archivos en Storage. No se regeneró el plan.
+
+El migrador confirmó cuatro adopciones, **ocho documentos canónicos activos y cero documentos legacy activos** en esa cohorte. Conservó los archivos y su evidencia; retirar la vista legacy no implica borrar los objetos. El estado financiero de las fuentes permaneció igual, exceptuando los campos de proyección documental expresamente permitidos por el verificador. Se comprobaron la pausa antes, durante y después de la migración y cero acciones del proveedor; no se solicitó ni timbró un REP nuevo.
+
+El informe agregado quedó en el archivo ignorado `__untracked_archive/rep-historical-migration-20260928/after-b8f8976b4c2559f6f6e9962223f56af973d5451ef3d79b9c286437e010d66eaa.json`. El respaldo original y los checkpoints permanecen fuera de Git. Esta adopción no reactiva Eventarc ni demuestra ausencia de recurrencia bajo entrega activa. La ventana posterior, 08:46:47–09:12:13 UTC, registró un seguimiento canónico y una ejecución al borde de la migración, sin repeticiones posteriores ni errores HTTP 5xx. El postflight del Hosting final volvió a confirmar la pausa a las 09:21:16 UTC; ambas comprobaciones constan en el informe ASTRA enlazado arriba.
+
+Antes de la migración, la lectura de las 08:17–08:19 confirmó cero eventos REP repetidos en ambas bitácoras y cero peticiones en los tres servicios REP desde las 07:47. Esa ventana corresponde a la contención con la entrega pausada, no a una prueba del trigger activo.
 
 ## Causa y corrección
 
@@ -43,7 +53,7 @@ Entre 04:54:20 y 05:00:11 se comprobaron cero peticiones y cero errores en esas 
 
 La auditoría final cubrió 05:07:26–05:21:42.956: cero logs y cero peticiones en las cuatro funciones. A las 05:21:56 la suscripción seguía pausada, con retención y ack intactos. La verificación HTTP/bundles/Chromium terminó a las 05:23:10.645. El preview `base8601-02-canary` conserva la versión `2495099408004b59` y la revisión SSR `00562-yiw`.
 
-La lectura acotada encontró cinco aplicaciones `IMPORTED`: una canónica completa, cuyo último timestamp coincide con el drenaje del bucle, y cuatro históricas con documentos legacy READY. Estas últimas no tienen todavía ownership canónico de pago; se conservaron sin ejecutar una migración masiva. No se observaron estados de revisión por reversión en ese conjunto.
+La lectura del cierre inicial encontró cinco aplicaciones `IMPORTED`: una canónica completa, cuyo último timestamp coincide con el drenaje del bucle, y cuatro históricas con documentos legacy READY. En esa lectura las cuatro carecían de ownership canónico de pago y se conservaron para una migración acotada posterior, aplicada a las 08:46 según la actualización anterior. No se observaron estados de revisión por reversión en ese conjunto.
 
 Por solicitud de contención se suspendió la entrega push de la suscripción asociada mediante `pushConfig={}` a las 04:54:08.368. La última petición observada fue a las 04:54:14.5. No se eliminó la suscripción; se conservó su retención de mensajes de 24 horas. La ausencia de peticiones durante esta suspensión demuestra contención, no demuestra todavía que el parche haya detenido el bucle bajo entrega activa.
 
@@ -55,6 +65,6 @@ La configuración original y el restaurador con validación previa se conservan 
 
 Un build falló cuando el disco quedó sin espacio. Se limpiaron cachés `.next/cache` y artefactos `.firebase` propios, recuperando aproximadamente 1,7 GB; los builds posteriores pasaron. El primer intento de Hosting también se detuvo antes de publicar por un descubrimiento de 7.350 ms, superior al límite inalterado de 7.000 ms; la repetición aislada pasó en 2.782 ms. Los worktrees de los frentes paralelos se conservaron sin modificaciones.
 
-Se verificó la ausencia de procesos Node/Java propios, de listeners de emuladores y del lock global. El servidor paralelo de visual-canary en 3010 se conservó. Los temporales de CLI propios quedaron eliminados; el respaldo operativo y su restaurador se preservan intencionalmente en el archivo ignorado. No hubo merge, push, despliegue de reglas/índices ni operaciones reales de pago, timbrado, SAT, IQ o mensajería iniciadas por esta validación. Este informe cubre el bucle REP y el seguimiento SAT descritos; no declara completados el backlog general ni los frentes Hugo/IQ.
+En el cierre inicial del hotfix se verificó la ausencia de procesos Node/Java propios, de listeners de emuladores y del lock global. El servidor paralelo de visual-canary en 3010 se conservó. Los temporales de CLI propios quedaron eliminados; el respaldo operativo y su restaurador se preservan intencionalmente en el archivo ignorado. Esa validación inicial no incluyó merge, push, despliegue de reglas/índices ni operaciones reales de pago, timbrado, SAT, IQ o mensajería. Las publicaciones posteriores corresponden al informe ASTRA enlazado arriba. Este informe cubre el bucle REP y el seguimiento SAT descritos; no declara completados el backlog general ni los frentes Hugo/IQ.
 
 La limpieza final retiró `.firebase`, `tmp/rep-followup-hotfix` y `firestore-debug.log` de este worktree, después de separar los dos enlaces a dependencias. Se comprobaron nuevamente las dependencias y el respaldo preservados; el volumen terminó con aproximadamente 4.035 MB libres. Los manifiestos compactos de fuentes y del parche quedaron junto al restaurador en el archivo ignorado. El árbol principal conserva su estado previo y sus archivos no seguidos.

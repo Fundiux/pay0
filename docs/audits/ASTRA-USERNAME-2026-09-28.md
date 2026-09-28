@@ -1,6 +1,8 @@
 # ASTRA — puntos 5 y 6: username y contraseña
 
-Fecha: 2026-09-28. Estado de esta evidencia: **IMPLEMENTADO / PROBADO LOCALMENTE**, pendiente de build frontend conjunto, configuración/deploy y validación productiva coordinados por el integrador.
+Fecha: 2026-09-28. Estado: **backend publicado y migración de 13 aliases aplicada**;
+la publicación de interfaz y el postflight conjunto se registran en
+[ASTRA-PUBLICATION-2026-09-28](ASTRA-PUBLICATION-2026-09-28.md).
 
 ## Reconciliación previa
 
@@ -35,7 +37,7 @@ Resultado: `productionAuthCalls: 0`, `externalActions: 0`. Las denegaciones Fire
 
 ## Entorno y pendientes de integración
 
-Revalidación integrada del 2026-09-28: **37 controles PASS** con Auth y Firestore, incluidos `disabled`, `deleted` y `deletedAt`. Functions build y frontend de 46 páginas PASS. La cuenta de ejecución ya dispone de firma de tokens; no se modificó IAM. Se preparó un plan de 13 aliases, sin cambiar cuentas ni contraseñas, pendiente de aplicar después del despliegue backend. REP continúa pausado.
+Revalidación integrada del 2026-09-28: **37 controles PASS** con Auth y Firestore, incluidos `disabled`, `deleted` y `deletedAt`. Functions build y frontend de 46 páginas PASS. La cuenta de ejecución ya dispone de firma de tokens; no se modificó IAM. Tras publicar el backend se aplicó el plan de 13 aliases con digest `e880a806b7bd04b7a738efcf68f67b9cc1ee5419e0ce1e61f6c43d80c37a4d50`: cero cuentas Auth, correos o contraseñas modificados. La lectura de las 08:45 UTC confirmó 13 perfiles, 13 reservas `ACTIVE` y 13 identidades Auth originales. TTL de `authLoginLimits.expiresAt` está activo y la configuración del backend quedó publicada. REP continúa pausado.
 
 La CLI cerró Auth, Firestore, hub y logging. Se comprobaron cero listeners en 4400/4500/8080/9099/9150 y ausencia del lock global antes de ceder los emuladores al frente UI. El log local no contenía ninguna de las contraseñas ficticias del test.
 

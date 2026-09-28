@@ -1,6 +1,7 @@
 # Identificación y registro de comprobantes
 
-Estado: implementación local; despliegue y validación productiva corresponden al cierre del ciclo.
+Estado de publicación y comprobaciones conjuntas:
+[cierre técnico ASTRA](ASTRA-PUBLICATION-2026-09-28.md).
 
 El lote de Pagos analiza PDF e imágenes con el servicio existente. El servidor propone un registro sólo con cliente y empresa inequívocos: RFC o cuenta completa, corroboración de identidad, mismo root y permisos vigentes. Las sugerencias aproximadas del navegador siguen disponibles para la captura manual; nunca autorizan un registro automático.
 
@@ -17,7 +18,7 @@ La tabla de Pagos también muestra «Aplicación por revisar» y un motivo human
 - Ejecución 2026-09-28: `75 PASS`, salida 0; Functions build y comprobación completa de tipos del frontend PASS. El lanzador cerró sus emuladores y dejó libres sus puertos al finalizar.
 - `qa/scripts/receipt-identification-emulator.cjs` usa los módulos compilados y las funciones reales de presentación. Ejecuta Firestore y Storage locales con proyecto `demo-*` y bloquea transporte HTTP externo.
 - Cubre parser, tres roles, permisos revocados, scopes cruzados, reglas privadas, propuesta alterada, consumo concurrente de identificación, recuperación, hash de bytes y finalización repetida.
-- La prueba de creación ejercita el guard y su consumo transaccional. No sustituye una prueba financiera completa de `createPago`; las secuencias, costos y postings continúan en el flujo existente.
+- La primera prueba ejercita el guard y su consumo transaccional. Después se agregó un fixture que invoca `createPago.run` completo: **17 PASS**, salida 0, sobre Firestore/Storage locales. Dos registros simultáneos producen un solo pago, el folio canónico y los costos vigentes; se comprueban archivo correcto, alteración de propuesta, permisos revocados, actor ajeno y repetición. La actividad se verifica en la colección canónica PAY0. El pago conserva el flujo de conciliación y no se aplica anticipadamente a facturas.
 - No se ejecutaron OCR externo, IQ, mensajería ni operaciones financieras productivas. REP permanece sujeto a la pausa del usuario.
 
 El resultado final de las compuertas se registra en el informe general del ciclo.
