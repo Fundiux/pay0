@@ -6,7 +6,7 @@ admin.initializeApp({ projectId: 'demo-pay0' });
 const db = admin.firestore(), stamp = admin.firestore.Timestamp;
 const api = require('../../functions/lib/modules/paymentApplications/complementAutomation');
 const { complementRequestId } = require('../../functions/lib/modules/paymentApplications/complementFollowup');
-const { claimIqComplementGate } = require('../../functions/lib/modules/paymentApplications/complementGates');
+const { claimIqComplementGate, inspectIqComplementGate } = require('../../functions/lib/modules/paymentApplications/complementGates');
 const { inventoryPage } = require('../../functions/lib/modules/paymentApplications/complementInventory');
 const { assessLocalIqRecovery } = require('../../functions/lib/modules/paymentApplications/complementRecoveryPlan');
 const uuid = '11111111-1111-4111-8111-111111111111';
@@ -16,7 +16,7 @@ async function fixture(label) {
   await db.doc(`users/${root}`).set({ rootId: root, role: 'superadmin', active: true });
   await db.doc(`clients/${root}`).set({ rootId: root, adminId: root, active: true });
   await db.doc(`iqIntegrationConfigs/${root}`).set({ rootId: root, enabled: true, automation: { aplicacionPagos: true } });
-  await db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, activatedAt: stamp.fromMillis(Date.now() - 60000), iqEnabled: true, iqLookupEnabled: true, facturamaEnabled: false });
+  await db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, activatedAt: stamp.fromMillis(Date.now() - 60000), iqEnabled: true, iqLookupEnabled: true, iqRequestEnabled: true, facturamaEnabled: false });
   await db.doc(`iqUserAccess/${root}`).set({ rootId: root, active: true, iqEnabled: true, iqCredentialProfileId: profileId, allowedModules: { pagos: true } });
   await db.doc(`iqCredentialProfiles/${profileId}`).set({ rootId: root, active: true, hasPassword: true, username: 'smoke' });
   await db.doc(`solicitudes/${root}`).set({ rootId: root, folio: 'S1', tipoFactura: 'PPD', clienteId: root, companyId: root, iqFolio: '123', facturaUuid: uuid, status: 'PROCESANDO' });
@@ -38,32 +38,52 @@ function adapter() {
     availableIqComplement: async () => { calls.lookup++; return null; }, requestIqComplement: async () => { calls.request++; } };
 }
 
-async function runCase(label, change, expected) {
+async function runCase(label, change, expected, expectedReason) {
   const item = await fixture(label), mock = adapter();
   await change(item);
   await api.executeComplement(item.jobId, mock);
   assert.deepEqual(mock.calls, expected, label);
   const job = (await db.doc(`paymentComplementJobs/${item.jobId}`).get()).data();
   assert.equal(job.status, expected.request ? 'REQUESTED' : 'PAUSED');
-  assert(job.lastGateReason || job.gateReason);
+  assert(job.gateReason || job.lastGateReason);
+  if (expectedReason) assert.equal(job.gateReason || job.lastGateReason, expectedReason, `${label} reason`);
   return item;
 }
 
 async function run() {
   const zero = { session: 0, preflight: 0, lookup: 0, request: 0 };
   const lookupOnly = { session: 1, preflight: 1, lookup: 0, request: 0 };
+  const allowed = { session: 2, preflight: 1, lookup: 0, request: 1 };
   await runCase('master-off', x => db.doc(`iqIntegrationConfigs/${x.root}`).update({ enabled: false }), zero);
   await runCase('lookup-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqLookupEnabled: false }), zero);
-  await runCase('access-off', x => db.doc(`iqUserAccess/${x.root}`).update({ active: false }), zero);
+  await runCase('access-off-origin-persists', x => db.doc(`iqUserAccess/${x.root}`).update({ active: false }), allowed);
+  await runCase('actor-inactive-origin-persists', x => db.doc(`users/${x.root}`).update({ active: false }), allowed);
   await runCase('profile-off', x => db.doc(`iqCredentialProfiles/${x.profileId}`).update({ active: false }), zero);
-  await runCase('profile-changed', x => db.doc(`iqUserAccess/${x.root}`).update({ iqCredentialProfileId: 'different' }), zero);
+  await runCase('profile-changed-origin-persists', x => db.doc(`iqUserAccess/${x.root}`).update({ iqCredentialProfileId: 'different' }), allowed);
+  await runCase('legacy-access-off', async x => {
+    await db.doc(`paymentComplementJobs/${x.jobId}`).update({ originIqProfileId: admin.firestore.FieldValue.delete() });
+    await db.doc(`iqUserAccess/${x.root}`).update({ active: false });
+  }, zero);
+  await runCase('legacy-actor-off', async x => {
+    await db.doc(`paymentComplementJobs/${x.jobId}`).update({ originIqProfileId: admin.firestore.FieldValue.delete() });
+    await db.doc(`users/${x.root}`).update({ active: false });
+  }, zero);
   await runCase('root-changed', x => db.doc(`iqCredentialProfiles/${x.profileId}`).update({ rootId: 'foreign' }), zero);
   await runCase('lookup-quota-zero', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqLookupDailyLimit: 0 }), zero);
   await runCase('request-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqEnabled: false }), lookupOnly);
-  await runCase('request-flag-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: false }), lookupOnly);
+  await runCase('request-flag-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: false }), lookupOnly, 'REP_REQUEST_HARD_DISABLED');
+  await runCase('request-flag-missing', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: admin.firestore.FieldValue.delete() }), lookupOnly, 'REP_REQUEST_HARD_DISABLED');
+  await runCase('request-flag-null', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: null }), lookupOnly, 'REP_REQUEST_HARD_DISABLED');
+  await runCase('request-flag-string', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: 'true' }), lookupOnly, 'REP_REQUEST_HARD_DISABLED');
+  await runCase('request-flag-number', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestEnabled: 1 }), lookupOnly, 'REP_REQUEST_HARD_DISABLED');
+  const noConfig = await fixture('request-config-missing');
+  await db.doc(`paymentComplementConfigs/${noConfig.root}`).delete();
+  const missingConfigDecision = await inspectIqComplementGate((await db.doc(`paymentComplementJobs/${noConfig.jobId}`).get()).data(), 'REQUEST');
+  assert.equal(missingConfigDecision.allowed, false);
+  assert.equal(missingConfigDecision.reason, 'REP_REQUEST_HARD_DISABLED');
   await runCase('flow-off', x => db.doc(`iqIntegrationConfigs/${x.root}`).update({ 'automation.aplicacionPagos': false }), lookupOnly);
   await runCase('request-quota-zero', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqRequestDailyLimit: 0 }), lookupOnly);
-  const live = await runCase('allowed', async () => {}, { session: 2, preflight: 1, lookup: 0, request: 1 });
+  const live = await runCase('allowed', async () => {}, allowed);
   await db.doc(`iqIntegrationConfigs/${live.root}`).update({ enabled: false });
   const paused = adapter();
   await api.checkComplementDaily(live.jobId, new Date(Date.now() + 86400000), paused);
@@ -77,7 +97,7 @@ async function run() {
   const ready = await fixture('ready-preview');
   assert.equal((await assessLocalIqRecovery(ready.root, ready.appId)).state, 'READY_FOR_IQ_LOOKUP');
   const recovery = await fixture('read-while-request-paused');
-  await db.doc(`paymentComplementConfigs/${recovery.root}`).update({ iqEnabled: false });
+  await db.doc(`paymentComplementConfigs/${recovery.root}`).update({ iqRequestEnabled: false });
   const recoveryCalls = adapter();
   recoveryCalls.preflightIqComplement = async () => { recoveryCalls.calls.preflight++; return 'AVAILABLE'; };
   await api.executeComplement(recovery.jobId, recoveryCalls);
@@ -102,6 +122,6 @@ async function run() {
   await db.doc(`paymentComplementJobs/${quota.jobId}`).update({ status: 'PREPARING' });
   const claims = await Promise.all([claimIqComplementGate(quota.jobId, 'LOOKUP'), claimIqComplementGate(quota.jobId, 'LOOKUP')]);
   assert.equal(claims.filter(row => row.allowed).length, 1, 'quota is claimed transactionally');
-  console.log(JSON.stringify({ ok: true, cases: 16, concurrentQuota: 'PASS', inventoryWhilePaused: 'PASS', lookupWithoutRequest: 'PASS', localRecoveryPreview: 'PASS', externalNetworkCalls: 0 }));
+  console.log(JSON.stringify({ ok: true, cases: 23, requestHardGateMatrix: 'PASS', concurrentQuota: 'PASS', inventoryWhilePaused: 'PASS', B_ENABLED_C_DISABLED: 'PASS', localRecoveryPreview: 'PASS', externalActions: 0 }));
 }
 run().then(() => process.exit(0)).catch(error => { console.error(error); process.exit(1); });

@@ -13,6 +13,7 @@ type AnyRecord = Record<string, unknown>;
 export type IqCanonicalModule =
   | "solicitudes"
   | "pagos"
+  | "clients"
   | "dispersiones"
   | "paymentApplications";
 
@@ -115,6 +116,13 @@ function moduleAllowed(
   allowedModules: AnyRecord,
   moduleKey: IqCanonicalModule,
 ): boolean {
+  // Client synchronization historically requires an active IQ assignment,
+  // while PAY0 client authorization is enforced by the client callable.
+  // It is not a payments capability and must not inherit allowedModules.pagos.
+  if (moduleKey === "clients") {
+    return true;
+  }
+
   if (moduleKey === "paymentApplications") {
     return (
       allowedModules.paymentApplications === true ||

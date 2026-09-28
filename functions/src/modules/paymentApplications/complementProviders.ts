@@ -12,6 +12,7 @@ import { saveComplementDocuments, validateRep } from "./complementDocuments";
 import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
 import { readIqRepDepositFields } from "./iqRepDepositFields";
 import { sanitizeIqOperationalError } from "./iqOperationalError";
+import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "../iq/originIdentity";
 
 function getJsZip(): typeof JSZip {
   return require("jszip");
@@ -25,6 +26,25 @@ async function requireGate(job: any, action: IqComplementAction) {
   if (!decision.allowed) throw Error(decision.reason);
 }
 export async function iqSession(job: any, action: IqComplementAction = "REQUEST") {
+  if (text(job.originIqProfileId)) {
+    const identity = await resolveEffectiveIqIdentity({
+      movement: job,
+      rootId: job.rootId,
+      authorizedActorUid: "SYSTEM",
+      encryptionSecret: IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY.value(),
+      includePassword: true,
+    });
+    assertIqIdentityInvariant(identity);
+    await requireGate(job, action);
+    const session = await loginIqHttpDirect({
+      apiOrigin: IQ_ORIGIN,
+      credentials: identity.credentialProfile,
+      requiredPermissions: "NONE",
+    });
+    for (const permission of action === "REQUEST" ? ["create", "view"] : ["view"])
+      if (!session.permissions.some(p => p.entity === "deposits/complement" && p.action === permission)) throw Error("REP_IQ_PERMISSION_REQUIRED");
+    return session;
+  }
   const user = (await db.doc(`users/${job.actorUid}`).get()).data();
   if (!user || text(user.rootId || job.actorUid) !== job.rootId || user.active === false || user.disabled === true) throw Error("REP_ACTOR_INVALID");
   const role = getUserRole(user);

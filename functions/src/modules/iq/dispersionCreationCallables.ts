@@ -15,6 +15,7 @@ import { assertDispersionDestination } from "./dispersionDestinationGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized } from "../../utils/authGuard";
 import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
+import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "./originIdentity";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -52,6 +53,9 @@ type IqAccess = {
   username: string;
   password: string;
   erpUrl: string;
+  originIqProfileId?: string;
+  effectiveIqProfileId?: string;
+  identityResolutionReason?: string;
 };
 
 type LegReservation = {
@@ -330,9 +334,10 @@ async function buildDispersionSchedulerAuth(
     user.deleted === true ||
     user.isDeleted === true ||
     Boolean(user.deletedAt);
+  const hasPersistedIqOrigin = Boolean(clean(principal.originIqProfileId));
 
   if (
-    inactive ||
+    (!hasPersistedIqOrigin && inactive) ||
     !["superadmin", "admin", "operador"].includes(role)
   ) {
     throw new HttpsError(
@@ -341,17 +346,19 @@ async function buildDispersionSchedulerAuth(
     );
   }
 
-  assertAuthorized({ uid }, user, {
-    allowedRoles: ["superadmin", "admin", "operador"],
-    requiredModule: "wallet",
-    requiredAction: "dispersiones",
-  });
+  if (!hasPersistedIqOrigin) {
+    assertAuthorized({ uid }, user, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "wallet",
+      requiredAction: "dispersiones",
+    });
+  }
 
   const principalRootId =
     clean(principal.rootId);
 
   if (
-    rootId !== expectedRootId ||
+    (!hasPersistedIqOrigin && rootId !== expectedRootId) ||
     (
       principalRootId &&
       principalRootId !== expectedRootId
@@ -366,7 +373,7 @@ async function buildDispersionSchedulerAuth(
   return {
     uid,
     role,
-    rootId,
+    rootId: hasPersistedIqOrigin ? expectedRootId : rootId,
     username:
       clean(
         user.username ??
@@ -587,6 +594,7 @@ async function loadIqAccess(
   auth: AuthContext,
   despachoId: string,
   sourceChannel: string,
+  movement?: AnyDoc,
 ): Promise<IqAccess> {
   const canonicalSourceChannel =
     upper(sourceChannel);
@@ -604,6 +612,30 @@ async function loadIqAccess(
     auth,
     despachoId,
   );
+  if (movement && (clean(movement.originIqProfileId) || clean(movement.iqCredentialProfileId))) {
+    const identity = await resolveEffectiveIqIdentity({
+      movement,
+      rootId: auth.rootId,
+      authorizedActorUid: auth.uid,
+      encryptionSecret: IQ_CREDENTIALS_KEY.value(),
+      includePassword: true,
+    });
+    assertIqIdentityInvariant(identity);
+    return {
+      profileId: identity.effectiveIqProfileId,
+      profileAlias: identity.credentialProfile.profileAlias,
+      associatedName:
+        identity.originIqContext.associatedName ||
+        clean(despacho.iqAssociatedName ?? despacho.associatedName) ||
+        identity.credentialProfile.username,
+      username: identity.credentialProfile.username,
+      password: identity.credentialProfile.password,
+      erpUrl: identity.credentialProfile.erpUrl,
+      originIqProfileId: identity.originIqProfileId,
+      effectiveIqProfileId: identity.effectiveIqProfileId,
+      identityResolutionReason: identity.identityResolutionReason,
+    };
+  }
   const accessSnap = await db
     .collection("iqUserAccess")
     .doc(auth.uid)
@@ -1183,6 +1215,12 @@ async function persistLegResult(
             ),
           iqCredentialProfileId:
             access.profileId,
+          originIqProfileId:
+            access.originIqProfileId || access.profileId,
+          effectiveIqProfileId:
+            access.effectiveIqProfileId || access.profileId,
+          iqIdentityResolutionReason:
+            access.identityResolutionReason || "LEGACY_ACTOR_ACCESS",
           iqCredentialProfileAlias:
             access.profileAlias ||
             null,
@@ -1639,6 +1677,7 @@ export async function runCreateClientDispersionIqCore(input: {
             auth,
             despachoId,
             clean(leg.channel),
+            { ...leg, ...principal },
           );
       } catch (error) {
         const message =
@@ -1791,6 +1830,7 @@ export async function runCreateClientDispersionIqCore(input: {
           auth,
           despachoId,
           clean(leg.channel),
+          { ...leg, ...principal },
         );
     } catch (error) {
       const message =
@@ -2105,7 +2145,7 @@ export const resolveCommissionInstrumentIq = onCall(
     const expectedLast4 = clean(method.last4 ?? method.masked).replace(/\D+/g, "").slice(-4);
     const operationTypeKey = upper(method.destinationKind) === "TARJETA" ? "TDC" : upper(method.destinationKind) === "CLABE" ? "TRANSFERENCIA" : "";
     if (!expectedLast4 || !operationTypeKey) throw new HttpsError("failed-precondition", "El instrumento no tiene tipo o terminación compatible con IQ.");
-    const access = await loadIqAccess(auth, despachoId, "IQ");
+    const access = await loadIqAccess(auth, despachoId, "IQ", payment);
     const methodRef = methodSnap.ref;
     await methodRef.set({ iqLinkStatus: "SYNCING", iqLastError: null, iqSyncStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     try {

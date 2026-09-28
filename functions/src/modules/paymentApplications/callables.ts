@@ -646,8 +646,17 @@ export const processPagoApplicationIqPlanOnDemandTask =
         ? userSnap.data() || {}
         : {};
 
+      const hasPersistedIqOrigin = Boolean(
+        cleanDispatchText(plan.originIqProfileId),
+      );
+
       const currentRole =
-        cleanDispatchText(user.role)
+        cleanDispatchText(
+          user.role ||
+          actorPayload.role ||
+          plan.createdByRole ||
+          "operador",
+        )
           .toLowerCase();
 
       const inactive =
@@ -661,7 +670,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
           "operador",
         ].includes(currentRole);
 
-      if (inactive) {
+      if (!hasPersistedIqOrigin && inactive) {
         await planRef.set(
           {
             iqExecutionDispatchStatus:
@@ -679,11 +688,12 @@ export const processPagoApplicationIqPlanOnDemandTask =
         return;
       }
 
-      const currentRootId =
-        await getRootId(uid);
+      const currentRootId = hasPersistedIqOrigin
+        ? cleanDispatchText(plan.rootId)
+        : await getRootId(uid);
 
       if (
-        cleanDispatchText(plan.rootId) !==
+        !hasPersistedIqOrigin && cleanDispatchText(plan.rootId) !==
         currentRootId
       ) {
         await planRef.set(
@@ -948,6 +958,7 @@ async function buildPaymentApplicationAutomationActor(
     rootId: string;
     createdBy: string;
     adminId?: string;
+    hasPersistedIqOrigin?: boolean;
   },
 ): Promise<PaymentApplicationActor> {
   const uid =
@@ -977,9 +988,11 @@ async function buildPaymentApplicationAutomationActor(
       .toLowerCase();
 
   if (
-    user.active === false ||
-    user.deleted === true ||
-    Boolean(user.deletedAt) ||
+    (!params.hasPersistedIqOrigin && (
+      user.active === false ||
+      user.deleted === true ||
+      Boolean(user.deletedAt)
+    )) ||
     ![
       "superadmin",
       "admin",
@@ -994,10 +1007,7 @@ async function buildPaymentApplicationAutomationActor(
   const currentRootId =
     await getRootId(uid);
 
-  if (
-    cleanDispatchText(currentRootId) !==
-    params.rootId
-  ) {
+  if (!params.hasPersistedIqOrigin && cleanDispatchText(currentRootId) !== params.rootId) {
     throw new Error(
       "El usuario creador ya no pertenece al mismo root.",
     );
@@ -1085,6 +1095,7 @@ async function processPaymentApplicationAutomationCandidate(
         cleanDispatchText(
           reservation.adminId,
         ),
+      hasPersistedIqOrigin: Boolean(cleanDispatchText(reservation.originIqProfileId)),
     });
 
   // Reutiliza exactamente la misma preparacion/reanudacion

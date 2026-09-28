@@ -38,6 +38,8 @@ import {
   type CanonicalFinancialBatchAccountState,
 } from "./dispersionFinancial";
 import { resolveDispersionDespachoId } from "./dispersionDispatchResolver";
+import { canRunIqAutomationForDispatch } from "../dispatches/domain";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "../iq/originIdentity";
 
 if (!getApps().length) {
   initializeApp();
@@ -390,6 +392,17 @@ export const createClientDispersion = onCall(
       role,
       requestedDespachoId,
     });
+    const despachoSnap = await db.doc(`despachos/${despachoId}`).get();
+    const dispersionOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "dispersiones",
+          despachoId,
+          companyId: empresaId,
+        })
+      : null;
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
@@ -673,6 +686,7 @@ export const createClientDispersion = onCall(
         adminId: clientAdminId,
         actorUid: uid,
         actorRole: role,
+        ...(dispersionOriginIdentity ? buildIqOriginIdentityPatch(dispersionOriginIdentity) : {}),
         accessSource,
         delegatedClientAccessPath,
         folio,
@@ -943,6 +957,16 @@ export const createClientDispersionsMassive = onCall(
       role,
       requestedDespachoId,
     });
+    const despachoSnap = await db.doc(`despachos/${despachoId}`).get();
+    const dispersionOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "dispersiones",
+          despachoId,
+        })
+      : null;
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
@@ -1883,6 +1907,7 @@ export const createClientDispersionsMassive = onCall(
           adminId: clientAdminId,
           actorUid: uid,
           actorRole: role,
+          ...(dispersionOriginIdentity ? buildIqOriginIdentityPatch(dispersionOriginIdentity) : {}),
           accessSource,
           delegatedClientAccessPath,
           folio,

@@ -1,4 +1,5 @@
 import { FieldPath, Firestore } from "firebase-admin/firestore";
+import { isIqRepRequestHardEnabled } from "../paymentApplications/complementGates";
 
 export type Pay0Identity = { uid: string; rootId: string; role: "superadmin" };
 export type Completeness = "COMPLETE" | "PARTIAL" | "UNKNOWN";
@@ -122,7 +123,7 @@ export class Pay0Connector {
     ]);
     const complementConfig = complementConfigSnap.data(), master = masterSnap.data();
     const iqLookupAllowed = master?.enabled === true && !!complementConfig && complementConfig.iqLookupEnabled !== false;
-    const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && complementConfig?.iqRequestEnabled !== false;
+    const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && isIqRepRequestHardEnabled(complementConfig);
     const data = { altaBeneficiario: "NO_CONECTADA", consultaComplemento: iqLookupAllowed ? "HABILITADA_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
       solicitudComplemento: iqRequestAllowed ? "HABILITADA_SOLO_PPD_NUEVAS_CONFIRMADAS_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
       complementoFacturama: complementConfig?.facturamaEnabled === true ? "AUTOMATICO_CON_VALIDACION_FISCAL" : "PAUSADO", dispersion: "TRANSFERENCIA_Y_TDC_CON_VALIDACIONES" };

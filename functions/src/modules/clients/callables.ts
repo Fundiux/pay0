@@ -11,6 +11,7 @@ import { IQ_PAYMENT_APPLICATION_SECRETS } from "../paymentApplications/iqExecuti
 import { syncIqClientById } from "./iqLinkCallable";
 import { isIqAutomationFlowEnabled } from "../iq/automationRuntime";
 import type { PaymentApplicationActor } from "../paymentApplications/service";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "../iq/originIdentity";
 import { upsertClientKycRfcIntake } from "../clientKyc/service";
 import {
   bindClientCsfIntake,
@@ -41,7 +42,6 @@ export const saveClientCallable = onCall(
         callerRootId,
         "crearCliente",
       );
-
     const requestedAdminId = String(request.data?.adminId || "").trim();
 
     const effectiveAdminId = resolveClientSaveAdminId({ role: callerRole, callerUid, callerAdminId: (caller as any)?.adminId, requestedAdminId });
@@ -56,6 +56,14 @@ export const saveClientCallable = onCall(
       requiredModule: "clientes",
       requiredAction: editingId ? "edit" : "create",
     });
+    const clientOriginIdentity = !editingId && iqClientAutomationEnabled
+      ? await captureIqOriginIdentity({
+          actorUid: callerUid,
+          rootId: callerRootId,
+          role: callerRole,
+          moduleKey: "clients",
+        })
+      : null;
     const managedByUserId = String(request.data?.managedByUserId || callerUid).trim() || callerUid;
     const identity = normalizeClientIdentity(request.data);
     const { name, rfc, email, whatsapp } = identity;
@@ -232,6 +240,7 @@ try { assertValidClientIdentity(identity); } catch (error: any) {
 
       tx.set(clientRef, {
         ...payload,
+        ...(clientOriginIdentity ? buildIqOriginIdentityPatch(clientOriginIdentity) : {}),
         active: true,
         ...buildClientSequenceFields({ number: numeroCliente, adminId: effectiveAdminId, counterPath: seq.counterPath }),
         createdBy: callerUid,

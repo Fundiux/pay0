@@ -1,6 +1,3 @@
-import {
-  loadIqCanonicalUserAccess,
-} from "./iqCanonicalAccess";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
@@ -33,6 +30,10 @@ import {
   resolveIqDepositCatalogHttp,
 } from "./iqDepositHttpCatalogResolver";
 import {
+  assertIqIdentityInvariant,
+  resolveEffectiveIqIdentity,
+} from "./originIdentity";
+import {
   runPagoDepositHttpFindByRefsA52,
   runPagoDepositHttpFindCandidatesA52,
 } from "./pagoDepositHttpReconcileA52";
@@ -58,6 +59,7 @@ type AuthContext = {
   role: string;
   rootId: string;
   user: Record<string, unknown>;
+  historicalIqOrigin?: boolean;
 };
 
 type IqAccess = {
@@ -67,6 +69,8 @@ type IqAccess = {
   username: string;
   password: string;
   erpUrl: string;
+  originIqProfileId?: string;
+  identityResolutionReason?: string;
 };
 
 type IqCreateDepositBatchItem = Record<string, any>;
@@ -261,6 +265,7 @@ async function getAuthContext(request: {
 }
 
 function canUsePagos(auth: AuthContext): boolean {
+  if (auth.historicalIqOrigin) return true;
   if (auth.role === "superadmin") return true;
 
   const modules = asRecord(auth.user.modules);
@@ -269,28 +274,30 @@ function canUsePagos(auth: AuthContext): boolean {
   return pagos.create === true || pagos.conciliate === true || pagos.view === true;
 }
 
-async function getIqAccessForPagos(
+async function getIqAccessForPagoOrigin(
   auth: AuthContext,
+  pago: Record<string, unknown>,
   includePassword: boolean,
 ): Promise<IqAccess> {
-  const canonical = await loadIqCanonicalUserAccess({
-    uid: auth.uid,
+  const identity = await resolveEffectiveIqIdentity({
+    movement: pago,
     rootId: auth.rootId,
-    role: auth.role,
-    moduleKey: "pagos",
+    authorizedActorUid: auth.uid,
     encryptionSecret: IQ_CREDENTIALS_KEY.value(),
     includePassword,
   });
-
+  assertIqIdentityInvariant(identity);
   return {
-    profileId: canonical.profileId,
-    profileAlias: canonical.profileAlias,
+    profileId: identity.effectiveIqProfileId,
+    profileAlias: identity.credentialProfile.profileAlias,
     associatedName:
-      canonical.associatedName ||
-      canonical.username,
-    username: canonical.username,
-    password: canonical.password,
-    erpUrl: canonical.erpUrl,
+      identity.originIqContext.associatedName ||
+      identity.credentialProfile.username,
+    username: identity.credentialProfile.username,
+    password: identity.credentialProfile.password,
+    erpUrl: identity.credentialProfile.erpUrl,
+    originIqProfileId: identity.originIqProfileId,
+    identityResolutionReason: identity.identityResolutionReason,
   };
 }
 function assertSameRoot(data: Record<string, unknown>, rootId: string, label: string): void {
@@ -798,7 +805,7 @@ async function buildPagoIqDepositContext(input: {
   const pago = resolvedPagoH4D61B.data;
   const resolvedPagoIdH4D61B = cleanText(pagoSnap.id ?? pagoRef.id ?? input.pagoId); // H4_D61B_BUILD_CONTEXT_RESOLVE_PAY0_FOLIO
 
-  const access = await getIqAccessForPagos(input.auth, input.includePassword);
+  const access = await getIqAccessForPagoOrigin(input.auth, pago, input.includePassword);
 
   const clienteId = cleanText(pago.clienteId ?? pago.clientId);
   const companyId = cleanText(pago.companyId ?? pago.empresaId);
@@ -978,6 +985,10 @@ async function buildPagoIqDepositContext(input: {
           status: prevalidationStatus,
           version: IQ_PAGO_DEPOSIT_PREVALIDATION_VERSION,
           profileId: access.profileId,
+          originIqProfileId: access.originIqProfileId || access.profileId,
+          effectiveIqProfileId: access.profileId,
+          identityResolutionReason: access.identityResolutionReason || "PERSISTED_ORIGIN",
+          authorizedActorUid: input.auth.uid,
           profileAlias: access.profileAlias || null,
           iqAssociatedName: access.associatedName,
           iqClientName: iqClientName || null,
@@ -2177,7 +2188,9 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
    * Ese fallback hacia que pagos de otros despachos usaran
    * la cuenta IQ del superadmin/root.
    */
+  const hasPersistedIqOrigin = Boolean(cleanText(pago.originIqProfileId));
   const uid = cleanText(
+    pago.originActorUid ??
     pago.createdBy ??
     pago.adminId ??
     pago.userId ??
@@ -2230,7 +2243,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     }
   }
 
-  if (!userFound) {
+  if (!userFound && !hasPersistedIqOrigin) {
     throw new HttpsError(
       "failed-precondition",
       "H4_D63A_AUTOMATION_SCOPE: El usuario creador del pago no existe.",
@@ -2242,7 +2255,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     rootId,
   );
 
-  if (userRootId && userRootId !== rootId) {
+  if (!hasPersistedIqOrigin && userRootId && userRootId !== rootId) {
     throw new HttpsError(
       "permission-denied",
       "H4_D63A_AUTOMATION_SCOPE: El usuario creador no pertenece al root del pago.",
@@ -2251,7 +2264,10 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
 
   const role = cleanText(
     user.role ??
-    user.userRole,
+    user.userRole ??
+    pago.originActorRole ??
+    pago.actorRole ??
+    "operador",
   ).toLowerCase();
 
   if (!role) {
@@ -2261,7 +2277,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     );
   }
 
-  const explicitDespachoAccess =
+  const explicitDespachoAccess = hasPersistedIqOrigin ||
     await verifyPagoIqAutomaticDespachoAccessH4D63A(
       uid,
       despachoId,
@@ -2278,6 +2294,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     uid,
     role,
     rootId,
+    historicalIqOrigin: hasPersistedIqOrigin,
     user: {
       ...user,
       uid,

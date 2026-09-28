@@ -211,6 +211,8 @@ async function persistLinked(params: {
         linkedAt: now,
         linkedBy: params.actor.uid,
         linkedByName: params.actor.displayName,
+        profileId: params.profileId,
+        profileAlias: params.profileAlias || null,
         updatedAt: now,
         reviewReason: FieldValue.delete(),
         candidates: FieldValue.delete(),
@@ -235,6 +237,11 @@ async function persistLinked(params: {
       },
       iqClientId: params.resolved.id,
       iqClientName: params.resolved.name,
+      originClientIqLink: {
+        profileId: params.profileId,
+        clientIqId: params.resolved.id,
+        clientIqName: params.resolved.name,
+      },
       updatedAt: now,
       updatedBy: params.actor.uid,
       updatedByName: params.actor.displayName,
@@ -322,10 +329,10 @@ export async function syncIqClientById(params: {
     );
   }
 
-  const access = await resolveIqAccess(
-    params.actor,
-    {capability:"CLIENTS"},
-  );
+  const access = await resolveIqAccess(params.actor, {
+    capability:"CLIENTS",
+    movement: client,
+  });
   const profileLinks = asRecord(client.iqLinksByProfile);
   const profileLink = asRecord(profileLinks[access.profileId]);
   const legacyLink = asRecord(client.iqLink);

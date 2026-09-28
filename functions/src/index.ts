@@ -36,6 +36,10 @@ import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
 import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
+import {
+  buildIqOriginIdentityPatch,
+  captureIqOriginIdentity,
+} from "./modules/iq/originIdentity";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -1751,10 +1755,11 @@ export const createPago = onCall(
       throw new HttpsError("invalid-argument", "operationTypeKey requerido.");
     }
 
-    const [operationTypeSnap, clientSnap, companySnap, delegatedClientAccess, directCompanyAccessSnap] = await Promise.all([
+    const [operationTypeSnap, clientSnap, companySnap, despachoSnap, delegatedClientAccess, directCompanyAccessSnap] = await Promise.all([
       db.doc(`operationTypes/${operationTypeKeyValue}`).get(),
       db.doc(`clients/${clienteId}`).get(),
       db.doc(`companies/${companyId}`).get(),
+      db.doc(`despachos/${costGuardDespachoId}`).get(),
       role === "superadmin"
         ? Promise.resolve(null)
         : getActiveClientDelegationAccess(
@@ -1857,6 +1862,27 @@ export const createPago = onCall(
       }
     }
     __mark("authorization_and_access");
+
+    const iqOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "pagos",
+          despachoId: companyDespachoId,
+          companyId: String(companyId),
+        })
+      : null;
+    const originClientProfileLink = iqOriginIdentity
+      ? (clientData?.iqLinksByProfile?.[iqOriginIdentity.originIqProfileId] || null)
+      : null;
+    const originClientIqLink = iqOriginIdentity && originClientProfileLink?.clientId
+      ? {
+          profileId: iqOriginIdentity.originIqProfileId,
+          clientIqId: String(originClientProfileLink.clientId),
+          clientIqName: String(originClientProfileLink.clientName || "") || null,
+        }
+      : null;
 
 
     const operationTypeName = String(
@@ -2124,6 +2150,8 @@ export const createPago = onCall(
         adminId,
         actorUid: uid,
         actorRole,
+        ...(iqOriginIdentity ? buildIqOriginIdentityPatch(iqOriginIdentity) : {}),
+        ...(originClientIqLink ? { originClientIqLink } : {}),
         accessSource: businessFolioContextPago.accessSource,
         delegatedClientAccessPath: businessFolioContextPago.delegatedClientAccessPath,
         clienteId: String(clienteId),

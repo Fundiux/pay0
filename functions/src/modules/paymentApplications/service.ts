@@ -51,6 +51,20 @@ type ReservationResult = {
   result?: Record<string, any> | null;
 };
 
+function inheritedIqOrigin(pago: DocumentData): Record<string, unknown> {
+  const profileId = String(pago?.originIqProfileId || "").trim();
+  if (!profileId) return {};
+  return {
+    originActorUid: String(pago?.originActorUid || pago?.createdBy || "").trim(),
+    originRootId: String(pago?.originRootId || pago?.rootId || "").trim(),
+    originIqProfileId: profileId,
+    originIqContext: pago?.originIqContext || null,
+    originClientIqLink: pago?.originClientIqLink || null,
+    identityRevision: String(pago?.identityRevision || "IQ_ORIGIN_IDENTITY_V1"),
+    identityCapturedAt: pago?.identityCapturedAt || null,
+  };
+}
+
 
 
 function assertRootScope(entity: DocumentData, rootId: string): void {
@@ -299,6 +313,9 @@ export async function reservePaymentApplicationBatch(params: {
 
     tx.set(reservationRef, {
       ...buildReservationPayload({ actor, batch, status: "RESERVED" }),
+      ...inheritedIqOrigin(pago),
+      authorizedBy: actor.uid,
+      authorizedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -625,6 +642,9 @@ export async function applyPaymentApplicationBatchAtomic(params: {
         status: "APLICADA",
         iqExecutionStatus: "NOT_REQUESTED",
         iqActionExecuted: false,
+        ...inheritedIqOrigin(pago),
+        authorizedBy: actor.uid,
+        authorizedAt: FieldValue.serverTimestamp(),
         createdBy: actor.uid,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -802,6 +822,9 @@ export async function applyPaymentApplicationBatchAtomic(params: {
           status: "APPLIED",
           result,
         }),
+        ...inheritedIqOrigin(pago),
+        authorizedBy: actor.uid,
+        authorizedAt: FieldValue.serverTimestamp(),
         createdAt: reservationSnap.exists
           ? reservationSnap.data()?.createdAt || FieldValue.serverTimestamp()
           : FieldValue.serverTimestamp(),

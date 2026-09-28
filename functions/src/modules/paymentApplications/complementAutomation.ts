@@ -201,6 +201,11 @@ export async function enqueueComplement(applicationId: string) {
     if (latest.data()?.automationJobId === id) return;
     if (existing.exists && existing.data()?.rootId !== app.rootId) throw Error("REP_JOB_SCOPE");
     if (!existing.exists) tx.create(jobRef, { rootId: app.rootId, provider, depositId, profileId, actorUid, clientId: solicitud.clienteId,
+      originActorUid: text(app.originActorUid || actorUid),
+      originRootId: app.rootId,
+      originIqProfileId: text(app.originIqProfileId || profileId),
+      originIqContext: app.originIqContext || null,
+      identityRevision: text(app.identityRevision || "IQ_ORIGIN_IDENTITY_V1"),
       applicationId, requestIdentity: provider === "IQ" ? canonicalId : null,
       status: "QUEUED", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     // A late application must be checked against the received REP. Never
@@ -225,7 +230,11 @@ export async function markIqSending(id: string) {
         row.data().requestedAt || ["REQUESTED", "RECEIVED", "REQUEST_STATE_UNKNOWN"].includes(row.data().status)))
       throw Error("REP_IQ_REQUEST_PREVIOUS_EVIDENCE");
     tx.update(ref, { status: "SENDING", requestIdentity: identity, attemptedAt: FieldValue.serverTimestamp(),
-      attemptProfileId: job.profileId, attemptActorUid: job.actorUid, updatedAt: FieldValue.serverTimestamp() });
+      attemptProfileId: job.originIqProfileId || job.profileId,
+      originIqProfileId: job.originIqProfileId || job.profileId,
+      effectiveIqProfileId: job.originIqProfileId || job.profileId,
+      identityResolutionReason: job.originIqProfileId ? "PERSISTED_ORIGIN" : "LEGACY_EXECUTION_EVIDENCE",
+      attemptActorUid: job.actorUid, updatedAt: FieldValue.serverTimestamp() });
     for (const row of linked.docs) tx.update(row.ref, { automationStatus: "SENDING", status: "SENDING", updatedAt: FieldValue.serverTimestamp() });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
       referenceId: id, referenceType: "complementoPago", description: "Solicitud IQ C reservada de forma durable antes del POST; cualquier resultado incierto bloquea reenvío." });
