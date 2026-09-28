@@ -21,10 +21,25 @@ assert.match(gateway, /authorize\(candidateToken, controller\.signal\)/);
 assert.match(gateway, /rootId: scope\.rootId/);
 assert.match(gateway, /function_call_output/);
 assert.match(gateway, /response\.create/);
+assert.match(gateway, /interrupt_response: false/);
+assert.match(gateway, /interruptionConfirmationMs = 300/);
+assert.match(gateway, /output_audio_buffer\.clear/);
+assert.doesNotMatch(component, /audioRef\.current\.muted = true/);
 assert.match(history, /agent007Conversations/);
 assert.match(history, /voiceSessions/);
 assert.match(history, /rootId: actor\.rootId/);
 assert.match(history, /ownerUid: actor\.uid/);
+assert.doesNotMatch(history, /data\.turns\) \? data\.turns\.slice/);
+assert.doesNotMatch(history, /data\.events\) \? data\.events\.slice/);
+assert.match(history, /turnId}:\$\{speaker}:\$\{responseId \|\| "input"}/);
+assert.match(gateway, /gpt-4o-mini-transcribe/);
+assert.match(gateway, /HUGO_BUILD_COMMIT/);
+assert.match(component, /pendingTurns/);
+assert.match(component, /conversation\.item\.input_audio_transcription\.failed/);
+assert.match(component, /CANARY · \{gatewayRevision\} · frontend/);
+assert.match(component, /NEXT_PUBLIC_PAY0_BUILD_COMMIT/);
+assert.match(component, /setGatewayRuntime\(answer\.runtime\?\.revision && answer\.runtime\?\.commit/);
+assert.doesNotMatch(component, /NEXT_PUBLIC_HUGO_GATEWAY_REVISION/);
 
 console.log(JSON.stringify({
   ok: true,
@@ -32,6 +47,10 @@ console.log(JSON.stringify({
   browserDirectRealtimeDisabled: true,
   registeredTools: expectedTools.length,
   toolContinuationRequired: true,
+  confirmedInterruptions: true,
   historyScopedByRootAndOwner: true,
+  incrementalHistory: true,
+  nativeInputTranscription: true,
+  collisionSafeResponseIdentity: true,
   externalActions: 0,
 }));

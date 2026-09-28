@@ -2944,7 +2944,7 @@ export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturama
 export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";
 export { createHugoRealtimeSession } from "./modules/agent007/realtimeVoice";
 export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modules/agent007/voiceDelegation";
-export { saveHugoVoiceHistory, getHugoVoiceSession } from "./modules/agent007/voiceHistory";
+export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";

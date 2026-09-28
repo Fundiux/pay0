@@ -20,12 +20,11 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-const expectedEndpointCount = 340;
+// ASTRA adds 2 identities, 4 payment continuations, 12 commission operations,
+// 1 materiality projection, 1 receipt certificate, 11 corporate resources and
+// 1 scoped voice-activity reader to the certified 309-endpoint baseline.
+const expectedEndpointCount = 341;
 const requiredEndpoints = [
-  "getMyCommissionSettings", "configureUserCommissionEntitlement", "previewUserCommissionWithdrawal", "requestUserCommissionDispersion", "executeUserCommissionDispersion", "cancelUserCommissionDispersion", "prepareDailyUserCommissions",
-  "applyPaymentAutomaticallyOnReconciliation", "applyPaymentAutomaticallyOnReceipt", "applyPaymentsAutomaticallyOnInvoice", "enqueuePaymentApplicationImmediately", "refreshMaterialityFromPaymentApplication",
-  "listCorporateResources", "getCorporateResource", "generateSolicitudReceiptCertificate",
-  'loginWithUsername', 'setMyUsername',
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
@@ -34,6 +33,16 @@ const requiredEndpoints = [
   "processIqDispersionCreate",
   "previewPaymentCommissionDistribution",
   "authorizeHugoVoiceGatewaySession",
+  "loginWithUsername", "setMyUsername",
+  "applyPaymentAutomaticallyOnReconciliation", "applyPaymentAutomaticallyOnReceipt",
+  "applyPaymentsAutomaticallyOnInvoice", "enqueuePaymentApplicationImmediately",
+  "getMyCommissionSettings", "configureUserCommissionEntitlement", "previewMyCommissionDestinations", "saveMyCommissionDestinations",
+  "requestUserCommissionDispersion", "previewUserCommissionWithdrawal", "executeUserCommissionDispersion", "cancelUserCommissionDispersion",
+  "getCommissionAutomationConfig", "saveCommissionAutomationConfig", "runDailyUserCommissionPreflight", "prepareDailyUserCommissions",
+  "refreshMaterialityFromPaymentApplication", "generateSolicitudReceiptCertificate",
+  "listCorporateResources", "getCorporateResource", "prepareCorporateResourceMigration", "importCorporateResource",
+  "reviewCorporateResourceVersion", "activateCorporateResourceVersion", "restoreCorporateResourceVersion", "retireCorporateResourceVersion",
+  "getCorporateResourceDownloadUrl", "initCorporateResourceUpload", "finalizeCorporateResourceUpload", "listHugoVoiceActivity",
 ];
 
 function fail(message) {

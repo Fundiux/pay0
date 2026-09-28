@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure } from "../src/gatewayConnection.mjs";
+import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
 
 const TOKEN = "test-token-never-log-this", UID = "configured-canary-user", ROOT = "configured-root";
 const auth = { type: "authenticate", idToken: TOKEN };
@@ -82,6 +82,7 @@ test("valid token outside configured allowlist: zero authorization and Realtime"
   await h.browser.receive(auth);
   await assertRejectedThenCannotRecover(h);
   assert.equal(h.counts.authorize, 0);
+  assert.deepEqual(Object.fromEntries(Object.entries(h.logs.find(item => item.type === "gateway.authorization_blocked")).filter(([key]) => !["type", "gatewaySessionId"].includes(key))), { restrictionType: "CANONICAL_AUTHORIZATION", tool: "VOICE_SESSION", reason: "CANARY_NOT_ALLOWED", sensitiveResourceStored: false });
 });
 
 test("empty allowlist fails closed: zero Realtime", async () => {
@@ -231,8 +232,8 @@ test("sideband connection timeout terminates authorization and clears context", 
   assertCleared(h, 1); assert.equal(h.browser.closes[0].code, 1008);
 });
 
-test("simulated E2E preserves tool deduplication, continuation and interruption without network", async () => {
-  const h = harness(); await h.browser.receive(auth); await h.browser.receive(offer);
+test("simulated E2E confirms sustained interruption before cancelling playback", async () => {
+  const h = harness({ interruptionConfirmationMs: 5 }); await h.browser.receive(auth); await h.browser.receive(offer);
   const sideband = h.sidebands[0];
   await sideband.receive({ type: "conversation.item.created", item: { id: "turn-1", type: "message", role: "user" } });
   await sideband.receive({ type: "response.created", response: { id: "response-1" } });
@@ -240,12 +241,63 @@ test("simulated E2E preserves tool deduplication, continuation and interruption 
   await sideband.receive(tool); await sideband.receive(tool);
   await sideband.receive({ type: "response.done", response: { id: "response-1", output: [{ type: "function_call", call_id: "tool-1" }] } });
   await sideband.receive({ type: "response.done", response: { id: "response-1", output: [{ type: "function_call", call_id: "tool-1" }] } });
+  await sideband.receive({ type: "response.created", response: { id: "response-2" } });
   await sideband.receive({ type: "input_audio_buffer.speech_started", item_id: "turn-2" });
+  await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(h.counts.realtime, 1); assert.equal(h.counts.delegate, 1);
   assert.equal(sideband.sent.filter(event => event.type === "conversation.item.create").length, 1);
   assert.equal(sideband.sent.filter(event => event.type === "response.create").length, 1);
-  const interruption = h.browser.sent.find(event => event.type === "gateway.interruption");
+  assert.deepEqual(sideband.sent.slice(-2).map(event => event.type), ["response.cancel", "output_audio_buffer.clear"]);
+  const interruption = h.browser.sent.find(event => event.type === "gateway.interruption_confirmed");
   assert.equal(interruption.turnId, "turn-1"); assert.equal(interruption.retained[0].status, "COMPLETED");
+  h.browser.close(); assertCleared(h, 1);
+});
+
+test("voice tool failures never expose codes, identifiers or protected existence", () => {
+  const denied = safeVoiceToolFailureOutput({ errorCategory: "PERMISSION_DENIED", errorCode: "SECRET_ID_123", retryable: false });
+  assert.deepEqual(denied, { status: "BLOCKED", text: "Esta consulta está fuera del alcance autorizado de tu sesión." });
+  assert.doesNotMatch(JSON.stringify(denied), /SECRET|UUID|FIRESTORE|PAYMENT/i);
+  const missing = safeVoiceToolFailureOutput({ errorCategory: "ENTITY_NOT_FOUND", errorCode: "PAY0_PAYMENT_REFERENCE_NOT_FOUND", retryable: false });
+  assert.deepEqual(missing, { status: "NOT_FOUND", text: "No encontré información que coincida con esa consulta." });
+  assert.notEqual(denied.text, missing.text);
+});
+
+test("Cloud Run runtime without immutable build metadata fails closed before Realtime", async () => {
+  const h = harness({ runtimeMetadata: { revision: "candidate-00001", commit: "UNSET", branch: "UNSET" } });
+  await h.browser.receive(auth); await h.browser.receive(offer);
+  assertCleared(h, 0);
+  assert.equal(h.logs.find(item => item.type === "gateway.request_rejected")?.code, "GATEWAY_BUILD_METADATA_MISSING");
+});
+
+test("short VAD activation is rejected without cancelling response or playback", async () => {
+  const h = harness({ interruptionConfirmationMs: 20 }); await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn-1", type: "message", role: "user" } });
+  await sideband.receive({ type: "response.created", response: { id: "response-1" } });
+  await sideband.receive({ type: "input_audio_buffer.speech_started", item_id: "turn-noise" });
+  await sideband.receive({ type: "input_audio_buffer.speech_stopped", item_id: "turn-noise" });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(sideband.sent.some(event => ["response.cancel", "output_audio_buffer.clear"].includes(event.type)), false);
+  assert.ok(h.browser.sent.some(event => event.type === "gateway.interruption_rejected"));
+  assert.equal(h.logs.filter(event => event.type === "gateway.interruption_rejected").length, 1);
+  h.browser.close(); assertCleared(h, 1);
+});
+
+test("first-audio telemetry is measured independently for each response", async () => {
+  const h = harness(); await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn-1", type: "message", role: "user" } });
+  await sideband.receive({ type: "input_audio_buffer.speech_stopped", item_id: "turn-1" });
+  await sideband.receive({ type: "response.created", response: { id: "response-1" } });
+  await sideband.receive({ type: "response.output_audio.delta", response_id: "response-1", delta: "simulated" });
+  await sideband.receive({ type: "response.output_audio.done", response_id: "response-1" });
+  await sideband.receive({ type: "response.done", response: { id: "response-1", output: [] } });
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn-2", type: "message", role: "user" } });
+  await sideband.receive({ type: "input_audio_buffer.speech_stopped", item_id: "turn-2" });
+  await sideband.receive({ type: "response.created", response: { id: "response-2" } });
+  await sideband.receive({ type: "response.output_audio.delta", response_id: "response-2", delta: "simulated" });
+  assert.deepEqual(h.logs.filter(event => event.type === "gateway.first_audio").map(event => event.responseId), ["response-1", "response-2"]);
+  assert.equal(h.logs.filter(event => event.type === "gateway.response_created").length, 2);
   h.browser.close(); assertCleared(h, 1);
 });
 

@@ -35,15 +35,15 @@ const reasons: Record<string, string> = {
   REP_GATE_QUOTA_ZERO: "Cuota de consulta deshabilitada",
 };
 const recoveryLabel = (row: ComplementInventoryException) => row.bReadState === "EXCEPTION"
-  ? "Lectura B detenida; Hugo aisló este expediente y requiere revisión de la excepción"
+  ? "Lectura B detenida; María aisló este expediente y requiere revisión de la excepción"
   : row.operationalTags?.includes("uncertainC")
-  ? "Resultado de C incierto; Hugo seguirá consultando el adjunto mediante B, sin repetir C"
+  ? "Resultado de C incierto; María seguirá consultando el adjunto mediante B, sin repetir C"
   : row.operationalTags?.includes("requestedC")
-    ? "Solicitud C registrada; Hugo seguirá consultando el adjunto mediante B"
+    ? "Solicitud C registrada; María seguirá consultando el adjunto mediante B"
   : row.operationalTags?.includes("waitingB")
-    ? `Hugo revisará el adjunto en la siguiente corrida diaria${row.nextCheckAt ? `, elegible desde ${new Date(row.nextCheckAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })} CDMX` : ""}`
+    ? `María revisará el adjunto en la siguiente corrida diaria${row.nextCheckAt ? `, elegible desde ${new Date(row.nextCheckAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })} CDMX` : ""}`
   : row.recoveryState === "GATE_BLOCKED"
-  ? `Hugo encontró el caso, pero no tiene autorización para consultar IQ: ${reasons[row.recoveryReason || ""] || row.recoveryReason}`
+  ? `María encontró el caso, pero no tiene autorización para consultar IQ: ${reasons[row.recoveryReason || ""] || row.recoveryReason}`
   : row.recoveryState === "WAITING_IQ_APPLICATION" ? "Sin confirmación suficiente de aplicación IQ"
   : row.recoveryState === "READY_FOR_IQ_LOOKUP" ? "Listo localmente para consulta IQ; IQ aún no consultado"
   : row.recoveryState === "LOCAL_EVIDENCE_INCOMPLETE" ? "Falta evidencia local para consultar IQ" : "";

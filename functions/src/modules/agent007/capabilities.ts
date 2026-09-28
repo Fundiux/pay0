@@ -148,7 +148,7 @@ export async function executeRequestIqComplement(input: {
     referenceType: "paymentComplementRequest",
     relatedEntityId: source.pagoId,
     relatedEntityType: "pago",
-    description: `Hugo ejecutó la capacidad REQUEST_IQ_PAYMENT_COMPLEMENT para ${source.solicitudFolio || source.pagoFolio || source.applicationId}.`,
+    description: `María ejecutó la capacidad REQUEST_IQ_PAYMENT_COMPLEMENT para ${source.solicitudFolio || source.pagoFolio || source.applicationId}.`,
     extra: {
       capability: "REQUEST_IQ_PAYMENT_COMPLEMENT",
       applicationId: source.applicationId,

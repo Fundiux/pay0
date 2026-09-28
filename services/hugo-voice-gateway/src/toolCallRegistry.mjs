@@ -16,5 +16,9 @@ export class ToolCallRegistry {
     }
     return { cancelled, retained };
   }
+  hasActive(turnId) {
+    for (const state of this.#calls.values()) if (state.turnId === turnId && ["PENDING", "RUNNING"].includes(state.status)) return true;
+    return false;
+  }
   canDeliver(id) { const state = this.#calls.get(id); return state?.status === "RUNNING" || state?.status === "COMPLETED"; }
 }

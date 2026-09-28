@@ -56,7 +56,7 @@ export const recordAgent007Observation = onCall(
       actorUid: uid, actorRole: String(getUserRole(user)), authorization: { role: String(getUserRole(user)), scope: "rootId", rootId },
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null,
     });
-    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: observationId, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `Hugo registró observación supervisada: ${intent}` });
+    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: observationId, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `María registró observación supervisada: ${intent}` });
     return { ok: true, observationId };
   }
 );
@@ -123,7 +123,7 @@ export const resolveAgent007Recommendation = onCall(
       return true;
     });
     if (!resolved) return { ok: true, alreadyResolved: true };
-    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: recommendationId, referenceType: "agent007Recommendation", relatedEntityId: clean(row.caseId, 128), relatedEntityType: clean(row.caseType, 40), description: `Hugo Fase 2: recomendacion ${decision.toLowerCase()}` });
+    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: recommendationId, referenceType: "agent007Recommendation", relatedEntityId: clean(row.caseId, 128), relatedEntityType: clean(row.caseType, 40), description: `María Fase 2: recomendacion ${decision.toLowerCase()}` });
     return { ok: true };
   },
 );
@@ -183,7 +183,7 @@ export const sendAgent007Message = onCall(
   async (request) => {
     const { uid, user, rootId } = await actor(request);
     const text = clean(request.data?.text, 2000);
-    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
+    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para María.");
     const startedAt = Date.now();
     const scope = normalizeHugoScope(request.data?.scope);
     const profile = classifyHugoProfile(text);
@@ -314,7 +314,7 @@ export const createAgent007MemoryCandidate = onCall(
     const entityReference = raw ? { sourceSystem: clean(raw.sourceSystem, 40), entityType: clean(raw.entityType, 40), entityId: clean(raw.entityId, 160), displayReference: clean(raw.displayReference, 80) || undefined } : undefined;
     if (entityReference && (!entityReference.sourceSystem || !entityReference.entityType || !entityReference.entityId)) throw new HttpsError("invalid-argument", "Entidad inválida.");
     const result = await hugoData.createMemoryCandidate({ rootId, actorUid: uid, kind: kind as "USER_STATEMENT" | "PREFERENCE" | "DECISION" | "EXPERIENCE", content, entityReference });
-    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: `Hugo creó candidato de memoria ${kind}` });
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: `María creó candidato de memoria ${kind}` });
     return { ok: true, ...result, status: "CANDIDATE" };
   },
 );
@@ -327,7 +327,7 @@ export const reviewAgent007MemoryCandidate = onCall(
     const supersedesId = clean(request.data?.supersedesId, 160) || undefined;
     if (!id || !["CONFIRM", "REJECT"].includes(decision) || decision === "REJECT" && supersedesId) throw new HttpsError("invalid-argument", "Revisión de memoria inválida.");
     const result = await hugoData.reviewMemoryCandidate(rootId, uid, id, decision as "CONFIRM" | "REJECT", supersedesId);
-    if (result.changed) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: id, referenceType: "agent007Memory", description: `Hugo revisó candidato de memoria: ${decision}` });
+    if (result.changed) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: id, referenceType: "agent007Memory", description: `María revisó candidato de memoria: ${decision}` });
     return { ok: true, ...result };
   },
 );
@@ -339,7 +339,7 @@ export const linkAgent007VerifiedExperience = onCall(
     const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
     if (!observationId || !decisionId || !outcomeId) throw new HttpsError("invalid-argument", "Vínculos obligatorios.");
     const result = await hugoData.linkVerifiedExperience(rootId, observationId, decisionId, outcomeId);
-    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "Hugo vinculó experiencia con resultado verificado" });
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "María vinculó experiencia con resultado verificado" });
     return { ok: true, ...result };
   },
 );

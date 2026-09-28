@@ -21,6 +21,16 @@ const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCat
 type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "getLatestSolicitudForUser" | "getLatestPagoForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
 const paymentStatusesConciliated = new Set(["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]);
 const money = (value: unknown, currency = "MXN") => Number(value || 0).toLocaleString("es-MX", { style: "currency", currency });
+const actorRef = (uid: string) => createHash("sha256").update(`hugo-voice:${uid}`).digest("hex").slice(0, 24);
+const safeAuditTool = (tool: string) => tool === "VOICE_SESSION" ? tool : VOICE_PLATFORM_TOOLS.has(tool) ? tool : tool ? "UNRECOGNIZED_VOICE_TOOL" : "VOICE_SESSION";
+export const safeVoiceSourceTrace = (trace: any) => ({ tool: clean(trace?.tool, 80) || null, sourceSystem: clean(trace?.sourceSystem, 40) || null, latencyMs: Math.max(0, Number(trace?.latencyMs) || 0), completeness: clean(trace?.completeness, 30) || null, result: clean(trace?.result, 30) || null });
+async function recordSecurityBlock(uid: string, tool: string, restrictionType: string, reason: string) {
+  await db.collection("agent007VoiceSecurityAudit").add({ actorRef: actorRef(uid), restrictionType: clean(restrictionType, 60), tool: safeAuditTool(tool), reason: clean(reason, 80) || "DENIED", channel: "VOICE", sensitiveResourceStored: false, createdAt: FieldValue.serverTimestamp() });
+}
+async function assertVoiceAuthorized(request: any, user: any, uid: string, tool: string) {
+  try { return assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] }); }
+  catch (error: any) { await recordSecurityBlock(uid, tool, "CANONICAL_AUTHORIZATION", error?.code === "unauthenticated" ? "UNAUTHENTICATED" : "ROLE_OR_SCOPE_DENIED").catch(() => undefined); throw error; }
+}
 function voiceError(error: unknown) {
   const raw = error instanceof Error ? `${error.name} ${error.message}` : "INTERNAL_ERROR";
   const code = raw.match(/(AUTHORIZATION_DENIED|PERMISSION_DENIED|HUGO_TOOL_NOT_ALLOWED|HUGO_TOOL_UNKNOWN|HUGO_TOOL_INVALID_INPUT|PAY0_PAYMENT_REFERENCE_NOT_FOUND|DEADLINE_EXCEEDED|TIMEOUT|UNAVAILABLE|PAY0_READ_FAILED)/i)?.[1]?.toUpperCase() || "INTERNAL_ERROR";
@@ -98,7 +108,7 @@ export const authorizeHugoVoiceGatewaySession = onCall(
   { region: "us-central1", timeoutSeconds: 15, memory: "256MiB" },
   async request => {
     const uid = requireAuth(request), user = await getMyUser(uid);
-    const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
+    const role = await assertVoiceAuthorized(request, user, uid, "VOICE_SESSION");
     return { ok: true, uid, rootId: clean(user?.rootId || uid, 128), role };
   },
 );
@@ -114,15 +124,15 @@ export const delegateHugoVoiceTurn = onCall(
   { region: "us-central1", timeoutSeconds: 90, memory: "512MiB" },
   async request => {
     const uid = requireAuth(request), user = await getMyUser(uid);
-    assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
-    const rootId = clean(user?.rootId || uid, 128), message = clean(request.data?.request);
     const requestedTool = clean(request.data?.toolName, 80);
+    await assertVoiceAuthorized(request, user, uid, requestedTool);
+    const rootId = clean(user?.rootId || uid, 128), message = clean(request.data?.request);
     const directTool = VOICE_PLATFORM_TOOLS.has(requestedTool) ? requestedTool as VoiceDirectTool : null;
     const sessionId = clean(request.data?.sessionId, 180), turnId = clean(request.data?.turnId, 180);
     const responseId = clean(request.data?.responseId, 180), delegationId = clean(request.data?.delegationId, 180);
     const toolCallId = clean(request.data?.toolCallId || delegationId, 180);
     if (!message || !sessionId || !turnId || !delegationId) throw new HttpsError("invalid-argument", "Delegacion de voz incompleta.");
-    if (requestedTool && !directTool) throw new HttpsError("invalid-argument", "Herramienta de voz no permitida.");
+    if (requestedTool && !directTool) { await recordSecurityBlock(uid, requestedTool, "TOOL_ALLOWLIST", "TOOL_NOT_ALLOWED").catch(() => undefined); throw new HttpsError("invalid-argument", "Herramienta de voz no permitida."); }
     const classified = classifyVoiceRoute(message);
     const { profile, signals } = classified, route = directTool ? "DETERMINISTIC_TOOL" : classified.route;
     if (route === "ECONOMIC_VOICE") return { ok: true, delegationId, route, text: "Puedo responder este turno directamente en la sesion de voz.", cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
@@ -162,13 +172,14 @@ export const delegateHugoVoiceTurn = onCall(
       const ledger = { rootId, ownerUid: uid, sessionId, turnId, responseId: responseId || null, delegationId, toolCallId, route,
         voiceCostUsd: null, delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0,
         provider: null, model: null, tokenUsage: null, latencyMs: Date.now() - started,
-        authorization: { role: identity.role, rootId }, tool: directTool, sourceSystem: result.sourceSystem, sourceTrace: result.trace,
+        authorization: { role: identity.role, rootId }, tool: directTool, sourceSystem: result.sourceSystem, sourceTrace: safeVoiceSourceTrace(result.trace),
         createdAt: FieldValue.serverTimestamp() };
       await db.collection("agent007CostLedger").doc(`${sessionId}_${delegationId}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 500)).set(ledger, { merge: true });
-      return { ok: true, delegationId, route, tool: directTool, sourceSystem: result.sourceSystem, sourceTrace: result.trace,
+      return { ok: true, delegationId, route, tool: directTool, sourceSystem: result.sourceSystem,
         text: formatVoicePlatformResult(directTool, result.data), cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
       } catch (error) {
         const safe = voiceError(error);
+        if (safe.errorCategory === "PERMISSION_DENIED") await recordSecurityBlock(uid, directTool, "CANONICAL_AUTHORIZATION", "TOOL_SCOPE_DENIED").catch(() => undefined);
         await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: { conversationId: `${rootId}_${uid}_global`, sessionId, safeUserRef, system: "PAY0", intent, requestedOperation: intent, selectedCapability: directTool, capability: directTool, status: "ERROR", ...safe, authorization: safe.errorCategory === "PERMISSION_DENIED" ? "DENIED" : "ALLOWED", scope: "CURRENT_AUTHORIZED_ROOT", fallbackUsed: false, attemptCount: 1, latencyMs: Date.now() - started, resultCount: 0, timestamp: new Date().toISOString() } }).catch(() => undefined);
         throw error;
       }
