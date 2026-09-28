@@ -230,14 +230,37 @@ service firebase.storage {
         );
     }
 
+    function canReadUserFundedDispersion(rootId, data) {
+      let user = userDoc();
+      let funding = data.fundingSource;
+      return myRootId() == rootId
+        && funding.sourceClientId == (("clientId" in data) ? data.clientId : data.clienteId)
+        && data.ownerUid == funding.ownerUid
+        && (isSuperAdmin() || funding.ownerUid == request.auth.uid)
+        && (!("active" in user) || user.active != false)
+        && (!("isActive" in user) || user.isActive != false)
+        && (!("disabled" in user) || user.disabled != true)
+        && (!("deleted" in user) || user.deleted != true)
+        && (!("isDeleted" in user) || user.isDeleted != true)
+        && (!("deletedAt" in user) || user.deletedAt == null)
+        && (!("modules" in user) || !("wallet" in user.modules)
+          || (user.modules.wallet != false && (!(user.modules.wallet is map)
+            || ((!("view" in user.modules.wallet) || user.modules.wallet.view != false)
+              && (!("dispersiones" in user.modules.wallet) || user.modules.wallet.dispersiones != false)))));
+    }
+
     function canAccessDispersionDocument(rootId, data) {
       return signedIn()
         && ("rootId" in data)
         && data.rootId == rootId
         && (
+          (("fundingSource" in data) && data.fundingSource.holderType == "USER")
+          ? canReadUserFundedDispersion(rootId, data)
+          : (
           request.auth.uid == rootId
           || ownsDocument(data)
           || dispersionAccessFromData(data)
+          )
         );
     }
 

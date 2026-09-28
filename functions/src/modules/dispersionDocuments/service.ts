@@ -14,6 +14,7 @@ import {
   toMoney,
 } from "./domain";
 import { getEffectiveUserModules, isCanonicalUserActive } from "../users/authorization";
+import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -55,6 +56,8 @@ function canUploadDispersionDocs(user: any): boolean {
 
 async function canAccessDispersion(user: any, uid: string, rootId: string, dispersion: any): Promise<boolean> {
   const role = getRole(user);
+  assertDispersionFundingOwner({ rootId, uid, role, dispersion });
+  if (dispersion.fundingSource?.holderType === "USER") return true;
   const dispersionRootId = String(dispersion?.rootId || "").trim();
   const dispersionAdminId = String(dispersion?.adminId || "").trim();
   const dispersionOperadorId = String(dispersion?.operadorId || "").trim();
@@ -566,6 +569,11 @@ export async function notifyClientDispersionComprobanteFromUploadId(
 
   if (!rootId || !dispersionId || !clientId) {
     return { ok: true, notified: false, reason: "missing_scope" };
+  }
+
+  const principal = await db.doc(`clientDispersions/${dispersionId}`).get();
+  if (principal.data()?.fundingSource?.holderType === "USER") {
+    return { ok: true, notified: false, reason: "private_user_withdrawal" };
   }
 
   const eventId = safeDocId(`COMPROBANTE_DISPERSION_CLIENTE_${clientId}_${dispersionId}_${cleanUploadId}`);

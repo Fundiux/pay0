@@ -8,6 +8,7 @@ import type {
   MatUserHomeResult,
 } from "./domain";
 import { readCanonicalBalanceSummary, readCanonicalStatement } from "../ledger/service";
+import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 
 function cleanText(value: unknown, fallback = "") {
   const text = String(value || "").trim();
@@ -246,7 +247,7 @@ function dispersionToHomeItem(doc: any): MatHomeItem {
   return {
     id: doc.id || folio,
     title: folio,
-    caption: cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || data?.clienteNombre || "", "Dispersion"),
+    caption: data?.fundingSource?.holderType === "USER" ? "Retiro de utilidad" : cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || data?.clienteNombre || "", "Dispersión"),
     amount: formatMoney(amount),
     status: cleanText(data?.status || "PROCESO").toUpperCase(),
     tone: cleanText(data?.incidenceStatus || data?.incidenciaStatus) ? "danger" : "warn",
@@ -264,6 +265,7 @@ async function readRecentDispersionsForClient(db: Firestore, clienteId: string, 
   });
 
   return Array.from(byId.values())
+    .filter(item => item.fundingSource?.holderType !== "USER")
     .sort((a, b) => getMillis((b as any).createdAt) - getMillis((a as any).createdAt))
     .slice(0, limit)
     .map((item) => dispersionToHomeItem(item));
@@ -281,6 +283,9 @@ async function readRecentDispersionsForUser(
   return snap.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
     .filter((item) => {
+      try {
+        assertDispersionFundingOwner({ rootId, uid: cleanText(user.uid || user.id), role: cleanText(user.role).toLowerCase(), dispersion: item });
+      } catch { return false; }
       const clienteId = cleanText((item as any).clienteId || (item as any).clientId);
       return !visibleClientIds.size || visibleClientIds.has(clienteId);
     })

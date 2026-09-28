@@ -327,6 +327,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   if (isPublicRoutePath(path)) return null;
 
   if (path === "/systems") return { href: "/systems" };
+  if (path === "/cuenta") return { href: "/cuenta" };
   if (path === "/assets" || path.startsWith("/assets/")) {
     return { href: "/assets", systemKey: "assets" };
   }

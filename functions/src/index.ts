@@ -2802,6 +2802,10 @@ export {
   getCommissionDistributionsReport,
 } from "./modules/commissionDistributions/callables";
 export { onPaymentReadyForCommissionDistribution } from "./modules/commissionDistributions/triggers";
+export { getMyCommissionSettings, configureUserCommissionEntitlement, previewMyCommissionDestinations, saveMyCommissionDestinations } from "./modules/commissionDistributions/userDestinations";
+export { requestUserCommissionDispersion, previewUserCommissionWithdrawal } from "./modules/commissionDistributions/requests";
+export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from "./modules/commissionDistributions/execution";
+export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";

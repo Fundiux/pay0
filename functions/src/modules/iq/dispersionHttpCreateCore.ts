@@ -1,6 +1,7 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { fetchIqExternal as fetch } from "./externalActionsPolicy";
 import { fetchIq } from "./iqHttpClient";
+import { assertVerifiedIqCommissionInstrument, type VerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
 const IQ_TIME_ZONE = "America/Mexico_City";
@@ -16,6 +17,8 @@ export type IqDispersionCreateItemH4D82A4A1 = {
   amount: number;
   expectedDestinationLast4: string;
   reference: string;
+  fundingHolderType?: "USER" | "CLIENT";
+  verifiedInstrument?: VerifiedIqCommissionInstrument;
 };
 
 export type IqDispersionCreateResultH4D82A4A1 = {
@@ -945,6 +948,13 @@ export async function runIqCreateDispersionHttpH4D85A50(
   let destinationVerified = false;
 
   try {
+    const verified = input.item.fundingHolderType === "USER" ? input.item.verifiedInstrument : undefined;
+    if (input.item.fundingHolderType === "USER") {
+      assertVerifiedIqCommissionInstrument(verified);
+      if (input.item.clientIqId !== verified.clientId || input.item.expectedDestinationLast4 !== verified.last4) {
+        throw new Error("IQ_COMMISSION_VERIFIED_CONTEXT_CHANGED");
+      }
+    }
     const token = await login({
       apiOrigin,
       username: input.username,
@@ -965,6 +975,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
       initialPayload,
       input.item.associatedName,
     );
+    if (verified && String(partner.id) !== verified.partnerId) throw new Error("IQ_COMMISSION_PARTNER_CHANGED");
 
     selected.associated = partner.name;
 
@@ -1017,6 +1028,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
         "IQ_BENEFICIARY_ID_INVALID",
       );
     }
+    if (verified && String(beneficiaryId) !== verified.beneficiaryId) throw new Error("IQ_COMMISSION_BENEFICIARY_CHANGED");
 
     const beneficiaryName =
       rowName(beneficiary);
@@ -1065,6 +1077,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
         ),
         input.item.expectedDestinationLast4,
       );
+    if (verified && String(account.id) !== verified.accountId) throw new Error("IQ_COMMISSION_ACCOUNT_CHANGED");
 
     destinationVerified = true;
 

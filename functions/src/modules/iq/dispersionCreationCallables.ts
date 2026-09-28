@@ -1,3 +1,5 @@
+import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
+import { bindVerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import {
@@ -389,6 +391,7 @@ function isDispersionCreateSchedulerCandidate(
   principal: AnyDoc,
   rootId: string,
 ): boolean {
+  if (principal.iqExecutionHeld === true) return false;
   if (clean(principal.rootId) !== rootId) {
     return false;
   }
@@ -1387,6 +1390,7 @@ export async function runCreateClientDispersionIqCore(input: {
   auth: AuthContext;
   dispersionId: string;
   previewOnly?: boolean;
+  allowCommissionExecution?: boolean;
 }) {
   const auth = input.auth;
   const dispersionId = clean(input.dispersionId);
@@ -1417,6 +1421,9 @@ export async function runCreateClientDispersionIqCore(input: {
   const principal = record(
     principalSnap.data(),
   );
+  assertDispersionFundingOwner({ rootId: auth.rootId, uid: auth.uid, role: auth.role, dispersion: principal });
+  if (principal.fundingSource?.holderType === "USER" && input.allowCommissionExecution !== true && !previewOnly) throw new HttpsError("permission-denied", "La utilidad debe ejecutarse desde su solicitud de comisión autorizada.");
+  if (principal.iqExecutionHeld === true && !previewOnly && !(input.allowCommissionExecution === true && principal.fundingSource?.holderType === "USER")) throw new HttpsError("failed-precondition", "La dispersión conserva una retención explícita de ejecución.");
   
   if (
     clean(principal.rootId) !==
@@ -1535,6 +1542,22 @@ export async function runCreateClientDispersionIqCore(input: {
   const method = record(
     methodSnap.data(),
   );
+  let commissionHistoricalLeg: AnyDoc | undefined;
+  if (principal.fundingSource?.holderType === "USER") {
+    const funding = record(principal.fundingSource);
+    const [commissionSnap, commissionRequestSnap, ownerSnap] = await Promise.all([
+      db.doc(`commissionDistributions/${clean(funding.commissionDistributionId)}`).get(),
+      db.doc(`commissionDispersionRequests/${clean(funding.commissionDistributionId)}`).get(),
+      db.doc(`users/${clean(funding.ownerUid)}`).get(),
+    ]);
+    const commission = record(commissionSnap.data());
+    const owner = record(ownerSnap.data());
+    const historicalLeg = (Array.isArray(commission.legs) ? commission.legs : []).find((leg: AnyDoc) => clean(leg.legId) === clean(funding.commissionLegId));
+    assertAuthorized({ uid: clean(funding.ownerUid) }, owner, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
+    const verifiedAt = timestampMillis(method.iqVerifiedAt);
+    if (owner.disabled === true || owner.deleted === true || owner.deletedAt || clean(owner.rootId || funding.ownerUid) !== auth.rootId || auth.uid !== clean(funding.ownerUid) || clean(funding.sourceClientId) !== clientId || commission.ownerUid !== funding.ownerUid || commission.rootId !== auth.rootId || commission.clientId !== clientId || commissionRequestSnap.data()?.status !== "PROCESSING" || !historicalLeg || historicalLeg.canonicalDispersionId !== dispersionId || historicalLeg.methodId !== methodId || historicalLeg.beneficiaryId !== beneficiaryId || historicalLeg.amountMinor !== Math.round(money(principal.amount) * 100) || clean(method.commissionOwnerUid) !== clean(funding.ownerUid) || upper(method.iqLinkStatus) !== "VERIFIED" || !verifiedAt || Date.now() - verifiedAt > 86400000 || clean(method.iqAccountId) !== clean(historicalLeg.iqAccountId) || clean(method.iqBeneficiaryId) !== clean(historicalLeg.iqBeneficiaryId) || clean(method.last4) !== clean(historicalLeg.instrumentLast4)) throw new HttpsError("failed-precondition", "El titular, la reserva o el instrumento histórico de comisión requiere revisión.");
+    commissionHistoricalLeg = historicalLeg;
+  }
   assertDispersionDestination({ rootId: auth.rootId, clientId, beneficiaryId, dispersionId,
     client, beneficiary, method, legs: legsSnap.docs.map(doc => record(doc.data())) });
   const destination =
@@ -1878,6 +1901,14 @@ export async function runCreateClientDispersionIqCore(input: {
     const item:
       IqDispersionCreateItemH4D82A4A1 =
       {
+        ...(principal.fundingSource?.holderType === "USER" ? {
+          fundingHolderType: "USER" as const,
+          verifiedInstrument: bindVerifiedIqCommissionInstrument({
+            rootId: auth.rootId, despachoId, profileId: access.profileId,
+            clientIqId: clean(record(client.iqLink).clientId ?? client.iqClientId),
+            operationTypeKey, method, historicalLeg: commissionHistoricalLeg,
+          }),
+        } : {}),
         associatedName:
           access.associatedName,
         clientCandidates,

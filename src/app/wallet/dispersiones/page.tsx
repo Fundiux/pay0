@@ -1,5 +1,7 @@
 "use client";
 
+import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
 import { formatDateTime24 } from "@/lib/dateTime";
 import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
@@ -126,6 +128,7 @@ interface MethodRow {
 
 
 interface DispersionRow {
+  fundingSource?: { holderType?: "CLIENT" | "USER"; ownerUid?: string; sourceClientId?: string };
   rootId?: string | null;
   clienteNombre?: string | null;
   clienteId?: string | null;
@@ -252,7 +255,7 @@ function NoteBubble({ note }: any) {
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2">
       <div className="mb-1 text-xs text-slate-400">
-        {note?.createdByName || note?.createdByRole || "Sistema"}
+        {noteAuthorLabel(note)}
       </div>
       <div className="whitespace-pre-wrap text-sm text-slate-100">{note?.text || "-"}</div>
       <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(note?.createdAt)}</div>
@@ -1913,6 +1916,7 @@ export default function WalletDispersionesPage() {
   function canGenerateIqForRow(
     row: any,
   ) {
+    if (row.fundingSource?.holderType === "USER") return false;
     const iqStatus =
       getIqGenerationStatus(row);
 
@@ -2965,13 +2969,14 @@ export default function WalletDispersionesPage() {
             <tbody>
               {displayedRows.map((row, index) => {
                 const busy = incidentBusyId === row.id;
-                const canRequest = row.status === "REGISTRADA" && !row.incidentStatus;
-                const canResolve = isSuperadmin && row.incidentStatus === "SOLICITADA";
+                const isUserWithdrawal = row.fundingSource?.holderType === "USER";
+                const canRequest = !isUserWithdrawal && row.status === "REGISTRADA" && !row.incidentStatus;
+                const canResolve = !isUserWithdrawal && isSuperadmin && row.incidentStatus === "SOLICITADA";
 
               
   return (
                   <tr key={row.id} className={index % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}>
-                    <td className="pay0-td-date text-sky-400" title={String(row.folio || "")}>{row.folio || "-"}</td>
+                    <td className="pay0-td-date text-sky-400" title={String(row.folio || "")}>{row.folio || "-"}{isUserWithdrawal ? <a href="/cuenta" className="block text-[10px] text-amber-300" title="Gestionar desde Mi cuenta">Retiro de utilidad</a> : null}</td>
                     <td
                       className="pay0-td-date text-emerald-300"
                       title={getDispersionIqFolioText(row)}

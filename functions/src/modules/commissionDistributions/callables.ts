@@ -30,6 +30,19 @@ function toIso(value: any): string | null {
   return date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
 }
 
+async function authorizedPayment(request: any, actor: Awaited<ReturnType<typeof auth>>, mutation: boolean) {
+  const paymentId = text(request.data?.paymentId);
+  if (!paymentId || paymentId.includes("/")) throw new HttpsError("invalid-argument", "Pago requerido.");
+  const snap = await db.doc(`pagos/${paymentId}`).get();
+  const payment = snap.data();
+  if (!payment || text(payment.rootId) !== actor.rootId) throw new HttpsError("permission-denied", "Pago fuera de alcance.");
+  await requireClientOperationalAccess({
+    uid: actor.uid, role: actor.role as any, rootId: actor.rootId,
+    clientId: text(payment.clienteId || payment.clientId), permission: mutation ? "operateDispersiones" : "view",
+  });
+  return paymentId;
+}
+
 export const getClientCommissionRule = onCall({ cors: true }, async (request) => {
   const actor = await auth(request);
   const clientId = text(request.data?.clientId);
@@ -82,8 +95,9 @@ export const saveClientCommissionRule = onCall({ cors: true }, async (request) =
 
 export const previewPaymentCommissionDistribution = onCall({ cors: true }, async (request) => {
   const actor = await auth(request);
+  const paymentId = await authorizedPayment(request, actor, false);
   try {
-    return await materializeCommissionDistribution({ paymentId: text(request.data?.paymentId), actorUid: actor.uid, dryRun: true });
+    return await materializeCommissionDistribution({ paymentId, actorUid: actor.uid, dryRun: true, expectedRootId: actor.rootId });
   } catch (error: any) {
     throw new HttpsError("failed-precondition", error?.message || "No se pudo calcular la distribución.");
   }
@@ -91,8 +105,9 @@ export const previewPaymentCommissionDistribution = onCall({ cors: true }, async
 
 export const processPaymentCommissionDistribution = onCall({ cors: true }, async (request) => {
   const actor = await auth(request, "configure");
+  const paymentId = await authorizedPayment(request, actor, true);
   try {
-    return await materializeCommissionDistribution({ paymentId: text(request.data?.paymentId), actorUid: actor.uid });
+    return await materializeCommissionDistribution({ paymentId, actorUid: actor.uid, expectedRootId: actor.rootId });
   } catch (error: any) {
     throw new HttpsError("failed-precondition", error?.message || "No se pudo crear la distribución.");
   }
@@ -105,7 +120,9 @@ export const preflightPaymentCommissionDistribution = onCall({ cors: true, timeo
   const distributionSnap = await db.doc(`commissionDistributions/${distributionId}`).get();
   const distribution: any = distributionSnap.data() || {};
   if (!distributionSnap.exists || text(distribution.rootId) !== actor.rootId) throw new HttpsError("permission-denied", "Distribución fuera de alcance.");
-  await requireClientOperationalAccess({ uid: actor.uid, role: actor.role as any, rootId: actor.rootId, clientId: text(distribution.clientId), permission: "operateDispersiones" });
+  if (distribution.sourceType === "USER_EARNINGS") {
+    if (actor.role !== "superadmin" && distribution.ownerUid !== actor.uid) throw new HttpsError("permission-denied", "Utilidad fuera de alcance.");
+  } else await requireClientOperationalAccess({ uid: actor.uid, role: actor.role as any, rootId: actor.rootId, clientId: text(distribution.clientId), permission: "operateDispersiones" });
   try { return await preflightCommissionDistribution({ distributionId, actorUid: actor.uid }); }
   catch (error: any) { throw new HttpsError("failed-precondition", error?.message || "No se pudo completar el preflight."); }
 });
@@ -121,8 +138,12 @@ export const getCommissionDistributionsReport = onCall({ cors: true, timeoutSeco
   const rows: any[] = [];
   for (const doc of snap.docs) {
     const data: any = doc.data() || {};
-    if (actor.role === "admin" && text(data.adminId) !== actor.uid) continue;
-    if (actor.role === "operador" && ![data.operadorId, data.createdBy].map(text).includes(actor.uid)) continue;
+    if (data.sourceType === "USER_EARNINGS") {
+      if (actor.role !== "superadmin" && data.ownerUid !== actor.uid) continue;
+    } else {
+      if (actor.role === "admin" && text(data.adminId) !== actor.uid) continue;
+      if (actor.role === "operador" && ![data.operadorId, data.createdBy].map(text).includes(actor.uid)) continue;
+    }
     if (from && text(data.operationalDate) < from) continue;
     if (to && text(data.operationalDate) > to) continue;
     if (clientId && text(data.clientId) !== clientId) continue;

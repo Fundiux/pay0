@@ -1,3 +1,4 @@
+import { resolveDispersionFunding, assertUserDispersionCanRelease, type DispersionFundingSource } from "../financing/dispersionFunding";
 import {
   FieldValue,
   type DocumentReference,
@@ -88,6 +89,7 @@ export type PreparedForwardOnlyPayment = {
 };
 
 export type PreparedForwardOnlyDispersion = {
+  fundingSource?: DispersionFundingSource;
   version: string;
   principalDispersionId: string;
   route: DispatchRoutePlan;
@@ -720,6 +722,7 @@ export async function prepareForwardOnlyDispersionTx(
     operationTypeKey: string;
     preferredDespachoId?: string | null;
     pricing: AnyDoc;
+    fundingSource?: DispersionFundingSource;
     batchAccountState?: ForwardOnlyBatchAccountState;
     fallbackNames?: {
       superadminName?: string;
@@ -728,6 +731,7 @@ export async function prepareForwardOnlyDispersionTx(
     };
   },
 ): Promise<PreparedForwardOnlyDispersion> {
+  const funding = resolveDispersionFunding(params.clientId, params.fundingSource);
   const currency =
     normalizeDispatchBalanceCurrency(
       params.pricing.currency || "MXN",
@@ -739,7 +743,7 @@ export async function prepareForwardOnlyDispersionTx(
     .where(
       "holderId",
       "==",
-      params.clientId,
+      funding.holderId,
     );
   const snap = await params.tx.get(query);
   const clientAccounts =
@@ -751,7 +755,8 @@ export async function prepareForwardOnlyDispersionTx(
     if (
       text(current.rootId) !== params.rootId ||
       text(current.holderType)
-        .toUpperCase() !== "CLIENT" ||
+        .toUpperCase() !== funding.holderType ||
+      (funding.holderType === "USER" && text(current.sourceClientId) !== params.clientId) ||
       text(current.currency)
         .toUpperCase() !== currency ||
       text(current.status)
@@ -773,6 +778,7 @@ export async function prepareForwardOnlyDispersionTx(
         doc.ref.path,
       );
 
+    if (funding.holderType === "USER" && clientAccounts.has(despachoId)) throw new HttpsError("failed-precondition", "Existen varios canales de utilidad para el mismo despacho; requieren conciliación antes de reservar.");
     clientAccounts.set(despachoId, {
       ref: doc.ref,
       exists: true,
@@ -782,8 +788,9 @@ export async function prepareForwardOnlyDispersionTx(
           : current,
       key: {
         rootId: params.rootId,
-        holderType: "CLIENT",
-        holderId: params.clientId,
+        holderType: funding.holderType,
+        holderId: funding.holderId,
+        sourceClientId: funding.sourceClientId,
         despachoId,
         currency,
         // H4_D87_A58_A44_FORWARD_ONLY_PRESERVE_ACCOUNT_CHANNEL
@@ -916,6 +923,7 @@ export async function prepareForwardOnlyDispersionTx(
             despachoId:
               leg.despachoId,
             currency,
+            ...(funding.holderType === "USER" ? { channel: leg.channel || null } : {}),
           },
           params.batchAccountState,
         );
@@ -935,6 +943,7 @@ export async function prepareForwardOnlyDispersionTx(
   }
 
   return {
+    fundingSource: funding.snapshot,
     version:
       H4_D82_A3_A2_FORWARD_ONLY_VERSION,
     principalDispersionId:
@@ -1010,8 +1019,9 @@ export function projectForwardOnlyDispersionBatchState(
   }
 
   for (const earning of prepared.earnings) {
+    const projectedCurrent = batchAccountState.get(earning.account.ref.path) || earning.account.current;
     const before = available(
-      earning.account.current,
+      projectedCurrent,
     );
     const after = money2(
       before + earning.amount,
@@ -1020,7 +1030,7 @@ export function projectForwardOnlyDispersionBatchState(
     const nextEarningAccount =
       accountPatch({
         current:
-          earning.account.current,
+          projectedCurrent,
         key: earning.account.key,
         holderName:
           earning.ownerName,
@@ -1028,7 +1038,7 @@ export function projectForwardOnlyDispersionBatchState(
           earning.ownerRole,
         availableBalance: after,
         reservedBalance: reserved(
-          earning.account.current,
+          projectedCurrent,
         ),
         generatedDelta:
           earning.amount,
@@ -1037,7 +1047,7 @@ export function projectForwardOnlyDispersionBatchState(
     batchAccountState.set(
       earning.account.ref.path,
       {
-        ...earning.account.current,
+        ...projectedCurrent,
         ...nextEarningAccount,
       },
     );
@@ -1059,6 +1069,8 @@ export function applyForwardOnlyDispersionTx(
     batchAccountState?: ForwardOnlyBatchAccountState;
   },
 ) {
+  const funding = resolveDispersionFunding(params.prepared.clientId, params.prepared.fundingSource);
+  const localAccountState = params.batchAccountState || new Map<string, AnyDoc>();
   const reservationMovementIds: string[] =
     [];
   const earningMovementIds: string[] = [];
@@ -1105,9 +1117,9 @@ export function applyForwardOnlyDispersionTx(
           sourceId:
             params.prepared
               .principalDispersionId,
-          holderType: "CLIENT",
-          holderId:
-            params.prepared.clientId,
+          holderType: funding.holderType,
+          holderId: funding.holderId,
+          sourceClientId: funding.sourceClientId,
           despachoId:
             leg.despachoId,
           currency:
@@ -1172,7 +1184,7 @@ export function applyForwardOnlyDispersionTx(
       nextClientAccount,
     );
 
-    params.batchAccountState?.set(
+    localAccountState.set(
       account.ref.path,
       {
         ...account.current,
@@ -1197,6 +1209,7 @@ export function applyForwardOnlyDispersionTx(
           params.prepared
             .principalDispersionId,
         principalFolio: params.folio,
+        fundingSource: funding.snapshot,
         legIndex: leg.legIndex,
         legKey: leg.legKey,
         clientId:
@@ -1234,6 +1247,7 @@ export function applyForwardOnlyDispersionTx(
   }
 
   for (const earning of params.prepared.earnings) {
+    earning.account.current = localAccountState.get(earning.account.ref.path) || earning.account.current;
     const before = available(
       earning.account.current,
     );
@@ -1306,6 +1320,7 @@ export function applyForwardOnlyDispersionTx(
       ownerId: earning.ownerId,
       ownerRole: earning.ownerRole,
       ownerName: earning.ownerName,
+      channel: earning.account.key.channel || null,
       sourceClientId:
         earning.sourceClientId,
       despachoId:
@@ -1340,7 +1355,7 @@ export function applyForwardOnlyDispersionTx(
       nextEarningAccount,
     );
 
-    params.batchAccountState?.set(
+    localAccountState.set(
       earning.account.ref.path,
       {
         ...earning.account.current,
@@ -1350,6 +1365,7 @@ export function applyForwardOnlyDispersionTx(
   }
 
   const principalPatch = {
+    fundingSource: funding.snapshot,
     forwardOnlyVersion:
       H4_D82_A3_A2_FORWARD_ONLY_VERSION,
     forwardOnlyAccountOriginVersion:
@@ -1481,6 +1497,7 @@ export async function releaseForwardOnlyDispersionTx(
     params.dispersion.clientId ||
       params.dispersion.clienteId,
   );
+  const funding = resolveDispersionFunding(clientId, params.dispersion.fundingSource);
   const currency =
     normalizeDispatchBalanceCurrency(
       params.dispersion
@@ -1508,6 +1525,7 @@ export async function releaseForwardOnlyDispersionTx(
     );
   const legsSnap =
     await params.tx.get(legsQuery);
+  assertUserDispersionCanRelease(params.dispersion, legsSnap.docs.map(doc => doc.data()));
   const legs = legsSnap.docs
     .map((doc) => ({
       ref: doc.ref,
@@ -1543,8 +1561,9 @@ export async function releaseForwardOnlyDispersionTx(
           params.db,
           {
             rootId,
-            holderType: "CLIENT",
-            holderId: clientId,
+            holderType: funding.holderType,
+            holderId: funding.holderId,
+            sourceClientId: funding.sourceClientId,
             despachoId,
             currency,
             // H4_D87_A58_A45_FORWARD_ONLY_RELEASE_PRESERVE_CHANNEL
@@ -1597,15 +1616,18 @@ export async function releaseForwardOnlyDispersionTx(
             despachoId:
               text(row.despachoId),
             currency,
+            channel: text(row.channel) || null,
           },
         ),
     });
   }
 
+  const releaseAccountState = new Map<string, AnyDoc>();
   const releaseMovementIds: string[] = [];
   const reversalMovementIds: string[] = [];
 
   for (const item of preparedLegs) {
+    item.account.current = releaseAccountState.get(item.account.ref.path) || item.account.current;
     const amount = money2(
       item.doc.totalDebitAmount,
     );
@@ -1631,8 +1653,9 @@ export async function releaseForwardOnlyDispersionTx(
         {
           rootId,
           sourceId: dispersionId,
-          holderType: "CLIENT",
-          holderId: clientId,
+          holderType: funding.holderType,
+          holderId: funding.holderId,
+          sourceClientId: funding.sourceClientId,
           despachoId:
             item.account.key.despachoId,
           currency,
@@ -1683,11 +1706,7 @@ export async function releaseForwardOnlyDispersionTx(
       movementRef.id,
     );
 
-    upsertDispatchBalanceAccountTx(
-      params.tx,
-      params.db,
-      item.account.key,
-      accountPatch({
+    const releasedPatch = accountPatch({
         current: item.account.current,
         key: item.account.key,
         holderName:
@@ -1701,8 +1720,9 @@ export async function releaseForwardOnlyDispersionTx(
         availableBalance: after,
         reservedBalance: reservedAfter,
         returnedDelta: amount,
-      }),
-    );
+      });
+    upsertDispatchBalanceAccountTx(params.tx, params.db, item.account.key, releasedPatch);
+    releaseAccountState.set(item.account.ref.path, { ...item.account.current, ...releasedPatch });
 
     params.tx.set(
       item.ref,
@@ -1721,6 +1741,7 @@ export async function releaseForwardOnlyDispersionTx(
   }
 
   for (const item of preparedEarnings) {
+    item.account.current = releaseAccountState.get(item.account.ref.path) || item.account.current;
     const amount = money2(
       item.row.amount,
     );

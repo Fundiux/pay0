@@ -1,3 +1,4 @@
+import { resolveDispersionFunding, assertUserDispersionCanRelease, type DispersionFundingSource } from "./dispersionFunding";
 import {
   FieldValue,
   type Firestore,
@@ -893,13 +894,15 @@ export function projectCanonicalDispersionFinancialBatchState(
     clientAccountCurrent: AnyDoc | undefined;
     clientId: string;
     clientName: string;
+    fundingSource?: DispersionFundingSource;
   },
 ) {
   const { pricing } = params.prepared;
+  const funding = resolveDispersionFunding(params.clientId, params.fundingSource);
   const clientKey =
     canonicalBatchAccountKey(
-      "CLIENT",
-      params.clientId,
+      funding.holderType,
+      funding.holderId,
     );
 
   const clientCurrent =
@@ -923,10 +926,10 @@ export function projectCanonicalDispersionFinancialBatchState(
   const principalMovement =
     buildBalanceMovement({
       rootId: pricing.rootId,
-      holderType: "CLIENT",
-      holderId: params.clientId,
-      holderRole: null,
-      holderName: params.clientName,
+      holderType: funding.holderType,
+      holderId: funding.holderId,
+      holderRole: funding.holderRole,
+      holderName: funding.holderName || params.clientName,
       movementType:
         "DISPERSION_REGISTRADA",
       movementSubType:
@@ -955,11 +958,10 @@ export function projectCanonicalDispersionFinancialBatchState(
     const commissionMovement =
       buildBalanceMovement({
         rootId: pricing.rootId,
-        holderType: "CLIENT",
-        holderId: params.clientId,
-        holderRole: null,
-        holderName:
-          params.clientName,
+        holderType: funding.holderType,
+        holderId: funding.holderId,
+        holderRole: funding.holderRole,
+        holderName: funding.holderName || params.clientName,
         movementType:
           "COMISION_CLIENTE_COBRADA",
         movementSubType:
@@ -1113,9 +1115,11 @@ export function applyCanonicalDispersionFinancialsTx(
     createdBy: string;
     actorUsername: string;
     principalConcept: string;
+    fundingSource?: DispersionFundingSource;
   },
 ) {
   const { pricing } = params.prepared;
+  const funding = resolveDispersionFunding(params.clientId, params.fundingSource);
   const beforeBalance = money2(
     params.clientAccountCurrent
       ?.availableBalance || 0,
@@ -1143,10 +1147,10 @@ export function applyCanonicalDispersionFinancialsTx(
     db: params.db,
     movementId: principalMovementId,
     rootId: pricing.rootId,
-    holderType: "CLIENT",
-    holderId: params.clientId,
-    holderRole: null,
-    holderName: params.clientName,
+    holderType: funding.holderType,
+    holderId: funding.holderId,
+    holderRole: funding.holderRole,
+    holderName: funding.holderName || params.clientName,
     movementType:
       "DISPERSION_REGISTRADA",
     movementSubType:
@@ -1203,10 +1207,10 @@ export function applyCanonicalDispersionFinancialsTx(
       movementId:
         commissionMovementId,
       rootId: pricing.rootId,
-      holderType: "CLIENT",
-      holderId: params.clientId,
-      holderRole: null,
-      holderName: params.clientName,
+      holderType: funding.holderType,
+      holderId: funding.holderId,
+      holderRole: funding.holderRole,
+      holderName: funding.holderName || params.clientName,
       movementType:
         "COMISION_CLIENTE_COBRADA",
       movementSubType:
@@ -1271,7 +1275,7 @@ export function applyCanonicalDispersionFinancialsTx(
     const movementId =
       `${params.dispersionId}__EARNING__${state.userId}`;
 
-    postMovementTx({
+    const postedEarning = postMovementTx({
       tx: params.tx,
       db: params.db,
       movementId,
@@ -1288,7 +1292,7 @@ export function applyCanonicalDispersionFinancialsTx(
       direction: "IN",
       amount,
       current:
-        state.currentAccount,
+        funding.holderType === "USER" && state.userId === funding.holderId ? clientFinalAccount : state.currentAccount,
       dispersionId:
         params.dispersionId,
       folio: params.folio,
@@ -1317,6 +1321,7 @@ export function applyCanonicalDispersionFinancialsTx(
       isSystemGenerated: true,
     });
 
+    if (funding.holderType === "USER" && state.userId === funding.holderId) clientFinalAccount = postedEarning.accountPatch;
     return movementId;
   };
 
@@ -1354,6 +1359,7 @@ export function applyCanonicalDispersionFinancialsTx(
     );
 
   const pricingSnapshot = {
+    fundingSource: funding.snapshot,
     version: pricing.version,
     operationTypeKey:
       pricing.operationTypeKey,
@@ -1454,6 +1460,7 @@ export function applyCanonicalDispersionFinancialsTx(
   params.tx.set(distributionRef, {
     rootId: pricing.rootId,
     sourceType: "DISPERSION",
+    fundingSource: funding.snapshot,
     depositId: null,
     dispersionId:
       params.dispersionId,
@@ -1580,6 +1587,11 @@ export async function reverseCanonicalDispersionFinancialsTx(
     dispersion.clienteId ||
       dispersion.clientId,
   );
+  const funding = resolveDispersionFunding(clientId, dispersion.fundingSource);
+  if (funding.holderType === "USER") {
+    const executionLegs = await params.tx.get(params.db.collection("clientDispersionLegs").where("principalDispersionId", "==", params.dispersionId));
+    assertUserDispersionCanRelease(dispersion, executionLegs.docs.map(doc => doc.data()));
+  }
   const clientName =
     text(dispersion.clienteNombre) ||
     clientId;
@@ -1655,8 +1667,8 @@ export async function reverseCanonicalDispersionFinancialsTx(
     await readBalanceAccountTx(
       params.tx,
       params.db,
-      "CLIENT",
-      clientId,
+      funding.holderType,
+      funding.holderId,
     );
   const clientCurrent =
     clientBalance.snap.exists
@@ -1759,10 +1771,10 @@ export async function reverseCanonicalDispersionFinancialsTx(
       movementId:
         reintegrationMovementId,
       rootId,
-      holderType: "CLIENT",
-      holderId: clientId,
-      holderRole: null,
-      holderName: clientName,
+      holderType: funding.holderType,
+      holderId: funding.holderId,
+      holderRole: funding.holderRole,
+      holderName: funding.holderName || clientName,
       movementType:
         "DISPERSION_REINTEGRADA",
       movementSubType:
@@ -1851,7 +1863,7 @@ export async function reverseCanonicalDispersionFinancialsTx(
       direction: "OUT",
       amount: item.amount,
       current:
-        state.currentAccount,
+        funding.holderType === "USER" && item.userId === funding.holderId ? clientReintegration.accountPatch : state.currentAccount,
       dispersionId:
         params.dispersionId,
       folio,

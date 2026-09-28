@@ -20,8 +20,9 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-const expectedEndpointCount = 328;
+const expectedEndpointCount = 340;
 const requiredEndpoints = [
+  "getMyCommissionSettings", "configureUserCommissionEntitlement", "previewUserCommissionWithdrawal", "requestUserCommissionDispersion", "executeUserCommissionDispersion", "cancelUserCommissionDispersion", "prepareDailyUserCommissions",
   "applyPaymentAutomaticallyOnReconciliation", "applyPaymentAutomaticallyOnReceipt", "applyPaymentsAutomaticallyOnInvoice", "enqueuePaymentApplicationImmediately", "refreshMaterialityFromPaymentApplication",
   "listCorporateResources", "getCorporateResource", "generateSolicitudReceiptCertificate",
   'loginWithUsername', 'setMyUsername',

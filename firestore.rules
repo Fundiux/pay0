@@ -656,8 +656,17 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    function userFundedDispersionScope(data) {
+      return data.get("fundingSource", {}).get("holderType", "CLIENT") != "USER" || (
+        data.get("rootId", "") == myRootId()
+        && data.fundingSource.get("sourceClientId", "") == data.get("clientId", data.get("clienteId", ""))
+        && data.get("ownerUid", "") == data.fundingSource.get("ownerUid", "")
+        && (isSuperadmin() || data.fundingSource.get("ownerUid", "") == me())
+      );
+    }
+
     match /clientDispersions/{docId} {
-      allow read: if hasModuleAction("wallet", "dispersiones") && (
+      allow read: if hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
@@ -667,7 +676,8 @@ service cloud.firestore {
       );
       allow create, update, delete: if false;
       match /notas/{notaId} {
-        allow read: if hasModuleAction("wallet", "dispersiones") && (
+        allow read: if hasModuleAction("wallet", "dispersiones")
+          && userFundedDispersionScope(get(/databases/$(database)/documents/clientDispersions/$(docId)).data) && (
           isSuperadmin()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.adminId == me()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.operadorId == me()
@@ -733,8 +743,15 @@ service cloud.firestore {
     match /pay0CanonicalResourceVersions/{id} { allow read, write: if false; }
     match /pay0CanonicalAuditLog/{id} { allow read, write: if false; }
     match /pay0CanonicalUploadSessions/{id} { allow read, write: if false; }
-
     match /pagoReceiptIdentifications/{id} { allow read, write: if false; }
+    match /commissionUserEntitlements/{id} { allow read, write: if false; }
+    match /commissionUserEntitlementHistory/{id} { allow read, write: if false; }
+    match /commissionUserDestinationRules/{id} { allow read, write: if false; }
+    match /commissionUserDestinationHistory/{id} { allow read, write: if false; }
+    match /commissionDailyRuns/{id} { allow read, write: if false; }
+    match /commissionDailyRunPages/{id} { allow read, write: if false; }
+    match /commissionDispersionRequests/{id} { allow read, write: if false; }
+    match /commissionAutomationConfigs/{id} { allow read, write: if false; }
 
     match /{document=**} {
       allow read, write: if false;

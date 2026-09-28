@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess, type ClientAccessPermissionKey } from "../clientDelegations/access";
+import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -104,8 +105,9 @@ export async function getAuthorizedDocumentDownloadUrlCore(
     }
 
     const role = normalizeRole(user.role);
+    if (family === "clientDispersions") assertDispersionFundingOwner({ rootId, uid, role, dispersion: parent });
     const clientId = clean(parent.clientId || parent.clienteId);
-    if (role !== "superadmin") {
+    if (role !== "superadmin" && !(family === "clientDispersions" && parent.fundingSource?.holderType === "USER")) {
       if (!clientId) throw new HttpsError("permission-denied", "Recurso padre sin cliente autorizado.");
       await requireClientOperationalAccess({
         uid,

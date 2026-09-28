@@ -172,6 +172,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="p-4 border-t border-white/10">
+        <button type="button" onClick={() => goTo("/cuenta")} title="Mi cuenta" className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-slate-400 transition hover:bg-white/5 hover:text-sky-300">
+          <Users size={20} />{!sidebarCollapsed && <span className="text-sm font-bold">Mi cuenta</span>}
+        </button>
         <button
           onClick={() => goTo("/systems")}
           className="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-slate-400 transition hover:bg-white/5 hover:text-sky-300"

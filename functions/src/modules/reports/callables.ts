@@ -883,6 +883,8 @@ export const getOperationalIntelligenceReport = onCall(
 
     dispersionsSnap.docs.forEach((docSnap) => {
       const doc = docSnap.data() || {};
+      // This report measures client funding, not withdrawals of personal earnings.
+      if (doc.fundingSource?.holderType === "USER") return;
       if (!isInOperationalScope(role, uid, doc)) return;
 
       const createdMillis = getTolerantDateMillis(doc);
