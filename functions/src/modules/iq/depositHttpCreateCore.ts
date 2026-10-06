@@ -1,4 +1,5 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
+import { operationTiming } from "../../utils/operationTiming";
 import { createHash } from "node:crypto";
 import { fetchIq } from "./iqHttpClient";
 
@@ -260,11 +261,13 @@ async function dispatchDepositPost(
   });
 
   try {
+    const dispatchAt = operationTiming("iq_dispatch_at", input.identity.pay0PagoId);
     const response = await fetchIq(apiUrl(input.auth, "/deposits"), {
       method: "POST",
       headers: authHeaders(input.auth),
       body: form,
     }, { operation: "deposit_create" });
+    operationTiming("iq_response_at", input.identity.pay0PagoId, dispatchAt);
 
     const postAcknowledgedAt = new Date().toISOString();
     const body = (await response.json().catch(() => ({}))) as {

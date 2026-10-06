@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { beginOperationTiming } from "@/lib/operationTiming";
 import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
 import { useSearchParams } from "next/navigation";
-import { collection, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
 import {
   Ban,
   ChevronDown,
@@ -347,6 +349,7 @@ export default function PagosPage() {
   const [customRange, setCustomRange] = useState<CustomRange>({});
 
   const [pagos, setPagos] = useState<any[]>([]);
+  const pagosRequestSeq = useRef(0);
   const [clientes, setClientes] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
@@ -1478,6 +1481,21 @@ export default function PagosPage() {
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
+  useLiveOperationRows({
+    collectionName: "pagos", rows: pagos, setRows: setPagos,
+    enabled: Boolean(myUid && rootId && canViewPagos),
+    scopeKey: `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`,
+    onError: setPageMsg,
+  });
+
+  useEffect(() => {
+    const current = (row: any) => row ? pagos.find((item) => item.id === row.id) || null : null;
+    setNotesFor(current);
+    setApplyFor(current);
+    setViewAplicacionesFor(current);
+    setPagoDocsFor(current);
+  }, [pagos]);
+
   useEffect(() => {
     clientesRef.current = clientes;
   }, [clientes]);
@@ -1490,6 +1508,7 @@ export default function PagosPage() {
   }, [searchParams]);
 
   const loadPagosPage = useCallback(async (append = false) => {
+    const requestSeq = append ? pagosRequestSeq.current : ++pagosRequestSeq.current;
     if (!canViewPagos || !rootId || !myUid) {
       setPagos([]);
       setLoadingPagos(false);
@@ -1505,18 +1524,28 @@ export default function PagosPage() {
         cursorNanoseconds: pagoCursor.nanoseconds,
         cursorId: pagoCursor.id,
       } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() });
-      setPagos((current) => append ? [...current, ...page.items] : page.items);
+      if (requestSeq !== pagosRequestSeq.current) return;
+      setPagos((current) => append
+        ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))]
+        : page.items);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
     } catch (error: any) {
+      if (requestSeq !== pagosRequestSeq.current) return;
       setPageMsg(`No se pudieron cargar pagos: ${String(error?.message || "Error interno.")}`);
     } finally {
-      setLoadingPagos(false);
-      setLoadingMorePagos(false);
+      if (requestSeq === pagosRequestSeq.current) {
+        setLoadingPagos(false);
+        setLoadingMorePagos(false);
+      }
     }
   }, [canViewPagos, rootId, myUid, pagoCursor, range]);
 
-  useEffect(() => { void loadPagosPage(false); }, [canViewPagos, rootId, myUid, range]);
+  useEffect(() => {
+    setPagos([]);
+    void loadPagosPage(false);
+    return () => { ++pagosRequestSeq.current; };
+  }, [canViewPagos, rootId, myUid, range]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {
@@ -2014,6 +2043,7 @@ export default function PagosPage() {
     backgroundUpload?: boolean;
     onUploadError?: (error: any) => void;
   }) {
+    const requestSeq = pagosRequestSeq.current;
     const createdPago: any = await createPago({
       clienteId: input.clienteId,
       companyId: input.companyId,
@@ -2058,6 +2088,17 @@ export default function PagosPage() {
 
     input.onPagoCreated?.(createdPagoId);
 
+    // Publish only the new row; its document listener handles subsequent IQ writes.
+    void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
+      if (requestSeq !== pagosRequestSeq.current || !snapshot.exists()) return;
+      const row = { ...snapshot.data(), id: snapshot.id };
+      setPagos((current) => current.some((item) => item.id === row.id) ? current : [row, ...current]);
+    }).catch(() => {
+      if (requestSeq === pagosRequestSeq.current) {
+        setPageMsg("Pago creado; no se pudo mostrar la fila. Revisa tu conexión y permisos.");
+      }
+    });
+
     const uploadReceipt = () =>
       uploadPagoDoc({
         pagoId: createdPagoId,
@@ -2081,6 +2122,8 @@ export default function PagosPage() {
   }
 
   const onCreatePago = async () => {
+    const releaseTiming = beginOperationTiming();
+    let createdId = "";
     if (!canCreatePagos) return;
     if (saving) return;
 
@@ -2147,6 +2190,7 @@ export default function PagosPage() {
           operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
           backgroundUpload: true,
+          onPagoCreated: (id) => { createdId = id; },
           onUploadError: (error: any) => {
             setPageMsg(
               error?.message ||
@@ -2172,6 +2216,7 @@ export default function PagosPage() {
       setPageMsg(e?.message || "No se pudo crear el pago.");
     } finally {
       setSaving(false);
+      if (createdId) releaseTiming(createdId);
     }
   };
 
@@ -2331,16 +2376,16 @@ export default function PagosPage() {
 
     let pay0Result: any = null;
     try {
-      await globalLoading.run(undefined, async () => {
-        pay0Result = await applyPagoToSolicitudesAtomic({
+      pay0Result = await globalLoading.run(undefined, () => applyPagoToSolicitudesAtomic({
           pagoId: pago.id,
           idempotencyKey,
           aplicaciones: seleccionados.map((item) => ({
             solicitudId: item.solicitud.id,
             montoAplicado: item.monto,
           })),
-        });
+        }));
 
+        setIqFlowOpen(false);
         setIqFlow((current: any) => current ? {
           ...current,
           pay0Result,
@@ -2363,7 +2408,6 @@ export default function PagosPage() {
           stage: getIqFlowStage(planResult),
           message: "Plan IQ prevalidado. Revisa cada dato antes de confirmar.",
         } : current);
-      });
       applyRequestKeyRef.current = "";
     } catch (error: any) {
       setIqFlow((current: any) => current ? {
@@ -2699,6 +2743,20 @@ export default function PagosPage() {
           </button>
         )}
       </header>
+
+      {iqFlow && !iqFlowOpen && iqFlow.pay0Result && (
+        <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
+          <span>{iqFlow.message}</span>
+          <button
+            type="button"
+            disabled={iqFlowBusy}
+            onClick={() => setIqFlowOpen(true)}
+            className="shrink-0 rounded-lg border border-sky-400/30 px-3 py-2 hover:bg-sky-500/20 disabled:opacity-50"
+          >
+            {iqFlowBusy ? "Preparando IQ…" : "Revisar aplicación IQ"}
+          </button>
+        </div>
+      )}
 
       {pageMsg && (
         <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">

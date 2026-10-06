@@ -22,6 +22,7 @@ import { logActivity, logActivityTx } from "./utils/logActivity";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { FieldValue, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
+import { operationTiming } from "./utils/operationTiming";
 import { nextSequenceTx, buildCanonicalFolio } from "./modules/sequences/service";
 import {
   resolveCanonicalBusinessFolioContext,
@@ -545,6 +546,8 @@ export const createSolicitud = onCall(
     });
 
     __mark("folio_transaction");
+
+    operationTiming("pay0_persisted_at", solicitudRef.id, __perfStartedAt);
 
     const comentarioText = String(comentario || "").trim();
 
@@ -2239,6 +2242,7 @@ export const createPago = onCall(
 
 
     __mark("folio_transaction");
+    operationTiming("pay0_persisted_at", ref.id, __perfStartedAt);
 
     await recordOperationalMetric({
       rootId,

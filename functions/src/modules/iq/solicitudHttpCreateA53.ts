@@ -1,4 +1,5 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
+import { operationTiming } from "../../utils/operationTiming";
 import { readFile } from "node:fs/promises";
 import {
   isIqAccessTokenUsable,
@@ -301,11 +302,13 @@ async function postOnce(
   catalog: { clientId: number; companyId: number },
 ): Promise<{ status: number; bodyText: string }> {
   const form = await buildFormData(item, catalog);
+  const dispatchAt = operationTiming("iq_dispatch_at", item.key || "");
   const response = await fetchIq(new URL("/invoices", session.apiOrigin), {
     method: "POST",
     headers: await authHeaders(session),
     body: form,
   }, { operation: "solicitud_create" });
+  operationTiming("iq_response_at", item.key || "", dispatchAt);
 
   return {
     status: response.status,

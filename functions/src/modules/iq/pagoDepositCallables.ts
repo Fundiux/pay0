@@ -2,6 +2,7 @@ import {
   loadIqCanonicalUserAccess,
 } from "./iqCanonicalAccess";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { operationTiming } from "../../utils/operationTiming";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import { assertSimilarPay0OperationConfirmedForIqCreateH4D58F } from "./pay0SimilarOperationPrecheckCallables";
@@ -1488,6 +1489,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }
 
   await result.ctx.pagoRef.set(patch, { merge: true });
+  operationTiming("firestore_iq_update_at", pagoId);
 
   if (created) {
     await result.ctx.pagoRef.collection("notas").add({

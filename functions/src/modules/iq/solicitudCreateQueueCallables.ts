@@ -1,4 +1,5 @@
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { operationTiming } from "../../utils/operationTiming";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -1567,6 +1568,7 @@ async function finalizeJobFromResult(input: {
     }, { merge: true });
   });
 
+  operationTiming("firestore_iq_update_at", input.job.solicitudId);
   const attemptRef = db
     .collection("solicitudes")
     .doc(input.job.solicitudId)

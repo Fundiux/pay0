@@ -9,6 +9,7 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
 import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
@@ -812,6 +813,21 @@ export default function SolicitudesPage() {
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
   const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
+
+  useLiveOperationRows({
+    collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
+    enabled: Boolean(uid && canViewSolicitudes),
+    scopeKey: `${uid}:${rootId}:${role}:${rangeKey}`, onError: setPageMsg,
+  });
+
+  useEffect(() => {
+    const current = (row: any) => row ? solicitudes.find((item) => item.id === row.id) || null : null;
+    setDocsFor(current);
+    setCommentFor(current);
+    setApplyPagoFor(current);
+    setCancelSatFor(current);
+    setRejectFor(current);
+  }, [solicitudes]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {

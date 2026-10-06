@@ -1,0 +1,218 @@
+# P0: Solicitudes, Pagos e IQ — diagnóstico y corrección parcial
+
+Fecha: 2026-10-06. Base inspeccionada: `fe2b98b`, rama inicialmente abierta
+`feature/commission-distribution-cycle`. Trabajo aislado en
+`fix/iq-latency-reactivity`. **P0 abierto; no autorizar deploy con este informe.**
+
+El checkout abierto no es `main`: este último apunta a `094472f` y presenta
+382 archivos diferentes. Los resultados de este informe pertenecen al checkout
+inspeccionado, no certifican el código desplegado ni los otros worktrees.
+El manifiesto actual usa Next.js 15.5.25; el entorno ejecutado usa Node 22.23.2.
+
+## 1. ROOT CAUSE P0-A
+
+- `createSolicitud` devuelve `HttpsCallableResult`, pero `NuevaSolicitudModal`
+  lee `solicitudId` y `folio` en el nivel superior. Se reprodujo ejecutando el
+  servicio real transpilado con una respuesta Firebase simulada válida: el
+  guard del modal falla y no llega al upload. El backend puede haber persistido
+  ya; repetir la captura puede crear otra solicitud. Corregido el contrato en
+  el servicio compartido. El importador masivo acepta también el nuevo contrato.
+- El callable `createSolicitud` espera `Promise.all(postCreateTasks)` después
+  de su transacción: auditoría, nota, Materialidad y borrador Facturama. Después
+  espera además `recordOperationalMetric`. El tiempo consumido por cada una
+  de estas dependencias todavía requiere medición individual. Cloud Logging
+  confirma que el bloque conjunto `post_create` consume p50 849 ms / p95 1714 ms.
+- `createPago` espera sus validaciones, transacción financiera/auditoría y
+  `recordOperationalMetric`; el alta normal ya sube su comprobante en segundo
+  plano. No se encontró un POST IQ dentro de este callable de alta.
+- En `applySelectedFolios`, el overlay global envolvía tanto
+  `applyPagoToSolicitudesAtomic` como `preparePagoApplicationIqPlan`. La prueba
+  ejecuta el manejador anterior y el actual con una promesa IQ retenida: antes
+  permanece bloqueado; después se libera tras PAY0. Se mantiene el bloqueo del
+  flujo IQ, su confirmación humana y la clave de idempotencia para reintento.
+  El modal se cierra al confirmar PAY0 y el progreso queda en un aviso dentro
+  de la página, con botón para revisar el plan cuando termine la preparación.
+
+## 2. ROOT CAUSE P0-B
+
+- Pagos automático: finalizar el comprobante escribe `QUEUED`, pero no
+  despacha una Task de creación. `processIqPagoDepositCreateQueue` corre cada
+  minuto y toma hasta diez candidatos, procesándolos secuencialmente. Hay una
+  dependencia directa del scheduler en el camino normal. El intervalo
+  configurado no es una medición de latencia: no garantiza un límite de 60 s.
+- Pagos manual: `requestPagoIqSync` sí encola Tasks. La primera creación usa
+  demora cero; reintentos de creación usan 5 y 15 minutos. Esas esperas y las
+  protecciones de resultado ambiguo no se han eliminado.
+- Solicitudes: `enqueueIqCreationForSolicitud` ya encola una Task inmediata
+  con el mismo job y lock por perfil; scheduler cada minuto como respaldo.
+  La Task limita concurrencia y despacho a uno. Un error de enqueue queda
+  registrado en `onDemandTaskEnqueueError`. Falta observar esos valores reales.
+- `solicitudHttpCreateA53` recupera el ID por HTTP con esperas configuradas
+  `[0, 1200, 3500, 8000]` ms si hace falta; no son tiempos medidos de IQ.
+- No se puede atribuir cuantitativamente la latencia a cold start, locks,
+  autenticación HTTP, catálogo o IQ sin una corrida correlacionada.
+
+## 3. ROOT CAUSE P0-C
+
+`listSolicitudes` y `listPagos` obtienen páginas mediante callables de una sola
+lectura. Los listeners que existen en las páginas corresponden a otros datos:
+no mantienen actualizadas las filas principales. El evento local de Solicitudes
+hace un solo `getDoc`. Varios modales guardan además el objeto seleccionado.
+
+Se añadió una suscripción por documento cargado, compartiendo implementación:
+reemplaza sólo la fila afectada, conserva las referencias de las demás filas y
+el enriquecimiento `iqApplicable`, elimina campos retirados por el servidor y
+actualiza los objetos abiertos en modales. La paginación añade suscripciones;
+cambiar de ámbito o salir las libera. Errores se muestran, y `permission-denied`
+retira la fila. No se introdujo polling, navegación, reload ni desmontaje de
+tabla por actualizaciones de documentos.
+
+**Límite pendiente:** el listener sigue documentos ya cargados. Los nuevos pagos
+creados en esta pestaña se insertan leyendo su documento; solicitudes mantienen
+su evento local. Una creación desde otra pestaña no se descubre automáticamente
+si su ID todavía no estaba cargado. La actualización de filas existentes en dos
+consumidores sí tiene prueba unitaria, pero falta la validación en dos pestañas
+reales y la suscripción acotada de descubrimiento de nuevas filas.
+
+## 4–7. Arquitectura actual y transportes
+
+Solicitud normal:
+
+`modal → createSolicitud callable → validaciones/transacción/folio PAY0 → tareas
+post-create esperadas → respuesta → upload init/Storage/finalize en navegador →
+enqueueIqCreationForSolicitud → Cloud Task (scheduler de respaldo) → lock por
+perfil → descarga OC → login/catálogos/POST /invoices HTTP → recuperación HTTP
+del folio → transacción Firestore → listeners de filas cargadas`.
+
+Pago normal:
+
+`página → createPago callable → validaciones/transacción/folio/auditoría → métrica
+esperada → respuesta → upload init/Storage/finalize en navegador → estado QUEUED →
+scheduler → contexto autorizado → runPagoDepositHttpCreateFlow → login/catálogos,
+descarga comprobante, fingerprint/lock/journal/recuperación → POST /deposits HTTP →
+vinculación ID/Firestore → seguimiento de conciliación → listeners`.
+
+El botón manual de sincronización de Pagos usa Task. La aplicación a solicitudes
+es un flujo diferente: transacción PAY0, preparación de plan IQ y confirmación
+humana antes de ejecutar IQ. No se ha automatizado esa confirmación.
+
+Los dos transportes de creación examinados son HTTP directo. Las referencias
+históricas a browser en comentarios no prueban ejecución de Chromium. No se
+migró ningún transporte ni se auditó exhaustivamente toda la integración IQ.
+
+## 8 y 10. Latencias ANTES / DESPUÉS
+
+No hay muestras end-to-end reales antes ni después. No se dispone todavía de
+un entorno PAY0/IQ y operación controlada identificados por el usuario.
+
+Sí se consultaron **100 métricas históricas de Cloud Logging**, sólo lectura,
+seleccionando `PAY0_PERF_CREATE_SOLICITUD` / `PAY0_PERF_CREATE_PAGO`, últimos
+30 días con límite de 100 entradas. La muestra efectiva abarca 2026-09-21 a
+2026-10-06. Se extrajeron únicamente tiempos y etapas, sin folios, identidades,
+credenciales ni payloads financieros. Percentiles por rango más cercano:
+
+| Tiempo interno del callable desplegado | n | mínimo | p50 | p95 | máximo |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Crear Solicitud | 63 | 694 ms | 1357 ms | 2513 ms | 3017 ms |
+| Crear Pago | 37 | 378 ms | 649 ms | 1380 ms | 1571 ms |
+
+Para Solicitudes, `post_create`: p50 849 ms / p95 1714 ms. `auth_user_root`:
+p50 69 ms / p95 723 ms. Para Pagos, `auth_user_root`: p50 64 ms / p95 617 ms.
+Las tres solicitudes más recientes del 2026-10-06 registran total/post-create:
+1089/782 ms, 1390/925 ms y 2997/1124 ms.
+
+Estas métricas pertenecen a versiones desplegadas, **no prueban que el deploy
+coincida con este checkout**. Excluyen el trayecto del navegador, parte del
+arranque de plataforma, upload y creación IQ. No se presentan como UI_LATENCY,
+IQ_LATENCY ni mediciones DESPUÉS de esta corrección, que no está desplegada.
+
+| Prueba controlada local | Antes | Después |
+| --- | --- | --- |
+| Respuesta Firebase válida de Solicitud | Guard falla; upload no alcanzado | ID y folio disponibles |
+| IQ pendiente después de aplicación PAY0 | Overlay global sigue activo | Overlay global liberado |
+| Documento cargado cambia | Lectura única; sin suscripción principal | Suscripción reemplaza una fila |
+
+Estos resultados funcionales no equivalen a mediciones de 2 s o 1–3 s.
+
+## 9. Instrumentación y cambios
+
+Backend: `PAY0_OPERATION_TIMING=1` activa logs con ID, etapa, tiempo Unix y
+duración opcional. Marcas: `pay0_persisted_at`, `iq_dispatch_at`,
+`iq_response_at`, `firestore_iq_update_at`. No se registran tokens ni payloads.
+Se conservan además las métricas `_perf` existentes de los callables.
+
+Frontend: activar por pestaña con
+`sessionStorage.setItem("PAY0_OPERATION_TIMING", "1")`; retirar con `removeItem`.
+El alta registra `ui_click_at`, `ui_released_at` y `UI_LATENCY`. Los listeners
+registran `ui_reactive_update_at` y `REACTIVE_LATENCY_ESTIMATE` a partir del último
+timestamp disponible. Este último mide entrega al listener, no pintura de React;
+puede incluir una carga inicial y está sujeto al desfase entre relojes. No debe
+usarse solo para certificar ausencia de parpadeo ni el objetivo reactivo.
+
+Para una corrida válida, correlacionar por ID:
+
+- `UI_LATENCY = ui_released_at - ui_click_at` (también monotónico en navegador).
+- `IQ_LATENCY = firestore_iq_update_at - ui_click_at`, comprobando además folio
+  y resultado exitoso; una respuesta HTTP sola no demuestra creación confirmada.
+- `IQ_HTTP_LATENCY = iq_response_at - iq_dispatch_at`.
+- `REACTIVE_LATENCY = ui_reactive_update_at - timestamp de commit`, con relojes
+  alineados; falta verificar commit/render en navegador y marcar todos los saltos
+  de cola, upload, autenticación y recuperación.
+
+No se adelantó el despacho automático de Pagos todavía. La propuesta es un
+despacho durable inmediato al finalizar el comprobante usando el mismo core,
+autorización, gates y locks del scheduler. No usar fire-and-forget en Functions.
+Separar Materialidad/Facturama requiere antes medir y asegurar idempotencia con
+el finalize del documento; moverlas simplemente a un trigger podría duplicar
+borradores porque el código existente puede seleccionar un documento nuevo.
+
+## 11. Pruebas y validación pendiente
+
+`node --test qa/scripts/operation-reactivity.test.cjs`: ocho pruebas locales
+con dependencias simuladas: contrato Firebase, cambios de fila/campos eliminados,
+enriquecimiento de Pagos, paginación/cleanup, dos consumidores, bloqueo anterior
+versus actual, protección de doble envío, error IQ/reintento y fallo PAY0;
+hook real con snapshots simulados, revocación de acceso y callbacks tardíos.
+
+Pasaron `npx tsc --noEmit --incremental false`, `npm --prefix functions run build`
+y `node scripts/verify-authorization-policy.mjs`. También pasó el build frontend
+final `npm run build`, con 42 páginas generadas; se verificó que el bundle final
+incluye «Revisar aplicación IQ». Durante los intentos hubo un error de tipos
+corregido, errores transitorios de red y fallos `WasmHash` al reutilizar la caché
+Webpack. El build final usó caché limpia, sin cambios de dependencias/configuración.
+
+No ejecutado: solicitud ni pago real; conteo de POST IQ; errores/retries reales;
+refresh/navegación/dos pestañas reales; perfilado de memoria; inspección visual
+de parpadeo; reglas contra emulador. No se ejecutaron operaciones vivas en
+Firebase/IQ/Telegram/WhatsApp. La única consulta remota fue la lectura de métricas
+existentes en Cloud Logging; no se guardaron las respuestas brutas en el repo.
+
+## 12. Archivos modificados
+
+- `src/services/solicitudes.ts`: contrato de respuesta.
+- `src/lib/liveOperationRows.ts`, `src/lib/useLiveOperationRows.ts`: suscripciones.
+- `src/app/solicitudes/page.tsx`, `src/app/pagos/page.tsx`: integración, modales,
+  respuesta obsoleta de Pagos, publicación de fila nueva y alcance del overlay.
+- `src/lib/operationTiming.ts`, `src/components/NuevaSolicitudModal.tsx`: trazas UI.
+- `functions/src/utils/operationTiming.ts`, `functions/src/index.ts`: trazas de persistencia.
+- `functions/src/modules/iq/{solicitudHttpCreateA53,depositHttpCreateCore,
+  solicitudCreateQueueCallables,pagoDepositCallables}.ts`: trazas HTTP/commit.
+- `qa/scripts/operation-reactivity.test.cjs` y este informe.
+
+## 13. Riesgos y trabajo restante
+
+Cada documento cargado añade una suscripción/lecturas Firestore; el número crece
+con las páginas que abre el usuario. El cierre de modales si desaparece su fila
+es intencional. El enriquecimiento de despacho `iqApplicable` proviene del
+callable y no se recalcula ante cambios de configuración del despacho; una fila
+recién publicada por `getDoc` todavía no tiene ese enriquecimiento. Los uploads
+siguen dependiendo de la pestaña, como antes. No se agregó idempotencia al alta
+de Solicitudes ni se certificó la ausencia de duplicados de creación de extremo
+a extremo. La prueba de idempotencia cubre el manejador de aplicación de Pagos.
+
+## 14–15. Commit y deploy
+
+El SHA se informa después del commit para no incorporar una autorreferencia.
+Sin merge, push ni deploy. Sin modificación de reglas, estados financieros,
+sincronización inversa ni complementos automáticos. El P0 permanece abierto
+hasta medir y completar los pendientes descritos con operaciones controladas.

@@ -11,6 +11,7 @@ function isPermissionDeniedError(e: any) {
   return code.includes("permission-denied") || message.includes("permission-denied");
 }
 import { createSolicitud } from "@/services/solicitudes";
+import { beginOperationTiming } from "@/lib/operationTiming";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, mergeModules } from "@/lib/roles";
@@ -534,6 +535,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     void applyOrdenCompraAutofill(file);
   };
   const handleSave = async (e: React.FormEvent) => {
+    const releaseTiming = beginOperationTiming();
     e.preventDefault();
     const numMonto = parseFloat(String(formData.monto).replace(/,/g, ""));
 
@@ -607,6 +609,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         })
       );
       onClose();
+      releaseTiming(__a54SolicitudId);
 
 
       // A54-A10-R2 POST_CREATE_ASYNC
