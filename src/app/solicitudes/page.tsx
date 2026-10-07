@@ -126,6 +126,7 @@ const SolicitudRow = React.memo(({
   canUploadDocs,
   showIqFolio,
   showCreator,
+  creatorOptions,
   allSolicitudes,
   sustitucionIndex
 }: any) => {
@@ -215,7 +216,7 @@ const SolicitudRow = React.memo(({
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
         <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div></td>
-        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s)}>{recordCreatorLabel(s)}</td> : null}
+        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s, creatorOptions)}>{recordCreatorLabel(s, creatorOptions)}</td> : null}
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -1702,6 +1703,7 @@ export default function SolicitudesPage() {
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
                   showCreator={isSuperAdmin(role) || isAdmin(role)}
+                  creatorOptions={creatorOptions}
                   allSolicitudes={filteredSortedData}
                   sustitucionIndex={sustitucionIndex}
                 />

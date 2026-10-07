@@ -30,6 +30,10 @@ type InitResp = {
   documentType: SolicitudDocumentType;
 };
 
+// Retain the same upload identity across a recoverable Storage/finalize failure.
+// Files stay in memory only; no business data or document is persisted locally.
+const checkpoints = new WeakMap<File, Map<string, { uploadId: string; storagePath: string; uploaded: boolean }>>();
+
 export async function uploadSolicitudDoc(opts: {
   solicitudId: string;
   documentType: SolicitudDocumentType;
@@ -43,53 +47,59 @@ export async function uploadSolicitudDoc(opts: {
     throw new Error("El archivo excede el limite de 1 MB.");
   }
 
-  
   const sha256 = await computeFileSha256(file);
-const init = httpsCallable(functions, CALLABLES.initSolicitudDocumentUpload);
-  const initRes = await init({
-    solicitudId,
-    documentType,
-    customDocumentTypeLabel: documentType === "OTRO" ? String(customDocumentTypeLabel || "").trim() : "",
-    originalName: file.name,
-    contentType: file.type || "application/octet-stream",
-    sizeBytes: file.size,
-    sha256,
-    integrityHashAlgorithm: sha256 ? "SHA-256" : "",
-  });
-
-  const { uploadId, storagePath } = (initRes.data as any) as InitResp;
-  if (!uploadId || !storagePath) {
-    throw new Error("initSolicitudDocumentUpload no devolvio uploadId/storagePath");
+  const key = `${solicitudId}:${documentType}:${customDocumentTypeLabel || ""}`;
+  let files = checkpoints.get(file);
+  if (!files) { files = new Map(); checkpoints.set(file, files); }
+  let checkpoint = files.get(key);
+  if (!checkpoint) {
+    const init = httpsCallable(functions, CALLABLES.initSolicitudDocumentUpload);
+    const initRes = await init({
+      solicitudId, documentType,
+      customDocumentTypeLabel: documentType === "OTRO" ? String(customDocumentTypeLabel || "").trim() : "",
+      originalName: file.name, contentType: file.type || "application/octet-stream",
+      sizeBytes: file.size, sha256, integrityHashAlgorithm: sha256 ? "SHA-256" : "",
+    });
+    const { uploadId, storagePath } = initRes.data as InitResp;
+    if (!uploadId || !storagePath) throw new Error("initSolicitudDocumentUpload no devolvio uploadId/storagePath");
+    checkpoint = { uploadId, storagePath, uploaded: false };
+    files.set(key, checkpoint);
   }
+  const { uploadId, storagePath } = checkpoint;
 
   const storageRef = ref(storage, storagePath);
-  const task = uploadBytesResumable(storageRef, file, {
-    contentType: file.type || "application/octet-stream",
-    customMetadata: {
-        uploadid: uploadId,
-        sha256,
-        integrityHashAlgorithm: sha256 ? "SHA-256" : "",
-        integritySealVersion: "PAY0-MATERIALIDAD-V1",
-      },
-  });
+  if (!checkpoint.uploaded) {
+    const task = uploadBytesResumable(storageRef, file, {
+      contentType: file.type || "application/octet-stream",
+      customMetadata: {
+          uploadid: uploadId,
+          sha256,
+          integrityHashAlgorithm: sha256 ? "SHA-256" : "",
+          integritySealVersion: "PAY0-MATERIALIDAD-V1",
+        },
+    });
 
-  const snap = await new Promise<any>((resolve, reject) => {
-    task.on(
-      "state_changed",
-      (s) => {
-        if (onProgress && s.totalBytes) {
-          onProgress(Math.round((s.bytesTransferred / s.totalBytes) * 100));
-        }
-      },
-      reject,
-      () => resolve(task.snapshot)
-    );
-  });
+    await new Promise<any>((resolve, reject) => {
+      task.on(
+        "state_changed",
+        (s) => {
+          if (onProgress && s.totalBytes) {
+            onProgress(Math.round((s.bytesTransferred / s.totalBytes) * 100));
+          }
+        },
+        reject,
+        () => resolve(task.snapshot)
+      );
+    });
 
-  const downloadURL = await getDownloadURL(snap.ref);
+    checkpoint.uploaded = true;
+  }
 
   const finalize = httpsCallable(functions, CALLABLES.finalizeSolicitudDocumentUpload);
   const finalizeRes = await finalize({ uploadId, storagePath });
+
+  // A download-link failure must not prevent authoritative finalization.
+  const downloadURL = await getDownloadURL(storageRef).catch(() => "");
 
   return {
     uploadId,

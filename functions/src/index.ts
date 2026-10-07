@@ -475,6 +475,8 @@ export const createSolicitud = onCall(
         rootId,
         adminId,
         createdBy: uid,
+        createdByDisplayName: String(caller.displayName || caller.name || caller.username || "").trim(),
+        createdByUsername: String(caller.username || "").trim(),
         ownerId: operationalOwnerId,
         operationalOwnerId,
         operationalOwnerName,

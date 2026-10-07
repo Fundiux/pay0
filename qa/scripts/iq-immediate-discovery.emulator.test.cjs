@@ -670,3 +670,42 @@ test('Solicitud workers share the production profile lease; terminal replay and 
   await worker.processIqCreateOnDemandTask({ data: { jobId: 'sol-uncertain', source: 'AUTO' } });
   assert.equal(submissions, 2);
 });
+
+// Source attachment regression: real Firestore init/finalize and lifecycle;
+// Storage bytes and downstream integrations are isolated fixture boundaries.
+test('Solicitud source finalization registers the original OC before enqueue, including replay', async () => {
+  const JSZip = functionsRequire('jszip');
+  const zip = new JSZip();
+  zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CANTIDAD</t></is></c></row></sheetData></worksheet>');
+  const bytes = await zip.generateAsync({ type: 'nodebuffer' });
+  let present = false, enqueue = 0;
+  const service = load('functions/src/modules/solicitudDocuments/service.ts', {
+    'firebase-admin': { apps: admin.apps, initializeApp: admin.initializeApp, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [present], download: async () => [bytes] }) }) }) },
+    'jszip': { default: JSZip }, 'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
+    '../../utils/logActivity': { logActivity: async () => {}, logActivityTx() {} },
+    './domain': functionsRequire('./lib/modules/solicitudDocuments/domain.js'),
+    './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
+    '../iq/solicitudCreateQueueCallables': { enqueueIqCreationForSolicitud: async ({ solicitudId }) => {
+      const docs = await db.collection('uploads').where('solicitudId', '==', solicitudId).where('active', '==', true).get();
+      assert.equal(docs.size, 1); assert.equal(docs.docs[0].data().status, 'READY'); enqueue++;
+    } },
+    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async () => {} },
+    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => {} },
+    '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
+  });
+  await db.doc('users/source-actor').set({ role: 'superadmin', rootId: 'root', username: 'source-actor' });
+  await db.doc('solicitudes/source-regression').set({ rootId: 'root', createdBy: 'source-actor', folio: 'LOCAL-ONLY', status: 'PROCESANDO' });
+  const auth = { uid: 'source-actor' };
+  const upload = await service.initSolicitudDocumentUploadCore({ auth, data: { solicitudId: 'source-regression', documentType: 'ORDEN_COMPRA', originalName: 'synthetic.xlsx', sizeBytes: bytes.length } });
+  assert.equal((await db.doc(`uploads/${upload.uploadId}`).get()).data().createdBy, 'source-actor');
+  const request = { auth, data: { uploadId: upload.uploadId, storagePath: upload.storagePath } };
+  await assert.rejects(service.finalizeSolicitudDocumentUploadCore(request), /no existe en Storage/);
+  assert.equal(enqueue, 0);
+  present = true;
+  await service.finalizeSolicitudDocumentUploadCore(request);
+  await service.finalizeSolicitudDocumentUploadCore(request);
+  const active = await db.collection('uploads').where('solicitudId', '==', 'source-regression').where('active', '==', true).get();
+  assert.equal(active.size, 1); assert.equal(active.docs[0].id, upload.uploadId);
+  assert.equal(enqueue, 2, 'replay rechecks the existing idempotent queue boundary');
+});
