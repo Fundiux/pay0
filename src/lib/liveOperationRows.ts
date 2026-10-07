@@ -10,7 +10,7 @@ export function replaceOperationRow<T extends OperationRow>(
   if (!data) return rows.filter((row) => row.id !== id);
   const previous = rows[index];
   const next = { ...data, id } as T;
-  if (typeof previous.iqApplicable === "boolean" && data.iqApplicable === undefined) {
+  if (typeof previous.iqApplicable === "boolean") {
     Object.assign(next, { iqApplicable: previous.iqApplicable });
   }
   if (JSON.stringify(previous) === JSON.stringify(next)) return rows;
@@ -39,4 +39,42 @@ export function createOperationSubscriptions(
       active.clear();
     },
   };
+}
+
+export type OperationScope = {
+  uid: string; rootId: string; role: string; fromMillis: number; toMillis: number;
+};
+export type OperationDiscoverySeed = {
+  scopeKey: string; boundary: { seconds: number; nanoseconds: number } | null;
+};
+export function operationCreatedMillis(row: OperationRow): number {
+  const time = row.createdAt;
+  return typeof time?.toMillis === "function" ? time.toMillis()
+    : Number(time?.seconds ?? time?._seconds ?? 0) * 1000 + Number(time?.nanoseconds ?? time?._nanoseconds ?? 0) / 1e6;
+}
+export function operationBelongsToScope(row: OperationRow, collectionName: string, scope: OperationScope): boolean {
+  if (!scope.uid || !scope.rootId) return false;
+  if ((collectionName === "pagos" || scope.role === "superadmin") && row.rootId !== scope.rootId) return false;
+  if (scope.role === "admin" && row.adminId !== scope.uid) return false;
+  if (["operador", "operator"].includes(scope.role) && row.createdBy !== scope.uid) return false;
+  if (!["superadmin", "admin", "operador", "operator"].includes(scope.role)) return false;
+  const at = operationCreatedMillis(row);
+  return at >= scope.fromMillis && at <= scope.toMillis;
+}
+export function mergeDiscoveredOperationRows<T extends OperationRow>(rows: T[], incoming: OperationRow[]): T[] {
+  let next = rows;
+  for (const row of incoming) {
+    next = next.some((item) => item.id === row.id)
+      ? replaceOperationRow(next, row.id, row)
+      : [...next, row as T];
+  }
+  if (next === rows) return rows;
+  // Firestore orders by createdAt DESC, document ID ASC. Keep tie ordering stable.
+  return next.slice().sort((a, b) => (Number(b.createdAt?.seconds ?? b.createdAt?._seconds ?? 0) - Number(a.createdAt?.seconds ?? a.createdAt?._seconds ?? 0)) || (Number(b.createdAt?.nanoseconds ?? b.createdAt?._nanoseconds ?? 0) - Number(a.createdAt?.nanoseconds ?? a.createdAt?._nanoseconds ?? 0)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+export function operationDiscoverySeed(scopeKey: string, items: OperationRow[]): OperationDiscoverySeed {
+  const time = items[items.length - 1]?.createdAt;
+  return { scopeKey, boundary: time ? {
+    seconds: Number(time.seconds ?? time._seconds), nanoseconds: Number(time.nanoseconds ?? time._nanoseconds ?? 0),
+  } : null };
 }

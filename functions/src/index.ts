@@ -2834,6 +2834,8 @@ export {
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
 export {
   processIqPagoDepositCreateQueue,
+  dispatchQueuedPagoIqCreation,
+  processIqPagoDepositAutomaticTask,
   processIqPagoDepositReconciliationQueue,
 } from "./modules/iq/pagoDepositCallables";
 // H4_D82_A3_A6_A3C_AUTOMATION_CONTROL_END

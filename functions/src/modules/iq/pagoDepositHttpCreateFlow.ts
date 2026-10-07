@@ -33,6 +33,7 @@ export interface PagoDepositHttpCreateFlowInput {
   receipt: PagoReceiptDescriptor;
   sum: number;
   iqAttemptId?: string;
+  expectedUploadId?: string;
   allowHttpPost: boolean;
   sessionHolder?: {
     username: string;
@@ -160,6 +161,7 @@ export async function runPagoDepositHttpCreateFlow(
     actorUid,
     source,
     fingerprint,
+    expectedUploadId: input.expectedUploadId,
   };
 
   return createIqDepositHttpControlled({

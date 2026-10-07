@@ -1,4 +1,150 @@
-# P0: Solicitudes, Pagos e IQ — diagnóstico y corrección parcial
+# P0: despacho inmediato de Pagos y descubrimiento reactivo
+
+## Continuacion sobre `43496c5970b83334a20563200a79f8cbe52e8b1f`
+
+Rama: `fix/iq-latency-reactivity`. **P0 permanece abierto. Sin push ni deploy.**
+Esta seccion describe el cambio actual y sustituye los dos pendientes tecnicos
+anotados en el diagnostico anterior, conservado abajo como antecedente.
+Las metricas historicas no son evidencia de cierre.
+
+### Causa y nuevo camino de Pagos
+
+Antes, `finalizePagoDocumentUploadCore` persistia el comprobante y el estado
+`QUEUED`, sin encolar una Task automatica. El consumidor normal era
+`processIqPagoDepositCreateQueue`: cada minuto, hasta diez candidatos en serie.
+La Task existente `processIqPagoDepositOnDemandTask` acepta solamente `MANUAL`;
+no era un camino automatico utilizable por la finalizacion del comprobante.
+
+Ahora el camino normal es:
+
+`createPago -> PAY0 persistido -> respuesta/UI liberada -> upload/finalize del
+comprobante -> commit QUEUED -> enqueue inmediato (delay 0) ->
+processIqPagoDepositAutomaticTask -> contexto autorizado/gates -> core HTTP
+compartido -> lock/fingerprint/journal -> POST /deposits -> recuperacion y
+vinculacion del ID -> Firestore -> listeners de la pantalla`.
+
+El comprobante sigue siendo requisito del POST. La pagina no espera IQ para
+liberarse. Finalize espera el enqueue, nunca el POST IQ. La transicion `QUEUED`
+es durable: `dispatchQueuedPagoIqCreation` reintenta el enqueue si el proceso
+muere o falla. Ambos caminos usan SHA-256 del par pago/upload como ID de Task;
+la normalizacion de Cloud Tasks no colapsa IDs que difieren por mayusculas.
+
+La Task relee el pago y la generacion, comprueba configuracion maestra y usa
+el mismo contexto/autorizacion del scheduler. El core y el lock transaccional
+vuelven a comprobar la generacion antes del POST. Se conservan leases,
+fingerprint, bloqueo de resultado incierto, vinculacion de ID write-once,
+protecciones terminales y reintentos manuales existentes. Las entregas tardias
+no despachan un comprobante reemplazado. El catch del scheduler ya no puede
+rebajar un estado que otro worker cambio a PROCESSING/CREATED.
+
+La nueva Task reintenta errores anteriores al despacho: hasta tres intentos,
+backoff 300-900 s, ventana de 1800 s. Un resultado incierto no se vuelve a
+postear automaticamente. El scheduler es respaldo: pagos QUEUED sin reserva
+de despacho (o con fallo explicito de enqueue) tras 60 s, o con reserva de la
+misma generacion de mas de 45 minutos
+(ventana de retries y ultima ejecucion). Conserva el mismo lock al competir.
+No se cambio la sincronizacion inversa IQ->PAY0 ni complementos automaticos.
+
+### Descubrimiento de filas nuevas
+
+Una consulta `onSnapshot` por pantalla usa el alcance exacto del callable
+(rol/usuario/root) y el rango temporal seleccionado. Arranca al recibir la
+primera pagina y fija el limite inferior en su ultimo `createdAt`; si esta
+vacia, usa el inicio del rango. No tiene limite movil: recupera todas las altas
+posteriores, incluso una rafaga durante desconexion. Los indices necesarios
+ya estan en `firestore.indexes.json`; no se modificaron reglas ni indices.
+
+El snapshot inicial/reconexion combina sus documentos por ID; despues procesa
+cambios incrementales en una sola actualizacion de estado por lote. Mantiene
+referencias de filas iguales, orden temporal con nanosegundos y desempate por ID.
+No activa loading, reload, navegacion ni una key que remonte la tabla.
+Los listeners de documentos conservan reactividad/borrado de las paginas mas
+antiguas, aunque queden fuera de la consulta de descubrimiento. Cambiar alcance
+o salir libera las suscripciones; las respuestas tardias se descartan.
+`iqApplicable` se persiste al finalizar el comprobante para las altas nuevas.
+El enriquecimiento ya recibido del listado conserva precedencia; cambios de
+configuracion del despacho se recalculan al volver a cargar el listado.
+
+### Validacion local de esta continuacion
+
+- `node --test qa/scripts/operation-reactivity.test.cjs`: 8/8.
+- `FIRESTORE_EMULATOR_HOST=127.0.0.1:8088 node --test --test-timeout=90000 qa/scripts/iq-immediate-discovery.emulator.test.cjs`: 9/9.
+- `npx tsc --noEmit --incremental false`: PASS.
+- `npm --prefix functions run build`: PASS.
+- `node scripts/verify-authorization-policy.mjs`: PASS.
+- `npm run build`: PASS (version final, cache limpia, 42 paginas generadas).
+
+La suite nueva usa Firestore emulado con las reglas actuales y un proyecto
+`demo-pay0-latency-*` unico por corrida. Rechaza cualquier host distinto del
+localhost indicado. Cloud Tasks y el transporte IQ estan simulados; se ejecutan
+el helper de enqueue, handlers extraidos del codigo actual, core HTTP y adapters
+reales de lock/journal. El orquestador de contexto IQ se sustituye por ese core:
+no prueba credenciales, catalogos, IAM ni entrega real de Cloud Tasks.
+
+Cobertura: helper de finalize/evento duplicados generan una Task inmediata; worker sin
+scheduler; fallo de enqueue y reintento; error previo al contexto y reintento;
+cinco creaciones concurrentes producen exactamente un POST; ID write-once;
+replay no genera otro POST; respuesta perdida conserva retryBlocked aun con
+lease vencido; generacion obsoleta/terminal no hace POST. Dos clientes Firebase
+por cada listado reciben altas/cambios/borrados; recuperan 150 altas tras
+reconexion sin duplicados; conservan filas de paginas anteriores y referencias
+no modificadas; cleanup de una sesion no interrumpe la otra. Consultas por rol
+aceptadas por reglas actuales y consulta ampliada de operador rechazada.
+
+El arnes inicial fallo por promesas de otro contexto VM y fue corregido para
+usar el contexto Node nativo. El emulador 1.22 devolvio 500 al vaciar un proyecto
+con streams cerrados: cada corrida usa ahora un proyecto demo nuevo. Estos
+fallos locales no se ocultan ni se atribuyen al comportamiento productivo.
+El frontend compilo inicialmente; tras el ajuste final de enriquecimiento,
+el build con cache reprodujo el error previo WasmHash de Webpack. Se repitio
+con cache local limpia, sin cambiar dependencias ni configuracion.
+
+Para repetir, iniciar el jar local del emulador en `127.0.0.1:8088` y ejecutar
+la suite con la variable indicada; requiere primero el build de Functions.
+
+### Archivos de esta continuacion
+
+- `functions/src/index.ts`: exporta trigger y Task automaticos.
+- `functions/src/modules/pagoDocuments/service.ts`: enqueue tras commit y enriquecimiento IQ.
+- `functions/src/modules/iq/pagoImmediateDispatch.ts`: reserva, deduplicacion y criterio de recovery.
+- `functions/src/modules/iq/pagoDepositCallables.ts`: trigger, worker, generacion y scheduler de respaldo.
+- `functions/src/modules/iq/pagoDepositHttpCreateFlow.ts`: propaga generacion al lock.
+- `functions/src/modules/iq/depositHttpCreateFirebaseAdapters.ts`: valida generacion/elegibilidad en transaccion.
+- `src/lib/operationDiscovery.ts`: consulta acotada de altas nuevas.
+- `src/lib/liveOperationRows.ts`: scope, merge incremental, orden y frontera inicial.
+- `src/lib/useLiveOperationRows.ts`: integra descubrimiento y listeners existentes.
+- `src/app/pagos/page.tsx`, `src/app/solicitudes/page.tsx`: seed y alcance de suscripciones.
+- `qa/scripts/operation-reactivity.test.cjs`: dependencia del hook actualizada.
+- `qa/scripts/iq-immediate-discovery.emulator.test.cjs`: cobertura local nueva.
+- Este informe.
+
+### Pendiente exclusivamente de validacion real para estos dos cambios
+
+Tras autorizar y desplegar esta version en el entorno acordado, comprobar
+provisionamiento/IAM de las dos Functions nuevas, enqueue/entrega/retries reales,
+configuracion IQ y uso de los indices existentes. Ejecutar una operacion
+controlada y correlacionar por ID:
+
+`click -> PAY0 persisted -> UI released -> IQ dispatch -> IQ response ->
+Firestore update -> UI reactive update`.
+
+Medir latencia total y cada tramo posterior a este cambio; contar POST y folios
+IQ efectivos; observar ambas pantallas en dos pestanas/sesiones, alta externa,
+folio/estado/aplicaciones, navegacion y reconexion. Comprobar visualmente que
+no hay refresh, parpadeo, perdida de scroll/seleccion ni remonte de la tabla.
+Las trazas del listener no sustituyen la comprobacion de pintura/commit React
+ni corrigen por si solas el desfase entre relojes. Las pruebas locales no
+certifican un SLO productivo ni autorizan cerrar P0.
+
+La consulta conserva todas las altas dentro del rango durante la sesion: sus
+lecturas/memoria crecen con las altas y paginas cargadas. El upload sigue
+dependiendo de la pestana y los post-create de Solicitudes siguen como estaban;
+esta continuacion no altera esos flujos. La prueba real determinara si algun
+tramo necesita otra correccion. No se uso ninguna operacion productiva.
+
+---
+
+## Diagnostico anterior (historico, previo a esta continuacion)
 
 Fecha: 2026-10-06. Base inspeccionada: `fe2b98b`, rama inicialmente abierta
 `feature/commission-distribution-cycle`. Trabajo aislado en

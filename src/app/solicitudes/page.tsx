@@ -10,6 +10,7 @@ import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
 import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
@@ -814,10 +815,14 @@ export default function SolicitudesPage() {
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
   const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
 
+  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
+  const operationScopeKey = `${uid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`;
+
   useLiveOperationRows({
     collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
     enabled: Boolean(uid && canViewSolicitudes),
-    scopeKey: `${uid}:${rootId}:${role}:${rangeKey}`, onError: setPageMsg,
+    discovery, scope: { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime() },
+    scopeKey: operationScopeKey, onError: setPageMsg,
   });
 
   useEffect(() => {
@@ -845,6 +850,7 @@ export default function SolicitudesPage() {
     void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() }).then((page) => {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       setSolicitudes(page.items || []);
+      setDiscovery(operationDiscoverySeed(operationScopeKey, page.items || []));
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
       setPageMsg((current) => current.includes("solicitudes") ? "" : current);

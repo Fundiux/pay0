@@ -7,6 +7,7 @@ import { MAX_PAGO_DOCUMENT_SIZE_BYTES, buildPagoDocumentStoragePath, getPagoDocu
 import { logActivityTx, logActivity } from "../../utils/logActivity";
 import { notifyIqPagoTelegramH4D59B } from "../iq/pagoTelegramNotifications";
 import { canRunIqAutomationForDispatch } from "../dispatches/domain";
+import { enqueueAutomaticPagoCreation } from "../iq/pagoImmediateDispatch";
 
 const db = admin.firestore();
 
@@ -443,6 +444,7 @@ export async function finalizePagoDocumentUploadCore(
   }
 
   let finalVersion = 1;
+  let queuedForIq = false;
   let terminalUnlockAppliedH4D64A6 = false;
   let terminalContextH4D64A6: PagoIqTerminalContextH4D64A6 = {
     terminal: false,
@@ -560,6 +562,10 @@ export async function finalizePagoDocumentUploadCore(
     if (Object.keys(iqAutoQueuePatchH4D62B).length > 0) {
       tx.set(pagoRefH4D58H, iqAutoQueuePatchH4D62B, { merge: true });
     }
+    queuedForIq = Object.keys(iqAutoQueuePatchH4D62B).length > 0;
+    if (documentType === "COMPROBANTE_PAGO") {
+      tx.set(pagoRefH4D58H, { iqApplicable: Boolean(iqDispatchEnabled) }, { merge: true });
+    }
     // H4_D62B_PAGO_DOC_COMPROBANTE_AUTO_QUEUE_WRITE
     logActivityTx(tx, db, {
       event: "DOCUMENTO_PAGO_SUBIDO",
@@ -589,6 +595,13 @@ export async function finalizePagoDocumentUploadCore(
       },
     });
   });
+
+  if (queuedForIq) {
+    await enqueueAutomaticPagoCreation(pagoId, uploadId).catch(() => {
+      // The committed QUEUED transition is a durable outbox: its trigger retries.
+      console.warn("PAGO_IQ_IMMEDIATE_ENQUEUE_DEFERRED", { pagoId });
+    });
+  }
 
   if (terminalUnlockAppliedH4D64A6) {
     const terminalFolio = terminalContextH4D64A6.iqId || "sin folio";

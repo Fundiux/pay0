@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
 import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { beginOperationTiming } from "@/lib/operationTiming";
 import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
 import { useSearchParams } from "next/navigation";
@@ -1481,10 +1482,14 @@ export default function PagosPage() {
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
+  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
+  const operationScopeKey = `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`;
+
   useLiveOperationRows({
     collectionName: "pagos", rows: pagos, setRows: setPagos,
     enabled: Boolean(myUid && rootId && canViewPagos),
-    scopeKey: `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`,
+    discovery, scope: { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime() },
+    scopeKey: operationScopeKey,
     onError: setPageMsg,
   });
 
@@ -1528,6 +1533,7 @@ export default function PagosPage() {
       setPagos((current) => append
         ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))]
         : page.items);
+      if (!append) setDiscovery(operationDiscoverySeed(operationScopeKey, page.items));
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
     } catch (error: any) {
@@ -1539,13 +1545,13 @@ export default function PagosPage() {
         setLoadingMorePagos(false);
       }
     }
-  }, [canViewPagos, rootId, myUid, pagoCursor, range]);
+  }, [canViewPagos, rootId, myUid, pagoCursor, range, operationScopeKey]);
 
   useEffect(() => {
     setPagos([]);
     void loadPagosPage(false);
     return () => { ++pagosRequestSeq.current; };
-  }, [canViewPagos, rootId, myUid, range]);
+  }, [canViewPagos, rootId, myUid, range, role]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {

@@ -13,6 +13,8 @@ import { mkdtemp, rm } from "fs/promises";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { enqueueAutomaticPagoCreation, isAutomaticPagoRecoveryDue, matchesPagoGeneration } from "./pagoImmediateDispatch";
 import { onTaskDispatched } from "firebase-functions/tasks";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 import { defineSecret } from "firebase-functions/params";
@@ -1262,24 +1264,19 @@ function logPagoIqAutomationScopeSkipH4D63A1C(input: {
 }
 // H4_D63A_AUTOMATION_SCOPE_SKIP_HELPERS_END
 async function markPagoIqAutoCreateErrorH4D62C(input: {
-  pagoId: string;
-  error: unknown;
-  source: string;
+  pagoId: string; error: unknown; source: string; expectedUploadId?: string;
 }) {
-  const message = cleanText((input.error as any)?.message ?? input.error) || "Error desconocido.";
-
-  await db.collection("pagos").doc(input.pagoId).set(
-    {
-      iqDepositCreationStatus: "ERROR_RETRYABLE",
-      iqDepositFollowupStatus: "ERROR_RETRYABLE",
-      iqDepositAutoCreateLastError: message,
+  const ref = db.collection("pagos").doc(input.pagoId);
+  await db.runTransaction(async (tx) => {
+    const row = asRecord((await tx.get(ref)).data());
+    if (!shouldProcessPagoIqCreateQueueH4D62C(row) || row.iqDepositCreationRetryBlocked === true ||
+        (input.expectedUploadId && !matchesPagoGeneration(row, input.expectedUploadId))) return;
+    tx.set(ref, {
+      iqDepositAutoCreateLastError: cleanText((input.error as any)?.message) || "Error de despacho IQ.",
       iqDepositAutoCreateLastErrorAt: FieldValue.serverTimestamp(),
       iqDepositAutoCreateLastErrorSource: input.source,
-      iqDepositUpdatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  ).catch(() => undefined);
+    }, { merge: true });
+  });
 }
 
 type PagoIqOperationalActorH4D87 = {
@@ -1292,7 +1289,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   auth: AuthContext;
   actor: PagoIqOperationalActorH4D87;
   pagoId: string;
-  source: "SCHEDULER" | "TASK";
+  source: "SCHEDULER" | "TASK" | "AUTO_TASK";
+  expectedUploadId?: string;
   sessionHolders?: Map<string, {
     username: string;
     apiOrigin: string;
@@ -1300,7 +1298,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }>;
 }) {
   const pagoId = cleanText(input.pagoId);
-  const reconcileSource = input.source;
+  const reconcileSource = input.source === "AUTO_TASK" ? "SCHEDULER" : input.source;
   const pagoRef = db.collection("pagos").doc(pagoId);
   const existingPagoSnap = await pagoRef.get();
 
@@ -1309,6 +1307,9 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }
 
   const existingPago = asRecord(existingPagoSnap.data());
+  if (input.expectedUploadId && !matchesPagoGeneration(existingPago, input.expectedUploadId)) {
+    return { ok: true, pagoId, status: "SKIPPED_STALE_GENERATION", created: false };
+  }
   assertSameRoot(existingPago, input.auth.rootId, "Pago");
 
   const createEligible =
@@ -1364,6 +1365,10 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     persist: true,
   });
 
+  if (input.expectedUploadId && ctx.receiptUploadId !== input.expectedUploadId) {
+    return { ok: true, pagoId, status: "SKIPPED_STALE_RECEIPT", created: false };
+  }
+
   if (!ctx.ready) {
     throw new HttpsError(
       "failed-precondition",
@@ -1387,6 +1392,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
 
   const httpResult = await runPagoDepositHttpCreateFlow({
     sessionHolder,
+    expectedUploadId: input.expectedUploadId,
     pagoId: ctx.pagoId,
     actorUid: input.actor.uid,
     source: `CREATE_PAGO_IQ_DEPOSIT_HTTP_${input.source}`,
@@ -1494,12 +1500,12 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   if (created) {
     await result.ctx.pagoRef.collection("notas").add({
       rootId: input.auth.rootId,
-      text: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
+      text: input.source !== "TASK" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
       createdBy: input.actor.uid,
       createdByName: input.actor.name,
       createdByRole: input.actor.role,
       createdAt: FieldValue.serverTimestamp(),
-      system: input.source === "SCHEDULER",
+      system: input.source !== "TASK",
     }).catch(() => undefined);
 
     await notifyIqPagoTelegramH4D59B({
@@ -1510,7 +1516,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       pago: result.ctx.pago as Record<string, unknown>,
       iqId,
       source: `H4_D62C_CREATE_${input.source}`,
-      message: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
+      message: input.source !== "TASK" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
     }).catch(() => undefined);
 
     const reconciled = await reconcilePagoIqDepositCoreH4D44(input.auth, pagoId, reconcileSource, input.actor).catch((error: any) => ({
@@ -1531,7 +1537,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       linked: true,
       iqId,
       reconciliation: reconciled,
-      message: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente: ${iqId}.` : `Deposito IQ creado manualmente: ${iqId}.`,
+      message: input.source !== "TASK" ? `Deposito IQ creado automaticamente: ${iqId}.` : `Deposito IQ creado manualmente: ${iqId}.`,
     };
   }
 
@@ -1574,12 +1580,12 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
 
       await pagoRef.collection("notas").add({
         rootId: input.auth.rootId,
-        text: input.source === "SCHEDULER" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
+        text: input.source !== "TASK" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
         createdBy: input.actor.uid,
         createdByName: input.actor.name,
         createdByRole: input.actor.role,
         createdAt: FieldValue.serverTimestamp(),
-        system: input.source === "SCHEDULER",
+        system: input.source !== "TASK",
       }).catch(() => undefined);
 
       return {
@@ -1591,7 +1597,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
         recovered: true,
         iqId: recoveredIqIdH4D62C,
         reconciliation: recoveredH4D62C,
-        message: input.source === "SCHEDULER" ? `Deposito IQ creado y folio recuperado automaticamente: ${recoveredIqIdH4D62C}.` : `Deposito IQ creado y folio recuperado manualmente: ${recoveredIqIdH4D62C}.`,
+        message: input.source !== "TASK" ? `Deposito IQ creado y folio recuperado automaticamente: ${recoveredIqIdH4D62C}.` : `Deposito IQ creado y folio recuperado manualmente: ${recoveredIqIdH4D62C}.`,
       };
     }
   }
@@ -3691,6 +3697,46 @@ export const processIqPagoDepositOnDemandTask =
     },
   );
 // H4_D64_A2_PAGO_IQ_ON_DEMAND_END
+// The QUEUED receipt generation is the durable outbox. Delayed events cannot
+// dispatch a replaced receipt, and repeated delivery resolves to the same task.
+export const dispatchQueuedPagoIqCreation = onDocumentWritten(
+  { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (event) => {
+    const before = asRecord(event.data?.before.data());
+    const after = asRecord(event.data?.after.data());
+    if (!event.data?.after.exists || !shouldProcessPagoIqCreateQueueH4D62C(after)) return;
+    if (before.iqDepositCreationStatus === "QUEUED" &&
+        before.iqDepositCreationQueuedUploadId === after.iqDepositCreationQueuedUploadId) return;
+    const uploadId = cleanText(after.iqDepositCreationQueuedUploadId);
+    if (uploadId) await enqueueAutomaticPagoCreation(event.params.pagoId, uploadId);
+  },
+);
+
+export const processIqPagoDepositAutomaticTask = onTaskDispatched(
+  {
+    region: "us-central1", timeoutSeconds: 540, memory: "2GiB",
+    secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
+    retryConfig: { maxAttempts: 3, minBackoffSeconds: 300, maxBackoffSeconds: 900, maxRetrySeconds: 1800 },
+    rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
+  },
+  async (request) => {
+    const { pagoId, uploadId } = asRecord(request.data);
+    if (typeof pagoId !== "string" || typeof uploadId !== "string" || !pagoId || !uploadId) return;
+    const snap = await db.collection("pagos").doc(pagoId).get();
+    const row = asRecord(snap.data());
+    if (!snap.exists || !matchesPagoGeneration(row, uploadId) || !shouldProcessPagoIqCreateQueueH4D62C(row)) return;
+    const enabled = await loadEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
+    if (!enabled.has(cleanText(row.rootId))) return;
+    const auth = await buildPagoIqSystemAuthH4D44(row);
+    // No catch that downgrades the financial/IQ state on a duplicate or lock error.
+    // Failures before dispatch remain QUEUED and Cloud Tasks retries with backoff.
+    await createPagoIqDepositFromQueueCoreH4D62C({
+      auth, pagoId, source: "AUTO_TASK", expectedUploadId: uploadId,
+      actor: { uid: "system", name: "System", role: "system" },
+    });
+  },
+);
+
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
@@ -3720,6 +3766,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
       .map((doc): Record<string, unknown> => ({ id: doc.id, ...asRecord(doc.data()) }))
       .filter((row) => enabledRoots.has(cleanText(row.rootId)))
       .filter((row) => shouldProcessPagoIqCreateQueueH4D62C(row))
+      .filter((row) => isAutomaticPagoRecoveryDue(row))
       .slice(0, 10);
 
     const sessionHolders = new Map<string, {
@@ -3737,6 +3784,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
           auth,
           pagoId,
           sessionHolders,
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
           actor: {
             uid: "system",
             name: "System",
@@ -3759,6 +3807,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
         await markPagoIqAutoCreateErrorH4D62C({
           pagoId,
           error,
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
           source: "SCHEDULER",
         });
       }

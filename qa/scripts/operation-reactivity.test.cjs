@@ -44,6 +44,7 @@ test('payment enrichment survives document updates and deleted documents are rem
   const next = replaceOperationRow(rows, 'p1', { id: 'p1', status: 'CONCILIADO', pagoIqFolio: '456' });
   assert.equal(next[0].iqApplicable, false);
   assert.equal(next[0].status, 'CONCILIADO');
+  assert.equal(replaceOperationRow(next, 'p1', { id: 'p1', iqApplicable: true })[0].iqApplicable, false, 'callable enrichment takes precedence over an older persisted flag');
   assert.equal(replaceOperationRow(next, 'p1', null).length, 0);
   assert.equal(replaceOperationRow(rows, 'unknown', { id: 'unknown' }), rows);
 });
@@ -164,6 +165,7 @@ test('actual hook ignores cached snapshots and late callbacks, surfaces revoked 
     '@/lib/firebaseClient': { db: {} },
     '@/lib/liveOperationRows': { replaceOperationRow, createOperationSubscriptions },
     '@/lib/operationTiming': { traceReactiveOperation() {} },
+    '@/lib/operationDiscovery': { buildOperationDiscoveryQuery() { return null; } },
   });
   hook.useLiveOperationRows({ collectionName: 'pagos', scopeKey: 'user:root:range', enabled: true,
     rows, setRows: update => { rows = update(rows); }, onError: message => errors.push(message) });
