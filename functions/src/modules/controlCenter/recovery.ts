@@ -1,3 +1,4 @@
+import { isIqHistoricalImport } from "../iq/historicalImportGuard";
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -24,6 +25,8 @@ export async function enqueueRecovery(solicitudId: string, row: any, kind: Recov
   const ref = db.collection("operationRecoveryJobs").doc(hash(`${row.rootId}:${solicitudId}:${kind}:${generation}`));
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
+    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
+    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") return;
     if (existing.exists && !["COMPLETED", "RESOLVED_EXTERNALLY", "SUPERSEDED"].includes(existing.data()?.status)) return;
     const automatic = kind === "DRAFT" || kind === "MATERIALITY";
     tx.set(ref, {
@@ -40,7 +43,7 @@ export const queueOperationRecovery = onDocumentWritten({
 }, async event => {
   if (!event.data?.after.exists) return;
   const row = (await db.doc(`solicitudes/${event.params.documentId}`).get()).data();
-  if (!row) return;
+  if (!row || isIqHistoricalImport(row) || row.isDeleted || row.deletedAt || row.status === "ELIMINADA") return;
   await reconcileRecoverySource(event.params.documentId, row);
   for (const kind of Object.keys(RECOVERY_FIELDS) as RecoveryKind[]) {
     if (row[RECOVERY_FIELDS[kind]] === "ERROR") await enqueueRecovery(event.params.documentId, row, kind);

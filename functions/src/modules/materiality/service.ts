@@ -1,3 +1,5 @@
+import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { normalizeRole } from "../../utils/authGuard";
 import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldPath, FieldValue, getFirestore, type Transaction, type QueryDocumentSnapshot } from "firebase-admin/firestore";
@@ -407,6 +409,10 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
 
   let solicitud = solicitudSnap.data() || {};
   assertSameRoot(solicitud, rootId, "Solicitud");
+  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") {
+    const prior = (await db.doc(`materialityOperations/${solicitudId}`).get()).data() || {};
+    return {ok:true,materialityOperationId:solicitudId,materialityClientCompanyId:prior.materialityClientCompanyId || "",status:prior.status || "INCOMPLETE",completedTypes:prior.completedTypes || [],missingTypes:prior.missingTypes || [],sourceDeleted:true};
+  }
 
   await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
   const refreshedSolicitudSnap = await db.collection("solicitudes").doc(solicitudId).get();
@@ -436,6 +442,9 @@ export async function getMaterialityOperationCore(request: any) {
 
   const row = snap.data() || {};
   assertSameRoot(row, rootId, "Operacion de materialidad");
+  await loadClientAndCompany(user, uid, rootId, cleanText(row.clienteId || row.clientId), cleanText(row.companyId));
+  await requireClientOperationalAccess({ uid, role: normalizeRole(user.role) as "superadmin" | "admin" | "operador", rootId,
+    clientId: cleanText(row.clienteId || row.clientId), permission: "view", errorMessage: "No autorizado para este expediente de materialidad." });
 
   return {
     ok: true,
@@ -808,6 +817,10 @@ async function projectMaterialityOperation(input: { rootId: string; uid: string;
       throw new HttpsError("aborted", "La solicitud cambió durante la actualización documental.");
     if (previousOperation.exists && cleanText(previousOperation.data()?.rootId) !== rootId)
       throw new HttpsError("permission-denied", "Expediente fuera del root.");
+    if (solicitud?.isDeleted || solicitud?.deletedAt || solicitud?.status === "ELIMINADA") {
+      const prior = previousOperation.data() || {};
+      return {ok:true,materialityOperationId:solicitudId,materialityClientCompanyId:prior.materialityClientCompanyId || "",status:prior.status || "INCOMPLETE",completedTypes:prior.completedTypes || [],missingTypes:prior.missingTypes || [],sourceDeleted:true};
+    }
     const [clientSnap, companySnap] = await Promise.all([tx.get(db.doc(`clients/${clienteId}`)), tx.get(db.doc(`companies/${companyId}`))]);
     const client = clientSnap.data(), company = companySnap.data();
     if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
@@ -919,4 +932,18 @@ async function projectMaterialityOperation(input: { rootId: string; uid: string;
     }, { merge: true });
     return result;
   });
+}
+
+export async function refreshMaterialityProjectionFromSource(input: { rootId: string; solicitudId: string }) {
+  const rootId = cleanText(input.rootId), solicitudId = cleanText(input.solicitudId);
+  if (!rootId || !solicitudId) throw new HttpsError("invalid-argument", "Alcance documental requerido.");
+  const snap = await db.doc(`solicitudes/${solicitudId}`).get(), solicitud = snap.data();
+  if (!solicitud || cleanText(solicitud.rootId) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera del root.");
+  const clienteId = cleanText(solicitud.clienteId || solicitud.clientId), companyId = cleanText(solicitud.companyId);
+  if (!clienteId || !companyId) throw new HttpsError("failed-precondition", "Expediente sin cliente o empresa.");
+  const [clientSnap, companySnap] = await Promise.all([db.doc(`clients/${clienteId}`).get(), db.doc(`companies/${companyId}`).get()]);
+  const client = clientSnap.data(), company = companySnap.data();
+  if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+    throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+  return projectMaterialityOperation({ rootId, uid: "SYSTEM", username: "Sistema", solicitudId, solicitud, clienteId, companyId, client, company });
 }

@@ -30,7 +30,7 @@ function LiveTable() {
   return <main><input aria-label="Filtro" value={filter} onChange={e => setFilter(e.target.value)}/><select aria-label="Creador" value={creator} onChange={e => setCreator(e.target.value)}><option value="selected">Seleccionado</option><option value="other">Otro</option></select>
     <button onClick={async () => { const s = await getDoc(doc(db, kind, 'older')); setRows(current => current.some(r => r.id === s.id) ? current : [...current, { ...s.data(), id: s.id }]); }}>Cargar otra página</button>
     <span role="alert">{error}</span><output>{selected}</output>
-    <table><tbody>{rows.filter(r => r.id.includes(filter)).map(row => <tr key={row.id} data-row={row.id}><td><input aria-label={`Seleccionar ${row.id}`} type="checkbox" checked={selected === row.id} onChange={() => setSelected(row.id)}/></td><td>{row.id}</td><td data-creator>{recordCreatorLabel(row)}</td><td>{row.status}</td><td>{row.pagoIqFolio || row.solicitudIqFolio}</td></tr>)}</tbody></table></main>;
+    <table><tbody>{rows.filter(r => r.id.includes(filter)).map(row => <tr key={row.id} data-row={row.id}><td><input aria-label={`Seleccionar ${row.id}`} type="checkbox" checked={selected === row.id} onChange={() => setSelected(row.id)}/></td><td>{row.id}</td><td data-creator>{recordCreatorLabel(row)}</td><td>{row.status}</td><td data-visibility>{row.oculto ? "Oculta" : "Visible"}</td><td>{row.pagoIqFolio || row.solicitudIqFolio}</td></tr>)}</tbody></table></main>;
 }
 const route = params.get('route');
 let view = <LiveTable/>;

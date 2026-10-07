@@ -522,6 +522,8 @@ test('production Materialidad keeps REP XML/PDF per application and partiality; 
     'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
     'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
     './domain': functionsRequire('./lib/modules/materiality/domain.js'),
+    '../clientDelegations/access': functionsRequire('./lib/modules/clientDelegations/access.js'),
+    '../../utils/authGuard': functionsRequire('./lib/utils/authGuard.js'),
     '../facturama/service': { async ensureAutomaticFacturamaDraftForSolicitud() { draftCalls++; } },
   });
   const rootId = 'projection-root', solicitudId = 'projection-sol', pagoId = 'projection-pay';
@@ -731,6 +733,8 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     crypto: require('node:crypto'), 'firebase-functions/v2/https': https,
     'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
     './domain': functionsRequire('./lib/modules/materiality/domain.js'),
+    '../clientDelegations/access': functionsRequire('./lib/modules/clientDelegations/access.js'),
+    '../../utils/authGuard': functionsRequire('./lib/utils/authGuard.js'),
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
   });
   await Promise.all([
@@ -821,11 +825,11 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     }, publishSuperadminQueueSummary: async () => {},
   }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
   try {
-    for (const mode of ['normal','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','master-off']) {
+    for (const mode of ['normal','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','five-workers','master-off']) {
       const file = {size:bytes.length,name:'synthetic.xlsx',arrayBuffer:async()=>Uint8Array.from(bytes).buffer};
       let creates = 0, closed = false, error = '', id; const click = Date.now();
       failInitResponse = mode === 'init-response-failure'; failUpload = mode === 'upload-failure'; failFinalize = mode === 'finalize-failure'; failProjection = mode === 'projection-failure'; failUrl = mode === 'url-failure';
-      const ctx = { beginOperationTiming:()=>sid=>{stamp('ui_released_at',sid);}, saving:{current:false},submission:{current:null},
+      const ctx = { sourceCompanyWarning:"", sourceCompanyConfirmed:false, beginOperationTiming:()=>sid=>{stamp('ui_released_at',sid);}, saving:{current:false},submission:{current:null},
         formData:{monto:'98,000',tipoFactura:'PUE',clientId:'flow-client',companyId:'flow-company',operationTypeKey:'FACTURA_SUBTOTAL'},
         isSolicitudFormComplete:true, facturaXmlFile:null,ordenCompraFile:file, facturaXmlParsed:null,ordenCompraParsed:{montoSolicitud:98000,tipoFactura:'PUE'},
         selectedCompany:{despachoId:'flow-dispatch'},setIsSubmitting(){},setSaveError:v=>{error=v;},
@@ -849,15 +853,16 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
       assert((await db.doc(`materialityOperations/${id}`).get()).updateTime.isEqual(projection.updateTime));
       const task=tasks.get(`iq-solicitud-create-${id}`.toLowerCase());assert(task);assert.equal(task.functionName,'processIqCreateOnDemandTask');
       await db.doc('iqIntegrationConfigs/flow-root').update({enabled:mode!=='master-off'});
+      stamp('harness_worker_started_at',id);
       const beforePosts=httpPosts;const names=[[],[]];
       const stops=names.map(values=>db.doc(`solicitudes/${id}`).onSnapshot(snap=>{values.push(snap.data().createdByDisplayName);if(snap.data().solicitudIqFolio)stamp('ui_reactive_update_at',id);}));
-      await Promise.all(Array.from({length:5},()=>worker.processIqCreateOnDemandTask({data:task.data})));
+      await Promise.all(Array.from({length:mode==='five-workers'?5:1},()=>worker.processIqCreateOnDemandTask({data:task.data})));
       await worker.processIqCreateOnDemandTask({data:task.data});
       assert.equal(httpPosts-beforePosts,mode==='master-off'?0:1);
       await eventually(()=>names.every(values=>values.length>=1),'two source listeners');
       assert(names.every(values=>values.every(name=>name==='Synthetic Creator')));stops.forEach(stop=>stop());
       const t=timing[id];console.log('SOURCE_FLOW',JSON.stringify({mode,creates,uploads:docs.size,tasks:1,posts:httpPosts-beforePosts,timestamps:t,
-        PAY0_PERSIST_LATENCY:t.pay0_persisted_at-t.ui_click_at,DOCUMENT_UPLOAD_LATENCY:t.document_finalized_at-t.document_upload_started_at,
+        HARNESS_PRE_WORKER:t.harness_worker_started_at-t.document_finalized_at,WORKER_TO_HTTP:t.iq_dispatch_at-t.harness_worker_started_at,PAY0_PERSIST_LATENCY:t.pay0_persisted_at-t.ui_click_at,DOCUMENT_UPLOAD_LATENCY:t.document_finalized_at-t.document_upload_started_at,
         UI_LATENCY:t.ui_released_at-t.ui_click_at,IQ_DISPATCH_LATENCY:t.iq_dispatch_at-t.document_finalized_at,REACTIVE_LATENCY:t.ui_reactive_update_at-t.firestore_iq_update_at,END_TO_END:t.ui_reactive_update_at-t.ui_click_at,IQ_LATENCY:t.iq_response_at-t.iq_dispatch_at,END_TO_END_BACKEND:t.firestore_iq_update_at-t.pay0_persisted_at}));
     }
   } finally { await new Promise(resolve=>server.close(resolve)); }
@@ -927,4 +932,189 @@ test('listSolicitudes resolves historical names and retains production root, cre
  assert.equal(second.items[0].id,'list-second');assert.equal(second.hasMore,false);
  await db.doc('users/list-admin').update({disabled:true});
  await assert.rejects(listSolicitudes(request));
+});
+
+test('listPagos resolves historical names and retains production root, creator filter and pagination guards', async () => {
+ const helper=functionsRequire('./lib/modules/sharedCallables/recordCreators.js');
+ const guard=functionsRequire('./lib/utils/authGuard.js');
+ const https=functionsRequire('firebase-functions/v2/https');
+ const {listPagos} = extract(['listPagos','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,canRunIqAutomationForDispatch:functionsRequire('./lib/modules/dispatches/domain.js').canRunIqAutomationForDispatch,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/index.ts');
+ await db.doc('users/list-pago-admin').set({rootId:'list-pago-root',role:'superadmin',active:true});
+ await db.doc('users/list-pago-creator').set({rootId:'list-pago-root',displayName:'Listed Creator'});
+ for(const [id,rootId,createdBy,at] of [['first','list-pago-root','list-pago-creator',3000],['second','list-pago-root','list-pago-creator',2000],['excluded','different-root','list-pago-creator',4000],['other','list-pago-root','someone-else',5000]]) await db.doc(`pagos/list-${id}`).set({rootId,createdBy,createdAt:Timestamp.fromMillis(at)});
+ const request={auth:{uid:'list-pago-admin'},data:{creatorUid:'list-pago-creator',limit:1}};
+ const first=await listPagos(request);
+ assert.equal(first.items.length,1);assert.equal(first.items[0].id,'list-first');assert.equal(first.items[0].createdByDisplayName,'Listed Creator');assert.equal(first.hasMore,true);
+ const second=await listPagos({...request,data:{...request.data,cursorSeconds:first.nextCursor.seconds,cursorNanoseconds:first.nextCursor.nanoseconds,cursorId:first.nextCursor.id}});
+ assert.equal(second.items[0].id,'list-second');assert.equal(second.hasMore,false);
+ await db.doc('users/list-pago-admin').update({disabled:true});
+ await assert.rejects(listPagos(request));
+});
+
+
+// Canonical deletion uses the real authorization policy, Firestore transactions
+// and system audit implementation. External transport is never contacted.
+async function seedDeletion(id) {
+ await db.doc('users/delete-actor').set({rootId:'delete-root',role:'superadmin',active:true,displayName:'Deletion Actor'});
+ await db.doc(`solicitudes/${id}`).set({rootId:'delete-root',createdBy:'delete-actor',adminId:'delete-root',folio:`LOCAL-${id}`,status:'PROCESANDO',oculto:false,isDeleted:false,totalAbonado:0});
+ return {auth:{uid:'delete-actor'},data:{solicitudId:id,newStatus:'ELIMINADA'}};
+}
+const deletion = () => functionsRequire('./lib/modules/solicitudes/deletion.js').changeSolicitudVisibilityCore;
+
+test('hide/show are durable, reversible, audited and do not change status or pending work', async () => {
+ const req=await seedDeletion('visibility');
+ await db.doc('iqCreateJobs/visibility').set({solicitudId:'visibility',rootId:'delete-root',status:'QUEUED'});
+ for(const ocultar of [true,true,false,false]) await deletion()({...req,data:{solicitudId:'visibility',ocultar}});
+ const source=(await db.doc('solicitudes/visibility').get()).data();
+ assert.equal(source.status,'PROCESANDO');assert.equal(source.isDeleted,false);assert.equal(source.oculto,false);
+ assert.equal((await db.doc('iqCreateJobs/visibility').get()).get('status'),'QUEUED');
+ const audit=await db.collection('pay0ActivityLog').where('referenceId','==','visibility').get();
+ assert.deepEqual(audit.docs.map(d=>d.get('event')).sort(),['SOLICITUD_MOSTRADA','SOLICITUD_OCULTADA']);
+});
+
+test('deletion preserves history, cancels pending dependencies and is idempotent under five concurrent requests', async () => {
+ const req=await seedDeletion('delete-docs');
+ for(const [id,status,active] of [['historic','READY',true],['unfinished','PENDING',false]]) await db.doc(`uploads/delete-${id}`).set({rootId:'delete-root',solicitudId:'delete-docs',status,active,version:2,storagePath:`synthetic/${id}`});
+ await db.doc('materialityOperations/delete-docs').set({rootId:'delete-root',status:'INCOMPLETE',projectionDigest:'keep-digest',ordenCompraUploadId:'delete-historic'});
+ await db.doc('facturamaInvoices/delete-draft').set({rootId:'delete-root',sourceSolicitudId:'delete-docs',status:'AUTO_DRAFT_FISCAL_VALIDATED',environment:'SANDBOX'});
+ await db.doc('iqCreateJobs/delete-docs').set({rootId:'delete-root',solicitudId:'delete-docs',status:'QUEUED',nextRunAt:Timestamp.now()});
+ await db.doc('operationRecoveryJobs/delete-docs').set({rootId:'delete-root',solicitudId:'delete-docs',status:'PENDING',nextAttemptAt:Timestamp.now()});
+ const results=await Promise.all(Array.from({length:5},()=>deletion()(req)));
+ assert.equal(results.filter(r=>!r.reused).length,1);
+ const row=(await db.doc('solicitudes/delete-docs').get()).data();assert.equal(row.status,'ELIMINADA');assert.equal(row.isDeleted,true);assert.equal(row.deletedBy,'delete-actor');assert(row.deletedAt);
+ const historic=(await db.doc('uploads/delete-historic').get()).data();assert.equal(historic.status,'READY');assert.equal(historic.version,2);assert.equal(historic.storagePath,'synthetic/historic');assert.equal(historic.sourceDeleted,true);
+ assert.equal((await db.doc('uploads/delete-unfinished').get()).get('status'),'CANCELLED_DELETED');
+ assert.equal((await db.doc('materialityOperations/delete-docs').get()).get('projectionDigest'),'keep-digest');
+ assert.equal((await db.doc('facturamaInvoices/delete-draft').get()).get('status'),'AUTO_DRAFT_FISCAL_VALIDATED');
+ assert.equal((await db.doc('operationRecoveryJobs/delete-docs').get()).get('status'),'CANCELLED_DELETED');
+ const audit=await db.collection('pay0ActivityLog').where('referenceId','==','delete-docs').get();assert.equal(audit.size,1);assert.equal(audit.docs[0].get('actorName'),'Deletion Actor');
+ const snapshot=await db.doc('solicitudes/delete-docs').get();await deletion()(req);assert((await snapshot.ref.get()).updateTime.isEqual(snapshot.updateTime));
+ await assert.rejects(deletion()({...req,data:{solicitudId:'delete-docs',ocultar:false}}));
+ let external=0;
+ const worker=extract(['processIqCreateOnDemandTask'],{db,onTaskDispatched:(_,run)=>run,IQ_CREDENTIALS_KEY:'local',TELEGRAM_BOT_TOKEN:'local',asRecord:x=>x||{},cleanText:x=>String(x||''),cleanUpper:x=>String(x||'').toUpperCase(),...runtime,processProfileJobs:async()=>{external++;}},'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+ await worker.processIqCreateOnDemandTask({data:{jobId:'delete-docs',source:'AUTO'}});assert.equal(external,0);
+});
+
+test('deletion fails closed for applications, financial links, IQ folios, uncertain responses, CFDI and inactive users', async () => {
+ const scenarios=[{field:{solicitudIqFolio:'IQ-1'}},{field:{iqCreationStatus:'OUTCOME_UNKNOWN'}},{field:{totalAbonado:1}},{collection:'pagoAplicaciones'}, {collection:'pagos'}, {collection:'paymentComplementRequests'}, {collection:'recognizedExpenses'}, {collection:'signatureRequests'}, {collection:'documentDeliveryJobs'}, {collection:'telegramClientNotificationEvents'}, {invoice:true}];
+ for(let i=0;i<scenarios.length;i++) {
+  const id=`blocked-delete-${i}`,req=await seedDeletion(id),scenario=scenarios[i];
+  if(scenario.field)await db.doc(`solicitudes/${id}`).update(scenario.field);
+  if(scenario.collection)await db.doc(`${scenario.collection}/${id}`).set({rootId:'delete-root',solicitudId:id});
+  if(scenario.invoice)await db.doc(`facturamaInvoices/${id}`).set({rootId:'delete-root',sourceSolicitudId:id,status:'PRODUCTION_ISSUED',facturamaCfdiId:'external'});
+  await assert.rejects(deletion()(req));assert.equal((await db.doc(`solicitudes/${id}`).get()).get('isDeleted'),false);
+ }
+ const req=await seedDeletion('delete-auth');
+ for(const flag of [{disabled:true},{deleted:true},{deletedAt:'2026-10-07'}]) {await db.doc('users/delete-actor').set({rootId:'delete-root',role:'superadmin',...flag});await assert.rejects(deletion()(req));}
+ await db.doc('users/delete-actor').set({rootId:'wrong-root',role:'superadmin'});await assert.rejects(deletion()(req));
+});
+
+test('canonical deletion and the actual worker claim serialize: either delete wins with zero POST, or deletion is blocked', async () => {
+ const {markJobProcessing}=extract(['markJobProcessing'],{db,FieldValue,cleanUpper:x=>String(x||'').toUpperCase()},'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+ for(let i=0;i<5;i++) {
+  const id=`delete-race-${i}`,req=await seedDeletion(id),ref=db.doc(`iqCreateJobs/${id}`);
+  await ref.set({rootId:'delete-root',solicitudId:id,status:'QUEUED',attemptCount:0});
+  let posts=0;
+  const [removed,worker]=await Promise.allSettled([deletion()(req),(async()=>{const claim=await markJobProcessing({ref,solicitudId:id});if(claim!==null)posts++;return claim;})()]);
+  if(removed.status==='fulfilled'){assert.equal(posts,0);assert.equal(worker.value,null);}else{assert.equal(posts,1);assert.equal((await db.doc(`solicitudes/${id}`).get()).get('isDeleted'),false);}
+ }
+});
+
+
+test('deleted source cannot revive Materialidad or a Facturama draft', async () => {
+ const req=await seedDeletion('deleted-projections');
+ await db.doc('materialityOperations/deleted-projections').set({rootId:'delete-root',status:'INCOMPLETE',projectionDigest:'retain',completedTypes:[],missingTypes:[]});
+ await deletion()(req);
+ const before=await db.doc('materialityOperations/deleted-projections').get();
+ const materiality=functionsRequire('./lib/modules/materiality/service.js');
+ const result=await materiality.linkSolicitudToMaterialityOperationCore({auth:req.auth,data:{solicitudId:'deleted-projections'}});
+ assert.equal(result.sourceDeleted,true);assert((await before.ref.get()).updateTime.isEqual(before.updateTime));
+ const draft=await functionsRequire('./lib/modules/facturama/service.js').ensureAutomaticFacturamaDraftForSolicitud({auth:req.auth,solicitudId:'deleted-projections',source:'OC_UPLOAD'});
+ assert.equal(draft.reason,'SOURCE_DELETED');
+});
+
+test('the production fiscal claim and deletion serialize without changing provider behavior', async () => {
+ const file='functions/src/modules/facturama/sandboxCallables.ts',source=fs.readFileSync(file,'utf8');
+ const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true);let body;
+ const visit=n=>{if(ts.isCallExpression(n)&&n.expression.getText(ast)==='db.runTransaction'&&n.arguments[0]?.getText(ast).includes('const currentSnap = await tx.get(invoiceRef)'))body=n.arguments[0].getText(ast);ts.forEachChild(n,visit);};visit(ast);assert(body);
+ for(let i=0;i<3;i++) {
+  const id=`fiscal-delete-${i}`,req=await seedDeletion(id),invoiceRef=db.doc(`facturamaInvoices/${id}`);
+  await invoiceRef.set({rootId:'delete-root',sourceSolicitudId:id,status:'AUTO_DRAFT_FISCAL_VALIDATED'});
+  const ctx={db,invoiceRef,solicitudId:id,rootId:'delete-root',uid:'delete-actor',FieldValue,HttpsError:functionsRequire('firebase-functions/v2/https').HttpsError,clean:x=>String(x||'').trim(),issuedStatus:'PRODUCTION_ISSUED',emittingStatus:'PRODUCTION_EMITTING',options:{environment:'PRODUCTION'},claimedInvoice:{}};
+  const callback=new Function(...Object.keys(ctx),ts.transpileModule('return '+body,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText)(...Object.values(ctx));
+  const [removed,claimed]=await Promise.allSettled([deletion()(req),db.runTransaction(callback)]);
+  assert.notEqual(removed.status,claimed.status,'only one conflicting operation can commit');
+  if(removed.status==='fulfilled')assert.equal((await invoiceRef.get()).get('status'),'AUTO_DRAFT_FISCAL_VALIDATED');
+  else assert.equal((await db.doc(`solicitudes/${id}`).get()).get('isDeleted'),false);
+ }
+});
+
+
+test('deleted source rejects quotation and receipt generation before any Storage or external action', async () => {
+ const req=await seedDeletion('deleted-generated-docs');await deletion()(req);
+ for(const [module,method] of [['cotizaciones/callables','generateCotizacionForSolicitudCore'],['constancias/service','generateConstanciaRecepcionForSolicitudCore']]) {
+  const core=functionsRequire(`./lib/modules/${module}.js`)[method];
+  await assert.rejects(core({auth:req.auth,data:{solicitudId:'deleted-generated-docs'}}),error=>error.code==='failed-precondition' && /eliminada/i.test(error.message));
+ }
+ assert.equal((await db.collection('uploads').where('solicitudId','==','deleted-generated-docs').get()).size,0);
+});
+
+
+test('deployed historical import suppression survives the deletion guard', async () => {
+ const guard=functionsRequire('./lib/modules/iq/historicalImportGuard.js');
+ const row={source:'IQ_IMPORT',importRunId:'local-import-run',importVersion:1,canonicalIqProfileId:'profile',originalIqEntityId:'123'};
+ const request=await seedDeletion('historical-no-recovery');await db.doc('solicitudes/historical-no-recovery').update({...row,materialitySyncStatus:'ERROR'});
+ let reconciled=0,enqueued=0;
+ const {queueOperationRecovery}=extract(['queueOperationRecovery'],{onDocumentWritten:(_,run)=>run,db,...guard,reconcileRecoverySource:async()=>reconciled++,enqueueRecovery:async()=>enqueued++,RECOVERY_FIELDS:{MATERIALITY:'materialitySyncStatus'}},'functions/src/modules/controlCenter/recovery.ts');
+ await queueOperationRecovery({data:{after:{exists:true}},params:{documentId:'historical-no-recovery'}});
+ assert.equal(reconciled,0);assert.equal(enqueued,0);assert.equal(guard.isIqHistoricalImport({...row,importRunId:''}),false);
+});
+
+test('deployed SYSTEM Materialidad projection retains scope, digest and application routing without drafts', async () => {
+ const service=functionsRequire('./lib/modules/materiality/service.js');
+ const rootId='system-projection-root',solicitudId='system-projection';
+ await db.doc('clients/system-client').set({rootId});await db.doc('companies/system-company').set({rootId});
+ await db.doc(`solicitudes/${solicitudId}`).set({rootId,clienteId:'system-client',companyId:'system-company',status:'PROCESANDO'});
+ await service.refreshMaterialityProjectionFromSource({rootId,solicitudId});
+ const before=await db.doc(`materialityOperations/${solicitudId}`).get();assert.equal(before.get('updatedBy'),'SYSTEM');
+ await service.refreshMaterialityProjectionFromSource({rootId,solicitudId});assert((await before.ref.get()).updateTime.isEqual(before.updateTime));
+ assert.equal((await db.collection('facturamaInvoices').where('sourceSolicitudId','==',solicitudId).get()).size,0);
+ await assert.rejects(service.refreshMaterialityProjectionFromSource({rootId:'other',solicitudId}));
+ const {solicitudIdsForUpload}=extract(['solicitudIdsForUpload','text'],{db},'functions/src/modules/materiality/triggers.ts');
+ await db.doc('pagoAplicaciones/system-app').set({rootId,pagoId:'p',solicitudId});
+ assert.deepEqual(await solicitudIdsForUpload({rootId,applicationId:'system-app',pagoId:'p'}),[solicitudId]);
+ assert.deepEqual(await solicitudIdsForUpload({rootId:'other',applicationId:'system-app',pagoId:'p'}),[]);
+ await db.doc(`solicitudes/${solicitudId}`).update({isDeleted:true,status:'ELIMINADA'});
+ await service.refreshMaterialityProjectionFromSource({rootId,solicitudId});assert((await before.ref.get()).updateTime.isEqual(before.updateTime));
+});
+
+test('deployed document bundles and acceptance fail closed on retired resources, wrong root and absent consent', async () => {
+ const {canonicalCompanyCatalog,loadCanonicalBundle}=functionsRequire('./lib/modules/documents/canonicalBundle.js');
+ const {resolveCorporateDocumentBundle}=functionsRequire('./lib/modules/canonicalCenter/service.js');
+ const {receiptAcceptance}=functionsRequire('./lib/modules/signatureLinks/acceptance.js');
+ const companies=canonicalCompanyCatalog();assert(companies.length>0);
+ for(const company of companies)for(const use of ['COTIZACION','CONSTANCIA_ENTREGA_BIENES','CONSTANCIA_SERVICIO']) {
+  const bundle=loadCanonicalBundle(company.rfc,use);assert(bundle.logo.length>0);assert(bundle.reference.length>0);assert.equal(bundle.snapshot.companyRfc,company.rfc);assert.equal(bundle.snapshot.documentUse,use);
+ }
+ const rfc=companies[0].rfc,root='bundle-root',company='bundle-company';
+ const id=require('crypto').createHash('sha256').update(`${root}:${company}:DOCUMENT_TEMPLATE:COTIZACION`).digest('hex');
+ await db.doc(`pay0CanonicalResources/${id}`).set({rootId:root,ownCompanyId:company,hasActivated:true,activeVersion:null});
+ await assert.rejects(resolveCorporateDocumentBundle(root,company,rfc,'COTIZACION'),/ACTIVE_VERSION_REQUIRED/);
+ await db.doc(`pay0CanonicalResources/${id}`).update({rootId:'wrong',activeVersion:1});
+ await assert.rejects(resolveCorporateDocumentBundle(root,company,rfc,'COTIZACION'),/SCOPE_INVALID/);
+ const acceptance={signerName:'Synthetic signer',signerRole:'Receiver',receiptLocation:'Local fixture',receiptAddress:'Local address',acceptedNoClaimPolicy:true};
+ assert(receiptAcceptance(acceptance).acceptanceVersion);assert.throws(()=>receiptAcceptance({...acceptance,acceptedNoClaimPolicy:false}));
+ assert.throws(()=>receiptAcceptance({...acceptance,receiptAddress:''}));
+});
+
+
+test('signature link creation and deletion serialize without leaving a usable link on a deleted source', async () => {
+ const {createSolicitudSignatureLink}=extract(['createSolicitudSignatureLink','clean','username','role','canAccessSolicitud'],{admin,db,FieldValue,randomBytes:require('crypto').randomBytes,...functionsRequire('./lib/utils/authGuard.js'),...functionsRequire('./lib/modules/sharedCallables/helpers.js'),HttpsError:functionsRequire('firebase-functions/v2/https').HttpsError,onCall:(_,run)=>run},'functions/src/modules/signatureLinks/callables.ts');
+ for(let i=0;i<3;i++) {
+  const id=`signature-delete-${i}`,req=await seedDeletion(id);
+  const [removed,created]=await Promise.allSettled([deletion()(req),createSolicitudSignatureLink({auth:req.auth,data:{solicitudId:id}})]);
+  assert.notEqual(removed.status,created.status);
+  if(removed.status==='fulfilled')assert.equal((await db.collection('signatureRequests').where('solicitudId','==',id).get()).size,0);
+  else assert.equal((await db.doc(`solicitudes/${id}`).get()).get('isDeleted'),false);
+ }
 });

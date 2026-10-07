@@ -382,6 +382,7 @@ async function loadSolicitudOrThrow(input: {
   if (!canAccessSolicitud(input.user, input.uid, input.rootId, solicitud)) {
     throw new HttpsError("permission-denied", "No autorizado.");
   }
+  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
 
   return {
     solicitudRef,
@@ -449,6 +450,8 @@ const safeName = sanitizeFilename(originalName);
   const uploadRef = db.collection("uploads").doc(uploadId);
   await db.runTransaction(async tx => {
     const existing = await tx.get(uploadRef);
+    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
+    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
     if (existing.exists) {
       const row = existing.data()!;
       if (row.createdBy !== uid || row.solicitudId !== solicitudId || row.originalName !== originalName || row.sizeBytes !== sizeBytes || (row.sha256 || "") !== sha256) throw new HttpsError("failed-precondition", "La carga existente no coincide con el archivo.");

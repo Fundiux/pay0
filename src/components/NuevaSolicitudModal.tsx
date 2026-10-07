@@ -37,6 +37,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
   const saving = useRef(false);
   const [saveError, setSaveError] = useState("");
   const [sourceCompanyWarning, setSourceCompanyWarning] = useState("");
+  const [sourceCompanyConfirmed, setSourceCompanyConfirmed] = useState(false);
   const parseSequence = useRef(0);
   const [ordenCompraFile, setOrdenCompraFile] = useState<File | null>(null);
   const [facturaXmlFile, setFacturaXmlFile] = useState<File | null>(null);
@@ -318,6 +319,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo Orden de Compra...");
 
+    setSourceCompanyConfirmed(false);
     const sequence = ++parseSequence.current;
     try {
       const parsed = await parseOrdenCompraFile(file);
@@ -415,6 +417,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo XML de factura...");
 
+    setSourceCompanyConfirmed(false);
     const sequence = ++parseSequence.current;
     try {
       const parsed = await parseFacturaXmlFile(file);
@@ -556,6 +559,10 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     const releaseTiming = beginOperationTiming();
     e.preventDefault();
     if (saving.current) return;
+    if (sourceCompanyWarning && !sourceCompanyConfirmed) {
+      setSaveError("Confirma o corrige la empresa detectada en el documento antes de crear.");
+      return;
+    }
     const numMonto = parseFloat(String(formData.monto).replace(/,/g, ""));
 
     if (!isSolicitudFormComplete) {
@@ -716,6 +723,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
               if (sourceDocumentLock) return;
 
               const company = empresas.find((e) => String(e.id || "") === String(value || ""));
+              setSourceCompanyConfirmed(false);
               setFormData({
                 ...formData,
                 companyId: value,
@@ -865,7 +873,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
             className="min-h-[82px] w-full resize-none rounded-xl border border-white/10 bg-[#0b1220] px-4 py-2 text-[13px] text-slate-300 outline-none transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-70"
           />
 
-          {sourceCompanyWarning && <p role="alert" className="text-sm text-amber-200">{sourceCompanyWarning}</p>}
+          {sourceCompanyWarning && <div className="text-sm text-amber-200"><p role="alert">{sourceCompanyWarning}</p><label className="flex gap-2"><input type="checkbox" checked={sourceCompanyConfirmed} disabled={isSubmitting} onChange={e => setSourceCompanyConfirmed(e.target.checked)} />Confirmo que la empresa y el documento corresponden a esta solicitud.</label></div>}
           {saveError && <p role="alert" className="text-sm text-amber-200">{saveError} Conservamos el archivo para reintentar sin crear otra solicitud.</p>}
           <button
             type="submit"

@@ -1,3 +1,4 @@
+import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
@@ -1101,6 +1102,8 @@ async function resolveSolicitudRelacion(rootId: string, rawValue: any, currentSo
 }
 
 const changeSolicitudStatusHandler = async (request: any) => {
+  if (normalizeSolicitudBackendStatus(request.data?.newStatus) === "ELIMINADA" ||
+      (typeof request.data?.ocultar === "boolean" && !request.data?.newStatus)) return changeSolicitudVisibilityCore(request);
   const uid = requireAuth(request);
   const rootId = await getRootId(uid);
   const me = await getMyUser(uid);
@@ -2261,6 +2264,12 @@ export const createPago = onCall(
         moneda: String(moneda || "MXN"),
         comprobantes: [],
         createdBy: uid,
+        createdByDisplayName: String(me.displayName || me.name || me.username || "").trim(),
+        createdByUsername: String(me.username || "").trim(),
+        createdByUserNumber: Number(me.userNumber || me.numeroUsuario || me.sequenceNumber || 0) || null,
+        folioOwnerId: businessFolioContextPago.ownerUid,
+        delegateUid: businessFolioContextPago.delegateUid,
+        delegateUserNumber: businessFolioContextPago.delegateUserNumber,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         conciliatedBy: null,
@@ -2384,7 +2393,8 @@ export const listPagos = onCall(
       requiredAction: "view",
     });
 
-    const role = String(me.role || "").trim().toLowerCase();
+    const role = getUserRole(me);
+    const creatorUid = requestedRecordCreator(request.data?.creatorUid, role);
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 100, 1), 100);
     const fromMillis = Number(request.data?.fromMillis || 0);
@@ -2396,6 +2406,7 @@ export const listPagos = onCall(
     let queryRef: FirebaseFirestore.Query = db.collection("pagos").where("rootId", "==", rootId);
     if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
+    if (creatorUid) queryRef = queryRef.where("createdBy", "==", creatorUid);
 
     if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
     if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
@@ -2406,6 +2417,7 @@ export const listPagos = onCall(
 
     const snap = await queryRef.get();
     const docs = snap.docs.slice(0, pageSize);
+    const creators = await resolveRecordCreators(db, { uid, role, rootId }, docs);
     const despachoIds = [...new Set(docs.map((doc) => String(doc.get("despachoId") || "").trim()).filter(Boolean))];
     const despachoSnapshots = await Promise.all(despachoIds.map((id) => db.collection("despachos").doc(id).get()));
     const iqByDespacho = new Map(despachoSnapshots.map((dispatch, index) => [despachoIds[index], dispatch.exists && canRunIqAutomationForDispatch(dispatch.data())]));
@@ -2419,6 +2431,7 @@ export const listPagos = onCall(
         return {
           id: doc.id,
           ...data,
+          ...creatorDisplayFields(data, creators.labels, role),
           iqApplicable: iqByDespacho.get(String(data.despachoId || "").trim()) === true,
           createdAt: createdAt && typeof createdAt.seconds === "number"
             ? { seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds || 0 }
@@ -2426,6 +2439,7 @@ export const listPagos = onCall(
         };
       }),
       hasMore: snap.docs.length > pageSize,
+      creatorOptions: creators.creatorOptions,
       nextCursor: last ? {
         seconds: typeof lastCreatedAt?.seconds === "number" ? lastCreatedAt.seconds : 0,
         nanoseconds: typeof lastCreatedAt?.nanoseconds === "number" ? lastCreatedAt.nanoseconds : 0,
@@ -2791,7 +2805,7 @@ export { addClientDispersionNota } from "./modules/financing/callables";
 export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
 export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
 export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";
-export { getPublicConstanciaVerification } from "./modules/constancias/service";
+export { getPublicConstanciaVerification, generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoAmountForRetry, deactivatePagoDocument } from "./modules/pagoDocuments/callables";
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
 

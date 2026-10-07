@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, cp } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -54,3 +54,12 @@ for (const template of manifest.templates || []) {
 }
 
 await copyFile(manifestPath, resolve(root, "functions/lib/assets/cotizaciones-manifest.json"));
+
+// Preserve the deployed generators' company-specific reference bundles.
+for (const template of manifest.templates || []) {
+  const companyFolder = String(template.companyId || "").replace(/-/g, "_");
+  for (const kind of ["constancia-entrega", "constancia-servicio"]) {
+    await cp(resolve(canonicalCompaniesRoot, companyFolder, kind, "v1.1"),
+      resolve(root, "functions/lib/assets/constancias", template.rfc, kind), { recursive: true });
+  }
+}

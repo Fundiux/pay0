@@ -2813,7 +2813,7 @@ export default function PagosPage() {
                   <tr
                     key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p)}>{recordCreatorLabel(p)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p, creatorOptions)}>{recordCreatorLabel(p, creatorOptions)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">

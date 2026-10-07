@@ -69,6 +69,14 @@ test('restored route components and P0 live hook in two browser tabs preserve fi
       await other.getByLabel('Filtro',{exact:true}).fill('');await other.locator('[data-row="offline-new"]').waitFor();
       assert.equal(await other.locator('[data-row="foreign"]').count(),0);assert.equal(await other.locator('[data-row="older"]').count(),1);
       for(const tab of [page,other]) {assert.deepEqual(await tab.evaluate(()=>({sameTable:window.originalTable===document.querySelector('table'),sameRow:window.originalRow===document.querySelector('[data-row="stable"]'),removals:window.removals})),{sameTable:true,sameRow:true,removals:0});assert.equal(await tab.getByRole('alert').textContent(),'');}
+      if(kind==='solicitudes') {
+        for(const oculto of [true,false]) {
+          await db.doc(`${kind}/new`).update({oculto});
+          for(const tab of [page,other]) {await tab.locator('[data-row="new"] [data-visibility]').getByText(oculto?'Oculta':'Visible',{exact:true}).waitFor();assert.equal(await tab.locator('[data-row="new"] [data-creator]').textContent(),'Synthetic Creator');}
+        }
+        await db.doc(`${kind}/offline-new`).update({status:'ELIMINADA',isDeleted:true,oculto:true});
+        for(const tab of [page,other]) {await tab.locator('[data-row="offline-new"]').getByText('ELIMINADA',{exact:true}).waitFor();assert(await tab.getByLabel('Seleccionar stable').isChecked());assert.equal(await tab.locator('[data-row="older"]').count(),1);assert.equal(await tab.evaluate(()=>window.removals),0);}
+      }
       await other.close();
     }
     assert.deepEqual(errors,[]);assert.deepEqual(external,[]);

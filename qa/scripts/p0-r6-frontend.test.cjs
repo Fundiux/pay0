@@ -114,3 +114,13 @@ test('activity query scopes each role, includes current PAY0 source and excludes
   assert(!system.belongsToSystem({ sourceSystem: 'HUGO', event: 'PAGO_CREADO' }, 'PAY0'));
   assert.throws(() => ui.buildActivityLogQuery({}, 'hugoActivityLog', { uid: 'u', rootId: 'r', role: 'superadmin', maxRows: 20 }));
 });
+
+
+test('Solicitud hide and delete send distinct commands and do not claim deletion on a failed backend response', async () => {
+ const calls=[];let error='';let fail=false;
+ const ctx={window:{confirm:()=>true},setPageMsg:v=>{error=v;},changeSolicitudStatus:async data=>{calls.push(data);if(fail)throw Error('controlled rejection');return {data:{isDeleted:data.newStatus==='ELIMINADA'}};}};
+ const hide=extract('src/app/solicitudes/page.tsx','handleHide',ctx),del=extract('src/app/solicitudes/page.tsx','handleDelete',ctx);
+ await hide('synthetic',true);await hide('synthetic',false);await del('synthetic');
+ assert.deepEqual(calls,[{solicitudId:'synthetic',ocultar:true},{solicitudId:'synthetic',ocultar:false},{solicitudId:'synthetic',newStatus:'ELIMINADA'}]);
+ fail=true;await del('synthetic');assert.match(error,/controlled rejection/);
+});

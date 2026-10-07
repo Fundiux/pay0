@@ -21,7 +21,7 @@ test('source failure stays visible, retains File and folio, retry/double click c
   const file = {}, submission = { current: null }, saving = { current: false };
   let fail = true;
   const context = {
-    beginOperationTiming: () => () => { releases++; }, formData: { monto: '98,000', tipoFactura: 'PUE' },
+    sourceCompanyWarning:"", sourceCompanyConfirmed:false, beginOperationTiming: () => () => { releases++; }, formData: { monto: '98,000', tipoFactura: 'PUE' },
     saving, submission, isSolicitudFormComplete: true, facturaXmlFile: null, ordenCompraFile: file,
     facturaXmlParsed: null, ordenCompraParsed: { montoSolicitud: 98000, tipoFactura: 'PUE' },
     selectedCompany: { despachoId: 'iq' }, setIsSubmitting() {}, setSaveError: v => { error = v; },
@@ -118,7 +118,7 @@ test('OC autofill feedback remains correct when React defers the state updater',
   let body;
   function visit(n) { if (ts.isVariableDeclaration(n) && n.name.getText(ast) === 'applyOrdenCompraAutofill') body = n.initializer.getText(ast); ts.forEachChild(n, visit); } visit(ast);
   let message = '', warning = '', updater;
-  const ctx = { parseSequence: {current:0}, formData: {companyId:'previous',companyName:'Previous Company'}, setSourceCompanyWarning:v=>{warning=v;}, setOrdenCompraParseBusy() {}, setOrdenCompraParseMsg: v => { message = v; }, setOrdenCompraParsed() {},
+  const ctx = { setSourceCompanyConfirmed() {}, parseSequence: {current:0}, formData: {companyId:'previous',companyName:'Previous Company'}, setSourceCompanyWarning:v=>{warning=v;}, setOrdenCompraParseBusy() {}, setOrdenCompraParseMsg: v => { message = v; }, setOrdenCompraParsed() {},
     parseOrdenCompraFile: async () => ({ clienteNombre: 'Client', proveedorNombre: 'Company', montoSolicitud: 98000, tipoFactura: 'PUE' }),
     matchOptionByLabel: (_, label) => ({ value: label, label }), clientOptions: [], companyOptions: [], operationOptions: [],
     findFacturaSubtotalOperation: () => ({ value: 'FACTURA_SUBTOTAL', label: 'Factura subtotal' }), setFormData: fn => { updater = fn; },
@@ -140,4 +140,11 @@ test('creator rendering prefers durable snapshots and resolves safe legacy evide
  assert.equal(label({createdBy:'actor',operationalOwnerId:'owner',userNumber:22,delegateUid:'actor'},options),'Actor');
  assert.equal(label({userNumber:22,delegateUid:'missing'},options),'No disponible');
  assert.equal(label({nUsuario:21},[...options,{uid:'ambiguous',userNumber:21,displayName:'Other',username:''}]),'No disponible');
+});
+
+
+test('company mismatch cannot submit before explicit confirmation', async () => {
+ let error='';let creates=0;
+ const run=action({beginOperationTiming:()=>()=>{},saving:{current:false},sourceCompanyWarning:'Selected differs from OC',sourceCompanyConfirmed:false,setSaveError:v=>{error=v;},createSolicitud:()=>{creates++;}});
+ await run({preventDefault(){}});assert.match(error,/Confirma o corrige/);assert.equal(creates,0);
 });

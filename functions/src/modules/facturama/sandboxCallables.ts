@@ -186,6 +186,8 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
     let claimedInvoice: any = invoice;
     await db.runTransaction(async tx => {
       const currentSnap = await tx.get(invoiceRef);
+      const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
+      if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada; no se emite.");
       if (!currentSnap.exists) throw new HttpsError("not-found", "Borrador no encontrado.");
       const current: any = currentSnap.data() || {};
       if (clean(current.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Borrador fuera de alcance.");
@@ -243,7 +245,7 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
         referenceId: solicitudId, referenceType: "SOLICITUD", amount: xmlMetadata.total,
         description: `CFDI ${options.environment} vinculado al expediente.`,
         extra: { invoiceId, environment: options.environment, uuid },
-      }, db.collection("activityLog").doc(`factura-issued-${invoiceId}`));
+      }, db.collection("pay0ActivityLog").doc(`factura-issued-${invoiceId}`));
       await fiscalBatch.commit();
       if (options.environment === "PRODUCTION" && solicitud.replacementOfSolicitudId && uuid) {
         try {

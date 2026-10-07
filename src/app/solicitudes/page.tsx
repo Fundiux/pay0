@@ -103,6 +103,7 @@ const SolicitudRow = React.memo(({
   s,
   onApplyPago,
   onDelete,
+  onHide,
   onComment,
   onCancel,
   onReject,
@@ -355,7 +356,8 @@ const SolicitudRow = React.memo(({
               </>
             )}
 
-            {!isHidden && !isTerminal && (
+            {canCancel && !isTerminal && <button title={isHidden ? "Mostrar" : "Ocultar"} onClick={() => onHide(s.id, !isHidden)} className="text-slate-500 hover:text-sky-400 p-1"><Eye size={16} /></button>}
+            {canCancel && !isTerminal && (
               <button
                 title="Eliminar"
                 onClick={() => onDelete(s.id)}
@@ -1381,12 +1383,20 @@ export default function SolicitudesPage() {
     }
   };
 
-  const handleHide = async (id: string) => {
+  const handleHide = async (id: string, ocultar: boolean) => {
     try {
-      await changeSolicitudStatus({ solicitudId: id, ocultar: true });
+      await changeSolicitudStatus({ solicitudId: id, ocultar });
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo completar la accion.");
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Eliminar esta solicitud de forma logica y detener su trabajo pendiente? Se conservaran documentos e historial. No se cancelaran operaciones externas.")) return;
+    try {
+      const response = await changeSolicitudStatus({solicitudId:id,newStatus:"ELIMINADA"});
+      if ((response.data as any)?.isDeleted !== true) throw new Error("El backend no confirmo la eliminacion.");
+    } catch (error: any) { setPageMsg(error?.message || "No se pudo eliminar la solicitud."); }
   };
 
   const sendNote = async () => {    setPageMsg("");
@@ -1697,7 +1707,8 @@ export default function SolicitudesPage() {
                   cancelSatSaving={cancelSatSaving}
                   cancellationError={cancellationErrors[s.id]}
                   onDocs={setDocsFor}
-                  onDelete={handleHide}
+                  onDelete={handleDelete}
+                  onHide={handleHide}
                   canComment={canCommentSolicitud}
                   canCancel={canCancelSolicitud}
                   canUploadDocs={canUploadDocsSolicitud}

@@ -1038,6 +1038,7 @@ async function reserveQueuedJob(input: {
     }
 
     const solicitud = asRecord(solicitudSnap.data());
+    if (solicitud.isDeleted || solicitud.deletedAt || ["ELIMINADA","ELIMINADO"].includes(cleanUpper(solicitud.status))) throw new HttpsError("failed-precondition", "Solicitud eliminada.");
     const existingIqId = cleanText(solicitud.iqId ?? solicitud.iqFolio);
     if (existingIqId) {
       return { jobId, batchId, reused: true };
@@ -1417,6 +1418,8 @@ async function markJobProcessing(job: IqCreateJob): Promise<number | null> {
   // lease. Recheck under a transaction before allowing any external request.
   return db.runTransaction(async (tx) => {
     const current = await tx.get(job.ref);
+    const source = await tx.get(db.collection("solicitudes").doc(job.solicitudId));
+    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || ["ELIMINADA","ELIMINADO"].includes(cleanUpper(source.get("status")))) return null;
     if (!current.exists || !["QUEUED", "FAILED_RETRYABLE"].includes(cleanUpper(current.get("status")))) return null;
     const attemptCount = (Number(current.get("attemptCount")) || 0) + 1;
     tx.set(job.ref, {

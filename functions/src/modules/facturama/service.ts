@@ -1,3 +1,4 @@
+import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { resolveSolicitudFiscalClassification } from "./companyCatalog";
 
@@ -114,6 +115,7 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
   const rootId = text(user.rootId || uid, 128);
   const solicitud: any = solicitudSnap.data() || {};
   if (text(solicitud.rootId, 128) !== rootId) return { ok: false, skipped: true, reason: "ROOT_MISMATCH" };
+  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") return {ok:true,skipped:true,reason:"SOURCE_DELETED"};
 
   const companyId = text(solicitud.companyId || solicitud.empresaId, 128);
   const clienteId = text(solicitud.clienteId || solicitud.clientId, 128);
@@ -184,7 +186,12 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
       : "AUTO_DRAFT_FISCAL_REVIEW";
   const conceptDescription = operationalDescription(solicitud);
 
-  await invoiceRef.set({
+  await db.runTransaction(async tx => {
+  const source = await tx.get(solicitudSnap.ref);
+  const currentInvoice = await tx.get(invoiceRef);
+  if (currentInvoice.exists && currentInvoice.get("status") !== existingInvoiceData.status) throw new HttpsError("aborted", "El borrador cambio durante su actualizacion.");
+  if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+  tx.set(invoiceRef, {
     rootId,
     companyId,
     issuer: { name: pickName(company, companyId), rfc: normalizeRfc(company.rfc) },
@@ -237,7 +244,7 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  await solicitudSnap.ref.set({
+  tx.set(solicitudSnap.ref, {
     facturamaAutoDraftStatus: status,
     facturamaInvoiceId: invoiceRef.id,
     facturamaReceiverDataComplete: complete,
@@ -248,5 +255,6 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
+  });
   return { ok: true, skipped: false, reused: !!existingInvoice, invoiceId: invoiceRef.id, status };
 }
