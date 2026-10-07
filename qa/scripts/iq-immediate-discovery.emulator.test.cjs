@@ -22,8 +22,8 @@ function load(file, dependencies = {}) {
   new Function('exports', 'require', code)(exports, name => { assert(name in dependencies, `Unexpected dependency: ${name}`); return dependencies[name]; });
   return exports;
 }
-function extract(names, context) {
-  const source = fs.readFileSync('functions/src/modules/iq/pagoDepositCallables.ts', 'utf8');
+function extract(names, context, file = 'functions/src/modules/iq/pagoDepositCallables.ts') {
+  const source = fs.readFileSync(file, 'utf8');
   const ast = ts.createSourceFile('module.ts', source, ts.ScriptTarget.Latest, true);
   const parts = [];
   function visit(node) {
@@ -369,4 +369,43 @@ test('fixed first-page boundary, scope and nanosecond order preserve data identi
   const scope = { uid: 'u', rootId: 'root', role: 'admin', fromMillis: 0, toMillis: 20000 };
   assert.equal(rowsLib.operationBelongsToScope({ ...first, adminId: 'someone-else' }, 'pagos', scope), false);
   assert.equal(rowsLib.operationBelongsToScope({ ...first, adminId: 'u' }, 'pagos', scope), true);
+});
+
+
+test('Solicitud AUTO task ignores a prior scheduler claim without changing configuration', async () => {
+  await configRef.update({ enabled: true, 'automation.solicitudes': true, 'intervalMinutes.solicitudCreate': 1 });
+  const input = { process: 'solicitudCreate', purpose: 'CREATION', respectWindow: false };
+  assert.equal((await runtime.loadEnabledIqAutomationRoots(input)).has('root'), true);
+  assert.equal((await runtime.loadEnabledIqAutomationRoots(input)).has('root'), false);
+  const before = await configRef.get();
+  await db.doc('iqCreateJobs/solicitud-gate').set({ rootId: 'root', status: 'QUEUED', profileId: 'test-profile' });
+  let executions = 0, fail = false;
+  const { processIqCreateOnDemandTask: task } = extract(['processIqCreateOnDemandTask'], {
+    db, ...runtime, IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local',
+    onTaskDispatched: (options, run) => ({ options, run }), asRecord: value => value || {},
+    cleanText: value => String(value || '').trim(), cleanUpper: value => String(value || '').toUpperCase(),
+    processProfileJobs: async (profileId, jobs) => {
+      assert.equal(profileId, 'test-profile'); assert.equal(jobs[0].id, 'solicitud-gate');
+      if (fail) throw new Error('controlled processing failure');
+      executions++;
+    },
+  }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+  const request = { data: { jobId: 'solicitud-gate', source: 'AUTO' } };
+  await task.run(request);
+  assert.equal(executions, 1, 'previously zero after the scheduler claim');
+  assert((await configRef.get()).updateTime.isEqual(before.updateTime));
+  fail = true;
+  await assert.rejects(task.run(request), /controlled processing failure/, 'processing failure must propagate, not silently skip on the interval');
+  assert((await configRef.get()).updateTime.isEqual(before.updateTime));
+  fail = false;
+  for (const patch of [{ enabled: false, 'automation.solicitudes': true }, { enabled: true, 'automation.solicitudes': false }]) {
+    await configRef.update(patch); const off = await configRef.get();
+    await task.run(request); assert.equal(executions, 1);
+    assert((await configRef.get()).updateTime.isEqual(off.updateTime));
+  }
+  await configRef.update({ enabled: true, 'automation.solicitudes': true });
+  await db.doc('iqCreateJobs/solicitud-gate').update({ status: 'COMPLETED' });
+  await task.run(request); assert.equal(executions, 1, 'terminal job replay is ignored');
+  assert.equal(task.options.retryConfig.maxAttempts, 1, 'existing Solicitudes retry configuration is unchanged');
+  console.log('SOLICITUD REGRESSION: processProfileJobs=1 priorClaim=true configWrites=0');
 });

@@ -1,5 +1,27 @@
 # P0: despacho inmediato de Pagos y descubrimiento reactivo
 
+## Continuacion 2026-10-07: Task automatica de Solicitudes (base `118b40f`)
+
+Se aplica al bloqueo aceptado del ultimo preflight el mismo helper de lectura.
+Diff de produccion: dos lineas en `solicitudCreateQueueCallables.ts`: importa
+`readEnabledIqAutomationRoots` y lo usa en `processIqCreateOnDemandTask` para
+fuentes automaticas. `processIqCreateQueue` conserva el helper con claim.
+No se cambian perfiles, locks, jobs, transporte, reintentos, fuentes manuales,
+sincronizacion inversa ni complementos. Pagos conserva la correccion anterior.
+
+La suite ejecuta el manejador actual de Solicitudes contra la configuracion
+real en Firestore emulado. Un claim previo impide otro claim pero no impide
+la Task: `processProfileJobs=1` (antes 0), sin escrituras a la configuracion.
+Master OFF y flujo OFF bloquean; el error de procesamiento se propaga; el job
+terminal no se procesa de nuevo. `processProfileJobs` se sustituye por un
+contador con fallo controlado: esta prueba no certifica el POST de Solicitudes.
+La regresion de Pagos mantiene finalize real -> Task -> core HTTP real con
+transporte simulado: tasks=1, core=1, POST=1, configWrites=0.
+
+Comprobaciones: emulador 13/13, reactividad 8/8, TypeScript, build Functions y
+verificador de autorizacion PASS. Build frontend: PASS (cache limpia, 42 paginas).
+P0 abierto. Sin push, deploy ni operaciones reales. SHA en la entrega.
+
 ## Correccion minima del claim de intervalo (base `5c345bf`)
 
 P0 abierto. Sin deploy, operaciones reales ni cambios de arquitectura.

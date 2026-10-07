@@ -23,7 +23,7 @@ import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
 
-import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -1270,7 +1270,7 @@ export const processIqCreateOnDemandTask = onTaskDispatched(
     const source = cleanUpper(data.source);
     const isExplicitManualRequest = ["MANUAL_QUEUE", "MASS_UPLOAD"].includes(source);
     if (!isExplicitManualRequest) {
-      const enabledRoots = await loadEnabledIqAutomationRoots({
+      const enabledRoots = await readEnabledIqAutomationRoots({
         process: "solicitudCreate",
         purpose: "CREATION",
         respectWindow: false,
