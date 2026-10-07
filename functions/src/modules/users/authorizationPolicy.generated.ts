@@ -7,8 +7,8 @@ export const ROLE_DEFAULT_MODULES = {
     "dashboard": { "view": true },
     "reportes": { "view": true },
     "materialidad": { "view": true, "sync": true, "alerts": true },
-    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": true, "uploadDocs": true },
-    "pagos": { "view": true, "create": true, "conciliate": true },
+    "solicitudes": { "view": true, "create": true, "edit": true, "comment": true, "cancel": true, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "edit": true, "cancel": true, "uploadDocs": true, "conciliate": true },
     "clientes": { "view": true, "create": true, "edit": true, "costs": true },
     "despachos": { "view": true, "costs": true },
     "empresas": { "view": true },
@@ -16,14 +16,15 @@ export const ROLE_DEFAULT_MODULES = {
     "modulos": { "view": true, "edit": true },
     "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": true, "manage": true }
   },
   "admin": {
     "dashboard": { "view": true },
     "reportes": { "view": true },
     "materialidad": { "view": false, "sync": false, "alerts": false },
-    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": true, "uploadDocs": true },
-    "pagos": { "view": true, "create": true, "conciliate": false },
+    "solicitudes": { "view": true, "create": true, "edit": true, "comment": true, "cancel": true, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "edit": true, "cancel": true, "uploadDocs": true, "conciliate": false },
     "clientes": { "view": true, "create": true, "edit": true, "costs": true },
     "despachos": { "view": true, "costs": true },
     "empresas": { "view": true },
@@ -31,21 +32,23 @@ export const ROLE_DEFAULT_MODULES = {
     "modulos": { "view": true, "edit": true },
     "wallet": { "view": true, "saldos": true, "adelantos": true, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": true, "estadoCuentaUsuario": true, "configuracion": true },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": false, "manage": false }
   },
   "operador": {
     "dashboard": { "view": true },
     "reportes": { "view": true },
     "materialidad": { "view": false, "sync": false, "alerts": false },
-    "solicitudes": { "view": true, "create": true, "comment": true, "cancel": false, "uploadDocs": true },
-    "pagos": { "view": true, "create": true, "conciliate": false },
+    "solicitudes": { "view": true, "create": true, "edit": false, "comment": true, "cancel": false, "uploadDocs": true },
+    "pagos": { "view": true, "create": true, "edit": false, "cancel": false, "uploadDocs": true, "conciliate": false },
     "clientes": { "view": true, "create": true, "edit": false, "costs": false },
     "despachos": { "view": true, "costs": false },
     "empresas": { "view": true },
     "usuarios": { "view": false, "create": false, "activate": false, "permissions": false, "costs": false, "clientDelegations": false },
     "modulos": { "view": false, "edit": false },
-    "wallet": { "view": false, "saldos": false, "adelantos": false, "dispersiones": false, "beneficiarios": false, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
+    "wallet": { "view": true, "saldos": false, "adelantos": false, "dispersiones": true, "beneficiarios": true, "estadoCuentaCliente": false, "estadoCuentaUsuario": false, "configuracion": false },
     "telegram": { "view": true, "link": true },
-    "actividad": { "view": true }
+    "actividad": { "view": true },
+    "corporateResources": { "view": false, "manage": false }
   }
 } as const;

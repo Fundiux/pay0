@@ -11,9 +11,15 @@ import {
   observeActivityForAgent007Tx,
 } from "../modules/agent007/observer";
 import { getActivityEventMeta, normalizeActivityEventKey } from "../modules/activityLog/eventCatalog";
+import {
+  activityCollectionForSystem,
+  inferActivitySystem,
+  type ActivitySystem,
+} from "../modules/activityLog/systemBoundary";
 
 export type ActivityLogParams = {
   event: string;
+  sourceSystem?: ActivitySystem;
   rootId: string;
   adminId?: string | null;
 
@@ -84,6 +90,7 @@ export function buildActivityPayload(params: ActivityLogParams) {
   const actorUsername = clean(params.actorUsername || params.actorName || "");
   const actorName = clean(params.actorName || params.actorUsername || "");
   const eventMeta = getActivityEventMeta(event);
+  const sourceSystem = inferActivitySystem(event, params.sourceSystem);
 
   if (!event) {
     throw new Error("event es requerido para activityLog");
@@ -105,6 +112,8 @@ export function buildActivityPayload(params: ActivityLogParams) {
     eventCategory: eventMeta.category,
     eventModule: eventMeta.module,
     eventSeverity: eventMeta.severity,
+    sourceSystem,
+    activitySchemaVersion: 2,
 
     rootId: clean(params.rootId),
     adminId: clean(params.adminId),
@@ -139,7 +148,7 @@ export function buildActivityPayload(params: ActivityLogParams) {
 export async function logActivity(params: LogParams) {
   const db = getFirestore();
   const payload = buildActivityPayload(params);
-  const ref = await db.collection("activityLog").add(payload);
+  const ref = await db.collection(activityCollectionForSystem(payload.sourceSystem)).add(payload);
   await observeActivityForAgent007(db, ref.id, payload).catch(() => undefined);
 }
 
@@ -149,8 +158,8 @@ export function logActivityTx(
   params: ActivityLogParams,
   ref?: DocumentReference,
 ) {
-  const activityRef = ref || db.collection("activityLog").doc();
   const payload = buildActivityPayload(params);
+  const activityRef = ref || db.collection(activityCollectionForSystem(payload.sourceSystem)).doc();
   tx.set(activityRef, payload);
   observeActivityForAgent007Tx(tx, db, activityRef.id, payload);
   return activityRef;
@@ -161,8 +170,8 @@ export function logActivityBatch(
   params: ActivityLogParams,
   ref?: DocumentReference,
 ) {
-  const activityRef = ref || db.collection("activityLog").doc();
   const payload = buildActivityPayload(params);
+  const activityRef = ref || db.collection(activityCollectionForSystem(payload.sourceSystem)).doc();
   batch.set(activityRef, payload);
   observeActivityForAgent007Batch(batch, db, activityRef.id, payload);
   return activityRef;

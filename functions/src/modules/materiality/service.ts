@@ -1,5 +1,6 @@
+import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
-import { FieldPath, FieldValue, getFirestore, type QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, getFirestore, type Transaction, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import {
   MATERIALITY_REQUIRED_TYPES,
   buildMaterialityClientCompanyId,
@@ -248,12 +249,12 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string): Promise<Record<string, any>> {
-  const snap = await db
+async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string, tx: Transaction): Promise<Record<string, any>> {
+  const snap = await tx.get(db
     .collection("uploads")
     .where("solicitudId", "==", solicitudId)
     .limit(150)
-    .get();
+    );
 
   const byType: Record<string, any> = {};
 
@@ -268,51 +269,59 @@ async function getActiveUploadsBySolicitud(rootId: string, solicitudId: string):
   return byType;
 }
 
-async function getActivePagoUploadsBySolicitud(rootId: string, solicitudId: string): Promise<Record<string, any>> {
-  const aplicacionesSnap = await db
+async function getActivePagoUploadsBySolicitud(rootId: string, solicitudId: string, tx: Transaction): Promise<Record<string, any>> {
+  const aplicacionesSnap = await tx.get(db
     .collection("pagoAplicaciones")
     .where("solicitudId", "==", solicitudId)
     .limit(100)
-    .get();
+    );
 
-  const pagoIds = Array.from(new Set(
-    aplicacionesSnap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
-      .filter((row) => cleanText(row.rootId) === rootId)
-      .filter((row) => !cleanText(row.status) || cleanText(row.status).toUpperCase() === "APLICADA")
-      .map((row) => cleanText(row.pagoId))
-      .filter(Boolean)
-  ));
+  const applications = aplicacionesSnap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
+    .filter((row) => cleanText(row.rootId) === rootId && (!cleanText(row.status) || cleanText(row.status).toUpperCase() === "APLICADA"));
+  const applicationById = new Map(applications.map(row => [row.id, row]));
+  const pagoIds = Array.from(new Set(applications.map(row => cleanText(row.pagoId)).filter(Boolean)));
 
   const byType: Record<string, any> = {};
   if (pagoIds.length === 0) return byType;
 
   for (const chunk of chunkArray(pagoIds, 10)) {
-    const uploadsSnap = await db
+    const uploadsSnap = await tx.get(db
       .collection("uploads")
       .where("pagoId", "in", chunk)
       .limit(150)
-      .get();
+      );
 
     uploadsSnap.docs.forEach((doc) => {
       const row = { id: doc.id, ...(doc.data() || {}) } as any;
       if (!isReadyActiveUpload(row, rootId)) return;
       if (cleanText(row.entityType) !== "pagos") return;
-      if (cleanText(row.documentType).toUpperCase() !== "COMPROBANTE_PAGO") return;
-
-      putLatestUploadByType(byType, row);
+      const type = cleanText(row.documentType).toUpperCase();
+      if (type === "COMPROBANTE_PAGO") {
+        putLatestUploadByType(byType, row);
+      } else if (["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(type)) {
+        const applicationId = cleanText(row.applicationId || row.pagoAplicacionId);
+        const application = applicationById.get(applicationId);
+        if (!application || cleanText(application.status).toUpperCase() !== "APLICADA" || cleanText(application.pagoId) !== cleanText(row.pagoId) ||
+            (row.solicitudId && row.solicitudId !== solicitudId)) return;
+        // Keep every partiality, including several applications of one payment.
+        const key = `${type}:${applicationId}`;
+        if (byType[key] && Number(byType[key].version || 0) > Number(row.version || 0)) return;
+        byType[key] = { ...row, applicationId,
+          applicationFolio: cleanText(application.folio), installment: Number(application.numeroParcialidad || 0) };
+      }
     });
   }
 
   return byType;
 }
 
-async function getPrimaryContract(materialityClientCompanyId: string): Promise<any | null> {
-  const snap = await db
+async function getPrimaryContract(materialityClientCompanyId: string, tx: Transaction): Promise<any | null> {
+  const snap = await tx.get(db
     .collection("materialityContracts")
     .where("materialityClientCompanyId", "==", materialityClientCompanyId)
     .limit(25)
-    .get();
+    );
 
   const active = snap.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() || {}) } as any))
@@ -329,7 +338,8 @@ function buildCompletedTypes(activeUploadsByType: Record<string, any>, contract:
     completed.add("CONTRATO_MARCO");
   }
 
-  Object.keys(activeUploadsByType).forEach((type) => {
+  Object.values(activeUploadsByType).forEach((upload) => {
+    const type = normalizeMaterialityDocumentType(upload.documentType);
     if (type) completed.add(type);
   });
 
@@ -406,111 +416,7 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
   const companyId = cleanText(solicitud?.companyId);
 
   const { client, company } = await loadClientAndCompany(user, uid, rootId, clienteId, companyId);
-
-  const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
-  const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
-  const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
-
-  const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
-    getActiveUploadsBySolicitud(rootId, solicitudId),
-    getActivePagoUploadsBySolicitud(rootId, solicitudId),
-    getPrimaryContract(materialityClientCompanyId),
-  ]);
-
-  const activeUploadsByType = {
-    ...activeSolicitudUploadsByType,
-    ...activePagoUploadsByType,
-  };
-
-  const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
-  const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
-  const operationStatus = buildOperationStatus(solicitud, missingTypes);
-  const contractId = cleanText(contract?.id || "");
-  const now = FieldValue.serverTimestamp();
-  const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
-    id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
-    documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
-    storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
-  })).filter((upload: any) => upload.id && upload.storagePath);
-
-  const operationRef = db.collection("materialityOperations").doc(solicitudId);
-  const solicitudRef = db.collection("solicitudes").doc(solicitudId);
-
-  await db.runTransaction(async (tx) => {
-    const previousOperation = await tx.get(operationRef);
-    await ensureMaterialityClientCompanyTx(tx, {
-      rootId,
-      uid,
-      username,
-      clienteId,
-      companyId,
-      clienteNombre,
-      companyName,
-    });
-
-    tx.set(operationRef, {
-      rootId,
-      clienteId,
-      clienteNombre,
-      companyId,
-      companyName,
-      materialityClientCompanyId,
-      solicitudId,
-      solicitudFolio: cleanText(solicitud?.folio || solicitudId),
-      monto: toNumber(solicitud?.monto),
-      moneda: cleanText(solicitud?.moneda || "MXN") || "MXN",
-      concepto: cleanText(solicitud?.concepto || solicitud?.comentario || solicitud?.folio || solicitudId),
-      solicitudStatus: cleanText(solicitud?.status || ""),
-      status: operationStatus,
-      contractId: contractId || null,
-      ordenCompraUploadId: cleanText(activeUploadsByType.ORDEN_COMPRA?.id) || null,
-      cotizacionUploadId: cleanText(activeUploadsByType.COTIZACION?.id) || null,
-      constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
-      firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
-      documentRefs,
-      presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
-      facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
-      facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
-      facturamaInvoiceId: cleanText(solicitud?.facturamaInvoiceId) || null,
-      fiscalValidationStatus: cleanText(solicitud?.fiscalValidationStatus) || null,
-      fiscalValidationReason: cleanText(solicitud?.fiscalValidationReason) || null,
-      comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
-      comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
-      comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,
-      comprobanteDispersionUploadIds: FieldValue.delete(),
-      evidenciaUploadIds: activeUploadsByType.EVIDENCIA_OPERATIVA?.id
-        ? [cleanText(activeUploadsByType.EVIDENCIA_OPERATIVA.id)]
-        : [],
-      requiredTypes: MATERIALITY_REQUIRED_TYPES,
-      completedTypes,
-      missingTypes,
-      missingTypeLabels: missingTypes.map(getMaterialityDocumentLabel),
-      publicTokenId: null,
-      updatedAt: now,
-      updatedBy: uid,
-      updatedByUsername: username,
-      createdAt: previousOperation.data()?.createdAt || now,
-      createdBy: previousOperation.data()?.createdBy || uid,
-      createdByUsername: previousOperation.data()?.createdByUsername || username,
-    }, { merge: true });
-
-    tx.set(solicitudRef, {
-      materialityClientCompanyId,
-      materialityOperationId: solicitudId,
-      materialityStatus: operationStatus,
-      materialityMissingTypes: missingTypes,
-      materialityUpdatedAt: now,
-    }, { merge: true });
-  });
-
-  return {
-    ok: true,
-    materialityOperationId: solicitudId,
-    materialityClientCompanyId,
-    status: operationStatus,
-    completedTypes,
-    missingTypes,
-  };
+  return projectMaterialityOperation({ rootId, uid, username, solicitudId, solicitud, clienteId, companyId, client, company });
 }
 
 export async function getMaterialityOperationCore(request: any) {
@@ -886,4 +792,131 @@ export async function getMaterialityDashboardCore(request: any) {
     folders: filtered.slice(0, limit),
     alerts: rows.filter((row) => row.alertCount > 0).slice(0, 50),
   };
+}
+
+async function projectMaterialityOperation(input: { rootId: string; uid: string; username: string; solicitudId: string;
+  solicitud: any; clienteId: string; companyId: string; client: any; company: any }) {
+  const { rootId, uid, username, solicitudId, clienteId, companyId } = input;
+  const operationRef = db.collection("materialityOperations").doc(solicitudId);
+  const solicitudRef = db.collection("solicitudes").doc(solicitudId);
+  return db.runTransaction(async (tx) => {
+    // Read all projection inputs under the same transaction snapshot. Concurrent
+    // finalization/replacement/reversal retries the complete calculation.
+    const [previousOperation, latestSolicitud] = await Promise.all([tx.get(operationRef), tx.get(solicitudRef)]);
+    const solicitud = latestSolicitud.data();
+    if (!solicitud || cleanText(solicitud.rootId) !== rootId || cleanText(solicitud.companyId) !== companyId || cleanText(solicitud.clienteId || solicitud.clientId) !== clienteId)
+      throw new HttpsError("aborted", "La solicitud cambió durante la actualización documental.");
+    if (previousOperation.exists && cleanText(previousOperation.data()?.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Expediente fuera del root.");
+    const [clientSnap, companySnap] = await Promise.all([tx.get(db.doc(`clients/${clienteId}`)), tx.get(db.doc(`companies/${companyId}`))]);
+    const client = clientSnap.data(), company = companySnap.data();
+    if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+    const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
+    const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
+    const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
+
+    const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
+      getActiveUploadsBySolicitud(rootId, solicitudId, tx),
+      getActivePagoUploadsBySolicitud(rootId, solicitudId, tx),
+      getPrimaryContract(materialityClientCompanyId, tx),
+    ]);
+
+    const activeUploadsByType = {
+      ...activeSolicitudUploadsByType,
+      ...activePagoUploadsByType,
+    };
+
+    const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
+    const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
+    const operationStatus = buildOperationStatus(solicitud, missingTypes);
+    const contractId = cleanText(contract?.id || "");
+    const now = FieldValue.serverTimestamp();
+    const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
+      id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
+      documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
+      storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
+      applicationId: cleanText(upload?.applicationId), applicationFolio: cleanText(upload?.applicationFolio), installment: Number(upload?.installment || 0),
+      pagoId: cleanText(upload?.pagoId), entityType: cleanText(upload?.entityType),
+    })).filter((upload: any) => upload.id && upload.storagePath);
+
+
+    const projectionDigest = createHash("sha256").update(JSON.stringify({
+      revision: 2, rootId, clienteId, clienteNombre, companyId, companyName, solicitudId,
+      folio: solicitud.folio || solicitudId, monto: toNumber(solicitud.monto), moneda: solicitud.moneda || "MXN",
+      concepto: solicitud.concepto || solicitud.comentario || solicitud.folio || solicitudId,
+      solicitudStatus: solicitud.status || "", operationStatus, contractId, documentRefs, missingTypes,
+      facturamaInvoiceId: solicitud.facturamaInvoiceId || null,
+      fiscalValidationStatus: solicitud.fiscalValidationStatus || null, fiscalValidationReason: solicitud.fiscalValidationReason || null,
+    })).digest("hex");
+
+    const result = { ok: true, materialityOperationId: solicitudId, materialityClientCompanyId,
+      status: operationStatus, completedTypes, missingTypes };
+    if (previousOperation.data()?.projectionDigest === projectionDigest) return result;
+    await ensureMaterialityClientCompanyTx(tx, {
+      rootId,
+      uid,
+      username,
+      clienteId,
+      companyId,
+      clienteNombre,
+      companyName,
+    });
+
+    tx.set(operationRef, {
+      rootId,
+      clienteId,
+      clienteNombre,
+      companyId,
+      companyName,
+      materialityClientCompanyId,
+      solicitudId,
+      solicitudFolio: cleanText(solicitud?.folio || solicitudId),
+      monto: toNumber(solicitud?.monto),
+      moneda: cleanText(solicitud?.moneda || "MXN") || "MXN",
+      concepto: cleanText(solicitud?.concepto || solicitud?.comentario || solicitud?.folio || solicitudId),
+      solicitudStatus: cleanText(solicitud?.status || ""),
+      status: operationStatus,
+      contractId: contractId || null,
+      ordenCompraUploadId: cleanText(activeUploadsByType.ORDEN_COMPRA?.id) || null,
+      cotizacionUploadId: cleanText(activeUploadsByType.COTIZACION?.id) || null,
+      constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
+      firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
+      documentRefs,
+      projectionDigest,
+      presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
+      facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
+      facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
+      facturamaInvoiceId: cleanText(solicitud?.facturamaInvoiceId) || null,
+      fiscalValidationStatus: cleanText(solicitud?.fiscalValidationStatus) || null,
+      fiscalValidationReason: cleanText(solicitud?.fiscalValidationReason) || null,
+      comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
+      comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
+      comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,
+      comprobanteDispersionUploadIds: FieldValue.delete(),
+      evidenciaUploadIds: activeUploadsByType.EVIDENCIA_OPERATIVA?.id
+        ? [cleanText(activeUploadsByType.EVIDENCIA_OPERATIVA.id)]
+        : [],
+      requiredTypes: MATERIALITY_REQUIRED_TYPES,
+      completedTypes,
+      missingTypes,
+      missingTypeLabels: missingTypes.map(getMaterialityDocumentLabel),
+      publicTokenId: null,
+      updatedAt: now,
+      updatedBy: uid,
+      updatedByUsername: username,
+      createdAt: previousOperation.data()?.createdAt || now,
+      createdBy: previousOperation.data()?.createdBy || uid,
+      createdByUsername: previousOperation.data()?.createdByUsername || username,
+    }, { merge: true });
+
+    tx.set(solicitudRef, {
+      materialityClientCompanyId,
+      materialityOperationId: solicitudId,
+      materialityStatus: operationStatus,
+      materialityMissingTypes: missingTypes,
+      materialityUpdatedAt: now,
+    }, { merge: true });
+    return result;
+  });
 }

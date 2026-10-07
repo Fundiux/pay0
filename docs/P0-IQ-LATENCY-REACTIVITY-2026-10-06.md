@@ -1,3 +1,160 @@
+## P0-R5 ? recuperaci?n autorizada y bloqueo Hosting/SSR (2026-10-07)
+
+**P0 ABIERTO. DEPLOY_READY = NO.** Esta secci?n sustituye el estado del informe parcial
+anterior; lo que sigue se conserva como historial. Base de esta continuaci?n: `d630dc541498c360626908a213060c8ae0d936e5`,
+descendiente de `a12cb6de14b0e489181dcd9d5df8283f47b6c0df`, rama `fix/iq-latency-reactivity`.
+No push, deploy, escritura productiva, cambio de switches ni operaci?n IQ/Facturama real.
+
+La autorizaci?n expresa resolvi? el l?mite de alcance de la proyecci?n documental REP.
+Los tres bloques backend quedan recuperados. **Permanece un bloqueo distinto, comprobado
+en el artefacto SSR desplegado: la UI local es anterior a protecciones y rutas productivas.**
+No se ampli? la modificaci?n a esos flujos ni se sustituy? su baseline por la rama hist?rica.
+
+### Baseline y comparaci?n sem?ntica de las cinco Functions
+
+Lecturas remotas repetidas el 7 de octubre: las cinco revisiones y el release Hosting siguen
+iguales al preflight. No se detect? cambio entre ambas lecturas; esto no es un bloqueo contra
+un despliegue concurrente futuro. Regi?n `us-central1`, proyecto `pay-0-system`.
+
+| Function | Revisi?n productiva | Diferencia restante en su camino ejecutado |
+|---|---|---|
+| createSolicitud | createsolicitud-00058-xev | Instrumentaci?n P0 tras persistencia. Proyecci?n documental, identidad/asociado, permisos y auditor?a recuperados. |
+| createPago | createpago-00060-qex | Instrumentaci?n P0. Origen IQ, perfil/cliente, identificaci?n del recibo y transacci?n productivos. |
+| finalizePagoDocumentUpload | finalizepagodocumentupload-00031-rox | Enqueue inmediato posterior a nueva generaci?n QUEUED y metadata iqApplicable. Conserva hash, replay y canonical upload productivos; wrapper uploadDocs. |
+| processIqCreateOnDemandTask | processiqcreateondemandtask-00007-rob | Lectura sin claim para AUTO e instrumentaci?n. Retry/rate limits y perfil/locks productivos. |
+| processIqPagoDepositCreateQueue | processiqpagodepositcreatequeue-00019-qay | Recovery con gracia para Task inmediata; fence de generaci?n y error transaccional P0. Scheduler mantiene claim. |
+
+Se recorrieron declaraciones/dependencias de cada archivo fuente propio: 187/160/131/209/435
+s?mbolos, respectivamente. Engines, dependencias y paquetes del lockfile Functions coinciden
+con los cinco archivos desplegados. Las diferencias ejecutables restantes corresponden al P0 aprobado.
+La comparaci?n por declaraci?n reporta tambi?n la clase completa FirestoreHugoDataStore y
+contratos de tipos; constructor, observationRef, recommendationRef y messageRef usados por el
+observador son id?nticos en los cinco baselines. No se copiaron funciones ajenas de Hugo.
+Este an?lisis est?tico y las regresiones locales no sustituyen una certificaci?n productiva.
+
+### Diff sem?ntico de esta continuaci?n
+
+- Materialidad: consultas de solicitud, aplicaciones, uploads y contrato dentro de la misma
+  transacci?n; XML/PDF REP conservados por applicationId y parcialidad; versi?n m?s reciente
+  por tipo/aplicaci?n; exclusi?n de aplicaciones reversadas, uploads inactivos y fuentes ajenas;
+  referencias con folio, parcialidad, pagoId y digest SHA-256 revisi?n 2. Un digest id?ntico evita
+  reescribir operaci?n, carpeta y solicitud. Se copiaron las declaraciones productivas necesarias,
+  sin a?adir refreshMaterialityProjectionFromSource ni modificar proveedores/automatizaciones REP.
+- Autorizaci?n: wrappers init/finalize/deactivate de documentos usan pagos.uploadDocs; guard
+  can?nico rechaza disabled/deleted/deletedAt antes del bypass superadmin. Defaults completos
+  de producci?n recuperados desde la pol?tica can?nica, generado backend y bloque generado de
+  reglas coherentes. Incluyen edit/cancel, corporateResources y los defaults Wallet del operador
+  existentes en producci?n, no permisos dise?ados para P0. No se desplegaron reglas.
+- Auditor?a: logActivity, logActivityTx y logActivityBatch escriben PAY0/ASSETS/TTT/HUGO en sus
+  colecciones respectivas; sourceSystem y activitySchemaVersion=2; CANONICAL sin sistema se
+  rechaza. Conservados los observadores existentes.
+- Dependencia de notificaci?n Pago: preview Telegram id?ntico al scheduler productivo (texto
+  compacto, sin alterar transporte, dedupe o triggers). Ning?n env?o real.
+- No se modificaron en esta continuaci?n los helpers de intervalo ni las protecciones P0
+  anteriores; se volvieron a probar sobre las dependencias recuperadas.
+
+### Evidencia
+
+| PRODUCTION_PROTECTION | PRESERVED | P0_COMPATIBLE | TEST | RESULT |
+|---|---|---|---|---|
+| Asociado Solicitud separado del login, cat?logo ?nico | S? | S? | Asociado ausente/ambiguo, cliente ID/nombre | PASS |
+| Origen IQ Pago y asociaci?n perfil/root/cliente | S? | S? | Reasignaci?n, root ajeno, perfil inactivo, legacy no scoped | PASS |
+| Identificaci?n y hash real del comprobante | S? | S? | Actor/root/payload/duplicado y bytes distintos | PASS |
+| Replay de finalizaci?n y write-once | S? | S? | Sin nueva versi?n/auditor?a; upload duplicado reutiliza can?nico | PASS |
+| REP documental XML/PDF por aplicaci?n/parcialidad | S? | S? | Dos aplicaciones de un pago, XML/PDF, versiones y metadata | PASS |
+| Digest/proyecci?n transaccional | S? | S? | Cinco replays concurrentes sin modificar updateTime; reversa recalcula; root ajeno rechazado | PASS |
+| pagos.uploadDocs | S? | S? | Tres wrappers; revocaci?n uploadDocs bloquea aunque create=true | PASS |
+| disabled/deleted/deletedAt | S? | S? | Admin/operador/superadmin rechazados antes del core | PASS |
+| Auditor?a separada por sistema | Backend s? | Backend s? | Directo/Tx/batch a cuatro colecciones; CANONICAL sin scope rechazado | PASS |
+| Pago lock/idempotencia/respuesta incierta | S? | S? | Cinco workers ? un POST simulado; replay cero adicional; lease vencido no reenv?a | PASS |
+| Solicitud lock/idempotencia/respuesta incierta | S? | S? | Cinco workers comparten lease; replay terminal e incertidumbre no reenv?an | PASS |
+| Master/automatizaci?n y claim | S? | S? | OFF cero POST; Task inmediata un core; scheduler conserva intervalo | PASS |
+| Retry/recovery y fence | S? | S? | Error retryable, gracia, eventos obsoletos y carrera de generaci?n | PASS |
+| Reactividad y descubrimiento P0 | S? | S? local | Dos clientes Firestore, burst/reconexi?n, identidad de filas/p?ginas | PASS |
+| Hosting: rutas y registro autom?tico del recibo | No todav?a | Pendiente | Comparaci?n artefacto SSR/rama | BLOCKED |
+| Hosting: lectura de auditor?a por sistema y permisos documentos | No todav?a | No con UI hist?rica | SSR frente a ActivityLog.tsx y pagos/page.tsx | BLOCKED |
+
+Pruebas ejecutadas:
+- `qa/scripts/iq-immediate-discovery.emulator.test.cjs`: **23/23 PASS**, Firestore `127.0.0.1:8088`,
+  proyecto demo aislado. Tasks/IQ/Storage externos simulados. La prueba de Solicitudes ejecuta
+  worker/profile lease/error handling reales con finalizaci?n de ?xito simulada; no afirma E2E IQ.
+- `qa/scripts/operation-reactivity.test.cjs`: **8/8 PASS**. Dos sesiones son consumidores locales,
+  no una validaci?n visual certificada de dos pesta?as productivas.
+- Functions build y TypeScript frontend: **PASS**.
+- Verificador de autorizaci?n: **PASS**. Coherencia can?nica local, no autorizaci?n para publicar reglas.
+- Frontend build: **PASS**, 42 p?ginas. Primer intento fall? en WasmHash._updateWithBuffer;
+  pas? despu?s de limpiar exclusivamente `.next/cache`, sin cambios de c?digo/dependencias.
+- `git diff --check`: **PASS**.
+- Primer test nuevo de auditor?a fall? por callback de fixture no async; corregido ?nicamente
+  el test y repetida la suite completa. Ninguna correcci?n productiva adicional por ese fallo.
+
+### Archivos de esta continuaci?n
+
+`functions/src/modules/materiality/service.ts`, `functions/src/modules/pagoDocuments/callables.ts`,
+`functions/src/modules/users/authorization.ts`, `functions/src/modules/users/authorizationPolicy.generated.ts`,
+`config/authorization-policy.json`, `firestore.rules`, `functions/src/utils/logActivity.ts`,
+`functions/src/modules/activityLog/systemBoundary.ts`, `functions/src/modules/iq/pagoTelegramNotifications.ts`,
+`qa/scripts/iq-immediate-discovery.emulator.test.cjs` y este informe.
+Archivos de auditor?a descargados, compilados y logs permanecen ignorados, fuera del commit.
+
+### Hosting/SSR: evidencia del bloqueo restante
+
+Release `projects/pay-0-system/sites/pay-0-system/releases/1790845588313000`, versi?n
+`db3b4ed873464908`, fecha 2026-10-01T09:06:28.313Z. SSR `ssrpay0system-00576-hed`,
+source generation `1790845363013657`, ZIP SHA-256
+`9f8b77de0a56843352ee39caae6ff57b31d9299466202a2222d23a51a0fc6395`,
+BUILD_ID `vt2pNREKn1aoVYJj29Ncd`. Se inspeccionaron manifiestos y JavaScript compilado;
+no se ejecut? c?digo descargado. Versiones Next/React/Firebase coinciden; eso no acredita paridad funcional.
+
+Diferencias productivas comprobadas, suficientes para bloquear Hosting:
+1. Rutas desplegadas ausentes localmente: `/administracion/recursos-corporativos`, `/cuenta`,
+   `/hugo/evaluation`, `/manifest.webmanifest`.
+2. SSR Pagos incluye `receiptIdentificationId`, validaci?n READY/reasons/id/payload/operationType,
+   y presentaci?n de `automaticApplication`; p?gina y contrato local del recibo carecen de esos
+   elementos. Desplegar el frontend local degradar?a el registro por identificaci?n productivo.
+3. SSR separa permiso documental `pagos.uploadDocs`; p?gina local admite tambi?n create/conciliate.
+4. SSR chunk 6311 contiene colecciones `pay0ActivityLog`/`assetsActivityLog`; ActivityLog.tsx local
+   consulta `activityLog`. Es incompatible con leer los eventos del escritor productivo recuperado.
+
+La comparaci?n contra el commit local `9c06705` indica diferencias en 97 archivos de src/config/manifest,
+pero ese commit NO se declara baseline autoritativo sin demostrar su correspondencia completa con el
+artefacto desplegado. No se copi? mec?nicamente esa rama. No se afirma que las cuatro diferencias
+anteriores agoten el drift frontend: falta reconciliar y comprobar todos los m?dulos de ese baseline.
+El 403 administrativo aceptado previamente no es el blocker; GET de releases con quota project
+`pay-0-system` funcion?. No se hizo redeploy ni cambio de Hosting para corregirlo.
+
+### Micro-deploy e IAM
+
+Conjunto backend P0 identificado (NO ejecutar): modificar `createSolicitud`, `createPago`,
+`finalizePagoDocumentUpload`, `processIqCreateOnDemandTask`, `processIqPagoDepositCreateQueue`;
+crear `dispatchQueuedPagoIqCreation` y `processIqPagoDepositAutomaticTask`.
+Los wrappers auxiliares ya productivos no requieren desplegar otros exports por haberlos recuperado
+localmente. Compartir fuentes no autoriza desplegar todas las Functions.
+
+Recursos nuevos: Function/servicio Cloud Run de la Task, cola Cloud Tasks
+`processIqPagoDepositAutomaticTask`, Function/servicio del trigger y su Eventarc/transporte administrado.
+Hosting `pay-0-system` y SSR `ssrpay0system` son necesarios para certificar la UI P0, pero su paquete
+**no es desplegable todav?a**. Por ello no se declara un micro-deploy completo definitivo/seguro hasta
+reconciliar ese baseline. No se incluyen complementos, sincronizaci?n inversa, reglas ni ?ndices.
+
+IAM revalidado mediante getIamPolicy y lectura de colas:
+- Runtime/caller/callee esperado: `751158244178-compute@developer.gserviceaccount.com`.
+- Cuenta runtime conserva editor, eventarc.eventReceiver y run.invoker heredado en proyecto;
+  editor cubre encolado/lectura de cola y actAs. No se concedieron permisos nuevos.
+- Cuenta runtime conserva self iam.serviceAccountTokenCreator. Agente Cloud Tasks
+  `service-751158244178@gcp-sa-cloudtasks.iam.gserviceaccount.com` conserva cloudtasks.serviceAgent/OIDC.
+- Requisitos de secretos IQ_CREDENTIALS_KEY/TELEGRAM_BOT_TOKEN: secretAccessor runtime conforme
+  al preflight aceptado; valores nunca consultados/publicados.
+- Colas actuales de Solicitud/Pago on-demand RUNNING, 1/s y concurrencia 1, maxAttempts=1;
+  cola nueva autom?tica Pago ausente. Su configuraci?n local conserva maxAttempts=3,
+  backoff 300?900s y maxRetrySeconds=1800.
+- **IAM: PASS de configuraci?n previa; invocaci?n del recurso nuevo no certificada.**
+
+P0 no est? certificado: no hay timestamps end-to-end posteriores a despliegue, operaci?n controlada
+ni validaci?n visual sin refresh/parpadeo. No se usaron m?tricas hist?ricas como evidencia de cierre.
+
+---
+
 ## P0-R5 ? reconciliacion parcial y conflicto de alcance (2026-10-07)
 
 **P0 ABIERTO. DEPLOY_READY = NO.** Base local: `a12cb6de14b0e489181dcd9d5df8283f47b6c0df`.

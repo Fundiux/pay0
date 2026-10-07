@@ -513,3 +513,160 @@ test('restored transport protection blocks external actions in isolated environm
     assert.throws(() => assertExternalActionsAllowed(env), /EXTERNAL_ACTIONS_DISABLED/);
   }
 });
+
+// Production R5 dependencies: projection only; external Facturama work is isolated.
+test('production Materialidad keeps REP XML/PDF per application and partiality; digest and concurrent replay write once', async () => {
+  let draftCalls = 0;
+  const materiality = load('functions/src/modules/materiality/service.ts', {
+    crypto: require('node:crypto'),
+    'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
+    'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
+    './domain': functionsRequire('./lib/modules/materiality/domain.js'),
+    '../facturama/service': { async ensureAutomaticFacturamaDraftForSolicitud() { draftCalls++; } },
+  });
+  const rootId = 'projection-root', solicitudId = 'projection-sol', pagoId = 'projection-pay';
+  await Promise.all([
+    db.doc('users/projection-user').set({ rootId, role: 'superadmin' }),
+    db.doc('clients/projection-client').set({ rootId, name: 'Synthetic client' }),
+    db.doc('companies/projection-company').set({ rootId, name: 'Synthetic company' }),
+    db.doc(`solicitudes/${solicitudId}`).set({ rootId, clienteId: 'projection-client', companyId: 'projection-company', monto: 100, status: 'CREADA' }),
+  ]);
+  const batch = db.batch();
+  for (const installment of [1, 2]) {
+    const applicationId = `projection-app-${installment}`;
+    batch.set(db.doc(`pagoAplicaciones/${applicationId}`), { rootId, solicitudId, pagoId, status: 'APLICADA', numeroParcialidad: installment, folio: `AP-${installment}` });
+    for (const suffix of ['XML', 'PDF']) for (const version of [1, 2]) {
+      const id = `${applicationId}-${suffix}-${version}`;
+      batch.set(db.doc(`uploads/${id}`), { rootId, solicitudId, pagoId, applicationId, entityType: 'pagos', documentType: `COMPLEMENTO_PAGO_${suffix}`, status: 'READY', active: true, version, storagePath: `synthetic/${id}`, sha256: `digest-${id}` });
+    }
+  }
+  for (const [id, overrides] of Object.entries({ foreign: { rootId: 'other-root' }, orphan: { applicationId: 'missing' }, inactive: { active: false }, wrongSolicitud: { solicitudId: 'other-sol' }, wrongPago: { pagoId: 'other-pay' } })) {
+    batch.set(db.doc(`uploads/projection-invalid-${id}`), { rootId, solicitudId, pagoId, applicationId: 'projection-app-1', entityType: 'pagos', documentType: 'COMPLEMENTO_PAGO_XML', status: 'READY', active: true, version: 99, storagePath: 'synthetic/invalid', ...overrides });
+  }
+  await batch.commit();
+  const request = { auth: { uid: 'projection-user' }, data: { solicitudId } };
+  await materiality.linkSolicitudToMaterialityOperationCore(request);
+  const before = await db.doc(`materialityOperations/${solicitudId}`).get();
+  const refs = before.data().documentRefs;
+  assert.equal(refs.length, 4);
+  assert.deepEqual(refs.map(r => r.installment).sort(), [1, 1, 2, 2]);
+  assert(refs.every(r => r.id.endsWith('-2') && r.applicationFolio === `AP-${r.installment}` && r.pagoId === pagoId && r.sha256.startsWith('digest-')));
+  assert.equal(before.data().projectionDigest.length, 64);
+  const solBefore = await db.doc(`solicitudes/${solicitudId}`).get();
+  const folderId = before.data().materialityClientCompanyId;
+  const folderBefore = await db.doc(`materialityClientCompanies/${folderId}`).get();
+  await Promise.all(Array.from({ length: 5 }, () => materiality.linkSolicitudToMaterialityOperationCore(request)));
+  assert((await db.doc(`materialityOperations/${solicitudId}`).get()).updateTime.isEqual(before.updateTime));
+  assert((await db.doc(`solicitudes/${solicitudId}`).get()).updateTime.isEqual(solBefore.updateTime));
+  assert((await db.doc(`materialityClientCompanies/${folderId}`).get()).updateTime.isEqual(folderBefore.updateTime));
+  await db.doc('pagoAplicaciones/projection-app-2').update({ status: 'REVERSADA' });
+  await materiality.linkSolicitudToMaterialityOperationCore(request);
+  const reversed = (await db.doc(`materialityOperations/${solicitudId}`).get()).data();
+  assert.equal(reversed.documentRefs.length, 2);
+  assert.notEqual(reversed.projectionDigest, before.data().projectionDigest);
+  await db.doc('companies/projection-company').update({ rootId: 'other-root' });
+  await assert.rejects(materiality.linkSolicitudToMaterialityOperationCore(request), { code: 'permission-denied' });
+  assert.equal(draftCalls, 8); // Same existing pre-projection call; no provider is invoked by this test.
+});
+
+test('production upload wrappers enforce uploadDocs and reject disabled/deleted/deletedAt before domain execution', async () => {
+  const auth = functionsRequire('./lib/modules/users/authorization.js');
+  let caller, executions = 0;
+  const wrapped = load('functions/src/modules/pagoDocuments/callables.ts', {
+    'firebase-functions/params': { defineSecret: () => ({ value: () => 'synthetic' }) },
+    'firebase-functions/v2/https': { onCall: (_options, handler) => handler },
+    '../../utils/authGuard': functionsRequire('./lib/utils/authGuard.js'),
+    '../sharedCallables/helpers': { requireAuth: request => request.auth.uid, getMyUser: async () => caller },
+    './service': Object.fromEntries(['initPagoDocumentUploadCore', 'finalizePagoDocumentUploadCore', 'deactivatePagoDocumentCore', 'updateRejectedPagoAmountForRetryCore'].map(name => [name, async () => { executions++; return { ok: true }; }])),
+  });
+  for (const role of ['superadmin', 'admin', 'operador']) {
+    caller = { role, active: true };
+    assert.equal(auth.decideUserAuthorization({ authenticatedUid: 'u', user: caller, requirement: { module: 'pagos', action: 'uploadDocs' } }).allowed, true);
+    for (const name of ['initPagoDocumentUpload', 'finalizePagoDocumentUpload', 'deactivatePagoDocument']) await wrapped[name]({ auth: { uid: 'u' } });
+    for (const flag of [{ disabled: true }, { deleted: true }, { deletedAt: '2026-10-01' }, { isDeleted: true }, { active: false }, { isActive: false }]) {
+      caller = { role, ...flag };
+      assert.equal(auth.decideUserAuthorization({ authenticatedUid: 'u', user: caller }).reason, 'USER_INACTIVE');
+      const before = executions;
+      for (const name of ['initPagoDocumentUpload', 'finalizePagoDocumentUpload', 'deactivatePagoDocument']) await assert.rejects(wrapped[name]({ auth: { uid: 'u' } }), { code: 'permission-denied' });
+      assert.equal(executions, before);
+    }
+  }
+  for (const role of ['admin', 'operador']) {
+    caller = { role, modules: { pagos: { create: true, uploadDocs: false } } };
+    await assert.rejects(wrapped.finalizePagoDocumentUpload({ auth: { uid: 'u' } }), { code: 'permission-denied' });
+    caller = { role, modules: { pagos: { create: false, uploadDocs: true } } };
+    await wrapped.finalizePagoDocumentUpload({ auth: { uid: 'u' } });
+  }
+});
+
+test('production audit routes direct, transactional and batch events to their own system collection', async () => {
+  const log = load('functions/src/utils/logActivity.ts', {
+    'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
+    '../modules/agent007/observer': { async observeActivityForAgent007() {}, observeActivityForAgent007Tx() {}, observeActivityForAgent007Batch() {} },
+    '../modules/activityLog/eventCatalog': functionsRequire('./lib/modules/activityLog/eventCatalog.js'),
+    '../modules/activityLog/systemBoundary': functionsRequire('./lib/modules/activityLog/systemBoundary.js'),
+  });
+  for (const [event, system, collection] of [['PAGO_CREADO', 'PAY0', 'pay0ActivityLog'], ['ASSET_CREATED', 'ASSETS', 'assetsActivityLog'], ['TTT_CREATED', 'TTT', 'tttActivityLog'], ['HUGO_CREATED', 'HUGO', 'hugoActivityLog']]) {
+    const payload = { event, rootId: 'audit-r5', actorUid: 'synthetic', referenceId: event };
+    await log.logActivity(payload);
+    const ref = await db.runTransaction(async tx => log.logActivityTx(tx, db, payload));
+    assert.equal(ref.parent.id, collection);
+    const batch = db.batch(), batchRef = log.logActivityBatch(batch, db, payload); await batch.commit();
+    assert.equal(batchRef.parent.id, collection);
+    const rows = await db.collection(collection).where('rootId', '==', 'audit-r5').get();
+    assert.equal(rows.size, 3);
+    assert(rows.docs.every(d => d.data().sourceSystem === system && d.data().activitySchemaVersion === 2));
+  }
+  await assert.rejects(log.logActivity({ event: 'CANONICAL_UNSCOPED', rootId: 'audit-r5', actorUid: 'synthetic' }), /GLOBAL_CANONICAL_ACTIVITY_FORBIDDEN/);
+  await log.logActivity({ event: 'CANONICAL_EXPLICIT', sourceSystem: 'PAY0', rootId: 'audit-r5', actorUid: 'synthetic' });
+  assert.equal((await db.collection('activityLog').where('rootId', '==', 'audit-r5').get()).size, 0);
+});
+
+test('Solicitud workers share the production profile lease; terminal replay and uncertain outcome never resubmit', async () => {
+  await configRef.update({ enabled: true, 'automation.solicitudes': true });
+  const profileId = 'sol-lock-profile';
+  await db.doc(`iqCredentialProfiles/${profileId}`).set({ rootId: 'root', username: 'synthetic' });
+  let submissions = 0, unknown = false, releasePost;
+  let enteredPost;
+  let entered = new Promise(resolve => { enteredPost = resolve; });
+  let gate = new Promise(resolve => { releasePost = resolve; });
+  const worker = extract(['acquireProfileLock', 'releaseProfileLock', 'markJobProcessing', 'processProfileJobs', 'processIqCreateOnDemandTask'], {
+    db, FieldValue, Timestamp, ...runtime, crypto: require('node:crypto'), path: require('node:path'), os: require('node:os'),
+    PROFILE_LOCK_MS: 25 * 60 * 1000, MAX_JOBS_PER_PROFILE: 12, RETRYABLE_DELAY_MS: 600000,
+    IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local', onTaskDispatched: (_options, run) => run,
+    asRecord: value => value || {}, cleanText: value => String(value || '').trim(), cleanUpper: value => String(value || '').toUpperCase(),
+    decryptSecret: () => 'synthetic', normalizeErpUrl: () => 'http://127.0.0.1', loadIqTimeZone: async () => 'UTC',
+    mkdtemp: async () => 'unused-local-fixture', rm: async () => {}, safeTemporaryFileName: value => value,
+    admin: { storage: () => ({ bucket: () => ({ file: () => ({ download: async () => {} }) }) }) },
+    requireIqAssociatedName: value => value, safeErrorMessage: error => error.message,
+    async runIqCreateInvoiceBatchHttpA53({ items }) {
+      submissions++; enteredPost(); await gate;
+      if (unknown) throw new Error('simulated loss after dispatch');
+      return { items: items.map(item => ({ key: item.key, iqId: 'S-991', submitClicked: true })) };
+    },
+    // Provider success and its finalizer are boundaries here; profile lock and error handling run unchanged.
+    async finalizeJobFromResult({ job, result }) { await job.ref.set({ status: 'CREATED', iqId: result.iqId, submitClicked: true }, { merge: true }); },
+    publishSuperadminQueueSummary: async () => {},
+  }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+  async function seed(id) {
+    await db.doc(`solicitudes/${id}`).set({ rootId: 'root' });
+    await db.doc(`iqCreateJobs/${id}`).set({ rootId: 'root', profileId, solicitudId: id, status: 'QUEUED', orderFileName: 'synthetic.xlsx', orderStoragePath: 'synthetic', associatedName: 'Associate', fingerprint: id, marker: id });
+  }
+  await seed('sol-lease');
+  let completedContenders = 0;
+  const calls = Array.from({ length: 5 }, () => worker.processIqCreateOnDemandTask({ data: { jobId: 'sol-lease', source: 'AUTO' } }).finally(() => { completedContenders++; }));
+  await entered;
+  // All four excluded contenders must finish while the winning worker holds its lease.
+  await eventually(() => completedContenders === 4, 'four Solicitud workers excluded by the profile lease');
+  releasePost(); await Promise.all(calls);
+  assert.equal(submissions, 1);
+  await worker.processIqCreateOnDemandTask({ data: { jobId: 'sol-lease', source: 'AUTO' } });
+  assert.equal(submissions, 1);
+  unknown = true; gate = Promise.resolve();
+  await seed('sol-uncertain');
+  await worker.processIqCreateOnDemandTask({ data: { jobId: 'sol-uncertain', source: 'AUTO' } });
+  assert.equal(submissions, 2);
+  assert.equal((await db.doc('iqSolicitudCreations/sol-uncertain').get()).data().status, 'OUTCOME_UNKNOWN');
+  await worker.processIqCreateOnDemandTask({ data: { jobId: 'sol-uncertain', source: 'AUTO' } });
+  assert.equal(submissions, 2);
+});

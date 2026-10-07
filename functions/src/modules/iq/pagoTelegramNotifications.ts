@@ -113,24 +113,17 @@ export function buildIqPagoTelegramPreviewH4D64A7(input: {
   const folio = pagoFolio(pagoId, input.pago);
   const cliente = cleanText(input.pago.clienteNombre ?? input.pago.clientName);
   const empresa = cleanText(input.pago.empresaNombre ?? input.pago.companyName);
-  const actorName = cleanText(
-    input.auth.user?.username ??
-    input.auth.user?.name ??
-    input.auth.uid
-  );
   const title = eventTitleH4D64A6(input.event);
+  const terminal = input.event === "IQ_PAGO_RECHAZADO" || input.event === "IQ_PAGO_CANCELADO";
+  const reason = cleanText(input.pago.iqDepositRejectionReason || input.pago.rejectionReason || input.pago.iqDepositTerminalReason);
+  const importantDetail = terminal || input.event === "IQ_PAGO_MONTO_CORREGIDO" || input.event === "IQ_PAGO_NUEVO_COMPROBANTE";
   const text = [
     title,
-    "",
-    `Pago PAY0: ${folio}`,
-    `FOLIO IQ: ${cleanText(input.iqId) || "no identificado"}`,
-    `Monto: ${formatMoney(pagoAmount(input.pago))}`,
-    cliente ? `Cliente: ${cliente}` : "",
-    empresa ? `Empresa: ${empresa}` : "",
-    actorName ? `Usuario: ${actorName}` : "",
-    input.source ? `Origen: ${input.source}` : "",
-    "",
-    input.message || eventDefaultMessageH4D64A6(input.event),
+    `Pago ${folio === pagoId ? "sin folio" : folio} · ${formatMoney(pagoAmount(input.pago))}${cleanText(input.iqId) ? ` · IQ ${cleanText(input.iqId)}` : ""}`,
+    [cliente, empresa].filter(Boolean).join(" · "),
+    reason && terminal ? `Motivo: ${reason}` : "",
+    importantDetail ? cleanText(input.message) || eventDefaultMessageH4D64A6(input.event) : "",
+    terminal ? "Acción: revisa el motivo y envía un nuevo comprobante. El seguimiento está cerrado." : "",
   ].filter(Boolean).join("\n").slice(0, 3900);
 
   return { rootId, pagoId, iqId, dedupeKey, notificationId, folio, title, text };
