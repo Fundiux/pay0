@@ -1,8 +1,8 @@
-import {
-  loadIqCanonicalUserAccess,
-} from "./iqCanonicalAccess";
-import { DEFAULT_IQ_ERP_URL } from "./config";
 import { operationTiming } from "../../utils/operationTiming";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { enqueueAutomaticPagoCreation, isAutomaticPagoRecoveryDue, matchesPagoGeneration } from "./pagoImmediateDispatch";
+import { manualNoteAuthor, systemNoteAuthor } from "../notes/domain";
+import { DEFAULT_IQ_ERP_URL } from "./config";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import { assertSimilarPay0OperationConfirmedForIqCreateH4D58F } from "./pay0SimilarOperationPrecheckCallables";
@@ -13,8 +13,6 @@ import { mkdtemp, rm } from "fs/promises";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { enqueueAutomaticPagoCreation, isAutomaticPagoRecoveryDue, matchesPagoGeneration } from "./pagoImmediateDispatch";
 import { onTaskDispatched } from "firebase-functions/tasks";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 import { defineSecret } from "firebase-functions/params";
@@ -26,6 +24,7 @@ import { assertAuthorized } from "../../utils/authGuard";
 
 import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { runPagoDepositHttpCreateFlow } from "./pagoDepositHttpCreateFlow";
+import { resolveStoredIqClientIdForProfile } from "./iqClientProfileLink";
 import {
   loginIqHttpDirect,
   toIqAuthContext,
@@ -34,6 +33,10 @@ import {
 import {
   resolveIqDepositCatalogHttp,
 } from "./iqDepositHttpCatalogResolver";
+import {
+  assertIqIdentityInvariant,
+  resolveEffectiveIqIdentity,
+} from "./originIdentity";
 import {
   runPagoDepositHttpFindByRefsA52,
   runPagoDepositHttpFindCandidatesA52,
@@ -60,6 +63,7 @@ type AuthContext = {
   role: string;
   rootId: string;
   user: Record<string, unknown>;
+  historicalIqOrigin?: boolean;
 };
 
 type IqAccess = {
@@ -69,12 +73,15 @@ type IqAccess = {
   username: string;
   password: string;
   erpUrl: string;
+  originIqProfileId?: string;
+  identityResolutionReason?: string;
 };
 
 type IqCreateDepositBatchItem = Record<string, any>;
 
 type PagoIqDepositContext = {
   pagoId: string;
+  clienteId: string;
   pagoRef: admin.firestore.DocumentReference;
   pago: Record<string, unknown>;
   access: IqAccess;
@@ -262,6 +269,7 @@ async function getAuthContext(request: {
 }
 
 function canUsePagos(auth: AuthContext): boolean {
+  if (auth.historicalIqOrigin) return true;
   if (auth.role === "superadmin") return true;
 
   const modules = asRecord(auth.user.modules);
@@ -270,28 +278,29 @@ function canUsePagos(auth: AuthContext): boolean {
   return pagos.create === true || pagos.conciliate === true || pagos.view === true;
 }
 
-async function getIqAccessForPagos(
+async function getIqAccessForPagoOrigin(
   auth: AuthContext,
+  pago: Record<string, unknown>,
   includePassword: boolean,
 ): Promise<IqAccess> {
-  const canonical = await loadIqCanonicalUserAccess({
-    uid: auth.uid,
+  const identity = await resolveEffectiveIqIdentity({
+    movement: pago,
     rootId: auth.rootId,
-    role: auth.role,
-    moduleKey: "pagos",
+    authorizedActorUid: auth.uid,
     encryptionSecret: IQ_CREDENTIALS_KEY.value(),
     includePassword,
   });
-
+  assertIqIdentityInvariant(identity);
   return {
-    profileId: canonical.profileId,
-    profileAlias: canonical.profileAlias,
+    profileId: identity.effectiveIqProfileId,
+    profileAlias: identity.credentialProfile.profileAlias,
     associatedName:
-      canonical.associatedName ||
-      canonical.username,
-    username: canonical.username,
-    password: canonical.password,
-    erpUrl: canonical.erpUrl,
+      identity.originIqContext.associatedName,
+    username: identity.credentialProfile.username,
+    password: identity.credentialProfile.password,
+    erpUrl: identity.credentialProfile.erpUrl,
+    originIqProfileId: identity.originIqProfileId,
+    identityResolutionReason: identity.identityResolutionReason,
   };
 }
 function assertSameRoot(data: Record<string, unknown>, rootId: string, label: string): void {
@@ -799,7 +808,7 @@ async function buildPagoIqDepositContext(input: {
   const pago = resolvedPagoH4D61B.data;
   const resolvedPagoIdH4D61B = cleanText(pagoSnap.id ?? pagoRef.id ?? input.pagoId); // H4_D61B_BUILD_CONTEXT_RESOLVE_PAY0_FOLIO
 
-  const access = await getIqAccessForPagos(input.auth, input.includePassword);
+  const access = await getIqAccessForPagoOrigin(input.auth, pago, input.includePassword);
 
   const clienteId = cleanText(pago.clienteId ?? pago.clientId);
   const companyId = cleanText(pago.companyId ?? pago.empresaId);
@@ -860,11 +869,7 @@ async function buildPagoIqDepositContext(input: {
     cleanText(pago.clienteNombre ?? pago.clientName) ||
     getEntityName(client, clienteId);
 
-  const clientIqLink = asRecord(client.iqLink);
-  const iqClientId = cleanText(
-    clientIqLink.clientId ??
-      client.iqClientId,
-  );
+  const iqClientId = resolveStoredIqClientIdForProfile(client, access);
 
   const iqCompanyName =
     cleanText(pago.empresaNombre ?? pago.companyName) ||
@@ -983,6 +988,10 @@ async function buildPagoIqDepositContext(input: {
           status: prevalidationStatus,
           version: IQ_PAGO_DEPOSIT_PREVALIDATION_VERSION,
           profileId: access.profileId,
+          originIqProfileId: access.originIqProfileId || access.profileId,
+          effectiveIqProfileId: access.profileId,
+          identityResolutionReason: access.identityResolutionReason || "PERSISTED_ORIGIN",
+          authorizedActorUid: input.auth.uid,
           profileAlias: access.profileAlias || null,
           iqAssociatedName: access.associatedName,
           iqClientName: iqClientName || null,
@@ -1013,6 +1022,7 @@ async function buildPagoIqDepositContext(input: {
 
   return {
     pagoId: resolvedPagoIdH4D61B,
+    clienteId,
     pagoRef,
     pago,
     access,
@@ -1368,7 +1378,6 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   if (input.expectedUploadId && ctx.receiptUploadId !== input.expectedUploadId) {
     return { ok: true, pagoId, status: "SKIPPED_STALE_RECEIPT", created: false };
   }
-
   if (!ctx.ready) {
     throw new HttpsError(
       "failed-precondition",
@@ -1424,6 +1433,39 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     sum: ctx.amount,
     allowHttpPost: true,
   });
+
+  const resolvedClientId = cleanText(httpResult.catalog.clientId);
+  const clientMatchStrategy = cleanText(httpResult.catalog.clientMatchStrategy);
+  if (resolvedClientId && ctx.clienteId) {
+    const linkNow = FieldValue.serverTimestamp();
+    await Promise.all([
+      db.collection("clients").doc(ctx.clienteId).set({
+        iqLinksByProfile: {
+          [ctx.profileId]: {
+            status: "LINKED",
+            active: true,
+            profileId: ctx.profileId,
+            profileAlias: ctx.profileAlias || null,
+            clientId: resolvedClientId,
+            clientName: httpResult.catalog.clientName || ctx.iqClientName,
+            partnerName: httpResult.catalog.partnerName || ctx.iqAssociatedName,
+            source: clientMatchStrategy || "IQ_DEPOSIT_CATALOG",
+            updatedAt: linkNow,
+          },
+        },
+        updatedAt: linkNow,
+      }, { merge: true }),
+      ctx.pagoRef.set({
+        iqDepositSync: {
+          iqClientId: resolvedClientId,
+          clientMatchStrategy: clientMatchStrategy || null,
+        },
+        iqDepositResolvedClientId: resolvedClientId,
+        iqDepositClientMatchStrategy: clientMatchStrategy || null,
+        iqDepositUpdatedAt: linkNow,
+      }, { merge: true }),
+    ]);
+  }
 
   const httpIqId = cleanText(httpResult.iqId);
   const httpCreated =
@@ -1484,6 +1526,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   };
 
   if (created) {
+    patch.iqDepositAutoCreateLastError = null;
+    patch.iqDepositAutoCreateLastErrorAt = null;
     patch.iqDepositId = iqId;
     patch.iqDepositFolio = iqId;
     patch.iqPagoDepositId = iqId;
@@ -1498,15 +1542,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   operationTiming("firestore_iq_update_at", pagoId);
 
   if (created) {
-    await result.ctx.pagoRef.collection("notas").add({
-      rootId: input.auth.rootId,
-      text: input.source !== "TASK" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
-      createdBy: input.actor.uid,
-      createdByName: input.actor.name,
-      createdByRole: input.actor.role,
-      createdAt: FieldValue.serverTimestamp(),
-      system: input.source !== "TASK",
-    }).catch(() => undefined);
+    // Deposit creation is recorded in structured IQ state and ActivityLog.
 
     await notifyIqPagoTelegramH4D59B({
       botToken: TELEGRAM_BOT_TOKEN.value(),
@@ -1581,11 +1617,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       await pagoRef.collection("notas").add({
         rootId: input.auth.rootId,
         text: input.source !== "TASK" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
-        createdBy: input.actor.uid,
-        createdByName: input.actor.name,
-        createdByRole: input.actor.role,
+        ...systemNoteAuthor("IQ", "RECONCILIATION", input.actor.uid),
         createdAt: FieldValue.serverTimestamp(),
-        system: input.source !== "TASK",
       }).catch(() => undefined);
 
       return {
@@ -1925,9 +1958,7 @@ async function resolvePagoIqDepositHistoricalH4D58E(
     text: selectedTerminalOutcomeH4D64A6
       ? `Pago ${selectedCancelled ? "cancelado" : "rechazado"} ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por adopcion de registro IQ ${iqDepositId}: ${patch.iqDepositTerminalReason || ""}`.trim()
       : `Pago actualizado ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por adopcion de registro IQ ${iqDepositId}`.trim(),
-    createdBy: actor.uid,
-    createdByName: actor.name,
-    createdByRole: actor.role,
+    ...systemNoteAuthor("IQ", selectedTerminalOutcomeH4D64A6 ? "REJECTION" : "RECONCILIATION", actor.uid),
     createdAt: FieldValue.serverTimestamp(),
     source: "IQ_DEPOSIT_HISTORICAL_RESOLUTION_H4_D64_A6",
   }).catch(() => undefined);
@@ -2151,7 +2182,9 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
    * Ese fallback hacia que pagos de otros despachos usaran
    * la cuenta IQ del superadmin/root.
    */
+  const hasPersistedIqOrigin = Boolean(cleanText(pago.originIqProfileId));
   const uid = cleanText(
+    pago.originActorUid ??
     pago.createdBy ??
     pago.adminId ??
     pago.userId ??
@@ -2204,7 +2237,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     }
   }
 
-  if (!userFound) {
+  if (!userFound && !hasPersistedIqOrigin) {
     throw new HttpsError(
       "failed-precondition",
       "H4_D63A_AUTOMATION_SCOPE: El usuario creador del pago no existe.",
@@ -2216,7 +2249,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     rootId,
   );
 
-  if (userRootId && userRootId !== rootId) {
+  if (!hasPersistedIqOrigin && userRootId && userRootId !== rootId) {
     throw new HttpsError(
       "permission-denied",
       "H4_D63A_AUTOMATION_SCOPE: El usuario creador no pertenece al root del pago.",
@@ -2225,7 +2258,10 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
 
   const role = cleanText(
     user.role ??
-    user.userRole,
+    user.userRole ??
+    pago.originActorRole ??
+    pago.actorRole ??
+    "operador",
   ).toLowerCase();
 
   if (!role) {
@@ -2235,7 +2271,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     );
   }
 
-  const explicitDespachoAccess =
+  const explicitDespachoAccess = hasPersistedIqOrigin ||
     await verifyPagoIqAutomaticDespachoAccessH4D63A(
       uid,
       despachoId,
@@ -2252,6 +2288,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
     uid,
     role,
     rootId,
+    historicalIqOrigin: hasPersistedIqOrigin,
     user: {
       ...user,
       uid,
@@ -2522,10 +2559,8 @@ async function reconcilePagoIqDepositCoreH4D44(
   if (terminalOutcomeH4D64A6) {
     await ctx.pagoRef.collection("notas").add({
       rootId: auth.rootId,
-      text: `Pago ${terminalOutcomeH4D64A6 === "CANCELLED" ? "cancelado" : "rechazado"} ${source === "SCHEDULER" ? "automaticamente" : "manualmente"} por IQ Depositos ${iqDepositIdForPatch || ""}; tareas de seguimiento cerradas.`.trim(),
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdByRole: actor.role,
+      text: `Pago ${terminalOutcomeH4D64A6 === "CANCELLED" ? "cancelado" : "rechazado"}. Motivo: ${cleanText(match.rejectionReason || match.rejectionComment || patch.iqDepositTerminalReason) || "No informado por IQ"}. Seguimiento cerrado hasta recibir un nuevo comprobante.`,
+      ...systemNoteAuthor("IQ", "REJECTION", actor.uid),
       createdAt: FieldValue.serverTimestamp(),
       source: "IQ_DEPOSIT_TERMINAL_H4_D64_A6",
     }).catch(() => undefined);
@@ -2549,9 +2584,7 @@ async function reconcilePagoIqDepositCoreH4D44(
     await ctx.pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: (source === "SCHEDULER" ? `Pago conciliado automaticamente por IQ Depositos ${match.iqId || ""}` : `Pago conciliado manualmente por IQ Depositos ${match.iqId || ""}`).trim(),
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdByRole: actor.role,
+      ...systemNoteAuthor("IQ", "RECONCILIATION", actor.uid),
       createdAt: FieldValue.serverTimestamp(),
       source: "IQ_DEPOSIT_RECONCILE",
     }).catch(() => undefined);
@@ -3697,8 +3730,6 @@ export const processIqPagoDepositOnDemandTask =
     },
   );
 // H4_D64_A2_PAGO_IQ_ON_DEMAND_END
-// The QUEUED receipt generation is the durable outbox. Delayed events cannot
-// dispatch a replaced receipt, and repeated delivery resolves to the same task.
 export const dispatchQueuedPagoIqCreation = onDocumentWritten(
   { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 60, memory: "256MiB" },
   async (event) => {
@@ -3740,7 +3771,7 @@ export const processIqPagoDepositAutomaticTask = onTaskDispatched(
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
-    schedule: "every 1 minute",
+    schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",
@@ -3784,13 +3815,13 @@ export const processIqPagoDepositCreateQueue = onSchedule(
           auth,
           pagoId,
           sessionHolders,
-          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
           actor: {
             uid: "system",
             name: "System",
             role: "system",
           },
           source: "SCHEDULER",
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
         });
       } catch (error: any) {
         // H4_D63A_CREATE_SCHEDULER_SCOPE_CATCH
@@ -3807,8 +3838,8 @@ export const processIqPagoDepositCreateQueue = onSchedule(
         await markPagoIqAutoCreateErrorH4D62C({
           pagoId,
           error,
-          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
           source: "SCHEDULER",
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
         });
       }
     }

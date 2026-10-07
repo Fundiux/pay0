@@ -1,3 +1,6 @@
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
+import { manualNoteAuthor } from "./modules/notes/domain";
+import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
 
 import {
   buildPagoCoverageApplyPatch,
@@ -546,7 +549,6 @@ export const createSolicitud = onCall(
     });
 
     __mark("folio_transaction");
-
     operationTiming("pay0_persisted_at", solicitudRef.id, __perfStartedAt);
 
     const comentarioText = String(comentario || "").trim();
@@ -578,7 +580,9 @@ export const createSolicitud = onCall(
         solicitudRef.collection("notas").add({
           rootId,
           adminId,
-          createdBy: uid,
+          ...manualNoteAuthor(uid, caller),
+          referenceType: "solicitud",
+          referenceId: solicitudRef.id,
           text: comentarioText,
           createdAt: now,
         }),
@@ -1717,12 +1721,21 @@ export const createPago = onCall(
       detectedBeneficiaryRfc,
       operatorSelectedBankName,
       operatorSelectedAccount,
+      acceptRfcMismatch,
       despachoId,
       asociadoId,
       operationTypeKey,
     } = request.data || {};
 
     const montoTotalNum = toSafeMoneyNumber(montoTotal);
+    const receiptIdentificationId = String(request.data?.receiptIdentificationId || "").trim();
+    if (receiptIdentificationId && !/^[a-f0-9]{64}$/.test(receiptIdentificationId)) {
+      throw new HttpsError("invalid-argument", "Identificación de comprobante inválida.");
+    }
+    const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
+    let validatedReceiptAnalysisId = "";
+    let validatedReceiptReaderVersion = "";
+    let validatedReceiptSemantic: Record<string, unknown> | null = null;
 
     const costGuardOperationTypeKey = String(operationTypeKey || "").trim().toUpperCase();
     const costGuardDespachoId = String(despachoId || "").trim();
@@ -1753,10 +1766,11 @@ export const createPago = onCall(
       throw new HttpsError("invalid-argument", "operationTypeKey requerido.");
     }
 
-    const [operationTypeSnap, clientSnap, companySnap, delegatedClientAccess, directCompanyAccessSnap] = await Promise.all([
+    const [operationTypeSnap, clientSnap, companySnap, despachoSnap, delegatedClientAccess, directCompanyAccessSnap] = await Promise.all([
       db.doc(`operationTypes/${operationTypeKeyValue}`).get(),
       db.doc(`clients/${clienteId}`).get(),
       db.doc(`companies/${companyId}`).get(),
+      db.doc(`despachos/${costGuardDespachoId}`).get(),
       role === "superadmin"
         ? Promise.resolve(null)
         : getActiveClientDelegationAccess(
@@ -1859,6 +1873,27 @@ export const createPago = onCall(
       }
     }
     __mark("authorization_and_access");
+
+    const iqOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "pagos",
+          despachoId: companyDespachoId,
+          companyId: String(companyId),
+        })
+      : null;
+    const originClientProfileLink = iqOriginIdentity
+      ? (clientData?.iqLinksByProfile?.[iqOriginIdentity.originIqProfileId] || null)
+      : null;
+    const originClientIqLink = iqOriginIdentity && originClientProfileLink?.clientId
+      ? {
+          profileId: iqOriginIdentity.originIqProfileId,
+          clientIqId: String(originClientProfileLink.clientId),
+          clientIqName: String(originClientProfileLink.clientName || "") || null,
+        }
+      : null;
 
 
     const operationTypeName = String(
@@ -1992,8 +2027,30 @@ export const createPago = onCall(
     const detectedBeneficiaryRfcValue = String(detectedBeneficiaryRfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
     const clientRfcValue = String(clientData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
     const companyRfcValue = String(companyData?.rfc || "").trim().toUpperCase().replace(/[^A-ZÑ&0-9]/g, "");
-    if (detectedPayerRfcValue && detectedPayerRfcValue !== clientRfcValue) throw new HttpsError("failed-precondition", "El RFC del ordenante del comprobante no coincide con el cliente facturado.");
-    if (detectedBeneficiaryRfcValue && detectedBeneficiaryRfcValue !== companyRfcValue) throw new HttpsError("failed-precondition", "El RFC beneficiario del comprobante no coincide con la empresa emisora.");
+    const receiptRfcMismatches: Array<{ field: string; detected: string; expected: string; message: string }> = [];
+    if (detectedPayerRfcValue && detectedPayerRfcValue !== clientRfcValue) {
+      receiptRfcMismatches.push({
+        field: "payerRfc",
+        detected: detectedPayerRfcValue,
+        expected: clientRfcValue,
+        message: "El RFC del ordenante no coincide con el cliente facturado.",
+      });
+    }
+    if (detectedBeneficiaryRfcValue && detectedBeneficiaryRfcValue !== companyRfcValue) {
+      receiptRfcMismatches.push({
+        field: "beneficiaryRfc",
+        detected: detectedBeneficiaryRfcValue,
+        expected: companyRfcValue,
+        message: "El RFC beneficiario no coincide con la empresa emisora.",
+      });
+    }
+    if (receiptRfcMismatches.length > 0 && acceptRfcMismatch !== true) {
+      throw new HttpsError(
+        "failed-precondition",
+        `${receiptRfcMismatches.map((item) => item.message).join(" ")} Revisa el comprobante y, si corresponde a un pago de tercero, confirma para enviarlo de todos modos.`,
+        { code: "PAGO_RECEIPT_RFC_MISMATCH", mismatches: receiptRfcMismatches },
+      );
+    }
     const operatorSelectedBankNameValue = String(operatorSelectedBankName || "").trim().slice(0, 120);
     const operatorSelectedAccountValue = String(operatorSelectedAccount || "").trim().slice(0, 80);
 
@@ -2063,6 +2120,15 @@ export const createPago = onCall(
     let pagoSequenceCounterPath = "";
 
     await db.runTransaction(async (tx) => {
+      if (receiptIdentificationRef) {
+        const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
+        assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
+        const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
+        validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
+        validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
+        validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
+          ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
+      }
       if (receiptDuplicateRef) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
 
@@ -2104,6 +2170,11 @@ export const createPago = onCall(
         adminId,
         actorUid: uid,
         actorRole,
+        ...(iqOriginIdentity ? buildIqOriginIdentityPatch(iqOriginIdentity) : {}),
+        ...(originClientIqLink ? { originClientIqLink } : {}),
+        automaticApplicationEligible: true,
+        automaticApplicationRevision: "ASTRA_V1",
+        ...(receiptIdentificationId ? { receiptIdentificationId, registrationSource: "RECEIPT_AUTOMATIC" } : {}),
         accessSource: businessFolioContextPago.accessSource,
         delegatedClientAccessPath: businessFolioContextPago.delegatedClientAccessPath,
         clienteId: String(clienteId),
@@ -2153,8 +2224,12 @@ export const createPago = onCall(
         // fecha del pago se conserva; de lo contrario se usa la creación real.
         reportDateAt: fechaPagoValue || FieldValue.serverTimestamp(),
         referencia: referenciaValue || null,
+        concepto: String(request.data?.concepto || "").trim().slice(0, 1000) || null,
         referenciaNormalized: referenciaNormalized || null,
         receiptLearningSignals: {
+          analysisId: validatedReceiptAnalysisId || null,
+          readerVersion: validatedReceiptReaderVersion || null,
+          semanticReceipt: validatedReceiptSemantic,
           detectedBankName: detectedBankNameValue || null,
           detectedSenderName: detectedSenderNameValue || null,
           detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
@@ -2169,6 +2244,11 @@ export const createPago = onCall(
           bankIdentificationNeedsReview:
             !!operatorSelectedBankNameValue &&
             detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+          rfcMismatchDetected: receiptRfcMismatches.length > 0,
+          rfcMismatchAccepted: receiptRfcMismatches.length > 0 && acceptRfcMismatch === true,
+          rfcMismatchAcceptedBy: receiptRfcMismatches.length > 0 ? uid : null,
+          rfcMismatchAcceptedAt: receiptRfcMismatches.length > 0 ? FieldValue.serverTimestamp() : null,
+          rfcMismatches: receiptRfcMismatches,
         },
         receiptDuplicateId: receiptDuplicateId || null,
         moneda: String(moneda || "MXN"),
@@ -2203,12 +2283,14 @@ export const createPago = onCall(
         tx.set(noteRef, {
           rootId,
           text: noteText,
-          createdBy: uid,
-          createdByName: actorId,
-          createdByRole: actorRole,
+          ...manualNoteAuthor(uid, me),
+          referenceType: "pago",
+          referenceId: ref.id,
           createdAt: FieldValue.serverTimestamp(),
         });
       }
+
+      if (receiptIdentificationRef) tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
 
       logActivityTx(tx, db, {
         event: "PAGO_CREADO",
@@ -2236,6 +2318,8 @@ export const createPago = onCall(
           bankIdentificationNeedsReview:
             !!operatorSelectedBankNameValue &&
             detectedBankNameValue.toUpperCase() !== operatorSelectedBankNameValue.toUpperCase(),
+          rfcMismatchAccepted: receiptRfcMismatches.length > 0 && acceptRfcMismatch === true,
+          rfcMismatches: receiptRfcMismatches,
         },
       });
     });

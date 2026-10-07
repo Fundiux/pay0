@@ -1,5 +1,6 @@
-import { DEFAULT_IQ_ERP_URL } from "./config";
 import { operationTiming } from "../../utils/operationTiming";
+import { DEFAULT_IQ_ERP_URL } from "./config";
+import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -64,6 +65,7 @@ type IqQueuePreparedSolicitud = {
   erpUrl: string;
   username: string;
   associatedName: string;
+  clientId: string;
   clientName: string;
   iqClientId: string;
   companyName: string;
@@ -467,9 +469,14 @@ async function revalidateIqCreateJobH4D82A4(
         : {};
 
       const clientIqLink = asRecord(client.iqLink);
+      const clientIqLinksByProfile = asRecord(client.iqLinksByProfile);
+      const clientIqProfileLink = asRecord(
+        clientIqLinksByProfile[job.profileId],
+      );
 
       effectiveIqClientId = cleanText(
-        clientIqLink.clientId ??
+        clientIqProfileLink.clientId ??
+          clientIqLink.clientId ??
           client.iqClientId,
       );
 
@@ -951,8 +958,13 @@ async function prepareSolicitudForIqQueue(input: {
     cleanText(solicitud.clienteNombre ?? solicitud.clientName) || getEntityName(client, clientId);
 
   const clientIqLink = asRecord(client.iqLink);
+  const clientIqLinksByProfile = asRecord(client.iqLinksByProfile);
+  const clientIqProfileLink = asRecord(
+    clientIqLinksByProfile[profileId],
+  );
   const iqClientId = cleanText(
-    clientIqLink.clientId ??
+    clientIqProfileLink.clientId ??
+      clientIqLink.clientId ??
       client.iqClientId,
   );
 
@@ -983,7 +995,8 @@ async function prepareSolicitudForIqQueue(input: {
     profileAlias: cleanText(profile.alias),
     erpUrl: normalizeErpUrl(cleanText(profile.erpUrl)),
     username,
-    associatedName: username,
+    associatedName: requireIqAssociatedName(profile.associatedName),
+    clientId,
     clientName,
     iqClientId,
     companyName,
@@ -1426,13 +1439,14 @@ async function finalizeJobFromResult(input: {
 }): Promise<void> {
   const solicitudRef = db.collection("solicitudes").doc(input.job.solicitudId);
   const creationRef = db.collection("iqSolicitudCreations").doc(input.job.solicitudId);
-  const noteRef = solicitudRef.collection("notas").doc("iq-folio");
   const now = FieldValue.serverTimestamp();
   const iqId = cleanText(input.result.iqId);
   const submitted = input.result.submitClicked === true;
   const outcome = cleanUpper(input.result.outcome);
   const error = input.result.errors.join(" ").slice(0, 1500);
   const responseMessage = cleanText(input.result.responseMessage || input.result.message);
+  const resolvedIqClientId = cleanText(input.result.iqClientIdMatched);
+  const clientMatchStrategy = cleanText(input.result.clientMatchStrategy);
 
   await db.runTransaction(async (tx) => {
     const currentSolicitudSnapH4D82A4 = await tx.get(
@@ -1442,6 +1456,11 @@ async function finalizeJobFromResult(input: {
       currentSolicitudSnapH4D82A4.exists
         ? asRecord(currentSolicitudSnapH4D82A4.data())
         : {};
+    const currentClientId = cleanText(
+      input.job.clientId ||
+      currentSolicitudH4D82A4.clienteId ||
+      currentSolicitudH4D82A4.clientId,
+    );
 
     const jobStatus = iqId
       ? "CREATED"
@@ -1452,6 +1471,9 @@ async function finalizeJobFromResult(input: {
     tx.set(input.job.ref, {
       status: jobStatus,
       iqId: iqId || null,
+      clientId: currentClientId || null,
+      iqClientId: resolvedIqClientId || input.job.iqClientId || null,
+      iqClientMatchStrategy: clientMatchStrategy || null,
       outcome,
       submitClicked: submitted,
       responseMessage: responseMessage || null,
@@ -1481,6 +1503,8 @@ async function finalizeJobFromResult(input: {
       targetDateIso: input.job.targetDateIso,
       attemptCount: input.attemptCount,
       iqId: iqId || null,
+      iqClientId: resolvedIqClientId || input.job.iqClientId || null,
+      iqClientMatchStrategy: clientMatchStrategy || null,
       submitClicked: submitted,
       responseMessage: responseMessage || null,
       error: error || null,
@@ -1503,6 +1527,8 @@ async function finalizeJobFromResult(input: {
       iqHttpCreateContractCapturedAtA53: input.result.httpContractCapture ? now : null,
       iqCreationFingerprint: input.job.fingerprint,
       iqCredentialProfileId: input.job.profileId,
+      iqClientIdResolved: resolvedIqClientId || null,
+      iqClientMatchStrategy: clientMatchStrategy || null,
       iqReconciliationMarker: input.job.marker,
       iqTargetDateIso: input.job.targetDateIso,
       iqSyncUpdatedAt: now,
@@ -1538,18 +1564,7 @@ async function finalizeJobFromResult(input: {
       solicitudPatch.iqSyncStatus = "CREATED";
       solicitudPatch.iqReconciliationStatus = "LINKED";
       solicitudPatch.iqInvoiceStatus = "WAITING";
-      solicitudPatch.hasUnreadMsg = true;
-
-      tx.set(noteRef, {
-        rootId: input.job.rootId,
-        createdBy: input.job.requestedBy,
-        createdByName: input.job.requestedBy,
-        createdByRole: "system",
-        source: "IQ",
-        text: `FOLIO IQ: ${iqId}`,
-        createdAt: now,
-        updatedAt: now,
-      }, { merge: true });
+      // Creation/linkage is structured state, not a new conversation note.
     } else if (submitted) {
       solicitudPatch.iqReconciliationStatus = "PENDING";
       solicitudPatch.iqReconciliationAttemptCount = 0;
@@ -1557,6 +1572,29 @@ async function finalizeJobFromResult(input: {
     }
 
     tx.set(solicitudRef, solicitudPatch, { merge: true });
+
+    if (resolvedIqClientId && currentClientId) {
+      tx.set(
+        db.collection("clients").doc(currentClientId),
+        {
+          iqLinksByProfile: {
+            [input.job.profileId]: {
+              status: "LINKED",
+              active: true,
+              profileId: input.job.profileId,
+              profileAlias: input.job.profileAlias || null,
+              clientId: resolvedIqClientId,
+              clientName: input.result.clientMatched || input.job.clientName,
+              partnerName: input.result.associatedMatched || input.job.associatedName,
+              source: clientMatchStrategy || "IQ_CREATE_CATALOG",
+              updatedAt: now,
+            },
+          },
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+    }
 
     tx.set(db.collection("iqCreateBatches").doc(input.batchId), {
       status: "PROCESSING",
@@ -1791,7 +1829,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         });
         items.push({
           key: job.id,
-          associatedName: job.associatedName,
+          associatedName: requireIqAssociatedName(job.associatedName),
           clientName: job.clientName,
           iqClientId: job.iqClientId,
           companyName: job.companyName,
@@ -2006,7 +2044,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
 export const processIqCreateQueue = onSchedule(
   {
-    schedule: "every 1 minute",
+    schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",

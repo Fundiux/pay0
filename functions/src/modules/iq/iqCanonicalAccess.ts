@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { normalizeIqAssociatedName, requireIqAssociatedName } from "./associatedName";
 import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
@@ -12,6 +13,7 @@ type AnyRecord = Record<string, unknown>;
 export type IqCanonicalModule =
   | "solicitudes"
   | "pagos"
+  | "clients"
   | "dispersiones"
   | "paymentApplications";
 
@@ -114,6 +116,13 @@ function moduleAllowed(
   allowedModules: AnyRecord,
   moduleKey: IqCanonicalModule,
 ): boolean {
+  // Client synchronization historically requires an active IQ assignment,
+  // while PAY0 client authorization is enforced by the client callable.
+  // It is not a payments capability and must not inherit allowedModules.pagos.
+  if (moduleKey === "clients") {
+    return true;
+  }
+
   if (moduleKey === "paymentApplications") {
     return (
       allowedModules.paymentApplications === true ||
@@ -138,6 +147,7 @@ export async function loadIqCanonicalProfileById(input: {
   rootId: string;
   encryptionSecret: string;
   includePassword?: boolean;
+  requireAssociatedName?: boolean;
 }): Promise<IqCanonicalAccess> {
   const db = getFirestore();
   const profileId = clean(input.profileId);
@@ -184,10 +194,14 @@ export async function loadIqCanonicalProfileById(input: {
     );
   }
 
+  const associatedName = input.requireAssociatedName === true
+    ? requireIqAssociatedName(profile.associatedName)
+    : normalizeIqAssociatedName(profile.associatedName);
+
   return {
     profileId,
     profileAlias: clean(profile.alias) || profileId,
-    associatedName: "",
+    associatedName,
     username,
     password:
       input.includePassword === false
@@ -206,6 +220,7 @@ export async function loadIqCanonicalUserAccess(input: {
   includePassword?: boolean;
   profileIdOverride?: string;
   associatedNameOverride?: string;
+  requireAssociatedName?: boolean;
 }): Promise<IqCanonicalAccess> {
   const db = getFirestore();
   const uid = clean(input.uid);
@@ -258,14 +273,18 @@ export async function loadIqCanonicalUserAccess(input: {
     rootId,
     encryptionSecret: input.encryptionSecret,
     includePassword: input.includePassword,
+    requireAssociatedName: input.requireAssociatedName,
   });
 
   return {
     ...profile,
-    associatedName:
-      clean(input.associatedNameOverride) ||
-      clean(access.associatedName) ||
-      profile.username,
+    associatedName: input.requireAssociatedName === true
+      ? requireIqAssociatedName(
+        clean(input.associatedNameOverride) || clean(access.associatedName) || profile.associatedName,
+      )
+      : normalizeIqAssociatedName(
+        clean(input.associatedNameOverride) || clean(access.associatedName) || profile.associatedName,
+      ),
   };
 }
 

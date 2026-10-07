@@ -104,14 +104,18 @@ const handlers = extract(['shouldProcessPagoIqCreateQueueH4D62C', 'markPagoIqAut
   buildPagoIqSystemAuthH4D44: async () => { if (failContext) throw new Error('local transient context error'); return { rootId: 'root' }; },
   createPagoIqDepositFromQueueCoreH4D62C: input => { coreExecutions++; return runCore(input.pagoId, input.expectedUploadId); },
 });
+const receiptBytes = Buffer.from('local synthetic receipt bytes');
+let documentAuditCalls = 0;
 const documents = load('functions/src/modules/pagoDocuments/service.ts', {
-  'firebase-admin': { firestore: () => db, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [true] }) }) }) },
+  'node:crypto': require('node:crypto'),
+  '../notes/domain': functionsRequire('./lib/modules/notes/domain.js'),
+  'firebase-admin': { firestore: () => db, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [true], getMetadata: async () => [{ size: receiptBytes.length }], download: async () => [receiptBytes] }) }) }) },
   'firebase-admin/firestore': { FieldValue },
   'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
   '../../utils/auth': { requireAuthLike: () => 'test-user', getUser: async () => ({ role: 'superadmin', rootId: 'root' }),
     getRole: user => user.role, getRootIdFromUser: user => user.rootId, getUsername: () => 'test-user' },
   './domain': functionsRequire('./lib/modules/pagoDocuments/domain.js'),
-  '../../utils/logActivity': { logActivityTx() {}, logActivity() {} },
+  '../../utils/logActivity': { logActivityTx() { documentAuditCalls++; }, logActivity() {} },
   '../iq/pagoTelegramNotifications': { notifyIqPagoTelegramH4D59B() { throw Error('Unexpected notification'); } },
   '../dispatches/domain': functionsRequire('./lib/modules/dispatches/domain.js'),
   '../iq/pagoImmediateDispatch': immediate,
@@ -137,7 +141,7 @@ test('finalize plus durable event enqueue one immediate task; worker dispatches 
   await seedPago('immediate', { despachoId: 'iq-dispatch', iqDepositCreationStatus: 'READY' });
   await db.doc('despachos/iq-dispatch').set({ active: true, automationMode: 'ERP', erpProvider: 'IQ' });
   await db.doc('uploads/receipt').set({ rootId: 'root', entityType: 'pagos', pagoId: 'immediate',
-    documentType: 'COMPROBANTE_PAGO', storagePath: 'synthetic.pdf', active: false });
+    documentType: 'COMPROBANTE_PAGO', storagePath: 'synthetic.pdf', status: 'PENDING', active: false });
   await documents.finalizePagoDocumentUploadCore({ data: { uploadId: 'receipt' } });
   assert.equal((await db.doc('uploads/receipt').get()).data().status, 'READY');
   const row = (await db.doc('pagos/immediate').get()).data();
@@ -408,4 +412,104 @@ test('Solicitud AUTO task ignores a prior scheduler claim without changing confi
   await task.run(request); assert.equal(executions, 1, 'terminal job replay is ignored');
   assert.equal(task.options.retryConfig.maxAttempts, 1, 'existing Solicitudes retry configuration is unchanged');
   console.log('SOLICITUD REGRESSION: processProfileJobs=1 priorClaim=true configWrites=0');
+});
+// R5: exercise restored production identity and receipt protections on local data.
+test('Solicitud associate is independent of login and catalog ambiguity fails closed', async () => {
+  const { requireIqAssociatedName } = functionsRequire('./lib/modules/iq/associatedName.js');
+  const invoice = functionsRequire('./lib/modules/iq/solicitudHttpCreateA53.js');
+  assert.throws(() => requireIqAssociatedName(' '), /Asociado IQ/);
+  assert.equal(requireIqAssociatedName(' Asociado   ACME '), 'Asociado ACME');
+  assert.equal(invoice.resolveIqPartnerForInvoiceA53([{ id: 2, name: 'ACME' }], 'ASOCIADO ACME').id, 2);
+  assert.throws(() => invoice.resolveIqPartnerForInvoiceA53([{ id: 2, name: 'ACME' }, { id: 3, name: 'ACME' }], 'ACME'), /NO_UNICO/);
+  const catalog = [{ id: 10, name: 'Client' }, { id: 11, name: 'Other' }];
+  assert.equal(invoice.resolveIqClientForInvoiceA53(catalog, { iqClientId: '11', clientName: 'Client' }).row.id, 11);
+  assert.equal(invoice.resolveIqClientForInvoiceA53(catalog, { iqClientId: '999', clientName: 'Client' }).strategy, 'HTTP_CATALOG_STALE_ID_EXACT_NAME');
+  assert.throws(() => invoice.resolveIqClientForInvoiceA53([...catalog, { id: 12, name: 'Client' }], { clientName: 'Client' }), /NO_UNICO/);
+});
+
+test('Pago persisted origin survives reassignment; wrong root, inactive or missing associate fail closed', async () => {
+  const identity = functionsRequire('./lib/modules/iq/originIdentity.js');
+  const canonical = functionsRequire('./lib/modules/iq/iqCanonicalAccess.js');
+  await db.doc('iqCredentialProfiles/origin-a').set({ rootId: 'root', active: true, hasPassword: true,
+    username: 'login-only', associatedName: 'ASOCIADO ACME', alias: 'A' });
+  await db.doc('iqUserAccess/identity-actor').set({ rootId: 'root', active: true, iqEnabled: true,
+    iqCredentialProfileId: 'origin-a', allowedModules: { pagos: true } });
+  const captured = await identity.captureIqOriginIdentity({ actorUid: 'identity-actor', rootId: 'root', role: 'operador', moduleKey: 'pagos' });
+  assert.equal(captured.originIqContext.associatedName, 'ASOCIADO ACME');
+  assert.notEqual(captured.originIqContext.associatedName, 'login-only');
+  await db.doc('iqUserAccess/identity-actor').update({ iqCredentialProfileId: 'different-profile' });
+  const input = { movement: captured, rootId: 'root', authorizedActorUid: 'scheduler', encryptionSecret: 'unused', includePassword: false };
+  const resolved = await identity.resolveEffectiveIqIdentity(input);
+  assert.equal(resolved.effectiveIqProfileId, 'origin-a');
+  identity.assertIqIdentityInvariant(resolved);
+  await assert.rejects(identity.resolveEffectiveIqIdentity({ ...input, rootId: 'other-root' }), /root/);
+  assert.throws(() => identity.assertIqIdentityInvariant({ originIqProfileId: 'origin-a', effectiveIqProfileId: 'different-profile' }), /SUBSTITUTION_BLOCKED/);
+  await db.doc('iqCredentialProfiles/origin-a').update({ active: false });
+  await assert.rejects(identity.resolveEffectiveIqIdentity(input), /inactiva/);
+  await db.doc('iqCredentialProfiles/origin-a').update({ active: true, associatedName: '' });
+  await assert.rejects(canonical.loadIqCanonicalProfileById({ profileId: 'origin-a', rootId: 'root', encryptionSecret: 'unused', includePassword: false, requireAssociatedName: true }), /Asociado IQ/);
+  await assert.rejects(canonical.loadIqCanonicalProfileById({ profileId: 'origin-a', rootId: 'other-root', encryptionSecret: 'unused', includePassword: false }), /scope/);
+});
+
+test('Pago client resolution selects the origin profile and refuses unscoped legacy IDs', () => {
+  const { resolveStoredIqClientIdForProfile: resolve } = functionsRequire('./lib/modules/iq/iqClientProfileLink.js');
+  const access = { profileId: 'a', profileAlias: 'A', associatedName: 'ACME', username: 'login-only' };
+  assert.equal(resolve({ iqClientId: 'wrong', iqLinksByProfile: { a: { clientId: 'correct' }, b: { clientId: 'other' } } }, access), 'correct');
+  assert.equal(resolve({ iqClientId: 'unscoped' }, access), '');
+  assert.equal(resolve({ iqLink: { profileId: 'b', clientId: 'foreign' } }, access), '');
+  assert.equal(resolve({ iqLink: { profileId: 'a', clientId: 'legacy' } }, access), 'legacy');
+});
+
+test('identified receipt rejects hash mismatch; successful finalize and replay preserve document generation', async () => {
+  const hash = require('node:crypto').createHash('sha256').update(receiptBytes).digest('hex');
+  const pagoId = 'r5-receipt', uploadId = 'r5-upload', identificationId = 'r5-identification';
+  await seedPago(pagoId, { despachoId: 'iq-dispatch', receiptIdentificationId: identificationId, iqDepositCreationStatus: 'READY' });
+  const upload = { rootId: 'root', entityType: 'pagos', pagoId, documentType: 'COMPROBANTE_PAGO', storagePath: 'synthetic.pdf', status: 'PENDING', active: false };
+  await db.doc(`uploads/${uploadId}`).set(upload);
+  await db.doc(`pagoReceiptIdentifications/${identificationId}`).set({ rootId: 'root', pagoId, status: 'REGISTERED', stage: 'REGISTERED_AWAITING_RECEIPT', contentSha256: 'mismatch' });
+  const count = tasks.size, audits = documentAuditCalls;
+  await assert.rejects(documents.finalizePagoDocumentUploadCore({ data: { uploadId } }), /no coincide/);
+  assert.equal(tasks.size, count); assert.equal(documentAuditCalls, audits);
+  assert.equal((await db.doc(`uploads/${uploadId}`).get()).get('status'), 'PENDING');
+  await db.doc(`pagoReceiptIdentifications/${identificationId}`).update({ contentSha256: hash });
+  const first = await documents.finalizePagoDocumentUploadCore({ data: { uploadId } });
+  assert.equal(first.version, 1); assert.equal(tasks.size, count + 1);
+  const ready = await db.doc(`uploads/${uploadId}`).get(), pago = await db.doc(`pagos/${pagoId}`).get();
+  const config = await configRef.get(), auditAfter = documentAuditCalls;
+  assert.equal(ready.get('sha256'), hash);
+  assert.equal(pago.get('iqApplicable'), true);
+  assert.equal((await db.doc(`pagoReceiptIdentifications/${identificationId}`).get()).get('stage'), 'RECEIPT_READY');
+  for (let i = 0; i < 3; i++) assert.deepEqual(await documents.finalizePagoDocumentUploadCore({ data: { uploadId } }), first);
+  assert((await db.doc(`uploads/${uploadId}`).get()).updateTime.isEqual(ready.updateTime));
+  assert((await db.doc(`pagos/${pagoId}`).get()).updateTime.isEqual(pago.updateTime));
+  assert((await configRef.get()).updateTime.isEqual(config.updateTime));
+  assert.equal(tasks.size, count + 1); assert.equal(documentAuditCalls, auditAfter);
+  // A second upload of the same identified bytes reuses the canonical published receipt.
+  await db.doc('uploads/r5-upload-copy').set(upload);
+  const reused = await documents.finalizePagoDocumentUploadCore({ data: { uploadId: 'r5-upload-copy' } });
+  assert.equal(reused.uploadId, uploadId); assert.equal(reused.version, 1);
+  assert.equal(tasks.size, count + 1); assert.equal(documentAuditCalls, auditAfter);
+});
+
+test('receipt creation revalidates actor/root, payload and duplicate status transaction snapshot', () => {
+  const { assertReceiptCreation } = functionsRequire('./lib/modules/pagos/receiptIdentification.js');
+  const payload = { clienteId: 'client', companyId: 'own-company', montoTotal: 100, referencia: 'ref' };
+  let row = { rootId: 'root', actorUid: 'actor', status: 'READY', createPayload: payload };
+  const snapshot = { exists: true, get: field => row[field] };
+  assertReceiptCreation(snapshot, { uid: 'actor', rootId: 'root' }, payload);
+  assert.throws(() => assertReceiptCreation(snapshot, { uid: 'other', rootId: 'root' }, payload), /alcance/);
+  assert.throws(() => assertReceiptCreation(snapshot, { uid: 'actor', rootId: 'other' }, payload), /alcance/);
+  assert.throws(() => assertReceiptCreation(snapshot, { uid: 'actor', rootId: 'root' }, { ...payload, companyId: 'other' }), /cambi/);
+  assert.throws(() => assertReceiptCreation(snapshot, { uid: 'actor', rootId: 'root' }, { ...payload, montoTotal: 101 }), /no coincide/);
+  row = { ...row, status: 'REGISTERED', pagoId: 'existing' };
+  assert.throws(() => assertReceiptCreation(snapshot, { uid: 'actor', rootId: 'root' }, payload), error => error.code === 'already-exists' && error.details.pagoId === 'existing');
+});
+
+test('restored transport protection blocks external actions in isolated environments', () => {
+  const { externalActionsDecision, assertExternalActionsAllowed } = functionsRequire('./lib/modules/iq/externalActionsPolicy.js');
+  assert.equal(externalActionsDecision({ GCLOUD_PROJECT: 'pay-0-system' }).allowed, true);
+  for (const env of [{ GCLOUD_PROJECT: 'pay0-staging' }, { PAY0_ENVIRONMENT: 'test' }, { PAY0_EXTERNAL_ACTIONS_MODE: 'sandbox' }]) {
+    assert.equal(externalActionsDecision(env).allowed, false);
+    assert.throws(() => assertExternalActionsAllowed(env), /EXTERNAL_ACTIONS_DISABLED/);
+  }
 });

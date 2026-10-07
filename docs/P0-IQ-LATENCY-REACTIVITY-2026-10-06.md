@@ -1,3 +1,107 @@
+## P0-R5 ? reconciliacion parcial y conflicto de alcance (2026-10-07)
+
+**P0 ABIERTO. DEPLOY_READY = NO.** Base local: `a12cb6de14b0e489181dcd9d5df8283f47b6c0df`.
+Sin push/deploy, cambios de switches, escrituras productivas ni llamadas IQ/Facturama.
+Fuentes descargadas mediante GET autenticado, por Function y generacion exacta.
+Las revisiones siguen siendo las del preflight aceptado; no se asumio un unico paquete productivo.
+
+| Function existente | Revision productiva | Generacion de source ZIP |
+|---|---|---|
+| `createSolicitud` | `createsolicitud-00058-xev` | `1790583721253880` |
+| `createPago` | `createpago-00060-qex` | `1790843385128228` |
+| `finalizePagoDocumentUpload` | `finalizepagodocumentupload-00031-rox` | `1790585058949246` |
+| `processIqCreateOnDemandTask` | `processiqcreateondemandtask-00007-rob` | `1790638545665964` |
+| `processIqPagoDepositCreateQueue` | `processiqpagodepositcreatequeue-00019-qay` | `1790638545690989` |
+
+Las nuevas `dispatchQueuedPagoIqCreation` y `processIqPagoDepositAutomaticTask`
+no tienen baseline desplegado. Reutilizan el core Pago reconciliado y las correcciones P0 aceptadas.
+
+### Cambios locales completados
+
+- `createSolicitud`: cuerpo productivo, incluida atribucion de notas; conserva instrumentacion P0.
+- `createPago`: cuerpo de su revision propia, captura identidad IQ de origen y vinculo cliente/perfil,
+  validacion transaccional de identificacion, deduplicacion, metadata verificada y registro del recibo;
+  conserva instrumentacion. No se copiaron los otros exports de index.ts.
+- Solicitud Task/core: associatedName independiente del login, asociado obligatorio, catalogo unico,
+  cliente por perfil y persistencia de linkage; Task AUTO lee habilitacion sin consumir intervalo.
+- Pago core/scheduler: identidad de origen inmutable frente a reasignacion del usuario, perfil/root,
+  cliente por perfil y retorno del catalogo resuelto. Conserva los fences de generacion P0,
+  lock/write-once/respuesta incierta y la gracia de recovery. Scheduler reclama intervalo.
+- Finalizador: hash SHA-256 contra bytes de Storage, identificacion del recibo, validacion transaccional
+  de scope, replay sin version/auditoria adicional y reutilizacion del upload canonico. Enqueue P0
+  solo tras nueva transicion QUEUED; reinicia su indicador en cada intento de transaccion.
+- Transporte: recuperado guard productivo que bloquea IQ fuera de produccion.
+- No cambios de implementacion REP, Facturama, switches o schedulers de complementos.
+
+### Conflicto encontrado: no se acredita paridad completa
+
+La inspeccion de dependencias por declaraciones, seguida de lectura semantica, encontro:
+
+1. `createSolicitud -> linkSolicitudToMaterialityOperationCore -> projectMaterialityOperation
+   -> getActivePagoUploadsBySolicitud`. Produccion incluye XML/PDF REP por aplicacion/parcialidad,
+   transacciones coherentes y digest para evitar reescrituras. Local omite esa evidencia.
+   Restaurar ese tramo toca procesamiento de documentos REP, mientras R5 ordena no modificar REP.
+   **Se detuvo antes de incorporarlo.** Es un conflicto de alcance de dependencias, no un fallo
+   observado en IQ real ni una afirmacion de que la Task sea incompatible con la identidad.
+2. El wrapper productivo de `finalizePagoDocumentUpload` exige `pagos.uploadDocs`; local exige
+   `pagos.create`. El techo canonico local no contiene uploadDocs para Pagos. Recuperar el contrato
+   completo requiere reconciliar politica canonica, generado backend y bloque de reglas, sin
+   habilitar permisos ad hoc. No se cambio ese contrato en esta entrega parcial.
+3. `isCanonicalUserActive` productivo excluye tambien deleted/disabled/deletedAt; pendiente.
+4. Auditoria productiva usa colecciones por sistema (PAY0/ASSETS/TTT/HUGO); local usa activityLog.
+   Esa dependencia compartida tampoco esta reconciliada. La diferencia de la clase Hugo detectada
+   por el recorrido requiere revision por metodo; no se copio el modulo completo.
+
+Por estos pendientes, los PASS locales NO prueban `PRODUCTION CURRENT BEHAVIOR + P0 FIXES` completo.
+El commit conserva solo el avance local verificable; no es un candidato autorizado para deploy.
+No se declara un diff semantico final completo ni paridad de Hosting/SSR.
+
+### Matriz de evidencia local
+
+| PRODUCTION_PROTECTION | LOCAL_BEFORE | RECONCILED | TEST | RESULT |
+|---|---|---|---|---|
+| Asociado separado del login; catalogo unico | Usaba username; resolucion antigua | Recuperado | Asociado ausente/ambiguo y cliente por ID/nombre | PASS |
+| Identidad IQ de origen Pago | Dependia del acceso actual del actor | Recuperada | Reasignacion, root ajeno, perfil inactivo, sustitucion | PASS |
+| Cliente por perfil | Link global | Recuperado | Perfil correcto, legacy ajeno/sin scope | PASS |
+| Identificacion recibo | No validada en createPago | Recuperada | Actor/root/payload/duplicado | PASS |
+| Hash y replay finalizador | Sin hash de identificacion; reversionado | Recuperado en core | Bytes distintos rechazados; replay y upload duplicado sin writes | PASS |
+| Idempotencia, lock y write-once | P0 aceptado | Conservados | Cinco workers y replay; automatic/manual/recovery | PASS |
+| Resultado incierto | P0 aceptado | Conservado | No segundo POST incluso tras lease | PASS |
+| Master OFF / intervalo | P0 aceptado | Conservado | OFF cero POST; inmediata un core; scheduler claim | PASS |
+| Reactividad y descubrimiento | P0 aceptado | Sin cambios | Dos sesiones, paginacion, burst y reconexion | PASS |
+| Transporte aislado | Guard productivo ausente | Recuperado | staging/test/sandbox bloqueados | PASS |
+| Proyeccion REP/Materialidad | Historica | No incorporada por limite de alcance | Diff de dependencias | BLOCKED |
+| uploadDocs / usuario inactivo | Historico | Pendiente | Comparacion wrapper/politica/guard | BLOCKED |
+| Auditoria por sistema | Historica | Pendiente | Comparacion dependencia logActivity | BLOCKED |
+
+La suite emulator usa Firestore real local y transporte IQ/Cloud Tasks simulados. El worker se
+extrae del fuente; su adaptador de core conecta al HTTP core con lock/journal reales, no a una
+sesion IQ. Las pruebas de identidad invocan los helpers recuperados contra perfiles sinteticos.
+No hay prueba end-to-end productiva ni prueba visual sin parpadeo.
+
+### Verificacion ejecutada
+
+- Suite P0 emulator ampliada: 19/19 PASS (13 previas + 6 recuperacion R5).
+- Reactividad: 8/8 PASS.
+- Functions build, TypeScript frontend y verificador de autorizacion: PASS.
+- Frontend build: PASS tras limpiar exclusivamente .next/cache; primer intento fallo en WasmHash.
+- git diff --check: PASS.
+- El PASS de autorizacion comprueba coherencia de la politica local actual, no paridad con produccion.
+
+### Recursos eventuales (no autorizados)
+
+Candidatos existentes: createSolicitud, createPago, finalizePagoDocumentUpload,
+processIqCreateOnDemandTask, processIqPagoDepositCreateQueue.
+Nuevos: dispatchQueuedPagoIqCreation, processIqPagoDepositAutomaticTask, cola homonima
+us-central1 y trigger Eventarc administrado para pagos. Hosting pay-0-system y ssrpay0system
+serian necesarios para servir los cambios UI, pero su baseline completo no esta certificado.
+No desplegar Functions ajenas, complementos, reglas ni sincronizacion inversa con esta lista.
+
+IAM esperado: runtime/caller `751158244178-compute@developer.gserviceaccount.com`, tasks.create,
+queues.get, serviceAccounts.actAs, run.invoker; Cloud Tasks service agent con OIDC y runtime con
+acceso a IQ_CREDENTIALS_KEY/TELEGRAM_BOT_TOKEN. Preflight previo verifico permisos existentes;
+la nueva Function/cola no existe y su verificacion efectiva sigue pendiente.
+
 # P0: despacho inmediato de Pagos y descubrimiento reactivo
 
 ## Continuacion 2026-10-07: Task automatica de Solicitudes (base `118b40f`)

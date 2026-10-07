@@ -1,3 +1,5 @@
+import { fetchIqExternal as fetch } from "./externalActionsPolicy";
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 function normalizedTimeout(value?: number): number {

@@ -19,6 +19,7 @@ import {
 } from "./iqHttpAuth";
 import {
   resolveIqDepositCatalogHttp,
+  type IqDepositResolvedCatalog,
   type IqDepositCatalogTarget,
 } from "./iqDepositHttpCatalogResolver";
 
@@ -41,6 +42,10 @@ export interface PagoDepositHttpCreateFlowInput {
     session?: IqHttpAuthSession;
   };
 }
+
+export type PagoDepositHttpCreateFlowResult = CreateDepositResult & {
+  catalog: IqDepositResolvedCatalog;
+};
 
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
@@ -72,7 +77,7 @@ function voucherSha256(bytes: Uint8Array): string {
 
 export async function runPagoDepositHttpCreateFlow(
   input: PagoDepositHttpCreateFlowInput,
-): Promise<CreateDepositResult> {
+): Promise<PagoDepositHttpCreateFlowResult> {
   const pagoId = cleanText(input.pagoId);
   const actorUid = cleanText(input.actorUid);
   const source = cleanText(input.source) || "PAY0_HTTP";
@@ -164,7 +169,7 @@ export async function runPagoDepositHttpCreateFlow(
     expectedUploadId: input.expectedUploadId,
   };
 
-  return createIqDepositHttpControlled({
+  const result = await createIqDepositHttpControlled({
     auth: toIqAuthContext(session),
     identity: {
       pay0PagoId: pagoId,
@@ -197,4 +202,9 @@ export async function runPagoDepositHttpCreateFlow(
     ),
     allowHttpPost: input.allowHttpPost,
   });
+
+  return {
+    ...result,
+    catalog,
+  };
 }

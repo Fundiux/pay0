@@ -2,7 +2,7 @@ import type { IqHttpAuthSession } from "./iqHttpAuth";
 import { isIqAccessTokenUsable } from "./iqHttpAuth";
 import { fetchIq } from "./iqHttpClient";
 
-interface CatalogRow {
+export interface CatalogRow {
   id?: unknown;
   name?: unknown;
   value?: unknown;
@@ -37,6 +37,7 @@ export interface IqDepositResolvedCatalog {
   partnerName: string;
   clientId: number;
   clientName: string;
+  clientMatchStrategy: string;
   companyId: number;
   companyName: string;
   operationTypeId: number;
@@ -48,6 +49,49 @@ export interface IqDepositResolvedCatalog {
   salePercentage: string;
   currencyValue: string;
   currencyName: string;
+}
+
+export function resolveIqDepositClientCatalogRow(
+  rows: CatalogRow[],
+  target: Pick<IqDepositCatalogTarget, "iqClientId" | "clientName">,
+): { row: CatalogRow; strategy: string } {
+  const canonicalClientId = cleanText(target.iqClientId);
+
+  if (canonicalClientId) {
+    const requestedClientId = numericId(canonicalClientId, "client");
+    const byId = rows.filter((row) => Number(row.id) === requestedClientId);
+
+    if (byId.length === 1) {
+      return { row: byId[0], strategy: "HTTP_CATALOG_PROFILE_ID" };
+    }
+
+    if (byId.length > 1) {
+      throw new Error(
+        `IQ_CATALOG_CLIENT_ID_AMBIGUOUS:${canonicalClientId}:${byId.length}`,
+      );
+    }
+
+    const wantedName = normalize(target.clientName);
+    const byExactName = rows.filter(
+      (row) => normalize(rowLabel(row)) === wantedName,
+    );
+
+    if (byExactName.length !== 1) {
+      throw new Error(
+        `IQ_CATALOG_CLIENT_STALE_ID_NAME_NOT_UNIQUE:${canonicalClientId}:${cleanText(target.clientName)}:${byExactName.length}`,
+      );
+    }
+
+    return {
+      row: byExactName[0],
+      strategy: "HTTP_CATALOG_STALE_ID_EXACT_NAME",
+    };
+  }
+
+  return {
+    row: selectUnique(rows, target.clientName, "client"),
+    strategy: "HTTP_CATALOG_NAME",
+  };
 }
 
 function cleanText(value: unknown): string {
@@ -469,42 +513,11 @@ export async function resolveIqDepositCatalogHttp(
     partnerCatalog.clients,
   );
 
-  const canonicalClientId =
-    cleanText(target.iqClientId);
-
-  let client: CatalogRow;
-
-  if (canonicalClientId) {
-    const requestedClientId = numericId(
-      canonicalClientId,
-      "client",
-    );
-
-    const clientMatches = clientRows.filter(
-      (row) =>
-        Number(row.id) === requestedClientId,
-    );
-
-    if (clientMatches.length === 0) {
-      throw new Error(
-        `IQ_CATALOG_CLIENT_ID_NOT_FOUND:${canonicalClientId}`,
-      );
-    }
-
-    if (clientMatches.length !== 1) {
-      throw new Error(
-        `IQ_CATALOG_CLIENT_ID_AMBIGUOUS:${canonicalClientId}:${clientMatches.length}`,
-      );
-    }
-
-    client = clientMatches[0];
-  } else {
-    client = selectUnique(
-      clientRows,
-      target.clientName,
-      "client",
-    );
-  }
+  const resolvedClient = resolveIqDepositClientCatalogRow(
+    clientRows,
+    target,
+  );
+  const client = resolvedClient.row;
 
   const company = selectUnique(
     asRows(partnerCatalog.companies),
@@ -626,6 +639,7 @@ export async function resolveIqDepositCatalogHttp(
     partnerName,
     clientId,
     clientName,
+    clientMatchStrategy: resolvedClient.strategy,
     companyId,
     companyName,
     operationTypeId,
