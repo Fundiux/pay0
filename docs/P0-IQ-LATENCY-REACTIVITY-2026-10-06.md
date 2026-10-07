@@ -1,3 +1,176 @@
+## P0-R6 — frontend/SSR productivo recuperado + UI P0 (2026-10-07)
+
+**R6: DEPLOY_READY = YES. P0 permanece ABIERTO.** Esta sección sustituye los bloqueos
+frontend de R5; el resto se conserva como historial. Rama `fix/iq-latency-reactivity`,
+base `fe1f84097bbddd1cc2b5d20365ac9ba5b2cff5f2`. Sin push, deploy, escrituras productivas,
+operaciones IQ reales ni cambios de switches. **Backend sin modificaciones en R6.**
+
+### Autoridad del baseline
+
+SSR remoto `ssrpay0system-00576-hed`, generación `1790845363013657`, ZIP SHA-256
+`9f8b77de0a56843352ee39caae6ff57b31d9299466202a2222d23a51a0fc6395`.
+Release Hosting `1790845588313000`, versión `db3b4ed873464908`.
+
+Los **515 archivos .next desplegados excluyendo caché** coinciden byte por byte con
+`.worktrees/payment-receipt-semantic-p3c-hosting/.next`; su árbol Git estaba limpio en
+`9c06705`. BUILD_ID productivo: `vt2pNREKn1aoVYJj29Ncd`. Esa correspondencia aporta la
+procedencia del código fuente, no una suposición basada en el nombre de la rama.
+Se recuperaron los archivos runtime de ese commit, sus dependencias compartidas y los
+cuatro JSON que la vista de evaluación importa en runtime. No se copiaron reportes
+históricos ajenos ni cambios backend. No hubo merge/rebase ni modificaciones de otros worktrees.
+
+### Cuatro rutas recuperadas
+
+- **/cuenta**: acceso/contraseña, nombre de usuario y destinos de comisión. Dependencias:
+  auth con reautenticación, accountValidation, loginIdentity, UserCommissionDestinations
+  y servicios de comisiones. Acceso autenticado según el guard productivo. Alta en
+  `a076c84983afcf816634f30223e7e38c2c6ef594`, no ancestro de R5. Interacción P0: ninguna
+  modificación del flujo; preserva shell/auth compartidos.
+- **/administracion/recursos-corporativos**: inventario y versiones por empresa propia,
+  revisión/aprobación/activación separadas, descarga y retiro. Dependencias: roles,
+  corporateResources, catálogo y callables productivos ya existentes. Sólo superadmin.
+  Alta en `c9388286ffbf1813b0f22a791c7115b6aabbd838`, no ancestro de R5. Interacción P0:
+  preservar navegación/permisos; no se ejecutó ninguna de sus mutaciones.
+- **/hugo/evaluation**: comparación controlada, revisión ciega local y exportación.
+  Dependencias: HugoModelEvaluation y cuatro fixtures phase9 efectivamente incluidos en
+  el bundle productivo. Guard de rutas productivo; admin/operador denegados. Alta en
+  `8160a4e3a29e8e6f28ffdbb49ef62c8cc06a84dc`, no ancestro de R5. Sin cambios P0 en evaluación.
+- **/manifest.webmanifest**: identidad pública PAY0, idioma es-MX, start_url y display
+  standalone. Dependencias: MetadataRoute, metadata de layout y cabeceras Next/Hosting.
+  Alta en `1e638e68a5c02f43249c9bac564e8f1170907a99`, no ancestro de R5. Sin lógica IQ.
+
+Las rutas faltaban porque la rama P0 partía de un árbol anterior a esos commits; no eran
+eliminaciones requeridas para P0. Se recuperaron sin rediseño.
+
+### Reconciliación semántica
+
+Pagos conserva de producción: propuesta identificada por servidor READY, reasons vacío,
+id SHA-256 coincidente con receiptIdentificationId y operationTypeKey; información semántica
+y correcciones del recibo; metadatos/códigos de revisión de aplicación automática; validación
+de archivo; finalización obligatoria del comprobante; recuperación de upload fallido que
+identifica el pago existente y evita inducir otro alta; override RFC únicamente en el flujo
+manual autorizado; cancel/create/conciliate/uploadDocs separados; estados terminales, acciones,
+notas legibles/de sistema, folios y filtro por creador. No se reintrodujo backgroundUpload.
+
+Encima se añadió sólo P0: listeners por documento, descubrimiento acotado, inserción local de
+la fila creada, dedupe al cargar otra página, sincronización de las filas abiertas en modales,
+instrumentación y liberación del overlay PAY0 antes de preparar el plan IQ, con banner/reapertura.
+Se conservan idempotencyKey e in-flight lock mientras IQ sigue pendiente.
+
+Solicitudes conserva permisos, filtros de creador, cancelación/seguimiento fiscal, documentos,
+notas, acciones y paginación productivos. P0 añade listeners y descubrimiento; el evento local
+existente se conserva con scope y cancelación de callbacks obsoletos. createSolicitud conserva
+el unwrap P0 y NuevaSolicitudModal su instrumentación; sus otros comportamientos son productivos.
+
+El descubrimiento y los updates por ID respetan **rootId para todos los roles**, como el
+listado productivo actual, más adminId/createdBy y el creador seleccionado. El scope histórico
+P0 de Solicitudes sólo filtraba adminId para admin: se corrigió localmente para conservar el
+scope productivo. Las ocho combinaciones de índices correspondientes están **READY** por
+lectura remota; no se crean índices. No se debilitan permisos para obtener reactividad.
+
+ActivityLog recupera el lector productivo: `pay0ActivityLog` con sourceSystem=PAY0 y
+compatibilidad con registros históricos de `activityLog`, filtrando los otros sistemas.
+Preserva root/actor/admin, orden descendente, límite maxRows, búsqueda/evento/fechas,
+labels y nombres legibles. Nunca sustituye los eventos nuevos por una lectura exclusivamente
+histórica. No se añadió paginación inexistente: conserva el límite y filtros del componente.
+
+### Matriz final
+
+| AREA | PROD PRESERVED | P0 ADDED | TEST | RESULT |
+|---|---|---|---|---|
+| Cuatro rutas | Sí, fuente y dependencias exactas | Sin alterar sus flujos | Roles/validación, render Chromium y HTTP del build | PASS |
+| Pagos | Identificación, finalización, permisos, controles, estados, acciones y creador | Release previo a IQ, estado visual y filas reactivas | Contratos reales extraídos + 8 reactividad + browser | PASS |
+| Solicitudes | Scope, permisos, creador, cancelación, documentos, notas y paginación | Listeners, discovery y evento local scoped | Backend/emulador, queries y dos pestañas | PASS |
+| ActivityLog | Lector por sistema + histórico filtrado | Compatible con auditoría reconciliada | Queries por rol y ambos orígenes renderizados | PASS |
+| Auth/roles/navegación/componentes | Baseline runtime recuperado | Sólo cuatro integraciones P0 | Paridad de fuente, TS, guard autorización | PASS |
+| SSR/rutas/middleware/configuración | Manifiestos y cabeceras coincidentes | Bundles P0 | Comparación artefactos y servidor local | PASS |
+| Backend aceptado R5 | Sin cambios | P0 R5 intacto | 23/23 emulador + Functions build | PASS |
+| Runtime SSR/IAM/colas/índices | Baseline y permisos conservados | Dos Functions + una cola/evento | Lock SSR fijado, lecturas remotas, índices READY | PASS |
+
+### Pruebas y límites de evidencia
+
+- `qa/scripts/iq-immediate-discovery.emulator.test.cjs`: **23/23**, también después de
+  ajustar rootId. Incluye identidad, hash, replay, digest, auditoría, concurrencia, Master OFF,
+  Task inmediata, scheduler/recovery y respuesta incierta. IQ/Tasks externos simulados.
+- `qa/scripts/operation-reactivity.test.cjs`: **8/8**.
+- `qa/scripts/p0-r6-frontend.test.cjs`: **5/5**. Rutas/roles, identificación, permisos,
+  barrera de upload y recuperación del error, scope/creador, auditoría.
+- `qa/scripts/p0-r6-browser.test.cjs`: **1/1**. Chromium real, dos pestañas y hook productivo
+  en una tabla fixture, Firestore demo: fila creada en una pestaña aparece en la otra,
+  IQ/estatus actualizados, página anterior retenida, filtro/selección intactos, desconexión y
+  recuperación, nodos tabla/fila estables y cero remociones de esos nodos. Además renderiza
+  las tres rutas recuperadas y ActivityLog reales. Auth/callables se simulan; red no-local bloqueada.
+  No se confunde este fixture con certificación visual de la app productiva completa.
+- `qa/scripts/p0-r6-hosting.test.cjs`: **1/1**, cuatro rutas HTTP 200 en Next local y cabeceras
+  de seguridad/manifest. No login ni operación productiva.
+- Functions build, TypeScript sin incremental y verificador de autorización: **PASS**.
+- Clean frontend build: **46 páginas**. Repetido con npm ci/lock productivo, guard de entorno
+  y caché limpia. Hubo un socket hang up durante descarga del build; el retry del build completó
+  sin modificar código ni desactivar validaciones. Caché limpia no se considera fallo P0.
+- La repetición inicial del test browser reutilizó filas demo y agotó timeout esperando la
+  primera página; se corrigió el fixture con projectId demo único. Las corridas posteriores pasan.
+
+### Drift clasificado y cierre de R6
+
+**FUNCTIONAL:** restauradas las diferencias de rutas, auth, roles, navegación, recibos,
+documentos, auditoría, componentes y páginas. Fuera de las cuatro integraciones
+`pagos/page.tsx`, `solicitudes/page.tsx`, `NuevaSolicitudModal.tsx`, `services/solicitudes.ts`,
+la fuente runtime recuperada coincide con producción. Cuatro helpers P0 son adiciones esperadas.
+No quedan diferencias funcionales inexplicadas en este alcance.
+
+**CONFIGURATION:** next.config, cabeceras Hosting (incluido microphone=(self)), configuración
+pública Firebase/gateway, política canónica y dependencias de frontend preservadas. Manifiestos
+app-path-routes/routes/middleware, conjunto de rutas prerender y config de required-server-files
+coinciden. El paquete runtime SSR candidato usa server.js/package.json/package-lock.json del
+ZIP desplegado, no los artefactos antiguos .firebase. Es importante: el lock generado SSR y el
+lock de build frontend tienen responsabilidades distintas; no se sustituye uno por el otro.
+
+**BUILD-ONLY:** BUILD_ID, hashes/chunks, rutas absolutas del compilador, proxy del manifest,
+hash de clase de la fuente Inter, agrupación/use-strict y exports retenidos por tree-shaking.
+Comparación por módulos: 1.698/1.707 coinciden normalizando paths/referencias. Los nueve restantes
+son Pagos/Solicitudes P0, cuatro cambios de agrupación/exports sin cambio de fuente, Firestore con
+export adicional requerido por P0, manifest con ruta codificada del worktree y clase Inter.
+No se restauran los predeploy/agregadores históricos que exigen ancestros o módulos backend
+ajenos al micro-deploy. Son herramientas de release, no configuración runtime publicada; sus
+comprobaciones aplicables quedan sustituidas aquí por evidencia de paridad y pruebas delimitadas.
+Sí se recupera el guard productivo de entorno frontend, integrado nuevamente en `npm run build`.
+
+**EXPECTED-P0:** liberación del overlay, estado IQ, instrumentación, listeners, discovery y
+compatibilidad con root/creador. Backend: diferencias P0 aprobadas y reconciliadas en R5.
+
+Última lectura de revisiones Functions/SSR y release: 2026-10-07T10:24:26.257235+00:00. Sin cambios frente a
+R5; las dos Functions nuevas siguen ausentes. Esto acredita ausencia de drift en esa ventana,
+no reserva el entorno contra cambios futuros. No se abre otra ronda genérica por hashes.
+
+### Micro-deploy exactamente delimitado, todavía NO autorizado
+
+Modificar cinco Functions: `createSolicitud`, `createPago`, `finalizePagoDocumentUpload`,
+`processIqCreateOnDemandTask`, `processIqPagoDepositCreateQueue`.
+Crear dos: `dispatchQueuedPagoIqCreation`, `processIqPagoDepositAutomaticTask`.
+Actualizar Hosting **pay-0-system** y la Function SSR **ssrpay0system**, us-central1, Node 22.
+No desplegar otros exports del paquete backend ni sustituir listPagos/listSolicitudes productivos.
+No reglas, índices, complementos, sincronización inversa, switches o servicios de voz.
+
+Nuevos recursos: servicios de las dos Functions, cola `processIqPagoDepositAutomaticTask` y
+trigger Eventarc/transporte administrado del evento de Pagos. Hosting crea un release y SSR
+una revisión; no se crea otro sitio ni cuenta de servicio. Retries de Task Pago: 3 intentos,
+300–900s, ventana 1800s; tasa 1/s y concurrencia 1. Scheduler existente sólo recovery.
+
+Runtime/caller/callee: `751158244178-compute@developer.gserviceaccount.com`.
+IAM leído: editor (enqueue/get/actAs), run.invoker y eventarc.eventReceiver heredados;
+self iam.serviceAccountTokenCreator; agente Cloud Tasks con cloudtasks.serviceAgent/OIDC.
+Secret accessor según baseline aceptado. No concesiones nuevas necesarias en la configuración
+revisada. La ejecución de la nueva Task y su identidad efectiva se verifican en certificación.
+
+Artefacto SSR local revisable: `tmp/p0-r6/candidate-ssr-szSZ6XCY8uhvE4w03Kjpe`. Conserva exactamente el manifest/lock/wrapper
+productivo con .next candidato. Es un artefacto ignorado, no se publicó. El eventual empaquetado
+debe usar este runtime fijado, no resolver un lock SSR distinto o reutilizar .firebase antiguo.
+
+El siguiente paso requiere autorización expresa: micro-deploy delimitado, una Solicitud y un Pago,
+siete timestamps, dos pestañas y decisión GO/rollback. **DEPLOY_READY no cierra P0 ni autoriza deploy.**
+
+---
+
 ## P0-R5 ? recuperaci?n autorizada y bloqueo Hosting/SSR (2026-10-07)
 
 **P0 ABIERTO. DEPLOY_READY = NO.** Esta secci?n sustituye el estado del informe parcial

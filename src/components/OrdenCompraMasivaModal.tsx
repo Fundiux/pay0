@@ -155,7 +155,7 @@ export default function OrdenCompraMasivaModal(props: {
     () =>
       operationTypes.map((op: any) => ({
         value: String(op.key || op.id || ""),
-        label: String(op.name || op.label || op.key || op.id || "Operacion"),
+        label: String(op.name || op.label || op.key || "Operación sin nombre"),
       })),
     [operationTypes]
   );

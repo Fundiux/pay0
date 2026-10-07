@@ -1,6 +1,10 @@
 "use client";
 
+import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
 import { collection, query, where, onSnapshot, orderBy, doc, getDoc} from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
@@ -9,11 +13,10 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
-import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
-import { operationDiscoverySeed, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
+import { canAutomaticallyRefreshCancellation } from "@/lib/solicitudCancellationFollowup";
 import { formatDateOnly } from "@/lib/dateTime";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
@@ -37,6 +40,8 @@ import DocsModal from "@/components/DocsModal";
 import DateScopeBar from "@/components/DateScopeBar";
 import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDate } from "@/lib/dateScope";
 import UiSelect from "@/components/UiSelect";
+import RecordCreatorFilter from "@/components/RecordCreatorFilter";
+import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
   const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
@@ -73,7 +78,7 @@ function noteDateTimeText(value: any) {
 }
 
 function NoteBubble({ note, myUid }: any) {
-  const isMine = String(note?.createdBy || "") === String(myUid || "");
+  const isMine = !isSystemNote(note) && String(note?.createdBy || "") === String(myUid || "");
   const wrapper = isMine ? "justify-end" : "justify-start";
   const bubble = isMine
     ? "bg-sky-500/15 border-sky-500/20 text-slate-100"
@@ -83,7 +88,7 @@ function NoteBubble({ note, myUid }: any) {
     <div className={`flex ${wrapper}`}>
       <div className={`max-w-[80%] rounded-2xl border px-4 py-3 ${bubble}`}>
         <div className={`mb-1 text-[11px] ${isMine ? "text-sky-300 text-right" : "text-slate-400 text-left"}`}>
-          {note?.createdByName || note?.createdByRole || "Sistema"}
+          {noteAuthorLabel(note)}
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
@@ -115,10 +120,12 @@ const SolicitudRow = React.memo(({
   cancelSatRelatedSolicitudId,
   setCancelSatRelatedSolicitudId,
   cancelSatSaving,
+  cancellationError,
   canComment,
   canCancel,
   canUploadDocs,
   showIqFolio,
+  showCreator,
   allSolicitudes,
   sustitucionIndex
 }: any) => {
@@ -207,7 +214,8 @@ const SolicitudRow = React.memo(({
   return (
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
-        <td className="pay0-td-date w-[78px] max-w-[78px] truncate whitespace-nowrap px-2 text-sky-400" title={String(s.folio || "")}>{s.folio}</td>
+        <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div></td>
+        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s)}>{recordCreatorLabel(s)}</td> : null}
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -227,15 +235,7 @@ const SolicitudRow = React.memo(({
         <td className="pay0-td text-slate-500 truncate" title={String(s.empresaNombre || "")}>{s.empresaNombre}</td>
         <td className="pay0-td text-center text-slate-400">{s.tipoFactura}</td>
         <td className="pay0-td text-center text-sky-400 font-mono">{s.facturaDisplay || s.numFactura || s.facturaFolio || "S/F"}</td>
-        <td className="pay0-td-money text-white text-center">
-          ${toCurrency(s.monto || 0)}
-        </td>
-        <td className="pay0-td-money text-emerald-400 text-center">
-          ${toCurrency(s.totalAbonado || 0)}
-        </td>
-        <td className="pay0-td-money text-amber-400 text-center">
-          ${toCurrency(saldo || 0)}
-        </td>
+        <td className="pay0-td-money pay0-balance-cell text-slate-200"><span className="sr-only">Monto: </span>${toCurrency(money2(s.monto))}</td>
         <td className="pay0-td text-slate-500 italic text-center">
           {s.updatedAt?.seconds && saldo === 0 ? new Date(s.updatedAt.seconds * 1000).toLocaleDateString() : "---"}
         </td>
@@ -285,6 +285,12 @@ const SolicitudRow = React.memo(({
                 </span>
               )}
             </div>
+
+            {cancellationError && (
+              <p role="status" className="max-w-[220px] whitespace-normal text-[10px] text-amber-300">
+                {String(s.folio || "Solicitud sin folio")}: {cancellationError}
+              </p>
+            )}
 
             {displayStatus === "SUSTITUIDA" && targetFolio && (
               <button
@@ -609,88 +615,15 @@ export default function SolicitudesPage() {
   const [hasMoreSolicitudes, setHasMoreSolicitudes] = useState(false);
   const [loadingMoreSolicitudes, setLoadingMoreSolicitudes] = useState(false);
   const solicitudesRequestSeq = useRef(0);
-
-  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
-
-  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
-
-  useEffect(() => {
-
-    const onSolicitudCreatedLocal = async (event: Event) => {
-
-      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
-
-      const solicitudId = String(detail?.solicitudId || "").trim();
-
-      if (!solicitudId) return;
-
-  
-
-      try {
-
-        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
-
-        if (!snap.exists()) return;
-
-  
-
-        const incoming: any = { id: snap.id, ...snap.data() };
-
-  
-
-        setSolicitudes((prev: any[]) => {
-
-          const index = prev.findIndex((item: any) => item?.id === incoming.id);
-
-          if (index < 0) return [incoming, ...prev];
-
-  
-
-          const next = prev.slice();
-
-          next[index] = { ...prev[index], ...incoming };
-
-          return next;
-
-        });
-
-      } catch (error) {
-
-        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
-
-      }
-
-    };
-
-  
-
-    window.addEventListener(
-
-      "PAY0_SOLICITUD_CREATED_LOCAL",
-
-      onSolicitudCreatedLocal
-
-    );
-
-  
-
-    return () => {
-
-      window.removeEventListener(
-
-        "PAY0_SOLICITUD_CREATED_LOCAL",
-
-        onSolicitudCreatedLocal
-
-      );
-
-    };
-
-  }, []);
+  const loadedSolicitudesRequestSeq = useRef<number | null>(null);
+  const checkedCancellationIds = useRef(new Set<string>());
+  const [cancellationErrors, setCancellationErrors] = useState<Record<string, string>>({});
 
   const [pagos, setPagos] = useState<any[]>([]);
   const [applicationFoliosBySolicitud, setApplicationFoliosBySolicitud] = useState<Record<string, string[]>>({});
   const [filter, setFilter] = useState("");
+  const [creatorUid, setCreatorUid] = useState("");
+  const [creatorOptions, setCreatorOptions] = useState<RecordCreatorOption[]>([]);
 
   useEffect(() => {
     const q = String(searchParams.get("q") || "").trim();
@@ -815,26 +748,11 @@ export default function SolicitudesPage() {
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
   const rangeKey = useMemo(() => `${range.from.getTime()}-${range.to.getTime()}`, [range]);
 
-  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
-  const operationScopeKey = `${uid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`;
-
-  useLiveOperationRows({
-    collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
-    enabled: Boolean(uid && canViewSolicitudes),
-    discovery, scope: { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime() },
-    scopeKey: operationScopeKey, onError: setPageMsg,
-  });
-
   useEffect(() => {
-    const current = (row: any) => row ? solicitudes.find((item) => item.id === row.id) || null : null;
-    setDocsFor(current);
-    setCommentFor(current);
-    setApplyPagoFor(current);
-    setCancelSatFor(current);
-    setRejectFor(current);
-  }, [solicitudes]);
-
-  useEffect(() => {
+    loadedSolicitudesRequestSeq.current = null;
+    checkedCancellationIds.current.clear();
+    setCancellationErrors({});
+    setLoadingMoreSolicitudes(false);
     if (!uid || !canViewSolicitudes) {
       setSolicitudes([]);
       setSolicitudesCursor(null);
@@ -847,10 +765,12 @@ export default function SolicitudesPage() {
     setSolicitudes([]);
     setSolicitudesCursor(null);
     setHasMoreSolicitudes(false);
-    void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() }).then((page) => {
+    void listSolicitudes({ limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined }).then((page) => {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
+      loadedSolicitudesRequestSeq.current = requestSeq;
       setSolicitudes(page.items || []);
       setDiscovery(operationDiscoverySeed(operationScopeKey, page.items || []));
+      setCreatorOptions(page.creatorOptions || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
       setPageMsg((current) => current.includes("solicitudes") ? "" : current);
@@ -861,8 +781,11 @@ export default function SolicitudesPage() {
       setSolicitudesCursor(null);
       setHasMoreSolicitudes(false);
     });
-    return () => { cancelled = true; };
-  }, [uid, rootId, role, canViewSolicitudes, rangeKey]);
+    return () => {
+      cancelled = true;
+      solicitudesRequestSeq.current++;
+    };
+  }, [uid, rootId, role, canViewSolicitudes, rangeKey, creatorUid]);
 
   const loadMoreSolicitudes = useCallback(async () => {
     if (!solicitudesCursor || loadingMoreSolicitudes) return;
@@ -870,6 +793,7 @@ export default function SolicitudesPage() {
     const requestSeq = solicitudesRequestSeq.current;
     try {
       const page = await listSolicitudes({
+        creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined,
         limit: 100,
         fromMillis: range.from.getTime(),
         toMillis: range.to.getTime(),
@@ -885,13 +809,114 @@ export default function SolicitudesPage() {
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
     } catch (error: any) {
+      if (requestSeq !== solicitudesRequestSeq.current) return;
       setPageMsg(error?.message || "No se pudieron cargar más solicitudes.");
     } finally {
       if (requestSeq === solicitudesRequestSeq.current) {
         setLoadingMoreSolicitudes(false);
       }
     }
-  }, [loadingMoreSolicitudes, solicitudesCursor, range]);
+  }, [loadingMoreSolicitudes, solicitudesCursor, range, creatorUid, role]);
+
+  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
+  const operationScopeKey = `${uid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
+
+  useLiveOperationRows({
+    collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
+    enabled: Boolean(uid && canViewSolicitudes),
+    discovery, scope: { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
+    scopeKey: operationScopeKey, onError: setPageMsg,
+  });
+
+  useEffect(() => {
+    const current = (row: any) => row ? solicitudes.find((item) => item.id === row.id) || null : null;
+    setDocsFor(current);
+    setCommentFor(current);
+    setApplyPagoFor(current);
+    setCancelSatFor(current);
+    setRejectFor(current);
+  }, [solicitudes]);
+
+  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
+
+  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
+
+  useEffect(() => {
+    let active = true;
+
+    const onSolicitudCreatedLocal = async (event: Event) => {
+
+      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
+
+      const solicitudId = String(detail?.solicitudId || "").trim();
+
+      if (!solicitudId) return;
+
+
+
+      try {
+
+        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
+
+        if (!active || !snap.exists()) return;
+
+
+
+        const incoming: any = { id: snap.id, ...snap.data() };
+
+
+
+        if (!operationBelongsToScope(incoming, "solicitudes", { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
+        setSolicitudes((prev: any[]) => {
+
+          const index = prev.findIndex((item: any) => item?.id === incoming.id);
+
+          if (index < 0) return [incoming, ...prev];
+
+
+
+          const next = prev.slice();
+
+          next[index] = { ...prev[index], ...incoming };
+
+          return next;
+
+        });
+
+      } catch (error) {
+
+        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
+
+      }
+
+    };
+
+
+
+    window.addEventListener(
+
+      "PAY0_SOLICITUD_CREATED_LOCAL",
+
+      onSolicitudCreatedLocal
+
+    );
+
+
+
+    return () => {
+      active = false;
+
+      window.removeEventListener(
+
+        "PAY0_SOLICITUD_CREATED_LOCAL",
+
+        onSolicitudCreatedLocal
+
+      );
+
+    };
+
+  }, [operationScopeKey]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -1148,43 +1173,40 @@ export default function SolicitudesPage() {
     setCancelSatRelatedSolicitudId(String(sol?.relatedSolicitudFolio || sol?.relatedSolicitudId || ""));
   };
 
-  const refreshCancellation = async (sol: any) => {
+  const refreshCancellation = async (sol: any, requestSeq: number) => {
     try {
-      setPageMsg("");
       const result = await refreshFacturamaProductionCancellationStatus(sol.id);
+      if (requestSeq !== solicitudesRequestSeq.current) return;
       setSolicitudes((prev: any[]) => prev.map((item: any) => item.id === sol.id ? {
         ...item,
         facturamaCancellationStatus: result.status,
         ...(result.terminal ? { status: "CANCELADA", sustitucionStatus: "CANCELADA_SAT" } : {}),
       } : item));
-      setPageMsg(`Estado SAT actualizado: ${result.status}${result.isCancelable ? ` (${result.isCancelable})` : ""}.`);
     } catch (error: any) {
-      setPageMsg(error?.message || "No se pudo consultar el estado de cancelacion.");
+      if (requestSeq !== solicitudesRequestSeq.current) return;
+      setCancellationErrors((current) => ({
+        ...current,
+        [sol.id]: `No se pudo verificar la cancelación. ${String(error?.message || "Intenta de nuevo al recargar la lista.")}`,
+      }));
     }
   };
 
-  // A cancellation request is checked automatically once per loaded Solicitud.
-  // There is deliberately no operator button: this never sends a new request
-  // to Facturama, it only reads the SAT/Facturama result already in progress.
-  const checkedCancellationIds = useRef(new Set<string>());
+  // Only follow an actual cancellation of an issued production CFDI. Missing
+  // folio/date metadata is recovered by reconcileFacturamaIssuedMetadata in
+  // Facturación, not by consulting SAT for an unissued draft.
   useEffect(() => {
+    const requestSeq = solicitudesRequestSeq.current;
+    if (!canViewSolicitudes || loadedSolicitudesRequestSeq.current !== requestSeq) return;
     const pending = solicitudes.filter((item: any) =>
-      String(item?.facturamaInvoiceId || "").trim() &&
-      (
-        String(item?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" ||
-        String(item?.status || "").toUpperCase() === "EN_SUSTITUCION" ||
-        !String(item?.facturaDisplay || "").trim() ||
-        !String(item?.facturaFecha || "").trim() ||
-        (String(item?.status || "").toUpperCase() === "CANCELADA" && !String(item?.cancellationReceiptUploadId || "").trim())
-      ) &&
+      canAutomaticallyRefreshCancellation(item, isSuperAdmin(role)) &&
       !checkedCancellationIds.current.has(String(item?.id || "")),
     );
     for (const item of pending) {
       if (!item?.id) continue;
       checkedCancellationIds.current.add(String(item.id));
-      void refreshCancellation(item);
+      void refreshCancellation(item, requestSeq);
     }
-  }, [solicitudes]);
+  }, [solicitudes, role, canViewSolicitudes, rangeKey]);
 
   const closeCancelSat = () => {
     setCancelSatFor(null);
@@ -1562,15 +1584,17 @@ export default function SolicitudesPage() {
         </div>
       </header>
 
+      {(isSuperAdmin(role) || isAdmin(role)) && <div className="mb-2 flex flex-wrap items-center gap-2"><RecordCreatorFilter value={creatorUid} onChange={setCreatorUid} options={creatorOptions} /></div>}
       {pageMsg && (
         <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}
         </div>
       )}
       <div className="w-full min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] shadow-2xl overflow-x-auto">
-        <table className={`pay0-solicitudes-main-table pay0-table w-full text-left ${isSuperAdmin(role) ? "min-w-[1450px] xl:min-w-[1450px]" : "min-w-[1120px] xl:min-w-[1260px]"}`}>
+        <table className={`pay0-solicitudes-main-table pay0-table w-full text-left ${isSuperAdmin(role) || isAdmin(role) ? "min-w-[1360px] xl:min-w-[1360px]" : "min-w-[1040px] xl:min-w-[1160px]"}`}>
           <colgroup className="pay0-solicitudes-colgroup">
             <col className="pay0-sol-col-folio" style={{ width: "78px" }} />
+            {(isSuperAdmin(role) || isAdmin(role)) ? <col className="pay0-sol-col-usuario" style={{ width: "118px" }} /> : null}
             {isSuperAdmin(role) ? <col className="pay0-sol-col-folio-iq" style={{ width: "76px" }} /> : null}
             <col className="pay0-sol-col-fecha" style={{ width: "92px" }} />
             <col className="pay0-sol-col-cliente" style={{ width: "210px" }} />
@@ -1578,8 +1602,6 @@ export default function SolicitudesPage() {
             <col className="pay0-sol-col-metodo" style={{ width: "64px" }} />
             <col className="pay0-sol-col-factura" style={{ width: "70px" }} />
             <col className="pay0-sol-col-monto" style={{ width: "100px" }} />
-            <col className="pay0-sol-col-abono" style={{ width: "92px" }} />
-            <col className="pay0-sol-col-pendiente" style={{ width: "105px" }} />
             <col className="pay0-sol-col-fecha-pago" style={{ width: "72px" }} />
             <col className="pay0-sol-col-docs" style={{ width: "42px" }} />
             <col className="pay0-sol-col-nota" style={{ width: "42px" }} />
@@ -1600,6 +1622,7 @@ export default function SolicitudesPage() {
                   {sortConfig.key === "folio" && (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                 </div>
               </th>
+              {(isSuperAdmin(role) || isAdmin(role)) ? <th className="pay0-th text-left !text-[13px] !py-[6px] font-normal">Usuario</th> : null}
               {isSuperAdmin(role) ? (
                 <th className="pay0-th w-[76px] max-w-[76px] px-1 text-center !text-[12px] !py-[6px] font-normal">
                   Folio IQ
@@ -1612,19 +1635,17 @@ export default function SolicitudesPage() {
                 { label:"Metodo", key:"tipoFactura" },
                 { label:"Factura", key:"facturaDisplay" },
                 { label:"Monto", key:"monto" },
-                { label:"Abono", key:"totalAbonado" },
-                { label:"Pendiente", key:"pendiente" },
                 { label:"Pago", key:"updatedAt" }
               ].map(h => (
                 <th
                   key={h.key}
-                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
+                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${h.label === "Monto" ? "pay0-balance-heading" : ""} ${["Monto", "Pago"].includes(h.label) ? "text-center" : ""} !py-[6px] font-normal`}
                   onClick={() => setSortConfig((prev) => ({
                     key: h.key,
                     dir: prev.key === h.key && prev.dir === "asc" ? "desc" : "asc"
                   }))}
                 >
-                  <div className={`flex items-center gap-1 ${["Monto", "Abono", "Pendiente", "Pago"].includes(h.label) ? "justify-center" : ""}`}>
+                  <div className={`flex items-center gap-1 ${["Monto", "Pago"].includes(h.label) ? "justify-center" : ""}`}>
                     {h.label}
                     {sortConfig.key === h.key && (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                   </div>
@@ -1639,8 +1660,8 @@ export default function SolicitudesPage() {
           <tbody className="[&>tr:nth-child(odd)]:bg-white/[0.025] [&>tr:nth-child(even)]:bg-slate-950/20">
             {filteredSortedData.length === 0 ? (
               <tr>
-                <td colSpan={isSuperAdmin(role) ? 15 : 14} className="p-4 text-[12px] italic text-slate-500">
-                  no hay registros para este periodo
+                <td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? (isSuperAdmin(role) ? 14 : 13) : 12} className="p-4 text-[12px] italic text-slate-500">
+                  No hay solicitudes que coincidan con este periodo y los filtros seleccionados.
                 </td>
               </tr>
             ) : (
@@ -1673,12 +1694,14 @@ export default function SolicitudesPage() {
                   cancelSatRelatedSolicitudId={cancelSatRelatedSolicitudId}
                   setCancelSatRelatedSolicitudId={setCancelSatRelatedSolicitudId}
                   cancelSatSaving={cancelSatSaving}
+                  cancellationError={cancellationErrors[s.id]}
                   onDocs={setDocsFor}
                   onDelete={handleHide}
                   canComment={canCommentSolicitud}
                   canCancel={canCancelSolicitud}
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
+                  showCreator={isSuperAdmin(role) || isAdmin(role)}
                   allSolicitudes={filteredSortedData}
                   sustitucionIndex={sustitucionIndex}
                 />
@@ -1735,7 +1758,7 @@ export default function SolicitudesPage() {
 
             <div className="space-y-3">
               <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white">
-                <div className="truncate font-normal">{rejectFor?.folio || rejectFor?.id || "Solicitud"}</div>
+                <div className="truncate font-normal">{rejectFor?.folio || "Solicitud sin folio"}</div>
                 <div className="mt-1 text-xs text-slate-400">{rejectFor?.clienteNombre || "---"}</div>
               </div>
 
@@ -1910,7 +1933,7 @@ export default function SolicitudesPage() {
                           key={p.id}
                           className={`border-b border-white/5 text-[11px] ${selectedPagoId === p.id ? "bg-sky-500/10" : "hover:bg-white/[0.02]"}`}
                         >
-                          <td className="pay0-td font-mono text-sky-400">{p.id}</td>
+                          <td className="pay0-td font-mono text-sky-400">{p.folio || "Sin folio"}</td>
                           <td className="pay0-td text-slate-300">
                             {p?.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toLocaleString() : "---"}
                           </td>

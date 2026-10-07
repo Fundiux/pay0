@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "systems": {
+    "PAY0": {
+      "routePrefix": "/",
+      "activityCollection": "pay0ActivityLog",
+      "owns": ["solicitudes", "pagos", "wallet", "materialidad", "facturacion", "reportes", "pay0Canonical"]
+    },
+    "ASSETS": {
+      "routePrefix": "/assets",
+      "activityCollection": "assetsActivityLog",
+      "owns": ["positions", "movements", "vehicles", "loans", "assetDocuments"]
+    },
+    "TTT": {
+      "routePrefix": "/ttt",
+      "activityCollection": "tttActivityLog",
+      "owns": ["tttOperations"]
+    },
+    "HUGO": {
+      "routePrefix": "/hugo",
+      "activityCollection": "hugoActivityLog",
+      "mayReadSystems": ["PAY0", "ASSETS", "TTT"],
+      "owns": ["conversation", "memory", "traces", "orchestration"]
+    }
+  }
+}

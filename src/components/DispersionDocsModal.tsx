@@ -4,11 +4,12 @@ import { formatDateTime24 } from "@/lib/dateTime";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
 import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import { httpsCallable } from "firebase/functions";
 import { Download, Trash2, UploadCloud, X } from "lucide-react";
-import { db, functions, storage } from "@/lib/firebaseClient";
+import { db, functions } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 import {
   DISPERSION_DOCUMENT_TYPES,
@@ -31,6 +32,7 @@ type UploadRow = {
 
 type DispersionLike = {
   id: string;
+  rootId?: string | null;
   folio?: string | null;
   dispersionFolio?: string | null;
   clienteId?: string | null;
@@ -60,25 +62,36 @@ export default function DispersionDocsModal(props: {
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [docs, setDocs] = useState<UploadRow[]>([]);
+  const [docsError, setDocsError] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deliveryBusyId, setDeliveryBusyId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const dispersionId = dispersion?.id || "";
+  const dispersionRootId = String(dispersion?.rootId || "").trim();
 
   const title = useMemo(() => {
     if (!dispersion) return "Docs";
-    return `Docs - ${dispersion.folio || dispersion.dispersionFolio || dispersion.id}`;
+    return `Docs - ${dispersion.folio || dispersion.dispersionFolio || "Dispersión sin folio"}`;
   }, [dispersion]);
 
   useEffect(() => {
     if (!open || !dispersionId) {
       setDocs([]);
+      setDocsError("");
       return;
     }
 
+    if (!dispersionRootId) {
+      setDocs([]);
+      setDocsError("La dispersion no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    setDocsError("");
     const qDocs = query(
       collection(db, "uploads"),
+      where("rootId", "==", dispersionRootId),
       where("dispersionId", "==", dispersionId)
     );
 
@@ -96,10 +109,14 @@ export default function DispersionDocsModal(props: {
           }) as UploadRow[];
 
         setDocs(rows);
+        setDocsError("");
       },
-      () => setDocs([])
+      () => {
+        setDocs([]);
+        setDocsError("No se pudieron cargar los documentos de esta dispersion.");
+      }
     );
-  }, [open, dispersionId]);
+  }, [open, dispersionId, dispersionRootId]);
 
   useEffect(() => {
     if (!open) {
@@ -161,8 +178,9 @@ export default function DispersionDocsModal(props: {
     setDownloadingId(doc.id);
 
     try {
-      const url = await getDownloadURL(ref(storage, doc.storagePath));
-      window.open(url, "_blank", "noopener,noreferrer");
+      await runAuthorizedDocumentAction(doc.id, getAuthorizedDocumentDownloadUrl, url => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
     } catch (err: any) {
       console.error("Download dispersion doc error", err);
       alert(err?.message || "No se pudo descargar el archivo.");
@@ -261,7 +279,9 @@ export default function DispersionDocsModal(props: {
               Comprobantes cargados
             </div>
 
-            {activeDocs.length === 0 ? (
+            {docsError ? (
+              <div className="px-3 py-4 text-sm text-rose-300">{docsError}</div>
+            ) : activeDocs.length === 0 ? (
               <div className="px-3 py-4 text-sm text-slate-500">Sin comprobantes cargados.</div>
             ) : (
               <div className="overflow-x-auto">

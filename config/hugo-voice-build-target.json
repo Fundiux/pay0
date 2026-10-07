@@ -1,0 +1,7 @@
+{
+  "projectId": "pay-0-system",
+  "region": "us-central1",
+  "service": "hugo-voice-gateway-canary",
+  "origin": "https://hugo-voice-gateway-canary-o4tesftjlq-uc.a.run.app",
+  "path": "/voice"
+}

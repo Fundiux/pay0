@@ -230,10 +230,10 @@ export default function MaterialidadPage() {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-slate-100">
-                          {folder.clienteNombre || folder.clienteId || "Cliente"}
+                          {folder.clienteNombre || "Cliente sin nombre"}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {folder.companyName || folder.companyId || "Empresa"}
+                          {folder.companyName || "Empresa sin nombre"}
                         </p>
                       </div>
 

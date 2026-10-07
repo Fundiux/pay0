@@ -17,9 +17,13 @@ export default function PublicSignaturePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [constanciaPending, setConstanciaPending] = useState(false);
   const [info, setInfo] = useState<{ solicitudFolio?: string | null; clienteNombre?: string | null; expiresAtMillis?: number }>({});
   const [signerName, setSignerName] = useState("");
   const [signerRole, setSignerRole] = useState("");
+  const [receiptLocation, setReceiptLocation] = useState("");
+  const [receiptAddress, setReceiptAddress] = useState("");
+  const [observations, setObservations] = useState("");
   const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
@@ -127,6 +131,10 @@ export default function PublicSignaturePage() {
       setError("Debes aceptar la recepcion/conformidad para firmar.");
       return;
     }
+    if (!signerRole.trim() || !receiptLocation.trim() || !receiptAddress.trim()) {
+      setError("Indica tu cargo, el lugar y la dirección reales de recepción o prestación.");
+      return;
+    }
     if (!hasInkRef.current) {
       setError("Firma dentro del recuadro.");
       return;
@@ -135,13 +143,17 @@ export default function PublicSignaturePage() {
     setSaving(true);
     setError("");
     try {
-      await submitSolicitudSignature({
+      const result = await submitSolicitudSignature({
         token,
         signerName: signerName.trim(),
         signerRole: signerRole.trim(),
+        receiptLocation: receiptLocation.trim(),
+        receiptAddress: receiptAddress.trim(),
+        observations: observations.trim(),
         acceptedNoClaimPolicy: accepted,
         signatureDataUrl: canvasRef.current.toDataURL("image/png"),
       });
+      setConstanciaPending(result.constanciaPending === true);
       setDone(true);
     } catch (err: any) {
       setError(err?.message || "No se pudo guardar la firma.");
@@ -162,7 +174,7 @@ export default function PublicSignaturePage() {
           <p className="mt-6 text-sm text-slate-300">Validando link...</p>
         ) : done ? (
           <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-            Firma recibida. PAY0 generó la constancia y la vinculó al expediente.
+            {constanciaPending ? "Firma recibida y guardada. El responsable del expediente podrá completar la constancia; no necesitas volver a firmar." : "Firma recibida. PAY0 generó la constancia y la vinculó al expediente."}
           </div>
         ) : error && !info.solicitudFolio ? (
           <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-100">
@@ -185,10 +197,26 @@ export default function PublicSignaturePage() {
             <input
               value={signerRole}
               onChange={(event) => setSignerRole(event.target.value)}
-              placeholder="Cargo o relación (opcional)"
+              placeholder="Cargo o relación con quien recibe"
               className="h-12 w-full rounded-xl border border-white/10 bg-[#070b15] px-3 text-sm outline-none focus:border-sky-400"
               disabled={saving}
             />
+
+            <label className="block text-sm text-slate-200">Lugar de recepción / prestación
+              <input value={receiptLocation} onChange={event => setReceiptLocation(event.target.value)} maxLength={240}
+                placeholder="Obra, almacén, oficina, embarcación…" disabled={saving}
+                className="mt-1 h-12 w-full rounded-xl border border-white/10 bg-[#070b15] px-3 text-sm outline-none focus:border-sky-400" />
+            </label>
+            <label className="block text-sm text-slate-200">Dirección real de recepción / prestación
+              <textarea value={receiptAddress} onChange={event => setReceiptAddress(event.target.value)} maxLength={500}
+                placeholder="Indica dónde se recibió el producto o se prestó el servicio" disabled={saving}
+                className="mt-1 min-h-20 w-full rounded-xl border border-white/10 bg-[#070b15] p-3 text-sm outline-none focus:border-sky-400" />
+            </label>
+            <p className="text-xs text-slate-400">Esta ubicación es la que declaras para la operación. No se completa con el domicilio fiscal ni con la ubicación de tu dispositivo.</p>
+            <label className="block text-sm text-slate-200">Observaciones (opcional)
+              <textarea value={observations} onChange={event => setObservations(event.target.value)} maxLength={600} disabled={saving}
+                className="mt-1 min-h-20 w-full rounded-xl border border-white/10 bg-[#070b15] p-3 text-sm outline-none focus:border-sky-400" />
+            </label>
 
             <div className="rounded-2xl border border-white/10 bg-white p-2">
               <canvas
@@ -210,7 +238,7 @@ export default function PublicSignaturePage() {
                 disabled={saving}
               />
               <span>
-                Confirmo recepción/conformidad de los bienes o servicios, salvo observaciones asentadas previamente, y acepto la política de no reclamación posterior aplicable.
+                Confirmo la recepción y conformidad de los bienes o servicios en el lugar y dirección declarados, salvo las observaciones registradas, y acepto la política de no reclamación posterior aplicable.
               </span>
             </label>
 

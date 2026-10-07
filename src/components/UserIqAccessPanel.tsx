@@ -153,9 +153,9 @@ export default function UserIqAccessPanel({ targetUid, targetName, targetEmail, 
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
         <div className="text-xs uppercase tracking-[0.18em] text-sky-300">Usuario PAY0</div>
         <div className="mt-1 text-lg font-semibold text-white">
-          {targetName || targetEmail || targetUid}
+          {targetName || targetEmail || "Usuario sin nombre"}
         </div>
-        <div className="text-sm text-slate-400">{targetEmail || targetUid}</div>
+        {targetEmail && <div className="text-sm text-slate-400">{targetEmail}</div>}
       </div>
 
       {msg ? (
@@ -229,7 +229,7 @@ export default function UserIqAccessPanel({ targetUid, targetName, targetEmail, 
         <div className="font-semibold text-slate-100">Estado actual</div>
         <div className="mt-2 grid gap-1">
           <div>Acceso: {currentAccess?.active && currentAccess?.iqEnabled ? "Activo" : "Inactivo"}</div>
-          <div>Cuenta: {currentAccess?.iqCredentialAlias || currentAccess?.iqCredentialProfileId || "-"}</div>
+          <div>Cuenta: {currentAccess?.iqCredentialAlias || "Sin alias"}</div>
           <div>
             Modulos:{" "}
             {IQ_MODULES.filter((moduleKey) => currentAccess?.allowedModules?.[moduleKey])

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/copy-canonical-assets.mjs && next build",
+    "build": "node scripts/run-with-frontend-build-env.mjs -- npm run build:validated",
     "start": "next start",
     "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "qa:pay0": "node qa/scripts/run-pay0-qa.mjs",
@@ -60,7 +60,8 @@
     "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs",
     "qa:audit-security": "node qa/scripts/audit-security-regression.mjs",
     "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1",
-    "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs"
+    "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
+    "build:validated": "node qa/scripts/verify-frontend-build-env.mjs && node scripts/copy-canonical-assets.mjs && next build"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
@@ -84,7 +85,8 @@
     "autoprefixer": "^10.4.23",
     "postcss": "8.5.23",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "esbuild": "0.28.2"
   },
   "overrides": {
     "postcss": "8.5.23",

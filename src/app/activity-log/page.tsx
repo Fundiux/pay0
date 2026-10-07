@@ -12,6 +12,7 @@ import {
   ACTIVITY_EVENT_SELECT_KEYS,
   getActivityEventLabel,
 } from "@/lib/activityEventLabels";
+import { activityEventBelongsToSystem } from "@/lib/systemActivity";
 
 export default function ActivityLogPage() {
   const { profile } = useUserProfile();
@@ -29,7 +30,7 @@ export default function ActivityLogPage() {
   const eventOptions = useMemo<UiSelectOption[]>(
     () => [
       { value: "TODOS", label: "Todos los eventos" },
-      ...ACTIVITY_EVENT_SELECT_KEYS.map((eventKey) => ({
+      ...ACTIVITY_EVENT_SELECT_KEYS.filter((eventKey) => activityEventBelongsToSystem(eventKey, "PAY0")).map((eventKey) => ({
         value: eventKey,
         label: getActivityEventLabel(eventKey),
       })),
@@ -99,7 +100,7 @@ export default function ActivityLogPage() {
         from={range.from}
         to={range.to}
         hideAuthEvents={!includeAccess}
-        title="Actividad del sistema"
+        title="Actividad PAY0"
         searchTerm={search}
         eventFilter={eventFilter}
         showInternalFilters={false}

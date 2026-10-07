@@ -149,7 +149,6 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     iconKey: "facturacion",
     superadminOnly: true,
   },
-  { label: "Hugo", href: "/hugo", iconKey: "hugo", superadminOnly: true },
   {
     label: "Materialidad",
     href: "/materialidad",
@@ -207,6 +206,14 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     label: "Administracion",
     iconKey: "administracion",
     children: [
+      {
+        label: "Recursos corporativos",
+        href: "/administracion/recursos-corporativos",
+        iconKey: "empresas",
+        moduleKey: "corporateResources",
+        actionKey: "view",
+        superadminOnly: true,
+      },
       {
         label: "Usuarios",
         href: "/usuarios",
@@ -320,6 +327,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   if (isPublicRoutePath(path)) return null;
 
   if (path === "/systems") return { href: "/systems" };
+  if (path === "/cuenta") return { href: "/cuenta" };
   if (path === "/assets" || path.startsWith("/assets/")) {
     return { href: "/assets", systemKey: "assets" };
   }
@@ -357,6 +365,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   }
 
   const routeRules: RouteCandidate[] = [
+    { href: "/administracion/recursos-corporativos", moduleKey: "corporateResources", actionKey: "view", superadminOnly: true },
     { href: "/integraciones/iq/diagnostico/pagos", superadminOnly: true },
     { href: "/integraciones/iq/automatizacion", superadminOnly: true },
   { href: "/integraciones/iq/diagnostico", superadminOnly: true },

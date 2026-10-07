@@ -2247,9 +2247,6 @@ export default function WhatsAppPage() {
                     Tipo
                   </th>
                   <th className="px-3 py-2">
-                    Chat ID
-                  </th>
-                  <th className="px-3 py-2">
                     Actualizado
                   </th>
                 </tr>
@@ -2263,7 +2260,7 @@ export default function WhatsAppPage() {
                         <span className="inline-flex items-center gap-2">
                           <MessageCircle className="h-3.5 w-3.5 text-emerald-300" />
                           {chat.name ||
-                            chat.chatId}
+                            (chat.isGroup ? "Grupo sin nombre" : "Contacto sin nombre")}
                         </span>
                       </td>
 
@@ -2271,10 +2268,6 @@ export default function WhatsAppPage() {
                         {chat.isGroup
                           ? "Grupo"
                           : "Contacto"}
-                      </td>
-
-                      <td className="px-3 py-2 text-xs text-slate-500">
-                        {chat.chatId}
                       </td>
 
                       <td className="px-3 py-2 text-xs text-slate-500">

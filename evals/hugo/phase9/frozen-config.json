@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "hugo-model-eval-config-v1",
+  "evalRunId": "hugo-phase9-devval-v1",
+  "datasetSha256": "209216d532b92085dfd5ca046285f5b944034b5b412eac50572c46d12ed7a224",
+  "frozenAt": "2026-09-23T00:00:00.000Z",
+  "baselineCommit": "152de04",
+  "hugoCoreVersion": "hugo-model-request-v1",
+  "toolRouterVersion": "hugo-tool-router-v1",
+  "promptVersion": "hugo-v2",
+  "systemPromptSource": "functions/src/modules/agent007/hugoCore/hugoV2Prompt.ts",
+  "temperature": { "gemini": 0.35, "openai": null, "differenceReason": "GPT-6 Sol reasoning configuration uses reasoning effort; temperature is not sent." },
+  "providers": [
+    { "id": "GOOGLE_VERTEX", "model": "gemini-2.5-flash", "maxOutputTokens": 8192, "timeoutMs": 35000, "reasoningEffort": "provider-managed", "priceUsdPerMillion": { "input": 0.3, "output": 2.5 }, "priceSource": "https://cloud.google.com/vertex-ai/generative-ai/pricing" },
+    { "id": "OPENAI", "model": "gpt-6-sol", "maxOutputTokens": 25000, "timeoutMs": 45000, "reasoningEffort": "low", "priceUsdPerMillion": { "input": 2, "cachedInput": 0.2, "output": 10 }, "priceSource": "https://developers.openai.com/api/docs/models/gpt-6-sol" }
+  ],
+  "contextPolicy": "same frozen synthetic evidence and empty history for both providers",
+  "memoryPolicy": "no historical memory; controlled evidence only",
+  "tools": "same declared capability catalog; no external side effects; no IQ calls",
+  "retryPolicy": "no retry inside an A/B arm",
+  "fallbackPolicy": "disabled during A/B evaluation",
+  "splitsAllowed": ["DEVELOPMENT", "VALIDATION"],
+  "holdoutPolicy": "closed and absent from this dataset"
+}

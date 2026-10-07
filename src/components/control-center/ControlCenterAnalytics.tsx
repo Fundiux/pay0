@@ -17,7 +17,7 @@ const metrics = [
   ["requestsOpen", "Solicitudes del periodo abiertas", "/solicitudes", false],
   ["invoicesIssued", "CFDI emitidos vigentes", "/facturacion", false],
   ["filesComplete", "Expedientes completos", "/materialidad", false],
-  ["hugoProposals", "Propuestas de Hugo", "/hugo", false],
+  ["hugoProposals", "Propuestas de María", "/hugo", false],
   ["hugoRules", "Reglas confirmadas vigentes", "/hugo", false],
 ] as const;
 

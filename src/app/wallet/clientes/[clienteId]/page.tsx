@@ -178,12 +178,11 @@ function formatStatementPeriodLabel(date: Date, mode: StatementPeriodMode) {
 
   return `${range.start.toLocaleDateString("es-MX")} - ${range.end.toLocaleDateString("es-MX")}`;
 }
-function getStatementClientName(account: BalanceAccount | null, clienteId: string) {
+function getStatementClientName(account: BalanceAccount | null) {
   const name =
     String((account as any)?.holderName || "").trim() ||
     String((account as any)?.clienteNombre || "").trim() ||
-    String((account as any)?.clientName || "").trim() ||
-    String(clienteId || "").trim();
+    String((account as any)?.clientName || "").trim();
 
   return name || "CLIENTE";
 }
@@ -207,13 +206,6 @@ function formatMovementType(value: unknown) {
 function formatReferenceType(value: unknown) {
   const raw = String(value || "").trim();
   return raw ? raw.replace(/_/g, " ") : "---";
-}
-
-function shortReference(value: unknown) {
-  const raw = String(value || "").trim();
-  if (!raw) return "---";
-  if (raw.length <= 12) return raw;
-  return `${raw.slice(0, 6)}...${raw.slice(-4)}`;
 }
 
 function formatMovementOrigin(item: WalletMovement) {
@@ -258,12 +250,12 @@ function formatMovementReference(item: WalletMovement) {
 
   if (visible) return visible;
 
-  if (item.depositId) return `Pago ${shortReference(item.depositId)}`;
-  if (item.dispersionId) return `Dispersion ${shortReference(item.dispersionId)}`;
-  if (item.transferId) return `Transferencia ${shortReference(item.transferId)}`;
+  if (item.depositId) return "Pago";
+  if (item.dispersionId) return "Dispersión";
+  if (item.transferId) return "Transferencia";
 
   if (item.referenceType || item.referenceId) {
-    return `${formatReferenceType(item.referenceType)} ${shortReference(item.referenceId)}`.trim();
+    return item.referenceType ? formatReferenceType(item.referenceType) : "Movimiento relacionado";
   }
 
   if (type === "ADELANTO_OTORGADO" || type === "ADELANTO_LIQUIDADO") return "Adelanto";
@@ -933,7 +925,7 @@ export default function WalletClienteDetallePage() {
 </header>
       <div className="pay0-table-card mb-8">
         <div className="pay0-table-header">
-          <h2 className="pay0-table-title">{`ESTADO DE CUENTA / ${getStatementClientName(account, routeClienteId)}`}</h2>
+          <h2 className="pay0-table-title">{`ESTADO DE CUENTA / ${getStatementClientName(account)}`}</h2>
           <FilePenLine size={18} className="text-slate-500" />
         </div>
 

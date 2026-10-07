@@ -212,7 +212,7 @@ export default function MaterialityModal({ open, solicitud, onClose }: Props) {
                 Expediente de materialidad
               </div>
               <div className="mt-1 text-[11px] text-slate-400">
-                {solicitud?.folio || solicitudId || "Solicitud"} · {solicitud?.clienteNombre || "---"}
+                {solicitud?.folio || "Solicitud sin folio"} · {solicitud?.clienteNombre || "---"}
               </div>
             </div>
 
@@ -244,7 +244,7 @@ export default function MaterialityModal({ open, solicitud, onClose }: Props) {
 
             <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
               <div className="text-[10px] uppercase tracking-widest text-slate-500">Folio</div>
-              <div className="mt-1 truncate text-sm text-sky-300">{solicitud?.folio || solicitudId || "---"}</div>
+              <div className="mt-1 truncate text-sm text-sky-300">{solicitud?.folio || "Sin folio"}</div>
             </div>
           </div>
 

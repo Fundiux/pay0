@@ -16,11 +16,13 @@ import Modal from "@/components/Modal";
 import UserPermissionsPanel from "@/components/UserPermissionsPanel";
 import UserClientAccessPanel from "@/components/UserClientAccessPanel";
 import UiSelect from "@/components/UiSelect";
+import { normalizeAccountUsername } from "@/lib/accountValidation";
 
 type UserItem = {
   uid: string;
   email: string | null;
   displayName: string | null;
+  username?: string | null;
   nombreusuario?: string | null;
   phone: string | null;
   role: string | null;
@@ -105,7 +107,7 @@ export default function UsuariosPage() {
 
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "operador">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "deleted">("active");
 
   const [openCreate, setOpenCreate] = useState(false);
   const [openPermsUid, setOpenPermsUid] = useState<string>("");
@@ -123,6 +125,7 @@ export default function UsuariosPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
 
   const SelectClass =
@@ -216,10 +219,12 @@ export default function UsuariosPage() {
 
       if (statusFilter === "active" && (!u.isActive || deleted)) return false;
       if (statusFilter === "inactive" && (u.isActive || deleted)) return false;
+      if (statusFilter === "deleted" && !deleted) return false;
       
       if (qq) {
         const hay =
           String(u.displayName || u.nombreusuario || "").toLowerCase().includes(qq) ||
+          String(u.username || "").toLowerCase().includes(qq) ||
           String(u.email || "").toLowerCase().includes(qq);
 
         if (!hay) return false;
@@ -284,6 +289,7 @@ export default function UsuariosPage() {
     setDespachoIdToCreate("");
     setEmail("");
     setPassword("");
+    setUsername("");
     setDisplayName("");
     setMsg("");
     setOpenCreate(true);
@@ -297,6 +303,9 @@ export default function UsuariosPage() {
       setMsg("Email requerido y password minimo 6 caracteres.");
       return;
     }
+    let normalizedUsername: string;
+    try { normalizedUsername = normalizeAccountUsername(username); }
+    catch (error: any) { setMsg(error.message); return; }
 
     if (roleToCreate === "admin") {
       if (!isSuper) {
@@ -315,6 +324,7 @@ export default function UsuariosPage() {
       const payload: any = {
         email,
         password,
+        username: normalizedUsername,
         displayName: displayName || null,
       };
 
@@ -344,12 +354,13 @@ export default function UsuariosPage() {
           ? `U${String(Number(res.userNumber)).padStart(2, "0")}`
           : "")
       ).trim();
-      setMsg(`Creado: ${roleToCreate}${createdUserFolio ? ` ${createdUserFolio}` : ""}`);
+      setMsg(`Creado: ${roleToCreate}${createdUserFolio ? ` ${createdUserFolio}` : ""}. Usuario: ${res?.username || normalizedUsername}`);
       setOpenCreate(false);
       await refresh();
     } catch (e: any) {
       setMsg(`Error creando: ${e?.code || ""} ${e?.message || e}`);
     } finally {
+      setPassword("");
       setLoading(false);
     }
   }
@@ -512,6 +523,7 @@ export default function UsuariosPage() {
               options={[
                 { value: "active", label: "Activos" },
                 { value: "inactive", label: "Inactivos" },
+                { value: "deleted", label: "Eliminados" },
                 { value: "all", label: "Todos" },
               ]}
               placeholder="Estado"
@@ -546,7 +558,7 @@ export default function UsuariosPage() {
                     <React.Fragment key={a.uid}>
                       <tr className={index % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}>
                         <td className="pay0-td text-sky-300">{formatUserNumber(a)}</td>
-                        <td className="pay0-td text-white">{a.displayName || a.nombreusuario || a.email || "Usuario"}</td>
+                        <td className="pay0-td text-white">{a.displayName || a.nombreusuario || a.email || "Usuario"}{a.username && <div className="mt-1 text-xs text-sky-300">Usuario: {a.username}</div>}</td>
                         <td className="pay0-td text-slate-300">{a.email || "---"}</td>
                         <td className="pay0-td">
                           <span className={cx("inline-flex items-center px-2 py-1 rounded-lg border text-xs", roleBadge(String(a.role || "")))}>
@@ -673,6 +685,7 @@ export default function UsuariosPage() {
                                   <div key={o.uid} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-2 text-[13px] font-normal">
                                     <div>
                                       <div className="text-slate-100">{o.displayName || o.nombreusuario || o.email || "Operador"}</div>
+                                      {o.username && <div className="mt-1 text-xs text-sky-300">Usuario: {o.username}</div>}
                                       <div className="text-[12px] font-normal text-slate-500">{o.email || ""}</div>
                                     </div>
 
@@ -821,6 +834,7 @@ export default function UsuariosPage() {
                   <div>
                     <div className="text-sky-300 text-xs font-semibold">{formatUserNumber(a)}</div>
                     <div className="text-slate-100 font-semibold text-lg">{a.displayName || a.nombreusuario || a.email || "Usuario"}</div>
+                    {a.username && <div className="mt-1 text-xs text-sky-300">Usuario: {a.username}</div>}
                     <div className="text-slate-400 text-sm">{a.email || ""}</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -938,6 +952,7 @@ export default function UsuariosPage() {
                           <div key={o.uid} className="p-3 rounded-xl bg-black/20 border border-white/10 flex items-center justify-between">
                             <div>
                               <div className="text-slate-100">{o.displayName || o.nombreusuario || o.email || "Operador"}</div>
+                              {o.username && <div className="mt-1 text-xs text-sky-300">Usuario: {o.username}</div>}
                               <div className="text-[12px] font-normal text-slate-500">{o.email || ""}</div>
                               <div className="mt-2">
                                 <span className={cx("inline-flex items-center rounded-lg border px-2 py-1 text-[11px] font-normal", roleBadge(String(o.role || "")))}>
@@ -1108,7 +1123,13 @@ export default function UsuariosPage() {
           </label>
 
           <label className="text-slate-300 text-sm">
-            Password
+            Usuario de acceso
+            <input className={cx(InputClass, "mt-1")} value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={32} placeholder="nombre.apellido" />
+            <span className="mt-1 block text-xs text-slate-500">Único; 3 a 32 letras sin acentos, números, puntos o guiones.</span>
+          </label>
+
+          <label className="text-slate-300 text-sm">
+            Contraseña inicial
             <input className={cx(InputClass, "mt-1")} value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="minimo 6" />
           </label>
 

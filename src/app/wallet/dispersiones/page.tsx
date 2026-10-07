@@ -1,5 +1,7 @@
 "use client";
 
+import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
 import { formatDateTime24 } from "@/lib/dateTime";
 import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
@@ -76,6 +78,13 @@ interface DespachoOption {
   active?: boolean;
 }
 
+const AUTO_IQ_DESPACHO_ID = "__AUTO_IQ__";
+const AUTO_IQ_DESPACHO: DespachoOption = {
+  id: AUTO_IQ_DESPACHO_ID,
+  label: "IQ",
+  active: true,
+};
+
 type DispersionPricingPreview = Awaited<
   ReturnType<
     typeof previewClientDispersionPricing
@@ -119,6 +128,8 @@ interface MethodRow {
 
 
 interface DispersionRow {
+  fundingSource?: { holderType?: "CLIENT" | "USER"; ownerUid?: string; sourceClientId?: string };
+  rootId?: string | null;
   clienteNombre?: string | null;
   clienteId?: string | null;
   clientId?: string | null;
@@ -244,7 +255,7 @@ function NoteBubble({ note }: any) {
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2">
       <div className="mb-1 text-xs text-slate-400">
-        {note?.createdByName || note?.createdByRole || "Sistema"}
+        {noteAuthorLabel(note)}
       </div>
       <div className="whitespace-pre-wrap text-sm text-slate-100">{note?.text || "-"}</div>
       <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(note?.createdAt)}</div>
@@ -390,6 +401,11 @@ export default function WalletDispersionesPage() {
   }, [uid, role, rootId, profileLoading]);
 
   useEffect(() => {
+    if (!isSuperadmin) {
+      setDespachos([]);
+      return;
+    }
+
     const qd = query(
       collection(db, "despachos"),
       orderBy("nombre", "asc"),
@@ -420,7 +436,7 @@ export default function WalletDispersionesPage() {
       },
       () => setDespachos([]),
     );
-  }, []);
+  }, [isSuperadmin]);
 
   useEffect(() => {
     if (!clientId) {
@@ -474,12 +490,14 @@ export default function WalletDispersionesPage() {
 
     const offBeneficiaries = watchClientBeneficiaries(
       clientId,
+      rootId,
       (nextRows) => setBeneficiaries(nextRows as BeneficiaryRow[]),
       (e) => setError(e.message || "No se pudieron cargar los beneficiarios.")
     );
 
     const offMethods = watchClientBeneficiaryMethods(
       clientId,
+      rootId,
       (nextRows) => setMethods(nextRows as MethodRow[]),
       (e) => setError(e.message || "No se pudieron cargar los metodos.")
     );
@@ -488,7 +506,7 @@ export default function WalletDispersionesPage() {
       offBeneficiaries();
       offMethods();
     };
-  }, [clientId]);
+  }, [clientId, rootId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -608,6 +626,10 @@ export default function WalletDispersionesPage() {
   );
 
   const eligibleMassiveDespachos = useMemo(() => {
+    if (!isSuperadmin) {
+      return [AUTO_IQ_DESPACHO];
+    }
+
     const ids = new Set(
       clientDispersionCosts
         .filter(
@@ -626,6 +648,7 @@ export default function WalletDispersionesPage() {
     clientDispersionCosts,
     despachos,
     massiveOperationTypeKey,
+    isSuperadmin,
   ]);
 
   useEffect(() => {
@@ -672,6 +695,10 @@ export default function WalletDispersionesPage() {
   const eligibleDespachos = useMemo(() => {
     if (!operationTypeKey) return [];
 
+    if (!isSuperadmin) {
+      return [AUTO_IQ_DESPACHO];
+    }
+
     const ids = new Set(
       clientDispersionCosts
         .filter(
@@ -691,6 +718,7 @@ export default function WalletDispersionesPage() {
     clientDispersionCosts,
     despachos,
     operationTypeKey,
+    isSuperadmin,
   ]);
 
   useEffect(() => {
@@ -1888,6 +1916,7 @@ export default function WalletDispersionesPage() {
   function canGenerateIqForRow(
     row: any,
   ) {
+    if (row.fundingSource?.holderType === "USER") return false;
     const iqStatus =
       getIqGenerationStatus(row);
 
@@ -1975,10 +2004,10 @@ export default function WalletDispersionesPage() {
         readyLegs
           .map(
             (leg) =>
-              `Tramo ${leg.legIndex + 1}: ${leg.despachoName || leg.despachoId} | ${leg.currency || "MXN"} ${Number(leg.amount || 0).toLocaleString("es-MX", {
+              `Tramo ${leg.legIndex + 1}: ${leg.despachoName || "Despacho sin nombre"} | ${leg.currency || "MXN"} ${Number(leg.amount || 0).toLocaleString("es-MX", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-              })} | ${leg.operationTypeKey} ${leg.percentageLabel || "0"}% | ${leg.destinationKind} ****${leg.destinationLast4} | Asociado: ${leg.associatedName} | Perfil: ${leg.iqCredentialProfileAlias || leg.iqCredentialProfileId}`,
+              })} | ${leg.operationTypeKey} ${leg.percentageLabel || "0"}% | ${leg.destinationKind} ****${leg.destinationLast4} | Asociado: ${leg.associatedName} | Perfil: ${leg.iqCredentialProfileAlias || "Perfil sin alias"}`,
           )
           .join("\n");
       const skippedSummary =
@@ -1992,7 +2021,7 @@ export default function WalletDispersionesPage() {
           : "";
       const confirmed =
         window.confirm(
-          `PREVALIDACION IQ\n\nDispersion: ${folio || dispersionId}\nTipo: ${preview.operationTypeKey}\nDestino: ${preview.destination.kind} ****${preview.destination.last4}\nTramos IQ: ${readyLegs.length}\nTotal principal: MXN ${amountTotal.toLocaleString("es-MX", {
+          `PREVALIDACION IQ\n\nDispersion: ${folio || "Sin folio"}\nTipo: ${preview.operationTypeKey}\nDestino: ${preview.destination.kind} ****${preview.destination.last4}\nTramos IQ: ${readyLegs.length}\nTotal principal: MXN ${amountTotal.toLocaleString("es-MX", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}\n\n${legSummary}${skippedSummary}\n\nEsta accion pulsara Crear en IQ para cada tramo READY. Un resultado incierto bloqueara el reintento para evitar duplicados.\n\n¿Continuar?`,
@@ -2332,7 +2361,7 @@ export default function WalletDispersionesPage() {
                         item.id === row.despachoId,
                     )?.label ||
                     row.channel ||
-                    row.despachoId;
+                    "Despacho sin nombre";
 
               return (
                 <div
@@ -2432,7 +2461,7 @@ export default function WalletDispersionesPage() {
             }}
             options={beneficiaries.map((item) => ({
               value: item.id,
-              label: item.nombre || item.id,
+              label: item.nombre || "Cliente sin nombre",
             }))}
             placeholder="Beneficiario"
           />
@@ -2455,30 +2484,32 @@ export default function WalletDispersionesPage() {
             placeholder={beneficiaryId && filteredMethods.length === 0 ? "Sin metodos activos" : "Metodo"}
           />
 
-          <UiSelect
-            value={despachoId}
-            onChange={(value) => {
-              setDespachoId(value);
-              setPricingPreview(null);
-              setPricingPreviewError("");
-            }}
-            disabled={
-              !methodId ||
-              eligibleDespachos.length === 0
-            }
-            options={eligibleDespachos.map(
-              (item) => ({
-                value: item.id,
-                label: item.label,
-              }),
-            )}
-            placeholder={
-              methodId &&
-              eligibleDespachos.length === 0
-                ? "Configura costo final del cliente"
-                : "Despacho"
-            }
-          />
+          {isSuperadmin ? (
+            <UiSelect
+              value={despachoId}
+              onChange={(value) => {
+                setDespachoId(value);
+                setPricingPreview(null);
+                setPricingPreviewError("");
+              }}
+              disabled={
+                !methodId ||
+                eligibleDespachos.length === 0
+              }
+              options={eligibleDespachos.map(
+                (item) => ({
+                  value: item.id,
+                  label: item.label,
+                }),
+              )}
+              placeholder={
+                methodId &&
+                eligibleDespachos.length === 0
+                  ? "Configura costo final del cliente"
+                  : "Despacho"
+              }
+            />
+          ) : null}
 
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -2555,7 +2586,7 @@ export default function WalletDispersionesPage() {
             <div data-pay0="clientOriginSummary" className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Cliente origen</span>
                 <span className="truncate text-right text-white">
-                  {selectedClient?.label || clientId || "-"}
+                  {selectedClient?.label || "Cliente sin nombre"}
                 </span>
               </div>
               <div className="flex justify-between gap-3">
@@ -2574,10 +2605,12 @@ export default function WalletDispersionesPage() {
             <div className="flex justify-between gap-3">
               <span className="text-slate-500">Despacho</span>
               <span className="truncate text-white">
-                {eligibleDespachos.find(
-                  (item) =>
-                    item.id === despachoId,
-                )?.label || "-"}
+                {!isSuperadmin
+                  ? "IQ"
+                  : eligibleDespachos.find(
+                      (item) =>
+                        item.id === despachoId,
+                    )?.label || "-"}
               </span>
             </div>
             <div className="flex justify-between gap-3">
@@ -2676,31 +2709,33 @@ export default function WalletDispersionesPage() {
           </div>
 
           
-          <div>
-            <div className="mb-1 text-[11px] text-slate-500">Despacho</div>
-            <UiSelect
-              value={dispersionImportDespachoId}
-              onChange={(value) => {
-                setDispersionImportDespachoId(value);
-                setDispersionImportPreview(null);
-                setDispersionImportFileName("");
-                setIsDispersionImportDragging(false);
-                setError("");
-                setSuccess("");
-              }}
-              options={eligibleMassiveDespachos.map(
-                (item) => ({
-                  value: item.id,
-                  label: item.label,
-                }),
-              )}
-              placeholder={
-                eligibleMassiveDespachos.length === 0
-                  ? "Configura costo final del cliente"
-                  : "Selecciona despacho"
-              }
-            />
-          </div>
+          {isSuperadmin ? (
+            <div>
+              <div className="mb-1 text-[11px] text-slate-500">Despacho</div>
+              <UiSelect
+                value={dispersionImportDespachoId}
+                onChange={(value) => {
+                  setDispersionImportDespachoId(value);
+                  setDispersionImportPreview(null);
+                  setDispersionImportFileName("");
+                  setIsDispersionImportDragging(false);
+                  setError("");
+                  setSuccess("");
+                }}
+                options={eligibleMassiveDespachos.map(
+                  (item) => ({
+                    value: item.id,
+                    label: item.label,
+                  }),
+                )}
+                placeholder={
+                  eligibleMassiveDespachos.length === 0
+                    ? "Configura costo final del cliente"
+                    : "Selecciona despacho"
+                }
+              />
+            </div>
+          ) : null}
 
           <div>
             <div className="mb-1 text-[11px] text-slate-500">Tipo de metodo archivo</div>
@@ -2934,13 +2969,14 @@ export default function WalletDispersionesPage() {
             <tbody>
               {displayedRows.map((row, index) => {
                 const busy = incidentBusyId === row.id;
-                const canRequest = row.status === "REGISTRADA" && !row.incidentStatus;
-                const canResolve = isSuperadmin && row.incidentStatus === "SOLICITADA";
+                const isUserWithdrawal = row.fundingSource?.holderType === "USER";
+                const canRequest = !isUserWithdrawal && row.status === "REGISTRADA" && !row.incidentStatus;
+                const canResolve = !isUserWithdrawal && isSuperadmin && row.incidentStatus === "SOLICITADA";
 
               
   return (
                   <tr key={row.id} className={index % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}>
-                    <td className="pay0-td-date text-sky-400" title={String(row.folio || "")}>{row.folio || "-"}</td>
+                    <td className="pay0-td-date text-sky-400" title={String(row.folio || "")}>{row.folio || "-"}{isUserWithdrawal ? <a href="/cuenta" className="block text-[10px] text-amber-300" title="Gestionar desde Mi cuenta">Retiro de utilidad</a> : null}</td>
                     <td
                       className="pay0-td-date text-emerald-300"
                       title={getDispersionIqFolioText(row)}
@@ -2968,7 +3004,7 @@ export default function WalletDispersionesPage() {
                         onClick={() => setDocsFor(row)}
                         className="text-sky-400 border border-dashed border-sky-400 rounded-full p-0.5 hover:bg-sky-400/10"
                         title="Comps"
-                        aria-label={`Comps ${row.folio || row.id}`}
+                        aria-label={`Comps ${row.folio || "dispersión sin folio"}`}
                       >
                         <Plus size={10} />
                       </button>
@@ -2980,7 +3016,7 @@ export default function WalletDispersionesPage() {
                           onClick={() => setNotesFor(row)}
                           className={`inline-flex items-center justify-center p-1 transition-colors duration-150 ${row.hasUnreadMsg ? "text-yellow-400 animate-[pulse_1.5s_infinite]" : "text-slate-500 hover:text-yellow-400"}`}
                           title="Notas / incidencias"
-                          aria-label={`Notas / incidencias ${row.folio || row.id}`}
+                          aria-label={`Notas / incidencias ${row.folio || "dispersión sin folio"}`}
                         >
                           <MessageSquarePlus size={16} strokeWidth={1.8} />
                         </button>
@@ -2992,7 +3028,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleRequestIncident(row.id, "DEVOLUCION")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Solicitar devolucion"
-                              aria-label={`Solicitar devolucion ${row.folio || row.id}`}
+                              aria-label={`Solicitar devolucion ${row.folio || "dispersión sin folio"}`}
                             >
                               <RotateCcw size={16} strokeWidth={1.8} />
                             </button>
@@ -3002,7 +3038,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleRequestIncident(row.id, "CANCELACION")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Solicitar cancelacion"
-                              aria-label={`Solicitar cancelacion ${row.folio || row.id}`}
+                              aria-label={`Solicitar cancelacion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Ban size={16} strokeWidth={1.8} />
                             </button>
@@ -3017,7 +3053,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "RECHAZADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-rose-500"
                               title="Rechazar incidencia"
-                              aria-label={`Rechazar incidencia ${row.folio || row.id}`}
+                              aria-label={`Rechazar incidencia ${row.folio || "dispersión sin folio"}`}
                             >
                               <XCircle size={16} strokeWidth={1.8} />
                             </button>
@@ -3027,7 +3063,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "DEVOLUCION_APLICADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-amber-500"
                               title="Aplicar devolucion"
-                              aria-label={`Aplicar devolucion ${row.folio || row.id}`}
+                              aria-label={`Aplicar devolucion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Undo2 size={16} strokeWidth={1.8} />
                             </button>
@@ -3037,7 +3073,7 @@ export default function WalletDispersionesPage() {
                               onClick={() => handleResolveIncident(row.id, "CANCELACION_APLICADA")}
                               className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 disabled:opacity-40 hover:text-rose-500"
                               title="Aplicar cancelacion"
-                              aria-label={`Aplicar cancelacion ${row.folio || row.id}`}
+                              aria-label={`Aplicar cancelacion ${row.folio || "dispersión sin folio"}`}
                             >
                               <Ban size={16} strokeWidth={1.8} />
                             </button>
@@ -3111,7 +3147,7 @@ export default function WalletDispersionesPage() {
               <div>
                 <div className="text-sm font-bold text-white">Notas de dispersion</div>
                 <div className="text-xs text-slate-400">
-                  {notesFor?.folio || notesFor?.id} - {notesFor?.clienteNombre || "---"}
+                  {notesFor?.folio || "Dispersión sin folio"} - {notesFor?.clienteNombre || "---"}
                 </div>
               </div>
               <button

@@ -186,7 +186,7 @@ export default function PagoApplicationIqFlowModal(props: Props) {
                 <tbody>
                   {items.map((item: any) => (
                     <tr key={clean(item?.planItemId || item?.applicationId || item?.solicitudId)} className="border-t border-white/5 text-slate-200">
-                      <td className="p-3 font-mono text-sky-300">{clean(item?.solicitudFolio) || clean(item?.solicitudId) || "---"}</td>
+                      <td className="p-3 font-mono text-sky-300">{clean(item?.solicitudFolio) || "Solicitud sin folio"}</td>
                       <td className="p-3 font-mono">{clean(item?.solicitudIqFolio) || "---"}</td>
                       <td className="p-3">
                         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px]">{upper(item?.invoiceType) || "---"}</span>

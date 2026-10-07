@@ -148,6 +148,7 @@ export default function ClientesPage() {
   const [toggleBusyId, setToggleBusyId] = useState<string>("");
   const [iqBusyId, setIqBusyId] = useState<string>("");
   const [pageMsg, setPageMsg] = useState("");
+  const [clientsRefreshKey, setClientsRefreshKey] = useState(0);
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     message: string;
@@ -176,7 +177,7 @@ export default function ClientesPage() {
       (rows) => setItems(rows as ClientRow[]),
       (e) => console.warn("[clients] scoped snapshot:", (e as any)?.code || (e as any)?.message || e)
     );
-  }, [effectiveRootId, uid, role, canViewClientes]);
+  }, [effectiveRootId, uid, role, canViewClientes, clientsRefreshKey]);
 
   const sortedItems = useMemo(() => {
     let sortableItems = [...items];
@@ -439,6 +440,7 @@ export default function ClientesPage() {
       resetCsfState();
       setOpen(false);
       setEditing(null);
+      setClientsRefreshKey((value) => value + 1);
     } catch (e: any) {
       setErr(e?.message || "Error al guardar cliente.");
     } finally {
@@ -457,6 +459,7 @@ export default function ClientesPage() {
         result?.message ||
         "Sincronizacion IQ terminada.",
       );
+      setClientsRefreshKey((value) => value + 1);
     }catch(e:any){
       setPageMsg(
         e?.message ||
@@ -714,7 +717,7 @@ export default function ClientesPage() {
                 <div className="col-span-2 flex items-center truncate text-[13px] font-normal text-slate-400">{getClientUsuarioLabel(it)}</div>
                 <div className="col-span-1 flex items-center truncate text-[11px] font-normal">
                   {it.iqLink?.status === "LINKED" ? (
-                    <span className="text-emerald-400" title={it.iqLink?.clientName || ""}>{it.iqLink?.clientId || it.iqClientId}</span>
+                    <span className="text-emerald-400" title={it.iqLink?.clientName || "Cliente vinculado en IQ"}>Vinculado</span>
                   ) : it.iqLink?.status === "REVIEW_REQUIRED" ? (
                     <button
                       type="button"

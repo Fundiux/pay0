@@ -14,7 +14,6 @@ import {
   saveWhatsAppDeliveryRoute,
 } from "@/services/whatsappQr";
 import ClientEntityDocumentsPanel from "@/components/ClientEntityDocumentsPanel";
-import ClientCommissionRulePanel from "@/components/ClientCommissionRulePanel";
 
 type DetailTab = "resumen" | "expediente" | "papeleria" | "kyc";
 
@@ -144,7 +143,7 @@ export default function ClienteDetallePage() {
 
         const chats = (dashboard.chats || []).map((chat: any) => ({
           id: String(chat.id || chat.safeDocId || ""),
-          name: String(chat.name || chat.chatId || "WhatsApp"),
+          name: String(chat.name || (chat.isGroup ? "Grupo sin nombre" : "Contacto sin nombre")),
           isGroup: chat.isGroup === true,
         }));
 
@@ -295,7 +294,7 @@ export default function ClienteDetallePage() {
               href={`/clientes/${client.id}/costos`}
               className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-400/15"
             >
-              Costos
+              Costos y distribución
             </Link>
           )}
 
@@ -385,11 +384,6 @@ export default function ClienteDetallePage() {
             Vista base del cliente. Desde aqui se centralizara el expediente fiscal-operativo,
             contratos, KYC, operaciones y documentos relacionados.
           </p>
-
-          <ClientCommissionRulePanel
-            clientId={client.id}
-            canEdit={["superadmin", "admin"].includes(normalizeRole((profile as any)?.role))}
-          />
 
           {canManageWhatsappRoute && (
             <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.05] p-4">

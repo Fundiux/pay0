@@ -5,7 +5,6 @@ import { formatDateTime24 } from "@/lib/dateTime";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where,
   getDocs} from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import {
@@ -13,7 +12,9 @@ import {
   retryWhatsAppJobErrors,
 } from "@/services/whatsappQr";
 import { ChevronDown, Download, UploadCloud, X } from "lucide-react";
-import { db, functions, storage } from "@/lib/firebaseClient";
+import { db, functions } from "@/lib/firebaseClient";
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 type RelatedPagoReceipt = {
   id: string;
@@ -24,6 +25,7 @@ type RelatedPagoReceipt = {
   fileName?: string | null;
   storagePath?: string | null;
   documentType?: string | null;
+  documentTypeLabel?: string | null;
   status?: string | null;
   active?: boolean;
 };
@@ -38,7 +40,7 @@ function chunkForInQuery<T>(items: T[], size = 10): T[][] {
 }
 
 function getRelatedReceiptName(row: RelatedPagoReceipt) {
-  return row.originalName || row.filename || row.fileName || row.storagePath?.split("/").pop() || "Comprobante de pago";
+  return row.documentTypeLabel || row.originalName || row.filename || row.fileName || row.storagePath?.split("/").pop() || "Documento del pago";
 }
 
 import { forceDownloadFromUrl } from "@/lib/downloadFile";
@@ -56,7 +58,7 @@ import {
 import { useGlobalLoading } from "@/components/GlobalLoading";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
-import { createSolicitudSignatureLink, generateSolicitudQuotation } from "@/services/signatureLinks";
+import { createSolicitudSignatureLink, generateSolicitudQuotation, submitSolicitudSignature, generateSolicitudReceiptCertificate } from "@/services/signatureLinks";
 
 type UploadRow = {
   id: string;
@@ -104,6 +106,7 @@ export default function DocsModal(props: {
   const [documentType, setDocumentType] = useState<SolicitudDocumentType>("FACTURA_PDF");
   const [otherLabel, setOtherLabel] = useState("");
   const [docs, setDocs] = useState<UploadRow[]>([]);
+  const [docsError, setDocsError] = useState("");
   const [relatedPagoReceipts, setRelatedPagoReceipts] = useState<RelatedPagoReceipt[]>([]);
   const [loadingRelatedPagoReceipts, setLoadingRelatedPagoReceipts] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -120,6 +123,7 @@ export default function DocsModal(props: {
   const [signatureMessage, setSignatureMessage] = useState("");
   const [signatureLinkCreating, setSignatureLinkCreating] = useState(false);
   const [signatureLink, setSignatureLink] = useState("");
+  const [receipt, setReceipt] = useState({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
   const [quotationGenerating, setQuotationGenerating] = useState(false);
   const [ocReprocessing, setOcReprocessing] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -127,6 +131,7 @@ export default function DocsModal(props: {
   const signatureHasInkRef = useRef(false);
 
   const solicitudId = solicitud?.id;
+  const solicitudRootId = String(solicitud?.rootId || "").trim();
 
   async function handleGenerateQuotation() {
     if (!solicitudId || quotationGenerating) return;
@@ -158,7 +163,7 @@ export default function DocsModal(props: {
 
   const title = useMemo(() => {
     if (!solicitud) return "Documentos";
-    return `Docs - ${solicitud.folio || solicitud.id}`;
+    return `Docs - ${solicitud.folio || "Solicitud sin folio"}`;
   }, [solicitud]);
 
   
@@ -169,7 +174,7 @@ export default function DocsModal(props: {
     async function loadRelatedPagoReceipts() {
       const sid = String(solicitudId || "").trim();
 
-      if (!sid) {
+      if (!sid || !solicitudRootId) {
         setRelatedPagoReceipts([]);
         setLoadingRelatedPagoReceipts(false);
         return;
@@ -179,7 +184,11 @@ export default function DocsModal(props: {
 
       try {
         const aplicacionesSnap = await getDocs(
-          query(collection(db, "pagoAplicaciones"), where("solicitudId", "==", sid))
+          query(
+            collection(db, "pagoAplicaciones"),
+            where("rootId", "==", solicitudRootId),
+            where("solicitudId", "==", sid),
+          )
         );
 
         const pagoIds = Array.from(new Set(
@@ -199,14 +208,18 @@ export default function DocsModal(props: {
 
         for (const chunk of chunkForInQuery(pagoIds, 10)) {
           const uploadsSnap = await getDocs(
-            query(collection(db, "uploads"), where("pagoId", "in", chunk))
+            query(
+              collection(db, "uploads"),
+              where("rootId", "==", solicitudRootId),
+              where("pagoId", "in", chunk),
+            )
           );
 
           uploadsSnap.docs.forEach((doc) => {
             const row = { id: doc.id, ...(doc.data() as any) } as RelatedPagoReceipt;
 
             if (String((row as any).entityType || "") !== "pagos") return;
-            if (String(row.documentType || "").toUpperCase() !== "COMPROBANTE_PAGO") return;
+            if (!["COMPROBANTE_PAGO", "COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(String(row.documentType || "").toUpperCase())) return;
             if (row.active !== true) return;
 
             const status = String(row.status || "READY").toUpperCase();
@@ -242,15 +255,25 @@ export default function DocsModal(props: {
     return () => {
       cancelled = true;
     };
-  }, [solicitudId]);
+  }, [solicitudId, solicitudRootId]);
 useEffect(() => {
     if (!open || !solicitudId) {
       setDocs([]);
+      setDocsError("");
       return;
     }
 
+    if (!solicitudRootId) {
+      setDocs([]);
+      setDocsError("La solicitud no tiene rootId para consultar sus documentos.");
+      return;
+    }
+
+    setDocsError("");
+
     const qDocs = query(
       collection(db, "uploads"),
+      where("rootId", "==", solicitudRootId),
       where("solicitudId", "==", solicitudId)
     );
 
@@ -267,18 +290,23 @@ useEffect(() => {
           }) as UploadRow[];
 
         setDocs(rows);
+        setDocsError("");
       },
-      () => setDocs([])
+      () => {
+        setDocs([]);
+        setDocsError("No se pudieron cargar los documentos de esta solicitud.");
+      }
     );
-  }, [open, solicitudId]);
+  }, [open, solicitudId, solicitudRootId]);
 
   useEffect(() => {
+    setReceipt({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
     if (!open) {
       setDropdownOpen(false);
       setOtherLabel("");
       setPct(0);
     }
-  }, [open]);
+  }, [open, solicitudId]);
 
   useEffect(() => {
     if (!open) {
@@ -597,33 +625,19 @@ useEffect(() => {
       setSignatureMessage("Primero captura la firma en el recuadro.");
       return;
     }
+    if (!receipt.signerName.trim() || !receipt.signerRole.trim() || !receipt.receiptLocation.trim() || !receipt.receiptAddress.trim() || !receipt.acceptedNoClaimPolicy) {
+      setSignatureMessage("Completa nombre, cargo, lugar, dirección y aceptación de quien recibe.");
+      return;
+    }
 
     setSignatureSaving(true);
     setSignatureMessage("");
 
     try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((value) => {
-          if (value) resolve(value);
-          else reject(new Error("No se pudo preparar la imagen de firma."));
-        }, "image/png");
-      });
-
-      const folio = String(solicitud?.folio || solicitudId || "solicitud").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const file = new File(
-        [blob],
-        `firma-autorizada-cliente-${folio}-${Date.now()}.png`,
-        { type: "image/png" },
-      );
-
-      await uploadSolicitudDoc({
-        solicitudId: String(solicitudId),
-        documentType: "FIRMA_AUTORIZADA_CLIENTE" as SolicitudDocumentType,
-        file,
-        onProgress: setPct,
-      });
-
-      setSignatureMessage("Firma guardada como evidencia autorizada del cliente.");
+      const link = await createSolicitudSignatureLink(String(solicitudId));
+      const result = await submitSolicitudSignature({ token: link.token, ...receipt, signatureDataUrl: canvas.toDataURL("image/png") });
+      setSignatureMessage(result.constanciaPending ? "Firma guardada. Usa Generar constancia para completar el PDF sin volver a firmar." : "Firma y constancia guardadas en el expediente.");
+      setReceipt({ signerName: "", signerRole: "", receiptLocation: "", receiptAddress: "", observations: "", acceptedNoClaimPolicy: false });
       setSignatureOpen(false);
     } catch (error: any) {
       setSignatureMessage(error?.message || "No se pudo guardar la firma.");
@@ -667,14 +681,15 @@ useEffect(() => {
   async function downloadRelatedPagoReceipt(row: RelatedPagoReceipt) {
     if (!row.storagePath) return;
 
-    const url = await getDownloadURL(ref(storage, row.storagePath));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = getRelatedReceiptName(row);
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    await runAuthorizedDocumentAction(row.id, getAuthorizedDocumentDownloadUrl, url => {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getRelatedReceiptName(row);
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
   }
 
   async function sendFacturaWhatsapp(forceResend = false) {
@@ -872,13 +887,14 @@ const downloadDoc = async (doc: UploadRow) => {
 
     setDownloadingId(doc.id);
     try {
-      const url = await getDownloadURL(ref(storage, doc.storagePath));
-      await forceDownloadFromUrl(
-        url,
-        doc.originalName ||
-          doc.filename ||
-          (doc.storagePath ? doc.storagePath.split("/").pop() : null) ||
-          "documento",
+      await runAuthorizedDocumentAction(doc.id, getAuthorizedDocumentDownloadUrl, url =>
+        forceDownloadFromUrl(
+          url,
+          doc.originalName ||
+            doc.filename ||
+            (doc.storagePath ? doc.storagePath.split("/").pop() : null) ||
+            "documento",
+        ),
       );
     } catch (err: any) {
       console.error("Download error", err);
@@ -1019,6 +1035,11 @@ const downloadDoc = async (doc: UploadRow) => {
               >
                 {signatureLinkCreating ? "Creando link..." : "Crear link"}
               </button>
+              <button type="button" disabled={signatureSaving || !solicitudId}
+                className="rounded-xl border border-white/10 px-3 py-2 text-[11px] disabled:opacity-50"
+                onClick={async () => { setSignatureSaving(true); try { await generateSolicitudReceiptCertificate(String(solicitudId)); setSignatureMessage("Constancia disponible en el expediente."); } catch (error: any) { setSignatureMessage(error?.message || "No se pudo generar la constancia."); } finally { setSignatureSaving(false); } }}>
+                Generar constancia
+              </button>
             </div>
 
             {signatureLink ? (
@@ -1029,6 +1050,12 @@ const downloadDoc = async (doc: UploadRow) => {
 
             {signatureOpen ? (
               <div className="mt-4 space-y-3">
+                <p className="text-xs text-slate-300">Datos declarados por quien recibe; el lugar real puede diferir del domicilio fiscal. No se captura geolocalización.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {([['signerName', 'Nombre de quien recibe', 180], ['signerRole', 'Cargo', 120], ['receiptLocation', 'Lugar de recepción o prestación', 240], ['receiptAddress', 'Dirección real de recepción o prestación', 500], ['observations', 'Observaciones (opcional)', 600]] as const).map(([key, label, max]) =>
+                    <label key={key} className="text-xs text-slate-300">{label}<input className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 p-2" value={receipt[key]} maxLength={max} onChange={e => setReceipt(value => ({ ...value, [key]: e.target.value }))}/></label>)}
+                </div>
+                <label className="flex gap-2 text-xs text-slate-300"><input type="checkbox" checked={receipt.acceptedNoClaimPolicy} onChange={e => setReceipt(value => ({ ...value, acceptedNoClaimPolicy: e.target.checked }))}/><span>Confirmo la recepción y conformidad de los bienes o servicios en el lugar y dirección declarados, salvo las observaciones registradas, y acepto la política de no reclamación posterior aplicable.</span></label>
                 <div className="rounded-2xl border border-white/10 bg-white p-2">
                   <canvas
                     ref={signatureCanvasRef}
@@ -1160,10 +1187,10 @@ const downloadDoc = async (doc: UploadRow) => {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[12px] uppercase tracking-[0.12em] text-emerald-200">
-                  Comprobantes relacionados por pagos
+                  Documentos relacionados por pagos
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  Se detectan desde los pagos aplicados a esta solicitud. No se duplica el archivo.
+                  Incluye comprobantes y complementos de pago vinculados a esta solicitud. No se duplica el archivo.
                 </div>
               </div>
               <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200">
@@ -1173,11 +1200,11 @@ const downloadDoc = async (doc: UploadRow) => {
 
             {loadingRelatedPagoReceipts ? (
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-400">
-                Buscando comprobantes relacionados...
+                Buscando documentos relacionados...
               </div>
             ) : relatedPagoReceipts.length === 0 ? (
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-500">
-                Sin comprobantes relacionados por pagos aplicados.
+                Sin documentos relacionados por pagos aplicados.
               </div>
             ) : (
               <div className="space-y-2">
@@ -1191,7 +1218,7 @@ const downloadDoc = async (doc: UploadRow) => {
                         {getRelatedReceiptName(row)}
                       </div>
                       <div className="mt-0.5 text-[10px] text-slate-500">
-                        Pago: {row.pagoFolio || row.pagoId || "---"}
+                        Pago: {row.pagoFolio || "Sin folio"}
                       </div>
                     </div>
 
@@ -1303,7 +1330,11 @@ const downloadDoc = async (doc: UploadRow) => {
               <div className="text-[10px] text-slate-500">{docs.length} registros</div>
             </div>
 
-            {docs.length === 0 ? (
+            {docsError ? (
+              <div className="px-3 py-6 text-center text-[11px] text-rose-300">
+                {docsError}
+              </div>
+            ) : docs.length === 0 ? (
               <div className="px-3 py-6 text-center text-[11px] text-slate-500">
                 Sin documentos cargados.
               </div>

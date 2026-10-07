@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "hugo-model-eval-results-v1",
+  "evalRunId": "hugo-phase9-devval-v1",
+  "status": "BLOCKED_MISSING_CREDENTIALS",
+  "executedAt": null,
+  "realCalls": 0,
+  "estimatedCostUsd": 0,
+  "providers": {},
+  "cases": [],
+  "blockers": ["HUGO_OPENAI_ENABLED", "OPENAI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS_OR_ADC"]
+}

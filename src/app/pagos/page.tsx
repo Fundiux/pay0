@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
-import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
-import { operationDiscoverySeed, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { beginOperationTiming } from "@/lib/operationTiming";
-import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
+
+import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
+import { automaticReceiptPayload, automaticReceiptMissing } from "@/lib/receiptAutomaticRegistration";
+import { automaticPaymentReviewMessage } from "@/lib/automaticPaymentReview";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
 import {
@@ -49,6 +53,10 @@ import PagoApplicationIqFlowModal from "@/components/PagoApplicationIqFlowModal"
 import { uploadPagoDoc } from "@/lib/uploadPagoDoc";
 import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDate } from "@/lib/dateScope";
 import { PaymentRelationIndicator } from "@/components/PaymentRelationIndicator"; // H4-D67-A1B_RELATION_COLUMN
+import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
+import RecordCreatorFilter from "@/components/RecordCreatorFilter";
+import CompactBalanceCells from "@/components/CompactBalanceCells";
+import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
   const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
@@ -203,7 +211,7 @@ function isSolicitudTerminal(s: any) {
 }
 
 function NoteBubble({ note, myUid }: any) {
-  const isMine = String(note?.createdBy || "") === String(myUid || "");
+  const isMine = !isSystemNote(note) && String(note?.createdBy || "") === String(myUid || "");
   const wrapper = isMine ? "justify-end" : "justify-start";
   const bubble = isMine
     ? "bg-sky-500/15 border-sky-500/20 text-slate-100"
@@ -215,7 +223,7 @@ function NoteBubble({ note, myUid }: any) {
     <div className={`flex ${wrapper}`}>
       <div className={`max-w-[80%] rounded-2xl border px-4 py-3 ${bubble}`}>
         <div className={`mb-1 text-[11px] ${isMine ? "text-sky-300 text-right" : "text-slate-400 text-left"}`}>
-          {note?.createdByName || note?.createdByRole || "Sistema"}
+          {noteAuthorLabel(note)}
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
@@ -228,7 +236,7 @@ function NoteBubble({ note, myUid }: any) {
 
 
 function getPagoFolio(p: any) {
-  return String(p?.folio || p?.referenceFolio || p?.pagoFolio || p?.id || p?.pagoId || '---');
+  return String(p?.folio || p?.referenceFolio || p?.pagoFolio || 'Sin folio');
 }
 function getTodayDateInputValue() {
   const now = new Date();
@@ -337,8 +345,9 @@ export default function PagosPage() {
 
   const canCreatePagos = !!modules?.pagos?.create;
   const canConciliatePagos = !!modules?.pagos?.conciliate;
+  const canCancelPagos = !!modules?.pagos?.cancel;
   const canApplyPagos = !!modules?.pagos?.create || !!modules?.pagos?.conciliate;
-  const canManagePagoDocs = !!modules?.pagos?.create || !!modules?.pagos?.conciliate || !!modules?.pagos?.uploadDocs;
+  const canManagePagoDocs = !!modules?.pagos?.uploadDocs;
   const role = normalizeRole((profile as any)?.role);
   const canViewIqFolios = isSuperAdmin(role);
 
@@ -350,17 +359,21 @@ export default function PagosPage() {
   const [customRange, setCustomRange] = useState<CustomRange>({});
 
   const [pagos, setPagos] = useState<any[]>([]);
-  const pagosRequestSeq = useRef(0);
   const [clientes, setClientes] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [pagoAplicaciones, setPagoAplicaciones] = useState<any[]>([]);
+  const [applicationComplementDocs, setApplicationComplementDocs] = useState<any[]>([]);
+  const [downloadingComplementId, setDownloadingComplementId] = useState("");
   const [loadingPagos, setLoadingPagos] = useState(true);
   const [loadingMorePagos, setLoadingMorePagos] = useState(false);
   const [hasMorePagos, setHasMorePagos] = useState(false);
   const [pagoCursor, setPagoCursor] = useState<{ seconds: number; nanoseconds: number; id: string } | null>(null);
 
   const [filter, setFilter] = useState("");
+  const [creatorUid, setCreatorUid] = useState("");
+  const [creatorOptions, setCreatorOptions] = useState<RecordCreatorOption[]>([]);
+  const pagosRequestSeq = useRef(0);
   const [sortConfig, setSortConfig] = useState({ key: "createdAt", dir: "desc" });
 
   const [openNewPago, setOpenNewPago] = useState(false);
@@ -896,6 +909,7 @@ export default function PagosPage() {
       file,
       status: "PENDING",
       parsed: null,
+      operationTypeKey: selectedOperationTypeKey || "",
       error: "",
     }));
 
@@ -929,7 +943,8 @@ export default function PagosPage() {
         );
 
         try {
-          const parsed = await parsePagoReceiptPdfFile(item.file);
+          const operationTypeKey = item.operationTypeKey;
+          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey });
 
           const senderSignals = {
             rfc: parsed.rfc,
@@ -960,22 +975,12 @@ export default function PagosPage() {
               beneficiarySignals,
             );
 
-          setReceiptBatchItems((current) =>
-            current.map((row) =>
-              row.key === item.key
-                ? {
-                    ...row,
-                    status: "READY",
-                    parsed,
-                    clientMatch,
-                    companyMatch,
-                    operationTypeKey:
-                      row.operationTypeKey ||
-                      facturaSubtotalOperationKey,
-                  }
-                : row,
-            ),
-          );
+          const analyzed = { ...item, parsed, clientMatch, companyMatch, operationTypeKey,
+            status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
+            error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
+          setReceiptBatchItems(current => current.map(row => row.key === item.key ? analyzed : row));
+          if (automaticReceiptPayload(parsed.identification, operationTypeKey) || parsed.identification?.receiptPending)
+            await registerReceiptItem(analyzed);
         } catch (error: any) {
           setReceiptBatchItems((current) =>
             current.map((row) =>
@@ -996,17 +1001,14 @@ export default function PagosPage() {
 
     await Promise.all([worker(), worker(), worker()]);
     setReceiptBatchBusy(false);
-    setPageMsg("Analisis de comprobantes terminado. Revisa el lote.");
+    setPageMsg("Lote procesado. Los comprobantes identificados se registraron; revisa los pendientes.");
   }
 
   function getReceiptBatchMissingFields(item: any): string[] {
     const parsed = item?.parsed || {};
-    const missing: string[] = [];
+    const missing = automaticReceiptMissing(parsed.identification, String(item.operationTypeKey || ""));
 
     if (!item?.file) missing.push("comprobante");
-    if (!item?.clientMatch?.item?.id) missing.push("cliente");
-    if (!item?.companyMatch?.item?.id) missing.push("empresa");
-    if (!item?.companyMatch?.item?.despachoId) missing.push("despacho");
     if (!item?.operationTypeKey) missing.push("tipo de operacion");
 
     const amount = Number(parsed.amount || 0);
@@ -1019,6 +1021,37 @@ export default function PagosPage() {
     }
 
     return missing;
+  }
+
+  async function revalidateReceiptItem(item: any) {
+    if (receiptBatchBusy || receiptBatchCreating || !item.file) return;
+    setReceiptBatchBusy(true);
+    setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row));
+    try {
+      const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || "") });
+      const analyzed = { ...item, parsed, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
+        error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
+      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? analyzed : row));
+      if (automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || "")) || parsed.identification?.receiptPending)
+        await registerReceiptItem(analyzed);
+    } catch (error: any) {
+      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row));
+    } finally { setReceiptBatchBusy(false); }
+  }
+
+  async function reclassifyReceiptReference(item: any, correctedField: "trackingKey" | "folio" | "transactionId") {
+    const parsed = item?.parsed;
+    const value = String(parsed?.semanticReceipt?.fields?.reference?.value || parsed?.reference || "").trim();
+    if (!parsed?.analysisId || !value || receiptBatchBusy || receiptBatchCreating) return;
+    setReceiptBatchBusy(true);
+    try {
+      const result = await correctPagoReceiptSemanticField({ analysisId: parsed.analysisId, field: "reference", correctedField, correctedValue: value });
+      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, parsed: { ...parsed, semanticReceipt: { ...parsed.semanticReceipt,
+        fields: { ...parsed.semanticReceipt.fields, [correctedField]: { ...parsed.semanticReceipt.fields.reference, value, normalizedValue: value, decision: "ACCEPTED", confidence: "HIGH", source: "DOCUMENT_TEXT" } },
+      } }, learningResult: result } : row));
+      setPageMsg("Correccion semantica guardada con observacion sanitizada.");
+    } catch (error: any) { setPageMsg(error?.message || "No se pudo guardar la correccion semantica."); }
+    finally { setReceiptBatchBusy(false); }
   }
 
   const receiptBatchCreationSummary = useMemo(() => {
@@ -1070,169 +1103,55 @@ export default function PagosPage() {
     }
   }
 
-  function buildReceiptDetectedNote(item: any) {
-    const parsed = item?.parsed || {};
-
-    return [
-      parsed.senderName ? `Ordenante/Proveedor: ${parsed.senderName}` : "",
-      parsed.beneficiaryName ? `Beneficiario/Receptor: ${parsed.beneficiaryName}` : "",
-      parsed.shortName ? `Nombre corto beneficiario: ${parsed.shortName}` : "",
-      parsed.bankName ? `Banco: ${parsed.bankName}` : "",
-      parsed.reference ? `Referencia: ${parsed.reference}` : "",
-      parsed.concept ? `Concepto: ${parsed.concept}` : "",
-      parsed.rfc ? `RFC detectado: ${parsed.rfc}` : "",
-      parsed.destinationAccount ? `Cuenta destino detectada: ${parsed.destinationAccount}` : "",
-      item.clientMatch ? `Match cliente: ${Math.round(item.clientMatch.score * 100)}%` : "",
-      item.companyMatch ? `Match empresa: ${Math.round(item.companyMatch.score * 100)}%` : "",
-    ]
-      .filter(Boolean)
-      .join(" | ");
+  async function registerReceiptItem(item: any) {
+    const update = (patch: Record<string, unknown>) => setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, ...patch } : row));
+    let createdPagoId = "";
+    const uploadExisting = async (pagoId: string) => {
+      createdPagoId = pagoId;
+      update({ status: "UPLOADING", createdPagoId: pagoId, error: "" });
+      await uploadPagoDoc({ pagoId, documentType: "COMPROBANTE_PAGO", customDocumentTypeLabel: "", file: item.file, onProgress: () => undefined });
+      return pagoId;
+    };
+    try {
+      update({ status: "CREATING", error: "" });
+      const identification = item.parsed?.identification;
+      const payload = automaticReceiptPayload(identification, String(item.operationTypeKey || ""));
+      let pagoId: string;
+      if (identification?.status === "REGISTERED" && identification.receiptPending === true && identification.pagoId) {
+        pagoId = await uploadExisting(identification.pagoId);
+      } else {
+        if (!payload) throw new Error("El comprobante requiere revisión antes del registro.");
+        try {
+          pagoId = await createPagoWithReceipt({ ...payload, file: item.file, onPagoCreated: id => {
+            createdPagoId = id; update({ status: "UPLOADING", createdPagoId: id });
+          } });
+        } catch (error: any) {
+          const code = String(error?.details?.code || error?.code || "").toUpperCase();
+          if (createdPagoId || (!code.includes("ALREADY-EXISTS") && !code.includes("PAGO_RECEIPT_DUPLICATE"))) throw error;
+          // A concurrent worker may have created this exact payment. Re-parse to obtain server-authorized recovery.
+          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || "") });
+          update({ parsed });
+          if (!parsed.identification?.receiptPending || !parsed.identification.pagoId) throw error;
+          pagoId = await uploadExisting(parsed.identification.pagoId);
+        }
+      }
+      update({ status: "CREATED", createdPagoId: pagoId, error: "" });
+      return true;
+    } catch (error: any) {
+      const code = String(error?.details?.code || error?.code || "").toUpperCase();
+      update({ status: createdPagoId ? "UPLOAD_ERROR" : code.includes("ALREADY-EXISTS") || code.includes("PAGO_RECEIPT_DUPLICATE") ? "DUPLICATE" : "CREATE_ERROR",
+        ...(createdPagoId ? { createdPagoId } : {}), error: error?.message || "No se pudo registrar el comprobante." });
+      return false;
+    }
   }
 
   async function createReadyReceiptBatch() {
     if (!canCreatePagos || receiptBatchBusy || receiptBatchCreating) return;
-
     const rows = receiptBatchCreationSummary.readyToCreate;
-
-    if (rows.length === 0) {
-      setPageMsg("No hay comprobantes completos listos para crear.");
-      return;
-    }
-
+    if (!rows.length) return;
     setReceiptBatchCreating(true);
-    setPageMsg(`Creando ${rows.length} pago(s) del lote...`);
-
-    let createdCount = 0;
-    let failedCount = 0;
-
-    try {
-      for (const item of rows) {
-        let createdPagoId = "";
-
-        setReceiptBatchItems((current) =>
-          current.map((row) =>
-            row.key === item.key
-              ? {
-                  ...row,
-                  status: "CREATING",
-                  error: "",
-                }
-              : row,
-          ),
-        );
-
-        try {
-          const parsed = item?.parsed || {};
-          const company = item?.companyMatch?.item;
-
-          const pagoId = await createPagoWithReceipt({
-            clienteId: String(item?.clientMatch?.item?.id || ""),
-            companyId: String(company?.id || ""),
-            despachoId: String(company?.despachoId || ""),
-            empresaNombre: String(
-              company?.label || receiptItemNames(company)[0] || "",
-            ),
-            operationTypeKey: String(item?.operationTypeKey || ""),
-            montoTotal: Number(parsed.amount || 0),
-            fechaPago: String(parsed.date || ""),
-            paymentTime: String(parsed.time || "12:00:00"),
-            paymentForm: "03",
-            referencia: String(parsed.reference || ""),
-            moneda: String(parsed.currency || "MXN"),
-            notaInicial: buildReceiptDetectedNote(item),
-            detectedBankName: String(parsed.bankName || ""),
-            detectedSenderName: String(parsed.senderName || ""),
-            detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-            detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
-            detectedDestinationAccount: String(parsed.destinationAccount || ""),
-            detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
-            detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
-            operatorSelectedBankName: String(company?.bankName || company?.banco || ""),
-            operatorSelectedAccount: String(company?.bankClabe || company?.clabe || company?.cuenta || ""),
-            file: item.file,
-            onPagoCreated: (nextPagoId) => {
-              createdPagoId = nextPagoId;
-
-              setReceiptBatchItems((current) =>
-                current.map((row) =>
-                  row.key === item.key
-                    ? {
-                        ...row,
-                        status: "UPLOADING",
-                        createdPagoId: nextPagoId,
-                        error: "",
-                      }
-                    : row,
-                ),
-              );
-            },
-          });
-
-          createdCount += 1;
-
-          setReceiptBatchItems((current) =>
-            current.map((row) =>
-              row.key === item.key
-                ? {
-                    ...row,
-                    status: "CREATED",
-                    createdPagoId: pagoId,
-                    error: "",
-                  }
-                : row,
-            ),
-          );
-        } catch (error: any) {
-          failedCount += 1;
-
-          const errorCode = String(
-            error?.details?.code ||
-            error?.code ||
-            "",
-          ).toUpperCase();
-
-          const errorMessage = String(
-            error?.message || "",
-          );
-
-          const isDuplicate =
-            errorCode.includes("PAGO_RECEIPT_DUPLICATE") ||
-            errorCode.includes("ALREADY-EXISTS") ||
-            errorMessage.toLowerCase().includes(
-              "comprobante ya registrado",
-            );
-
-          setReceiptBatchItems((current) =>
-            current.map((row) =>
-              row.key === item.key
-                ? {
-                    ...row,
-                    status: isDuplicate
-                      ? "DUPLICATE"
-                      : createdPagoId
-                        ? "UPLOAD_ERROR"
-                        : "CREATE_ERROR",
-                    ...(createdPagoId
-                      ? { createdPagoId }
-                      : {}),
-                    error:
-                      error?.message ||
-                      "No se pudo crear este pago.",
-                  }
-                : row,
-            ),
-          );
-        }
-      }
-
-      setPageMsg(
-        failedCount > 0
-          ? `Lote procesado: ${createdCount} pago(s) creado(s) y ${failedCount} con error.`
-          : `Lote procesado: ${createdCount} pago(s) creado(s) correctamente.`,
-      );
-    } finally {
-      setReceiptBatchCreating(false);
-    }
+    try { for (const item of rows) await registerReceiptItem(item); }
+    finally { setReceiptBatchCreating(false); }
   }
 
   function openReceiptBatchItem(item: any) {
@@ -1265,8 +1184,10 @@ export default function PagosPage() {
       setMoneda(parsed.currency);
     }
 
-    setNotaInicial(buildReceiptDetectedNote(item));
+    setNotaInicial("");
     setReceiptLearningSignals({
+      detectedReference: String(parsed.reference || ""),
+      detectedConcept: String(parsed.concept || ""),
       detectedBankName: String(parsed.bankName || ""),
       detectedSenderName: String(parsed.senderName || ""),
       detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
@@ -1370,6 +1291,8 @@ export default function PagosPage() {
       }
 
       setReceiptLearningSignals({
+        detectedReference: String(parsed.reference || ""),
+        detectedConcept: String(parsed.concept || ""),
         detectedBankName: String(parsed.bankName || ""),
         detectedSenderName: String(parsed.senderName || ""),
         detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
@@ -1483,12 +1406,12 @@ export default function PagosPage() {
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
   const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
-  const operationScopeKey = `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}`;
+  const operationScopeKey = `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
 
   useLiveOperationRows({
     collectionName: "pagos", rows: pagos, setRows: setPagos,
     enabled: Boolean(myUid && rootId && canViewPagos),
-    discovery, scope: { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime() },
+    discovery, scope: { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
     scopeKey: operationScopeKey,
     onError: setPageMsg,
   });
@@ -1513,45 +1436,38 @@ export default function PagosPage() {
   }, [searchParams]);
 
   const loadPagosPage = useCallback(async (append = false) => {
-    const requestSeq = append ? pagosRequestSeq.current : ++pagosRequestSeq.current;
     if (!canViewPagos || !rootId || !myUid) {
       setPagos([]);
       setLoadingPagos(false);
       return;
     }
     append ? setLoadingMorePagos(true) : setLoadingPagos(true);
+    const requestSeq = ++pagosRequestSeq.current;
     try {
       const page = await listPagos(append && pagoCursor ? {
+        creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined,
         limit: 100,
         fromMillis: range.from.getTime(),
         toMillis: range.to.getTime(),
         cursorSeconds: pagoCursor.seconds,
         cursorNanoseconds: pagoCursor.nanoseconds,
         cursorId: pagoCursor.id,
-      } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime() });
+      } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined });
       if (requestSeq !== pagosRequestSeq.current) return;
-      setPagos((current) => append
-        ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))]
-        : page.items);
+      setPagos((current) => append ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))] : page.items);
       if (!append) setDiscovery(operationDiscoverySeed(operationScopeKey, page.items));
+      setCreatorOptions(page.creatorOptions || []);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
     } catch (error: any) {
       if (requestSeq !== pagosRequestSeq.current) return;
       setPageMsg(`No se pudieron cargar pagos: ${String(error?.message || "Error interno.")}`);
     } finally {
-      if (requestSeq === pagosRequestSeq.current) {
-        setLoadingPagos(false);
-        setLoadingMorePagos(false);
-      }
+      if (requestSeq === pagosRequestSeq.current) { setLoadingPagos(false); setLoadingMorePagos(false); }
     }
-  }, [canViewPagos, rootId, myUid, pagoCursor, range, operationScopeKey]);
+  }, [canViewPagos, rootId, myUid, pagoCursor, range, creatorUid, role, operationScopeKey]);
 
-  useEffect(() => {
-    setPagos([]);
-    void loadPagosPage(false);
-    return () => { ++pagosRequestSeq.current; };
-  }, [canViewPagos, rootId, myUid, range, role]);
+  useEffect(() => { setPagoCursor(null); setHasMorePagos(false); setPagos([]); void loadPagosPage(false); return () => { pagosRequestSeq.current++; }; }, [canViewPagos, rootId, myUid, range, creatorUid, role]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {
@@ -1745,6 +1661,36 @@ export default function PagosPage() {
     );
   }, [rootId, myUid, role]);
 
+  useEffect(() => {
+    if (!rootId || !viewAplicacionesFor?.id) {
+      setApplicationComplementDocs([]);
+      return;
+    }
+    const docsQuery = query(
+      collection(db, "uploads"),
+      where("rootId", "==", rootId),
+      where("pagoId", "==", viewAplicacionesFor.id),
+    );
+    return onSnapshot(docsQuery, (snap) => {
+      setApplicationComplementDocs(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((row: any) =>
+        row.active === true && row.entityType === "pagos" && row.applicationId &&
+        ["COMPLEMENTO_PAGO_XML", "COMPLEMENTO_PAGO_PDF"].includes(String(row.documentType || "").toUpperCase())));
+    }, () => setApplicationComplementDocs([]));
+  }, [rootId, viewAplicacionesFor?.id]);
+
+  const downloadApplicationComplement = async (doc: any) => {
+    if (!doc?.id || downloadingComplementId) return;
+    setDownloadingComplementId(doc.id);
+    try {
+      const url = await getAuthorizedDocumentDownloadUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error: any) {
+      setPageMsg(error?.message || "No fue posible descargar el complemento.");
+    } finally {
+      setDownloadingComplementId("");
+    }
+  };
+
   const clientesOrdenados = useMemo(() => {
     return [...clientes].sort((a, b) => clientLabel(a).localeCompare(clientLabel(b)));
   }, [clientes]);
@@ -1814,51 +1760,6 @@ export default function PagosPage() {
       },
     );
   }, [canViewPagos, myUid]);
-
-  const facturaSubtotalOperation = useMemo(() => {
-    const matched = findFacturaSubtotalOperation(
-      operationTypes.map((x: any) => ({
-        label: String(x?.name || x?.key || x?.id || ""),
-        value: String(x?.key || x?.id || ""),
-        operation: x,
-      })),
-    );
-
-    return matched?.operation || null;
-  }, [operationTypes]);
-
-  const facturaSubtotalOperationKey = facturaSubtotalOperation
-    ? String(facturaSubtotalOperation?.key || facturaSubtotalOperation?.id || "")
-    : "";
-
-  // Si el comprobante termino de analizarse antes de que cargara
-  // el catalogo de tipos, completar FACTURA SUBTOTAL al llegar.
-  useEffect(() => {
-    if (!facturaSubtotalOperationKey) return;
-
-    setReceiptBatchItems((current) => {
-      let changed = false;
-
-      const next = current.map((row) => {
-        if (
-          row?.status !== "READY" ||
-          !row?.parsed ||
-          row?.operationTypeKey
-        ) {
-          return row;
-        }
-
-        changed = true;
-
-        return {
-          ...row,
-          operationTypeKey: facturaSubtotalOperationKey,
-        };
-      });
-
-      return changed ? next : current;
-    });
-  }, [facturaSubtotalOperationKey, receiptBatchItems]);
 
   const clientOptions = useMemo(() => {
     return clientesOrdenados.map((c) => ({
@@ -1931,7 +1832,7 @@ export default function PagosPage() {
         const solicitud = solicitudes.find((s) => String(s?.id || "") === String(x?.solicitudId || ""));
         return {
           ...x,
-          folioSolicitud: solicitud?.folio || x?.solicitudId || "---",
+          folioSolicitud: solicitud?.folio || "Sin folio",
           solicitudStatus: solicitud?.status || "---",
           empresaNombre: solicitud?.empresaNombre || viewAplicacionesFor?.empresaNombre || "---",
           clienteNombre: solicitud?.clienteNombre || viewAplicacionesFor?.clienteNombre || "---",
@@ -1995,6 +1896,7 @@ export default function PagosPage() {
   }, [pagosFiltradosOrdenados]);
 
   function selectPagoReceiptFile(nextFile: File | null) {
+    setReceiptLearningSignals({});
     if (!nextFile) {
       setComprobantePagoFile(null);
       return;
@@ -2033,6 +1935,8 @@ export default function PagosPage() {
     paymentTime?: string;
     paymentForm?: string;
     referencia?: string;
+    concepto?: string;
+    receiptIdentificationId?: string;
     moneda: string;
     notaInicial: string;
     detectedBankName?: string;
@@ -2046,11 +1950,9 @@ export default function PagosPage() {
     operatorSelectedAccount?: string;
     file: File;
     onPagoCreated?: (pagoId: string) => void;
-    backgroundUpload?: boolean;
-    onUploadError?: (error: any) => void;
   }) {
     const requestSeq = pagosRequestSeq.current;
-    const createdPago: any = await createPago({
+    const createPayload = {
       clienteId: input.clienteId,
       companyId: input.companyId,
       despachoId: input.despachoId,
@@ -2061,6 +1963,8 @@ export default function PagosPage() {
       paymentTime: input.paymentTime || "12:00:00",
       paymentForm: input.paymentForm || "",
       referencia: input.referencia || "",
+      concepto: input.concepto || "",
+      ...(input.receiptIdentificationId ? { receiptIdentificationId: input.receiptIdentificationId } : {}),
       moneda: input.moneda,
       notaInicial: input.notaInicial,
       detectedBankName: input.detectedBankName || "",
@@ -2072,7 +1976,31 @@ export default function PagosPage() {
       detectedBeneficiaryRfc: input.detectedBeneficiaryRfc || "",
       operatorSelectedBankName: input.operatorSelectedBankName || "",
       operatorSelectedAccount: input.operatorSelectedAccount || "",
-    });
+    };
+
+    let createdPago: any;
+    try {
+      createdPago = await createPago(createPayload);
+    } catch (error: any) {
+      const details = error?.details || error?.customData?.details || {};
+      if (input.receiptIdentificationId || String(details?.code || "") !== "PAGO_RECEIPT_RFC_MISMATCH") throw error;
+
+      const mismatchLines = Array.isArray(details?.mismatches)
+        ? details.mismatches.map((item: any) =>
+            `${item?.message || "RFC distinto"} Detectado: ${item?.detected || "---"}. Esperado: ${item?.expected || "---"}.`,
+          )
+        : [];
+      const accepted = window.confirm(
+        [
+          "El comprobante contiene RFC distintos a los registrados.",
+          ...mismatchLines,
+          "Si es un pago realizado por un tercero, puedes enviarlo de todos modos. La aceptacion quedara registrada para auditoria y aprendizaje de María.",
+          "¿Enviar de todos modos?",
+        ].join("\n\n"),
+      );
+      if (!accepted) throw error;
+      createdPago = await createPago({ ...createPayload, acceptRfcMismatch: true });
+    }
 
     const createdPagoId = String(
       createdPago?.pagoId ||
@@ -2098,6 +2026,7 @@ export default function PagosPage() {
     void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
       if (requestSeq !== pagosRequestSeq.current || !snapshot.exists()) return;
       const row = { ...snapshot.data(), id: snapshot.id };
+      if (!operationBelongsToScope(row, "pagos", { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
       setPagos((current) => current.some((item) => item.id === row.id) ? current : [row, ...current]);
     }).catch(() => {
       if (requestSeq === pagosRequestSeq.current) {
@@ -2114,15 +2043,12 @@ export default function PagosPage() {
         onProgress: () => undefined,
       });
 
-    if (input.backgroundUpload) {
-      void uploadReceipt().catch((error) => {
-        input.onUploadError?.(error);
-      });
-
-      return createdPagoId;
+    try {
+      await uploadReceipt();
+    } catch (error: any) {
+      error.pagoId = createdPagoId;
+      throw error;
     }
-
-    await uploadReceipt();
 
     return createdPagoId;
   }
@@ -2183,6 +2109,8 @@ export default function PagosPage() {
           fechaPago: fechaPago || "",
           paymentTime,
           paymentForm,
+          referencia: receiptLearningSignals.detectedReference || "",
+          concepto: receiptLearningSignals.detectedConcept || "",
           moneda: moneda || "MXN",
           notaInicial: notaInicial.trim(),
           detectedBankName: receiptLearningSignals.detectedBankName || "",
@@ -2195,14 +2123,7 @@ export default function PagosPage() {
           operatorSelectedBankName: String(selectedCompanyLearning?.bankName || selectedCompanyLearning?.banco || ""),
           operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
-          backgroundUpload: true,
           onPagoCreated: (id) => { createdId = id; },
-          onUploadError: (error: any) => {
-            setPageMsg(
-              error?.message ||
-                "Pago creado, pero no se pudo subir el comprobante.",
-            );
-          },
         });
 
         setSelectedClientId("");
@@ -2219,7 +2140,12 @@ export default function PagosPage() {
         setOpenNewPago(false);
       });
     } catch (e: any) {
-      setPageMsg(e?.message || "No se pudo crear el pago.");
+      const createdPagoId = String(e?.pagoId || "").trim();
+      setPageMsg(
+        createdPagoId
+          ? `El pago ya fue creado, pero el comprobante no termino de guardarse. No vuelvas a crear el pago; abre Docs en la fila y sube el comprobante nuevamente. ${e?.message || ""}`.trim()
+          : e?.message || "No se pudo crear el pago.",
+      );
     } finally {
       setSaving(false);
       if (createdId) releaseTiming(createdId);
@@ -2265,7 +2191,7 @@ export default function PagosPage() {
   };
 
   const requestRechazarPago = (pagoId: string) => {
-    if (!canConciliatePagos) return;
+    if (!canCancelPagos && !canConciliatePagos) return;
     if (actionId) return;
 
     setConfirmAction({
@@ -2277,7 +2203,7 @@ export default function PagosPage() {
     });
   };
   const rechazarPago = async (pagoId: string) => {
-    if (!canConciliatePagos) return;
+    if (!canCancelPagos && !canConciliatePagos) return;
     if (actionId) return;
 
     try {
@@ -2292,6 +2218,31 @@ export default function PagosPage() {
     } finally {
       setActionId("");
     }
+  };
+
+  const requestCancelarPago = (pagoId: string) => {
+    if (!canCancelPagos) return;
+    if (actionId) return;
+    setConfirmAction({
+      title: "Cancelar pago",
+      message: "¿Seguro que quieres cancelar este pago? Esta accion cierra su seguimiento.",
+      confirmLabel: "Cancelar pago",
+      danger: true,
+      onConfirm: async () => {
+        setActionId(pagoId);
+        try {
+          await changePagoStatus({
+            pagoId,
+            newStatus: "CANCELADO",
+            conciliationNote: "Pago cancelado desde modulo Pagos",
+          });
+        } catch (e: any) {
+          setPageMsg(e?.message || "No se pudo cancelar el pago.");
+        } finally {
+          setActionId("");
+        }
+      },
+    });
   };
 
   const applySelectedFolios = async () => {
@@ -2342,7 +2293,7 @@ export default function PagosPage() {
 
     const excedido = seleccionados.find((item) => item.monto > item.pendiente);
     if (excedido) {
-      setPageMsg(`El monto para ${excedido.solicitud?.folio || excedido.solicitud?.id} excede el pendiente.`);
+      setPageMsg(`El monto para ${excedido.solicitud?.folio || "la solicitud sin folio"} excede el pendiente.`);
       return;
     }
 
@@ -2750,6 +2701,7 @@ export default function PagosPage() {
         )}
       </header>
 
+      {(isSuperAdmin(role) || isAdmin(role)) && <div className="mb-2 flex flex-wrap items-center gap-2"><RecordCreatorFilter value={creatorUid} onChange={setCreatorUid} options={creatorOptions} /></div>}
       {iqFlow && !iqFlowOpen && iqFlow.pay0Result && (
         <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
           <span>{iqFlow.message}</span>
@@ -2770,9 +2722,10 @@ export default function PagosPage() {
         </div>
       )}
       <div className="pay0-pagos-table-wrap w-full min-w-0 rounded-2xl border border-white/5 bg-[#161d2b] shadow-2xl overflow-x-auto">
-        <table className="pay0-pagos-main-table pay0-table w-full text-left min-w-[1355px]">
+        <table className="pay0-pagos-main-table pay0-table w-full text-left min-w-[1470px]">
           <colgroup className="pay0-pagos-colgroup">{/* H4-D67-A4_CANONICAL_15_COLUMNS */}
             <col className="pay0-col-folio" />
+            {(isSuperAdmin(role) || isAdmin(role)) && <col className="pay0-col-usuario" />}
             {/* IQ2G_H4_D43G_PAGOS_IQ_COLS_AFTER_FOLIO */}
             <col className="pay0-col-iq-folio" />
             <col className="pay0-col-relacion" />
@@ -2793,6 +2746,7 @@ export default function PagosPage() {
             <tr className="pay0-table-head-row">
               {[
                 { label: "Folio", key: "id" },
+                ...((isSuperAdmin(role) || isAdmin(role)) ? [{ label: "Usuario", key: "creatorName" }] : []),
                 // IQ2G_H4_D43G_PAGOS_IQ_HEADERS_AFTER_FOLIO
                 { label: "Folio IQ", key: "iqDepositFolio" },
                 { label: "Relacion", key: "montoAplicado" },
@@ -2806,7 +2760,7 @@ export default function PagosPage() {
               ].map((h) => (
                 <th
                   key={h.key}
-                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Folio", "Cliente", "Empresa"].includes(h.label) ? "text-left" : "text-center"} !py-[6px] font-normal`}
+                  className={`p-3 cursor-pointer hover:text-sky-400 !text-[13px] ${["Monto", "Aplicado", "Disponible"].includes(h.label) ? "pay0-balance-heading" : ""} ${["Folio", "Usuario", "Cliente", "Empresa"].includes(h.label) ? "text-left" : "text-center"} !py-[6px] font-normal`}
                   onClick={() =>
                     setSortConfig((prev) => ({
                       key: h.key,
@@ -2814,7 +2768,7 @@ export default function PagosPage() {
                     }))
                   }
                 >
-                  <div className={`flex items-center gap-1 ${["Folio", "Cliente", "Empresa"].includes(h.label) ? "justify-start" : "justify-center"}`}>
+                  <div className={`flex items-center gap-1 ${["Folio", "Usuario", "Cliente", "Empresa"].includes(h.label) ? "justify-start" : "justify-center"}`}>
                     {h.label}
                     {sortConfig.key === h.key &&
                       (sortConfig.dir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
@@ -2826,11 +2780,11 @@ export default function PagosPage() {
 
           <tbody className="[&>tr:nth-child(odd)]:bg-white/[0.025] [&>tr:nth-child(even)]:bg-slate-950/20">
             {loadingPagos ? (
-              <tr><td colSpan={15} className="pay0-empty-cell">
+              <tr><td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? 16 : 15} className="pay0-empty-cell">
                   Cargando pagos...
                 </td></tr>
             ) : pagosFiltradosOrdenados.length === 0 ? (
-              <tr><td colSpan={15} className="p-4 text-[12px] italic text-slate-500">
+              <tr><td colSpan={(isSuperAdmin(role) || isAdmin(role)) ? 16 : 15} className="p-4 text-[12px] italic text-slate-500">
                   no hay registros para este periodo
                 </td></tr>
             ) : (
@@ -2857,14 +2811,14 @@ export default function PagosPage() {
 
                 return (
                   <tr
-                    key={getPagoFolio(p)}
+                    key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left">{getPagoFolio(p)}</td><td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p)}>{recordCreatorLabel(p)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">
-                      <div>{p?.empresaNombre || p?.companyId || "---"}</div>
-                    </td><td className="pay0-td-money text-white text-center">{toCurrency(p?.montoTotal)}</td><td className="pay0-td-money text-emerald-400 text-center">{toCurrency(p?.montoAplicado)}</td><td className="pay0-td-money text-amber-400 text-center">{toCurrency(p?.montoDisponible)}</td><td className="pay0-td text-center">
+                      <div>{p?.empresaNombre || "Empresa sin nombre"}</div>
+                    </td><CompactBalanceCells amount={money2(p?.montoTotal)} paid={money2(p?.montoAplicado)} pending={money2(p?.montoDisponible)} application /><td className="pay0-td text-center">
                       {foliosPendientes.length === 0 ? (
                         <span className="text-slate-500">Sin pendientes</span>
                       ) : (
@@ -2884,7 +2838,7 @@ export default function PagosPage() {
                                   type="button"
                                   className="mx-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-sky-400/20 bg-sky-500/10 px-1.5 text-center text-[10px] font-normal leading-none text-sky-300 transition hover:bg-sky-500/20 hover:text-sky-100"
                                   title={foliosPendientes
-                                    .map((s) => `${s.folio || s.id}: $${toCurrency(getSolicitudPendiente(s))}`)
+                                    .map((s) => `${s.folio || "Solicitud sin folio"}: $${toCurrency(getSolicitudPendiente(s))}`)
                                     .join("\n")}
                                   aria-label={`${foliosPendientes.length} folios pendientes`}
                                   onClick={(event) => {
@@ -2914,7 +2868,7 @@ export default function PagosPage() {
                                           className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-2 py-1.5"
                                         >
                                           <span className="max-w-[150px] truncate font-mono text-[11px] text-sky-300">
-                                            {s.folio || s.id}
+                                            {s.folio || "Solicitud sin folio"}
                                           </span>
                                           <span className="whitespace-nowrap font-mono text-[11px] text-amber-300">
                                             ${toCurrency(getSolicitudPendiente(s))}
@@ -2957,10 +2911,15 @@ export default function PagosPage() {
                       >
                         {status}
                       </span>
+                      {automaticPaymentReviewMessage(p.automaticApplication) && <div className="mt-1 text-[10px] text-amber-300"
+                        title={automaticPaymentReviewMessage(p.automaticApplication)}>
+                        Aplicación por revisar
+                        <span className="sr-only">: {automaticPaymentReviewMessage(p.automaticApplication)}</span>
+                      </div>}
                     </td><td className="pay0-td pay0-pagos-actions-cell text-center">
                       <div className="flex justify-end gap-2 opacity-50 transition-opacity group-hover:opacity-100">
 
-{canConciliatePagos && status === "REGISTRADO" && (
+                        {canConciliatePagos && status === "REGISTRADO" && (
                           <button
                             title="Enviar a conciliacion"
                             onClick={() => moveToConciliacion(p.id)}
@@ -2971,25 +2930,51 @@ export default function PagosPage() {
                           </button>
                         )}
 
-                        {canConciliatePagos && status === "CONCILIACION_PENDIENTE" && (
-                          <>
-                            <button
-                              title="Conciliar pago"
-                              onClick={() => conciliarPago(p.id)}
-                              className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10"
-                              disabled={actionId === p.id}
-                            >
-                              <ShieldCheck size={16} />
-                            </button>
+                        {canCancelPagos && status === "REGISTRADO" && (
+                          <button
+                            title="Cancelar pago"
+                            onClick={() => requestCancelarPago(p.id)}
+                            className="rounded p-1 text-rose-300 hover:bg-rose-500/10"
+                            disabled={actionId === p.id}
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
 
-                            <button
-                              title="Rechazar pago"
-                              onClick={() => requestRechazarPago(p.id)}
-                              className="rounded p-1 text-rose-400 hover:bg-rose-500/10"
-                              disabled={actionId === p.id}
-                            >
-                              <Ban size={16} />
-                            </button>
+                        {(canConciliatePagos || canCancelPagos) && status === "CONCILIACION_PENDIENTE" && (
+                          <>
+                            {canConciliatePagos ? (
+                              <button
+                                title="Conciliar pago"
+                                onClick={() => conciliarPago(p.id)}
+                                className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <ShieldCheck size={16} />
+                              </button>
+                            ) : null}
+
+                            {canCancelPagos || canConciliatePagos ? (
+                              <button
+                                title="Rechazar pago"
+                                onClick={() => requestRechazarPago(p.id)}
+                                className="rounded p-1 text-rose-400 hover:bg-rose-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <Ban size={16} />
+                              </button>
+                            ) : null}
+
+                            {canCancelPagos ? (
+                              <button
+                                title="Cancelar pago"
+                                onClick={() => requestCancelarPago(p.id)}
+                                className="rounded p-1 text-rose-300 hover:bg-rose-500/10"
+                                disabled={actionId === p.id}
+                              >
+                                <X size={16} />
+                              </button>
+                            ) : null}
                           </>
                         )}                        {aplicacionesPago.length > 0 && (
                           <button
@@ -3099,17 +3084,25 @@ export default function PagosPage() {
             </div>
 
             <div className="max-h-[72vh] overflow-y-auto p-4">
+              <p className="mb-3 text-xs text-slate-300" role="status">
+                Detectados: {receiptBatchItems.filter(row => row.parsed).length} · Identificados: {receiptBatchItems.filter(row => row.parsed?.identification?.status === "READY" || row.createdPagoId).length} ·
+                Registrados: {receiptBatchItems.filter(row => row.status === "CREATED").length} · Por revisar: {receiptBatchCreationSummary.needsReview.length} ·
+                Con error: {receiptBatchItems.filter(row => ["ERROR", "CREATE_ERROR", "UPLOAD_ERROR"].includes(row.status)).length}
+              </p>
               <div className="grid grid-cols-1 gap-3">
                 {receiptBatchItems.map((item) => {
                   const parsed = item.parsed || {};
+                  const serverPayload = automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || ""));
+                  const identifiedClient = serverPayload ? clientes.find(row => row.id === serverPayload.clienteId) : item.clientMatch?.item;
+                  const identifiedCompany = serverPayload ? companies.find(row => row.id === serverPayload.companyId) : item.companyMatch?.item;
                   const clientName =
-                    item.clientMatch?.item
-                      ? clientLabel(item.clientMatch.item)
+                    identifiedClient
+                      ? clientLabel(identifiedClient)
                       : "";
                   const companyName =
-                    item.companyMatch?.item
-                      ? receiptItemNames(item.companyMatch.item)[0] || ""
-                      : "";
+                    identifiedCompany
+                      ? receiptItemNames(identifiedCompany)[0] || ""
+                      : serverPayload?.empresaNombre || "";
                   const missingFields =
                     item.status === "READY"
                       ? getReceiptBatchMissingFields(item)
@@ -3158,6 +3151,48 @@ export default function PagosPage() {
                                 {parsed.reference || "Sin detectar"}
                               </div>
 
+                              {parsed.semanticReceipt && (
+                                <div className="md:col-span-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-slate-500">Lectura semantica:</span>
+                                    <span className={parsed.semanticReceipt.reviewRequired ? "text-amber-300" : "text-emerald-300"}>
+                                      {parsed.semanticReceipt.reviewRequired ? "requiere revision" : "evidencia consistente"}
+                                    </span>
+                                    <span className="text-slate-600">{parsed.readerVersion}</span>
+                                    {parsed.cacheHit && <span className="text-sky-300">resultado reutilizado</span>}
+                                  </div>
+                                  <div className="mt-2 grid grid-cols-1 gap-1 md:grid-cols-3">
+                                    {[
+                                      ["Rastreo", parsed.semanticReceipt.fields?.trackingKey],
+                                      ["Folio", parsed.semanticReceipt.fields?.folio],
+                                      ["Transaccion", parsed.semanticReceipt.fields?.transactionId],
+                                      ["Saldo", parsed.semanticReceipt.fields?.accountBalance],
+                                      ["Comision", parsed.semanticReceipt.fields?.bankCommission],
+                                    ].map(([label, evidence]: any) => evidence?.value != null && (
+                                      <div key={label} title={evidence.excerpt || ""}>
+                                        <span className="text-slate-500">{label}: </span>{String(evidence.value)}
+                                        <span className={evidence.decision === "ACCEPTED" ? "ml-1 text-emerald-400" : "ml-1 text-amber-300"}>
+                                          ({String(evidence.confidence).toLowerCase()})
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {parsed.semanticReceipt.fields?.reference?.value && !parsed.semanticReceipt.fields?.trackingKey?.value && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <span className="text-slate-500">Corregir clasificación:</span>
+                                      {(["trackingKey", "folio", "transactionId"] as const).map(field => (
+                                        <button key={field} type="button" disabled={receiptBatchBusy || receiptBatchCreating}
+                                          onClick={() => void reclassifyReceiptReference(item, field)}
+                                          className="rounded-lg border border-sky-400/30 px-2 py-1 text-[10px] text-sky-200 disabled:opacity-40">
+                                          {field === "trackingKey" ? "Clave de rastreo" : field === "folio" ? "Folio" : "Transacción"}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {item.learningResult && <div className="mt-2 text-[10px] text-emerald-300">Corrección persistida · observation y memoria candidata enlazadas.</div>}
+                                </div>
+                              )}
+
                               <div className="md:col-span-3">
                                 <div className="mb-1 text-slate-500">
                                   Tipo de operacion
@@ -3178,10 +3213,14 @@ export default function PagosPage() {
                                   }
                                   options={operationTypes.map((x: any) => ({
                                     value: String(x.key || x.id),
-                                    label: String(x.name || x.key || x.id),
+                                    label: String(x.name || x.key || "Operación sin nombre"),
                                   }))}
                                   placeholder="Selecciona tipo de operacion..."
                                 />
+                                <button type="button" className="mt-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs disabled:opacity-40"
+                                  disabled={receiptBatchBusy || receiptBatchCreating}
+                                  onClick={() => void revalidateReceiptItem(item)}>Validar y registrar</button>
+                                <p className="mt-1 text-[11px] text-slate-500">El tipo de operación determina los costos y no se deduce del comprobante.</p>
 
                                 {missingFields.length > 0 && (
                                   <div className="mt-2 text-[11px] text-amber-300">
@@ -3201,6 +3240,9 @@ export default function PagosPage() {
                           )}
                         </div>
 
+                        {["UPLOAD_ERROR", "CREATE_ERROR"].includes(item.status) && <button type="button"
+                          className="rounded-xl border border-white/10 px-3 py-2 text-xs disabled:opacity-40"
+                          disabled={receiptBatchBusy || receiptBatchCreating} onClick={() => void revalidateReceiptItem(item)}>Revalidar y retomar</button>}
                         <button
                           type="button"
                           disabled={item.status !== "READY"}
@@ -3302,7 +3344,7 @@ export default function PagosPage() {
                 onChange={setSelectedOperationTypeKey}
                 options={operationTypes.map((x: any) => ({
                   value: String(x.key || x.id),
-                  label: String(x.name || x.key || x.id),
+                  label: String(x.name || x.key || "Operación sin nombre"),
                 }))}
                 placeholder="Selecciona tipo de operacion..."
               />
@@ -3474,7 +3516,7 @@ export default function PagosPage() {
 
   return (
                           <tr key={s.id} className="border-b border-white/5 text-[11px] text-white"><td className="p-3">
-                              <div className="font-mono text-sky-400">{s?.folio || s?.id}</div>
+                              <div className="font-mono text-sky-400">{s?.folio || "Solicitud sin folio"}</div>
                               <div className="mt-0.5 text-[10px] text-slate-500">{s?.clienteNombre || "---"}</div>
                             </td>{canViewIqFolios && (
                               <td className="p-3">
@@ -3584,7 +3626,7 @@ export default function PagosPage() {
                 <div className="overflow-x-auto rounded-2xl border border-white/10">
                   <table className="pay0-pagos-inner-table min-w-[900px] w-full text-left">
                     <thead>
-                      <tr><th className="p-3">Fecha</th><th className="p-3">Solicitud</th><th className="p-3">Cliente</th><th className="p-3">Empresa</th><th className="p-3 text-center">Monto aplicado</th><th className="pay0-th">Estatus</th></tr>
+                      <tr><th className="p-3">Fecha</th><th className="p-3">Solicitud</th><th className="p-3">Cliente</th><th className="p-3">Empresa</th><th className="p-3 text-center">Monto aplicado</th><th className="pay0-th">Complemento</th><th className="pay0-th">Estatus</th></tr>
                     </thead>
                     <tbody>
                       {aplicacionesDelPago.map((a) => (
@@ -3596,9 +3638,19 @@ export default function PagosPage() {
                             >
                               {a?.folioSolicitud || "---"}
                             </a>
-                            <div className="mt-0.5 text-[10px] text-slate-500">{a?.solicitudId || "---"}</div>
                           </td><td className="p-3">{a?.clienteNombre || "---"}</td><td className="p-3">{a?.empresaNombre || "---"}</td><td className="p-3 text-center font-mono text-emerald-400">
                             ${toCurrency(a?.montoAplicado || 0)}
+                          </td><td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {applicationComplementDocs.filter((doc: any) => doc.applicationId === a.id).map((doc: any) => (
+                                <button key={doc.id} type="button" disabled={downloadingComplementId === doc.id}
+                                  onClick={() => void downloadApplicationComplement(doc)}
+                                  className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200 hover:bg-sky-500/20 disabled:opacity-50">
+                                  {String(doc.documentType).endsWith("XML") ? "XML" : "PDF"}
+                                </button>
+                              ))}
+                              {applicationComplementDocs.every((doc: any) => doc.applicationId !== a.id) && <span className="text-slate-500">Pendiente</span>}
+                            </div>
                           </td><td className="p-3 text-center">
                             <span className={`inline-flex h-6 min-w-[110px] items-center justify-center rounded-full border px-3 py-1 text-[10px] uppercase tracking-tighter ${aplicacionStatusClass(a)}`}>
                               {aplicacionStatusLabel(a)}

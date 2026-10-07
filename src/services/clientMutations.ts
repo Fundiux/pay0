@@ -42,5 +42,6 @@ export async function syncIqClientMutation(
     "syncIqClientCallable",
   );
   const res: any = await fn({ clientId });
+  invalidateClientCatalog();
   return res?.data;
 }

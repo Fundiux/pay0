@@ -3,7 +3,7 @@
 import { formatDateTime24WithSeconds } from "@/lib/dateTime";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -13,6 +13,8 @@ import {
   getActivityEventLabel,
   normalizeActivityEventKey,
 } from "@/lib/activityEventLabels";
+import { belongsToSystem, SYSTEM_ACTIVITY_COLLECTIONS } from "@/lib/systemActivity";
+import { buildActivityLogQuery } from "@/lib/activityLogQuery";
 
 type Props = {
   adminId?: string;
@@ -34,7 +36,7 @@ export default function ActivityLog({
   from,
   to,
   hideAuthEvents = true,
-  title = "Actividad del sistema",
+  title = "Actividad PAY0",
   maxRows = 200,
   searchTerm,
   eventFilter,
@@ -48,6 +50,7 @@ export default function ActivityLog({
 
   const [activity, setActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [readError, setReadError] = useState(false);
   const [localSearch, setLocalSearch] = useState("");
   const [localEventFilter, setLocalEventFilter] = useState("TODOS");
 
@@ -261,46 +264,39 @@ export default function ActivityLog({
     if (!uid || !role) return;
 
     setLoading(true);
+    setReadError(false);
+    setActivity([]);
 
-    let qy: any;
+    const rowsByCollection = new Map<string, any[]>();
+    const failedCollections = new Set<string>();
+    const collectionNames = [SYSTEM_ACTIVITY_COLLECTIONS.PAY0, "activityLog"];
+    const publish = () => {
+      const merged = collectionNames
+        .flatMap((name) => rowsByCollection.get(name) || [])
+        .filter((row) => belongsToSystem(row, "PAY0"))
+        .sort((a, b) => Number(b.createdAt?.seconds || 0) - Number(a.createdAt?.seconds || 0))
+        .slice(0, maxRows);
+      setActivity(merged);
+      setLoading(rowsByCollection.size < collectionNames.length);
+      setReadError(failedCollections.size > 0);
+    };
 
-    if (role === "superadmin") {
-      qy = query(
-        collection(db, "activityLog"),
-        where("rootId", "==", myRootId),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    } else if (role === "admin") {
-      qy = query(
-        collection(db, "activityLog"),
-        where("adminId", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    } else {
-      qy = query(
-        collection(db, "activityLog"),
-        where("actorUid", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(maxRows)
-      );
-    }
-
-    const unsub = onSnapshot(
-      qy,
+    const unsubs = collectionNames.map((collectionName) => onSnapshot(
+      buildActivityLogQuery(db, collectionName, { uid, role, rootId: myRootId, maxRows }),
       (snap) => {
-        setActivity(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLoading(false);
+        failedCollections.delete(collectionName);
+        rowsByCollection.set(collectionName, snap.docs.map((d) => ({ id: `${collectionName}:${d.id}`, ...d.data() })));
+        publish();
       },
       (error) => {
-        console.error("Error ActivityLog:", error);
-        setActivity([]);
-        setLoading(false);
-      }
-    );
+        console.error(`Error ActivityLog (${collectionName}):`, error);
+        failedCollections.add(collectionName);
+        rowsByCollection.set(collectionName, []);
+        publish();
+      },
+    ));
 
-    return () => unsub();
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
   }, [uid, role, myRootId, maxRows]);
 
   const eventOptions = useMemo(() => {
@@ -405,10 +401,16 @@ export default function ActivityLog({
         </div>
       )}
 
+      {readError && (
+        <div role="alert" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          No se pudo cargar toda la actividad. Actualiza la página para intentarlo de nuevo.
+        </div>
+      )}
+
       {loading ? (
         <div className="pay0-empty-cell">Cargando actividad...</div>
       ) : filteredActivity.length === 0 ? (
-        <div className="pay0-empty-cell">No hay registros para este filtro.</div>
+        <div className="pay0-empty-cell">{readError ? "Actividad no disponible." : "No hay registros para este filtro."}</div>
       ) : (
         <div className="pay0-table-card">
           <div className="pay0-table-wrap">

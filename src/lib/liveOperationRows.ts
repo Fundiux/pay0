@@ -42,7 +42,7 @@ export function createOperationSubscriptions(
 }
 
 export type OperationScope = {
-  uid: string; rootId: string; role: string; fromMillis: number; toMillis: number;
+  uid: string; rootId: string; role: string; fromMillis: number; toMillis: number; creatorUid?: string;
 };
 export type OperationDiscoverySeed = {
   scopeKey: string; boundary: { seconds: number; nanoseconds: number } | null;
@@ -54,10 +54,11 @@ export function operationCreatedMillis(row: OperationRow): number {
 }
 export function operationBelongsToScope(row: OperationRow, collectionName: string, scope: OperationScope): boolean {
   if (!scope.uid || !scope.rootId) return false;
-  if ((collectionName === "pagos" || scope.role === "superadmin") && row.rootId !== scope.rootId) return false;
+  if (row.rootId !== scope.rootId) return false;
   if (scope.role === "admin" && row.adminId !== scope.uid) return false;
   if (["operador", "operator"].includes(scope.role) && row.createdBy !== scope.uid) return false;
   if (!["superadmin", "admin", "operador", "operator"].includes(scope.role)) return false;
+  if (["superadmin", "admin"].includes(scope.role) && scope.creatorUid && row.createdBy !== scope.creatorUid) return false;
   const at = operationCreatedMillis(row);
   return at >= scope.fromMillis && at <= scope.toMillis;
 }

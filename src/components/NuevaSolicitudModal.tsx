@@ -10,8 +10,8 @@ function isPermissionDeniedError(e: any) {
   const message = String(e?.message || "").toLowerCase();
   return code.includes("permission-denied") || message.includes("permission-denied");
 }
-import { createSolicitud } from "@/services/solicitudes";
 import { beginOperationTiming } from "@/lib/operationTiming";
+import { createSolicitud } from "@/services/solicitudes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, mergeModules } from "@/lib/roles";
@@ -95,7 +95,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     () =>
       operationTypes.map((op: any) => ({
         value: String(op.key || op.id || ""),
-        label: String(op.name || op.label || op.key || op.id || "Operacion"),
+        label: String(op.name || op.label || op.key || "Operación sin nombre"),
       })),
     [operationTypes]
   );

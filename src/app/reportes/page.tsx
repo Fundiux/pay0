@@ -608,7 +608,7 @@ export default function ReportesPage() {
             {[['Movimientos', commissionsResult?.summary.movements || 0], ['Destinos', commissionsResult?.summary.legs || 0], ['Total', money(commissionsResult?.summary.totalAmount)], ['Pendientes', commissionsResult?.summary.pending || 0], ['Errores', commissionsResult?.summary.errors || 0]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-[#111827] p-4"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-1 text-xl font-bold">{value}</div></div>)}
           </div>
           <div className="flex justify-end"><button type="button" onClick={exportCommissionsPdf} disabled={exporting || !(commissionsResult?.rows.length)} className="rounded-xl border border-orange-400/40 bg-orange-400/10 px-4 py-2 text-xs font-bold uppercase text-orange-200 disabled:opacity-40">Exportar PDF</button></div>
-          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111827]"><table className="pay0-table min-w-[1300px]"><thead><tr><th>FECHA</th><th>REFERENCIA</th><th>CLIENTE</th><th>FOLIO PAY0</th><th>DESTINO</th><th>%</th><th>IMPORTE</th><th>FOLIO IQ</th><th>ESTADO</th><th>PREFLIGHT</th></tr></thead><tbody>{commissionsLoading && !commissionsResult ? <tr><td colSpan={10} className="py-8 text-center">Cargando…</td></tr> : !(commissionsResult?.rows.length) ? <tr><td colSpan={10} className="py-8 text-center text-slate-400">Sin distribuciones en el periodo.</td></tr> : commissionsResult.rows.map((row, index) => <tr key={`${row.distributionId}-${index}`}><td>{row.operationalDate}</td><td>{row.originalReference || '-'}</td><td>{row.clientName || row.clientId}</td><td>{row.pay0Folio}</td><td>{row.kind === 'BASE' ? 'BASE' : row.commissioner}</td><td>{(row.rateBps / 100).toFixed(2)}%</td><td>{money(row.amount)}</td><td>{row.iqFolio || '-'}</td><td><span className={`rounded-full border px-2 py-1 text-[10px] ${statusClass(row.status)}`}>{row.status}</span></td><td><button onClick={() => void runCommissionPreflight(row.distributionId)} disabled={commissionsLoading} className="text-xs text-sky-300 disabled:opacity-40">Validar sin dispersar</button></td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111827]"><table className="pay0-table min-w-[1300px]"><thead><tr><th>FECHA</th><th>REFERENCIA</th><th>CLIENTE</th><th>FOLIO PAY0</th><th>DESTINO</th><th>%</th><th>IMPORTE</th><th>FOLIO IQ</th><th>ESTADO</th><th>PREFLIGHT</th></tr></thead><tbody>{commissionsLoading && !commissionsResult ? <tr><td colSpan={10} className="py-8 text-center">Cargando…</td></tr> : !(commissionsResult?.rows.length) ? <tr><td colSpan={10} className="py-8 text-center text-slate-400">Sin distribuciones en el periodo.</td></tr> : commissionsResult.rows.map((row, index) => <tr key={`${row.distributionId}-${index}`}><td>{row.operationalDate}</td><td>{row.originalReference || '-'}</td><td>{row.clientName || "Cliente sin nombre"}</td><td>{row.pay0Folio}</td><td>{row.kind === 'BASE' ? 'BASE' : row.commissioner}</td><td>{(row.rateBps / 100).toFixed(2)}%</td><td>{money(row.amount)}</td><td>{row.iqFolio || '-'}</td><td><span className={`rounded-full border px-2 py-1 text-[10px] ${statusClass(row.status)}`}>{row.status}</span></td><td><button onClick={() => void runCommissionPreflight(row.distributionId)} disabled={commissionsLoading} className="text-xs text-sky-300 disabled:opacity-40">Validar sin dispersar</button></td></tr>)}</tbody></table></div>
         </section>
       ) : activeTab === "metrics" ? (
         <section className="mb-5">
@@ -710,10 +710,7 @@ export default function ReportesPage() {
                     <tr key={row.clienteId}>
                       <td>
                         <div className="max-w-[260px] truncate font-bold text-white">
-                          {row.clienteNombre || row.clienteId}
-                        </div>
-                        <div className="max-w-[260px] truncate text-[10px] text-slate-500">
-                          {row.clienteId}
+                          {row.clienteNombre || "Cliente sin nombre"}
                         </div>
                       </td>
                       <td>{row.operationsCount}</td>
@@ -819,14 +816,13 @@ export default function ReportesPage() {
                     <tr key={row.pagoId}>
                       <td>
                         <div className="max-w-[180px] truncate font-bold text-white">{row.folio}</div>
-                        <div className="max-w-[180px] truncate text-[10px] text-slate-500">{row.pagoId}</div>
                       </td>
                       <td>
                         <div className="max-w-[240px] truncate font-bold text-white">
-                          {row.clienteNombre || row.clienteId || "-"}
+                          {row.clienteNombre || "Cliente sin nombre"}
                         </div>
                         <div className="max-w-[240px] truncate text-[10px] text-slate-500">
-                          {row.empresaNombre || row.companyId || "-"}
+                          {row.empresaNombre || "Empresa sin nombre"}
                         </div>
                       </td>
                       <td>{money(row.amount)}</td>
@@ -934,10 +930,7 @@ export default function ReportesPage() {
                       <tr key={row.clienteId}>
                         <td>
                           <div className="max-w-[240px] truncate font-bold text-white">
-                            {row.clienteNombre || row.clienteId}
-                          </div>
-                          <div className="max-w-[240px] truncate text-[10px] text-slate-500">
-                            {row.clienteId}
+                            {row.clienteNombre || "Cliente sin nombre"}
                           </div>
                         </td>
                         <td>
@@ -1045,7 +1038,7 @@ export default function ReportesPage() {
                       </td>
                       <td>
                         <div className="max-w-[160px] truncate text-slate-200">
-                          {row.referenceFolio || row.referenceId || "-"}
+                          {row.referenceFolio || "Sin folio"}
                         </div>
                       </td>
                       <td>{money(row.amount)}</td>

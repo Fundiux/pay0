@@ -14,6 +14,7 @@ import { isAdmin, isOperador, isSuperAdmin, normalizeRole } from "@/lib/roles";
 import { setClientOperationCost } from "@/services/rates";
 import { watchClientById } from "@/services/clients";
 import { watchUserDespachos } from "@/services/despachosAccess";
+import ClientCommissionRulePanel from "@/components/ClientCommissionRulePanel";
 
 type ClientLite = {
   id: string;
@@ -203,7 +204,7 @@ export default function ClienteCostosPage() {
     return onSnapshot(qd, (snap) => {
       const rows = snap.docs.map((d) => ({
         id: d.id,
-        nombre: (d.data() as any)?.nombre || d.id,
+        nombre: (d.data() as any)?.nombre || "Despacho sin nombre",
       }));
       setAllDespachos(sortByName(rows));
     });
@@ -260,7 +261,7 @@ export default function ClienteCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -291,7 +292,7 @@ export default function ClienteCostosPage() {
           id: d.id,
           costId: x?.costId || d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           assignedCost: Number(x?.assignedCost || 0),
@@ -323,7 +324,7 @@ export default function ClienteCostosPage() {
         return {
           id: d.id,
           operationTypeKey: String(x?.operationTypeKey || d.id),
-          operationTypeName: String(x?.operationTypeName || d.id),
+          operationTypeName: String(x?.operationTypeName || "Tipo sin nombre"),
           calculationBaseType: normalizeBaseType(x?.calculationBaseType),
           pricingMode: normalizePricingMode(x?.pricingMode),
           baseCost: Number(x?.baseCost || 0),
@@ -482,7 +483,7 @@ export default function ClienteCostosPage() {
       { value: "", label: "Selecciona despacho", disabled: true },
       ...availableDespachos.map((d) => ({
         value: d.id,
-        label: d.nombre || d.id,
+        label: d.nombre || "Despacho sin nombre",
       })),
     ],
     [availableDespachos]
@@ -606,7 +607,7 @@ export default function ClienteCostosPage() {
     <main className="p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-slate-100 text-2xl font-semibold">Clientes / Costos</div>
+          <div className="text-slate-100 text-2xl font-semibold">Costos y distribución</div>
           <div className="text-slate-400 text-sm mt-1">
             La asignacion se hace por despacho + tipo de operacion o dispersion.
           </div>
@@ -624,9 +625,8 @@ export default function ClienteCostosPage() {
         <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
           <div className="text-slate-400 text-xs uppercase">Cliente</div>
           <div className="text-slate-100 font-semibold mt-2">
-            {clientDoc?.name || clientDoc?.id || "-"}
+            {clientDoc?.name || "Cliente sin nombre"}
           </div>
-          <div className="text-slate-400 text-sm mt-1">{clientDoc?.id || "-"}</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
@@ -921,6 +921,15 @@ export default function ClienteCostosPage() {
           </div>
         </div>
       </div>
+
+      {clientDoc?.rootId && selectedAssignedRow?.pricingMode === "PERCENT" ? (
+        <ClientCommissionRulePanel clientId={clientId} rootId={clientDoc.rootId} canEdit={canManageClient}
+          canonicalRateBps={Math.round(Number(selectedAssignedRow.assignedCost || 0) * 100)} />
+      ) : (
+        <section className="mt-6 rounded-2xl border border-orange-400/20 bg-orange-500/[0.04] p-4 text-sm text-slate-400">
+          Selecciona y guarda un costo final porcentual para distribuir esa comisión.
+        </section>
+      )}
     </main>
   );
 }
