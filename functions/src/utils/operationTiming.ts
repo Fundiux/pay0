@@ -1,4 +1,4 @@
-type Stage = "pay0_persisted_at" | "iq_dispatch_at" | "iq_response_at" | "firestore_iq_update_at";
+type Stage = "document_finalized_at" | "pay0_persisted_at" | "iq_dispatch_at" | "iq_response_at" | "firestore_iq_update_at";
 
 /** Temporary opt-in diagnostic: IDs and timestamps only, never request data. */
 export function operationTiming(stage: Stage, operationId: string, startedAt?: number): number {

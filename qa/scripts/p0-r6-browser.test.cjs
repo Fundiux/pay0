@@ -47,7 +47,7 @@ test('restored route components and P0 live hook in two browser tabs preserve fi
     await db.doc('activityLog/other-system').set({rootId:'r',event:'ASSET_CREATED',description:'NO MOSTRAR',createdAt:Timestamp.fromMillis(3000)});
     await page.goto(`${origin}/?route=/activity-log`); await page.getByText('Evento actual visible').waitFor(); await page.getByText('Evento histórico visible').waitFor(); assert.equal(await page.getByText('NO MOSTRAR').count(),0);
     for(const kind of ['pagos','solicitudes']){
-      for(const [id,time,creator] of [['stable',3000,'selected'],['initial',2000,'selected'],['older',1000,'selected'],['foreign',4000,'other']]) await db.doc(`${kind}/${id}`).set({rootId:'r',createdBy:creator,status:'QUEUED',createdAt:Timestamp.fromMillis(time)});
+      for(const [id,time,creator] of [['stable',3000,'selected'],['initial',2000,'selected'],['older',1000,'selected'],['foreign',4000,'other']]) await db.doc(`${kind}/${id}`).set({rootId:'r',createdBy:creator,createdByDisplayName:'Synthetic Creator',status:'QUEUED',createdAt:Timestamp.fromMillis(time)});
       const other = await context.newPage();other.on('pageerror',e=>errors.push(e.message));
       await Promise.all([page.goto(`${origin}/?kind=${kind}`),other.goto(`${origin}/?kind=${kind}`)]);
       for(const tab of [page,other]){
@@ -58,7 +58,7 @@ test('restored route components and P0 live hook in two browser tabs preserve fi
       await page.evaluate(()=>window.uiTest.create('new'));
       await other.locator('[data-row="new"]').waitFor();
       await db.doc(`${kind}/new`).update({status:'LINKED',[kind==='pagos'?'pagoIqFolio':'solicitudIqFolio']:'IQ-991'});
-      for(const tab of [page,other]) await tab.getByText('IQ-991').waitFor();
+      for(const tab of [page,other]) { await tab.getByText('IQ-991').waitFor(); assert.equal(await tab.locator('[data-row="new"] [data-creator]').textContent(),'Synthetic Creator'); assert.equal(await tab.locator('[data-row="stable"] [data-creator]').textContent(),'Synthetic Creator'); }
       await other.getByLabel('Filtro',{exact:true}).fill('stable');
       await other.evaluate(()=>window.uiTest.offline());
       await db.doc(`${kind}/stable`).update({status:'UPDATED'});

@@ -1,3 +1,5 @@
+import { createHash } from "crypto";
+import { operationTiming } from "../../utils/operationTiming";
 import * as admin from "firebase-admin";
 import JSZip from "jszip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
@@ -437,10 +439,22 @@ const { solicitud } = await loadSolicitudOrThrow({
 
   
 const safeName = sanitizeFilename(originalName);
-  const uploadId = db.collection("uploads").doc().id;
+  const uploadRequestId = String(data.uploadRequestId || "").trim();
+  if (uploadRequestId && !/^[a-zA-Z0-9_-]{8,128}$/.test(uploadRequestId)) throw new HttpsError("invalid-argument", "Identificador de carga invalido.");
+  const uploadId = uploadRequestId
+    ? createHash("sha256").update(JSON.stringify([rootId, uid, solicitudId, documentType, uploadRequestId])).digest("hex")
+    : db.collection("uploads").doc().id;
   const storagePath = buildSolicitudDocumentStoragePath({ rootId, solicitudId, documentType, uploadId, originalName: safeName });
 
-  await db.collection("uploads").doc(uploadId).set({
+  const uploadRef = db.collection("uploads").doc(uploadId);
+  await db.runTransaction(async tx => {
+    const existing = await tx.get(uploadRef);
+    if (existing.exists) {
+      const row = existing.data()!;
+      if (row.createdBy !== uid || row.solicitudId !== solicitudId || row.originalName !== originalName || row.sizeBytes !== sizeBytes || (row.sha256 || "") !== sha256) throw new HttpsError("failed-precondition", "La carga existente no coincide con el archivo.");
+      return;
+    }
+    tx.create(uploadRef, {
     rootId,
     adminId: solicitud.adminId || rootId,
     clienteId: solicitud.clienteId || solicitud.clientId || null,
@@ -474,6 +488,7 @@ const safeName = sanitizeFilename(originalName);
     createdUsername: getUsername(user, uid),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+  });
   });
 
   return {
@@ -569,9 +584,20 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
   }
 
   let finalVersion = 1;
+  let didFinalize = false;
 
   await db.runTransaction(async (tx) => {
+    didFinalize = false;
+    const currentUpload = await tx.get(uploadRef);
+    const current = currentUpload.data() || {};
     const solicitudSnapH4D58H = await tx.get(solicitudRef);
+    if (!solicitudSnapH4D58H.exists || solicitudSnapH4D58H.data()?.isDeleted || solicitudSnapH4D58H.data()?.deletedAt) throw new HttpsError("failed-precondition", "La solicitud no esta disponible.");
+    if (current.status === "READY" && current.active === true) {
+      finalVersion = Number(current.version || 1);
+      return;
+    }
+    if (current.status !== "PENDING") throw new HttpsError("failed-precondition", "La carga ya fue reemplazada o desactivada.");
+    didFinalize = true;
     const solicitudH4D58H = solicitudSnapH4D58H.exists ? ((solicitudSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
     // H4_D58H_B1_SOLICITUD_DOC_TX_READ
     finalVersion = await finalizeSolicitudDocumentVersionTx({
@@ -689,21 +715,6 @@ logActivityTx(tx, db, {
   });
 
   if (documentType === "ORDEN_COMPRA") {
-    await enqueueIqCreationForSolicitud({
-      solicitudId,
-      requestedBy: uid,
-      source: "OC_UPLOAD",
-    }).catch(async (error) => {
-      await solicitudRef.set(
-        {
-          iqCreateQueueStatus: "NOT_ENQUEUED",
-          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
-          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
       solicitudId,
@@ -719,7 +730,7 @@ logActivityTx(tx, db, {
       );
     });
 
-    await generateCotizacionForSolicitudCore({
+    if (didFinalize) await generateCotizacionForSolicitudCore({
       auth: request.auth,
       // The active OC is the source of truth. Replacing it must also replace
       // the derivative quotation; returning an old active version leaves its
@@ -737,7 +748,7 @@ logActivityTx(tx, db, {
     });
   }
 
-  if (documentType === "FIRMA_AUTORIZADA_CLIENTE") {
+  if (didFinalize && documentType === "FIRMA_AUTORIZADA_CLIENTE") {
     await generateConstanciaRecepcionForSolicitudCore({
       auth: request.auth,
       data: {
@@ -757,7 +768,8 @@ logActivityTx(tx, db, {
     });
   }
 
-  await linkSolicitudToMaterialityOperationCore({
+
+  const materiality = await linkSolicitudToMaterialityOperationCore({
     auth: request.auth,
     data: { solicitudId },
   }).catch(async (error) => {
@@ -769,7 +781,32 @@ logActivityTx(tx, db, {
       },
       { merge: true },
     );
+    throw error;
   });
+
+  if (["ORDEN_COMPRA", "FACTURA_XML"].includes(documentType) &&
+      (materiality.materialityOperationId !== solicitudId || !materiality.completedTypes.includes(documentType))) {
+    throw new HttpsError("failed-precondition", "Materialidad no confirma el documento obligatorio.");
+  }
+  const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
+
+  if (documentType === "ORDEN_COMPRA") {
+    await enqueueIqCreationForSolicitud({
+      solicitudId,
+      requestedBy: uid,
+      source: "OC_UPLOAD",
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          iqCreateQueueStatus: "NOT_ENQUEUED",
+          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
+          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+
+  }
 
   return {
     ok: true,
@@ -777,6 +814,9 @@ logActivityTx(tx, db, {
     status: "READY",
     active: true,
     version: finalVersion,
+    solicitudId,
+    materialityConfirmed: true,
+    documentFinalizedAt,
   };
 }
 

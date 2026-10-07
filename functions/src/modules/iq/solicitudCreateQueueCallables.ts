@@ -1412,22 +1412,24 @@ async function loadQueuedJobs(): Promise<IqCreateJob[]> {
   });
 }
 
-async function markJobProcessing(job: IqCreateJob): Promise<number> {
-  const attemptCount = job.attemptCount + 1;
-  await job.ref.set({
-    status: "PROCESSING",
-    attemptCount,
-    processingStartedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  await db.collection("solicitudes").doc(job.solicitudId).set({
-    iqCreationStatus: "PROCESSING",
-    iqCreateQueueStatus: "PROCESSING",
-    iqCreationAttemptCount: attemptCount,
-    iqCreationStartedAt: FieldValue.serverTimestamp(),
-    iqSyncUpdatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return attemptCount;
+async function markJobProcessing(job: IqCreateJob): Promise<number | null> {
+  // A worker may have read QUEUED before another worker acquired the profile
+  // lease. Recheck under a transaction before allowing any external request.
+  return db.runTransaction(async (tx) => {
+    const current = await tx.get(job.ref);
+    if (!current.exists || !["QUEUED", "FAILED_RETRYABLE"].includes(cleanUpper(current.get("status")))) return null;
+    const attemptCount = (Number(current.get("attemptCount")) || 0) + 1;
+    tx.set(job.ref, {
+      status: "PROCESSING", attemptCount,
+      processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.set(db.collection("solicitudes").doc(job.solicitudId), {
+      iqCreationStatus: "PROCESSING", iqCreateQueueStatus: "PROCESSING",
+      iqCreationAttemptCount: attemptCount, iqCreationStartedAt: FieldValue.serverTimestamp(),
+      iqSyncUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return attemptCount;
+  });
 }
 
 async function finalizeJobFromResult(input: {
@@ -1823,6 +1825,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
       for (const job of limitedJobs) {
         const attemptCount = await markJobProcessing(job);
+        if (attemptCount === null) continue;
         const temporaryFilePath = path.join(tempDir, `${job.id}-${safeTemporaryFileName(job.orderFileName)}`);
         await admin.storage().bucket().file(job.orderStoragePath).download({
           destination: temporaryFilePath,
@@ -1846,6 +1849,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
       // Desde este punto una excepciÃƒÂ³n no demuestra que el botÃƒÂ³n Crear
       // no haya sido pulsado. El lote queda bloqueado para lectura.
+      if (items.length === 0) return { total: 0, linked: 0, uncertain: 0, failed: 0 };
       browserBatchStarted = true;
 
       const batchResult = await runIqCreateInvoiceBatchHttpA53({

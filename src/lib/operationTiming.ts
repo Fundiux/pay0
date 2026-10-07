@@ -30,3 +30,7 @@ export function traceReactiveOperation(operationId: string, data: Record<string,
     REACTIVE_LATENCY_ESTIMATE: writeAt === null ? null : Date.now() - writeAt,
   });
 }
+
+export function traceDocumentOperation(stage: "document_upload_started_at" | "document_uploaded_at" | "document_finalized_at", operationId: string, at = Date.now()) {
+  if (enabled()) console.info("PAY0_OPERATION_TIMING", { stage, operationId, at });
+}

@@ -47,13 +47,14 @@ test('upload resumes same uploadId and stored bytes; download URL failure cannot
   let init = 0, bytes = 0, finalize = 0, fail = true;
   const calls = { initSolicitudDocumentUpload: 'init', finalizeSolicitudDocumentUpload: 'finalize' };
   const helper = load('src/lib/uploadSolicitudDoc.ts', {
+    '@/lib/operationTiming': { traceDocumentOperation() {} },
     '@/lib/callableNames': { CALLABLES: calls }, '@/lib/firebaseClient': { functions: {}, storage: {} },
     '@/canonicos/materialidad': { MATERIALIDAD_CANONICAL_DOCUMENTS: [] },
     'firebase/functions': { httpsCallable: (_, name) => async input => {
       if (name === 'init') { init++; return { data: { uploadId: 'u1', storagePath: 'local/s1/u1' } }; }
       assert.equal(input.uploadId, 'u1'); finalize++;
       if (fail) throw new Error('controlled finalize failure');
-      return { data: { ok: true } };
+      return { data: { ok: true, uploadId: 'u1', solicitudId: 's1', status: 'READY', active: true, materialityConfirmed: true } };
     } },
     'firebase/storage': { ref: (_, path) => path, getDownloadURL: async () => { throw Error('link unavailable'); },
       uploadBytesResumable: () => { bytes++; return { snapshot: {}, on: (_, progress, reject, done) => done() }; } },
@@ -116,8 +117,8 @@ test('OC autofill feedback remains correct when React defers the state updater',
   const ast = ts.createSourceFile('modal.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let body;
   function visit(n) { if (ts.isVariableDeclaration(n) && n.name.getText(ast) === 'applyOrdenCompraAutofill') body = n.initializer.getText(ast); ts.forEachChild(n, visit); } visit(ast);
-  let message = '', updater;
-  const ctx = { setOrdenCompraParseBusy() {}, setOrdenCompraParseMsg: v => { message = v; }, setOrdenCompraParsed() {},
+  let message = '', warning = '', updater;
+  const ctx = { parseSequence: {current:0}, formData: {companyId:'previous',companyName:'Previous Company'}, setSourceCompanyWarning:v=>{warning=v;}, setOrdenCompraParseBusy() {}, setOrdenCompraParseMsg: v => { message = v; }, setOrdenCompraParsed() {},
     parseOrdenCompraFile: async () => ({ clienteNombre: 'Client', proveedorNombre: 'Company', montoSolicitud: 98000, tipoFactura: 'PUE' }),
     matchOptionByLabel: (_, label) => ({ value: label, label }), clientOptions: [], companyOptions: [], operationOptions: [],
     findFacturaSubtotalOperation: () => ({ value: 'FACTURA_SUBTOTAL', label: 'Factura subtotal' }), setFormData: fn => { updater = fn; },
@@ -126,4 +127,17 @@ test('OC autofill feedback remains correct when React defers the state updater',
   await run({ name: 'synthetic.xlsx' });
   assert.match(message, /Autollenado completo/);
   assert.equal(updater({}).companyId, 'Company');
+  assert.match(warning, /Previous Company.*Company/);
+});
+
+
+test('creator rendering prefers durable snapshots and resolves safe legacy evidence without substituting delegated owner', () => {
+ const {recordCreatorLabel: label} = load('src/lib/recordCreator.ts');
+ const options=[{uid:'actor',displayName:'Actor',username:'a',userNumber:21},{uid:'owner',displayName:'Owner',username:'o',userNumber:22}];
+ for(const row of [{createdBy:'actor'},{nUsuario:21},{actorUid:'actor'},{creatorId:'actor'}]) assert.equal(label(row,options),'Actor');
+ assert.equal(label({createdBy:'deleted',createdByDisplayName:'Historical'}),'Historical');
+ assert.equal(label({createdBy:'actor',createdByDisplayName:'Original'},options),'Original');
+ assert.equal(label({createdBy:'actor',operationalOwnerId:'owner',userNumber:22,delegateUid:'actor'},options),'Actor');
+ assert.equal(label({userNumber:22,delegateUid:'missing'},options),'No disponible');
+ assert.equal(label({nUsuario:21},[...options,{uid:'ambiguous',userNumber:21,displayName:'Other',username:''}]),'No disponible');
 });

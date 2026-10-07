@@ -36,6 +36,8 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
   const submission = useRef<{ solicitudId: string; folio: string } | null>(null);
   const saving = useRef(false);
   const [saveError, setSaveError] = useState("");
+  const [sourceCompanyWarning, setSourceCompanyWarning] = useState("");
+  const parseSequence = useRef(0);
   const [ordenCompraFile, setOrdenCompraFile] = useState<File | null>(null);
   const [facturaXmlFile, setFacturaXmlFile] = useState<File | null>(null);
   const [ordenCompraDragging, setOrdenCompraDragging] = useState(false);
@@ -111,7 +113,18 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     []
   );
 
+  useEffect(() => {
+    const warnPending = (event: BeforeUnloadEvent) => {
+      if (!saving.current && !submission.current) return;
+      event.preventDefault(); event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnPending);
+    return () => window.removeEventListener("beforeunload", warnPending);
+  }, []);
+
   const resetForm = () => {
+    parseSequence.current++;
+    setSourceCompanyWarning("");
     submission.current = null;
     setSaveError("");
     setFormData(initialFormData);
@@ -305,13 +318,17 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo Orden de Compra...");
 
+    const sequence = ++parseSequence.current;
     try {
       const parsed = await parseOrdenCompraFile(file);
+      if (sequence !== parseSequence.current) return;
       setOrdenCompraParsed(parsed);
 
       const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
+      setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value
+        ? `Empresa seleccionada: ${formData.companyName}. El documento corresponde a ${matchedCompany.label}; el formulario cambio a la empresa del documento. Verifica antes de crear.` : "");
 
       const filled: string[] = [matchedClient && "cliente", matchedCompany && "empresa", matchedOperation && "tipo de operacion", parsed.montoSolicitud > 0 && "monto total", parsed.tipoFactura && "tipo factura"].filter(Boolean) as string[];
 
@@ -386,10 +403,11 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
         setOrdenCompraParseMsg("OC cargada. No pude autollenar campos; corrige el archivo o catalogos.");
       }
     } catch (err: any) {
+      if (sequence !== parseSequence.current) return;
       console.error("[NuevaSolicitudModal] OC parse error", err);
       setOrdenCompraParseMsg("OC cargada. No se pudo leer para autollenado.");
     } finally {
-      setOrdenCompraParseBusy(false);
+      if (sequence === parseSequence.current) setOrdenCompraParseBusy(false);
     }
   };
 
@@ -397,13 +415,17 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo XML de factura...");
 
+    const sequence = ++parseSequence.current;
     try {
       const parsed = await parseFacturaXmlFile(file);
+      if (sequence !== parseSequence.current) return;
       setFacturaXmlParsed(parsed);
 
       const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
+      setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value
+        ? `Empresa seleccionada: ${formData.companyName}. El documento corresponde a ${matchedCompany.label}; el formulario cambio a la empresa del documento. Verifica antes de crear.` : "");
 
       const filled: string[] = [matchedClient && "cliente", matchedCompany && "empresa", matchedOperation && "tipo de operacion", parsed.montoSolicitud > 0 && "monto total", parsed.tipoFactura && "tipo factura"].filter(Boolean) as string[];
 
@@ -480,10 +502,11 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
         setOrdenCompraParseMsg("XML cargado. No pude autollenar campos; corrige el archivo o catalogos.");
       }
     } catch (err: any) {
+      if (sequence !== parseSequence.current) return;
       console.error("[NuevaSolicitudModal] XML parse error", err);
       setOrdenCompraParseMsg(err?.message || "XML cargado. No se pudo leer para autollenado.");
     } finally {
-      setOrdenCompraParseBusy(false);
+      if (sequence === parseSequence.current) setOrdenCompraParseBusy(false);
     }
   };
 
@@ -842,6 +865,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
             className="min-h-[82px] w-full resize-none rounded-xl border border-white/10 bg-[#0b1220] px-4 py-2 text-[13px] text-slate-300 outline-none transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-70"
           />
 
+          {sourceCompanyWarning && <p role="alert" className="text-sm text-amber-200">{sourceCompanyWarning}</p>}
           {saveError && <p role="alert" className="text-sm text-amber-200">{saveError} Conservamos el archivo para reintentar sin crear otra solicitud.</p>}
           <button
             type="submit"

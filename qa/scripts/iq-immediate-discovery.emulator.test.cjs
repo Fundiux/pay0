@@ -27,7 +27,7 @@ function extract(names, context, file = 'functions/src/modules/iq/pagoDepositCal
   const ast = ts.createSourceFile('module.ts', source, ts.ScriptTarget.Latest, true);
   const parts = [];
   function visit(node) {
-    if (ts.isFunctionDeclaration(node) && names.includes(node.name?.text)) parts.push(node.getText(ast));
+    if (ts.isFunctionDeclaration(node) && names.includes(node.name?.text)) parts.push(node.getText(ast).replace(/^export\s+/, ''));
     if (ts.isVariableDeclaration(node) && names.includes(node.name.getText(ast))) parts.push(`const ${node.getText(ast)};`);
     ts.forEachChild(node, visit);
   }
@@ -680,6 +680,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   const bytes = await zip.generateAsync({ type: 'nodebuffer' });
   let present = false, enqueue = 0;
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
+    crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: () => Date.now() },
     'firebase-admin': { apps: admin.apps, initializeApp: admin.initializeApp, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [present], download: async () => [bytes] }) }) }) },
     'jszip': { default: JSZip }, 'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
     '../../utils/logActivity': { logActivity: async () => {}, logActivityTx() {} },
@@ -689,7 +690,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
       const docs = await db.collection('uploads').where('solicitudId', '==', solicitudId).where('active', '==', true).get();
       assert.equal(docs.size, 1); assert.equal(docs.docs[0].data().status, 'READY'); enqueue++;
     } },
-    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async () => {} },
+    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async ({data}) => ({materialityOperationId:data.solicitudId, completedTypes:['ORDEN_COMPRA']}) },
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
     '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => {} },
     '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
@@ -708,4 +709,222 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   const active = await db.collection('uploads').where('solicitudId', '==', 'source-regression').where('active', '==', true).get();
   assert.equal(active.size, 1); assert.equal(active.docs[0].id, upload.uploadId);
   assert.equal(enqueue, 2, 'replay rechecks the existing idempotent queue boundary');
+  const second = await service.initSolicitudDocumentUploadCore({auth,data:{solicitudId:'source-regression',documentType:'ORDEN_COMPRA',originalName:'replacement.xlsx',sizeBytes:bytes.length,uploadRequestId:'replacement-once'}});
+  const same = await service.initSolicitudDocumentUploadCore({auth,data:{solicitudId:'source-regression',documentType:'ORDEN_COMPRA',originalName:'replacement.xlsx',sizeBytes:bytes.length,uploadRequestId:'replacement-once'}});
+  assert.equal(same.uploadId,second.uploadId);
+  const secondRequest={auth,data:{uploadId:second.uploadId,storagePath:second.storagePath}};
+  await service.finalizeSolicitudDocumentUploadCore(secondRequest);
+  await service.finalizeSolicitudDocumentUploadCore(secondRequest);
+  assert.equal((await db.doc(`uploads/${second.uploadId}`).get()).get('version'),2);
+  await assert.rejects(service.finalizeSolicitudDocumentUploadCore(request),/reemplazada o desactivada/);
+  assert.equal((await db.doc(`uploads/${upload.uploadId}`).get()).get('active'),false);
+
+});
+
+test('integrated Solicitud creation, source retries, Materialidad, immediate Task, HTTP and two listeners', async () => {
+  const https = functionsRequire('firebase-functions/v2/https');
+  const guard = functionsRequire('./lib/utils/authGuard.js');
+  const sequence = functionsRequire('./lib/modules/sequences/service.js');
+  const folio = functionsRequire('./lib/modules/sequences/businessFolioContext.js');
+  const timing = {}; const stamp = (stage, id, at = Date.now()) => { (timing[id] ||= {})[stage] ??= at; return at; };
+  const materiality = load('functions/src/modules/materiality/service.ts', {
+    crypto: require('node:crypto'), 'firebase-functions/v2/https': https,
+    'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
+    './domain': functionsRequire('./lib/modules/materiality/domain.js'),
+    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+  });
+  await Promise.all([
+    db.doc('users/flow-user').set({ rootId: 'flow-root', role: 'superadmin', active: true, username: 'creator', displayName: 'Synthetic Creator', userNumber: 9 }),
+    db.doc('clients/flow-client').set({ rootId: 'flow-root', name: 'Synthetic Client', createdBy: 'flow-user', adminId: 'flow-user', clientNumber: 2 }),
+    db.doc('companies/flow-company').set({ rootId: 'flow-root', nombre: 'Synthetic Company', despachoId: 'flow-dispatch', companyNumber: 3 }),
+    db.doc('despachos/flow-dispatch').set({ rootId: 'flow-root', active: true, automationMode: 'ERP', erpProvider: 'IQ' }),
+    db.doc('iqIntegrationConfigs/flow-root').set({ enabled: true, automation: { solicitudes: true }, intervalMinutes: { solicitudCreate: 1 } }),
+    db.doc('iqCredentialProfiles/flow-profile').set({ rootId: 'flow-root', username: 'synthetic', associatedName: 'Associate' }),
+  ]);
+  const auth = { uid: 'flow-user' };
+  const create = extract(['createSolicitud', 'requireAuth', 'getRootId', 'getMyUser', 'requireRole', 'getActivityAdminId'], {
+    db, FieldValue, ...https, ...guard, ...sequence, ...folio, onCall: (_, run) => run,
+    operationTiming: (stage,id) => stamp(stage,id), resolveClientAssignedCostRate: async () => 6,
+    logActivity: async () => {}, recordOperationalMetric: async () => {},
+    linkSolicitudToMaterialityOperationCore: materiality.linkSolicitudToMaterialityOperationCore,
+    ensureAutomaticFacturamaDraftForSolicitud: async () => {},
+  }, 'functions/src/index.ts').createSolicitud;
+  const strings = { cleanText: x => String(x || '').trim(), cleanUpper: x => String(x || '').toUpperCase(), asRecord: x => x || {} };
+  const queueHandlers = extract(['reserveQueuedJob', 'enqueueIqCreationForSolicitud'], {
+    db, FieldValue, ...https, ...strings, crypto: require('node:crypto'), IQ_QUEUE_VERSION: 'local', IQ_PREVALIDATION_VERSION: 'local',
+    IQ_CREATE_ON_DEMAND_TASK: 'processIqCreateOnDemandTask', ...queue, safeLogActivity: async () => {}, safeErrorMessage: e => e.message,
+    prepareSolicitudForIqQueue: async ({solicitudId}) => {
+      const sol = (await db.doc(`solicitudes/${solicitudId}`).get()).data();
+      const docs = await db.collection('uploads').where('solicitudId', '==', solicitudId).where('active', '==', true).get();
+      assert.equal(docs.size, 1); const upload = docs.docs[0];
+      assert.equal(upload.data().status, 'READY');
+      assert.equal((await db.doc(`materialityOperations/${solicitudId}`).get()).data().ordenCompraUploadId, upload.id);
+      assert.equal(sol.createdByDisplayName, 'Synthetic Creator');
+      return { solicitudId, rootId: 'flow-root', solicitudFolio: sol.folio, profileId: 'flow-profile', profileAlias: 'local',
+        associatedName: 'Associate', clientName: 'Synthetic Client', companyName: 'Synthetic Company', iqClientId: '2',
+        fingerprint: upload.id, marker: solicitudId, targetDateIso: '2026-10-07', orderUploadId: upload.id,
+        orderStoragePath: upload.data().storagePath, orderFileName: 'synthetic.xlsx', amount: 98000, invoiceType: 'PUE', requestedBy: 'flow-user' };
+    },
+  }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+  const JSZip = functionsRequire('jszip'), zip = new JSZip();
+  zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CANTIDAD</t></is></c></row></sheetData></worksheet>');
+  const bytes = await zip.generateAsync({ type: 'nodebuffer' });
+  const stored = new Map(); let failUpload = false, failFinalize = false, failProjection = false, failUrl = false, failInitResponse = false;
+  const service = load('functions/src/modules/solicitudDocuments/service.ts', {
+    crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: (stage,id) => stamp(stage,id) },
+    'firebase-admin': { apps: admin.apps, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: path => ({ exists: async () => [stored.has(path)], download: async () => [stored.get(path)] }) }) }) },
+    jszip: { default: JSZip }, 'firebase-functions/v2/https': https,
+    '../../utils/logActivity': { logActivity: async () => {}, logActivityTx() {} },
+    './domain': functionsRequire('./lib/modules/solicitudDocuments/domain.js'), './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
+    '../iq/solicitudCreateQueueCallables': queueHandlers,
+    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async request => { if (failProjection) throw Error('controlled projection failure'); return materiality.linkSolicitudToMaterialityOperationCore(request); } },
+    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => {} },
+    '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
+  });
+  const upload = load('src/lib/uploadSolicitudDoc.ts', {
+    '@/lib/operationTiming': { traceDocumentOperation: stamp }, '@/lib/callableNames': { CALLABLES: { initSolicitudDocumentUpload: 'init', finalizeSolicitudDocumentUpload: 'finalize' } },
+    '@/lib/firebaseClient': { functions: {}, storage: {} }, '@/canonicos/materialidad': { MATERIALIDAD_CANONICAL_DOCUMENTS: [] },
+    'firebase/functions': { httpsCallable: (_, name) => async data => {
+      if (name === 'finalize' && failFinalize) throw Error('controlled finalize failure');
+      const result = await (name === 'init' ? service.initSolicitudDocumentUploadCore : service.finalizeSolicitudDocumentUploadCore)({ auth, data });
+      if(name === 'init' && failInitResponse) throw Error('controlled lost init response');
+      return { data: result };
+    } },
+    'firebase/storage': { ref: (_, path) => path, getDownloadURL: async () => { if(failUrl) throw Error('controlled URL failure'); return 'local-only'; },
+      uploadBytesResumable: (path) => ({ snapshot: {}, on: (_, progress, reject, done) => { if(failUpload) return reject(Error('controlled Storage failure')); stored.set(path, bytes); done(); } }) },
+  });
+  const http = require('node:http'); let httpPosts = 0;
+  const server = http.createServer(async (req, res) => { for await (const chunk of req) {} httpPosts++; res.writeHead(201); res.end('{"id":991}'); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const transport = extract(['postOnce','buildFormData'], {
+    readFile: async () => bytes, clean: strings.cleanText, operationTiming: (stage,id) => stamp(stage,id), authHeaders: async () => ({}),
+    fetchIq: (url, options) => { assert.equal(url.origin, origin); return fetch(url, options); },
+  }, 'functions/src/modules/iq/solicitudHttpCreateA53.ts');
+  const worker = extract(['acquireProfileLock','releaseProfileLock','markJobProcessing','processProfileJobs','processIqCreateOnDemandTask'], {
+    db, FieldValue, Timestamp, ...runtime, ...strings, crypto: require('node:crypto'), path: require('node:path'), os: require('node:os'),
+    PROFILE_LOCK_MS: 25*60*1000, MAX_JOBS_PER_PROFILE: 12, RETRYABLE_DELAY_MS: 600000,
+    IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local', onTaskDispatched: (_, run) => run,
+    decryptSecret: () => 'synthetic', normalizeErpUrl: () => origin, loadIqTimeZone: async () => 'UTC',
+    mkdtemp: async () => 'unused-local-fixture', rm: async () => {}, safeTemporaryFileName: x => x,
+    admin: { storage: () => ({ bucket: () => ({ file: path => ({ download: async () => { assert(stored.has(path)); } }) }) }) },
+    requireIqAssociatedName: x => { assert.equal(x,'Associate'); return x; }, safeErrorMessage: e => e.message,
+    runIqCreateInvoiceBatchHttpA53: async ({items}) => ({items: await Promise.all(items.map(async item => {
+      const result = await transport.postOnce({ apiOrigin: origin }, item, {clientId:2,companyId:3});
+      assert.equal(result.status, 201); return {key:item.key, iqId:'LOCAL-991', submitClicked:true};
+    }))}),
+    finalizeJobFromResult: async ({job,result}) => {
+      await job.ref.update({status:'CREATED',iqId:result.iqId});
+      const written = await db.doc(`solicitudes/${job.solicitudId}`).update({solicitudIqFolio:result.iqId,iqFolio:result.iqId,status:'CONCILIACION_PENDIENTE'});
+      stamp('firestore_iq_update_at',job.solicitudId,written.writeTime.toMillis());
+    }, publishSuperadminQueueSummary: async () => {},
+  }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+  try {
+    for (const mode of ['normal','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','master-off']) {
+      const file = {size:bytes.length,name:'synthetic.xlsx',arrayBuffer:async()=>Uint8Array.from(bytes).buffer};
+      let creates = 0, closed = false, error = '', id; const click = Date.now();
+      failInitResponse = mode === 'init-response-failure'; failUpload = mode === 'upload-failure'; failFinalize = mode === 'finalize-failure'; failProjection = mode === 'projection-failure'; failUrl = mode === 'url-failure';
+      const ctx = { beginOperationTiming:()=>sid=>{stamp('ui_released_at',sid);}, saving:{current:false},submission:{current:null},
+        formData:{monto:'98,000',tipoFactura:'PUE',clientId:'flow-client',companyId:'flow-company',operationTypeKey:'FACTURA_SUBTOTAL'},
+        isSolicitudFormComplete:true, facturaXmlFile:null,ordenCompraFile:file, facturaXmlParsed:null,ordenCompraParsed:{montoSolicitud:98000,tipoFactura:'PUE'},
+        selectedCompany:{despachoId:'flow-dispatch'},setIsSubmitting(){},setSaveError:v=>{error=v;},
+        createSolicitud:async data=>{creates++; const result=await create({auth,data});id=result.solicitudId;timing[id].ui_click_at=click;return result;},
+        uploadSolicitudDoc:upload.uploadSolicitudDoc,window:{dispatchEvent(){}},CustomEvent:class{},setOrdenCompraUploadPct(){},
+        onClose(){closed=true;},resetForm(){},alert(message){throw Error(message);},
+      };
+      const run = extract(['handleSave'],ctx,'src/components/NuevaSolicitudModal.tsx').handleSave;
+      const first=run({preventDefault(){}});if(mode==='double-click')await run({preventDefault(){}});await first;
+      if (mode.endsWith('failure') && mode!=='url-failure') {
+        assert.equal(closed,false);assert.match(error,/archivo pendiente/);assert.equal(ctx.submission.current.solicitudId,id);
+        assert.equal(tasks.has(`iq-solicitud-create-${id}`.toLowerCase()),false);
+        failInitResponse=failUpload=failFinalize=failProjection=false;await run({preventDefault(){}});
+      }
+      assert.equal(closed,true,error);assert.equal(creates,1);
+      const docs=await db.collection('uploads').where('solicitudId','==',id).get();assert.equal(docs.size,1);
+      const doc=docs.docs[0];assert.equal(doc.data().active,true);assert.equal(doc.data().version,1);
+      const projection=await db.doc(`materialityOperations/${id}`).get();assert.equal(projection.data().ordenCompraUploadId,doc.id);
+      await service.finalizeSolicitudDocumentUploadCore({auth,data:{uploadId:doc.id,storagePath:doc.data().storagePath}});
+      assert.equal((await doc.ref.get()).data().version,1);
+      assert((await db.doc(`materialityOperations/${id}`).get()).updateTime.isEqual(projection.updateTime));
+      const task=tasks.get(`iq-solicitud-create-${id}`.toLowerCase());assert(task);assert.equal(task.functionName,'processIqCreateOnDemandTask');
+      await db.doc('iqIntegrationConfigs/flow-root').update({enabled:mode!=='master-off'});
+      const beforePosts=httpPosts;const names=[[],[]];
+      const stops=names.map(values=>db.doc(`solicitudes/${id}`).onSnapshot(snap=>{values.push(snap.data().createdByDisplayName);if(snap.data().solicitudIqFolio)stamp('ui_reactive_update_at',id);}));
+      await Promise.all(Array.from({length:5},()=>worker.processIqCreateOnDemandTask({data:task.data})));
+      await worker.processIqCreateOnDemandTask({data:task.data});
+      assert.equal(httpPosts-beforePosts,mode==='master-off'?0:1);
+      await eventually(()=>names.every(values=>values.length>=1),'two source listeners');
+      assert(names.every(values=>values.every(name=>name==='Synthetic Creator')));stops.forEach(stop=>stop());
+      const t=timing[id];console.log('SOURCE_FLOW',JSON.stringify({mode,creates,uploads:docs.size,tasks:1,posts:httpPosts-beforePosts,timestamps:t,
+        PAY0_PERSIST_LATENCY:t.pay0_persisted_at-t.ui_click_at,DOCUMENT_UPLOAD_LATENCY:t.document_finalized_at-t.document_upload_started_at,
+        UI_LATENCY:t.ui_released_at-t.ui_click_at,IQ_DISPATCH_LATENCY:t.iq_dispatch_at-t.document_finalized_at,REACTIVE_LATENCY:t.ui_reactive_update_at-t.firestore_iq_update_at,END_TO_END:t.ui_reactive_update_at-t.ui_click_at,IQ_LATENCY:t.iq_response_at-t.iq_dispatch_at,END_TO_END_BACKEND:t.firestore_iq_update_at-t.pay0_persisted_at}));
+    }
+  } finally { await new Promise(resolve=>server.close(resolve)); }
+});
+
+
+test('historical creators remain readable without reviving disabled accounts or exposing another root', async () => {
+  const helper = functionsRequire('./lib/modules/sharedCallables/recordCreators.js');
+  await db.doc('users/history-actor').set({rootId:'history-root',displayName:'Historical Actor',userNumber:21,disabled:true,deleted:true});
+  await db.doc('users/history-owner').set({rootId:'history-root',displayName:'Owner',userNumber:22});
+  await db.doc('users/history-foreign').set({rootId:'foreign-root',displayName:'Forbidden',userNumber:23});
+  await db.doc('solicitudes/history-row').set({createdBy:'history-foreign'});
+  const docs = await db.collection('solicitudes').where('createdBy','==','history-foreign').get();
+  const {labels,creatorOptions} = await helper.resolveRecordCreators(db,{uid:'history-owner',rootId:'history-root',role:'superadmin'},docs.docs);
+  assert(!labels.has('history-foreign'));assert(!creatorOptions.some(p=>p.displayName==='Forbidden'));
+  const display = data=>helper.creatorDisplayFields(data,labels,'superadmin').createdByDisplayName;
+  assert.equal(display({createdBy:'history-actor'}),'Historical Actor');
+  assert.equal(display({createdBy:'missing',createdByDisplayName:'Durable Snapshot'}),'Durable Snapshot');
+  assert.equal(display({nUsuario:21}),'Historical Actor');
+  assert.equal(display({ownerId:'history-owner'}),'Owner');
+  assert.equal(display({createdByName:'Legacy Name'}),'Legacy Name');
+  assert.equal(display({createdBy:'unknown',operationalOwnerName:'Owner'}),null);
+  assert.equal(display({createdBy:'history-actor',operationalOwnerId:'history-owner',userNumber:22,delegateUid:'history-actor',delegateUserNumber:21}),'Historical Actor');
+  assert.equal((await db.doc('users/history-actor').get()).get('disabled'),true);
+  assert.throws(()=>helper.requestedRecordCreator('history-actor','operador'),/administraci/);
+  assert.equal((await helper.resolveRecordCreators(db,{uid:'history-actor',rootId:'history-root',role:'operador'},docs.docs)).creatorOptions.length,0);
+});
+
+
+test('delegation preserves canonical owner U and actor UD with authorized access', async () => {
+ const context = functionsRequire('./lib/modules/sequences/businessFolioContext.js');
+ const sequence = functionsRequire('./lib/modules/sequences/service.js');
+ await db.doc('users/delegation-owner').set({rootId:'delegation-root',userNumber:7});
+ await db.doc('users/delegation-actor').set({rootId:'delegation-root',userNumber:8});
+ await db.doc('clients/delegation-client').set({rootId:'delegation-root',createdBy:'delegation-owner',clientNumber:2,adminId:'another-admin'});
+ await db.doc('userClientAccess/delegation-actor/clients/delegation-client').set({active:true,permissions:{view:true,operate:true}});
+ const actual = await context.resolveCanonicalBusinessFolioContext({db,rootId:'delegation-root',clientId:'delegation-client',actorUid:'delegation-actor',actorRole:'operador'});
+ assert.equal(actual.ownerUid,'delegation-owner');assert.equal(actual.delegateUid,'delegation-actor');
+ assert.equal(sequence.buildCanonicalFolio('S',1,context.buildCanonicalBusinessFolioParts({...actual,companyNumber:3})),'S1C2U7E3UD8');
+ await db.doc('userClientAccess/delegation-actor/clients/delegation-client').update({active:false});
+ await assert.rejects(context.resolveCanonicalBusinessFolioContext({db,rootId:'delegation-root',clientId:'delegation-client',actorUid:'delegation-actor',actorRole:'operador'}),/No autorizado/);
+});
+
+test('a stale Solicitud worker cannot reclaim a completed or uncertain job after the profile lease changes', async () => {
+ const {markJobProcessing} = extract(['markJobProcessing'],{db,FieldValue,cleanUpper:x=>String(x||'').toUpperCase()},'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+ const ref=db.doc('iqCreateJobs/stale-source');
+ for(const status of ['CREATED','PROCESSING','PENDING_RECONCILIATION','OUTCOME_UNKNOWN']) {
+  await ref.set({status,attemptCount:1});
+  assert.equal(await markJobProcessing({ref,solicitudId:'stale-source',attemptCount:0}),null);
+  assert.equal((await ref.get()).get('status'),status);
+ }
+});
+
+
+test('listSolicitudes resolves historical names and retains production root, creator filter and pagination guards', async () => {
+ const helper=functionsRequire('./lib/modules/sharedCallables/recordCreators.js');
+ const guard=functionsRequire('./lib/utils/authGuard.js');
+ const https=functionsRequire('firebase-functions/v2/https');
+ const {listSolicitudes} = extract(['listSolicitudes','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/index.ts');
+ await db.doc('users/list-admin').set({rootId:'list-root',role:'superadmin',active:true});
+ await db.doc('users/list-creator').set({rootId:'list-root',displayName:'Listed Creator'});
+ for(const [id,rootId,createdBy,at] of [['first','list-root','list-creator',3000],['second','list-root','list-creator',2000],['excluded','different-root','list-creator',4000],['other','list-root','someone-else',5000]]) await db.doc(`solicitudes/list-${id}`).set({rootId,createdBy,createdAt:Timestamp.fromMillis(at)});
+ const request={auth:{uid:'list-admin'},data:{creatorUid:'list-creator',limit:1}};
+ const first=await listSolicitudes(request);
+ assert.equal(first.items.length,1);assert.equal(first.items[0].id,'list-first');assert.equal(first.items[0].createdByDisplayName,'Listed Creator');assert.equal(first.hasMore,true);
+ const second=await listSolicitudes({...request,data:{...request.data,cursorSeconds:first.nextCursor.seconds,cursorNanoseconds:first.nextCursor.nanoseconds,cursorId:first.nextCursor.id}});
+ assert.equal(second.items[0].id,'list-second');assert.equal(second.hasMore,false);
+ await db.doc('users/list-admin').update({disabled:true});
+ await assert.rejects(listSolicitudes(request));
 });

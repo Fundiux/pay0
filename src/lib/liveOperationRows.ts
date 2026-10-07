@@ -10,8 +10,9 @@ export function replaceOperationRow<T extends OperationRow>(
   if (!data) return rows.filter((row) => row.id !== id);
   const previous = rows[index];
   const next = { ...data, id } as T;
-  if (previous.createdBy === data.createdBy) {
-    for (const key of ["createdByDisplayName", "createdByUsername", "createdByName"]) {
+  const creatorKey = (row: OperationRow) => row.createdBy || row.actorUid || row.creatorId || row.ownerId || row.nUsuario;
+  if (creatorKey(previous) === creatorKey(data)) {
+    for (const key of ["createdByDisplayName", "createdByUsername", "createdByName", "creatorName", "createdUsername"]) {
       if (!(key in data) && key in previous) next[key as keyof T] = previous[key];
     }
   }

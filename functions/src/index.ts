@@ -1,3 +1,4 @@
+import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
 import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
@@ -477,6 +478,10 @@ export const createSolicitud = onCall(
         createdBy: uid,
         createdByDisplayName: String(caller.displayName || caller.name || caller.username || "").trim(),
         createdByUsername: String(caller.username || "").trim(),
+        createdByUserNumber: Number(caller.userNumber || caller.numeroUsuario || caller.sequenceNumber || 0) || null,
+        folioOwnerId: businessFolioContext.ownerUid,
+        delegateUid: businessFolioContext.delegateUid,
+        delegateUserNumber: businessFolioContext.delegateUserNumber,
         ownerId: operationalOwnerId,
         operationalOwnerId,
         operationalOwnerName,
@@ -2444,7 +2449,8 @@ export const listSolicitudes = onCall(
     });
 
     const rootId = String(me.rootId || uid);
-    const role = String(me.role || "").trim().toLowerCase();
+    const role = getUserRole(me);
+    const creatorUid = requestedRecordCreator(request.data?.creatorUid, role);
     const requestedLimit = Number(request.data?.limit || 100);
     const pageSize = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 100);
     const fromMillisRaw = Number(request.data?.fromMillis || 0);
@@ -2459,11 +2465,12 @@ export const listSolicitudes = onCall(
       throw new HttpsError("invalid-argument", "Rango temporal invalido.");
     }
 
-    let queryRef: FirebaseFirestore.Query = db.collection("solicitudes");
-    if (role === "superadmin") queryRef = queryRef.where("rootId", "==", rootId);
+    let queryRef: FirebaseFirestore.Query = db.collection("solicitudes").where("rootId", "==", rootId);
+    if (role === "superadmin") { /* Root scope is already enforced. */ }
     else if (role === "admin") queryRef = queryRef.where("adminId", "==", uid);
     else if (["operador", "operator"].includes(role)) queryRef = queryRef.where("createdBy", "==", uid);
     else throw new HttpsError("permission-denied", "Rol sin acceso a solicitudes.");
+    if (creatorUid) queryRef = queryRef.where("createdBy", "==", creatorUid);
 
     if (fromMillis > 0) queryRef = queryRef.where("createdAt", ">=", Timestamp.fromMillis(fromMillis));
     if (toMillis > 0) queryRef = queryRef.where("createdAt", "<=", Timestamp.fromMillis(toMillis));
@@ -2473,6 +2480,7 @@ export const listSolicitudes = onCall(
     }
     const snap = await queryRef.get();
     const docs = snap.docs.slice(0, pageSize);
+    const creators = await resolveRecordCreators(db, { uid, role, rootId }, docs);
     const last = docs[docs.length - 1];
     const createdAt: any = last?.get("createdAt");
     return {
@@ -2482,12 +2490,14 @@ export const listSolicitudes = onCall(
         return {
           id: entry.id,
           ...data,
+          ...creatorDisplayFields(data, creators.labels, role),
           createdAt: entryCreatedAt && typeof entryCreatedAt.seconds === "number"
             ? { seconds: entryCreatedAt.seconds, nanoseconds: entryCreatedAt.nanoseconds || 0 }
             : null,
         };
       }),
       hasMore: snap.docs.length > pageSize,
+      creatorOptions: creators.creatorOptions,
       nextCursor: last ? {
         seconds: Number(createdAt?.seconds || 0),
         nanoseconds: Number(createdAt?.nanoseconds || 0),
