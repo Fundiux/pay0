@@ -1,5 +1,58 @@
 # P0: despacho inmediato de Pagos y descubrimiento reactivo
 
+## Correccion minima del claim de intervalo (base `5c345bf`)
+
+P0 abierto. Sin deploy, operaciones reales ni cambios de arquitectura.
+
+El preflight encontro que enqueue y worker de Pagos consumian el intervalo
+usando `loadEnabledIqAutomationRoots`. La Task podia terminar normalmente sin
+entrar al core IQ. Las pruebas anteriores ocultaban ese efecto mediante un mock
+siempre habilitado; sus resultados no certificaban la integracion de este gate.
+
+Diff de produccion limitado a tres archivos:
+
+- `automationRuntime.ts`: extrae la seleccion existente a
+  `readEnabledIqAutomationRoots` (solo lectura). Conserva Master Switch,
+  habilitacion del flujo, normalizacion y evaluacion opcional de horario.
+  `loadEnabledIqAutomationRoots` llama a esa lectura y al mismo
+  `claimIqAutomationProcessIfDue` transaccional. No cambia el cuerpo del claim.
+- `pagoImmediateDispatch.ts`: enqueue usa la lectura sin claim.
+- `pagoDepositCallables.ts`: el worker automatico de Pagos usa la lectura sin
+  claim. Sus schedulers siguen usando `loadEnabledIqAutomationRoots`.
+
+No cambia la deduplicacion de Task, generacion, lease, fingerprint, write-once,
+proteccion de resultado incierto, backoff ni protecciones terminales.
+
+La suite usa ahora `automationRuntime.ts` y `operatingCalendar.ts` reales contra
+Firestore emulado, sin sustituir la habilitacion por una respuesta constante.
+Ejecuta el finalize real de documentos con Storage/usuario/auditoria simulados,
+helper de enqueue, entrega de Task simulada, worker real extraido de su modulo,
+core HTTP y adapters reales; transporte IQ simulado. La construccion del contexto
+IQ se sustituye por la llamada al core HTTP, como en la suite anterior.
+
+Evidencia obtenida:
+
+- Finalize -> enqueue -> Task -> worker -> core: **tasks=1, core=1, POST=1**.
+- Un claim previo del scheduler no bloquea el recorrido inmediato.
+- `updateTime` del documento de configuracion permanece identico tras finalize,
+  enqueue y worker: cero escrituras, incluido `lastClaimedAt`.
+- Scheduler: primer claim admitido, segundo dentro del intervalo rechazado,
+  siguiente al vencer 60 segundos admitido; timestamp actualizado correctamente.
+- Master OFF y flujo Pagos OFF: cero enqueue/core/POST y sin claim.
+- Cinco workers concurrentes: un POST. Replay: ningun POST adicional.
+- Fallo de contexto del worker: promesa rechazada (retryable), pago QUEUED,
+  sin POST ni claim; siguiente intento ejecuta un POST. Conserva tres intentos.
+- Respuesta IQ incierta: retryBlocked persiste incluso al vencer el lease.
+- Permanecen las pruebas de generacion obsoleta, ID write-once, dos sesiones,
+  reconexion con 150 altas por listado, scopes/reglas y cleanup.
+
+Verificacion: suite Firestore emulada **12/12**, suite reactividad **8/8**,
+TypeScript frontend, build Functions y politica de autorizacion PASS.
+Build frontend: PASS, cache limpia, 42 paginas generadas.
+SHA en la entrega; el diff exacto es `git show <SHA> --` sobre estos tres modulos,
+la suite `qa/scripts/iq-immediate-discovery.emulator.test.cjs` y este informe.
+Los resultados son locales; la certificacion real continua pendiente.
+
 ## Continuacion sobre `43496c5970b83334a20563200a79f8cbe52e8b1f`
 
 Rama: `fix/iq-latency-reactivity`. **P0 permanece abierto. Sin push ni deploy.**

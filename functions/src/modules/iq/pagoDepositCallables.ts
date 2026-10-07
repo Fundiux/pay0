@@ -24,7 +24,7 @@ import { evaluateIqCompanyDespachoGate } from "../paymentApplications/iqBusiness
 import { assertIqAuthorized } from "./authorization";
 import { assertAuthorized } from "../../utils/authGuard";
 
-import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { runPagoDepositHttpCreateFlow } from "./pagoDepositHttpCreateFlow";
 import {
   loginIqHttpDirect,
@@ -3725,7 +3725,7 @@ export const processIqPagoDepositAutomaticTask = onTaskDispatched(
     const snap = await db.collection("pagos").doc(pagoId).get();
     const row = asRecord(snap.data());
     if (!snap.exists || !matchesPagoGeneration(row, uploadId) || !shouldProcessPagoIqCreateQueueH4D62C(row)) return;
-    const enabled = await loadEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
+    const enabled = await readEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
     if (!enabled.has(cleanText(row.rootId))) return;
     const auth = await buildPagoIqSystemAuthH4D44(row);
     // No catch that downgrades the financial/IQ state on a duplicate or lock error.

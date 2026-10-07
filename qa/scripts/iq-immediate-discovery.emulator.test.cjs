@@ -49,10 +49,14 @@ const queue = load('functions/src/modules/iq/iqOnDemandTaskQueue.ts', {
     },
   }) }) },
 });
+const runtime = load('functions/src/modules/iq/automationRuntime.ts', {
+  'firebase-admin/firestore': functionsRequire('firebase-admin/firestore'),
+  './operatingCalendar': load('functions/src/modules/iq/operatingCalendar.ts'),
+});
 const immediate = load('functions/src/modules/iq/pagoImmediateDispatch.ts', {
   'node:crypto': require('node:crypto'), 'firebase-admin': admin,
   'firebase-admin/firestore': { FieldValue }, './iqOnDemandTaskQueue': queue,
-  './automationRuntime': { loadEnabledIqAutomationRoots: async () => new Set(['root']) },
+  './automationRuntime': runtime,
 });
 const adapters = functionsRequire('./lib/modules/iq/depositHttpCreateFirebaseAdapters.js');
 let posts = 0, transportMode = 'success';
@@ -87,7 +91,7 @@ async function runCore(pagoId, uploadId = 'receipt') {
     allowHttpPost: true, recovery: { pollingBackoffMs: [0], pageSize: 100, maxPages: 1 },
   });
 }
-let failContext = false;
+let failContext = false, coreExecutions = 0;
 const handlers = extract(['shouldProcessPagoIqCreateQueueH4D62C', 'markPagoIqAutoCreateErrorH4D62C',
   'dispatchQueuedPagoIqCreation', 'processIqPagoDepositAutomaticTask'], {
   db, FieldValue, asRecord: value => value || {}, cleanText: value => String(value || '').trim(),
@@ -96,10 +100,24 @@ const handlers = extract(['shouldProcessPagoIqCreateQueueH4D62C', 'markPagoIqAut
   isPagoIqTerminalLockedH4D58H: row => row.iqDepositTerminalLocked === true,
   ...immediate, IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local',
   onDocumentWritten: (options, run) => ({ options, run }), onTaskDispatched: (options, run) => ({ options, run }),
-  loadEnabledIqAutomationRoots: async () => new Set(['root']),
+  ...runtime,
   buildPagoIqSystemAuthH4D44: async () => { if (failContext) throw new Error('local transient context error'); return { rootId: 'root' }; },
-  createPagoIqDepositFromQueueCoreH4D62C: input => runCore(input.pagoId, input.expectedUploadId),
+  createPagoIqDepositFromQueueCoreH4D62C: input => { coreExecutions++; return runCore(input.pagoId, input.expectedUploadId); },
 });
+const documents = load('functions/src/modules/pagoDocuments/service.ts', {
+  'firebase-admin': { firestore: () => db, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [true] }) }) }) },
+  'firebase-admin/firestore': { FieldValue },
+  'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
+  '../../utils/auth': { requireAuthLike: () => 'test-user', getUser: async () => ({ role: 'superadmin', rootId: 'root' }),
+    getRole: user => user.role, getRootIdFromUser: user => user.rootId, getUsername: () => 'test-user' },
+  './domain': functionsRequire('./lib/modules/pagoDocuments/domain.js'),
+  '../../utils/logActivity': { logActivityTx() {}, logActivity() {} },
+  '../iq/pagoTelegramNotifications': { notifyIqPagoTelegramH4D59B() { throw Error('Unexpected notification'); } },
+  '../dispatches/domain': functionsRequire('./lib/modules/dispatches/domain.js'),
+  '../iq/pagoImmediateDispatch': immediate,
+});
+const configRef = db.doc('iqIntegrationConfigs/root');
+const gateInput = { process: 'pagoCreate', purpose: 'CREATION', respectWindow: false };
 async function seedPago(id, patch = {}) {
   await db.collection('pagos').doc(id).set({ rootId: 'root', adminId: 'admin', createdBy: 'operator',
     status: 'CONCILIACION_PENDIENTE', iqDepositCreationStatus: 'QUEUED',
@@ -108,11 +126,20 @@ async function seedPago(id, patch = {}) {
 before(async () => {
   env = await initializeTestEnvironment({ projectId, firestore: { host: '127.0.0.1', port: 8088,
     rules: fs.readFileSync('firestore.rules', 'utf8') } });
+  await configRef.set({ enabled: true, automation: { pagos: true }, intervalMinutes: { pagoCreate: 1 } });
 });
 after(async () => { await env?.cleanup(); await admin.app().delete(); });
 
 test('finalize plus durable event enqueue one immediate task; worker dispatches without scheduler', async () => {
-  await seedPago('immediate');
+  // An existing scheduler claim must neither suppress nor be changed by immediate work.
+  await configRef.update({ 'automationRuntime.pagoCreate.lastClaimedAt': Timestamp.now() });
+  const configBefore = await configRef.get();
+  await seedPago('immediate', { despachoId: 'iq-dispatch', iqDepositCreationStatus: 'READY' });
+  await db.doc('despachos/iq-dispatch').set({ active: true, automationMode: 'ERP', erpProvider: 'IQ' });
+  await db.doc('uploads/receipt').set({ rootId: 'root', entityType: 'pagos', pagoId: 'immediate',
+    documentType: 'COMPROBANTE_PAGO', storagePath: 'synthetic.pdf', active: false });
+  await documents.finalizePagoDocumentUploadCore({ data: { uploadId: 'receipt' } });
+  assert.equal((await db.doc('uploads/receipt').get()).data().status, 'READY');
   const row = (await db.doc('pagos/immediate').get()).data();
   const event = { params: { pagoId: 'immediate' }, data: { before: { data: () => ({}) }, after: { exists: true, data: () => row } } };
   await Promise.all([immediate.enqueueAutomaticPagoCreation('immediate', 'receipt'),
@@ -123,13 +150,55 @@ test('finalize plus durable event enqueue one immediate task; worker dispatches 
   const task = tasks.get(id);
   assert.equal(task.options.scheduleDelaySeconds, 0);
   assert.equal(immediate.isAutomaticPagoRecoveryDue((await db.doc('pagos/immediate').get()).data()), false);
-  const beforePosts = posts;
+  const beforePosts = posts, beforeCore = coreExecutions;
   await handlers.processIqPagoDepositAutomaticTask.run({ data: task.data });
+  assert.equal(coreExecutions - beforeCore, 1);
+  assert((await configRef.get()).updateTime.isEqual(configBefore.updateTime), "finalize/enqueue/worker must not write config or lastClaimedAt");
   assert.equal(posts - beforePosts, 1);
   assert.equal((await db.doc('pagos/immediate').get()).data().iqDepositId, '991');
   await handlers.processIqPagoDepositAutomaticTask.run({ data: task.data });
   await handlers.dispatchQueuedPagoIqCreation.run(event);
   assert.equal(posts - beforePosts, 1, 'replayed worker/event must not POST again');
+  assert.equal(coreExecutions - beforeCore, 1);
+  console.log('REGRESSION: tasks=1 core=1 POST=1 configWrites=0 replayPOST=0');
+});
+
+test('real scheduler helper claims once, excludes immediate repeat and admits the next interval', async () => {
+  await configRef.update({ automationRuntime: {} });
+  const now = new Date();
+  assert.equal((await runtime.loadEnabledIqAutomationRoots({ ...gateInput, now })).has('root'), true);
+  const claimed = await configRef.get();
+  assert.equal(claimed.data().automationRuntime.pagoCreate.lastClaimedAt.toMillis(), now.getTime());
+  assert.equal((await runtime.loadEnabledIqAutomationRoots({ ...gateInput, now })).has('root'), false, 'reproduces the former worker suppression');
+  assert.equal((await runtime.readEnabledIqAutomationRoots({ ...gateInput, now })).has('root'), true);
+  assert((await configRef.get()).updateTime.isEqual(claimed.updateTime));
+  assert.equal((await runtime.loadEnabledIqAutomationRoots({ ...gateInput, now: new Date(now.getTime() + 60000) })).has('root'), true);
+  assert.equal((await configRef.get()).data().automationRuntime.pagoCreate.lastClaimedAt.toMillis(), now.getTime() + 60000);
+});
+
+test('Master OFF and flow OFF prevent enqueue and worker POST without consuming an interval', async () => {
+  await seedPago('disabled');
+  for (const patch of [{ enabled: false, 'automation.pagos': true }, { enabled: true, 'automation.pagos': false }]) {
+    await configRef.update(patch);
+    const before = await configRef.get(), count = tasks.size, beforePosts = posts, beforeCore = coreExecutions;
+    await immediate.enqueueAutomaticPagoCreation('disabled', 'receipt');
+    await handlers.processIqPagoDepositAutomaticTask.run({ data: { pagoId: 'disabled', uploadId: 'receipt' } });
+    assert.equal(tasks.size, count); assert.equal(posts, beforePosts); assert.equal(coreExecutions, beforeCore);
+    assert.equal((await runtime.loadEnabledIqAutomationRoots(gateInput)).size, 0);
+    assert((await configRef.get()).updateTime.isEqual(before.updateTime));
+  }
+  await configRef.update({ enabled: true, 'automation.pagos': true });
+});
+
+test('five concurrent real workers produce one POST and replay cannot POST twice', async () => {
+  await seedPago('worker-race');
+  const before = await configRef.get(), beforePosts = posts;
+  const request = { data: { pagoId: 'worker-race', uploadId: 'receipt' } };
+  await Promise.allSettled(Array.from({ length: 5 }, () => handlers.processIqPagoDepositAutomaticTask.run(request)));
+  assert.equal(posts - beforePosts, 1);
+  await handlers.processIqPagoDepositAutomaticTask.run(request);
+  assert.equal(posts - beforePosts, 1);
+  assert((await configRef.get()).updateTime.isEqual(before.updateTime));
 });
 
 test('transient enqueue/context errors retain a retryable generation and fallback has a grace period', async () => {
@@ -144,10 +213,13 @@ test('transient enqueue/context errors retain a retryable generation and fallbac
   assert.equal(row.iqDepositAutoDispatchEnqueueFailedAt, undefined);
   assert.equal(immediate.isAutomaticPagoRecoveryDue(row, row.iqDepositAutoDispatchRequestedAt.toMillis() + 60_001), false);
   assert.equal(immediate.isAutomaticPagoRecoveryDue(row, row.iqDepositAutoDispatchRequestedAt.toMillis() + 45 * 60_000), true);
+  const configBeforeFailure = await configRef.get();
   failContext = true; const beforePosts = posts;
   await assert.rejects(handlers.processIqPagoDepositAutomaticTask.run({ data: { pagoId: 'retry', uploadId: 'receipt' } }));
   assert.equal(posts, beforePosts);
   assert.equal((await db.doc('pagos/retry').get()).data().iqDepositCreationStatus, 'QUEUED');
+  assert((await configRef.get()).updateTime.isEqual(configBeforeFailure.updateTime));
+  assert.equal(handlers.processIqPagoDepositAutomaticTask.options.retryConfig.maxAttempts, 3);
   failContext = false;
   await handlers.processIqPagoDepositAutomaticTask.run({ data: { pagoId: 'retry', uploadId: 'receipt' } });
   assert.equal(posts - beforePosts, 1);

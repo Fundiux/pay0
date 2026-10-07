@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
-import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { readEnabledIqAutomationRoots } from "./automationRuntime";
 
 export const AUTOMATIC_PAGO_TASK = "processIqPagoDepositAutomaticTask";
 // Covers the task's 30 minute retry window plus its final 9 minute execution.
@@ -28,7 +28,7 @@ export function isAutomaticPagoRecoveryDue(row: Record<string, any>, now = Date.
 /** Both finalize and the durable Firestore event use the same generation/task ID. */
 export async function enqueueAutomaticPagoCreation(pagoId: string, uploadId: string) {
   const ref = admin.firestore().collection("pagos").doc(pagoId);
-  const enabled = await loadEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
+  const enabled = await readEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
   const reserved = await admin.firestore().runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
     const row = snapshot.data() || {};
