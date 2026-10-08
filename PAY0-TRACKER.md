@@ -1,7 +1,36 @@
 ﻿# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-09-20
+Actualizado: 2026-10-08 (America/Mexico_City)
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
+
+## Corte vigente — 2026-10-08
+
+- Rama: `fix/iq-latency-reactivity`; base funcional inspeccionada: `f7dc2a6`. Actualización documental en la misma línea de trabajo; no requiere cambiar ni integrar ramas.
+- **P0 continúa abierto.** El [informe R6](docs/P0-IQ-LATENCY-REACTIVITY-2026-10-06.md) declaró su candidato listo para despliegue, sin desplegar ni certificar producción. Los commits posteriores y el trabajo sin commit requieren su propia validación.
+- Referencia de alcance y evidencia: [Estado maestro vigente](PAY0_ESTADO_MAESTRO.md#corte-vigente--2026-10-08). Este corte prevalece sobre las tablas y prioridades históricas de septiembre; ningún pendiente antiguo se cierra sin evidencia específica.
+
+| ID | Estado | Prioridad | Avance comprobable | Siguiente acción / criterio de cierre |
+| --- | --- | --- | --- | --- |
+| P0-IQ-REACT | IMPLEMENTADO / VALIDACIÓN | P0 | Despacho inmediato de Pagos, tareas automáticas independientes del intervalo del scheduler y filas reactivas con descubrimiento acotado (`43496c5` a `a12cb6d`). | Certificar Solicitud/Pago controlados: latencias correlacionadas, dos pestañas, recuperación y cero creaciones IQ duplicadas. Continúa IQ-02/SOL-02 sin cerrar esos IDs. |
+| P0-PARIDAD | IMPLEMENTADO / VALIDACIÓN | P0 | Identidad, comprobante, proyección, autorización, auditoría y frontend/SSR recuperados (`d630dc5`, `fe1f840`, `d1e51db`). | Revalidar candidato final y versiones efectivas antes de publicación; el PASS de R6 no cubre cambios posteriores. |
+| P0-DOCUMENTOS | IMPLEMENTADO / VALIDACIÓN | P0 | Documento fuente/creador conservados en reintentos; flujos documentales y eliminación segura separados (`789425b`, `c0b3ae4`, `d206a6c`). | Prueba integrada de OC, proyección, cotización, reintentos y eliminación bajo permisos/estados aplicables. |
+| P0-DESPACHO-UI | IMPLEMENTADO / VALIDACIÓN | P0 | `f7dc2a6`: liberación UI de Pago marcada tras éxito del comprobante; Solicitud despacha IQ antes del render de cotización, con OC/Materialidad confirmadas. | Ejecutar y registrar regresiones del candidato final, incluyendo `qa/scripts/p0-cross-flow-ui.test.cjs` y emulador IQ. |
+| FISCAL-GUARD-WIP | EN CURSO / SIN COMMIT | P1 | Cambios locales de elegibilidad de emisor Facturama, catálogos y exclusión de despachos externos del flujo fiscal. | Revisar alcance y pruebas de autorización/aislamiento antes de commit o deploy. No cierra FAC-01. |
+| REP-SAFETY-WIP | EN CURSO / SIN COMMIT | P1 | Cambios locales en complementos, política IQ, recuperación/proyección y nuevo módulo `automationSafety`. | Delimitar cambios, probar concurrencia, idempotencia, gates y recuperación; no activar acciones externas por esta actualización. |
+| COMISIONES-IQ | IMPLEMENTADO / VALIDACIÓN | P1 | Flujo gobernado, preflight IQ y vínculo de instrumentos (`1c60ec8`, `fe2b98b`); acciones rápidas Wallet/catálogos (`d6d78a0`). | Confirmar pruebas y alcance desplegado por flujo; no inferir publicación desde Git. |
+| HUGO-EVAL | EVALUACIÓN CONTROLADA | P1 | Núcleo/conector/trazas/contexto/aprendizaje versionados; [Fase 7](docs/HUGO_PHASE7.md) completa en su alcance controlado, torneo `NOT_READY`, Fase 4 `PARTIAL`. | Resolver gates documentados antes de comparar o cambiar modelo productivo. |
+| DOC-CONTINUIDAD | ACTUALIZADO | P2 | Estado maestro y tracker reconciliados al 2026-10-08, con separación de código versionado, WIP y evidencia histórica. | Mantener ambos al cerrar cada bloque; no sustituye el ZIP/checkpoint pendiente de DOC-02. |
+
+### Pruebas, publicación y límites del corte
+
+- **Evidencia histórica R6:** emulador IQ 23/23, reactividad 8/8, frontend 5/5, navegador 1/1, hosting local 1/1; builds frontend/Functions, TypeScript y autorización PASS. IQ/Tasks simulados; no certifica operación externa ni el árbol actual.
+- **Verificación de esta actualización:** revisión de Git/diff y `git diff --check` documental. No se ejecutan builds ni suites de negocio por un cambio exclusivamente documental.
+- **Producción:** sin consulta remota, deploy, escritura financiera ni acción IQ/Facturama/Telegram/WhatsApp en esta sesión. Publicación y certificación real siguen sujetas a autorización explícita.
+- **Árbol de trabajo:** se conservan cambios y archivos locales preexistentes de backend, QA, auditoría y arquitectura. No se agregan reportes, worktrees ni artefactos al commit documental.
+
+## Historial hasta el 2026-09-20
+
+Los estados, cifras y prioridades siguientes corresponden a sus fechas originales. Se conservan como evidencia histórica; no deben interpretarse como validación del candidato de octubre.
 
 ## ASSETS — dashboard interactivo, fechas operativas y acceso gobernado — 2026-09-20
 

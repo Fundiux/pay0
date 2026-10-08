@@ -1,5 +1,49 @@
 # PAY0 — Estado maestro vivo
 
+Actualizado: 2026-10-08 (America/Mexico_City).
+
+## Corte vigente — 2026-10-08
+
+**Estado:** P0 de latencia/reactividad IQ abierto; implementación versionada y trabajo local adicional pendiente de validación. No se certifica PAY0 como Production Ready. Rama inspeccionada: `fix/iq-latency-reactivity`; último commit funcional: `f7dc2a6`. Esta actualización es documental, basada en Git, código e informes locales; no consulta ni modifica producción.
+
+Este corte y el [tracker vigente](PAY0-TRACKER.md#corte-vigente--2026-10-08) prevalecen sobre los estados históricos de septiembre. Las revisiones, despliegues y pruebas anteriores conservan su fecha y alcance: no acreditan el árbol de trabajo actual. Los pendientes antiguos sin evidencia nueva permanecen por confirmar, no se cierran por inferencia.
+
+### Implementación versionada desde el corte anterior
+
+| Frente | Estado comprobable y evidencia | Falta para cierre |
+| --- | --- | --- |
+| P0 IQ / reactividad | `43496c5`, `5c345bf`, `118b40f` y `a12cb6d`: filas reactivas y descubrimiento acotado; despacho inmediato de Pagos; elegibilidad automática separada del claim de intervalo del scheduler. | Certificación controlada de Solicitud/Pago con timestamps, dos pestañas, reintentos y ausencia de POST duplicados. |
+| Compatibilidad productiva | `d630dc5`, `fe1f840`, `d1e51db`: recuperación de identidad IQ, guardas del comprobante, proyección documental, autorización, auditoría y frontend/SSR. Rutas recuperadas: `/cuenta`, `/administracion/recursos-corporativos`, `/hugo/evaluation` y `/manifest.webmanifest`. | Revalidar el candidato posterior a R6 antes de autorizar un despliegue delimitado. |
+| Solicitudes / documentos / creador | `789425b`, `c0b3ae4`, `d206a6c`: conservación del documento fuente y creador en reintentos, flujos de cotización/firma/constancia y separación de la eliminación segura de Solicitudes. | Validar el recorrido integrado con los cambios posteriores y su alcance de publicación. |
+| Último ajuste P0 | `f7dc2a6` (2026-10-08): marca de liberación UI sólo tras éxito del alta/comprobante; upload sin consulta adicional de download URL; despacho IQ de Solicitud después de confirmar OC/Materialidad y antes de generar cotización. | Registrar resultados del candidato final; la existencia de pruebas en el commit no equivale a que hayan pasado en esta sesión. |
+| Wallet / comisiones / cuentas IQ | `b37f3e9`, `9662218`, `d6d78a0`, `1c60ec8`, `fe2b98b`: edición/retiro de cuentas IQ, corrección de perfiles, acciones rápidas y flujo gobernado de distribución de comisiones con preflight IQ. | Verificación operativa por flujo; no se certifica despliegue por el mensaje del commit. |
+| Hugo | Núcleo conversacional, conector acotado, trazas, contexto/memoria y aprendizaje versionados. [Fase 6](docs/HUGO_PHASE6.md) y [Fase 7](docs/HUGO_PHASE7.md) documentan evaluación controlada; Fase 7 declara `NOT_READY` para torneo y Fase 4 `PARTIAL`. | Resolver gates de evaluación y limitaciones documentadas; recuperar la ruta de evaluación no demuestra un cambio de modelo productivo. |
+
+### Evidencia y límites
+
+El [informe P0 R6](docs/P0-IQ-LATENCY-REACTIVITY-2026-10-06.md) registra 23/23 pruebas de emulador, 8/8 de reactividad, 5/5 de frontend, 1/1 de navegador y 1/1 de hosting local; builds Functions/frontend (46 páginas), TypeScript y autorización PASS. Son resultados históricos de R6, con IQ/Tasks simulados y fixtures de navegador; no se extienden automáticamente a `f7dc2a6` ni a las modificaciones sin commit.
+
+R6 dejó `DEPLOY_READY = YES` para su candidato, con P0 abierto y micro-deploy pendiente de autorización. No se encontró en la evidencia revisada un cierre productivo posterior aplicable al candidato actual. La siguiente certificación debe comprobar versiones efectivas, latencias de UI/IQ/reactividad, integridad documental y no duplicación; cualquier deploy o acción real requiere autorización explícita.
+
+### Trabajo local preexistente, fuera del cierre documental
+
+El árbol ya contenía modificaciones sin commit en Facturama/catálogos, Control Center, Materialidad, documentos de Solicitud, política de acciones IQ y automatización/seguimiento/proveedores/documentos de complementos, además de dos scripts de QA. También estaban sin seguimiento `automationSafety/`, `facturama/issuerGuard.ts`, auditorías, propuestas de arquitectura y artefactos locales.
+
+El diff incorpora guardas de emisor Facturama y controles de solicitudes externas, entre otros cambios. Se registra como **trabajo en curso**, sin atribuirle build, prueba, deploy o aprobación. Las auditorías locales contienen propuestas y riesgos por investigar; sus inventarios no certifican el estado de producción. No se incorporan esos archivos ni sus artefactos a este commit documental.
+
+### Próximo punto de trabajo
+
+1. Delimitar y revisar el candidato P0 frente a los cambios locales preexistentes; completar verificaciones focalizadas y builds correspondientes antes de publicar.
+2. Actualizar el alcance de despliegue con los cambios posteriores a R6 y obtener autorización explícita para publicación y operaciones controladas.
+3. Certificar una Solicitud y un Pago con evidencia correlacionada, dos pestañas y recuperación sin duplicados; mantener P0 abierto hasta obtenerla.
+4. Continuar por separado la validación de guardas fiscales, complementos y seguridad de automatizaciones. Conservar los pendientes de integraciones sin cierre demostrado.
+
+**Sesión documental del 2026-10-08:** se reconciliaron estado maestro y tracker con historial Git e informes. Verificación aplicable: revisión del diff y `git diff --check`. No se ejecutaron builds, emuladores ni operaciones Firebase/IQ/Facturama/Telegram/WhatsApp; no hubo deploy, merge ni push. Los cambios locales ajenos se conservan.
+
+## Historial hasta el 2026-09-20
+
+Las secciones siguientes describen cortes anteriores. Sus etiquetas «actual», «pendiente» y «última sesión» deben leerse con la fecha original; el estado vigente está arriba.
+
 ### ASSETS interactivo, fechas y permisos por sistema (2026-09-20)
 
 ASSETS ya usa una identidad predominantemente grafito/gris con acentos naranja en todas sus pantallas; el verde queda reservado para utilidad o entradas. El Dashboard permite cambiar entre `Todo`, `Vehículos` y `Préstamos`: KPIs, rendimientos, actividad, posiciones y las dos gráficas se recalculan con el alcance elegido. La distribución de capital es horizontal y usa las etiquetas cortas `Vehículos`, `Préstamos+INT` y `Préstamos`; la utilidad generada se presenta en verde en ambas gráficas.
