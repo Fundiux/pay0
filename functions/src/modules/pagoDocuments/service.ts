@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { operationTiming } from "../../utils/operationTiming";
 import { systemNoteAuthor } from "../notes/domain";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -9,7 +10,6 @@ import { MAX_PAGO_DOCUMENT_SIZE_BYTES, buildPagoDocumentStoragePath, getPagoDocu
 import { logActivityTx, logActivity } from "../../utils/logActivity";
 import { notifyIqPagoTelegramH4D59B } from "../iq/pagoTelegramNotifications";
 import { canRunIqAutomationForDispatch } from "../dispatches/domain";
-import { enqueueAutomaticPagoCreation } from "../iq/pagoImmediateDispatch";
 
 const db = admin.firestore();
 
@@ -457,7 +457,6 @@ export async function finalizePagoDocumentUploadCore(
   }
 
   let finalVersion = 1;
-  let queuedForIq = false;
   let finalUploadId = uploadId;
   let terminalUnlockAppliedH4D64A6 = false;
   let terminalContextH4D64A6: PagoIqTerminalContextH4D64A6 = {
@@ -471,7 +470,6 @@ export async function finalizePagoDocumentUploadCore(
 
   await db.runTransaction(async (tx) => {
     terminalUnlockAppliedH4D64A6 = false;
-    queuedForIq = false;
     const pagoRefH4D58H = db.collection("pagos").doc(pagoId);
     const pagoSnapH4D58H = await tx.get(pagoRefH4D58H);
     const pagoH4D58H = pagoSnapH4D58H.exists ? ((pagoSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
@@ -631,7 +629,6 @@ export async function finalizePagoDocumentUploadCore(
     }) : {};
 
     if (Object.keys(iqAutoQueuePatchH4D62B).length > 0) {
-      queuedForIq = true;
       tx.set(pagoRefH4D58H, iqAutoQueuePatchH4D62B, { merge: true });
     }
     if (documentType === "COMPROBANTE_PAGO") {
@@ -667,11 +664,11 @@ export async function finalizePagoDocumentUploadCore(
     });
   });
 
-  if (queuedForIq) {
-    await enqueueAutomaticPagoCreation(pagoId, finalUploadId).catch(() => {
-      console.warn("PAGO_IQ_IMMEDIATE_ENQUEUE_DEFERRED", { pagoId });
-    });
-  }
+  operationTiming("document_finalized_at", pagoId);
+
+  // The durable QUEUED transition is dispatched by
+  // dispatchQueuedPagoIqCreation. Finalization returns after READY instead of
+  // waiting for Cloud Tasks; Eventarc retries and the scheduler remain backups.
 
   if (terminalUnlockAppliedH4D64A6) {
     const terminalFolio = terminalContextH4D64A6.iqId || "sin folio";

@@ -2139,6 +2139,7 @@ export default function PagosPage() {
     setComprobantePagoFile(null);
         setOpenNewPago(false);
       });
+      if (createdId) releaseTiming(createdId);
     } catch (e: any) {
       const createdPagoId = String(e?.pagoId || "").trim();
       setPageMsg(
@@ -2148,7 +2149,6 @@ export default function PagosPage() {
       );
     } finally {
       setSaving(false);
-      if (createdId) releaseTiming(createdId);
     }
   };
 

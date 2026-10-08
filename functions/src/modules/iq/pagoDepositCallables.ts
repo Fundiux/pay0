@@ -3753,6 +3753,7 @@ export const processIqPagoDepositAutomaticTask = onTaskDispatched(
   async (request) => {
     const { pagoId, uploadId } = asRecord(request.data);
     if (typeof pagoId !== "string" || typeof uploadId !== "string" || !pagoId || !uploadId) return;
+    operationTiming("worker_started_at", pagoId);
     const snap = await db.collection("pagos").doc(pagoId).get();
     const row = asRecord(snap.data());
     if (!snap.exists || !matchesPagoGeneration(row, uploadId) || !shouldProcessPagoIqCreateQueueH4D62C(row)) return;

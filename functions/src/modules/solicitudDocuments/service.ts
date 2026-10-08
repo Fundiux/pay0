@@ -717,6 +717,25 @@ logActivityTx(tx, db, {
     });
   });
 
+  const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
+  const generateOcQuotation = async () => {
+    if (!didFinalize || documentType !== "ORDEN_COMPRA") return;
+    await generateCotizacionForSolicitudCore({
+      auth: request.auth,
+      // Replacing the active OC must also replace its derivative quotation.
+      data: { solicitudId, replaceExisting: true },
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          cotizacionAutoGenerateStatus: "ERROR",
+          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
+          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+  };
+
   if (documentType === "ORDEN_COMPRA") {
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
@@ -733,22 +752,6 @@ logActivityTx(tx, db, {
       );
     });
 
-    if (didFinalize) await generateCotizacionForSolicitudCore({
-      auth: request.auth,
-      // The active OC is the source of truth. Replacing it must also replace
-      // the derivative quotation; returning an old active version leaves its
-      // SAT key, concept, amount, and receiver data stale.
-      data: { solicitudId, replaceExisting: true },
-    }).catch(async (error) => {
-      await solicitudRef.set(
-        {
-          cotizacionAutoGenerateStatus: "ERROR",
-          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
-          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
   }
 
   if (didFinalize && documentType === "FIRMA_AUTORIZADA_CLIENTE") {
@@ -784,14 +787,18 @@ logActivityTx(tx, db, {
       },
       { merge: true },
     );
+    // The OC is already READY. Preserve the derivative quotation on this
+    // failure path so an idempotent finalize retry does not silently lose it.
+    await generateOcQuotation();
     throw error;
   });
 
   if (["ORDEN_COMPRA", "FACTURA_XML"].includes(documentType) &&
       (materiality.materialityOperationId !== solicitudId || !materiality.completedTypes.includes(documentType))) {
+    await generateOcQuotation();
     throw new HttpsError("failed-precondition", "Materialidad no confirma el documento obligatorio.");
   }
-  const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
+  operationTiming("materiality_confirmed_at", solicitudId);
 
   if (documentType === "ORDEN_COMPRA") {
     await enqueueIqCreationForSolicitud({
@@ -808,6 +815,11 @@ logActivityTx(tx, db, {
         { merge: true },
       );
     });
+
+    // The OC and its Materialidad projection are already durable. The
+    // quotation still runs and refreshes Materialidad, but it must not hold
+    // the immediate IQ dispatch behind PDF rendering and Storage writes.
+    await generateOcQuotation();
 
   }
 

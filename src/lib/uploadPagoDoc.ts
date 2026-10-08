@@ -1,4 +1,4 @@
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { functions, storage } from "@/lib/firebaseClient";
 import { CALLABLES } from "@/lib/callableNames";
@@ -85,8 +85,6 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
     );
   });
 
-  const downloadURL = await getDownloadURL(task.snapshot.ref);
-
   const finalize = httpsCallable(functions, CALLABLES.finalizePagoDocumentUpload);
   const finalizeRes = await finalize({ uploadId, storagePath });
 
@@ -94,6 +92,5 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
     ...(finalizeRes.data as any),
     uploadId,
     storagePath,
-    downloadURL,
   };
 }

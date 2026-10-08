@@ -57,6 +57,7 @@ const immediate = load('functions/src/modules/iq/pagoImmediateDispatch.ts', {
   'node:crypto': require('node:crypto'), 'firebase-admin': admin,
   'firebase-admin/firestore': { FieldValue }, './iqOnDemandTaskQueue': queue,
   './automationRuntime': runtime,
+  '../../utils/operationTiming': { operationTiming() {} },
 });
 const adapters = functionsRequire('./lib/modules/iq/depositHttpCreateFirebaseAdapters.js');
 let posts = 0, transportMode = 'success';
@@ -72,6 +73,7 @@ const core = load('functions/src/modules/iq/depositHttpCreateCore.ts', {
     if (options.method === 'POST') {
       posts++;
       if (transportMode === 'unknown') throw new Error('simulated response lost after dispatch');
+      if (transportMode === 'slow') await new Promise(resolve => setTimeout(resolve, 700));
       return new Response(JSON.stringify({ message: 'success' }), { status: 201 });
     }
     return new Response(JSON.stringify(transportMode === 'unknown' ? [] : [iqRow]), { status: 200 });
@@ -101,6 +103,7 @@ const handlers = extract(['shouldProcessPagoIqCreateQueueH4D62C', 'markPagoIqAut
   ...immediate, IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local',
   onDocumentWritten: (options, run) => ({ options, run }), onTaskDispatched: (options, run) => ({ options, run }),
   ...runtime,
+  operationTiming() {},
   buildPagoIqSystemAuthH4D44: async () => { if (failContext) throw new Error('local transient context error'); return { rootId: 'root' }; },
   createPagoIqDepositFromQueueCoreH4D62C: input => { coreExecutions++; return runCore(input.pagoId, input.expectedUploadId); },
 });
@@ -108,6 +111,7 @@ const receiptBytes = Buffer.from('local synthetic receipt bytes');
 let documentAuditCalls = 0;
 const documents = load('functions/src/modules/pagoDocuments/service.ts', {
   'node:crypto': require('node:crypto'),
+  '../../utils/operationTiming': { operationTiming() {} },
   '../notes/domain': functionsRequire('./lib/modules/notes/domain.js'),
   'firebase-admin': { firestore: () => db, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [true], getMetadata: async () => [{ size: receiptBytes.length }], download: async () => [receiptBytes] }) }) }) },
   'firebase-admin/firestore': { FieldValue },
@@ -118,7 +122,6 @@ const documents = load('functions/src/modules/pagoDocuments/service.ts', {
   '../../utils/logActivity': { logActivityTx() { documentAuditCalls++; }, logActivity() {} },
   '../iq/pagoTelegramNotifications': { notifyIqPagoTelegramH4D59B() { throw Error('Unexpected notification'); } },
   '../dispatches/domain': functionsRequire('./lib/modules/dispatches/domain.js'),
-  '../iq/pagoImmediateDispatch': immediate,
 });
 const configRef = db.doc('iqIntegrationConfigs/root');
 const gateInput = { process: 'pagoCreate', purpose: 'CREATION', respectWindow: false };
@@ -142,12 +145,13 @@ test('finalize plus durable event enqueue one immediate task; worker dispatches 
   await db.doc('despachos/iq-dispatch').set({ active: true, automationMode: 'ERP', erpProvider: 'IQ' });
   await db.doc('uploads/receipt').set({ rootId: 'root', entityType: 'pagos', pagoId: 'immediate',
     documentType: 'COMPROBANTE_PAGO', storagePath: 'synthetic.pdf', status: 'PENDING', active: false });
+  const taskCountBeforeFinalize = tasks.size;
   await documents.finalizePagoDocumentUploadCore({ data: { uploadId: 'receipt' } });
   assert.equal((await db.doc('uploads/receipt').get()).data().status, 'READY');
+  assert.equal(tasks.size, taskCountBeforeFinalize, 'READY finalization returns without awaiting Task enqueue');
   const row = (await db.doc('pagos/immediate').get()).data();
   const event = { params: { pagoId: 'immediate' }, data: { before: { data: () => ({}) }, after: { exists: true, data: () => row } } };
-  await Promise.all([immediate.enqueueAutomaticPagoCreation('immediate', 'receipt'),
-    handlers.dispatchQueuedPagoIqCreation.run(event), handlers.dispatchQueuedPagoIqCreation.run(event)]);
+  await Promise.all([handlers.dispatchQueuedPagoIqCreation.run(event), handlers.dispatchQueuedPagoIqCreation.run(event)]);
   const id = immediate.automaticPagoTaskId('immediate', 'receipt');
   assert.notEqual(id, immediate.automaticPagoTaskId('Immediate', 'receipt'), 'case-sensitive document IDs do not collide');
   assert.equal(tasks.size, 1);
@@ -203,6 +207,24 @@ test('five concurrent real workers produce one POST and replay cannot POST twice
   await handlers.processIqPagoDepositAutomaticTask.run(request);
   assert.equal(posts - beforePosts, 1);
   assert((await configRef.get()).updateTime.isEqual(before.updateTime));
+});
+
+test('Pago Task remains independent of a cold worker and slow IQ response', async () => {
+  await seedPago('slow-payment');
+  const beforePosts = posts;
+  await immediate.enqueueAutomaticPagoCreation('slow-payment', 'receipt');
+  const task = tasks.get(immediate.automaticPagoTaskId('slow-payment', 'receipt'));
+  assert(task, 'the immediate Task is durable before the worker starts');
+  const queuedAt = Date.now();
+  await new Promise(resolve => setTimeout(resolve, 700)); // simulated cold start
+  transportMode = 'slow';
+  try {
+    const workerAt = Date.now();
+    assert(workerAt - queuedAt >= 700);
+    await handlers.processIqPagoDepositAutomaticTask.run({ data: task.data });
+    assert.equal(posts - beforePosts, 1);
+    assert.equal((await db.doc('pagos/slow-payment').get()).data().iqDepositId, '991');
+  } finally { transportMode = 'success'; }
 });
 
 test('transient enqueue/context errors retain a retryable generation and fallback has a grace period', async () => {
@@ -385,7 +407,7 @@ test('Solicitud AUTO task ignores a prior scheduler claim without changing confi
   await db.doc('iqCreateJobs/solicitud-gate').set({ rootId: 'root', status: 'QUEUED', profileId: 'test-profile' });
   let executions = 0, fail = false;
   const { processIqCreateOnDemandTask: task } = extract(['processIqCreateOnDemandTask'], {
-    db, ...runtime, IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local',
+    db, ...runtime, operationTiming() {}, IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local',
     onTaskDispatched: (options, run) => ({ options, run }), asRecord: value => value || {},
     cleanText: value => String(value || '').trim(), cleanUpper: value => String(value || '').toUpperCase(),
     processProfileJobs: async (profileId, jobs) => {
@@ -473,8 +495,14 @@ test('identified receipt rejects hash mismatch; successful finalize and replay p
   assert.equal((await db.doc(`uploads/${uploadId}`).get()).get('status'), 'PENDING');
   await db.doc(`pagoReceiptIdentifications/${identificationId}`).update({ contentSha256: hash });
   const first = await documents.finalizePagoDocumentUploadCore({ data: { uploadId } });
-  assert.equal(first.version, 1); assert.equal(tasks.size, count + 1);
-  const ready = await db.doc(`uploads/${uploadId}`).get(), pago = await db.doc(`pagos/${pagoId}`).get();
+  assert.equal(first.version, 1); assert.equal(tasks.size, count);
+  const ready = await db.doc(`uploads/${uploadId}`).get(), queuedPago = await db.doc(`pagos/${pagoId}`).get();
+  await handlers.dispatchQueuedPagoIqCreation.run({
+    params: { pagoId },
+    data: { before: { data: () => ({}) }, after: { exists: true, data: () => queuedPago.data() } },
+  });
+  assert.equal(tasks.size, count + 1);
+  const pago = await db.doc(`pagos/${pagoId}`).get();
   const config = await configRef.get(), auditAfter = documentAuditCalls;
   assert.equal(ready.get('sha256'), hash);
   assert.equal(pago.get('iqApplicable'), true);
@@ -633,7 +661,7 @@ test('Solicitud workers share the production profile lease; terminal replay and 
   let entered = new Promise(resolve => { enteredPost = resolve; });
   let gate = new Promise(resolve => { releasePost = resolve; });
   const worker = extract(['acquireProfileLock', 'releaseProfileLock', 'markJobProcessing', 'processProfileJobs', 'processIqCreateOnDemandTask'], {
-    db, FieldValue, Timestamp, ...runtime, crypto: require('node:crypto'), path: require('node:path'), os: require('node:os'),
+    db, FieldValue, Timestamp, ...runtime, operationTiming() {}, crypto: require('node:crypto'), path: require('node:path'), os: require('node:os'),
     PROFILE_LOCK_MS: 25 * 60 * 1000, MAX_JOBS_PER_PROFILE: 12, RETRYABLE_DELAY_MS: 600000,
     IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local', onTaskDispatched: (_options, run) => run,
     asRecord: value => value || {}, cleanText: value => String(value || '').trim(), cleanUpper: value => String(value || '').toUpperCase(),
@@ -680,7 +708,9 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   const zip = new JSZip();
   zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CANTIDAD</t></is></c></row></sheetData></worksheet>');
   const bytes = await zip.generateAsync({ type: 'nodebuffer' });
-  let present = false, enqueue = 0;
+  let present = false, enqueue = 0, projectionConfirmed = false, releaseQuotation;
+  const order = [];
+  const quotationGate = new Promise(resolve => { releaseQuotation = resolve; });
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
     crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: () => Date.now() },
     'firebase-admin': { apps: admin.apps, initializeApp: admin.initializeApp, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [present], download: async () => [bytes] }) }) }) },
@@ -690,11 +720,13 @@ test('Solicitud source finalization registers the original OC before enqueue, in
     './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
     '../iq/solicitudCreateQueueCallables': { enqueueIqCreationForSolicitud: async ({ solicitudId }) => {
       const docs = await db.collection('uploads').where('solicitudId', '==', solicitudId).where('active', '==', true).get();
-      assert.equal(docs.size, 1); assert.equal(docs.docs[0].data().status, 'READY'); enqueue++;
+      assert.equal(docs.size, 1); assert.equal(docs.docs[0].data().status, 'READY');
+      assert.equal(projectionConfirmed, true, 'Materialidad must confirm the OC before IQ');
+      order.push('enqueue'); enqueue++;
     } },
-    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async ({data}) => ({materialityOperationId:data.solicitudId, completedTypes:['ORDEN_COMPRA']}) },
+    '../materiality/service': { linkSolicitudToMaterialityOperationCore: async ({data}) => { projectionConfirmed = true; order.push('materiality'); return {materialityOperationId:data.solicitudId, completedTypes:['ORDEN_COMPRA']}; } },
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
-    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => {} },
+    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => { order.push('quotation'); await quotationGate; } },
     '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
   });
   await db.doc('users/source-actor').set({ role: 'superadmin', rootId: 'root', username: 'source-actor' });
@@ -706,7 +738,11 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   await assert.rejects(service.finalizeSolicitudDocumentUploadCore(request), /no existe en Storage/);
   assert.equal(enqueue, 0);
   present = true;
-  await service.finalizeSolicitudDocumentUploadCore(request);
+  const firstFinalization = service.finalizeSolicitudDocumentUploadCore(request);
+  await eventually(() => enqueue === 1 && order.includes('quotation'), 'OC dispatch precedes quotation');
+  assert.deepEqual(order.slice(0, 3), ['materiality', 'enqueue', 'quotation']);
+  releaseQuotation();
+  await firstFinalization;
   await service.finalizeSolicitudDocumentUploadCore(request);
   const active = await db.collection('uploads').where('solicitudId', '==', 'source-regression').where('active', '==', true).get();
   assert.equal(active.size, 1); assert.equal(active.docs[0].id, upload.uploadId);
@@ -756,6 +792,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
   const strings = { cleanText: x => String(x || '').trim(), cleanUpper: x => String(x || '').toUpperCase(), asRecord: x => x || {} };
   const queueHandlers = extract(['reserveQueuedJob', 'enqueueIqCreationForSolicitud'], {
     db, FieldValue, ...https, ...strings, crypto: require('node:crypto'), IQ_QUEUE_VERSION: 'local', IQ_PREVALIDATION_VERSION: 'local',
+    operationTiming: (stage,id) => stamp(stage,id),
     IQ_CREATE_ON_DEMAND_TASK: 'processIqCreateOnDemandTask', ...queue, safeLogActivity: async () => {}, safeErrorMessage: e => e.message,
     prepareSolicitudForIqQueue: async ({solicitudId}) => {
       const sol = (await db.doc(`solicitudes/${solicitudId}`).get()).data();
@@ -774,6 +811,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
   zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CANTIDAD</t></is></c></row></sheetData></worksheet>');
   const bytes = await zip.generateAsync({ type: 'nodebuffer' });
   const stored = new Map(); let failUpload = false, failFinalize = false, failProjection = false, failUrl = false, failInitResponse = false;
+  let quoteDelayMs = 0, responseDelayMs = 0;
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
     crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: (stage,id) => stamp(stage,id) },
     'firebase-admin': { apps: admin.apps, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: path => ({ exists: async () => [stored.has(path)], download: async () => [stored.get(path)] }) }) }) },
@@ -783,7 +821,10 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     '../iq/solicitudCreateQueueCallables': queueHandlers,
     '../materiality/service': { linkSolicitudToMaterialityOperationCore: async request => { if (failProjection) throw Error('controlled projection failure'); return materiality.linkSolicitudToMaterialityOperationCore(request); } },
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
-    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => {} },
+    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async ({ data }) => {
+      if (quoteDelayMs) await new Promise(resolve => setTimeout(resolve, quoteDelayMs));
+      stamp('quotation_finished_at', data.solicitudId);
+    } },
     '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
   });
   const upload = load('src/lib/uploadSolicitudDoc.ts', {
@@ -799,7 +840,9 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
       uploadBytesResumable: (path) => ({ snapshot: {}, on: (_, progress, reject, done) => { if(failUpload) return reject(Error('controlled Storage failure')); stored.set(path, bytes); done(); } }) },
   });
   const http = require('node:http'); let httpPosts = 0;
-  const server = http.createServer(async (req, res) => { for await (const chunk of req) {} httpPosts++; res.writeHead(201); res.end('{"id":991}'); });
+  const server = http.createServer(async (req, res) => { for await (const chunk of req) {} httpPosts++;
+    if (responseDelayMs) await new Promise(resolve => setTimeout(resolve, responseDelayMs));
+    res.writeHead(201); res.end('{"id":991}'); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const transport = extract(['postOnce','buildFormData'], {
@@ -808,6 +851,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
   }, 'functions/src/modules/iq/solicitudHttpCreateA53.ts');
   const worker = extract(['acquireProfileLock','releaseProfileLock','markJobProcessing','processProfileJobs','processIqCreateOnDemandTask'], {
     db, FieldValue, Timestamp, ...runtime, ...strings, crypto: require('node:crypto'), path: require('node:path'), os: require('node:os'),
+    operationTiming: (stage,id) => stamp(stage,id),
     PROFILE_LOCK_MS: 25*60*1000, MAX_JOBS_PER_PROFILE: 12, RETRYABLE_DELAY_MS: 600000,
     IQ_CREDENTIALS_KEY: 'local', TELEGRAM_BOT_TOKEN: 'local', onTaskDispatched: (_, run) => run,
     decryptSecret: () => 'synthetic', normalizeErpUrl: () => origin, loadIqTimeZone: async () => 'UTC',
@@ -825,10 +869,11 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     }, publishSuperadminQueueSummary: async () => {},
   }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
   try {
-    for (const mode of ['normal','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','five-workers','master-off']) {
+    for (const mode of ['normal','slow-quotation','slow-iq','cold-worker','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','five-workers','master-off']) {
       const file = {size:bytes.length,name:'synthetic.xlsx',arrayBuffer:async()=>Uint8Array.from(bytes).buffer};
       let creates = 0, closed = false, error = '', id; const click = Date.now();
       failInitResponse = mode === 'init-response-failure'; failUpload = mode === 'upload-failure'; failFinalize = mode === 'finalize-failure'; failProjection = mode === 'projection-failure'; failUrl = mode === 'url-failure';
+      quoteDelayMs = mode === 'slow-quotation' ? 700 : 0; responseDelayMs = mode === 'slow-iq' ? 700 : 0;
       const ctx = { sourceCompanyWarning:"", sourceCompanyConfirmed:false, beginOperationTiming:()=>sid=>{stamp('ui_released_at',sid);}, saving:{current:false},submission:{current:null},
         formData:{monto:'98,000',tipoFactura:'PUE',clientId:'flow-client',companyId:'flow-company',operationTypeKey:'FACTURA_SUBTOTAL'},
         isSolicitudFormComplete:true, facturaXmlFile:null,ordenCompraFile:file, facturaXmlParsed:null,ordenCompraParsed:{montoSolicitud:98000,tipoFactura:'PUE'},
@@ -852,8 +897,15 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
       assert.equal((await doc.ref.get()).data().version,1);
       assert((await db.doc(`materialityOperations/${id}`).get()).updateTime.isEqual(projection.updateTime));
       const task=tasks.get(`iq-solicitud-create-${id}`.toLowerCase());assert(task);assert.equal(task.functionName,'processIqCreateOnDemandTask');
+      if (mode !== 'projection-failure')
+        assert(timing[id].task_enqueued_at <= timing[id].quotation_finished_at, 'IQ Task precedes derivative quotation completion');
+      else
+        assert(timing[id].quotation_finished_at <= timing[id].task_enqueued_at, 'projection failure retains the quotation but never dispatches before retry');
+      assert(timing[id].ui_released_at >= timing[id].quotation_finished_at, 'the existing Solicitud response still waits for quotation');
       await db.doc('iqIntegrationConfigs/flow-root').update({enabled:mode!=='master-off'});
+      if (mode === 'cold-worker') await new Promise(resolve => setTimeout(resolve, 700));
       stamp('harness_worker_started_at',id);
+      assert(timing[id].ui_released_at <= timing[id].harness_worker_started_at, 'UI is released before worker and IQ');
       const beforePosts=httpPosts;const names=[[],[]];
       const stops=names.map(values=>db.doc(`solicitudes/${id}`).onSnapshot(snap=>{values.push(snap.data().createdByDisplayName);if(snap.data().solicitudIqFolio)stamp('ui_reactive_update_at',id);}));
       await Promise.all(Array.from({length:mode==='five-workers'?5:1},()=>worker.processIqCreateOnDemandTask({data:task.data})));
@@ -991,7 +1043,7 @@ test('deletion preserves history, cancels pending dependencies and is idempotent
  const snapshot=await db.doc('solicitudes/delete-docs').get();await deletion()(req);assert((await snapshot.ref.get()).updateTime.isEqual(snapshot.updateTime));
  await assert.rejects(deletion()({...req,data:{solicitudId:'delete-docs',ocultar:false}}));
  let external=0;
- const worker=extract(['processIqCreateOnDemandTask'],{db,onTaskDispatched:(_,run)=>run,IQ_CREDENTIALS_KEY:'local',TELEGRAM_BOT_TOKEN:'local',asRecord:x=>x||{},cleanText:x=>String(x||''),cleanUpper:x=>String(x||'').toUpperCase(),...runtime,processProfileJobs:async()=>{external++;}},'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
+ const worker=extract(['processIqCreateOnDemandTask'],{db,onTaskDispatched:(_,run)=>run,IQ_CREDENTIALS_KEY:'local',TELEGRAM_BOT_TOKEN:'local',operationTiming(){},asRecord:x=>x||{},cleanText:x=>String(x||''),cleanUpper:x=>String(x||'').toUpperCase(),...runtime,processProfileJobs:async()=>{external++;}},'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
  await worker.processIqCreateOnDemandTask({data:{jobId:'delete-docs',source:'AUTO'}});assert.equal(external,0);
 });
 

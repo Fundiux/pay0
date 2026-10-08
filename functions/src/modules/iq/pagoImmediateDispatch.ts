@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 import { readEnabledIqAutomationRoots } from "./automationRuntime";
+import { operationTiming } from "../../utils/operationTiming";
 
 export const AUTOMATIC_PAGO_TASK = "processIqPagoDepositAutomaticTask";
 // Covers the task's 30 minute retry window plus its final 9 minute execution.
@@ -25,7 +26,7 @@ export function isAutomaticPagoRecoveryDue(row: Record<string, any>, now = Date.
     : !queuedAt || now - queuedAt >= 60_000;
 }
 
-/** Both finalize and the durable Firestore event use the same generation/task ID. */
+/** The durable Firestore event uses a deterministic generation/task ID. */
 export async function enqueueAutomaticPagoCreation(pagoId: string, uploadId: string) {
   const ref = admin.firestore().collection("pagos").doc(pagoId);
   const enabled = await readEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
@@ -53,6 +54,7 @@ export async function enqueueAutomaticPagoCreation(pagoId: string, uploadId: str
       functionName: AUTOMATIC_PAGO_TASK, taskId: automaticPagoTaskId(pagoId, uploadId),
       data: { pagoId, uploadId }, scheduleDelaySeconds: 0, dispatchDeadlineSeconds: 540,
     });
+    operationTiming("task_enqueued_at", pagoId);
     await admin.firestore().runTransaction(async (tx) => {
       const row = (await tx.get(ref)).data() || {};
       if (matchesPagoGeneration(row, uploadId) && row.iqDepositAutoDispatchEnqueueFailedAt) {

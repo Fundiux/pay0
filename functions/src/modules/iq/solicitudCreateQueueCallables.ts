@@ -1165,6 +1165,7 @@ export async function enqueueIqCreationForSolicitud(input: {
       source: input.source || "AUTO",
       batchId: input.batchId,
     });
+    operationTiming("iq_job_queued_at", input.solicitudId);
 
     await safeLogActivity({
       event: reservation.reused ? "IQ_SOLICITUD_COLA_REUTILIZADA" : "IQ_SOLICITUD_ENCOLADA",
@@ -1207,6 +1208,7 @@ export async function enqueueIqCreationForSolicitud(input: {
         dispatchDeadlineSeconds: 540,
       });
       taskId = task.taskId;
+      operationTiming("task_enqueued_at", input.solicitudId);
     } catch (error) {
       taskEnqueueError = safeErrorMessage(error);
       // La cola programada conserva el trabajo como respaldo cuando Cloud Tasks
@@ -1274,6 +1276,7 @@ export const processIqCreateOnDemandTask = onTaskDispatched(
     const data = asRecord(request.data);
     const jobId = cleanText(data.jobId);
     if (!jobId) return;
+    operationTiming("worker_started_at", jobId);
 
     const snap = await db.collection("iqCreateJobs").doc(jobId).get();
     if (!snap.exists) return;
