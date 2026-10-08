@@ -9,6 +9,7 @@ import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallabl
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 
@@ -549,7 +550,7 @@ export async function finalizeSolicitudDocumentUploadCore(request: any) {
     throw new HttpsError("failed-precondition", "Upload sin solicitudId.");
   }
 
-  await loadSolicitudOrThrow({
+  const { solicitud } = await loadSolicitudOrThrow({
     solicitudId,
     uid,
     user,
@@ -736,7 +737,7 @@ logActivityTx(tx, db, {
     });
   };
 
-  if (documentType === "ORDEN_COMPRA") {
+  if (documentType === "ORDEN_COMPRA" && belongsToPay0Dispatch(rootId, solicitud.despachoId)) {
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
       solicitudId,
@@ -874,12 +875,13 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     ocFiscalMetadataSource: "ORDEN_COMPRA_XLSX",
     ocFiscalMetadataUploadId: activeOc.docs[0].id,
     ocFiscalMetadataUpdatedAt: FieldValue.serverTimestamp(),
-    facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC",
+    ...(belongsToPay0Dispatch(rootId, solicitud.despachoId) ? { facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC" } : {}),
     cotizacionAutoGenerateStatus: "REPROCESSING_ACTIVE_OC",
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  if (belongsToPay0Dispatch(rootId, solicitud.despachoId))
+    await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
   const quote = await generateCotizacionForSolicitudCore({ auth: request.auth, data: { solicitudId, replaceExisting: true } });
   await linkSolicitudToMaterialityOperationCore({ auth: request.auth, data: { solicitudId } });
   await logActivity({
@@ -894,7 +896,7 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     referenceId: solicitudId,
     referenceFolio: solicitud.folio || solicitudId,
     referenceType: "solicitudDocument",
-    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron Facturacion y Cotizacion.`,
+    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron ${belongsToPay0Dispatch(rootId, solicitud.despachoId) ? "Facturacion y Cotizacion" : "Cotizacion y Materialidad"}.`,
     createdBy: uid,
     extra: { source: "docs", activeOcUploadId: activeOc.docs[0].id, productCode: metadata.productCode, unitCode: metadata.unitCode, quotationUploadId: (quote as any).uploadId || null },
   });

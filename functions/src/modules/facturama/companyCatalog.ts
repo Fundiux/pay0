@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { HttpsError } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { lookupGlobalSatConcept } from "./satGlobalCatalog";
 import { getCanonicalCatalogAttestation } from "./canonicalCatalogAttestations";
+import { assertPay0Issuer } from "./issuerGuard";
 
 const REQUIRED_HEADERS = [
   "CLAVE_SAT",
@@ -27,6 +28,9 @@ const ALLOWED_STATUS = new Set(["AUTORIZADO", "CONDICIONADO", "REVISIÓN"]);
 const ACTIVE_STATUS = "ACTIVE";
 const MAX_CATALOG_BYTES = 1024 * 1024;
 const MAX_CATALOG_ROWS = 500;
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 
 export type CompanyCatalogEntry = {
   productCode: string;
@@ -45,13 +49,6 @@ export type CompanyCatalogEntry = {
 
 function text(value: unknown, max = 1000): string {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
-}
-
-function isOwnInvoiceIssuerCompany(company: any): boolean {
-  const rfc = text(company?.rfc, 13).toUpperCase();
-  return company?.isOwnCompany === true || company?.ownedByRoot === true || company?.pay0OwnCompany === true ||
-    text(company?.ownership || company?.companyOwnership || company?.companyType).toUpperCase() === "PROPIA" ||
-    rfc === "TRO230717L64";
 }
 
 function normalizedHeader(value: unknown): string {
@@ -93,7 +90,7 @@ function readCellValue(cellXml: string, sharedStrings: string[]): string {
 }
 
 export async function parseCompanyInvoiceCatalogWorkbook(buffer: Buffer): Promise<CompanyCatalogEntry[]> {
-    const zip = await JSZip.loadAsync(buffer);
+    const zip = await getJsZip().loadAsync(buffer);
     const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
     const sharedStrings = [...sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((match) => xmlText(match[1]));
     const sheetNames = Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
@@ -178,12 +175,8 @@ function decodeBase64(value: unknown): Buffer {
 }
 
 async function getOwnCompanyOrThrow(companyId: string, rootId: string) {
-  const snap = await db.doc(`companies/${companyId}`).get();
-  if (!snap.exists) throw new HttpsError("not-found", "Empresa emisora no encontrada.");
-  const company: any = snap.data() || {};
-  if (text(company.rootId, 128) !== rootId || company.active === false) throw new HttpsError("permission-denied", "Empresa fuera de tu alcance o inactiva.");
-  if (!isOwnInvoiceIssuerCompany(company)) throw new HttpsError("failed-precondition", "Solo las empresas propias pueden tener catálogo emisor CFDI.");
-  return { snap, company };
+  const issuer = await assertPay0Issuer({ db, rootId, companyId, requireCsd: false });
+  return { company: issuer.company };
 }
 
 export async function importCompanyInvoiceCatalogCore(request: any) {

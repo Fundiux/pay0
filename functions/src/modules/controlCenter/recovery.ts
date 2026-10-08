@@ -7,6 +7,7 @@ import { db } from "../sharedCallables/helpers";
 import { logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 
 export const RECOVERY_FIELDS = {
   MATERIALITY: "materialitySyncStatus",
@@ -21,6 +22,7 @@ const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 // original actor's current scope and each domain service's authorization.
 export async function enqueueRecovery(solicitudId: string, row: any, kind: RecoveryKind) {
   if (!row.rootId || !row.createdBy) return;
+  if (kind === "DRAFT" && !belongsToPay0Dispatch(row.rootId, row.despachoId)) return;
   const generation = String(row.ocFiscalMetadataUploadId || "initial");
   const ref = db.collection("operationRecoveryJobs").doc(hash(`${row.rootId}:${solicitudId}:${kind}:${generation}`));
   await db.runTransaction(async tx => {
@@ -78,6 +80,7 @@ export async function executeRecovery(job: any) {
   }
   const row = source.data()!;
   if (["CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO"].includes(row.status) || row.isDeleted) return;
+  if (job.kind === "DRAFT" && !belongsToPay0Dispatch(job.rootId, row.despachoId)) return;
   const field = RECOVERY_FIELDS[job.kind as RecoveryKind];
   if (!field) throw new Error("RECOVERY_KIND_INVALID");
   if (row[field] !== "ERROR") return;

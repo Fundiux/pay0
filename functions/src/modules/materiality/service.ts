@@ -10,7 +10,7 @@ import {
   getMaterialityDocumentLabel,
   normalizeMaterialityDocumentType,
 } from "./domain";
-import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 
 const db = getFirestore();
 
@@ -407,16 +407,12 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
     throw new HttpsError("not-found", "Solicitud no encontrada.");
   }
 
-  let solicitud = solicitudSnap.data() || {};
+  const solicitud = solicitudSnap.data() || {};
   assertSameRoot(solicitud, rootId, "Solicitud");
   if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") {
     const prior = (await db.doc(`materialityOperations/${solicitudId}`).get()).data() || {};
     return {ok:true,materialityOperationId:solicitudId,materialityClientCompanyId:prior.materialityClientCompanyId || "",status:prior.status || "INCOMPLETE",completedTypes:prior.completedTypes || [],missingTypes:prior.missingTypes || [],sourceDeleted:true};
   }
-
-  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
-  const refreshedSolicitudSnap = await db.collection("solicitudes").doc(solicitudId).get();
-  solicitud = refreshedSolicitudSnap.data() || solicitud;
 
   const clienteId = cleanText(solicitud?.clienteId || solicitud?.clientId);
   const companyId = cleanText(solicitud?.companyId);
@@ -854,13 +850,15 @@ async function projectMaterialityOperation(input: { rootId: string; uid: string;
     })).filter((upload: any) => upload.id && upload.storagePath);
 
 
+    const ownFiscal = belongsToPay0Dispatch(rootId, company.despachoId) && solicitud.despachoId === company.despachoId;
     const projectionDigest = createHash("sha256").update(JSON.stringify({
       revision: 2, rootId, clienteId, clienteNombre, companyId, companyName, solicitudId,
       folio: solicitud.folio || solicitudId, monto: toNumber(solicitud.monto), moneda: solicitud.moneda || "MXN",
       concepto: solicitud.concepto || solicitud.comentario || solicitud.folio || solicitudId,
       solicitudStatus: solicitud.status || "", operationStatus, contractId, documentRefs, missingTypes,
-      facturamaInvoiceId: solicitud.facturamaInvoiceId || null,
-      fiscalValidationStatus: solicitud.fiscalValidationStatus || null, fiscalValidationReason: solicitud.fiscalValidationReason || null,
+      facturamaInvoiceId: ownFiscal ? solicitud.facturamaInvoiceId || null : null,
+      fiscalValidationStatus: ownFiscal ? solicitud.fiscalValidationStatus || null : null,
+      fiscalValidationReason: ownFiscal ? solicitud.fiscalValidationReason || null : null,
     })).digest("hex");
 
     const result = { ok: true, materialityOperationId: solicitudId, materialityClientCompanyId,
@@ -900,9 +898,9 @@ async function projectMaterialityOperation(input: { rootId: string; uid: string;
       presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
       facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
       facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
-      facturamaInvoiceId: cleanText(solicitud?.facturamaInvoiceId) || null,
-      fiscalValidationStatus: cleanText(solicitud?.fiscalValidationStatus) || null,
-      fiscalValidationReason: cleanText(solicitud?.fiscalValidationReason) || null,
+      facturamaInvoiceId: ownFiscal ? cleanText(solicitud?.facturamaInvoiceId) || null : null,
+      fiscalValidationStatus: ownFiscal ? cleanText(solicitud?.fiscalValidationStatus) || null : null,
+      fiscalValidationReason: ownFiscal ? cleanText(solicitud?.fiscalValidationReason) || null : null,
       comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
       comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
       comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,

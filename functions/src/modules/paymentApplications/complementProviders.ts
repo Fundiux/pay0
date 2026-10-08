@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
-import JSZip from "jszip";
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
+import type JSZip from "jszip";
 import { createHash } from "crypto";
 import { defineSecret } from "firebase-functions/params";
 import { db } from "../sharedCallables/helpers";
@@ -12,6 +13,12 @@ import { saveComplementDocuments, validateRep } from "./complementDocuments";
 import { inspectIqComplementGate, type IqComplementAction } from "./complementGates";
 import { readIqRepDepositFields } from "./iqRepDepositFields";
 import { sanitizeIqOperationalError } from "./iqOperationalError";
+import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "../iq/originIdentity";
+import { assertPay0Issuer, PAY0_DISPATCH_ID } from "../facturama/issuerGuard";
+
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME"), PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
 export const COMPLEMENT_SECRETS = [IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY, USERNAME, PASSWORD];
@@ -21,6 +28,25 @@ async function requireGate(job: any, action: IqComplementAction) {
   if (!decision.allowed) throw Error(decision.reason);
 }
 export async function iqSession(job: any, action: IqComplementAction = "REQUEST") {
+  if (text(job.originIqProfileId)) {
+    const identity = await resolveEffectiveIqIdentity({
+      movement: job,
+      rootId: job.rootId,
+      authorizedActorUid: "SYSTEM",
+      encryptionSecret: IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY.value(),
+      includePassword: true,
+    });
+    assertIqIdentityInvariant(identity);
+    await requireGate(job, action);
+    const session = await loginIqHttpDirect({
+      apiOrigin: IQ_ORIGIN,
+      credentials: identity.credentialProfile,
+      requiredPermissions: "NONE",
+    });
+    for (const permission of action === "REQUEST" ? ["create", "view"] : ["view"])
+      if (!session.permissions.some(p => p.entity === "deposits/complement" && p.action === permission)) throw Error("REP_IQ_PERMISSION_REQUIRED");
+    return session;
+  }
   const user = (await db.doc(`users/${job.actorUid}`).get()).data();
   if (!user || text(user.rootId || job.actorUid) !== job.rootId || user.active === false || user.disabled === true) throw Error("REP_ACTOR_INVALID");
   const role = getUserRole(user);
@@ -145,7 +171,7 @@ async function boundedDownload(initial: string, job?: any) {
 }
 export async function validateIqRepAttachmentDownload(url: string, source: any, job: any) {
   const archive = await boundedDownload(url, job);
-  const zip = await JSZip.loadAsync(archive);
+  const zip = await getJsZip().loadAsync(archive);
   const files = Object.values(zip.files).filter(file => !file.dir);
   if (files.length > 30 || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000)
     throw Error("REP_ZIP_LIMIT");
@@ -167,7 +193,7 @@ export async function validateIqRepAttachmentDownload(url: string, source: any, 
     xmlBytes: match.xml.length, pdfBytes: match.pdf.length, validated: true };
 }
 export async function importIqComplement(url: string, sources: any[], job?: any) {
-  const zip = await JSZip.loadAsync(await boundedDownload(url, job));
+  const zip = await getJsZip().loadAsync(await boundedDownload(url, job));
   const files = Object.values(zip.files).filter(file => !file.dir);
   if (files.length > 30 || files.some(file => Number((file as any)._data?.uncompressedSize || 0) > 10_000_000) || files.reduce((n, file) => n + Number((file as any)._data?.uncompressedSize || 0), 0) > 20_000_000) throw Error("REP_ZIP_LIMIT");
   const xmlFiles = files.filter(file => /\.xml$/i.test(file.name)), result = [];
@@ -194,6 +220,8 @@ async function facturama(path: string, init: RequestInit = {}) {
   return response.json();
 }
 export async function prepareFacturamaComplement(job: any, source: any, app: any, solicitud: any, pago: any) {
+  if (solicitud.despachoId !== PAY0_DISPATCH_ID || solicitud.rootId !== job.rootId) throw Error("REP_FACTURAMA_EXTERNAL_DISPATCH");
+  await assertPay0Issuer({ db, rootId: job.rootId, companyId: text(solicitud.companyId) });
   const invoice = (await db.doc(`facturamaInvoices/${text(solicitud.facturamaInvoiceId)}`).get()).data();
   if (!invoice || invoice.rootId !== job.rootId || invoice.status !== "PRODUCTION_ISSUED" || invoice.sourceSolicitudId !== source.solicitudId || invoice.companyId !== solicitud.companyId || invoice.uuid !== source.invoiceUuid) throw Error("REP_FACTURAMA_SOURCE_INVALID");
   const company = (await db.doc(`companies/${solicitud.companyId}`).get()).data();

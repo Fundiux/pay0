@@ -11,7 +11,11 @@ export function validateRep(xml: Buffer, source: any) {
   const uuid = xmlAttribute(stamp, "UUID").toUpperCase();
   if (xmlAttribute(top, "TipoDeComprobante") !== "P" || !/^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$/.test(uuid)) throw Error("REP_NOT_STAMPED_PAYMENT");
   const matches = xmlTags(data, "DoctoRelacionado").filter(tag => xmlAttribute(tag, "IdDocumento").toUpperCase() === source.invoiceUuid.toUpperCase() && Number(xmlAttribute(tag, "NumParcialidad")) === source.installment);
-  if (matches.length !== 1 || cents(xmlAttribute(matches[0], "ImpPagado")) !== source.amountMinor || cents(xmlAttribute(matches[0], "ImpSaldoAnt")) !== cents(source.balanceBefore) || cents(xmlAttribute(matches[0], "ImpSaldoInsoluto")) !== cents(source.balanceAfter)) throw Error("REP_APPLICATION_MISMATCH");
+  const tolerance = source.legacyRoundingToleranceMinor === 1 ? 1 : 0;
+  const close = (actual: number, expected: number) => Math.abs(actual - expected) <= tolerance;
+  if (matches.length !== 1 || !close(cents(xmlAttribute(matches[0], "ImpPagado")), source.amountMinor) ||
+      !close(cents(xmlAttribute(matches[0], "ImpSaldoAnt")), cents(source.balanceBefore)) ||
+      !close(cents(xmlAttribute(matches[0], "ImpSaldoInsoluto")), cents(source.balanceAfter))) throw Error("REP_APPLICATION_MISMATCH");
   if (source.currency && xmlAttribute(matches[0], "MonedaDR") !== source.currency) throw Error("REP_DOCUMENT_CURRENCY_MISMATCH");
   return uuid;
 }

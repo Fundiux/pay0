@@ -41,6 +41,7 @@ import { normalizeClientAccessPermissions } from "./modules/clientDelegations/ac
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
+import { belongsToPay0Dispatch } from "./modules/facturama/issuerGuard";
 import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
@@ -617,7 +618,7 @@ export const createSolicitud = onCall(
       ),
     );
 
-    postCreateTasks.push(
+    if (belongsToPay0Dispatch(rootId, companyDespachoId)) postCreateTasks.push(
       ensureAutomaticFacturamaDraftForSolicitud({
         auth: request.auth,
         solicitudId: solicitudRef.id,

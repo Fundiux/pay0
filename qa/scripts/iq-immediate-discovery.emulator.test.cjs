@@ -544,7 +544,6 @@ test('restored transport protection blocks external actions in isolated environm
 
 // Production R5 dependencies: projection only; external Facturama work is isolated.
 test('production Materialidad keeps REP XML/PDF per application and partiality; digest and concurrent replay write once', async () => {
-  let draftCalls = 0;
   const materiality = load('functions/src/modules/materiality/service.ts', {
     crypto: require('node:crypto'),
     'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
@@ -552,7 +551,7 @@ test('production Materialidad keeps REP XML/PDF per application and partiality; 
     './domain': functionsRequire('./lib/modules/materiality/domain.js'),
     '../clientDelegations/access': functionsRequire('./lib/modules/clientDelegations/access.js'),
     '../../utils/authGuard': functionsRequire('./lib/utils/authGuard.js'),
-    '../facturama/service': { async ensureAutomaticFacturamaDraftForSolicitud() { draftCalls++; } },
+    '../facturama/issuerGuard': functionsRequire('./lib/modules/facturama/issuerGuard.js'),
   });
   const rootId = 'projection-root', solicitudId = 'projection-sol', pagoId = 'projection-pay';
   await Promise.all([
@@ -596,7 +595,115 @@ test('production Materialidad keeps REP XML/PDF per application and partiality; 
   assert.notEqual(reversed.projectionDigest, before.data().projectionDigest);
   await db.doc('companies/projection-company').update({ rootId: 'other-root' });
   await assert.rejects(materiality.linkSolicitudToMaterialityOperationCore(request), { code: 'permission-denied' });
-  assert.equal(draftCalls, 8); // Same existing pre-projection call; no provider is invoked by this test.
+  assert.equal((await db.collection('facturamaInvoices').where('sourceSolicitudId', '==', solicitudId).get()).size, 0);
+});
+
+test('Facturama is limited to canonical PAY0 own issuers; external IQ sources create no fiscal draft', async () => {
+  const fiscal = functionsRequire('./lib/modules/facturama/issuerGuard.js');
+  const rootId = fiscal.PAY0_ROOT_ID, ownId = fiscal.TROSTRE_COMPANY_ID;
+  const own = { rootId, despachoId: fiscal.PAY0_DISPATCH_ID, active: true, rfc: fiscal.TROSTRE_RFC, nombre: 'TROSTRE' };
+  const dispatch = { rootId, active: true, nombre: 'PAY0' };
+  const config = { rootId, companyId: ownId, csdRfc: fiscal.TROSTRE_RFC, csdRegistrationStatus: 'REGISTERED_API_MULTIISSUER' };
+  const eligible = () => ({ rootId, companyId: ownId, company: own, dispatch, config });
+  assert.equal(fiscal.fiscalIssuerReason(eligible()), null);
+  for (const [change, reason] of [
+    [{ company: { ...own, despachoId: 'external-dispatch', isOwnCompany: true, facturamaEnabled: true } }, 'NOT_PAY0_OWN_DISPATCH'],
+    [{ company: { ...own, rfc: 'OTHER010101AAA' } }, 'OWN_COMPANY_NOT_AUTHORIZED'],
+    [{ company: { ...own, facturamaEnabled: false } }, 'OWN_CAPABILITY_DISABLED'],
+    [{ company: { ...own, isOwnCompany: false } }, 'OWN_CAPABILITY_DISABLED'],
+    [{ company: { ...own, active: false } }, 'NOT_PAY0_OWN_DISPATCH'],
+    [{ company: { ...own, deletedAt: '2026-10-08' } }, 'NOT_PAY0_OWN_DISPATCH'],
+    [{ dispatch: { ...dispatch, rootId: 'other-root' } }, 'NOT_PAY0_OWN_DISPATCH'],
+    [{ dispatch: { ...dispatch, isDeleted: true } }, 'NOT_PAY0_OWN_DISPATCH'],
+    [{ config: { ...config, csdRfc: 'OTHER010101AAA' } }, 'CSD_RFC_MISMATCH_OR_UNREGISTERED'],
+    [{ config: { ...config, csdRegistrationStatus: 'PENDING' } }, 'CSD_RFC_MISMATCH_OR_UNREGISTERED'],
+    [{ rootId: 'other-root' }, 'NOT_PAY0_OWN_DISPATCH'],
+  ]) assert.equal(fiscal.fiscalIssuerReason({ ...eligible(), ...change }), reason);
+  assert.equal(fiscal.ownIssuerIdentityReason({ rootId, companyId: 'future-own', company: { ...own, rfc: 'FUT010101AAA', isOwnCompany: true, facturamaEnabled: true }, dispatch }), null);
+  assert.equal(fiscal.ownIssuerIdentityReason({ rootId, companyId: 'future-own', company: { ...own, rfc: 'PE\u00d1010101AAA', isOwnCompany: true, facturamaEnabled: true }, dispatch }), null);
+  assert.equal(fiscal.ownIssuerIdentityReason({ rootId, companyId: 'future-own', company: { ...own, rfc: 'FUT010101AAA', isOwnCompany: true }, dispatch }), 'OWN_COMPANY_NOT_AUTHORIZED');
+  await Promise.all([
+    db.doc(`despachos/${fiscal.PAY0_DISPATCH_ID}`).set(dispatch),
+    db.doc(`companies/${ownId}`).set(own),
+    db.doc(`facturamaIssuerConfigs/${ownId}`).set(config),
+    db.doc('users/fiscal-actor').set({ rootId, role: 'superadmin', active: true }),
+    db.doc('clients/fiscal-client').set({ rootId, nombre: 'Synthetic receiver', rfc: 'ABC010101AAA' }),
+    db.doc('despachos/external-dispatch').set({ rootId, active: true, erpProvider: 'IQ' }),
+    db.doc('companies/fiscal-external').set({ rootId, despachoId: 'external-dispatch', active: true, rfc: fiscal.TROSTRE_RFC, isOwnCompany: true, facturamaEnabled: true }),
+    db.doc('solicitudes/fiscal-external').set({ rootId, despachoId: 'external-dispatch', companyId: 'fiscal-external', clienteId: 'fiscal-client', facturamaInvoiceId: 'forged-marker', monto: 98000 }),
+    db.doc('solicitudes/fiscal-own').set({ rootId, despachoId: fiscal.PAY0_DISPATCH_ID, companyId: ownId, clienteId: 'fiscal-client', monto: 98000, folio: 'LOCAL-OWN' }),
+  ]);
+  await assert.rejects(fiscal.assertPay0Issuer({ db, rootId, companyId: 'fiscal-external' }), { code: 'failed-precondition' });
+  const externalGuard = await fiscal.loadPay0IssuerGuard({
+    db: { doc(path) {
+      if (path.startsWith('facturamaIssuerConfigs/')) throw Error('External issuer must not read CSD config');
+      return db.doc(path);
+    } },
+    rootId, companyId: 'fiscal-external',
+  });
+  assert.equal(externalGuard.allowed, false);
+  assert.equal(externalGuard.reason, 'NOT_PAY0_OWN_DISPATCH');
+  const draft = functionsRequire('./lib/modules/facturama/service.js').ensureAutomaticFacturamaDraftForSolicitud;
+  const auth = { uid: 'fiscal-actor' };
+  const external = await draft({ auth, solicitudId: 'fiscal-external', source: 'OC_UPLOAD' });
+  assert.equal(external.reason, 'EXTERNAL_DISPATCH');
+  assert.equal((await db.collection('facturamaInvoices').where('sourceSolicitudId', '==', 'fiscal-external').get()).size, 0);
+  assert.equal((await db.doc('solicitudes/fiscal-external').get()).get('facturamaAutoDraftStatus'), undefined);
+  await functionsRequire('./lib/modules/materiality/service.js').refreshMaterialityProjectionFromSource({ rootId, solicitudId: 'fiscal-external' });
+  assert.equal((await db.doc('materialityOperations/fiscal-external').get()).get('facturamaInvoiceId'), null);
+  await functionsRequire('./lib/modules/controlCenter/recovery.js').enqueueRecovery('fiscal-external', { rootId, createdBy: 'fiscal-actor', despachoId: 'external-dispatch' }, 'DRAFT');
+  assert.equal((await db.collection('operationRecoveryJobs').where('solicitudId', '==', 'fiscal-external').get()).size, 0);
+  await db.doc('facturamaInvoices/fiscal-forged').set({ rootId, companyId: 'fiscal-external', sourceSolicitudId: 'fiscal-external', fiscalValidation: { status: 'VALID' }, status: 'AUTO_DRAFT_FISCAL_VALIDATED' });
+  const fiscalCallables = load('functions/src/modules/facturama/sandboxCallables.ts', {
+    crypto: require('node:crypto'), 'firebase-admin': admin,
+    'firebase-admin/firestore': { FieldValue },
+    'firebase-functions/params': { defineSecret: () => ({ value: () => { throw Error('No Facturama credential access expected'); } }) },
+    'firebase-functions/v2/https': { HttpsError: functionsRequire('firebase-functions/v2/https').HttpsError, onCall: (_, handler) => handler },
+    '../../utils/authGuard': { assertAuthorized() {} },
+    '../sharedCallables/helpers': { db, getMyUser: async () => ({ rootId, role: 'superadmin' }), requireAuth: request => request.auth.uid },
+    '../solicitudDocuments/lifecycle': { finalizeSolicitudDocumentVersionTx() { throw Error('No document creation expected'); } },
+    './issuerGuard': fiscal, '../../utils/logActivity': { logActivityBatch() { throw Error('No fiscal activity expected'); } },
+  });
+  for (const operation of [
+    () => fiscalCallables.issueFacturamaSandboxInvoice({ auth, data: { invoiceId: 'fiscal-forged' } }),
+    () => fiscalCallables.issueFacturamaProductionInvoice({ auth, data: { invoiceId: 'fiscal-forged', confirmation: 'EMITIR_CFDI_REAL' } }),
+    () => fiscalCallables.saveFacturamaIssuerConfig({ auth, data: { companyId: 'fiscal-external' } }),
+    () => fiscalCallables.getFacturamaProductionCsdStatus({ auth, data: { companyId: 'fiscal-external' } }),
+  ]) await assert.rejects(operation(), { code: 'failed-precondition' });
+  await db.doc('facturamaInvoices/fiscal-own-forged').set({ rootId, companyId: ownId, sourceSolicitudId: 'fiscal-external', fiscalValidation: { status: 'VALID' }, environment: 'SANDBOX', status: 'SANDBOX_ISSUED', facturamaCfdiId: 'existing-cfdi' });
+  await assert.rejects(fiscalCallables.issueFacturamaSandboxInvoice({ auth, data: { invoiceId: 'fiscal-own-forged' } }), { code: 'permission-denied' });
+  assert.equal((await db.doc('facturamaInvoices/fiscal-forged').get()).get('status'), 'AUTO_DRAFT_FISCAL_VALIDATED');
+  const providerFor = extract(['providerFor'], { belongsToPay0Dispatch: fiscal.belongsToPay0Dispatch, clean: x => String(x || '').trim() }, 'functions/src/modules/paymentApplications/complementInventory.ts').providerFor;
+  assert.equal(providerFor({ rootId, despachoId: 'external-dispatch', facturamaEnvironment: 'PRODUCTION', facturamaInvoiceId: 'fiscal-forged', iqFolio: 'IQ-1' }), 'IQ');
+  await Promise.all([
+    db.doc('solicitudes/fiscal-external').update({ facturamaEnvironment: 'PRODUCTION', iqFolio: 'IQ-1', facturaUuid: 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE', tipoFactura: 'PPD' }),
+    db.doc('pagos/fiscal-pay').set({ rootId, status: 'CREADO', companyId: 'fiscal-external', clienteId: 'fiscal-client', moneda: 'MXN' }),
+    db.doc('pagoAplicaciones/fiscal-app').set({ rootId, solicitudId: 'fiscal-external', pagoId: 'fiscal-pay', status: 'APLICADA', invoiceType: 'PPD', montoAplicado: 100, numeroParcialidad: 1, saldoAnterior: 100, saldoInsoluto: 0 }),
+  ]);
+  await functionsRequire('./lib/modules/paymentApplications/complementFollowup.js').reconcilePaymentComplement('fiscal-app');
+  const requestId = functionsRequire('./lib/modules/paymentApplications/complementFollowup.js').complementRequestId(rootId, 'fiscal-app');
+  assert.equal((await db.doc(`paymentComplementRequests/${requestId}`).get()).get('provider'), 'IQ');
+  await Promise.all([
+    db.doc(`paymentComplementRequests/${requestId}`).update({ provider: 'FACTURAMA', automationJobId: 'fiscal-forged-job' }),
+    db.doc(`paymentComplementConfigs/${rootId}`).set({ rootId, facturamaEnabled: true }),
+    db.doc('paymentComplementJobs/fiscal-forged-job').set({ rootId, provider: 'FACTURAMA', applicationId: 'fiscal-app', status: 'QUEUED' }),
+  ]);
+  let fiscalProviderCalls = 0;
+  await functionsRequire('./lib/modules/paymentApplications/complementAutomation.js').executeComplement('fiscal-forged-job', {
+    async prepareFacturamaComplement() { fiscalProviderCalls++; throw Error('Provider must not be called'); },
+  });
+  assert.equal(fiscalProviderCalls, 0);
+  assert.equal((await db.doc('paymentComplementJobs/fiscal-forged-job').get()).get('status'), 'BLOCKED');
+  const gates = functionsRequire('./lib/modules/paymentApplications/complementGates.js');
+  assert.equal(gates.isIqRepRequestHardEnabled({ iqRequestEnabled: false }), false);
+  assert.equal(gates.isIqRepRequestHardEnabled({}), false);
+  assert.equal(gates.isIqRepRequestHardEnabled({ iqRequestEnabled: true }), true);
+  assert.equal(typeof functionsRequire('./lib/modules/paymentApplications/complementAutomation.js').adoptImportedIqComplementById, 'function');
+  assert.equal(typeof functionsRequire('./lib/modules/automationSafety/runtime.js').SafetyRuntime, 'function');
+  const first = await draft({ auth, solicitudId: 'fiscal-own', source: 'OC_UPLOAD' });
+  const replay = await draft({ auth, solicitudId: 'fiscal-own', source: 'OC_UPLOAD' });
+  assert.equal(first.ok, true); assert.equal(replay.ok, true);
+  assert.equal((await db.collection('facturamaInvoices').where('sourceSolicitudId', '==', 'fiscal-own').get()).size, 1);
 });
 
 test('production upload wrappers enforce uploadDocs and reject disabled/deleted/deletedAt before domain execution', async () => {
@@ -726,6 +833,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
     } },
     '../materiality/service': { linkSolicitudToMaterialityOperationCore: async ({data}) => { projectionConfirmed = true; order.push('materiality'); return {materialityOperationId:data.solicitudId, completedTypes:['ORDEN_COMPRA']}; } },
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+    '../facturama/issuerGuard': functionsRequire('./lib/modules/facturama/issuerGuard.js'),
     '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => { order.push('quotation'); await quotationGate; } },
     '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
   });
@@ -760,6 +868,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
 });
 
 test('integrated Solicitud creation, source retries, Materialidad, immediate Task, HTTP and two listeners', async () => {
+  let facturamaCalls = 0;
   const https = functionsRequire('firebase-functions/v2/https');
   const guard = functionsRequire('./lib/utils/authGuard.js');
   const sequence = functionsRequire('./lib/modules/sequences/service.js');
@@ -771,7 +880,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     './domain': functionsRequire('./lib/modules/materiality/domain.js'),
     '../clientDelegations/access': functionsRequire('./lib/modules/clientDelegations/access.js'),
     '../../utils/authGuard': functionsRequire('./lib/utils/authGuard.js'),
-    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+    '../facturama/issuerGuard': functionsRequire('./lib/modules/facturama/issuerGuard.js'),
   });
   await Promise.all([
     db.doc('users/flow-user').set({ rootId: 'flow-root', role: 'superadmin', active: true, username: 'creator', displayName: 'Synthetic Creator', userNumber: 9 }),
@@ -787,7 +896,8 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     operationTiming: (stage,id) => stamp(stage,id), resolveClientAssignedCostRate: async () => 6,
     logActivity: async () => {}, recordOperationalMetric: async () => {},
     linkSolicitudToMaterialityOperationCore: materiality.linkSolicitudToMaterialityOperationCore,
-    ensureAutomaticFacturamaDraftForSolicitud: async () => {},
+    ensureAutomaticFacturamaDraftForSolicitud: async () => { facturamaCalls++; },
+    belongsToPay0Dispatch: functionsRequire('./lib/modules/facturama/issuerGuard.js').belongsToPay0Dispatch,
   }, 'functions/src/index.ts').createSolicitud;
   const strings = { cleanText: x => String(x || '').trim(), cleanUpper: x => String(x || '').toUpperCase(), asRecord: x => x || {} };
   const queueHandlers = extract(['reserveQueuedJob', 'enqueueIqCreationForSolicitud'], {
@@ -820,7 +930,8 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     './domain': functionsRequire('./lib/modules/solicitudDocuments/domain.js'), './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
     '../iq/solicitudCreateQueueCallables': queueHandlers,
     '../materiality/service': { linkSolicitudToMaterialityOperationCore: async request => { if (failProjection) throw Error('controlled projection failure'); return materiality.linkSolicitudToMaterialityOperationCore(request); } },
-    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
+    '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => { facturamaCalls++; } },
+    '../facturama/issuerGuard': functionsRequire('./lib/modules/facturama/issuerGuard.js'),
     '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async ({ data }) => {
       if (quoteDelayMs) await new Promise(resolve => setTimeout(resolve, quoteDelayMs));
       stamp('quotation_finished_at', data.solicitudId);
@@ -911,6 +1022,8 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
       await Promise.all(Array.from({length:mode==='five-workers'?5:1},()=>worker.processIqCreateOnDemandTask({data:task.data})));
       await worker.processIqCreateOnDemandTask({data:task.data});
       assert.equal(httpPosts-beforePosts,mode==='master-off'?0:1);
+      assert.equal(facturamaCalls, 0, 'External IQ Solicitud must not enter Facturama');
+      assert.equal((await db.collection('facturamaInvoices').where('sourceSolicitudId', '==', id).get()).size, 0);
       await eventually(()=>names.every(values=>values.length>=1),'two source listeners');
       assert(names.every(values=>values.every(name=>name==='Synthetic Creator')));stops.forEach(stop=>stop());
       const t=timing[id];console.log('SOURCE_FLOW',JSON.stringify({mode,creates,uploads:docs.size,tasks:1,posts:httpPosts-beforePosts,timestamps:t,

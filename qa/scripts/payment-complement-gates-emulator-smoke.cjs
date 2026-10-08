@@ -16,7 +16,7 @@ async function fixture(label) {
   await db.doc(`users/${root}`).set({ rootId: root, role: 'superadmin', active: true });
   await db.doc(`clients/${root}`).set({ rootId: root, adminId: root, active: true });
   await db.doc(`iqIntegrationConfigs/${root}`).set({ rootId: root, enabled: true, automation: { aplicacionPagos: true } });
-  await db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, activatedAt: stamp.fromMillis(Date.now() - 60000), iqEnabled: true, iqLookupEnabled: true, facturamaEnabled: false });
+  await db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, activatedAt: stamp.fromMillis(Date.now() - 60000), iqEnabled: true, iqLookupEnabled: true, iqRequestEnabled: true, facturamaEnabled: false });
   await db.doc(`iqUserAccess/${root}`).set({ rootId: root, active: true, iqEnabled: true, iqCredentialProfileId: profileId, allowedModules: { pagos: true } });
   await db.doc(`iqCredentialProfiles/${profileId}`).set({ rootId: root, active: true, hasPassword: true, username: 'smoke' });
   await db.doc(`solicitudes/${root}`).set({ rootId: root, folio: 'S1', tipoFactura: 'PPD', clienteId: root, companyId: root, iqFolio: '123', facturaUuid: uuid, status: 'PROCESANDO' });
@@ -54,9 +54,11 @@ async function run() {
   const lookupOnly = { session: 1, preflight: 1, lookup: 0, request: 0 };
   await runCase('master-off', x => db.doc(`iqIntegrationConfigs/${x.root}`).update({ enabled: false }), zero);
   await runCase('lookup-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqLookupEnabled: false }), zero);
-  await runCase('access-off', x => db.doc(`iqUserAccess/${x.root}`).update({ active: false }), zero);
+  // A job with an authorized, persisted origin keeps that identity even if
+  // mutable user access changes later; its original profile must remain valid.
+  await runCase('access-off', x => db.doc(`iqUserAccess/${x.root}`).update({ active: false }), { session: 2, preflight: 1, lookup: 0, request: 1 });
   await runCase('profile-off', x => db.doc(`iqCredentialProfiles/${x.profileId}`).update({ active: false }), zero);
-  await runCase('profile-changed', x => db.doc(`iqUserAccess/${x.root}`).update({ iqCredentialProfileId: 'different' }), zero);
+  await runCase('profile-changed', x => db.doc(`iqUserAccess/${x.root}`).update({ iqCredentialProfileId: 'different' }), { session: 2, preflight: 1, lookup: 0, request: 1 });
   await runCase('root-changed', x => db.doc(`iqCredentialProfiles/${x.profileId}`).update({ rootId: 'foreign' }), zero);
   await runCase('lookup-quota-zero', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqLookupDailyLimit: 0 }), zero);
   await runCase('request-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqEnabled: false }), lookupOnly);
