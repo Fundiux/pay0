@@ -16,27 +16,55 @@ export default function DocumentDownloadPage() {
   const token = useRef("");
   const busy = useRef(false);
   const initialized = useRef(false);
+  const generation = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "downloading" | "done" | "error">("loading");
   useEffect(() => {
-    // StrictMode may repeat effects; capture once and never restore the bearer to history.
-    if (initialized.current) return;
-    initialized.current = true;
-    token.current = window.location.hash ? captureDownloadFragment() : pendingToken;
-    pendingToken = "";
-    setState(token.current ? "ready" : "error");
+    const invalidate = () => {
+      generation.current++;
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+      busy.current = false;
+    };
+    const changed = (event: HashChangeEvent) => {
+      // Ignore queued events superseded by a later navigation or our history replacement.
+      if (event.newURL && event.newURL !== window.location.href) return;
+      const next = captureDownloadFragment();
+      invalidate();
+      token.current = next;
+      setState(next ? "ready" : "error");
+    };
+    // StrictMode cleanup/re-entry must reattach the listener without losing the captured token.
+    if (!initialized.current) {
+      initialized.current = true;
+      token.current = window.location.hash ? captureDownloadFragment() : pendingToken;
+      pendingToken = "";
+      setState(token.current ? "ready" : "error");
+    }
+    window.addEventListener("hashchange", changed);
+    return () => {
+      window.removeEventListener("hashchange", changed);
+      invalidate();
+    };
   }, []);
 
   async function download() {
     if (!token.current || busy.current) return;
     busy.current = true;
+    const attempt = ++generation.current;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const current = () => generation.current === attempt && !controller.signal.aborted;
     setState("downloading");
     try {
       const response = await fetch(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.current }), credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
+        body: JSON.stringify({ token: token.current }), signal: controller.signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
       });
+      if (!current()) return;
       if (!response.ok) throw new Error("DOWNLOAD_UNAVAILABLE");
       const blob = await response.blob();
+      if (!current()) return;
       const disposition = response.headers.get("Content-Disposition") || "";
       let name = "documento";
       try { name = decodeURIComponent(/filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1] || "documento"); } catch { /* Safe fallback. */ }
@@ -50,8 +78,13 @@ export default function DocumentDownloadPage() {
       setState("done");
     } catch {
       // Do not display provider responses, tokens, URLs or raw exceptions.
-      setState("error");
-    } finally { busy.current = false; }
+      if (current()) setState("error");
+    } finally {
+      if (generation.current === attempt) {
+        busy.current = false;
+        activeRequest.current = null;
+      }
+    }
   }
 
   return <main className="flex min-h-screen items-center justify-center bg-[#0b1220] px-6 text-slate-100">
