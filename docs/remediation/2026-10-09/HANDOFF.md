@@ -2,6 +2,18 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+## Punto operativo 22:21 UTC: prevalece sobre estados anteriores
+
+Integracion congelada y publicada `9616055`. Telegram puente `telegramwebhook-00032-yud` ACTIVE/Ready/100%, ventana fija 21:29:52.042Z–22:29:52.042Z. Revision anterior `00031-yeg` retirada desde 21:45:52.322896Z; gate conservador satisfecho a las 22:13 UTC con trafico reconsultado y proyeccion completa de tokens creados desde 21:20: cero documentos, sin IDs/tokens expuestos. No se interpreto ausencia de metricas como cero instancias. Journal local recuperado sin cambiar bytes ni fechas mediante helper `4ff7818`.
+
+Hosting esta actualizando SSR despues de todos sus predeploy PASS; a las 22:21:34 la release live seguia siendo `1791573963658000` / `a664c1d18ee7c39a`. No ejecutar smoke remoto como si fuera nueva hasta comprobar release y rewrite. Sesion root `25455`, log privado integracion `.firebase/telegram-transition/hosting-deploy.log`.
+
+Consumidor Telegram: intento `npx firebase` fallo localmente antes de Firebase (`could not determine executable`), sin deploy. Reintento con `firebase.cmd` instalado en sesion `33253`, log privado `consumer-deploy-retry.log`; iniciado despues de que Hosting terminara compilaciones/emuladores y subiera fuentes separadas SSR. Consumidor y emisor final **todavia no verificados**. Verificar consumer Ready/trafico y OPTIONS permitido204/ajeno403/POST vacio400; despues Hosting browser con `node qa/scripts/remediation-download-browser-smoke.mjs --remote-readonly` (commit `59e96f5`, POST sinteticos interceptados, solo assets GET/HEAD remotos). Solo entonces cambiar dotenv mediante helper modo final y publicar exclusivamente webhook. No extender ventana automaticamente: si vence antes, la emision bridge falla cerrada hasta terminar modo final.
+
+Siguientes cambios aislados listos para revisar/integrar despues del rollout: Hugo `6de1af4` (17 pruebas y build PASS); legacy signed-download `d254e44` en rama private-document-bridge (13/13 frente a 8/13 en integracion, suite/informe fuente `90ad4f7`); loaders IQ `a18533d` en `fix/iq-synthetic-runtime-gates` (29+81 checks PASS). No atribuir estos fixes al candidato `9616055`. Un intento de editar dos tests IQ en integracion se restituyo a las 22:01:40 UTC; no cambio dominio ni artefactos desplegables y no habian empezado sus predeploy. Integracion volvio a estado limpio.
+
+Storage: NO retirar SDK delegado por Hosting solamente. Un bundle antiguo puede subir dispersion y fallar antes de finalize; no existe actualizacion forzada ni inventario completo de clientes alternos. Detalle `STORAGE-CLIENT-TRANSITION.md`. Callable firmado actual sigue `00003-xuj`; su siguiente lote debe incluir revalidacion despues de lookup, manteniendo contrato y declarando limite bearer300s. No reglas ni writers nuevos desplegados.
+
 ## Estado consolidado 2026-10-09
 
 - Fuente: `remediation/pay0-integral-20261009`, incluye `67adc86` (provision de identidad Logging), `55b3b77` (push OIDC minimo), `28b3bd9` (presupuesto y limites) y los lotes anteriores. Preservar cambios de agentes y archivos historicos sin seguimiento.
