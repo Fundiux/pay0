@@ -359,6 +359,36 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
   let finalVersion = 1;
 
   await db.runTransaction(async (tx) => {
+    // Re-read the target before changing any active version. A repeated finalize
+    // must not replace itself, increment its version, or revive a retired upload.
+    const currentSnap = await tx.get(uploadRef);
+    if (!currentSnap.exists) {
+      throw new HttpsError("not-found", "Upload no existe.");
+    }
+    const current = currentSnap.data() || {};
+    if (cleanText(current.rootId) !== rootId) {
+      throw new HttpsError("permission-denied", "No autorizado.");
+    }
+    if (cleanText(current.dispersionId || current.entityId) !== dispersionId ||
+        cleanText(current.storagePath) !== cleanText(upload.storagePath) ||
+        current.documentType !== upload.documentType || current.entityType !== upload.entityType ||
+        current.storageGeneration !== upload.storageGeneration) {
+      throw new HttpsError("failed-precondition", "El comprobante cambio. Vuelve a cargarlo.");
+    }
+    if (current.deleted === true || current.isDeleted === true || current.deletedAt != null) {
+      throw new HttpsError("failed-precondition", "El comprobante ya no puede finalizarse.");
+    }
+    const currentStatus = cleanText(current.status).toUpperCase();
+    if (currentStatus === "READY" && current.active === true) {
+      if (!Number.isSafeInteger(current.version) || current.version < 1) {
+        throw new HttpsError("failed-precondition", "Version de comprobante invalida.");
+      }
+      finalVersion = current.version;
+      return;
+    }
+    if (currentStatus !== "PENDING" || current.active !== false) {
+      throw new HttpsError("failed-precondition", "El comprobante ya no puede finalizarse.");
+    }
     const activeQuery = db
       .collection("uploads")
       .where("rootId", "==", rootId)
