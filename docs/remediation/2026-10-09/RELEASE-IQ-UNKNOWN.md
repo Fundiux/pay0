@@ -135,3 +135,25 @@ Los otros seis pueden prepararse como dos sublotes posteriores: solicitud3 (crea
 **No bloquear por un falso positivo de associatedName:** createSolicitudIq y los ejecutores reales de dispersion/comision corren grupo A, donde esas guardas ya estaban. B/C empaquetan copias antiguas de esos modulos pero no las invocan desde sus handlers de deposito/cola. Las pruebas de separaci?n login/Asociado son relevantes, pero falta de lectura de perfiles no demuestra un nuevo requisito introducido en esas Functions. No se propone backfill ni consulta de valores privados por esa diferencia.
 
 Restan para deposito3: (1) incorporar commit de dos tests cuando termine congelamiento y fijar SHA de release; (2) suite financiera17 y build/discovery/predeploy coordinados sobre ese candidato; (3) comparar metadata exacta de las dos colas Tasks (retry/rate/state) y revisar configuracion/env/identidades sin valores en salida; (4) revisar delta transitivo de pagoDepositHttpCreateFlow/adapters/pagoImmediateDispatch/automationRuntime/authorizeDeferredIntent contra cada artefacto correspondiente, especialmente el on-demand A frente a automatico/scheduler B; (5) plan efectivo que preserve limites, pausas REP/syncToday y no reactive nada; (6) decision central de ventana con automatismos ENABLED y postflight de revision/hash/config, sin crear jobs ni probar efectos financieros. Recuperacion sigue usando ZIP propio por funcion; no restaurar un clasificador inseguro ni liberar UNKNOWN para simular exito. No hay gate de datos associatedName agregado a deposito3.
+
+
+## Cloud Tasks y Scheduler: gate de metadata deposito3
+
+Lectura GET acotada iniciada **2026-10-09T22:38:40.119Z**, proyecto pay-0-system/us-central1. Vinculo por codigo: pagoDepositCallables declara el destino processIqPagoDepositOnDemandTask; pagoImmediateDispatch.AUTOMATIC_PAGO_TASK declara processIqPagoDepositAutomaticTask; ambos pasan functionName a getFunctions().taskQueue(functionName). El SDK usa us-central1 para nombres simples. Se consultaron esas dos colas exactas, no un listado de tareas. API v2beta3 con readMask y fields exclusivamente name/state/rateLimits/retryConfig/stats; Scheduler con proyeccion sin destino ni headers. [Contrato GET con stats explicitas](https://docs.cloud.google.com/tasks/docs/reference/rest/v2beta3/projects.locations.queues/get).
+
+| Cola | Estado | Dispatch/s; concurrentes; burst | Retry efectivo |
+| --- | --- | --- | --- |
+| processIqPagoDepositOnDemandTask | RUNNING | 1; 1; 10 | maxAttempts1, minBackoff60s, maxBackoff300s, maxDoublings16; maxRetryDuration no devuelto |
+| processIqPagoDepositAutomaticTask | RUNNING | 1; 1; 10 | maxAttempts3, maxRetryDuration1800s, minBackoff300s, maxBackoff900s, maxDoublings16 |
+
+Los campos retry/rate explicitados por el candidato 9616055+a18533d concuerdan con los valores remotos. maxBurstSize10 y maxDoublings16 son campos efectivos adicionales, no promesas de nueva configuracion del codigo; preservar mediante revision de plan. stats devolvio effectiveExecutionRate=1 en ambas colas; no devolvio tasksCount, concurrentDispatchesCount ni executedLastMinuteCount. **No interpretar ese rate como un conteo de tareas, ni ausencia de campos como demostracion de cola vacia o cero ejecuciones.** No se ampliaron lecturas a tasks.list, payloads, URLs o Monitoring. La consulta no determina si hay una operacion financiera en vuelo.
+
+| Scheduler | Estado y horario | Deadline / retry observado |
+| --- | --- | --- |
+| processIqPagoDepositCreateQueue | ENABLED; every 1 minutes; America/Mexico_City | 540s; retryConfig no devuelto; lastAttemptTime22:38:02.767582Z |
+| syncTodayIqInvoicesNow | PAUSED; every 24 hours; America/Mexico_City | 540s; retryConfig no devuelto |
+| checkPaymentComplementsDaily | PAUSED; 0 19 * * 1-5; America/Mexico_City | 540s; maxRetryDuration0s, minBackoffDuration5s, maxBackoffDuration3600s, maxDoublings5 |
+
+Campos no devueltos no se convierten en una configuracion inventada. El scheduler de deposito sigue habilitado y puede ejecutar su consulta al publicarse; las pausas de los otros dos permanecen verificadas en esta ventana. No hubo creacion, ejecucion, retry, purge, pause/resume ni lectura de documentos IQ. Metadata privada conservada como evidencia local ignorada; solo configuracion y agregados en este documento.
+
+Gate de comparacion de colas **satisfecho para campos declarados**. Pendiente concreto para autorizar deposito3: diff transitivo de flow/adapters/dispatcher/runtime/autoridad por artefacto A/B, suite financiera17 coordinada y build/discovery del SHA final, comparacion de entorno/identidad/plan efectivo sin valores privados y decision central de ventana con Tasks RUNNING/scheduler ENABLED. No reabrir associatedName como requisito nuevo; no afirmar que estas lecturas acreditan drenaje de trabajos. Los tests permanecen fuera de integracion mientras termine su congelamiento.
