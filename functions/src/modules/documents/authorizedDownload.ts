@@ -10,16 +10,7 @@ function clean(value: unknown): string {
 
 export async function getAuthorizedDocumentDownloadUrlCore(
   request: any,
-  signUrl: (storagePath: string) => Promise<string> = async (storagePath) => {
-    const file = admin.storage().bucket().file(storagePath);
-    const [exists] = await file.exists();
-    if (!exists) throw new HttpsError("not-found", "Archivo no encontrado.");
-    const [url] = await file.getSignedUrl({
-      action: "read",
-      expires: Date.now() + 5 * 60 * 1000,
-    });
-    return url;
-  },
+  signUrl?: (storagePath: string) => Promise<string>,
 ) {
     const uid = clean(request.auth?.uid);
     const uploadId = clean(request.data?.uploadId);
@@ -28,7 +19,24 @@ export async function getAuthorizedDocumentDownloadUrlCore(
 
     let url: string;
     try {
-      url = await signUrl(storagePath);
+      let signer = signUrl;
+      if (!signer) {
+        const file = admin.storage().bucket().file(storagePath);
+        const [exists] = await file.exists();
+        if (!exists) throw new HttpsError("not-found", "Archivo no encontrado.");
+        signer = async () => {
+          const [signed] = await file.getSignedUrl({ action: "read", expires: Date.now() + 5 * 60 * 1000 });
+          return signed;
+        };
+      }
+      // Storage lookup is outside Firestore. Recheck current authority after it.
+      // This does not make signing atomic or revoke a URL already delivered.
+      const current = await resolveAuthorizedDocumentObject(uid, { family: "uploads", documentId: uploadId });
+      if (current.revision !== object.revision || current.storagePath !== storagePath ||
+          current.expectedGeneration !== object.expectedGeneration) {
+        throw new HttpsError("failed-precondition", "Documento modificado.");
+      }
+      url = await signer(storagePath);
     } catch (error: any) {
       if (error instanceof HttpsError) throw error;
       if (Number(error?.code) === 404 || Number(error?.statusCode) === 404) {
