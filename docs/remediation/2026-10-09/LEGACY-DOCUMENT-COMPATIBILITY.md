@@ -58,6 +58,24 @@ No introducir fallback entityId como supuesta restauracion: el callable probado 
 
 Un fallback futuro entityType+entityId seria compatibilidad nueva, que requiere diseno y pruebas especificas: familia whitelist exacta, ID valido, ninguna contradiccion con campos canonicos, padre existente/root/lifecycle, autoridad vigente en transaccion y prefijo Storage solo como comprobacion de consistencia. URL/path nunca aportan permiso. No se propuso ni ejecuto esa ampliacion para este rollout.
 
-## Diagnostico pendiente sin ampliar autoridad
+## Plan previo del diagnostico sin ampliar autoridad
 
-El plan detallado esta en DOCUMENT-INVENTORY.md: el checkpoint agregado no conserva IDs de anomalos, por lo que se propone reescaneo de metadata bajo el mismo root con nuevo checkpoint privado,100porlote/tope1500, maximo4candidatos y8lecturas adicionales padre/revalidacion. No se ejecuto. El unico resultado publico seria conteos/enums, sin IDs ni datos. EntityId se usaria para consultar un candidato padre, nunca como permiso ni sustitucion automatica del campo canonico. Conservar rechazo legacy hasta que una reparacion especifica tenga evidencia y revision propias.
+El plan detallado esta en DOCUMENT-INVENTORY.md: el checkpoint agregado no conserva IDs de anomalos, por lo que se propone reescaneo de metadata bajo el mismo root con nuevo checkpoint privado,100porlote/tope1500, maximo4candidatos y8lecturas adicionales padre/revalidacion. El plan no se habia ejecutado al redactar esta seccion; el resultado posterior consta abajo. La salida publica se limita a conteos/enums, sin IDs ni datos. EntityId se usaria para consultar un candidato padre, nunca como permiso ni sustitucion automatica del campo canonico. Conservar rechazo legacy hasta que una reparacion especifica tenga evidencia y revision propias.
+
+## Resultado del diagnostico legacy ejecutado por integracion
+
+Integracion reporto COMPLETE:1446registros reescaneados, sourceCountMatched:true,4candidatos y8lecturas adicionales. Los4resultados comparten familia SOLICITUD, parent:MISSING, prefix:MATCH, result:AMBIGUOUS_OR_UNAVAILABLE y provenance:UNVERIFIED. No hubo cambios productivos. Este agente incorpora el reporte sin reabrir checkpoints privados ni realizar lecturas remotas.
+
+El prefijo coincide con la referencia entityId guardada, pero los documentos padre consultados no existen. Esa coincidencia NO demuestra ownership, permiso, procedencia ni recuperabilidad. No procede completar solicitudId automaticamente: agregaria una referencia a un padre ausente y no resolveria la autorizacion. Tampoco procede crear solicitudes ficticias, reasignar documentos a otra solicitud, aceptar una URL como prueba ni relajar el resolver. Conservar los registros y su historial; el rechazo de descarga permanece coherente con el callable legacy probado.
+
+La coincidencia de conteos entre inventarios secuenciales no prueba un snapshot comun ni identidad completa de la poblacion original; el diagnostico revalido updateTime de cada candidato durante sus lecturas. Los padres ausentes estan acreditados en ese momento de lectura, no como afirmacion permanente ante futuras restauraciones.
+
+### Backlog de investigacion y recuperacion revisada
+
+1. Investigar, con alcance y presupuesto separados, si hubo borrado legitimo/accidental del padre, migracion historica o referencias creadas sin padre. Revisar solo evidencia necesaria en auditoria/eventos/respaldos; no iniciar barrido general ni emitir IDs/datos en reportes.
+2. Buscar una cadena de procedencia demostrable entre el registro upload, su entityId, el padre historico y el objeto. Un path coincidente no sustituye esa cadena. Registrar si la evidencia es inexistente, contradictoria o verificable sin inventarla.
+3. Si existe respaldo autentico y recuperacion autorizada, disenar restauracion de la entidad original con sus invariantes financieras, root/cliente/lifecycle y auditoria. Evaluar efectos colaterales y permisos actuales antes de cualquier restauracion; no crear un padre sintetico para hacer funcionar la descarga.
+4. Si se demuestra otra referencia canonica, proponer una reparacion puntual con evidencia, revision humana, CAS de version y audit atomico. Nunca reparentar por semejanza de nombre/ruta, ni activar una reparacion masiva con estos cuatro casos.
+5. Si no hay evidencia suficiente, conservar historial y marcar el impedimento para soporte. Cualquier acceso excepcional de recuperacion exige un flujo autorizado independiente y no altera las reglas ni la autoridad normal del puente.
+
+Estado: diagnostico read-only cerrado para estos4candidatos; reparacion NO autorizada ni ejecutada. El backlog anterior sigue pendiente y no convierte en compatibles las cuatro descargas bloqueadas.
