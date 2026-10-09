@@ -2968,3 +2968,5 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
+
+export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";

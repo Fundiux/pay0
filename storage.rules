@@ -2,6 +2,57 @@ rules_version = "2";
 service firebase.storage {
   match /b/{bucket}/o {
 
+
+    function restrictionId(value) { return value.matches('[A-Za-z0-9_-]{1,128}'); }
+    function restrictionMillis(value) { return value is int && value >= 0 && value <= 253402300799999; }
+    function restrictionRoot(user) {
+      let root = user.get('rootId', null);
+      return root == null || root == '' || root == false || root == 0 ? request.auth.uid : root;
+    }
+    // Every required property is accessed below; exact map size rejects unknown fields.
+    // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
+    function restrictionRecordValid(row, rootId) {
+      return row is map
+        && row.keys().size() == (row.state == 'ACTIVE' ? 15 : 18)
+        && row.schemaVersion == 1
+        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
+        && row.policyVersion == 'PAY0-CONTAINMENT@1'
+        && restrictionId(row.restrictionId)
+        && restrictionId(rootId) && row.rootId == rootId
+        && restrictionId(request.auth.uid) && row.subjectUid == request.auth.uid
+        && row.scope == 'ACCOUNT_OPERATIONS'
+        && row.authority == 'HUMAN_SECURITY_ADMIN'
+        && restrictionId(row.authorityUid) && row.authorityUid != request.auth.uid
+        && restrictionId(row.incidentId)
+        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
+        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
+        && restrictionMillis(row.issuedAtMs) && restrictionMillis(row.expiresAtMs)
+        && row.issuedAtMs <= request.time.toMillis() && row.expiresAtMs > row.issuedAtMs
+        && row.expiresAtMs - row.issuedAtMs <= 86400000;
+    }
+    function restrictionAllowsRecord(row, rootId) {
+      return restrictionRecordValid(row, rootId) && (
+        (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
+        || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
+          && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
+          && restrictionId(row.revokedBy) && row.revokedBy != request.auth.uid
+          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY'])
+      );
+    }
+    function restrictionAllowsUser(user) {
+      return !user.keys().hasAny(['trustedRestrictionV1']) || restrictionAllowsRecord(user.trustedRestrictionV1, restrictionRoot(user));
+    }
+    function userLifecycleActive(user) {
+      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
+        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
+        && user.get('isActive', true) != false && user.get('active', true) != false;
+    }
+
+    function currentUserAllowed(rootId) {
+      let user = userDoc();
+      return signedIn() && userLifecycleActive(user) && restrictionRoot(user) == rootId && restrictionAllowsUser(user);
+    }
+
     function signedIn() {
       return request.auth != null;
     }
@@ -103,9 +154,9 @@ service firebase.storage {
         && ("rootId" in data)
         && data.rootId == rootId
         && (
-          request.auth.uid == rootId
-          || ownsDocument(data)
-          || solicitudAccessFromData(data)
+          (request.auth.uid == rootId || ownsDocument(data))
+            ? currentUserAllowed(rootId)
+            : solicitudAccessFromData(data)
         );
     }
 
@@ -114,16 +165,17 @@ service firebase.storage {
         && ("rootId" in data)
         && data.rootId == rootId
         && (
-          request.auth.uid == rootId
-          || ownsDocument(data)
-          || pagoAccessFromData(data)
+          (request.auth.uid == rootId || ownsDocument(data))
+            ? currentUserAllowed(rootId)
+            : pagoAccessFromData(data)
         );
     }
 
     function canReadUserFundedDispersion(rootId, data) {
       let user = userDoc();
       let funding = data.fundingSource;
-      return myRootId() == rootId
+      return currentUserAllowed(rootId)
+        && myRootId() == rootId
         && funding.sourceClientId == (("clientId" in data) ? data.clientId : data.clienteId)
         && data.ownerUid == funding.ownerUid
         && (isSuperAdmin() || funding.ownerUid == request.auth.uid)
@@ -147,9 +199,9 @@ service firebase.storage {
           (("fundingSource" in data) && data.fundingSource.holderType == "USER")
           ? canReadUserFundedDispersion(rootId, data)
           : (
-          request.auth.uid == rootId
-          || ownsDocument(data)
-          || dispersionAccessFromData(data)
+          (request.auth.uid == rootId || ownsDocument(data))
+            ? currentUserAllowed(rootId)
+            : dispersionAccessFromData(data)
           )
         );
     }
@@ -258,7 +310,7 @@ service firebase.storage {
       documentType,
       fileName
     ) {
-      return hasPreparedUploadId()
+      return currentUserAllowed(rootId) && hasPreparedUploadId()
         && (
           (
             ("uploadid" in request.resource.metadata)
@@ -364,7 +416,7 @@ service firebase.storage {
       documentType,
       fileName
     ) {
-      return hasPreparedEntityDocumentId()
+      return currentUserAllowed(rootId) && hasPreparedEntityDocumentId()
         && (
           (
             ("documentid" in request.resource.metadata)
@@ -392,7 +444,7 @@ service firebase.storage {
     }
 
     function preparedSatCatalogMatches(rootId, fileName) {
-      return signedIn()
+      return currentUserAllowed(rootId)
         && isSuperAdmin()
         && firestore.exists(
           /databases/(default)/documents/satCatalogImports/$(fileName)
@@ -466,7 +518,7 @@ service firebase.storage {
     }
 
     match /roots/{rootId}/entityDocuments/{entityType}/{entityId}/{documentType}/{fileName} {
-      allow read: if signedIn() && request.auth.uid == rootId;
+      allow read: if currentUserAllowed(rootId) && request.auth.uid == rootId;
 
       allow create: if resource == null
                     && signedIn()
@@ -486,10 +538,11 @@ service firebase.storage {
     // assetDocuments/{documentId}; la carga no puede crear posiciones ni
     // movimientos y el objeto queda inmutable después de finalizar.
     match /roots/{rootId}/assets/{ownerUid}/documents/{documentId}/{fileName} {
-      allow read: if signedIn() && request.auth.uid == ownerUid;
+      allow read: if currentUserAllowed(rootId) && request.auth.uid == ownerUid;
 
       allow create: if resource == null
                     && signedIn()
+                    && currentUserAllowed(rootId)
                     && request.auth.uid == ownerUid
                     && request.resource.size <= 10 * 1024 * 1024
                     && request.resource.contentType in [
@@ -521,7 +574,7 @@ service firebase.storage {
     // Archivo fuente del catálogo SAT. Solo una importación preparada por
     // superadministración puede crear un objeto inmutable en esta ruta.
     match /roots/{rootId}/fiscal-catalogs/sat/{fileName} {
-      allow read: if signedIn() && isSuperAdmin() && myRootId() == rootId;
+      allow read: if currentUserAllowed(rootId) && isSuperAdmin() && myRootId() == rootId;
       allow create: if resource == null
                     && request.resource.size <= 40 * 1024 * 1024
                     && request.resource.contentType == "application/x-bzip2"
@@ -553,7 +606,7 @@ service firebase.storage {
     function preparedCorporateUpload(rootId, uid, sessionId) {
       let user = userDoc();
       let session = firestore.get(/databases/(default)/documents/pay0CanonicalUploadSessions/$(sessionId)).data;
-      return isSuperAdmin()
+      return currentUserAllowed(rootId) && isSuperAdmin()
         && myRootId() == rootId && request.auth.uid == uid
         && (!("active" in user) || user.active != false)
         && (!("isActive" in user) || user.isActive != false)
