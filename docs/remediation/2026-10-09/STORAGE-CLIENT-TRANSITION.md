@@ -58,3 +58,30 @@ This backend lot improves authorization for old bundles while retaining their pr
 ## Storage cut remains separate
 
 Candidate local implementation remains three read-only helper fallback removals, covering six matches (three docs and three flat). Keep prepared writes and owner/root/USER branches. Require48 negative restriction cases and legitimate delegate bridge positives, client adoption/recovery evidence, and explicit handling of alternative clients. A bounded operational maintenance window may accept interruption with recovery, but must not be labelled seamless compatibility. Do not hide actions, invent parents, silently finalize uncertain uploads, or revoke historical URLs without a separate approved migration.
+
+## Executed compatibility regression: signing race remains open
+
+New qa/scripts/remediation-legacy-download-authority.test.cjs transpiles the actual callable, shared resolver, lineage access, policy and authorization modules from an explicit --source-root. Only SDK/storage/Firestore are synthetic. The default signer is exercised, not replaced with an always-successful callback; getSignedUrl calls are counted. Network fetch is forbidden. No build or emulator was run for this test-only lot.
+
+Executed against both .worktrees/private-document-bridge-20261009 and .worktrees/pay0-remediation-integration-20261009: **8/10 PASS, 2/10 FAIL**, exit1 intentionally preserved. The principal checkout currently has no documents/authorizedDownload.ts; invoking there gives SOURCE_MISSING exit2 instead of silently selecting integration. Both candidate checkouts are read-only targets.
+
+Passed: exact callable wire result and actual signer expiry now+300000 (bounded timing tolerance); valid actor; active trusted restriction for admin and superadmin; malformed restriction; revoked ancestor grant; revoked ancestor delegation module; actual unchanged old callable wrapper; candidate bridge wrapper selecting uploads/documentId and returning local blob.
+
+Failed invariant: changing actor restriction or revoking ancestor inside the fake Storage exists() causes the callable to invoke getSignedUrl once and return a URL. The evidence changed AFTER its authorization transaction and BEFORE signing. These two tests require denial and zero signatures; they remain red and must not be described as a passing release gate. Existing Firestore transaction correctness does not remove this cross-service gap.
+
+Proposed next domain change, not implemented here: separate object existence/metadata lookup from signing; re-run the current-authority resolver after that await and immediately before getSignedUrl, also ensuring the resolved document/path is unchanged. Preserve the300s wire contract and sanitization. This narrows the demonstrated race; it cannot make Firestore and GCS signing one atomic transaction, pin legacy URL consumption to current authorization, or revoke URLs already delivered. Generation pinning remains a distinct existing limitation. Coordinator approval is required before domain edits.
+
+Reproduction commands (no remote actions):
+
+```powershell
+node qa/scripts/remediation-legacy-download-authority.test.cjs --source-root .worktrees/private-document-bridge-20261009
+node qa/scripts/remediation-legacy-download-authority.test.cjs --source-root .worktrees/pay0-remediation-integration-20261009
+```
+
+### Follow-up: isolated postlookup correction implemented
+
+With coordinator authorization, only private-document-bridge functions/src/modules/documents/authorizedDownload.ts was changed. The worktree was clean except for an unrelated untracked coverage report, preserved. Production and integration were not modified. The actual default path now performs exists(), then resolves current authority again, compares document revision/storagePath/expectedGeneration with the original resolution, and only then calls getSignedUrl. The optional injected signer contract remains compatible; it also receives post-resolution validation.
+
+The suite now includes document path, stored generation and parent changes during exists(). Corrected isolated candidate: **13/13 PASS**. Unmodified integration: **8/13 PASS,5/13 FAIL**, each failed race issues exactly one signature. This is deliberate before/after evidence, not a green integration gate. No additional build was run because the coordinator reserved that window; compilation remains a release gate for the domain commit.
+
+The correction closes the demonstrated asynchronous lookup window and refuses changed document identity instead of signing the old path with new metadata. Authority can still change after the final validation; Firestore and GCS signing are not atomic. The URL remains path-based and usable until expiry, with no per-GET revalidation. Do not claim generation-pinned or retroactively revocable legacy URLs.
