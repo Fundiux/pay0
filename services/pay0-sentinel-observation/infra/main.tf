@@ -68,7 +68,7 @@ resource "google_project" "observation" {
   deletion_policy     = "PREVENT"
 }
 resource "google_project_service" "apis" {
-  for_each           = toset(["firestore.googleapis.com", "run.googleapis.com", "pubsub.googleapis.com", "iam.googleapis.com", "logging.googleapis.com", "firebaserules.googleapis.com", "firebase.googleapis.com", "artifactregistry.googleapis.com", "cloudbuild.googleapis.com"])
+  for_each           = toset(["firestore.googleapis.com", "run.googleapis.com", "pubsub.googleapis.com", "iam.googleapis.com", "logging.googleapis.com", "firebaserules.googleapis.com", "firebase.googleapis.com", "artifactregistry.googleapis.com", "cloudbuild.googleapis.com", "policytroubleshooter.googleapis.com"])
   project            = google_project.observation.project_id
   service            = each.key
   disable_on_destroy = false
@@ -188,6 +188,9 @@ resource "google_cloud_run_v2_service" "observer" {
   deletion_protection  = true
   ingress              = "INGRESS_TRAFFIC_ALL"
   invoker_iam_disabled = false
+  scaling {
+    max_instance_count = 1
+  }
   template {
     service_account                  = google_service_account.runtime.email
     timeout                          = "10s"
