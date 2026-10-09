@@ -49,3 +49,42 @@ Tambien difieren pagoDepositCallables, solicitudCreateQueueCallables, solicitudC
 6. Ante fallo, detener ese lote y preservar UNKNOWN/reservas/auditoria. Preferir correccion hacia adelante si volver al codigo anterior permitiria repetir un POST. No limpiar retryBlocked ni reenviar por expiracion de lease. Toda conciliacion productiva requiere su propio alcance y evidencia; este documento no la autoriza.
 
 Pendientes: artefactos exactos por ejecutor, gate integrado completo, estado runtime contemporaneo y decision central de despliegue. No cierra AR03-AR05 ni la remediacion integral.
+
+
+## Preflight remoto exacto de los nueve ejecutores
+
+Consulta posterior de solo metadata y GET de artefactos: nueve Functions ACTIVE y nueve ZIP recuperados sin error. No hubo deploy, mutacion cloud, lectura de dotenv, ejecucion de artefactos ni llamada IQ. Credencial en memoria, proyecto de cuota pay-0-system, redirects rechazados, timeout y limite de descarga; evidencia privada ignorada en `.firebase/iq-unknown-preflight/`. No usar el ZIP documental anterior como sustituto de estas fuentes efectivas.
+
+| Export | Revision reportada por Functions | Generacion exacta | Grupo ZIP | Comparacion de siete TS |
+| --- | --- | --- | --- | --- |
+| processIqPagoDepositOnDemandTask | processiqpagodepositondemandtask-00034-jot | 1790638545672827 | A | 7 DIFF |
+| processIqPagoDepositAutomaticTask | processiqpagodepositautomatictask-00001-gox | 1791370236816575 | B | TS ausente; 7 JS DIFF |
+| processIqPagoDepositCreateQueue | processiqpagodepositcreatequeue-00020-naz | 1791370286964567 | B | TS ausente; 7 JS DIFF |
+| createSolicitudIq | createsolicitudiq-00057-tar | 1790638545651227 | A | 7 DIFF |
+| processIqCreateOnDemandTask | processiqcreateondemandtask-00009-qey | 1791410490996895 | C | TS ausente; 7 JS DIFF |
+| processIqCreateQueue | processiqcreatequeue-00019-dut | 1791410577000980 | C | TS ausente; 7 JS DIFF |
+| createClientDispersionIq | createclientdispersioniq-00022-hoy | 1790638546049323 | A | 7 DIFF |
+| processIqDispersionCreate | processiqdispersioncreate-00011-nor | 1790638545671737 | A | 7 DIFF |
+| executeUserCommissionDispersion | executeusercommissiondispersion-00002-fow | 1790638545592528 | A | 7 DIFF |
+
+| Grupo | SHA256 ZIP | Bytes por ZIP | Formato |
+| --- | --- | --- | --- |
+| A | 8eb3cdb9f23e011defe720e4ccd09edd0fe50a50318d6ed56df5a0cb78a6b056 | 6058026 | TS + JS + maps |
+| B | 56e1e34b6282a4e44fc4c9bff4c3b019e96ca81ff9ee3597d68308def8016561 | 3893649 | JS + maps, sin TS seleccionado |
+| C | 07d05e50d00feba5dbe9eabcc4e8333cf52641752057a8aa0bafb94dd656316f | 7697319 | JS + maps, sin TS seleccionado |
+
+Cada ZIP se conserva como `<export>-<generation>.zip`; metadata.json y comparison.json relacionan los nueve artefactos exactos. Los siete modulos son depositHttpCreateCore, dispersionHttpCreateCore, solicitudHttpCreateA53, pagoDepositCallables, solicitudCreateQueueCallables, solicitudCreationCallables y dispersionCreationCallables. La comparacion TS usa `git show 9616055:<ruta>` y normaliza solo EOL. En A, hashes de los tres cores coinciden con los historicos de la tabla anterior, pero los cuatro consumidores no son intercambiables con aquel ZIP documental. Esa diferencia confirma por que era necesario recuperar cada artefacto exacto.
+
+B y C no contienen esos TypeScript; sus source maps tampoco incorporan sourcesContent. No declarar igualdad o reconstruccion TS que no se pudo demostrar. Se compararon sus siete JavaScript contra lib local existente: todos DIFF; las siete fuentes locales correspondientes si coinciden byte a byte normalizadas con 9616055. Este chequeo no acredita por si solo que lib se genero con ese commit: el gate de build congelado sigue necesario. Los hashes completos JS actuales/anteriores quedan en compiled-comparison.json privado; matriz compacta de cores desplegados:
+
+| Core JS | Grupo A SHA256 | Grupos B y C SHA256 |
+| --- | --- | --- |
+| depositHttpCreateCore | 5656c6144678e017d3991c87a668e4ec5a797088f6071854425b92bca3e0fe10 | 0551b1384887306730b2b93469daf7b4120553459497b515d25fd405b910ff32 |
+| dispersionHttpCreateCore | 26cea82b194395235700dfeb394b5f35c6b80760067bd7687329e19ae6a33315 | 00aeb50f3394a0ffddaa477e1c55ce933c4278e01be5c498c63f0a2127f2b37e |
+| solicitudHttpCreateA53 | 513698f853b6443aeb8f4ca27fe09545e5241da75ee0740d5ab7377a70753f3d | b60bff16a7811cc3eb756b83f462569fb83bea9107b68ea0324cc27f6f9d058b |
+
+B/C coinciden en seis de los siete JS; difieren en solicitudCreateQueueCallables (B e45578198f146340ee28053abc16aaaa2ba06abb4cb550a6a14f0a2d572141ae; C 9756aadadc98f39d637004bc13f0617425a2cbbcc56aeb5291ba4e99c9b7e409). No reducir esta diferencia a un cambio de empaquetado sin revisar la semantica. En ninguno de los tres grupos aparece el identificador nuevo unequivocalRejection en los tres cores; es evidencia estatica acotada, no una prueba de efectos de proveedor.
+
+Compatibilidad: inventario y recuperacion de fuentes exactas completos 9/9; equivalencia semantica NO acreditada. El siguiente gate debe revisar hunks de los consumidores y JS-only, sus imports transitivos y opciones por endpoint, ejecutar el build y suites falsas sobre el candidato congelado y comprobar pausas contemporaneas. Las lecturas de metadata reportan revision de Functions, no un inventario exhaustivo de tags/trafico Cloud Run ni del backlog de Tasks. No se consultaron configuraciones financieras ni credenciales de IQ.
+
+Recuperacion: hay respaldo exacto por endpoint, con generacion inmutable y hash, no una version comun supuesta. No restaurar automaticamente el grupo A/B/C si reintroduce la clasificacion ambigua insegura; preservar reservas/UNKNOWN y preparar correccion hacia adelante. La existencia del ZIP no constituye un rollback ensayado ni certifica permisos, opciones runtime o disponibilidad futura del backend. No se han cerrado los demas gates de este documento.
