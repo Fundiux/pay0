@@ -1,4 +1,14 @@
 // READ ONLY. Default dry run. No grants migration, authorization verdict or ancestor traversal.
+// Scope evidence: clientDelegations/access.ts checks cleanId(user.rootId || uid).
+// Existing profile with absent/null/empty rootId may therefore use uid, ONLY when
+// an explicit client.rootId agrees. Missing profile/client/root remains UNKNOWN.
+// Other malformed falsy values (false/0) stay UNKNOWN here, not an inferred scope.
+// scopeBasis distinguishes this backend fallback from an explicit profile root;
+// neither proves role, lifecycle, restriction, direct ownership or ancestor authority.
+// Temporal evidence: policy.ts returns Timestamp.toMillis() without positivity,
+// but numeric millis must be >0. Thus past Timestamp starts may be current while
+// numeric0/-1 are invalid. Classification mirrors that distinction descriptively;
+// CURRENT_BY_LIFETIME_ONLY is never an authorization verdict.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,15 +42,17 @@ export function restAdapter({credential,fetchImpl=fetch}){
 }
 export async function inventory(adapter,{rootId,maxRecords=25,pageSize=25,now=Date.now()}){
  assert.ok(validId(rootId));assert.ok(Number.isInteger(maxRecords)&&maxRecords>=1&&maxRecords<=100);assert.ok(Number.isInteger(pageSize)&&pageSize>=1&&pageSize<=100);
- const summary={mode:'BOUNDED_READ_ONLY',limits:{maxRecords,pageSize,maxScopeReads:2*maxRecords,maxResponseBytes:512*1024},sampleOnly:true,securityClosure:false,scanned:0,grantPaths:0,otherPaths:0,inScope:0,outsideRoot:0,scopeUnknown:0,queries:0,scopeReads:0,exhaustedAtRead:false,budgetExhausted:false,provenance:{},lifetime:{},declaredScope:{},authoritySource:{},grantorOrigin:{},formats:{},legacyCurrentByLifetime:0,authorizationEvaluated:false,migrationPerformed:false,snapshotConsistent:false,unknowns:['ROLE_LIFECYCLE_RESTRICTION_NOT_READ','GRANTOR_ANCESTORS_NOT_READ','DIRECT_OWNERSHIP_NOT_EVALUATED','MISSING_CLIENT_ROOT_NOT_ASSUMED','CONCURRENT_CHANGES_POSSIBLE'],legacySemantics:'LEGACY_PROVENANCE_UNVERIFIED may remain allowed by current backend; absence of provenance is not rejection.'};
+ const summary={mode:'BOUNDED_READ_ONLY',limits:{maxRecords,pageSize,maxScopeReads:2*maxRecords,maxResponseBytes:512*1024},sampleOnly:true,securityClosure:false,scanned:0,grantPaths:0,otherPaths:0,inScope:0,outsideRoot:0,scopeUnknown:0,scopeBasis:{},queries:0,scopeReads:0,exhaustedAtRead:false,budgetExhausted:false,provenance:{},lifetime:{},declaredScope:{},authoritySource:{},grantorOrigin:{},formats:{},legacyCurrentByLifetime:0,authorizationEvaluated:false,migrationPerformed:false,snapshotConsistent:false,unknowns:['ROLE_LIFECYCLE_RESTRICTION_NOT_READ','GRANTOR_ANCESTORS_NOT_READ','DIRECT_OWNERSHIP_NOT_EVALUATED','MISSING_CLIENT_ROOT_NOT_ASSUMED','CONCURRENT_CHANGES_POSSIBLE'],legacySemantics:'LEGACY_PROVENANCE_UNVERIFIED may remain allowed by current backend; absence of provenance is not rejection.'};
  const inc=(obj,key)=>obj[key]=(obj[key]||0)+1;let cursor=null;
  while(summary.scanned<maxRecords){const limit=Math.min(pageSize,maxRecords-summary.scanned);summary.queries++;const rows=await adapter.list(cursor,limit);assert.ok(Array.isArray(rows)&&rows.length<=limit);
  for(const row of rows){assert.ok(typeof row.name==='string'&&row.name.startsWith(DOCUMENTS+'/')&&(!cursor||row.name>cursor));cursor=row.name;summary.scanned++;
  const relative=row.name.slice(DOCUMENTS.length+1),parts=relative.split('/');if(parts.length!==4||parts[0]!=='userClientAccess'||parts[2]!=='clients'||!validId(parts[1])||!validId(parts[3])){summary.otherPaths++;continue;}
  summary.grantPaths++;const uid=parts[1],clientId=parts[3];summary.scopeReads++;const owner=await adapter.scope('users',uid);summary.scopeReads++;const client=await adapter.scope('clients',clientId);
- const ownerRoot=owner&&(owner.rootId===undefined||owner.rootId===null||owner.rootId==='')?uid:owner?.rootId;
- if(!owner||!client||!validId(ownerRoot)||!validId(client.rootId)||ownerRoot!==client.rootId){summary.scopeUnknown++;continue;}if(ownerRoot!==rootId){summary.outsideRoot++;continue;}
- summary.inScope++;const grant=Object.fromEntries(FIELDS.filter(k=>Object.hasOwn(row.fields||{},k)).map(k=>[k,decode(row.fields[k])]));const result=classify(grant,{uid,clientId,rootId,now});inc(summary.provenance,result.provenance);inc(summary.lifetime,result.lifetime);inc(summary.declaredScope,result.declaredScope);inc(summary.authoritySource,result.authoritySource);inc(summary.grantorOrigin,result.grantorOrigin);for(const[k,v]of Object.entries(result.formats)){summary.formats[k]||={};inc(summary.formats[k],v);}if(result.provenance==='LEGACY_PROVENANCE_UNVERIFIED'&&result.lifetime==='CURRENT_BY_LIFETIME_ONLY')summary.legacyCurrentByLifetime++;
+ const fallback=!!owner&&(owner.rootId===undefined||owner.rootId===null||owner.rootId==='');
+ const ownerRoot=fallback?uid:typeof owner?.rootId==='string'?clean(owner.rootId):null;
+ const clientRoot=typeof client?.rootId==='string'?clean(client.rootId):null;
+ if(!owner||!client||!validId(ownerRoot)||!validId(clientRoot)||ownerRoot!==clientRoot){summary.scopeUnknown++;continue;}if(ownerRoot!==rootId){summary.outsideRoot++;continue;}
+ summary.inScope++;inc(summary.scopeBasis,fallback?'PROFILE_UID_FALLBACK_MATCHED_CLIENT_ROOT':'EXPLICIT_PROFILE_AND_CLIENT_ROOT');const grant=Object.fromEntries(FIELDS.filter(k=>Object.hasOwn(row.fields||{},k)).map(k=>[k,decode(row.fields[k])]));const result=classify(grant,{uid,clientId,rootId,now});inc(summary.provenance,result.provenance);inc(summary.lifetime,result.lifetime);inc(summary.declaredScope,result.declaredScope);inc(summary.authoritySource,result.authoritySource);inc(summary.grantorOrigin,result.grantorOrigin);for(const[k,v]of Object.entries(result.formats)){summary.formats[k]||={};inc(summary.formats[k],v);}if(result.provenance==='LEGACY_PROVENANCE_UNVERIFIED'&&result.lifetime==='CURRENT_BY_LIFETIME_ONLY')summary.legacyCurrentByLifetime++;
  }
  if(rows.length<limit){summary.exhaustedAtRead=true;break;}}
  summary.budgetExhausted=!summary.exhaustedAtRead&&summary.scanned===maxRecords;return summary;
