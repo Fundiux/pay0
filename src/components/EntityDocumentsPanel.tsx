@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ban, Download, FileText, Plus, RefreshCw, RotateCcw, UploadCloud, X } from "lucide-react";
-import { getDownloadURL, ref } from "firebase/storage";
-import { storage } from "@/lib/firebaseClient";
+import { downloadPrivateDocument } from "@/lib/downloadPrivateDocument";
 
 import {
   deactivateEntityDocument,
@@ -364,7 +363,7 @@ if (!file) {
     }
 
     try {
-      const url = await getDownloadURL(ref(storage, row.storagePath));
+      const url = await downloadPrivateDocument("entityDocuments", row.id);
       const link = document.createElement("a");
 
       link.href = url;

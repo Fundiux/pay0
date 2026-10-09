@@ -1,4 +1,4 @@
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { storage } from "@/lib/firebaseClient";
 import {
   EntityDocumentEntityType,
@@ -132,12 +132,7 @@ export async function uploadEntityDocument(
     storagePath: initResult.storagePath,
   });
 
-  let downloadURL = "";
-  try {
-    downloadURL = await getDownloadURL(task.snapshot.ref);
-  } catch {
-    downloadURL = "";
-  }
+  const downloadURL = ""; // Download on demand through the authenticated bridge.
 
   return {
     ok: Boolean(finalizeResult.ok),

@@ -1,6 +1,6 @@
 import { CALLABLES } from "@/lib/callableNames";
 import { httpsCallable } from "firebase/functions";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { functions, storage } from "@/lib/firebaseClient";
 
 export const MAX_DISPERSION_DOCUMENT_SIZE_BYTES = 1024 * 1024;
@@ -67,7 +67,7 @@ export async function uploadDispersionDoc(opts: {
     },
   });
 
-  const snap = await new Promise<any>((resolve, reject) => {
+  await new Promise<any>((resolve, reject) => {
     task.on(
       "state_changed",
       (s) => {
@@ -80,7 +80,7 @@ export async function uploadDispersionDoc(opts: {
     );
   });
 
-  const downloadURL = await getDownloadURL(snap.ref);
+  const downloadURL = ""; // Finalization must not depend on downloading the object.
 
   const finalize = httpsCallable(functions, CALLABLES.finalizeDispersionDocumentUpload);
   const finalizeRes = await finalize({ uploadId, storagePath });

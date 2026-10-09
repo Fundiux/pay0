@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebaseClient";
+import { downloadPrivateDocument } from "@/lib/downloadPrivateDocument";
 
 export function getAuthorizedDocumentErrorMessage(error: unknown): string {
   const code = String((error as any)?.code || "").toLowerCase().replace(/^functions\//, "");
@@ -15,20 +14,13 @@ export function getAuthorizedDocumentErrorMessage(error: unknown): string {
     case "invalid-argument":
       return "El documento no se puede identificar para la descarga.";
     default:
-      return "No fue posible generar temporalmente el enlace de descarga.";
+      return "No fue posible descargar temporalmente el documento.";
   }
 }
 
 export async function getAuthorizedDocumentDownloadUrl(uploadId: string): Promise<string> {
-  const callable = httpsCallable<{ uploadId: string }, {
-    ok: boolean;
-    uploadId: string;
-    url: string;
-    expiresInSeconds: number;
-  }>(functions, "getAuthorizedDocumentDownloadUrl");
   try {
-    const result = await callable({ uploadId });
-    return result.data.url;
+    return await downloadPrivateDocument("uploads", uploadId);
   } catch (error) {
     const sanitized = new Error(getAuthorizedDocumentErrorMessage(error));
     (sanitized as any).code = (error as any)?.code;

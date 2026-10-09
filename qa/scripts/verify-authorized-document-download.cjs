@@ -1,10 +1,20 @@
 const assert = require("node:assert/strict");
-const admin = require("firebase-admin");
+const fs = require("node:fs");
+const path = require("node:path");
+const { createRequire } = require("node:module");
+const functionsRequire = createRequire(path.resolve(__dirname, "../../functions/package.json"));
+assert.match(process.env.GCLOUD_PROJECT || "", /^demo-pay0-document-/);
+assert.match(process.env.FIRESTORE_EMULATOR_HOST || "", /^127\.0\.0\.1:\d+$/);
+const ts = functionsRequire("typescript");
+require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+}).outputText, filename);
+const admin = functionsRequire("firebase-admin");
 
-if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT || "pay0-system" });
+if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
 const { getAuthorizedDocumentDownloadUrlCore } = require(
-  "../../functions/lib/modules/documents/authorizedDownload.js",
+  "../../functions/src/modules/documents/authorizedDownload.ts",
 );
 
 const runId = `doc-access-${Date.now()}`;
@@ -20,7 +30,7 @@ const auth = (uid) => ({ uid, token: {} });
 
 async function seed(path, data) { await db.doc(path).set(data); }
 async function expectDenied(promise, label) {
-  await assert.rejects(promise, /No tienes permisos|No autorizado|fuera del root|fuera de scope|no esta activo/i, label);
+  await expectCode(promise, "permission-denied", label);
 }
 async function expectCode(promise, code, label) {
   await assert.rejects(promise, (error) => {

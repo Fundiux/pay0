@@ -2,8 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Download, Eye, Plus, UploadCloud, X } from "lucide-react";
-import { getDownloadURL, ref } from "firebase/storage";
-import { storage } from "@/lib/firebaseClient";
+import { downloadPrivateDocument } from "@/lib/downloadPrivateDocument";
 import { uploadAssetDocument } from "@/lib/uploadAssetDocument";
 import type { AssetDocumentType } from "@/services/assets";
 import { AssetsEmpty, AssetsError, AssetsLoading } from "@/components/assets/AssetsStates";
@@ -40,7 +39,7 @@ export default function DocumentsPage() {
   };
   const openFile = async (doc: any, download = false) => {
     try {
-      const url = await getDownloadURL(ref(storage, doc.storagePath));
+      const url = await downloadPrivateDocument("assetDocuments", doc.id);
       const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer";
       if (download) link.download = doc.originalFileName || "documento";
       document.body.appendChild(link); link.click(); link.remove();

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { runAuthorizedDocumentAction } from "../../src/lib/authorizedDocumentAction.ts";
+import { runAuthorizedDocumentAction, registerPrivateDocumentUrl, releasePrivateDocumentUrl, isPrivateDocumentUrl } from "../../src/lib/authorizedDocumentAction.ts";
 
 const calls = [];
 const deliveries = [];
-const signedUrl = "https://storage.googleapis.test/signed-document?token=ephemeral";
+const signedUrl = "blob:https://pay-0-system.web.app/authorized-local-document";
+registerPrivateDocumentUrl(signedUrl);
 const returned = await runAuthorizedDocumentAction(
   "upload-parent-scoped",
   async uploadId => { calls.push(uploadId); return signedUrl; },
@@ -34,6 +35,15 @@ assert.match(materiality, /role="alert"/);
 assert.doesNotMatch(materiality, /doc\.storagePath/);
 const service = fs.readFileSync("src/services/authorizedDocuments.ts", "utf8");
 assert.match(service, /getAuthorizedDocumentDownloadUrl/);
-assert.match(service, /callable\(\{ uploadId \}\)/);
+assert.match(service, /downloadPrivateDocument\("uploads", uploadId\)/);
+assert.doesNotMatch(service, /httpsCallable/);
+const bridge = fs.readFileSync("src/lib/downloadPrivateDocument.ts", "utf8");
+assert.match(bridge, /method:\s*"POST"/);
+assert.match(bridge, /getIdToken/);
+assert.match(bridge, /createObjectURL/);
+assert.match(bridge, /revision/);
+await assert.rejects(() => runAuthorizedDocumentAction("upload-1", async () => "blob:https://pay-0-system.web.app/unregistered", async () => {}), /URL segura/);
+releasePrivateDocumentUrl(signedUrl);
+assert.equal(isPrivateDocumentUrl(signedUrl), false);
 
-console.log(JSON.stringify({ ok: true, uiFamilies: ["SOLICITUD", "PAGO", "DISPERSION", "MATERIALIDAD"], callablePayload: { uploadId: "upload-parent-scoped" }, ephemeralUrlDelivered: true, legacyStorageUrlRejected: true, visibleErrorContract: true }));
+console.log(JSON.stringify({ ok: true, uiFamilies: ["SOLICITUD", "PAGO", "DISPERSION", "MATERIALIDAD"], bridgePayload: { family: "uploads", documentId: "upload-parent-scoped" }, localBlobDelivered: true, legacyStorageUrlRejected: true, visibleErrorContract: true }));

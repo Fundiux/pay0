@@ -1,7 +1,7 @@
 import { traceDocumentOperation } from "@/lib/operationTiming";
 import { CALLABLES } from "@/lib/callableNames";
 import { httpsCallable } from "firebase/functions";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { functions, storage } from "@/lib/firebaseClient";
 import { MATERIALIDAD_CANONICAL_DOCUMENTS } from "@/canonicos/materialidad";
 
@@ -111,7 +111,7 @@ export async function uploadSolicitudDoc(opts: {
   traceDocumentOperation("document_finalized_at", solicitudId, result.documentFinalizedAt);
 
   // A download-link failure must not prevent authoritative finalization.
-  const downloadURL = await getDownloadURL(storageRef).catch(() => "");
+  const downloadURL = ""; // Download on demand through the authenticated bridge.
 
   return {
     uploadId,

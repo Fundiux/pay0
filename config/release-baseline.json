@@ -87,13 +87,43 @@
     },
     {
       "file": "qa/scripts/authorized-document-ui-integration.mjs",
-      "text": "ephemeralUrlDelivered: true",
-      "capability": "La UI entrega documentos solo despues del callable autorizado"
+      "text": "localBlobDelivered: true",
+      "capability": "BASE8601-01: Materialidad obtiene documento autorizado mediante POST y blob local"
     },
     {
       "file": "qa/scripts/authorized-document-ui-integration.mjs",
       "text": "\"MATERIALIDAD\"",
-      "capability": "BASE8601-01: Materialidad entrega documentos mediante URL HTTPS efimera"
+      "capability": "BASE8601-01: Materialidad obtiene documento autorizado mediante POST y blob local"
+    },
+    {
+      "file": "functions/src/modules/documents/authorizedDownload.ts",
+      "text": "resolveAuthorizedDocumentObject",
+      "capability": "Callable legacy conserva autorizacion central antes de firmar"
+    },
+    {
+      "file": "functions/src/modules/documents/downloadAccess.ts",
+      "text": "transaction: tx",
+      "capability": "Descarga documental resuelve delegaciones actuales en transaccion"
+    },
+    {
+      "file": "functions/src/modules/documents/documentDownloadHttp.ts",
+      "text": "verifyIdToken(token, true)",
+      "capability": "Puente documental valida revocacion del ID token"
+    },
+    {
+      "file": "src/services/authorizedDocuments.ts",
+      "text": "downloadPrivateDocument",
+      "capability": "Consumidores operativos usan el puente documental privado"
+    },
+    {
+      "file": "src/lib/downloadPrivateDocument.ts",
+      "text": "method:\"POST\"",
+      "capability": "Transporte documental usa POST autenticado"
+    },
+    {
+      "file": "src/lib/downloadPrivateDocument.ts",
+      "text": "registerPrivateDocumentUrl(url)",
+      "capability": "Transporte documental entrega solo blob local completo"
     }
   ],
   "forbiddenText": [
