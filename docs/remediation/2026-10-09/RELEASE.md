@@ -33,3 +33,11 @@ Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35
 4. Publicar por el flujo Git permitido; GitHub main consultado: protected=false, sin reglas devueltas, SHA remoto7dfcd8a.
 5. Desplegar componentes concretos, comprobar revisión efectiva y postflight seguro.
 6. Un fallo bloquea solo ese lote. Si rollback reintroduce vulnerabilidad, priorizar contención compatible o corrección hacia adelante. Nunca repetir un efecto externo incierto.
+
+## Segundo lote preparado: incidencias y OCR
+
+Candidato integrado ed86559 (FI-01 raíz obligatoria y FI-02 solicitud transaccional) sobre merge68799eb; frontend47 páginas y Functions PASS antes de FI-02, predeploy obligatorio recompila FI-02. Pruebas de raíz, carrera, replay, política, linaje, IQ24casos y Telegram/AppCheck18 PASS. No se publicará todo el backend.
+
+Componentes exactos: resolveClientDispersionIncident, requestClientDispersionIncident, parsePagoReceiptPdf, correctPagoReceiptSemanticField. Preflight remoto: todos ACTIVE, único env custom PAY0_FIREBASE_WEB_API_KEY, sin bindings secretos. Las capacidades productivas de OCR/corrección se recuperaron previamente; ambos usan el mismo ZIP SHA256329B31F7F23C0B87556A38034CC5AE6E0F9E64F8B5A2D0D51EC6CD8EDA723A98. Incidencias usan ZIP previo C50F0D7A95BB24CAF156022AE1145503D34F2110F9C39DF71921EE52A190DB1F. Archivos completos preservados en TEMP privado.
+
+Preversiones: resolve revision00022-wum/generation1790583779087600; request revision00022-rom/generation1790583779318022; parse revision00012-fab/generation1790843385213011; correct revision00001-zod/generation1790843316135075. Diff real financing: únicamente helper de delegación vigente y correcciones FI-01/FI-02, sin pérdida de capacidades productivas. Rollback ordinario reintroduciría fallo de raíz o carrera: preferir corrección hacia adelante o contención focal. Sin pruebas de mutación real de incidencias ni OCR de documentos productivos; postflight no autenticado y metadata primero, simulaciones/emuladores para efectos.
