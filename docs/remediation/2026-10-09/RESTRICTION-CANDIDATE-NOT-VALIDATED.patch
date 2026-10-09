@@ -1,0 +1,519 @@
+# APPLIED LOCALLY AFTER CENTRAL REVIEW: matrix2760+33120 PASS; candidate325/325 and actual325/325 PASS; NO DEPLOY;24 delegated Storage gaps remain.
+# Review artifact uses zero context to avoid whitespace-only patch context in Git checks.
+diff --git a/firestore.rules b/firestore.rules
+index 81f22fa..c86b221 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -4,0 +5,47 @@ service cloud.firestore {
++
++    function restrictionId(value) { return value.matches('[A-Za-z0-9_-]{1,128}'); }
++    function restrictionMillis(value) { return value is int && value >= 0 && value <= 253402300799999; }
++    function restrictionRoot(user) {
++      let root = user.get('rootId', null);
++      return root == null || root == '' || root == false || root == 0 ? request.auth.uid : root;
++    }
++    // Every required property is accessed below; exact map size rejects unknown fields.
++    // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
++    function restrictionRecordValid(row, rootId) {
++      return row is map
++        && row.keys().size() == (row.state == 'ACTIVE' ? 15 : 18)
++        && row.schemaVersion == 1
++        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
++        && row.policyVersion == 'PAY0-CONTAINMENT@1'
++        && restrictionId(row.restrictionId)
++        && restrictionId(rootId) && row.rootId == rootId
++        && restrictionId(request.auth.uid) && row.subjectUid == request.auth.uid
++        && row.scope == 'ACCOUNT_OPERATIONS'
++        && row.authority == 'HUMAN_SECURITY_ADMIN'
++        && restrictionId(row.authorityUid) && row.authorityUid != request.auth.uid
++        && restrictionId(row.incidentId)
++        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
++        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
++        && restrictionMillis(row.issuedAtMs) && restrictionMillis(row.expiresAtMs)
++        && row.issuedAtMs <= request.time.toMillis() && row.expiresAtMs > row.issuedAtMs
++        && row.expiresAtMs - row.issuedAtMs <= 86400000;
++    }
++    function restrictionAllowsRecord(row, rootId) {
++      return restrictionRecordValid(row, rootId) && (
++        (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
++        || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
++          && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
++          && restrictionId(row.revokedBy) && row.revokedBy != request.auth.uid
++          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY'])
++      );
++    }
++    function restrictionAllowsUser(user) {
++      return !user.keys().hasAny(['trustedRestrictionV1']) || restrictionAllowsRecord(user.trustedRestrictionV1, restrictionRoot(user));
++    }
++    function userLifecycleActive(user) {
++      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
++        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
++        && user.get('isActive', true) != false && user.get('active', true) != false;
++    }
++
++    function accountAllowed() { return authenticated() && restrictionAllowsUser(userDoc(me())); }
+@@ -32,3 +79,3 @@ service cloud.firestore {
+-    function isSuperadmin() { return myRole() == "superadmin"; }
+-    function isAdmin() { return myRole() == "admin"; }
+-    function isOperador() { return myRole() == "operador"; }
++    function isSuperadmin() { return userDoc(me()).get("role", "") == "superadmin"; }
++    function isAdmin() { return userDoc(me()).get("role", "") == "admin"; }
++    function isOperador() { return userDoc(me()).get("role", "") in ["operator", "operador"]; }
+@@ -38,27 +85,37 @@ service cloud.firestore {
+-      return isSuperadmin()
+-        || (isAdmin() && (
+-          (moduleKey == "dashboard" && actionKey == "view")
+-          || (moduleKey == "reportes" && actionKey == "view")
+-          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "edit", "comment", "cancel", "uploadDocs"])
+-          || (moduleKey == "pagos" && actionKey in ["view", "create", "edit", "cancel", "uploadDocs"])
+-          || (moduleKey == "clientes" && actionKey in ["view", "create", "edit", "costs"])
+-          || (moduleKey == "despachos" && actionKey in ["view", "costs"])
+-          || (moduleKey == "empresas" && actionKey == "view")
+-          || (moduleKey == "usuarios" && actionKey in ["view", "create", "activate", "permissions", "costs", "clientDelegations"])
+-          || (moduleKey == "modulos" && actionKey in ["view", "edit"])
+-          || (moduleKey == "wallet" && actionKey in ["view", "saldos", "adelantos", "dispersiones", "beneficiarios", "estadoCuentaCliente", "estadoCuentaUsuario", "configuracion"])
+-          || (moduleKey == "telegram" && actionKey in ["view", "link"])
+-          || (moduleKey == "actividad" && actionKey == "view")
+-        ))
+-        || (isOperador() && (
+-          (moduleKey == "dashboard" && actionKey == "view")
+-          || (moduleKey == "reportes" && actionKey == "view")
+-          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "uploadDocs"])
+-          || (moduleKey == "pagos" && actionKey in ["view", "create", "uploadDocs"])
+-          || (moduleKey == "clientes" && actionKey in ["view", "create"])
+-          || (moduleKey == "despachos" && actionKey == "view")
+-          || (moduleKey == "empresas" && actionKey == "view")
+-          || (moduleKey == "wallet" && actionKey in ["view", "dispersiones", "beneficiarios"])
+-          || (moduleKey == "telegram" && actionKey in ["view", "link"])
+-          || (moduleKey == "actividad" && actionKey == "view")
+-        ));
++      // Canonical renderer v1: cache role and select modules by action.
++      let role = myRole();
++      let modules = role == "admin"
++        ? (
++          actionKey == "view" ? ["actividad", "clientes", "dashboard", "despachos", "empresas", "modulos", "pagos", "reportes", "solicitudes", "telegram", "usuarios", "wallet"]
++          : actionKey == "activate" ? ["usuarios"]
++          : actionKey == "adelantos" ? ["wallet"]
++          : actionKey == "beneficiarios" ? ["wallet"]
++          : actionKey == "cancel" ? ["pagos", "solicitudes"]
++          : actionKey == "clientDelegations" ? ["usuarios"]
++          : actionKey == "comment" ? ["solicitudes"]
++          : actionKey == "configuracion" ? ["wallet"]
++          : actionKey == "costs" ? ["clientes", "despachos", "usuarios"]
++          : actionKey == "create" ? ["clientes", "pagos", "solicitudes", "usuarios"]
++          : actionKey == "dispersiones" ? ["wallet"]
++          : actionKey == "edit" ? ["clientes", "modulos", "pagos", "solicitudes"]
++          : actionKey == "estadoCuentaCliente" ? ["wallet"]
++          : actionKey == "estadoCuentaUsuario" ? ["wallet"]
++          : actionKey == "link" ? ["telegram"]
++          : actionKey == "permissions" ? ["usuarios"]
++          : actionKey == "saldos" ? ["wallet"]
++          : actionKey == "uploadDocs" ? ["pagos", "solicitudes"]
++          : []
++        )
++        : role == "operador"
++          ? (
++            actionKey == "view" ? ["actividad", "clientes", "dashboard", "despachos", "empresas", "pagos", "reportes", "solicitudes", "telegram", "wallet"]
++            : actionKey == "beneficiarios" ? ["wallet"]
++            : actionKey == "comment" ? ["solicitudes"]
++            : actionKey == "create" ? ["clientes", "pagos", "solicitudes"]
++            : actionKey == "dispersiones" ? ["wallet"]
++            : actionKey == "link" ? ["telegram"]
++            : actionKey == "uploadDocs" ? ["pagos", "solicitudes"]
++            : []
++          )
++          : [];
++      return role == "superadmin" || moduleKey in modules;
+@@ -74,0 +132,4 @@ service cloud.firestore {
++    function individualAllowsViewAndAction(moduleKey, actionKey) {
++      let access = userDoc(me()).get("modules", {}).get(moduleKey, {});
++      return access.get("view", true) == true && (actionKey == "view" || access.get(actionKey, true) == true);
++    }
+@@ -80,3 +141,2 @@ service cloud.firestore {
+-          && individualAllows(moduleKey, "view")
+-          && roleDefaultAllows(moduleKey, actionKey)
+-          && individualAllows(moduleKey, actionKey)
++          && (actionKey == "view" || roleDefaultAllows(moduleKey, actionKey))
++          && individualAllowsViewAndAction(moduleKey, actionKey)
+@@ -152 +212 @@ service cloud.firestore {
+-    function clientDelegationIsCurrent(clientId) {
++    function clientDelegationPermission(clientId, permission, legacy) {
+@@ -154,0 +215 @@ service cloud.firestore {
++      let permissions = access.get("permissions", {});
+@@ -167,7 +228,2 @@ service cloud.firestore {
+-        && validDelegationTime(access.get("startsAt", null), false);
+-    }
+-
+-    function clientDelegationPermission(clientId, permission, legacy) {
+-      let access = get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data;
+-      let permissions = access.get("permissions", {});
+-      return clientDelegationIsCurrent(clientId) && permissions is map
++        && validDelegationTime(access.get("startsAt", null), false)
++        && permissions is map
+@@ -242 +298 @@ service cloud.firestore {
+-      allow read: if signedIn();
++      allow read: if accountAllowed() && (signedIn());
+@@ -246 +302,3 @@ service cloud.firestore {
+-      allow read: if canReadUser(uid);
++      // Preserve own active profile bootstrap; no lists, writes or economic collections.
++      allow get: if authenticated() && me() == uid && userLifecycleActive(resource.data);
++      allow read: if accountAllowed() && (canReadUser(uid));
+@@ -250,2 +308,2 @@ service cloud.firestore {
+-        allow read: if hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid));
+-        allow write: if signedIn() && isSuperadmin();
++        allow read: if accountAllowed() && (hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid)));
++        allow write: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -265 +323 @@ service cloud.firestore {
+-      allow read: if hasModuleView("despachos") && (
++      allow read: if accountAllowed() && (hasModuleView("despachos") && (
+@@ -269,2 +327,2 @@ service cloud.firestore {
+-      );
+-      allow write: if signedIn() && isSuperadmin();
++      ));
++      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -272 +330 @@ service cloud.firestore {
+-        allow read: if hasModuleAction("despachos", "costs") && (
++        allow read: if accountAllowed() && (hasModuleAction("despachos", "costs") && (
+@@ -276,2 +334,2 @@ service cloud.firestore {
+-        );
+-        allow write: if signedIn() && isSuperadmin();
++        ));
++        allow write: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -282 +340 @@ service cloud.firestore {
+-      allow read: if signedIn();
++      allow read: if accountAllowed() && (signedIn());
+@@ -287 +345 @@ service cloud.firestore {
+-      allow read: if hasModuleView("empresas") && (
++      allow read: if accountAllowed() && (hasModuleView("empresas") && (
+@@ -291,2 +349,2 @@ service cloud.firestore {
+-      );
+-      allow write: if signedIn() && isSuperadmin();
++      ));
++      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -296 +354 @@ service cloud.firestore {
+-      allow read: if hasModuleView("clientes") && (
++      allow read: if accountAllowed() && (hasModuleView("clientes") && (
+@@ -303 +361 @@ service cloud.firestore {
+-      );
++      ));
+@@ -308 +366 @@ service cloud.firestore {
+-        allow read: if hasModuleAction("clientes", "costs") && (
++        allow read: if accountAllowed() && (hasModuleAction("clientes", "costs") && (
+@@ -318 +376 @@ service cloud.firestore {
+-        );
++        ));
+@@ -324 +382 @@ service cloud.firestore {
+-      allow read: if signedIn() && isSuperadmin();
++      allow read: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -328 +386 @@ service cloud.firestore {
+-      allow read: if signedIn() && (
++      allow read: if accountAllowed() && (signedIn() && (
+@@ -333 +391 @@ service cloud.firestore {
+-      );
++      ));
+@@ -337 +395 @@ service cloud.firestore {
+-      allow read: if hasModuleView("solicitudes") && (
++      allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
+@@ -342 +400 @@ service cloud.firestore {
+-      );
++      ));
+@@ -347 +405 @@ service cloud.firestore {
+-        allow read: if hasModuleView("solicitudes") && (
++        allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
+@@ -352 +410 @@ service cloud.firestore {
+-        );
++        ));
+@@ -354 +412 @@ service cloud.firestore {
+-        allow create: if hasModuleAction("solicitudes", "comment") && (
++        allow create: if accountAllowed() && (hasModuleAction("solicitudes", "comment") && (
+@@ -359 +417 @@ service cloud.firestore {
+-        );
++        ));
+@@ -361 +419 @@ service cloud.firestore {
+-        allow update, delete: if signedIn() && isSuperadmin();
++        allow update, delete: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -365 +423 @@ service cloud.firestore {
+-      allow read: if hasModuleView("pagos") && (
++      allow read: if accountAllowed() && (hasModuleView("pagos") && (
+@@ -370 +428 @@ service cloud.firestore {
+-      );
++      ));
+@@ -375 +433 @@ service cloud.firestore {
+-        allow read: if hasModuleView("pagos") && (
++        allow read: if accountAllowed() && (hasModuleView("pagos") && (
+@@ -380 +438 @@ service cloud.firestore {
+-        );
++        ));
+@@ -386 +444 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "create") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "create") && (
+@@ -405 +463 @@ service cloud.firestore {
+-      );
++      ));
+@@ -407 +465 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -426 +484 @@ service cloud.firestore {
+-      );
++      ));
+@@ -431 +489 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -435 +493 @@ service cloud.firestore {
+-      );
++      ));
+@@ -440 +498 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -444 +502 @@ service cloud.firestore {
+-      );
++      ));
+@@ -448 +506 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -452 +510 @@ service cloud.firestore {
+-      );
++      ));
+@@ -456 +514 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -460 +518 @@ service cloud.firestore {
+-      );
++      ));
+@@ -464 +522 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("pagos", "conciliate") && (
++      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+@@ -468 +526 @@ service cloud.firestore {
+-      );
++      ));
+@@ -472 +530 @@ service cloud.firestore {
+-      allow read: if hasModuleView("wallet") && (
++      allow read: if accountAllowed() && (hasModuleView("wallet") && (
+@@ -476 +534 @@ service cloud.firestore {
+-      );
++      ));
+@@ -480 +538 @@ service cloud.firestore {
+-      allow read: if hasModuleView("wallet") && (
++      allow read: if accountAllowed() && (hasModuleView("wallet") && (
+@@ -485 +543 @@ service cloud.firestore {
+-      );
++      ));
+@@ -490 +548 @@ service cloud.firestore {
+-      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId() && (
++      allow read: if accountAllowed() && (hasModuleView("actividad") && resource.data.rootId == myRootId() && (
+@@ -496 +554 @@ service cloud.firestore {
+-      );
++      ));
+@@ -501 +559 @@ service cloud.firestore {
+-      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId()
++      allow read: if accountAllowed() && (hasModuleView("actividad") && resource.data.rootId == myRootId()
+@@ -508 +566 @@ service cloud.firestore {
+-      );
++      ));
+@@ -524 +582 @@ service cloud.firestore {
+-      allow read: if hasModuleView("empresas") && (
++      allow read: if accountAllowed() && (hasModuleView("empresas") && (
+@@ -527,2 +585,2 @@ service cloud.firestore {
+-      );
+-      allow write: if signedIn() && isSuperadmin();
++      ));
++      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -532 +590 @@ service cloud.firestore {
+-      allow read: if hasModuleView("empresas") && (
++      allow read: if accountAllowed() && (hasModuleView("empresas") && (
+@@ -535,2 +593,2 @@ service cloud.firestore {
+-      );
+-      allow create, update, delete: if signedIn() && isSuperadmin();
++      ));
++      allow create, update, delete: if accountAllowed() && (signedIn() && isSuperadmin());
+@@ -540 +598 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid))));
+@@ -545 +603 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid))));
+@@ -550,2 +608,2 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+-      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
++      allow write: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
+@@ -555 +613 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
+@@ -557 +615 @@ service cloud.firestore {
+-      allow create, update, delete: if signedIn() && (
++      allow create, update, delete: if accountAllowed() && (signedIn() && (
+@@ -564 +622 @@ service cloud.firestore {
+-      );
++      ));
+@@ -568,2 +626,2 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+-      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
++      allow write: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
+@@ -573,2 +631,2 @@ service cloud.firestore {
+-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+-      allow create, update, delete: if signedIn() && (isSuperadmin() || iManageUser(uid));
++      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
++      allow create, update, delete: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
+@@ -578 +636 @@ service cloud.firestore {
+-      allow read: if hasModuleView("wallet") && (
++      allow read: if accountAllowed() && (hasModuleView("wallet") && (
+@@ -588 +646 @@ service cloud.firestore {
+-      );
++      ));
+@@ -593 +651 @@ service cloud.firestore {
+-      allow read: if hasModuleView("wallet") && (
++      allow read: if accountAllowed() && (hasModuleView("wallet") && (
+@@ -603 +661 @@ service cloud.firestore {
+-      );
++      ));
+@@ -608 +666 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("wallet", "beneficiarios") && (
++      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
+@@ -615 +673 @@ service cloud.firestore {
+-      );
++      ));
+@@ -629 +687 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
++      allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
+@@ -636 +694 @@ service cloud.firestore {
+-      );
++      ));
+@@ -639 +697 @@ service cloud.firestore {
+-        allow read: if hasModuleAction("wallet", "dispersiones")
++        allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones")
+@@ -647 +705 @@ service cloud.firestore {
+-        );
++        ));
+@@ -654 +712 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("wallet", "beneficiarios") && (
++      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
+@@ -661 +719 @@ service cloud.firestore {
+-      );
++      ));
+@@ -665 +723 @@ service cloud.firestore {
+-      allow read: if hasModuleAction("wallet", "adelantos") && (
++      allow read: if accountAllowed() && (hasModuleAction("wallet", "adelantos") && (
+@@ -669 +727 @@ service cloud.firestore {
+-      );
++      ));
+@@ -674 +732 @@ service cloud.firestore {
+-      allow read: if hasModuleView("telegram") && isSuperadmin();
++      allow read: if accountAllowed() && (hasModuleView("telegram") && isSuperadmin());
+@@ -679 +737 @@ service cloud.firestore {
+-      allow read: if hasModuleView("telegram") && (
++      allow read: if accountAllowed() && (hasModuleView("telegram") && (
+@@ -682 +740 @@ service cloud.firestore {
+-      );
++      ));
+@@ -691 +749 @@ service cloud.firestore {
+-      allow read: if hasModuleView("telegram") && (isSuperadmin() || me() == uid);
++      allow read: if accountAllowed() && (hasModuleView("telegram") && (isSuperadmin() || me() == uid));
+@@ -696 +754 @@ service cloud.firestore {
+-      allow read: if hasModuleView("telegram") && isSuperadmin();
++      allow read: if accountAllowed() && (hasModuleView("telegram") && isSuperadmin());
+diff --git a/storage.rules b/storage.rules
+index e296724..ce0e757 100644
+--- a/storage.rules
++++ b/storage.rules
+@@ -4,0 +5,51 @@ service firebase.storage {
++
++    function restrictionId(value) { return value.matches('[A-Za-z0-9_-]{1,128}'); }
++    function restrictionMillis(value) { return value is int && value >= 0 && value <= 253402300799999; }
++    function restrictionRoot(user) {
++      let root = user.get('rootId', null);
++      return root == null || root == '' || root == false || root == 0 ? request.auth.uid : root;
++    }
++    // Every required property is accessed below; exact map size rejects unknown fields.
++    // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
++    function restrictionRecordValid(row, rootId) {
++      return row is map
++        && row.keys().size() == (row.state == 'ACTIVE' ? 15 : 18)
++        && row.schemaVersion == 1
++        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
++        && row.policyVersion == 'PAY0-CONTAINMENT@1'
++        && restrictionId(row.restrictionId)
++        && restrictionId(rootId) && row.rootId == rootId
++        && restrictionId(request.auth.uid) && row.subjectUid == request.auth.uid
++        && row.scope == 'ACCOUNT_OPERATIONS'
++        && row.authority == 'HUMAN_SECURITY_ADMIN'
++        && restrictionId(row.authorityUid) && row.authorityUid != request.auth.uid
++        && restrictionId(row.incidentId)
++        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
++        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
++        && restrictionMillis(row.issuedAtMs) && restrictionMillis(row.expiresAtMs)
++        && row.issuedAtMs <= request.time.toMillis() && row.expiresAtMs > row.issuedAtMs
++        && row.expiresAtMs - row.issuedAtMs <= 86400000;
++    }
++    function restrictionAllowsRecord(row, rootId) {
++      return restrictionRecordValid(row, rootId) && (
++        (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
++        || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
++          && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
++          && restrictionId(row.revokedBy) && row.revokedBy != request.auth.uid
++          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY'])
++      );
++    }
++    function restrictionAllowsUser(user) {
++      return !user.keys().hasAny(['trustedRestrictionV1']) || restrictionAllowsRecord(user.trustedRestrictionV1, restrictionRoot(user));
++    }
++    function userLifecycleActive(user) {
++      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
++        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
++        && user.get('isActive', true) != false && user.get('active', true) != false;
++    }
++
++    function currentUserAllowed(rootId) {
++      let user = userDoc();
++      return signedIn() && userLifecycleActive(user) && restrictionRoot(user) == rootId && restrictionAllowsUser(user);
++    }
++
+@@ -106,3 +157,3 @@ service firebase.storage {
+-          request.auth.uid == rootId
+-          || ownsDocument(data)
+-          || solicitudAccessFromData(data)
++          (request.auth.uid == rootId || ownsDocument(data))
++            ? currentUserAllowed(rootId)
++            : solicitudAccessFromData(data)
+@@ -117,3 +168,3 @@ service firebase.storage {
+-          request.auth.uid == rootId
+-          || ownsDocument(data)
+-          || pagoAccessFromData(data)
++          (request.auth.uid == rootId || ownsDocument(data))
++            ? currentUserAllowed(rootId)
++            : pagoAccessFromData(data)
+@@ -126 +177,2 @@ service firebase.storage {
+-      return myRootId() == rootId
++      return currentUserAllowed(rootId)
++        && myRootId() == rootId
+@@ -150,3 +202,3 @@ service firebase.storage {
+-          request.auth.uid == rootId
+-          || ownsDocument(data)
+-          || dispersionAccessFromData(data)
++          (request.auth.uid == rootId || ownsDocument(data))
++            ? currentUserAllowed(rootId)
++            : dispersionAccessFromData(data)
+@@ -261 +313 @@ service firebase.storage {
+-      return hasPreparedUploadId()
++      return currentUserAllowed(rootId) && hasPreparedUploadId()
+@@ -367 +419 @@ service firebase.storage {
+-      return hasPreparedEntityDocumentId()
++      return currentUserAllowed(rootId) && hasPreparedEntityDocumentId()
+@@ -395 +447 @@ service firebase.storage {
+-      return signedIn()
++      return currentUserAllowed(rootId)
+@@ -469 +521 @@ service firebase.storage {
+-      allow read: if signedIn() && request.auth.uid == rootId;
++      allow read: if currentUserAllowed(rootId) && request.auth.uid == rootId;
+@@ -489 +541 @@ service firebase.storage {
+-      allow read: if signedIn() && request.auth.uid == ownerUid;
++      allow read: if currentUserAllowed(rootId) && request.auth.uid == ownerUid;
+@@ -492,0 +545 @@ service firebase.storage {
++                    && currentUserAllowed(rootId)
+@@ -524 +577 @@ service firebase.storage {
+-      allow read: if signedIn() && isSuperAdmin() && myRootId() == rootId;
++      allow read: if currentUserAllowed(rootId) && isSuperAdmin() && myRootId() == rootId;
+@@ -556 +609 @@ service firebase.storage {
+-      return isSuperAdmin()
++      return currentUserAllowed(rootId) && isSuperAdmin()

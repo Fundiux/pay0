@@ -2,6 +2,53 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+
+    function restrictionId(value) { return value.matches('[A-Za-z0-9_-]{1,128}'); }
+    function restrictionMillis(value) { return value is int && value >= 0 && value <= 253402300799999; }
+    function restrictionRoot(user) {
+      let root = user.get('rootId', null);
+      return root == null || root == '' || root == false || root == 0 ? request.auth.uid : root;
+    }
+    // Every required property is accessed below; exact map size rejects unknown fields.
+    // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
+    function restrictionRecordValid(row, rootId) {
+      return row is map
+        && row.keys().size() == (row.state == 'ACTIVE' ? 15 : 18)
+        && row.schemaVersion == 1
+        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
+        && row.policyVersion == 'PAY0-CONTAINMENT@1'
+        && restrictionId(row.restrictionId)
+        && restrictionId(rootId) && row.rootId == rootId
+        && restrictionId(request.auth.uid) && row.subjectUid == request.auth.uid
+        && row.scope == 'ACCOUNT_OPERATIONS'
+        && row.authority == 'HUMAN_SECURITY_ADMIN'
+        && restrictionId(row.authorityUid) && row.authorityUid != request.auth.uid
+        && restrictionId(row.incidentId)
+        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
+        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
+        && restrictionMillis(row.issuedAtMs) && restrictionMillis(row.expiresAtMs)
+        && row.issuedAtMs <= request.time.toMillis() && row.expiresAtMs > row.issuedAtMs
+        && row.expiresAtMs - row.issuedAtMs <= 86400000;
+    }
+    function restrictionAllowsRecord(row, rootId) {
+      return restrictionRecordValid(row, rootId) && (
+        (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
+        || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
+          && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
+          && restrictionId(row.revokedBy) && row.revokedBy != request.auth.uid
+          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY'])
+      );
+    }
+    function restrictionAllowsUser(user) {
+      return !user.keys().hasAny(['trustedRestrictionV1']) || restrictionAllowsRecord(user.trustedRestrictionV1, restrictionRoot(user));
+    }
+    function userLifecycleActive(user) {
+      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
+        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
+        && user.get('isActive', true) != false && user.get('active', true) != false;
+    }
+
+    function accountAllowed() { return authenticated() && restrictionAllowsUser(userDoc(me())); }
     function authenticated() { return request.auth != null; }
     function me() { return request.auth.uid; }
 
@@ -29,39 +76,49 @@ service cloud.firestore {
       return role == "operator" ? "operador" : role;
     }
 
-    function isSuperadmin() { return myRole() == "superadmin"; }
-    function isAdmin() { return myRole() == "admin"; }
-    function isOperador() { return myRole() == "operador"; }
+    function isSuperadmin() { return userDoc(me()).get("role", "") == "superadmin"; }
+    function isAdmin() { return userDoc(me()).get("role", "") == "admin"; }
+    function isOperador() { return userDoc(me()).get("role", "") in ["operator", "operador"]; }
 
     // AUTHORIZATION_POLICY_GENERATED_START PAY0-USERS-PERMISSIONS@1
     function roleDefaultAllows(moduleKey, actionKey) {
-      return isSuperadmin()
-        || (isAdmin() && (
-          (moduleKey == "dashboard" && actionKey == "view")
-          || (moduleKey == "reportes" && actionKey == "view")
-          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "edit", "comment", "cancel", "uploadDocs"])
-          || (moduleKey == "pagos" && actionKey in ["view", "create", "edit", "cancel", "uploadDocs"])
-          || (moduleKey == "clientes" && actionKey in ["view", "create", "edit", "costs"])
-          || (moduleKey == "despachos" && actionKey in ["view", "costs"])
-          || (moduleKey == "empresas" && actionKey == "view")
-          || (moduleKey == "usuarios" && actionKey in ["view", "create", "activate", "permissions", "costs", "clientDelegations"])
-          || (moduleKey == "modulos" && actionKey in ["view", "edit"])
-          || (moduleKey == "wallet" && actionKey in ["view", "saldos", "adelantos", "dispersiones", "beneficiarios", "estadoCuentaCliente", "estadoCuentaUsuario", "configuracion"])
-          || (moduleKey == "telegram" && actionKey in ["view", "link"])
-          || (moduleKey == "actividad" && actionKey == "view")
-        ))
-        || (isOperador() && (
-          (moduleKey == "dashboard" && actionKey == "view")
-          || (moduleKey == "reportes" && actionKey == "view")
-          || (moduleKey == "solicitudes" && actionKey in ["view", "create", "comment", "uploadDocs"])
-          || (moduleKey == "pagos" && actionKey in ["view", "create", "uploadDocs"])
-          || (moduleKey == "clientes" && actionKey in ["view", "create"])
-          || (moduleKey == "despachos" && actionKey == "view")
-          || (moduleKey == "empresas" && actionKey == "view")
-          || (moduleKey == "wallet" && actionKey in ["view", "dispersiones", "beneficiarios"])
-          || (moduleKey == "telegram" && actionKey in ["view", "link"])
-          || (moduleKey == "actividad" && actionKey == "view")
-        ));
+      // Canonical renderer v1: cache role and select modules by action.
+      let role = myRole();
+      let modules = role == "admin"
+        ? (
+          actionKey == "view" ? ["actividad", "clientes", "dashboard", "despachos", "empresas", "modulos", "pagos", "reportes", "solicitudes", "telegram", "usuarios", "wallet"]
+          : actionKey == "activate" ? ["usuarios"]
+          : actionKey == "adelantos" ? ["wallet"]
+          : actionKey == "beneficiarios" ? ["wallet"]
+          : actionKey == "cancel" ? ["pagos", "solicitudes"]
+          : actionKey == "clientDelegations" ? ["usuarios"]
+          : actionKey == "comment" ? ["solicitudes"]
+          : actionKey == "configuracion" ? ["wallet"]
+          : actionKey == "costs" ? ["clientes", "despachos", "usuarios"]
+          : actionKey == "create" ? ["clientes", "pagos", "solicitudes", "usuarios"]
+          : actionKey == "dispersiones" ? ["wallet"]
+          : actionKey == "edit" ? ["clientes", "modulos", "pagos", "solicitudes"]
+          : actionKey == "estadoCuentaCliente" ? ["wallet"]
+          : actionKey == "estadoCuentaUsuario" ? ["wallet"]
+          : actionKey == "link" ? ["telegram"]
+          : actionKey == "permissions" ? ["usuarios"]
+          : actionKey == "saldos" ? ["wallet"]
+          : actionKey == "uploadDocs" ? ["pagos", "solicitudes"]
+          : []
+        )
+        : role == "operador"
+          ? (
+            actionKey == "view" ? ["actividad", "clientes", "dashboard", "despachos", "empresas", "pagos", "reportes", "solicitudes", "telegram", "wallet"]
+            : actionKey == "beneficiarios" ? ["wallet"]
+            : actionKey == "comment" ? ["solicitudes"]
+            : actionKey == "create" ? ["clientes", "pagos", "solicitudes"]
+            : actionKey == "dispersiones" ? ["wallet"]
+            : actionKey == "link" ? ["telegram"]
+            : actionKey == "uploadDocs" ? ["pagos", "solicitudes"]
+            : []
+          )
+          : [];
+      return role == "superadmin" || moduleKey in modules;
     }
     // AUTHORIZATION_POLICY_GENERATED_END
 
@@ -72,14 +129,17 @@ service cloud.firestore {
         .get(actionKey, true) == true;
     }
 
+    function individualAllowsViewAndAction(moduleKey, actionKey) {
+      let access = userDoc(me()).get("modules", {}).get(moduleKey, {});
+      return access.get("view", true) == true && (actionKey == "view" || access.get(actionKey, true) == true);
+    }
     function hasModuleAction(moduleKey, actionKey) {
       return signedIn() && (
         isSuperadmin()
         || (
           roleDefaultAllows(moduleKey, "view")
-          && individualAllows(moduleKey, "view")
-          && roleDefaultAllows(moduleKey, actionKey)
-          && individualAllows(moduleKey, actionKey)
+          && (actionKey == "view" || roleDefaultAllows(moduleKey, actionKey))
+          && individualAllowsViewAndAction(moduleKey, actionKey)
         )
       );
     }
@@ -149,9 +209,10 @@ service cloud.firestore {
       );
     }
 
-    function clientDelegationIsCurrent(clientId) {
+    function clientDelegationPermission(clientId, permission, legacy) {
       let path = /databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId);
       let access = get(path).data;
+      let permissions = access.get("permissions", {});
       let rootId = myRootId();
       let client = get(/databases/$(database)/documents/clients/$(clientId)).data;
       return clientId != null && exists(path)
@@ -164,13 +225,8 @@ service cloud.firestore {
         && access.get("revokedAt", null) == null
         && (access.get("mode", "PERMANENT") != "TEMPORARY" || access.get("expiresAt", null) != null)
         && validDelegationTime(access.get("expiresAt", null), true)
-        && validDelegationTime(access.get("startsAt", null), false);
-    }
-
-    function clientDelegationPermission(clientId, permission, legacy) {
-      let access = get(/databases/$(database)/documents/userClientAccess/$(me())/clients/$(clientId)).data;
-      let permissions = access.get("permissions", {});
-      return clientDelegationIsCurrent(clientId) && permissions is map
+        && validDelegationTime(access.get("startsAt", null), false)
+        && permissions is map
         && permissions.get(permission, permissions.get(legacy, true)) == true;
     }
 
@@ -239,16 +295,18 @@ service cloud.firestore {
     }
 
     match /system/{docId} {
-      allow read: if signedIn();
+      allow read: if accountAllowed() && (signedIn());
       allow write: if false;
     }
     match /users/{uid} {
-      allow read: if canReadUser(uid);
+      // Preserve own active profile bootstrap; no lists, writes or economic collections.
+      allow get: if authenticated() && me() == uid && userLifecycleActive(resource.data);
+      allow read: if accountAllowed() && (canReadUser(uid));
       allow create, update, delete: if false;
 
       match /costos/{costId} {
-        allow read: if hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid));
-        allow write: if signedIn() && isSuperadmin();
+        allow read: if accountAllowed() && (hasModuleAction("usuarios", "costs") && (isSuperadmin() || me() == uid || iManageUser(uid)));
+        allow write: if accountAllowed() && (signedIn() && isSuperadmin());
       }
     }
 
@@ -262,50 +320,50 @@ service cloud.firestore {
     }
 
     match /despachos/{docId} {
-      allow read: if hasModuleView("despachos") && (
+      allow read: if accountAllowed() && (hasModuleView("despachos") && (
         isSuperadmin()
         || (isAdmin() && resource.data.rootId == myRootId())
         || (isOperador() && resource.data.rootId == myRootId())
-      );
-      allow write: if signedIn() && isSuperadmin();
+      ));
+      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
       match /costos/{costId} {
-        allow read: if hasModuleAction("despachos", "costs") && (
+        allow read: if accountAllowed() && (hasModuleAction("despachos", "costs") && (
           isSuperadmin()
           || (isAdmin() && resource.data.rootId == myRootId())
           || (isOperador() && resource.data.rootId == myRootId())
-        );
-        allow write: if signedIn() && isSuperadmin();
+        ));
+        allow write: if accountAllowed() && (signedIn() && isSuperadmin());
       }
     }
 
     match /operationTypes/{docId} {
-      allow read: if signedIn();
+      allow read: if accountAllowed() && (signedIn());
       allow create, update, delete: if false;
     }
 
     match /companies/{companyId} {
-      allow read: if hasModuleView("empresas") && (
+      allow read: if accountAllowed() && (hasModuleView("empresas") && (
         isSuperadmin()
         || hasCompanyAccess(companyId)
         || (("despachoId" in resource.data) && hasDespachoAccess(resource.data.despachoId))
-      );
-      allow write: if signedIn() && isSuperadmin();
+      ));
+      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
     }
 
     match /clients/{docId} {
-      allow read: if hasModuleView("clientes") && (
+      allow read: if accountAllowed() && (hasModuleView("clientes") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("managedByUserId" in resource.data) && resource.data.managedByUserId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || hasClientAccess(docId)
-      );
+      ));
 
       allow create, update, delete: if false;
 
       match /costos/{costId} {
-        allow read: if hasModuleAction("clientes", "costs") && (
+        allow read: if accountAllowed() && (hasModuleAction("clientes", "costs") && (
           isSuperadmin()
           || (("adminId" in get(/databases/$(database)/documents/clients/$(docId)).data)
               && get(/databases/$(database)/documents/clients/$(docId)).data.adminId == me())
@@ -315,75 +373,75 @@ service cloud.firestore {
               && get(/databases/$(database)/documents/clients/$(docId)).data.managedByUserId == me())
           || (("operadorId" in get(/databases/$(database)/documents/clients/$(docId)).data)
               && get(/databases/$(database)/documents/clients/$(docId)).data.operadorId == me())
-        );
+        ));
         allow write: if false;
       }
     }
 
     match /entityDocuments/{docId} {
-      allow read: if signedIn() && isSuperadmin();
+      allow read: if accountAllowed() && (signedIn() && isSuperadmin());
       allow create, update, delete: if false;
     }
     match /uploads/{docId} {
-      allow read: if signedIn() && (
+      allow read: if accountAllowed() && (signedIn() && (
         isSuperadmin()
         || resource.data.rootId == myRootId()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /solicitudes/{docId} {
-      allow read: if hasModuleView("solicitudes") && (
+      allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
         || hasClientSolicitudAccessFromData(resource.data)
-      );
+      ));
 
       allow create, update, delete: if false;
 
       match /notas/{notaId} {
-        allow read: if hasModuleView("solicitudes") && (
+        allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
           isSuperadmin()
           || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
           || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
           || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
-        );
+        ));
 
-        allow create: if hasModuleAction("solicitudes", "comment") && (
+        allow create: if accountAllowed() && (hasModuleAction("solicitudes", "comment") && (
           isSuperadmin()
           || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
           || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
           || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
-        );
+        ));
 
-        allow update, delete: if signedIn() && isSuperadmin();
+        allow update, delete: if accountAllowed() && (signedIn() && isSuperadmin());
       }
     }
     match /pagos/{pagoId} {
-      allow read: if hasModuleView("pagos") && (
+      allow read: if accountAllowed() && (hasModuleView("pagos") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
         || hasClientPagoAccessFromData(resource.data)
-      );
+      ));
 
       allow create, update, delete: if false;
 
       match /notas/{notaId} {
-        allow read: if hasModuleView("pagos") && (
+        allow read: if accountAllowed() && (hasModuleView("pagos") && (
           isSuperadmin()
           || get(/databases/$(database)/documents/pagos/$(pagoId)).data.adminId == me()
           || get(/databases/$(database)/documents/pagos/$(pagoId)).data.createdBy == me()
           || hasClientPagoAccessFromData(get(/databases/$(database)/documents/pagos/$(pagoId)).data)
-        );
+        ));
 
         allow create, update, delete: if false;
       }
     }
     match /pagoAplicaciones/{aplicacionId} {
-      allow read: if hasModuleAction("pagos", "create") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "create") && (
         isSuperadmin()
         || (
           resource.data.get("rootId", null) == myRootId()
@@ -402,9 +460,9 @@ service cloud.firestore {
             )
           )
         )
-      );
+      ));
 
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || (
           resource.data.get("rootId", null) == myRootId()
@@ -423,89 +481,89 @@ service cloud.firestore {
             )
           )
         )
-      );
+      ));
 
       allow create, update, delete: if false;
     }
     match /pagoApplicationReservations/{reservationId} {
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
 
       allow create, update, delete: if false;
     }
     match /pagoApplicationIqPlans/{planId} {
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /pagoApplicationIqPlanItems/{itemId} {
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /pagoApplicationIqAttempts/{attemptId} {
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /pagoApplicationIqLocks/{lockId} {
-      allow read: if hasModuleAction("pagos", "conciliate") && (
+      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || resource.data.adminId == me()
         || resource.data.createdBy == me()
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /clientWallets/{docId} {
-      allow read: if hasModuleView("wallet") && (
+      allow read: if accountAllowed() && (hasModuleView("wallet") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /ledgerEvents/{docId} {
-      allow read: if hasModuleView("wallet") && (
+      allow read: if accountAllowed() && (hasModuleView("wallet") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /activityLog/{docId} {
       // Coleccion legada: solo lectura durante la transicion, sin nuevas escrituras cliente.
-      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId() && (
+      allow read: if accountAllowed() && (hasModuleView("actividad") && resource.data.rootId == myRootId() && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("actorUid" in resource.data) && resource.data.actorUid == me())
         || (("actorId" in resource.data) && resource.data.actorId == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
 
     match /pay0ActivityLog/{docId} {
-      allow read: if hasModuleView("actividad") && resource.data.rootId == myRootId()
+      allow read: if accountAllowed() && (hasModuleView("actividad") && resource.data.rootId == myRootId()
         && resource.data.sourceSystem == "PAY0" && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("actorUid" in resource.data) && resource.data.actorUid == me())
         || (("actorId" in resource.data) && resource.data.actorId == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
 
@@ -521,61 +579,61 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
     match /dispatchCompanyAccess/{despachoId} {
-      allow read: if hasModuleView("empresas") && (
+      allow read: if accountAllowed() && (hasModuleView("empresas") && (
         isSuperadmin()
         || hasDespachoAccess(despachoId)
-      );
-      allow write: if signedIn() && isSuperadmin();
+      ));
+      allow write: if accountAllowed() && (signedIn() && isSuperadmin());
     }
 
     match /dispatchCompanyAccess/{despachoId}/companies/{companyId} {
-      allow read: if hasModuleView("empresas") && (
+      allow read: if accountAllowed() && (hasModuleView("empresas") && (
         isSuperadmin()
         || hasDespachoAccess(despachoId)
-      );
-      allow create, update, delete: if signedIn() && isSuperadmin();
+      ));
+      allow create, update, delete: if accountAllowed() && (signedIn() && isSuperadmin());
     }
 
     match /userClientAccess/{uid} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid))));
       allow write: if false;
     }
 
     match /userClientAccess/{uid}/clients/{clientId} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid)));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "clientDelegations") && iManageUser(uid))));
       allow create, update, delete: if false;
     }
 
     match /userCompanyAccess/{uid} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
-      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
+      allow write: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
     }
 
     match /userCompanyAccess/{uid}/companies/{companyId} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
 
-      allow create, update, delete: if signedIn() && (
+      allow create, update, delete: if accountAllowed() && (signedIn() && (
         (isSuperadmin() && despachoAllowsCompany(targetDespachoId(uid), companyId))
         ||
         (iManageUser(uid)
           && despachoAllowsCompany(targetDespachoId(uid), companyId)
           && hasCompanyAccess(companyId)
         )
-      );
+      ));
     }
 
     match /userDespachoAccess/{uid} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
-      allow write: if signedIn() && (isSuperadmin() || iManageUser(uid));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
+      allow write: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
     }
 
     match /userDespachoAccess/{uid}/despachos/{despachoId} {
-      allow read: if signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid)));
-      allow create, update, delete: if signedIn() && (isSuperadmin() || iManageUser(uid));
+      allow read: if accountAllowed() && (signedIn() && (isSuperadmin() || me() == uid || (hasModuleAction("usuarios", "permissions") && iManageUser(uid))));
+      allow create, update, delete: if accountAllowed() && (signedIn() && (isSuperadmin() || iManageUser(uid)));
     }
 
     match /balanceAccounts/{docId} {
-      allow read: if hasModuleView("wallet") && (
+      allow read: if accountAllowed() && (hasModuleView("wallet") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
@@ -585,12 +643,12 @@ service cloud.firestore {
           && ("holderId" in resource.data)
           && resource.data.holderId == me()
         )
-      );
+      ));
       allow create, update, delete: if false;
     }
 
     match /balanceMovements/{docId} {
-      allow read: if hasModuleView("wallet") && (
+      allow read: if accountAllowed() && (hasModuleView("wallet") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
@@ -600,19 +658,19 @@ service cloud.firestore {
           && ("holderId" in resource.data)
           && resource.data.holderId == me()
         )
-      );
+      ));
       allow create, update, delete: if false;
     }
 
     match /clientBeneficiaries/{docId} {
-      allow read: if hasModuleAction("wallet", "beneficiarios") && (
+      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
         || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
-      );
+      ));
       allow create, update, delete: if false;
     }
 
@@ -626,17 +684,17 @@ service cloud.firestore {
     }
 
     match /clientDispersions/{docId} {
-      allow read: if hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
+      allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
         || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
-      );
+      ));
       allow create, update, delete: if false;
       match /notas/{notaId} {
-        allow read: if hasModuleAction("wallet", "dispersiones")
+        allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones")
           && userFundedDispersionScope(get(/databases/$(database)/documents/clientDispersions/$(docId)).data) && (
           isSuperadmin()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.adminId == me()
@@ -644,42 +702,42 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.createdBy == me()
           || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clientId)
           || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clienteId)
-        );
+        ));
 
         allow create, update, delete: if false;
       }
     }
 
     match /clientBeneficiaryMethods/{docId} {
-      allow read: if hasModuleAction("wallet", "beneficiarios") && (
+      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
         || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
-      );
+      ));
       allow create, update, delete: if false;
     }
     match /clientAdvances/{docId} {
-      allow read: if hasModuleAction("wallet", "adelantos") && (
+      allow read: if accountAllowed() && (hasModuleAction("wallet", "adelantos") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
 
     match /telegramUpdates/{docId} {
-      allow read: if hasModuleView("telegram") && isSuperadmin();
+      allow read: if accountAllowed() && (hasModuleView("telegram") && isSuperadmin());
       allow create, update, delete: if false;
     }
 
     match /telegramUsers/{telegramUserId} {
-      allow read: if hasModuleView("telegram") && (
+      allow read: if accountAllowed() && (hasModuleView("telegram") && (
         isSuperadmin()
         || (("uid" in resource.data) && resource.data.uid == me())
-      );
+      ));
       allow create, update, delete: if false;
     }
 
@@ -688,12 +746,12 @@ service cloud.firestore {
     }
 
     match /telegramNotificationPrefs/{uid} {
-      allow read: if hasModuleView("telegram") && (isSuperadmin() || me() == uid);
+      allow read: if accountAllowed() && (hasModuleView("telegram") && (isSuperadmin() || me() == uid));
       allow create, update, delete: if false;
     }
 
     match /telegramOutbox/{docId} {
-      allow read: if hasModuleView("telegram") && isSuperadmin();
+      allow read: if accountAllowed() && (hasModuleView("telegram") && isSuperadmin());
       allow create, update, delete: if false;
     }
 
