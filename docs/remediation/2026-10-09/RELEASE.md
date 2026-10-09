@@ -1,16 +1,16 @@
 # Publicación y recuperación
 
-No hay despliegues ni push de esta ejecución todavía. Base preservada: 1f694607. Los commits se enumeran en EXECUTION-LOG.md; integración aislada con main094472f en curso.
+Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35cb, rama remota integration/pay0-remediation-20261009. Main remoto sin cambios. Estado efectivo y recuperación en HANDOFF.md; las filas siguientes conservan detalle del candidato inicial, no son cierre global.
 
 ## Candidatos locales
 
 | Lote | Commit fuente | Verificación | Publicación |
 |---|---|---|---|
-| Reportes sin contención | 31a9f05 | 4 pruebas y build PASS | Pendiente logUnauthorizedRouteAttempt |
+| Reportes sin contención | 31a9f05 | 4 pruebas y build PASS | Publicado revision00012-zal; HTTP401 PASS; limpieza de binding de secreto pendiente |
 | Materialidad QA | 6507598 | Contrato ejecutable PASS | Herramienta local |
 | Delegaciones/reglas | 6859938 | 243 aserciones emuladas; build PASS | Revalidar integrado antes de reglas/callables afectados |
 | OCR y memoria por root | a43658b | 11 pruebas PASS | parsePagoReceiptPdf y correctPagoReceiptSemanticField |
-| Telegram | 6a894d0 | 6 pruebas PASS | Productor telegramWebhook y consumidor telegramDownloadAction juntos |
+| Telegram | 6a894d0 | 6 pruebas PASS | Orden: consumidor compatible, Hosting de página, productor; ventana legacy 15 min |
 | Dependencias | d66555b | Audit cero; builds y smokes PASS; npm ci limpio PASS | Se publica con lotes pertinentes |
 | Resultado IQ incierto | 36270fb | 17 escenarios emulador PASS | Entradas de depósito afectadas, sin ejecutar depósitos de prueba reales |
 | Integridad documental | b49db84 | 8 pruebas y build PASS | init/finalizeEntityDocumentUpload preservando continuidad CSF |

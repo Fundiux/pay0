@@ -85,7 +85,7 @@ export const logAuthEventCallable = onCall(
 // Browser reports are untrusted observations, never authority to restrict an account.
 // One record per actor/minute bounds storage independently of client-controlled paths.
 export const logUnauthorizedRouteAttempt = onCall(
-  { cors: true, timeoutSeconds: 30, memory: "256MiB" },
+  { cors: true, timeoutSeconds: 30, memory: "256MiB", secrets: [] },
   async (request) => {
     const callerUid = requireAuth(request);
     const caller = await getMyUser(callerUid);

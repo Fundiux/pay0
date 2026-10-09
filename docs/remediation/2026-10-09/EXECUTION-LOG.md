@@ -17,3 +17,6 @@
 - Merge aislado de main 094472f en integración. Resueltos conflictos conservando avances de ambas líneas y guards de release; corregidas duplicación getJsZip y dependencia corporativa perdida. Prueba corporate19 aserciones y reactividad8 PASS.
 - Instalación limpia npm ci --ignore-scripts del candidato integrado PASS: Functions439 y frontend457 paquetes. Deprecated no equivale a nueva vulnerabilidad; audit fijado por lock.
 - GitHub main 7dfcd8a, protected=false y ninguna regla de rama devuelta por API autenticada. Se mantiene publicación normal, sin force-push.
+
+- Hito remoto: integración 6b8d2f7e35cb publicada en su rama; S02 revision00012-zal ACTIVE y rechazo no autenticado401 verificados. Artefacto fuente coincide; binding heredado requiere redeploy secrets vacío. Detalles exactos HANDOFF.md.
+- Hito Sentinel: proyecto aislado/API/repositorio creados; recuperación DNS sin recreación. Servicio/ingesta todavía no activos. Reglas candidatas no publicadas: dos límites de evaluación y brechas Storage pendientes.
