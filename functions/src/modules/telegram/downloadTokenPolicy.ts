@@ -1,6 +1,23 @@
 ﻿export const DOWNLOAD_LEASE_MS = 70_000;
 export const DOWNLOAD_STREAM_MS = 55_000;
 export const DOWNLOAD_MAX_ATTEMPTS = 3;
+export const DOWNLOAD_APP_ORIGIN = "https://pay-0-system.web.app";
+export const DOWNLOAD_PAGE_PATH = "/descarga/documento";
+export function downloadTokenFromRequest(method: string, query: any, body: any): string {
+  const value = method === "POST" ? body?.token : query?.token;
+  if (method === "POST" && (!body || typeof body !== "object" || Array.isArray(body) ||
+      Object.keys(body).some(key => key !== "token") || Object.keys(query || {}).length)) throw new DownloadTokenError(400);
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value)) throw new DownloadTokenError(400);
+  return value;
+}
+export function assertDownloadTransport(row: any, method: string, now: number): void {
+  if (method === "POST") return;
+  // Compatibility only for pre-migration records, never for newly issued tokens.
+  const createdAt = timestampMillis(row?.createdAt);
+  const expiresAt = timestampMillis(row?.expiresAt);
+  if (row?.transportVersion !== undefined || createdAt <= 0 || createdAt > now ||
+      expiresAt <= createdAt || expiresAt - createdAt > 900000 || now - createdAt >= 900000) throw new DownloadTokenError(410);
+}
 export class DownloadTokenError extends Error {
   constructor(public readonly status: number) { super("Descarga no disponible."); }
 }
