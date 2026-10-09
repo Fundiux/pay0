@@ -122,8 +122,44 @@ function atomicWrite(target, bytes, mode = 0o600) {
     fs.renameSync(temporary, target);
   } finally { if (fd !== undefined) fs.closeSync(fd); if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
 }
-// Workspace injection exists for synthetic filesystem tests; CLI has no path override.
-export function transitionLocal({ workspace, mode, execute = false, nowMs = Date.now(), parse = firebaseParser(), ignored = root => spawnSync('git', ['check-ignore', '--quiet', '--no-index', '.firebase/telegram-transition/check.env.backup'], { cwd: root, stdio: 'ignore' }).status === 0 }) {
+function recoverPreparedManifest(directory, plan, mode, nowMs) {
+  const names = fs.readdirSync(directory).filter(name => /^[a-f0-9-]{36}\.manifest\.json$/.test(name));
+  if (names.length > 128) fail();
+  const candidates = [];
+  for (const name of names) {
+    const target = path.join(directory, name); assertRegular(target);
+    if (fs.statSync(target).size > 4096) fail();
+    const journal = JSON.parse(fs.readFileSync(target, 'utf8'));
+    if (journal.phase !== 'PREPARED') continue;
+    if (Object.keys(journal).sort().join(',') !== 'afterHash,at,backup,beforeHash,mode,phase,schema' ||
+        journal.schema !== 'PAY0-TELEGRAM-LOCAL-CHANGE@1' || !['bridge','final'].includes(journal.mode) ||
+        !/^[a-f0-9]{64}$/.test(journal.beforeHash) || !/^[a-f0-9]{64}$/.test(journal.afterHash) ||
+        journal.backup !== name.replace('.manifest.json', '.env.backup')) fail();
+    instant(journal.at);
+    if (journal.mode !== mode) continue;
+    if (journal.afterHash !== plan.afterHash) fail();
+    const backup = path.join(directory, journal.backup); assertRegular(backup);
+    if (fs.statSync(backup).size > 1024 * 1024 || sha256(fs.readFileSync(backup)) !== journal.beforeHash) fail();
+    candidates.push({ target, journal });
+  }
+  if (candidates.length > 1) fail();
+  if (candidates.length) {
+    const { target, journal } = candidates[0];
+    atomicWrite(target, Buffer.from(JSON.stringify({ ...journal, phase: 'RECOVERED_APPLIED', recoveredAt: new Date(nowMs).toISOString() }, null, 2)+'\n'));
+    return true;
+  }
+  return false;
+}
+// Test-only injection cannot be selected by CLI. Errors expose only fixed stage enums.
+export function transitionLocal(options) {
+  let stage = 'PRECHECK';
+  try {
+    return runTransition({ ...options, checkpoint: next => { stage = next; options?.checkpoint?.(next); } });
+  } catch {
+    const error = new Error('TELEGRAM_ENV_REJECTED'); error.stage = stage; throw error;
+  }
+}
+function runTransition({ workspace, mode, execute = false, nowMs = Date.now(), parse = firebaseParser(), checkpoint, ignored = root => spawnSync('git', ['check-ignore', '--quiet', '--no-index', '.firebase/telegram-transition/check.env.backup'], { cwd: root, stdio: 'ignore' }).status === 0 }) {
   const root = fs.realpathSync(workspace), target = path.join(root, 'functions/.env.pay-0-system');
   assertRegular(path.join(root, 'functions'), true); assertRegular(target);
   const firebaseDir = path.join(root, '.firebase'), directory = path.join(firebaseDir, 'telegram-transition');
@@ -139,32 +175,47 @@ export function transitionLocal({ workspace, mode, execute = false, nowMs = Date
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   for (const folder of [firebaseDir, directory]) assertRegular(folder, true);
   const lock = path.join(directory, 'transition.lock');
+  checkpoint('LOCK_ACQUIRE');
   const fd = fs.openSync(lock, 'wx', 0o600);
   try {
+    checkpoint('PLAN');
     const original = readTarget();
     const plan = planTransition(original, { mode, nowMs, state: readState() }, parse);
     if (!plan.changed) {
+      checkpoint('JOURNAL_RECOVERY');
+      const recovered = recoverPreparedManifest(directory, plan, mode, nowMs);
       // Adopt an existing bridge window even when its file bytes need no edit.
+      checkpoint('STATE_APPLY');
       atomicWrite(statePath, Buffer.from(JSON.stringify({ ...plan.state, phase: mode === 'bridge' ? 'BRIDGE_APPLIED' : 'FINAL_APPLIED' }, null, 2)+'\n'));
-      return { mode: 'NO_CHANGE', changed: false, beforeHash: plan.beforeHash, afterHash: plan.afterHash };
+      return { mode: 'NO_CHANGE', changed: false, recovered, beforeHash: plan.beforeHash, afterHash: plan.afterHash };
     }
     const id = randomUUID(), backup = path.join(directory, `${id}.env.backup`), manifest = path.join(directory, `${id}.manifest.json`);
-    atomicWrite(backup, original);
+    checkpoint('BACKUP_WRITE'); atomicWrite(backup, original);
+    checkpoint('BACKUP_VERIFY');
     if (sha256(fs.readFileSync(backup)) !== plan.beforeHash) fail();
     const journal = { schema: 'PAY0-TELEGRAM-LOCAL-CHANGE@1', at: new Date(nowMs).toISOString(), mode, phase: 'PREPARED', beforeHash: plan.beforeHash, afterHash: plan.afterHash, backup: path.basename(backup) };
-    atomicWrite(manifest, Buffer.from(JSON.stringify(journal, null, 2)+'\n'));
+    checkpoint('MANIFEST_PREPARE'); atomicWrite(manifest, Buffer.from(JSON.stringify(journal, null, 2)+'\n'));
     // Persist fixed window before target mutation. Recovery cannot silently renew it.
+    checkpoint('STATE_PREPARE');
     if (plan.state) atomicWrite(statePath, Buffer.from(JSON.stringify({ ...plan.state, phase: mode === 'bridge' ? 'PREPARED' : 'FINAL_APPLIED' }, null, 2)+'\n'));
+    checkpoint('SOURCE_COMPARE');
     if (sha256(readTarget()) !== plan.beforeHash) fail();
     // Stage secret-bearing bytes inside ignored directory, on the same workspace volume.
     const staged = path.join(directory, `${id}.env.staged`);
-    atomicWrite(staged, plan.bytes, fs.statSync(target).mode & 0o777);
-    try { fs.renameSync(staged, target); } finally { if (fs.existsSync(staged)) fs.unlinkSync(staged); }
+    checkpoint('STAGE_WRITE'); atomicWrite(staged, plan.bytes, fs.statSync(target).mode & 0o777);
+    try { checkpoint('TARGET_REPLACE'); fs.renameSync(staged, target); } finally { if (fs.existsSync(staged)) fs.unlinkSync(staged); }
+    checkpoint('AFTER_TARGET_REPLACE');
+    checkpoint('TARGET_VERIFY');
     if (sha256(readTarget()) !== plan.afterHash) fail();
+    checkpoint('STATE_APPLY');
     if (plan.state) atomicWrite(statePath, Buffer.from(JSON.stringify({ ...plan.state, phase: mode === 'bridge' ? 'BRIDGE_APPLIED' : 'FINAL_APPLIED' }, null, 2)+'\n'));
-    atomicWrite(manifest, Buffer.from(JSON.stringify({ ...journal, phase: 'APPLIED' }, null, 2)+'\n'));
+    checkpoint('MANIFEST_APPLY'); atomicWrite(manifest, Buffer.from(JSON.stringify({ ...journal, phase: 'APPLIED' }, null, 2)+'\n'));
+    checkpoint('AFTER_MANIFEST_APPLY');
     return { mode: 'APPLIED_LOCAL', changed: true, beforeHash: plan.beforeHash, afterHash: plan.afterHash };
-  } finally { fs.closeSync(fd); fs.unlinkSync(lock); }
+  } finally {
+    try { fs.closeSync(fd); fs.unlinkSync(lock); }
+    catch { checkpoint('LOCK_RELEASE_FAILED'); fail(); }
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -175,6 +226,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const result = transitionLocal({ workspace, mode: args[1], execute: args[2] === '--execute-local' });
     console.log(`TELEGRAM_ENV:${result.mode}`);
     console.log(`BYTE_CHANGE:${result.changed ? 'YES' : 'NO'}`);
+    if (result.recovered) console.log('JOURNAL:RECOVERED_APPLIED');
     console.log(`SHA256_BEFORE:${result.beforeHash}`); console.log(`SHA256_AFTER:${result.afterHash}`);
-  } catch { console.error('TELEGRAM_ENV:FAILED_REVIEW_REQUIRED'); process.exitCode = 1; }
+  } catch (error) {
+    console.error('TELEGRAM_ENV:FAILED_REVIEW_REQUIRED');
+    const stage = error?.stage;
+    console.error(`STAGE:${typeof stage === 'string' && /^[A-Z_]{1,40}$/.test(stage) ? stage : 'ARGUMENTS_OR_SETUP'}`);
+    process.exitCode = 1;
+  }
 }

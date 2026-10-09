@@ -1,3 +1,4 @@
+import { sameEvidenceIdentity, observationEntity } from "./hugoCore/evidenceIdentity";
 import { FieldValue, Firestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { createHash } from "node:crypto";
@@ -164,26 +165,37 @@ export class FirestoreHugoDataStore implements HugoDataStore {
   async linkVerifiedExperience(rootId: string, observationId: string, decisionId: string, outcomeId: string) {
     const scope = this.scope(rootId);
     if (![observationId, decisionId, outcomeId].every(valid)) throw new HttpsError("invalid-argument", "Referencias de experiencia inválidas.");
-    const [observation, decision, outcome] = await Promise.all([this.observationRef(observationId).get(), this.memoryRef(decisionId).get(), this.observationRef(outcomeId).get()]);
-    const a = observation.data(), d = decision.data() as HugoMemoryRecord | undefined, z = outcome.data();
-    if (!a || !d || !z || [a.rootId, d.rootId, z.rootId].some(x => x !== scope) || !a.caseId || a.caseId !== z.caseId || d.entityReference?.entityId !== a.caseId ||
-      d.kind !== "DECISION" || d.status !== "CONFIRMED" || d.links?.observationId !== observationId || !d.decision?.decisionAt ||
-      !a.createdAt?.toMillis?.() || !z.createdAt?.toMillis?.() || a.createdAt.toMillis() > Date.parse(d.decision.decisionAt) || z.createdAt.toMillis() < Date.parse(d.decision.decisionAt) ||
-      a.source !== "ACTIVITY_LOG" || z.source !== "ACTIVITY_LOG" ||
-      !["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "DISPERSION_INCIDENCIA_RESUELTA", "OPERACION_RECUPERADA"].includes(z.sourceEvent)) throw new HttpsError("failed-precondition", "No hay vínculo verificable entre observación, decisión y resultado.");
     const id = `experience_${createHash("sha256").update(JSON.stringify([scope, observationId, decisionId, outcomeId])).digest("hex").slice(0, 36)}`;
-    const ref = this.memoryRef(id), now = new Date().toISOString(), entityReference = d.entityReference!;
-    if ((await ref.get()).exists) return { id, created: false };
-    const record: HugoMemoryRecord & { entityKey: string } = { id, version: MEMORY_CONTRACT_VERSION, rootId: scope, kind: "EXPERIENCE", status: "CONFIRMED",
-      scope: { level: "ENTITY", rootId: scope, system: entityReference.sourceSystem, entityType: entityReference.entityType, entityId: entityReference.entityId },
-      entityReference, entityKey: `${entityReference.sourceSystem}:${entityReference.entityType}:${entityReference.entityId}`,
-      content: `Evento observado: ${String(a.intent || a.sourceEvent).slice(0, 220)}. Decisión humana: ${String(d.decision?.decisionType || "UNKNOWN").slice(0, 40)}. Resultado registrado: ${String(z.outcome || z.sourceEvent).slice(0, 220)}.`,
-      source: "VERIFIED_ACTIVITY_LINK", sourceSystem: "HUGO", confidence: null, createdAt: now, effectiveAt: z.createdAt?.toDate?.()?.toISOString() || now, lastVerifiedAt: now, validUntil: null, supersedes: [],
-      links: { observationId, ...(d.links?.recommendationId ? { recommendationId: d.links.recommendationId } : {}), decisionId, outcomeId, linkStatus: "LINKED" },
-      verification: { evidenceSource: "ACTIVITY_LOG_TERMINAL_EVENT", confirmations: 1, contradictions: 0, outcomeKnown: true } };
-    try { await ref.create(record); return { id, created: true }; }
-    catch (error: any) { if (error?.code === 6 || error?.code === "already-exists") return { id, created: false }; throw error; }
+    const ref = this.memoryRef(id);
+    // Source evidence and creation share one read set: a concurrent revocation retries validation.
+    return this.db.runTransaction(async tx => {
+      const [observation, decision, outcome, existing] = await Promise.all([tx.get(this.observationRef(observationId)), tx.get(this.memoryRef(decisionId)), tx.get(this.observationRef(outcomeId)), tx.get(ref)]);
+      const a = observation.data(), d = decision.data() as HugoMemoryRecord | undefined, z = outcome.data();
+      if (!sameEvidenceIdentity(observationEntity(a), d?.entityReference, observationEntity(z)))
+        throw new HttpsError("failed-precondition", "Identidad de evidencia incompleta o incompatible: sistema, tipo e identificador requeridos.");
+      const observedAt = a?.createdAt?.toMillis?.(), decidedAt = Date.parse(d?.decision?.decisionAt || ""), outcomeAt = z?.createdAt?.toMillis?.();
+      if (!a || !d || !z || [a.rootId, d.rootId, z.rootId].some(x => x !== scope) || !a.caseId || a.caseId !== z.caseId || d.entityReference?.entityId !== a.caseId ||
+        d.kind !== "DECISION" || d.status !== "CONFIRMED" || d.links?.observationId !== observationId || !d.decision?.decisionAt ||
+        ![observedAt, decidedAt, outcomeAt].every(value => Number.isFinite(value) && value > 0) || observedAt > decidedAt || outcomeAt < decidedAt ||
+        a.source !== "ACTIVITY_LOG" || z.source !== "ACTIVITY_LOG" ||
+        !["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "DISPERSION_INCIDENCIA_RESUELTA", "OPERACION_RECUPERADA"].includes(z.sourceEvent)) throw new HttpsError("failed-precondition", "No hay vínculo verificable entre observación, decisión y resultado.");
+      const now = new Date().toISOString(), entityReference = d.entityReference!;
+      if (existing.exists) {
+        if (existing.data()?.rootId !== scope) throw new HttpsError("failed-precondition", "La experiencia no pertenece al root actual.");
+        return { id, created: false };
+      }
+      const record: HugoMemoryRecord & { entityKey: string } = { id, version: MEMORY_CONTRACT_VERSION, rootId: scope, kind: "EXPERIENCE", status: "CONFIRMED",
+        scope: { level: "ENTITY", rootId: scope, system: entityReference.sourceSystem, entityType: entityReference.entityType, entityId: entityReference.entityId },
+        entityReference, entityKey: `${entityReference.sourceSystem}:${entityReference.entityType}:${entityReference.entityId}`,
+        content: `Evento observado: ${String(a.intent || a.sourceEvent).slice(0, 220)}. Decisión humana: ${String(d.decision?.decisionType || "UNKNOWN").slice(0, 40)}. Resultado registrado: ${String(z.outcome || z.sourceEvent).slice(0, 220)}.`,
+        source: "VERIFIED_ACTIVITY_LINK", sourceSystem: "HUGO", confidence: null, createdAt: now, effectiveAt: new Date(outcomeAt).toISOString(), lastVerifiedAt: now, validUntil: null, supersedes: [],
+        links: { observationId, ...(d.links?.recommendationId ? { recommendationId: d.links.recommendationId } : {}), decisionId, outcomeId, linkStatus: "LINKED" },
+        verification: { evidenceSource: "ACTIVITY_LOG_TERMINAL_EVENT", confirmations: 1, contradictions: 0, outcomeKnown: true } };
+      tx.create(ref, record);
+      return { id, created: true };
+    });
   }
+
   async purgeExpiredTraces(now = new Date()) {
     let removed = 0;
     for (let page = 0; page < 5; page++) {

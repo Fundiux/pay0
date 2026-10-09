@@ -5,7 +5,10 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { chromium } from "@playwright/test";
 
-const appRoot = path.resolve(process.argv[2] || process.cwd());
+const args = process.argv.slice(2);
+const remoteReadOnly = args.includes("--remote-readonly");
+const appRoot = path.resolve(remoteReadOnly ? process.cwd() : args[0] || process.cwd());
+const hostingOrigin = "https://pay-0-system.web.app";
 const nextCli = path.join(appRoot, "node_modules/next/dist/bin/next");
 const buildFile = path.join(appRoot, ".next/BUILD_ID");
 const endpoint = "https://us-central1-pay-0-system.cloudfunctions.net/telegramDownloadAction";
@@ -14,6 +17,14 @@ const nextDummy = "second_synthetic_download_".padEnd(43, "y");
 const pdf = Buffer.from("%PDF-1.4\n% SYNTHETIC LOCAL SMOKE ONLY\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n");
 const check = (value, code) => { if (!value) throw new Error(code); };
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// No arbitrary remote targets, query-bearing URLs or network mutations are permitted.
+function networkPolicy(url, method, origin, remote) {
+  if (url.origin === new URL(endpoint).origin && url.pathname === new URL(endpoint).pathname) return "SYNTHETIC";
+  if (url.origin !== origin) return "BLOCK_EXTERNAL";
+  if (remote && (!["GET", "HEAD"].includes(method) || url.search || url.username || url.password)) return "BLOCK_REMOTE";
+  if ([dummy, nextDummy].some(token => url.href.includes(token))) return "BLOCK_CAPABILITY";
+  return "READ_OR_LOCAL";
+}
 async function portFree() {
   const server = net.createServer(); server.listen(0, "127.0.0.1"); await once(server, "listening");
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
@@ -24,11 +35,25 @@ async function isListening(port) {
 }
 let server, browser, port, phase="SETUP", browserClosed=false, serverClosed=false;
 let intercepted=0, blockedRemote=0, expectedToken=dummy, holdResponse=false, releasePending=()=>{};
+let remoteReadsAllowed=0, remoteAssetReadsAllowed=0, blockedSameOriginRequests=0, transportFailure=false;
 const results=[];
 try {
-  check(fs.existsSync(nextCli) && fs.existsSync(buildFile), "EXISTING_BUILD_REQUIRED");
+  check(args.length <= 1 && (remoteReadOnly || !args[0]?.startsWith("--")), "ARGUMENTS_INVALID");
   check(dummy.length===43, "SYNTHETIC_INPUT_INVALID");
-  port=await portFree();const origin=`http://127.0.0.1:${port}`;
+  for (const [url, method, expected] of [
+    [hostingOrigin+"/_next/static/example.js", "GET", "READ_OR_LOCAL"],
+    [hostingOrigin+"/", "HEAD", "READ_OR_LOCAL"],
+    [hostingOrigin+"/", "POST", "BLOCK_REMOTE"],
+    [hostingOrigin+"/?token=synthetic", "GET", "BLOCK_REMOTE"],
+    ["https://example.invalid/", "GET", "BLOCK_EXTERNAL"],
+    [endpoint, "POST", "SYNTHETIC"],
+    [endpoint+"?token=synthetic", "POST", "SYNTHETIC"],
+  ]) check(networkPolicy(new URL(url), method, hostingOrigin, true)===expected,"NETWORK_POLICY_INVALID");
+  results.push("network_policy_self_checks");
+  let origin=hostingOrigin;
+  if (!remoteReadOnly) {
+  check(fs.existsSync(nextCli) && fs.existsSync(buildFile), "EXISTING_BUILD_REQUIRED");
+  port=await portFree();origin=`http://127.0.0.1:${port}`;
   server=spawn(process.execPath,[nextCli,"start","--hostname","127.0.0.1","--port",String(port)],
     {cwd:appRoot,env:{...process.env,NODE_ENV:"production",NEXT_TELEMETRY_DISABLED:"1"},stdio:["ignore","pipe","pipe"],windowsHide:true});
   // Drain logs without printing request URLs, environment or capability fragments.
@@ -40,12 +65,16 @@ try {
     await delay(250);
   }
   check(ready,"LOCAL_SERVER_TIMEOUT");
+  }
   phase="BROWSER_LAUNCH";browser=await chromium.launch({headless:true});
   const context=await browser.newContext({acceptDownloads:true,serviceWorkers:"block"});
   await context.route("**/*",async route=>{
     const request=route.request();const url=new URL(request.url());
-    if(url.origin===origin){await route.continue();return;}
-    if(request.url()===endpoint){
+    const policy=networkPolicy(url,request.method(),origin,remoteReadOnly);
+    // Intercept before the same-origin allowance; even malformed endpoint requests never reach the network.
+    if(policy==="SYNTHETIC"){
+      try {
+      check(request.url()===endpoint,"TRANSPORT_URL");
       if(request.method()==="OPTIONS") {await route.fulfill({status:204,headers:{"access-control-allow-origin":origin,"access-control-allow-methods":"POST","access-control-allow-headers":"content-type"}});return;}
       check(request.method()==="POST","TRANSPORT_METHOD");
       check(url.search==="","TRANSPORT_QUERY");
@@ -54,7 +83,22 @@ try {
       intercepted++;const held=holdResponse;if(held)await new Promise(resolve=>{releasePending=resolve;});
       try { await route.fulfill({status:200,body:pdf,headers:{"content-type":"application/pdf","cache-control":"no-store",
         "content-disposition":"attachment; filename*=UTF-8''smoke-sintetico.pdf","access-control-allow-origin":origin,"access-control-expose-headers":"Content-Disposition"}}); } catch(error) { if(!held)throw error; } return;
+      } catch { transportFailure=true;await route.abort("blockedbyclient").catch(()=>{});return; }
     }
+    if(policy==="READ_OR_LOCAL"){
+      if(remoteReadOnly){remoteReadsAllowed++;if(url.pathname.startsWith("/_next/") || ["script","stylesheet","font","image"].includes(request.resourceType()))remoteAssetReadsAllowed++;}
+      // Do not follow HTTP redirects: each remote request must stay at the fixed origin.
+      if(remoteReadOnly){
+        try {
+          const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:15000});
+          if(response.status()>=300 && response.status()<400){blockedSameOriginRequests++;await route.abort("blockedbyclient");return;}
+          await route.fulfill({response});
+        } catch {transportFailure=true;await route.abort("blockedbyclient").catch(()=>{});}
+        return;
+      }
+      await route.continue();return;
+    }
+    if(policy!=="BLOCK_EXTERNAL"){blockedSameOriginRequests++;await route.abort("blockedbyclient");return;}
     // All external traffic, including Firebase initialization, is blocked before network.
     blockedRemote++;await route.abort("blockedbyclient");
   });
@@ -118,6 +162,7 @@ try {
     check(await page.getByRole("heading",{name:"Descargar documento",exact:true}).count()===0,"ADJOINING_PUBLIC_LEAK");
   }
   results.push("three_adjoining_routes_require_login");
+  check(!transportFailure,"SYNTHETIC_TRANSPORT_FAILED");
   await context.close();phase="PASS";
 } catch(error) {
   // Never dump browser errors, traces, URLs, fragments, request bodies or captured server output.
@@ -129,6 +174,7 @@ try {
   if(server && server.exitCode===null){server.kill();for(let i=0;i<40 && server.exitCode===null;i++)await delay(100);}
   serverClosed=port?!(await isListening(port)):true;
   if(!browserClosed||!serverClosed){console.error(JSON.stringify({status:"CLEANUP_FAILED",browserClosed,serverClosed}));process.exitCode=1;}
-  console.log(JSON.stringify({status:process.exitCode?"FAIL":"PASS",checks:results,interceptedSyntheticPosts:intercepted,
-    blockedExternalRequests:blockedRemote,remoteRequestsAllowed:0,browserClosed,serverClosed}));
+  console.log(JSON.stringify({status:process.exitCode?"FAIL":"PASS",mode:remoteReadOnly?"REMOTE_READONLY":"LOCAL",checks:results,interceptedSyntheticPosts:intercepted,
+    blockedExternalRequests:blockedRemote,blockedSameOriginRequests,remoteRequestsAllowed:remoteReadsAllowed,remoteAssetReadsAllowed,
+    remotePostsAllowed:0,serviceWorkers:"BLOCKED",localServerStarted:Boolean(server),browserClosed,serverClosed}));
 }

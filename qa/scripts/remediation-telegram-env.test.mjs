@@ -84,3 +84,40 @@ test('final already configured records closed state without changing env bytes',
  assert.equal(f.run({mode:'final',execute:true}).mode,'NO_CHANGE');assert.equal(fs.readFileSync(f.target,'utf8'),bytes);
  assert.throws(()=>f.run({mode:'bridge',execute:true}));
 });
+for (const stage of ['AFTER_TARGET_REPLACE','TARGET_VERIFY','STATE_APPLY','MANIFEST_APPLY','AFTER_MANIFEST_APPLY']) {
+ test(`failure at ${stage} leaves changed target diagnosable and recovery never renews`,t=>{
+  const f=fixture(t,'A=synthetic-secret-marker\n');
+  let caught;
+  try { f.run({mode:'bridge',execute:true,checkpoint:current=>{if(current===stage)throw Error('sensitive-provider-detail-synthetic-secret-marker');}}); }
+  catch(error){caught=error;}
+  assert.equal(caught?.stage,stage);assert.equal(caught.message,'TELEGRAM_ENV_REJECTED');assert.equal(String(caught).includes('synthetic-secret-marker'),false);
+  const applied=fs.readFileSync(f.target);const state=JSON.parse(fs.readFileSync(path.join(f.dir,'state.json')));
+  assert.equal(parse(applied.toString())[modeKey],'LEGACY_BRIDGE');assert.equal(state.startedAt,'2026-10-09T12:00:00.000Z');
+  const manifestName=fs.readdirSync(f.dir).find(x=>x.endsWith('.manifest.json'));
+  const retry=f.run({mode:'bridge',execute:true,nowMs:nowMs+5000});
+  assert.equal(retry.mode,'NO_CHANGE');assert.equal(retry.recovered,stage!=='AFTER_MANIFEST_APPLY');assert.ok(fs.readFileSync(f.target).equals(applied));
+  const finalState=JSON.parse(fs.readFileSync(path.join(f.dir,'state.json')));assert.equal(finalState.deadline,state.deadline);assert.equal(finalState.phase,'BRIDGE_APPLIED');
+  const journal=JSON.parse(fs.readFileSync(path.join(f.dir,manifestName)));assert.equal(journal.phase,stage==='AFTER_MANIFEST_APPLY'?'APPLIED':'RECOVERED_APPLIED');
+  assert.equal(fs.existsSync(path.join(f.dir,'transition.lock')),false);
+ });
+}
+test('failure before replacement preserves original; durable prepared window survives retry',t=>{
+ const f=fixture(t,'A=synthetic\n');
+ assert.throws(()=>f.run({mode:'bridge',execute:true,checkpoint:stage=>{if(stage==='TARGET_REPLACE')throw Error('synthetic');}}),{stage:'TARGET_REPLACE'});
+ assert.equal(fs.readFileSync(f.target,'utf8'),'A=synthetic\n');
+ f.run({mode:'bridge',execute:true,nowMs:nowMs+10000});assert.equal(parse(fs.readFileSync(f.target,'utf8'))[endKey],'2026-10-09T13:00:00.000Z');
+});
+test('recovery rejects corrupt backup and leaves journal PREPARED without rewriting target',t=>{
+ const f=fixture(t,'A=synthetic\n');
+ assert.throws(()=>f.run({mode:'bridge',execute:true,checkpoint:stage=>{if(stage==='AFTER_TARGET_REPLACE')throw Error('synthetic');}}));
+ const current=fs.readFileSync(f.target);const backup=fs.readdirSync(f.dir).find(x=>x.endsWith('.env.backup'));
+ fs.writeFileSync(path.join(f.dir,backup),'corrupted synthetic fixture');
+ assert.throws(()=>f.run({mode:'bridge',execute:true}),{stage:'JOURNAL_RECOVERY'});assert.ok(fs.readFileSync(f.target).equals(current));
+});
+test('post-rename expired recovery refuses renewal; final can still close safely',t=>{
+ const f=fixture(t,'A=synthetic\n');
+ assert.throws(()=>f.run({mode:'bridge',execute:true,checkpoint:stage=>{if(stage==='AFTER_TARGET_REPLACE')throw Error('synthetic');}}));
+ assert.throws(()=>f.run({mode:'bridge',execute:true,nowMs:nowMs+3600000}),{stage:'PLAN'});
+ assert.equal(f.run({mode:'final',execute:true,nowMs:nowMs+3600000}).mode,'APPLIED_LOCAL');
+ assert.equal(parse(fs.readFileSync(f.target,'utf8'))[modeKey],'POST_FRAGMENT');
+});
