@@ -16,9 +16,9 @@ const rootId = 'phase6-synthetic-root', at = n => new Date(Date.UTC(2026, 8, 22,
 function source(id) { const entityId = `case_${id}`; return { rootId, experienceId: `learning_${id}`, domain: 'SOLICITUDES', taskType: 'REASON', intent: 'EXPLAIN_DELAY', questionClass: 'OPERATIONAL_CAUSE',
   memory: { id: `memory_${id}`, rootId, status: 'CONFIRMED', kind: 'EXPERIENCE', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId },
     links: { observationId: `obs_${id}`, decisionId: `decision_${id}`, outcomeId: `outcome_${id}` }, createdAt: at(3) },
-  observation: { id: `obs_${id}`, rootId, caseId: entityId, source: 'ACTIVITY_LOG', createdAt: at(0) },
-  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', entityId, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: at(1) },
-  outcome: { id: `outcome_${id}`, rootId, caseId: entityId, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: at(2) },
+  observation: { id: `obs_${id}`, rootId, caseId: entityId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', createdAt: at(0) },
+  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: at(1) },
+  outcome: { id: `outcome_${id}`, rootId, caseId: entityId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: at(2) },
   features: { entityType: 'SOLICITUD', status: 'PENDIENTE', issueCode: 'DOCUMENT_MISSING' }, now: at(3) }; }
 function verified(id, behavior = 'VERIFY_DOCUMENT_BEFORE_DECISION') { const a = source(id), row = buildVerifiedExperience(a);
   return withCorrection(row, { originalBehavior: 'COPY_PRIOR_ACTION', correctedBehavior: behavior, reasonCode: 'OUTCOME_SUPPORTED_CORRECTION',

@@ -3,16 +3,17 @@ const fs = require("node:fs");
 const ts = require("typescript");
 const { test } = require("node:test");
 const exportsUnderTest = {};
+function loadPure(file) { const output={}; const path=require("node:path"); new Function("exports","require",ts.transpileModule(fs.readFileSync(file,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText)(output,name=>loadPure(path.resolve(path.dirname(file),name+".ts")));return output; }
 class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const source = ts.transpileModule(fs.readFileSync("functions/src/modules/agent007/firestoreHugoDataStore.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
-const deps = { "firebase-admin/firestore": {}, "firebase-functions/v2/https": { HttpsError }, "node:crypto": require("node:crypto"), "./hugoCore/memoryContract": { MEMORY_CONTRACT_VERSION: 1 }, "./hugoCore/conversationState": {} };
+const deps = { "firebase-admin/firestore": {}, "firebase-functions/v2/https": { HttpsError }, "node:crypto": require("node:crypto"), "./hugoCore/memoryContract": { MEMORY_CONTRACT_VERSION: 1 }, "./hugoCore/conversationState": {}, "./hugoCore/evidenceIdentity": loadPure("functions/src/modules/agent007/hugoCore/evidenceIdentity.ts") };
 new Function("exports", "require", source)(exportsUnderTest, name => { assert.ok(Object.hasOwn(deps, name), name); return deps[name]; });
 const stamp = ms => ({ toMillis: () => ms, toDate: () => new Date(ms) });
 function harness(changeBeforeCommit) {
   const rows = new Map([
-    ["agent007Observations/observation", { rootId: "root-a", caseId: "case", source: "ACTIVITY_LOG", createdAt: stamp(1000), sourceEvent: "OBSERVED" }],
+    ["agent007Observations/observation", { rootId: "root-a", caseId: "case", caseType: "SOLICITUD", sourceSystem: "PAY0", source: "ACTIVITY_LOG", createdAt: stamp(1000), sourceEvent: "OBSERVED" }],
     ["agent007Memory/decision", { rootId: "root-a", kind: "DECISION", status: "CONFIRMED", entityReference: { sourceSystem: "PAY0", entityType: "SOLICITUD", entityId: "case" }, links: { observationId: "observation" }, decision: { decisionAt: new Date(2000).toISOString(), decisionType: "APPROVE" } }],
-    ["agent007Observations/outcome", { rootId: "root-a", caseId: "case", source: "ACTIVITY_LOG", createdAt: stamp(3000), sourceEvent: "SOLICITUD_COMPLETADA" }],
+    ["agent007Observations/outcome", { rootId: "root-a", caseId: "case", caseType: "SOLICITUD", sourceSystem: "PAY0", source: "ACTIVITY_LOG", createdAt: stamp(3000), sourceEvent: "SOLICITUD_COMPLETADA" }],
   ]);
   let mutations = 0, attempts = 0, hook = changeBeforeCommit;
   const snapshot = key => { const row = rows.get(key); return { exists: !!row, data: () => row }; };
