@@ -2,6 +2,8 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Actualizacion 22:30 UTC:** Hosting ya verificado: release1791584692603000/versionde6ff585fd68735d/SSR00588-guh, browser publico PASS con3POSTsimulados interceptados y0reales. Consumidor Telegram00015-lap ACTIVE/Ready100%, CORS204/403 y POSTvacio400. Emisor final POST_FRAGMENT en despliegue sesion89352/logprivado final-producer-deploy.log; dotenv final aplicado y tombstone persistido. Ventana puente vencio22:29:52.042Z sin renovacion: nueva emision temporalmente cerrada hasta revision final. Los parrafos22:21 inferiores son checkpointhistorico. Fuente suma3b1abab y b2192ce (adaptadorSentinel listUsers desactivado,19tests/build/policyPASS); no integrado/deploy por ese cambio. Ver detalle actualizado en RELEASE-FRONTEND-TELEGRAM.md.
+
 ## Punto operativo 22:21 UTC: prevalece sobre estados anteriores
 
 Integracion congelada y publicada `9616055`. Telegram puente `telegramwebhook-00032-yud` ACTIVE/Ready/100%, ventana fija 21:29:52.042Z–22:29:52.042Z. Revision anterior `00031-yeg` retirada desde 21:45:52.322896Z; gate conservador satisfecho a las 22:13 UTC con trafico reconsultado y proyeccion completa de tokens creados desde 21:20: cero documentos, sin IDs/tokens expuestos. No se interpreto ausencia de metricas como cero instancias. Journal local recuperado sin cambiar bytes ni fechas mediante helper `4ff7818`.
