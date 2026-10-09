@@ -4,21 +4,21 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { request } from 'node:http';
 import ts from 'typescript';
-import { CANARY, loadConfig } from '../../services/pay0-security-observation-publisher/src/config.mjs';
+import { CANARY, loadConfig, createImmutableCanaryPublisher } from '../../services/pay0-security-observation-publisher/src/config.mjs';
 import { createLoggingWriter } from '../../services/pay0-security-observation-publisher/src/logging.mjs';
 import { createCanaryServer } from '../../services/pay0-security-observation-publisher/src/http.mjs';
 import { decodeEnvelope } from '../../services/pay0-sentinel-observation/src/transport.mjs';
 const require = createRequire(import.meta.url);
-function load(file) {
+function load(file, deps = {}) {
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  new Function('require', 'module', 'exports', code)(name => { assert.equal(name, 'node:crypto'); return require(name); }, module, module.exports);
+  new Function('require', 'module', 'exports', code)(name => { if (Object.hasOwn(deps, name)) return deps[name]; assert.equal(name, 'node:crypto'); return require(name); }, module, module.exports);
   return module.exports;
 }
 const { createAuthorizationObservationPublisher: createPublisher } = load('../../functions/src/modules/securityObservation/publisher.ts');
 const { sanitizeSecurityEvent } = load('../../functions/src/modules/sentinel/schema.ts');
 const env = { PAY0_SOURCE_PROJECT_ID: CANARY.projectId, K_SERVICE: CANARY.serviceName, K_CONFIGURATION: CANARY.serviceName,
-  K_REVISION: CANARY.serviceName + '-00001-test', OBSERVATION_PUBLISHER_MODE: 'CANARY_DRY_RUN' };
+  K_REVISION: CANARY.serviceName + '-00001-test', CANARY_OCCURRED_AT_MS: String(Date.now()), OBSERVATION_PUBLISHER_MODE: 'CANARY_DRY_RUN' };
 const config = loadConfig(env), now = Date.now(), context = { rootId: CANARY.rootId, actorUid: CANARY.actorUid };
 const metadataResponse = value => new Response(value, { headers: { 'Metadata-Flavor': 'Google' } });
 function fakeFetch(calls, override) {
@@ -124,4 +124,58 @@ test('private canary HTTP accepts only empty POST and always supplies fixed synt
     assert.equal((await call('/canary')).status, 200);
     assert.deepEqual(observations, [context]);
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('immutable canary keeps event across live clock, restart and unique delivery metadata', async () => {
+  let clock = config.occurredAtMs, entries = [];
+  const create = () => createImmutableCanaryPublisher(config, createPublisher, async value => entries.push(value), () => clock);
+  const publisher = create();
+  assert.equal(await publisher.authorizationDenied(context), 'ACCEPTED'); clock += 1000;
+  assert.equal(await publisher.authorizationDenied(context), 'ACCEPTED'); clock += 60000;
+  assert.equal(await create().authorizationDenied(context), 'ACCEPTED');
+  assert.deepEqual(entries[0].jsonPayload, entries[1].jsonPayload);
+  assert.deepEqual(entries[0].jsonPayload, entries[2].jsonPayload);
+  assert.equal(entries[0].jsonPayload.event.occurredAtMs, config.occurredAtMs);
+  assert.equal(new Set(entries.map(entry => entry.insertId)).size, 3);
+  assert.notEqual(entries[0].timestamp, entries[1].timestamp);
+  // Restart cannot renew the fixed admission window or rewrite occurredAtMs.
+  clock = config.occurredAtMs + 3600000;
+  assert.equal(await create().authorizationDenied(context), 'WRITE_FAILED'); assert.equal(entries.length, 3);
+});
+
+test('active canary rejects missing/noncanonical epoch and disabled remains compatible without it', async () => {
+  for (const epoch of [undefined, '', 'NaN', '0', '1.5', '001791500000000', '1791500000000 ']) {
+    assert.throws(() => loadConfig({ ...env, CANARY_OCCURRED_AT_MS: epoch }), /INVALID_CANARY_EPOCH/);
+  }
+  const disabled = loadConfig({ ...env, CANARY_OCCURRED_AT_MS: undefined, OBSERVATION_PUBLISHER_MODE: 'DISABLED' });
+  let writes = 0;
+  assert.equal(await createImmutableCanaryPublisher(disabled, createPublisher, async () => writes++).authorizationDenied(context), 'DISABLED');
+  assert.equal(writes, 0);
+  const future = createImmutableCanaryPublisher(config, createPublisher, async () => writes++, () => config.occurredAtMs - 60001);
+  assert.equal(await future.authorizationDenied(context), 'WRITE_FAILED'); assert.equal(writes, 0);
+});
+
+test('actual immutable producer and core record once, dedupe exact replay and reject altered content', async () => {
+  const schema = load('../../functions/src/modules/sentinel/schema.ts');
+  const policy = load('../../functions/src/modules/sentinel/policy.ts');
+  const { ObservationDetector } = load('../../functions/src/modules/sentinel/detector.ts', { './schema': schema, './policy': policy });
+  const rows = new Map(); let clock = config.occurredAtMs, last, outcomes = [];
+  const detector = new ObservationDetector({ transact: async (root, fn) => fn({
+    readReceipt: async k => rows.get(root+'/receipts/'+k) || null,
+    readIncident: async k => rows.get(root+'/incidents/'+k) || null, readQuota: async () => null,
+    createReceipt: (k, v) => rows.set(root+'/receipts/'+k, v),
+    writeIncident: (k, v) => rows.set(root+'/incidents/'+k, v), writeQuota: () => {},
+  }) }, () => clock);
+  const ingress = { ...context, publisherId: CANARY.publisherId, source: 'SERVER' };
+  const create = () => createImmutableCanaryPublisher(config, createPublisher, async entry => {
+    last = entry.jsonPayload.event; outcomes.push((await detector.ingest(last, ingress)).outcome);
+  }, () => clock);
+  const producer = create(); await producer.authorizationDenied(context); clock += 1000;
+  await producer.authorizationDenied(context); clock += 1000; await create().authorizationDenied(context);
+  assert.deepEqual(outcomes, ['RECORDED', 'DUPLICATE', 'DUPLICATE']);
+  const before = structuredClone([...rows]);
+  assert.equal((await detector.ingest({ ...last, occurredAtMs: last.occurredAtMs + 1 }, ingress)).outcome, 'EVENT_CONTENT_CONFLICT');
+  assert.deepEqual([...rows], before);
+  const incident = [...rows].find(([path]) => path.includes('/incidents/'))[1];
+  assert.equal(incident.eventCount, 1); assert.equal(incident.authority, 'NONE');
 });

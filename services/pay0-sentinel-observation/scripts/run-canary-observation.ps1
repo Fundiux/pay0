@@ -3,6 +3,7 @@ param(
     [switch]$Execute, [switch]$LibraryOnly,
     [ValidateSet('CANARY_DRY_RUN','CANARY')][string]$Mode='CANARY_DRY_RUN',
     [string]$ExpectedRevision='',
+    [long]$ExpectedOccurredAtMs=0,
     [ValidateRange(1,2)][int]$MaxPosts=1
 )
 # Dot-sourcing imports the reviewed helpers, but its parameter names share scope.
@@ -10,6 +11,11 @@ $observationExecute=$Execute; $observationLibrary=$LibraryOnly
 . (Join-Path $PSScriptRoot 'verify-canary-runtime.ps1') -LibraryOnly
 $Execute=$observationExecute; $LibraryOnly=$observationLibrary
 
+function Assert-ObservationWindow([long]$OccurredAtMs) {
+    $now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    if (([string]$OccurredAtMs) -cnotmatch '^[1-9][0-9]{12}$' -or $now -lt $OccurredAtMs -or
+        ($now+3000) -ge ($OccurredAtMs+3600000)) { throw 'CANARY_WINDOW_CLOSED' }
+}
 function Get-ObservationFilter([string]$Revision) {
     if ($Revision -cnotmatch '^pay0-security-canary-[0-9]{5}-[a-z0-9]{3}$') { throw 'REVISION_REQUIRED' }
     return @(
@@ -26,7 +32,8 @@ function Get-ObservationSink([string]$OperatorEmail) {
     if ($r.Status -ne 0) { throw 'SINK_READ_FAILED' }
     try { return $r.Text | ConvertFrom-Json } finally { $r=$null }
 }
-function Assert-ObservationPreflight([string]$OperatorToken,[string]$OperatorEmail,[string]$RequestedMode,[string]$Revision) {
+function Assert-ObservationPreflight([string]$OperatorToken,[string]$OperatorEmail,[string]$RequestedMode,[string]$Revision,[long]$OccurredAtMs) {
+    Assert-ObservationWindow $OccurredAtMs
     $expectedFilter=Get-ObservationFilter $Revision
     $fullRevision='projects/pay-0-system/locations/us-central1/services/pay0-security-canary/revisions/'+$Revision
     $r=Invoke-CanaryHttp 'GET' $script:CanaryRunBase $OperatorToken $null $true $true
@@ -47,6 +54,8 @@ function Assert-ObservationPreflight([string]$OperatorToken,[string]$OperatorEma
     $projects=@($envs | Where-Object { (Get-CanaryProperty $_ 'name') -ceq 'PAY0_SOURCE_PROJECT_ID' })
     if ($modes.Count -ne 1 -or (Get-CanaryProperty $modes[0] 'value') -cne $RequestedMode -or
         $projects.Count -ne 1 -or (Get-CanaryProperty $projects[0] 'value') -cne 'pay-0-system') { throw 'MODE_OR_SOURCE_REJECTED' }
+    $epochs=@($envs | Where-Object { (Get-CanaryProperty $_ 'name') -ceq 'CANARY_OCCURRED_AT_MS' })
+    if ($epochs.Count -ne 1 -or (Get-CanaryProperty $epochs[0] 'value') -cne ([string]$OccurredAtMs)) { throw 'EVENT_EPOCH_REJECTED' }
     if ($script:CanaryUrl -and $script:CanaryUrl -cne $url) { throw 'URL_CHANGED' }
     $sink=Get-ObservationSink $OperatorEmail
     $filter=Get-CanaryProperty $sink 'filter'
@@ -63,7 +72,8 @@ function Assert-ObservationPreflight([string]$OperatorToken,[string]$OperatorEma
         (Get-CanaryProperty $sink 'interceptChildren') -eq $true) { throw 'SINK_STATE_REJECTED' }
     $script:CanaryUrl=$url
 }
-function Invoke-ObservationRun([string]$OperatorEmail,[string]$OperatorToken,[string]$RequestedMode,[string]$Revision,[int]$PostLimit) {
+function Invoke-ObservationRun([string]$OperatorEmail,[string]$OperatorToken,[string]$RequestedMode,[string]$Revision,[int]$PostLimit,[long]$OccurredAtMs) {
+    Assert-ObservationWindow $OccurredAtMs
     if ($RequestedMode -cnotin @('CANARY_DRY_RUN','CANARY') -or $PostLimit -lt 1 -or $PostLimit -gt 2 -or
         ($RequestedMode -ceq 'CANARY_DRY_RUN' -and $PostLimit -ne 1)) { throw 'POST_BOUND_REJECTED' }
     $null=Get-ObservationFilter $Revision
@@ -77,7 +87,7 @@ function Invoke-ObservationRun([string]$OperatorEmail,[string]$OperatorToken,[st
     $posts=0; $accepted=0; $clean=$true; $passed=$false; $idToken=$null; $mint=$null
     try {
         $script:CanaryUrl=$null
-        Assert-ObservationPreflight $OperatorToken $OperatorEmail $RequestedMode $Revision
+        Assert-ObservationPreflight $OperatorToken $OperatorEmail $RequestedMode $Revision $OccurredAtMs
         $r=Invoke-CanaryHttp 'GET' ('https://iam.googleapis.com/v1/'+$script:CanaryRole) $OperatorToken $null $true $true
         $perms=@(Get-CanaryProperty $r.Data 'includedPermissions')
         if ($r.Status -ne 200 -or (Get-CanaryProperty $r.Data 'deleted') -eq $true -or $perms.Count -ne 2 -or
@@ -100,7 +110,7 @@ function Invoke-ObservationRun([string]$OperatorEmail,[string]$OperatorToken,[st
         # Delay once for invoker propagation; POSTs themselves never retry.
         Wait-CanaryPropagation
         for ($i=1; $i -le $PostLimit; $i++) {
-            Assert-ObservationPreflight $OperatorToken $OperatorEmail $RequestedMode $Revision
+            Assert-ObservationPreflight $OperatorToken $OperatorEmail $RequestedMode $Revision $OccurredAtMs
             $posts++ # Count before send, including ambiguous timeout/401/403/503.
             $r=Invoke-CanaryHttp 'POST' ($script:CanaryUrl+'/canary') $idToken $null $true $false
             Write-CanaryStatus ('CANARY_POST_'+$posts) ([string]$r.Status)
@@ -130,6 +140,7 @@ if (-not $Execute) { Write-CanaryStatus 'MODE' 'DRY_RUN_NO_REMOTE_CALLS'; return
 $exitCode=1
 try {
     $null=Get-ObservationFilter $ExpectedRevision
+    Assert-ObservationWindow $ExpectedOccurredAtMs
     if ($Mode -ceq 'CANARY_DRY_RUN' -and $MaxPosts -ne 1) { throw 'POST_BOUND_REJECTED' }
     Add-Type -AssemblyName System.Net.Http
     $script:CanaryLogPath=Join-Path ([IO.Path]::GetTempPath()) ('pay0-observation-run-'+[Guid]::NewGuid().ToString('N')+'.log')
@@ -141,7 +152,7 @@ try {
     $account=Invoke-CanaryGcloud @('auth','list','--filter=status:ACTIVE','--format=value(account)','--quiet')
     $credential=Invoke-CanaryGcloud @('auth','print-access-token','--quiet')
     if ($account.Status -ne 0 -or $credential.Status -ne 0 -or $credential.Text -cnotmatch '^[A-Za-z0-9._~+/-]{20,8192}={0,2}$') { throw 'OPERATOR_INVALID' }
-    $result=Invoke-ObservationRun $account.Text $credential.Text $Mode $ExpectedRevision $MaxPosts
+    $result=Invoke-ObservationRun $account.Text $credential.Text $Mode $ExpectedRevision $MaxPosts $ExpectedOccurredAtMs
     if ($result.Accepted -and $result.CleanupVerified) { $exitCode=0; Write-CanaryStatus 'OBSERVATION_RUN' 'LOGGING_ACCEPTANCE_CONFIRMED' }
     else { Write-CanaryStatus 'OBSERVATION_RUN' 'NOT_CONFIRMED' }
 } catch { Write-CanaryStatus 'OBSERVATION_RUN' 'NOT_CONFIRMED' }

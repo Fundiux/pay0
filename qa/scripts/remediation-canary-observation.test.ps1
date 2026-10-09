@@ -33,7 +33,8 @@ function Invoke-CanaryHttp([string]$Method,[string]$Uri,[string]$Token,$Body,[bo
  } elseif ($Uri.Contains('/revisions/')) {
   $mode=$script:RequestedMode
   if ($script:Case -eq 'WRONG_MODE') { $mode='DISABLED' }
-  $data=@{serviceAccount=$script:CanaryAccount;containers=@(@{env=@(@{name='OBSERVATION_PUBLISHER_MODE';value=$mode},@{name='PAY0_SOURCE_PROJECT_ID';value='pay-0-system'})})}
+  if ($script:Case -eq 'WRONG_EPOCH') { $script:Epoch-- }
+  $data=@{serviceAccount=$script:CanaryAccount;containers=@(@{env=@(@{name='OBSERVATION_PUBLISHER_MODE';value=$mode},@{name='PAY0_SOURCE_PROJECT_ID';value='pay-0-system'},@{name='CANARY_OCCURRED_AT_MS';value=([string]$script:Epoch)})})}
  } elseif ($Uri.EndsWith('/roles/canaryRuntimeVerifier')) {
   $perms=@('iam.serviceAccounts.getAccessToken','iam.serviceAccounts.getOpenIdToken')
   if ($script:Case -eq 'BROAD_ROLE') { $perms+='iam.serviceAccounts.signBlob' }
@@ -78,15 +79,16 @@ function Invoke-CanaryHttp([string]$Method,[string]$Uri,[string]$Token,$Body,[bo
  if ($null -ne $data) { $data=($data | ConvertTo-Json -Depth 30) | ConvertFrom-Json }
  return [pscustomobject]@{Status=$status;Data=$data}
 }
-$cases=@('DRY','CANARY','BROAD_FILTER','WRONG_ROOT','WRONG_REVISION_FILTER','WRONG_DESTINATION','WRONG_SINK_MODE','EXCLUSIONS','WRONG_MODE','WRONG_TRAFFIC','BROAD_ROLE','MINT_FAIL','AMBIGUOUS_BINDING','AMBIGUOUS_POST','POST403','WRONG_CODE','SINK_CHANGED','CLEANUP_FAIL')
+$cases=@('DRY','CANARY','BROAD_FILTER','WRONG_ROOT','WRONG_REVISION_FILTER','WRONG_DESTINATION','WRONG_SINK_MODE','EXCLUSIONS','WRONG_MODE','WRONG_TRAFFIC','BROAD_ROLE','MINT_FAIL','AMBIGUOUS_BINDING','AMBIGUOUS_POST','POST403','WRONG_CODE','SINK_CHANGED','CLEANUP_FAIL','WRONG_EPOCH')
 foreach ($case in $cases) {
  $script:Case=$case; $script:RequestedMode='CANARY'; $limit=2
  if ($case -eq 'DRY') { $script:RequestedMode='CANARY_DRY_RUN'; $limit=1 }
  $script:Revision='pay0-security-canary-00002-abc'
+ $script:Epoch=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()-1000
  $script:Waits=0; $script:Sets=0; $script:SinkReads=0; $script:Posts=0; $script:Mints=0
  $script:Policies=@{}
  foreach ($key in @('SA','RUN')) { $script:Policies[$key]='{"version":3,"etag":"initial","bindings":[{"role":"roles/viewer","members":["user:unrelated@example.invalid"]}]}' | ConvertFrom-Json }
- $result=Invoke-ObservationRun 'operator@example.invalid' 'synthetic-operator-token' $script:RequestedMode $script:Revision $limit
+ $result=Invoke-ObservationRun 'operator@example.invalid' 'synthetic-operator-token' $script:RequestedMode $script:Revision $limit $script:Epoch
  Assert-Local ($result.Accepted -eq ($case -in @('DRY','CANARY','AMBIGUOUS_BINDING','CLEANUP_FAIL'))) ('RESULT_'+$case)
  Assert-Local ($result.CleanupVerified -eq ($case -ne 'CLEANUP_FAIL')) ('CLEANUP_'+$case)
  Assert-Local ($result.PostsAttempted -eq $script:Posts -and $script:Posts -le $limit) 'ABSOLUTE_POST_BOUND'
@@ -94,14 +96,20 @@ foreach ($case in $cases) {
   Assert-Local ($script:Policies[$key].bindings[0].role -eq 'roles/viewer') 'UNRELATED_PRESERVED'
   if ($key -ne 'RUN' -or $case -ne 'CLEANUP_FAIL') { Assert-Local ($script:Policies[$key].bindings.Count -eq 1) 'CLEANUP_VERIFIED' }
  }
- if ($case -in @('BROAD_FILTER','WRONG_ROOT','WRONG_REVISION_FILTER','WRONG_DESTINATION','WRONG_SINK_MODE','EXCLUSIONS','WRONG_MODE','WRONG_TRAFFIC','BROAD_ROLE')) { Assert-Local ($script:Posts -eq 0 -and $script:Sets -eq 0) 'PREFLIGHT_NO_MUTATION' }
+ if ($case -in @('BROAD_FILTER','WRONG_ROOT','WRONG_REVISION_FILTER','WRONG_DESTINATION','WRONG_SINK_MODE','EXCLUSIONS','WRONG_MODE','WRONG_TRAFFIC','BROAD_ROLE','WRONG_EPOCH')) { Assert-Local ($script:Posts -eq 0 -and $script:Sets -eq 0) 'PREFLIGHT_NO_MUTATION' }
  if ($case -eq 'MINT_FAIL') { Assert-Local ($script:Mints -eq 7 -and $script:Waits -eq 6 -and $script:Posts -eq 0) 'BOUNDED_MINT' }
  if ($case -in @('AMBIGUOUS_POST','POST403','WRONG_CODE','SINK_CHANGED')) { Assert-Local ($script:Posts -eq 1) 'NO_POST_RETRY' }
  if ($case -eq 'CANARY') { Assert-Local ($script:Posts -eq 2 -and $script:SinkReads -eq 3) 'RECHECK_EACH_POST' }
 }
 foreach ($argsCase in @(@('CANARY_DRY_RUN','pay0-security-canary-00002-abc',2),@('CANARY','pay0-security-canary-00002-abc',3),@('CANARY','anything',1),@('DISABLED','pay0-security-canary-00002-abc',1))) {
  $rejected=$false
- try { $null=Invoke-ObservationRun 'operator@example.invalid' 'fake' $argsCase[0] $argsCase[1] $argsCase[2] } catch { $rejected=$true }
+ try { $null=Invoke-ObservationRun 'operator@example.invalid' 'fake' $argsCase[0] $argsCase[1] $argsCase[2] $script:Epoch } catch { $rejected=$true }
  Assert-Local $rejected 'INVALID_ARGUMENTS_REJECTED'
 }
-[Console]::WriteLine('LOCAL_CANARY_OBSERVATION:PASS_23_CASES_NO_REMOTE_CALLS')
+
+foreach ($invalidEpoch in @(0,([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()-3600001),([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+120000))) {
+ $beforeSets=$script:Sets; $beforePosts=$script:Posts; $rejected=$false
+ try { $null=Invoke-ObservationRun 'operator@example.invalid' 'fake' 'CANARY' $script:Revision 2 $invalidEpoch } catch { $rejected=$true }
+ Assert-Local ($rejected -and $script:Sets -eq $beforeSets -and $script:Posts -eq $beforePosts) 'EPOCH_REJECTED_BEFORE_MUTATION'
+}
+[Console]::WriteLine('LOCAL_CANARY_OBSERVATION:PASS_27_CASES_NO_REMOTE_CALLS')

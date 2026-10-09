@@ -1,3 +1,11 @@
+variable "canary_occurred_at_ms" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.canary_occurred_at_ms == null || can(regex("^[1-9][0-9]{12}$", var.canary_occurred_at_ms))
+    error_message = "Provide an explicit fixed synthetic event epoch in milliseconds."
+  }
+}
 variable "canary_image_digest" {
   type    = string
   default = null
@@ -50,6 +58,10 @@ resource "google_cloud_run_v2_service" "canary" {
   }
   lifecycle {
     precondition {
+      condition     = var.canary_mode == "DISABLED" || var.canary_occurred_at_ms != null
+      error_message = "Active canary modes require a fixed epoch; no automatic clock fallback."
+    }
+    precondition {
       condition     = var.canary_image_digest != null
       error_message = "Canary deployment requires a built and reviewed image digest."
     }
@@ -76,6 +88,13 @@ resource "google_cloud_run_v2_service" "canary" {
       env {
         name  = "OBSERVATION_PUBLISHER_MODE"
         value = var.canary_mode
+      }
+      dynamic "env" {
+        for_each = var.canary_occurred_at_ms == null ? [] : [var.canary_occurred_at_ms]
+        content {
+          name  = "CANARY_OCCURRED_AT_MS"
+          value = env.value
+        }
       }
       startup_probe {
         http_get { path = "/healthz" }

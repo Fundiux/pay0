@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Execute,[switch]$LibraryOnly,[string]$ExpectedRevision='',[ValidateRange(1,6)][int]$MaxAttempts=3)
+param([switch]$Execute,[switch]$LibraryOnly,[string]$ExpectedRevision='',[long]$ExpectedOccurredAtMs=0,[ValidateRange(1,6)][int]$MaxAttempts=3)
 $evidenceExecute=$Execute; $evidenceLibrary=$LibraryOnly
 . (Join-Path $PSScriptRoot 'verify-canary-runtime.ps1') -LibraryOnly
 $Execute=$evidenceExecute; $LibraryOnly=$evidenceLibrary
@@ -10,17 +10,18 @@ function Get-EvidenceSha256([string]$Text) {
     finally { $hash.Dispose() }
 }
 function Get-EvidenceDigest($Value) { return Get-EvidenceSha256 (ConvertTo-Json -InputObject $Value -Depth 10 -Compress) }
-function Get-CanaryEvidenceKeys([string]$Revision) {
+function Get-CanaryEvidenceKeys([string]$Revision,[long]$OccurredAtMs) {
+    if (([string]$OccurredAtMs) -cnotmatch '^[1-9][0-9]{12}$') { throw 'EVENT_EPOCH_REQUIRED' }
     if ($Revision -cnotmatch '^pay0-security-canary-[0-9]{5}-[a-z0-9]{3}$') { throw 'REVISION_REQUIRED' }
     $root='canary-observation-root'; $actor='canary-observation-actor'; $publisher='pay0-observation-canary-v1'
     $policy='PAY0-SENTINEL-SHADOW@1'; $origin='SERVER_AUTH_DECISION'; $eventType='AUTHORIZATION_DENIED'
-    $eventId='canary_'+(Get-EvidenceSha256 ('PAY0-CANARY@1:'+$Revision))
+    $eventId='canary_'+(Get-EvidenceSha256 ('PAY0-CANARY@2:'+$Revision+':'+([string]$OccurredAtMs)))
     $eventDigest=Get-EvidenceDigest @($publisher,$actor,$eventId)
     $rootDigest=Get-EvidenceDigest $root
     $receiptKey=Get-EvidenceDigest @($policy,$origin,$eventDigest)
     $incidentKey=Get-EvidenceDigest @($policy,$origin,$actor,$eventType,$eventDigest)
     $base='projects/pay0-sentinel-observe/databases/sentinel-observation/documents/sentinelObservationRoots/'+$rootDigest
-    return [pscustomobject]@{Root=$root;Actor=$actor;PublisherDigest=(Get-EvidenceDigest $publisher);EventDigest=$eventDigest;
+    return [pscustomobject]@{OccurredAtMs=$OccurredAtMs;Root=$root;Actor=$actor;PublisherDigest=(Get-EvidenceDigest $publisher);EventDigest=$eventDigest;
         IncidentKey=$incidentKey;ReceiptName=($base+'/receipts/'+$receiptKey);IncidentName=($base+'/incidents/'+$incidentKey)}
 }
 function Read-EvidenceField($Fields,[string]$Name,[string]$Type) {
@@ -55,7 +56,7 @@ function Assert-EvidenceText($Fields,[string]$Name,[string]$Expected) {
 function Assert-CanaryEvidence($Receipt,$Incident,$Keys,[long]$NowMs) {
     if ((Get-CanaryProperty $Receipt 'name') -cne $Keys.ReceiptName -or (Get-CanaryProperty $Incident 'name') -cne $Keys.IncidentName) { throw 'DOCUMENT_PATH_MISMATCH' }
     $receiptFields=Get-CanaryProperty $Receipt 'fields'; $incidentFields=Get-CanaryProperty $Incident 'fields'
-    Assert-EvidenceKeys $receiptFields @('eventDigest','event','incidentKey','observedAtMs','expiresAtMs','expiresAt')
+    Assert-EvidenceKeys $receiptFields @('contentBindingVersion','contentDigest','eventDigest','event','incidentKey','observedAtMs','expiresAtMs','expiresAt')
     Assert-EvidenceKeys $incidentFields @('policyVersion','decision','authority','reason','recovery','rootId','actorUid','origin','eventType','status','eventCount','firstOccurredAtMs','lastOccurredAtMs','lastObservedAtMs','evidence','expiresAtMs','expiresAt')
     Assert-EvidenceText $receiptFields 'eventDigest' $Keys.EventDigest
     Assert-EvidenceText $receiptFields 'incidentKey' $Keys.IncidentKey
@@ -80,6 +81,10 @@ function Assert-CanaryEvidence($Receipt,$Incident,$Keys,[long]$NowMs) {
     }
     if ((Read-EvidenceField $incidentFields 'eventCount' 'integerValue') -ne 1) { throw 'EVENT_COUNT_NOT_ONE' }
     $occurred=Read-EvidenceField $event 'occurredAtMs' 'integerValue'
+    if ($occurred -ne $Keys.OccurredAtMs) { throw 'EVENT_EPOCH_MISMATCH' }
+    Assert-EvidenceText $receiptFields 'contentBindingVersion' 'PAY0-EVENT-CONTENT@1'
+    $binding=Get-EvidenceDigest @('PAY0-EVENT-CONTENT@1','PAY0-SECURITY-EVENT@1',$Keys.Root,$Keys.Actor,$Keys.PublisherDigest,$Keys.EventDigest,$null,$null,$null,'SERVER_AUTH_DECISION','AUTHORIZATION_DENIED',[long]$occurred)
+    Assert-EvidenceText $receiptFields 'contentDigest' $binding
     $observed=Read-EvidenceField $receiptFields 'observedAtMs' 'integerValue'
     if ($occurred -lt ($NowMs-86400000) -or $occurred -gt ($observed+60000) -or $observed -gt $NowMs -or
         (Read-EvidenceField $incidentFields 'firstOccurredAtMs' 'integerValue') -ne $occurred -or
@@ -91,9 +96,9 @@ function Assert-CanaryEvidence($Receipt,$Incident,$Keys,[long]$NowMs) {
     }
 }
 function Wait-EvidencePropagation { Start-Sleep -Seconds 10 }
-function Invoke-CanaryEvidenceRead([string]$OperatorToken,[string]$Revision,[int]$Attempts=3) {
+function Invoke-CanaryEvidenceRead([string]$OperatorToken,[string]$Revision,[int]$Attempts=3,[long]$OccurredAtMs=0) {
     if ($Attempts -lt 1 -or $Attempts -gt 6) { throw 'READ_BOUND_REJECTED' }
-    $keys=Get-CanaryEvidenceKeys $Revision
+    $keys=Get-CanaryEvidenceKeys $Revision $OccurredAtMs
     $receipt=$null; $incident=$null
     try {
         for ($i=1; $i -le $Attempts; $i++) {
@@ -120,7 +125,7 @@ if ($LibraryOnly) { return }
 if (-not $Execute) { Write-CanaryStatus 'MODE' 'DRY_RUN_NO_REMOTE_CALLS'; return }
 $exitCode=1
 try {
-    $null=Get-CanaryEvidenceKeys $ExpectedRevision
+    $null=Get-CanaryEvidenceKeys $ExpectedRevision $ExpectedOccurredAtMs
     Add-Type -AssemblyName System.Net.Http
     foreach ($name in @('CLOUDSDK_AUTH_ACCESS_TOKEN','CLOUDSDK_AUTH_ACCESS_TOKEN_FILE','CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE','CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT','GOOGLE_APPLICATION_CREDENTIALS')) {
         if ([Environment]::GetEnvironmentVariable($name)) { throw 'AMBIGUOUS_CREDENTIALS' }
@@ -131,7 +136,7 @@ try {
     if ($account.Status -ne 0 -or $account.Text -cnotmatch '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' -or $account.Text.EndsWith('.gserviceaccount.com')) { throw 'USER_OPERATOR_REQUIRED' }
     $credential=Invoke-CanaryGcloud @('auth','print-access-token','--quiet')
     if ($credential.Status -ne 0 -or $credential.Text -cnotmatch '^[A-Za-z0-9._~+/-]{20,8192}={0,2}$') { throw 'OPERATOR_INVALID' }
-    if (Invoke-CanaryEvidenceRead $credential.Text $ExpectedRevision $MaxAttempts) { $exitCode=0 }
+    if (Invoke-CanaryEvidenceRead $credential.Text $ExpectedRevision $MaxAttempts $ExpectedOccurredAtMs) { $exitCode=0 }
 } catch { Write-CanaryStatus 'CANARY_EVIDENCE' 'NOT_VERIFIED' }
 finally { $credential=$null; $account=$null }
 exit $exitCode
