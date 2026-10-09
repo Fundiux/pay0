@@ -5,7 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $script:IqProject = 'pay-0-system'
-$script:IqHead = 'c29260bef02192cdb98def40770bb8cb51378691'
+$script:IqHead = 'a71a8b898feb35564faed04a4c14c9bb67639581'
 $script:IqNames = @('processIqPagoDepositAutomaticTask','processIqPagoDepositCreateQueue','processIqPagoDepositOnDemandTask')
 $script:IqExpected = @{
   processIqPagoDepositAutomaticTask = @('processiqpagodepositautomatictask-00001-gox','1791370236816575')
@@ -34,7 +34,7 @@ function Get-IqConfigFingerprint($Snapshot) {
   $s=$Snapshot.serviceConfig
   $secrets=@($s.secretEnvironmentVariables | ForEach-Object { "$($_.key):$($_.secret):$($_.version)" } | Sort-Object)
   if(($secrets -join '|') -cne 'IQ_CREDENTIALS_KEY:IQ_CREDENTIALS_KEY:2|TELEGRAM_BOT_TOKEN:TELEGRAM_BOT_TOKEN:1'){throw 'SECRET_BINDING_CHANGED'}
-  return (@($s.timeoutSeconds,$s.availableMemory,$s.maxInstanceCount,$s.maxInstanceRequestConcurrency,$s.serviceAccountEmail,($secrets -join '|')) | ConvertTo-Json -Compress)
+  return (@($s.timeoutSeconds,$s.availableMemory,$s.availableCpu,$s.minInstanceCount,$s.ingressSettings,$s.vpcConnector,$s.vpcConnectorEgressSettings,$s.maxInstanceCount,$s.maxInstanceRequestConcurrency,$s.serviceAccountEmail,($secrets -join '|')) | ConvertTo-Json -Compress)
 }
 function Get-IqPlan([hashtable]$Snapshots) {
   $envs=@{}; $configs=@{}
@@ -89,7 +89,7 @@ function Get-IqLiveSnapshot([string]$Name) {
   if($Name -notin $script:IqNames){throw 'FUNCTION_SCOPE_INVALID'}
   $token=(& gcloud.cmd auth print-access-token --project pay-0-system --quiet 2>$null | Out-String).Trim()
   if($LASTEXITCODE -ne 0 -or $token -notmatch '^[A-Za-z0-9._~-]{20,4096}$'){throw 'AUTH_UNAVAILABLE'}
-  $fields='state,buildConfig(source(storageSource(generation))),serviceConfig(revision,serviceAccountEmail,timeoutSeconds,availableMemory,maxInstanceCount,maxInstanceRequestConcurrency,environmentVariables,secretEnvironmentVariables(key,secret,version))'
+  $fields='state,buildConfig(source(storageSource(generation))),serviceConfig(revision,serviceAccountEmail,timeoutSeconds,availableMemory,availableCpu,minInstanceCount,ingressSettings,vpcConnector,vpcConnectorEgressSettings,maxInstanceCount,maxInstanceRequestConcurrency,environmentVariables,secretEnvironmentVariables(key,secret,version))'
   try {
     return Invoke-RestMethod -Method Get -Uri ('https://cloudfunctions.googleapis.com/v2/projects/pay-0-system/locations/us-central1/functions/'+$Name+'?fields='+[Uri]::EscapeDataString($fields)) -Headers @{Authorization="Bearer $token";'x-goog-user-project'='pay-0-system'} -TimeoutSec 30 -MaximumRedirection 0
   } catch {throw 'METADATA_READ_FAILED'} finally {$token=$null}
