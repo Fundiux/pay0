@@ -1,6 +1,6 @@
 # Ejecutor acotado de observaciones sintéticas
 
-Estado: fuente y pruebas locales listas; **no se ejecutó contra producción**. La ejecución central previa del verificador DISABLED pasó (mint ACCESS/ID 200, POST 503/PUBLISHER_DISABLED, tres negativos 403, ambas retiradas REMOVED_VERIFIED; commit `d1cd871`). Esa evidencia no acredita todavía el recorrido Logging → sink → Pub/Sub → observador → Firestore.
+Estado: ejecución remota CANARY_DRY_RUN confirmada el 2026-10-09, revisión `pay0-security-canary-00002-9fs`, un POST 200/LOGGING_DRY_RUN_ACCEPTED y ambos bindings REMOVED_VERIFIED. El sink permaneció desactivado; no se exportó el evento. Las 23 pruebas del ejecutor y 20 del verificador original pasaron. La ejecución central previa DISABLED también pasó (mint ACCESS/ID 200, POST 503/PUBLISHER_DISABLED, tres negativos 403; commit `d1cd871`). Esta evidencia no acredita todavía el recorrido Logging → sink → Pub/Sub → observador → Firestore.
 
 Archivo nuevo: `services/pay0-sentinel-observation/scripts/run-canary-observation.ps1`. Importa `verify-canary-runtime.ps1 -LibraryOnly` sin modificarlo. El wrapper preserva sus flags al importar. Sin `-Execute` no hace llamadas remotas. No crea roles, modifica variables de entorno, hace despliegues, modifica Terraform/state ni configura o activa el sink.
 
