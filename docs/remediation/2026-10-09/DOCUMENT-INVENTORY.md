@@ -1,6 +1,6 @@
 # Inventario documental historico previo al puente
 
-Estado: herramienta preparada y probada con fixtures; CERO lecturas productivas, CERO escrituras cloud, ningun cambio de bridge/rules/UI. No demuestra compatibilidad historica real ni autoriza retirar Storage/getDownloadURL. Fuente revisada: DOCUMENT-ROLLOUT-COVERAGE.md y downloadAccess.ts de .worktrees/private-document-bridge-20261009, mas escritores y verifiedStorageObject del checkout principal.
+Estado: herramienta preparada y probada con fixtures; este agente no ejecuto lecturas productivas ni escrituras cloud. Integracion reporto un bootstrap de100 documentos, documentado abajo; no es cierre historico. Ningun cambio de bridge/rules/UI. No demuestra compatibilidad historica real ni autoriza retirar Storage/getDownloadURL. Fuente revisada: DOCUMENT-ROLLOUT-COVERAGE.md y downloadAccess.ts de .worktrees/private-document-bridge-20261009, mas escritores y verifiedStorageObject del checkout principal.
 
 ## Herramienta y modo seguro predeterminado
 
@@ -53,3 +53,23 @@ El alcance del checkpoint fija proyecto/root/bucket/familias/metadata. Un cambio
 5. Mantener24 casos Storage delegados pendientes hasta despliegue compatible de backend/UI, inventario historico, prueba de acceso legitimo y revision final de reglas. Este script no activa restriccion, writer ni despliegue.
 
 No se ejecutaron builds ni emuladores: el lote solo agrega script read-only y pruebas puras. No se usaron credenciales, proveedores ni respuestas productivas en las pruebas.
+
+## Bootstrap y adapter REST sin ADC persistente
+
+Archivos nuevos: remediation-document-inventory-bootstrap.mjs/.test.mjs y remediation-document-inventory-rest.mjs/.test.mjs. Suite conjunta19/19 PASS (8core,5bootstrap,6REST). Ambos comandos son DRY_RUN por defecto: no piden token, no leen checkpoint privado ni usan red. Firebase Admin Firestore instalado rechaza credencial custom getAccessToken (firestore-internal.js acepta certificado/ADC); por eso estos helpers usan Firestore REST con el mismo permiso OAuth, no un supuesto soporte de Admin. El ejecutable original de inventario con Admin sigue siendo secundario; la ruta operativa preferida sin ADC es el adapter REST.
+
+memoryCredential captura gcloud auth print-access-token --project pay-0-system --quiet en stdout PIPE; no imprime stdout/stderr del proceso. Token vive en cierre de memoria con cache30s, nunca variable persistente, archivo ADC, URL o checkpoint. shell de Windows solo recibe comando/argumentos constantes, sin entradas de usuario. Errores se sustituyen por codigos genericos; DEBUG se vacia antes de autenticar.
+
+Bootstrap fija proyecto pay-0-system, coleccion uploads, proyeccion exclusiva rootId y limit100 en una sola runQuery. Guarda cursor y roots reales exclusivamente en .firebase/document-inventory/*.json ignorado; stdout contiene indices/hash/conteos, no IDs. Integracion reporto su ejecucion de una pagina:100 documentos, missingRoot0,invalidRoot0,un root index0,exhausted=false. Este agente no leyo el checkpoint ni las respuestas. Es muestra, no inventario completo ni validacion de padre/tamano.
+
+Adapter REST selecciona root por index desde ese checkpoint; nunca requiere escribir UID en comando/stdout. Primera ejecucion revisable por integracion:
+
+```powershell
+node qa/scripts/remediation-document-inventory-rest.mjs --execute-read-only --bootstrap .firebase/document-inventory/bootstrap-uploads.json --root-index 0 --checkpoint .firebase/document-inventory/sample-uploads-root0.json --max-records 100 --page-size 25
+```
+
+Este agente NO ejecuto el comando remoto. El adapter fija uploads y maximo100 registros por invocacion; usa FIELDS, filtro rootId exacto y cursor exclusivo por __name__. Padres se consultan por ID canonico, limit1 y solo6 campos root/estado/lifecycle. Las respuestas estan acotadas a512KiB, timeout30s y redirect:error; el endpoint de proyecto es constante. No imprime mensaje original de proveedor, rutas o datos leidos. Checkpoints bajo carpeta ignorada y bootstrap/inventario deben ser archivos distintos.
+
+Storage sigue DESACTIVADO en la primera muestra. El flag opcional --with-storage-metadata solo solicita fields=size al endpoint fijo pay-0-system.appspot.com, referencia tomada de scripts canonicos previos; confirmar bucket con integracion antes habilitar. No consulta custom metadata/tokens ni contenido. Su presupuesto queda igual a max-records. La muestra puede detectar problemas de metadata declarada; sin Storage no confirma tamano actual, generacion ni existencia del objeto.
+
+Una pagina bootstrap100 mas muestra100 y hasta100 padres implica lecturas adicionales acotadas; consultar siguiente pagina/root, otras colecciones o metadata Storage requiere revisar resultados y presupuesto, no continuar automaticamente. No retirar rutas ni publicar la UI suponiendo compatibilidad global a partir de una sola muestra.
