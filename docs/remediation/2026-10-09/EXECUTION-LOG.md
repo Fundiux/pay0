@@ -29,3 +29,8 @@
 - 99d1f3a (fuente): Telegram POST/fragment y pagina publica exacta;14tests PASS. Pendiente integrar, compilar y desplegar handlerdual, Hosting y webhookemisor en ese orden.
 - Firebase CLI15.3.1 prepare.inferDetailsFromExisting preserva environmentVariables existentes cuando no hay dotenv de Functions. Verificado localmente; no se copiaron valores secretos ni se crearon env de Functions. Revalidar metadatos despues de cada lote.
 - Sandbox local fallo runner spawn_ready; inspecciones y ejecuciones continuaron por escalacion autorizada de plataforma. No rechazo de aprobacion ni bypass de controles.
+
+- Hito remoto: integración 6b8d2f7e35cb publicada en su rama; S02 revision00012-zal ACTIVE y rechazo no autenticado401 verificados. Artefacto fuente coincide; binding heredado requiere redeploy secrets vacío. Detalles exactos HANDOFF.md.
+- Hito Sentinel: proyecto aislado/API/repositorio creados; recuperación DNS sin recreación. Servicio/ingesta todavía no activos. Reglas candidatas no publicadas: dos límites de evaluación y brechas Storage pendientes.
+
+- Segundo despliegue S02 aa8c659: revision logunauthorizedrouteattempt-00013-cij ACTIVE, generation1791567236518049, updateTime2026-10-09T17:35:34.615925986Z, sin bindings secretos; HTTP401/UNAUTHENTICATED PASS. Predeploy completo PASS.

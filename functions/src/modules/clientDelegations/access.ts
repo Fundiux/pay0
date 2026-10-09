@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
-import { delegationIsCurrent } from "./policy";
-import { getUserRole } from "../../utils/authGuard";
+import { delegationIsCurrent, delegationTimeMillis } from "./policy";
+import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -52,6 +52,9 @@ export type ResolveClientAccessParams = {
   rootId: string;
   clientId: string;
   client?: any | null;
+  transaction?: admin.firestore.Transaction;
+  // Setter-only exclusion prevents introducing a cycle through the target.
+  excludedAncestorUid?: string;
 };
 
 export type RequireClientAccessParams = ResolveClientAccessParams & {
@@ -192,6 +195,12 @@ function deniedAccess(params: {
 export async function resolveClientOperationalAccess(
   params: ResolveClientAccessParams
 ): Promise<ResolvedClientAccess> {
+  return resolveClientAccessWithLineage(params, new Set<string>(params.excludedAncestorUid ? [params.excludedAncestorUid] : []));
+}
+
+async function resolveClientAccessWithLineage(
+  params: ResolveClientAccessParams, ancestors: Set<string>
+): Promise<ResolvedClientAccess> {
   const uid = cleanId(params.uid);
   const role = params.role;
   const rootId = cleanId(params.rootId);
@@ -205,10 +214,11 @@ export async function resolveClientOperationalAccess(
     throw new HttpsError("invalid-argument", "clientId requerido.");
   }
 
+  const read = (ref: admin.firestore.DocumentReference) => params.transaction ? params.transaction.get(ref) : ref.get();
   let client = params.client || null;
 
   if (!client) {
-    const clientSnap = await db.doc(`clients/${clientId}`).get();
+    const clientSnap = await read(db.doc(`clients/${clientId}`));
     if (!clientSnap.exists) {
       throw new HttpsError("not-found", "Cliente no existe.");
     }
@@ -219,12 +229,15 @@ export async function resolveClientOperationalAccess(
     throw new HttpsError("failed-precondition", "Cliente inactivo.");
   }
 
-  const user = (await db.doc(`users/${uid}`).get()).data();
+  const user = (await read(db.doc(`users/${uid}`))).data();
   if (!user || !rootId || !["superadmin", "admin", "operador"].includes(role) || getUserRole(user) !== role || cleanId(user.rootId || uid) !== rootId
     || user.active === false || user.isActive === false || user.isDeleted === true || user.disabled === true
     || user.deleted === true || user.deletedAt != null) {
     return deniedAccess({ uid, role, rootId, clientId, client, reason: "CLIENT_ACCESS_ACTOR_INVALID" });
   }
+
+  try { assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] }); }
+  catch { return deniedAccess({ uid, role, rootId, clientId, client, reason: "CLIENT_ACCESS_ACTOR_INVALID" }); }
 
   const owner = getClientEconomicOwner(client);
   const clientRootId = cleanId(client?.rootId);
@@ -278,7 +291,12 @@ export async function resolveClientOperationalAccess(
     };
   }
 
-  const delegationSnap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
+  // Direct ownership above terminates the lineage; only delegated paths recurse.
+  if (ancestors.has(uid) || ancestors.size >= 16) {
+    return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_LINEAGE_INVALID" });
+  }
+  const nextAncestors = new Set(ancestors).add(uid);
+  const delegationSnap = await read(db.doc(`userClientAccess/${uid}/clients/${clientId}`));
   if (!delegationSnap.exists) {
     return deniedAccess({
       uid,
@@ -290,7 +308,7 @@ export async function resolveClientOperationalAccess(
     });
   }
 
-  const delegation: any = delegationSnap.data() || {};
+  let delegation: any = delegationSnap.data() || {};
   const active = delegation?.active === true;
 
   if (!active) {
@@ -333,6 +351,38 @@ export async function resolveClientOperationalAccess(
   }
 
   const permissions = normalizeClientAccessPermissions(delegation?.permissions, true);
+  const authority = delegation.grantAuthority;
+  if (authority !== undefined && (!authority || authority.version !== 1 ||
+      !["SUPERADMIN", "DIRECT", "DELEGATED"].includes(authority.source) ||
+      typeof authority.grantorUid !== "string" || !authority.grantorUid.trim())) {
+    return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_LINEAGE_INVALID" });
+  }
+  const grantorUid = cleanId(authority?.grantorUid || delegation.grantedBy || delegation.createdBy);
+  if (grantorUid) {
+    if (/[\/]/.test(grantorUid) || grantorUid === uid ||
+        (authority?.source === "DELEGATED" && authority.parentPath !== `userClientAccess/${grantorUid}/clients/${clientId}`)) {
+      return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_LINEAGE_INVALID" });
+    }
+    const grantor = (await read(db.doc(`users/${grantorUid}`))).data();
+    try { assertAuthorized({ uid: grantorUid }, grantor, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "clientDelegations" }); }
+    catch { return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_GRANTOR_INVALID" }); }
+    const parent = await resolveClientAccessWithLineage({ uid: grantorUid, role: getUserRole(grantor),
+      rootId, clientId, client, transaction: params.transaction }, nextAncestors);
+    if (!parent.allowed || !parent.permissions.operate ||
+        (authority?.source === "SUPERADMIN" && parent.source !== "SUPERADMIN") ||
+        (authority?.source === "DIRECT" && parent.source === "DELEGATED")) {
+      return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_GRANTOR_INVALID" });
+    }
+    for (const key of Object.keys(permissions) as (keyof ClientAccessPermissions)[]) {
+      permissions[key] = permissions[key] && parent.permissions[key];
+    }
+    const parentExpiry = delegationTimeMillis(parent.delegation?.expiresAt);
+    const ownExpiry = delegationTimeMillis(delegation.expiresAt);
+    if (parentExpiry !== null && (ownExpiry === null || parentExpiry < ownExpiry)) {
+      delegation = { ...delegation, expiresAt: parent.delegation.expiresAt };
+    }
+  }
+
 
   if (!Object.values(permissions).some(value => value === true)) {
     return deniedAccess({
@@ -359,7 +409,7 @@ export async function resolveClientOperationalAccess(
     delegation,
     permissions,
     ...owner,
-    reason: null,
+    reason: grantorUid ? null : "LEGACY_PROVENANCE_UNVERIFIED",
   };
 }
 
