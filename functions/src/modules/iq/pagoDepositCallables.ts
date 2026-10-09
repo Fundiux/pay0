@@ -3221,6 +3221,7 @@ export const requestPagoIqSync = onCall(
 export const processIqPagoDepositOnDemandTask =
   onTaskDispatched(
     {
+      preserveExternalChanges: true,
       region: "us-central1",
       timeoutSeconds: 540,
       memory: "2GiB",
@@ -3752,6 +3753,7 @@ export const dispatchQueuedPagoIqCreation = onDocumentWritten(
 
 export const processIqPagoDepositAutomaticTask = onTaskDispatched(
   {
+    preserveExternalChanges: true,
     region: "us-central1", timeoutSeconds: 540, memory: "2GiB",
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
     retryConfig: { maxAttempts: 3, minBackoffSeconds: 300, maxBackoffSeconds: 900, maxRetrySeconds: 1800 },
@@ -3779,6 +3781,7 @@ export const processIqPagoDepositAutomaticTask = onTaskDispatched(
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
+    preserveExternalChanges: true,
     schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
