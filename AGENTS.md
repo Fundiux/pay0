@@ -48,9 +48,11 @@ npx playwright test --config playwright.config.mjs
 `PAY0_QA_BROWSER_PATH` if needed. It starts `npm run dev` automatically.
 
 `npm run qa:pay0` runs both builds and local repository checks and writes
-ignored audit output. Its materiality check now uses tracked executable
-fixtures and source contracts. It does not replace authorization emulator,
+ignored audit output. Its materiality check now exercises domain/transaction
+contracts with synthetic fixtures in `qa/scripts/check-materiality-canon.mjs`,
+independent of archived prose. It does not replace authorization emulator,
 financial concurrency, document access, or Functions discovery checks.
+Keep generated reports out of commits.
 
 ## Security and data rules
 
