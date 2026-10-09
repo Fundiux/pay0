@@ -40,13 +40,26 @@ resource.name == 'projects/pay0-sentinel-observe/databases/sentinel-observation'
 
 Esto explica plausiblemente el 404 por inexistencia, **no prueba denegación**. La consulta de bindings directos tampoco certifica todos los permisos heredados. El script conserva expected 403 para default y la matriz completa **no pasa**. No se creó otra DB para cambiar el resultado.
 
-## Alternativa Policy Troubleshooter, pendiente
+## Alternativa Policy Troubleshooter: propuesta y ejecución posterior
 
 La API no estaba habilitada en el proyecto de cuota consultado `pay-0-system`; no se habilitó. La API oficial admite contexto explícito `resource.name/service/type`, y la CLI muestra evaluación de políticas de proyecto con contexto de recurso. Por analogía, se propone modelar la condición para default inexistente, usando el proyecto existente como recurso de consulta. Es una inferencia que necesita ejecución, no evidencia obtenida. [API v3](https://docs.cloud.google.com/policy-intelligence/docs/reference/policytroubleshooter/rest/v3/iam/troubleshoot), [CLI oficial](https://docs.cloud.google.com/sdk/gcloud/reference/policy-intelligence/troubleshoot-policy/iam).
 
 Tupla propuesta: principal `pay0-sentinel-observer@pay0-sentinel-observe.iam.gserviceaccount.com`; fullResourceName `//cloudresourcemanager.googleapis.com/projects/pay0-sentinel-observe`; permiso `datastore.entities.get`; contexto service `firestore.googleapis.com`, type `firestore.googleapis.com/Database`, name alternando `projects/pay0-sentinel-observe/databases/(default)` y `projects/pay0-sentinel-observe/databases/sentinel-observation`. Repetir, como máximo ocho consultas en total, para `datastore.entities.create`, `datastore.entities.update` y `datastore.databases.get`.
 
 Revisar explicación de bindings y estado global: se espera condición falsa para default y verdadera para named si no intervienen otros permisos. UNKNOWN/contexto incompleto no es PASS. Incluso DENIED sería evidencia **modelada**, no una denegación HTTP observada. Root decidirá habilitación mínima y proyecto de cuota; no se certificó una tarifa gratuita de Troubleshooter.
+
+Actualización posterior autorizada: se habilitó únicamente `policytroubleshooter.googleapis.com` en `pay0-sentinel-observe` (exit 0; cuota de habilitación `pay-0-system`). Las evaluaciones usaron proyecto y cuota `pay0-sentinel-observe`. No hubo mint, grants, escrituras Firestore, recursos ficticios ni intervención en Terraform/state.
+
+La primera tanda de ocho evaluaciones conservó correctamente los resultados de condición/binding, pero un error de normalización descartó los enums globales v3 CAN_ACCESS/CANNOT_ACCESS. Su salida UNKNOWN no representaba un UNKNOWN de la API. Se hizo una segunda y última tanda correctiva de ocho, autorizada centralmente, con enums reales preservados y exclusivamente salida redaccionada:
+
+| Permiso | Default: global / condición | Named: global / condición |
+| --- | --- | --- |
+| `datastore.entities.get` | CANNOT_ACCESS (DENIED) / false | CAN_ACCESS (GRANTED) / true |
+| `datastore.entities.create` | CANNOT_ACCESS (DENIED) / false | CAN_ACCESS (GRANTED) / true |
+| `datastore.entities.update` | CANNOT_ACCESS (DENIED) / false | CAN_ACCESS (GRANTED) / true |
+| `datastore.databases.get` | CANNOT_ACCESS (DENIED) / false | CAN_ACCESS (GRANTED) / true |
+
+Para los cuatro permisos, el binding `sentinelObservationWriter` devolvió `ALLOW_ACCESS_STATE_NOT_GRANTED` en default y `ALLOW_ACCESS_STATE_GRANTED` en named. Las ocho consultas correctivas terminaron sin errores ni UNKNOWN. Esto confirma la distinción **modelada** para la tupla/contexto indicados; no prueba el comportamiento HTTP de una DB default inexistente, ni certifica que futuras políticas permanezcan iguales. La prueba RPC default 404 y el expected 403 del verificador permanecen intactos.
 
 ## Presupuesto mínimo propuesto
 
