@@ -234,3 +234,17 @@ provenance retained, restricted/revoked-module/wrong-root grantor, missing or
 unexpected reference with zero extra remote reads, fifth grant/second grantor,
 incomplete query, exact nine-read upper bound, typed timestamp/fixed-clock expiry,
 and projection/transport shape. No new remote execution, mutation or build.
+
+## Reported complete-cohort execution, 2026-10-09 23:24:11.188 UTC
+
+Coordinator reports remote `e2f86fc` PASS, classificationAsOf 1791588251188:
+88 scanned, four in-scope grants, six masked reads, one grantor. Two results were
+allowed / DELEGATED / reason NONE; two were denied / DELEGATION_INACTIVE. Each of
+the ten canonical permissions counted true=2 and false=2. Cached resolver reads
+were users=8, clients=4, grants=4; these are cache operations, not additional remote
+reads. No identifiers or payloads are reproduced here.
+
+This confirms current bounded cohort behavior under the real backend resolver.
+It does not establish authority at issuance, infer a need for migration, prove
+all roots/clients have been inventoried, or close Firestore/Storage S10 globally.
+No migration or new grantAuthority is recommended from these counts alone.
