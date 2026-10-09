@@ -1,4 +1,4 @@
-﻿import {
+import {
   loginIqHttpDirect,
   type IqHttpAuthSession,
   type IqHttpCredentials,

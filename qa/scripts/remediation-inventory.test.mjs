@@ -1,4 +1,4 @@
-﻿import { test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildInventory, parseRules, ruleKey, parseCsv, csv, ROOT } from '../../scripts/build-remediation-inventory.mjs';

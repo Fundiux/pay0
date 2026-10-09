@@ -1,4 +1,4 @@
-﻿export const DOWNLOAD_LEASE_MS = 70_000;
+export const DOWNLOAD_LEASE_MS = 70_000;
 export const DOWNLOAD_STREAM_MS = 55_000;
 export const DOWNLOAD_MAX_ATTEMPTS = 3;
 export class DownloadTokenError extends Error {

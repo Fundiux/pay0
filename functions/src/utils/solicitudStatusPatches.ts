@@ -1,4 +1,4 @@
-﻿import type { SatCancelCode } from "./solicitudStatusMachine";
+import type { SatCancelCode } from "./solicitudStatusMachine";
 
 export function buildSolicitudCanceladaPatch(input: {
   uid: string;

@@ -1,4 +1,4 @@
-﻿const assert=require('node:assert/strict');
+const assert=require('node:assert/strict');
 const {test}=require('node:test');
 const {createRequire}=require('node:module');
 const functionsRequire=createRequire(require('node:path').resolve('functions/package.json'));

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { collection, doc, getDoc, getDocs, query, orderBy, limit, where, setDoc, Timestamp, disableNetwork, enableNetwork } from 'firebase/firestore';
 import { db } from '@/lib/firebaseClient';

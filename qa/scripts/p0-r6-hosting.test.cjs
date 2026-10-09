@@ -1,4 +1,4 @@
-﻿const assert = require('node:assert/strict');
+const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
