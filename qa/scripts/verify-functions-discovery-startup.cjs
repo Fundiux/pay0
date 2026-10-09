@@ -23,11 +23,13 @@ const warmupTimeoutMs = 60_000;
 // ASTRA adds 2 identities, 4 payment continuations, 12 commission operations,
 // 1 materiality projection, 1 receipt certificate, 11 corporate resources and
 // 1 scoped voice-activity reader to the certified 309-endpoint baseline.
-const expectedEndpointCount = 341;
+// Integration restores two deposit automation endpoints and published receipt correction.
+const expectedEndpointCount = 344;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
-  "parsePagoReceiptPdf",
+  "parsePagoReceiptPdf", "correctPagoReceiptSemanticField",
+  "dispatchQueuedPagoIqCreation", "processIqPagoDepositAutomaticTask",
   "getAuthorizedDocumentDownloadUrl",
   "createClientDispersionIq",
   "processIqDispersionCreate",

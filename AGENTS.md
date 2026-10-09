@@ -3,7 +3,7 @@
 ## Purpose and architecture
 
 PAY0 is a Spanish-language financial operations application. It is a Next.js
-14 App Router frontend backed directly by Firebase Authentication, Firestore,
+15.5 App Router frontend backed directly by Firebase Authentication, Firestore,
 Storage, and Firebase Cloud Functions v2. There is no separate REST server.
 
 - Frontend: `src/app/` routes, `src/components/` UI, `src/services/` Firebase
@@ -23,7 +23,7 @@ Functions through `src/lib/firebaseClient.ts`.
 ## Startup and verification
 
 Use Node 22 for the Functions package; the frontend currently builds with the
-repository lockfile and Next.js 14.
+repository lockfile and Next.js 15.5.27.
 
 ```powershell
 npm ci
@@ -47,10 +47,10 @@ npx playwright test --config playwright.config.mjs
 `playwright.config.mjs` is headed and optionally uses Opera GX; configure
 `PAY0_QA_BROWSER_PATH` if needed. It starts `npm run dev` automatically.
 
-Do not treat `npm run qa:pay0` as a reliable gate yet. Its materiality check
-still reads `pay0-archivo-tecnico/MATERIALIDAD-CANON.md`, which was deliberately
-archived outside Git during repository cleanup. It also writes audit output.
-Repair that test's fixture/source contract before enabling it as CI.
+`npm run qa:pay0` runs both builds and local repository checks and writes
+ignored audit output. Its materiality check now uses tracked executable
+fixtures and source contracts. It does not replace authorization emulator,
+financial concurrency, document access, or Functions discovery checks.
 
 ## Security and data rules
 
