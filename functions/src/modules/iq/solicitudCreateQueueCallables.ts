@@ -1,3 +1,5 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
+import { assertAuthorized } from "../../utils/authGuard";
 import { operationTiming } from "../../utils/operationTiming";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { requireIqAssociatedName } from "./associatedName";
@@ -719,9 +721,8 @@ async function getAuthContext(request: {
   }
 
   const user = asRecord(userSnap.data());
-  const token = asRecord(request.auth?.token);
-  const role = cleanText(token.role ?? token.userRole ?? user.role).toLowerCase();
-  const rootId = cleanText(token.rootId ?? token.root_id ?? user.rootId ?? uid);
+  const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
+  const rootId = cleanText(user.rootId ?? uid);
 
   return { uid, role, rootId: rootId || uid, user };
 }
@@ -1474,7 +1475,7 @@ async function finalizeJobFromResult(input: {
       ? "CREATED"
       : submitted
         ? "PENDING_RECONCILIATION"
-        : "FAILED_RETRYABLE";
+        : input.result.status === "AUTH_STOPPED" ? "AUTH_STOPPED" : "FAILED_RETRYABLE";
 
     tx.set(input.job.ref, {
       status: jobStatus,
@@ -1500,7 +1501,7 @@ async function finalizeJobFromResult(input: {
       rootId: input.job.rootId,
       solicitudId: input.job.solicitudId,
       solicitudFolio: input.job.solicitudFolio || null,
-      status: iqId ? "SUCCEEDED" : submitted ? "OUTCOME_UNKNOWN" : "FAILED_RETRYABLE",
+      status: iqId ? "SUCCEEDED" : submitted ? "OUTCOME_UNKNOWN" : jobStatus,
       source: "QUEUE",
       batchId: input.batchId,
       version: IQ_QUEUE_VERSION,
@@ -1523,7 +1524,7 @@ async function finalizeJobFromResult(input: {
 
     const solicitudPatch: Record<string, unknown> = {
       iqCreateQueueStatus: jobStatus,
-      iqCreationStatus: iqId ? "CREATED" : submitted ? "OUTCOME_UNKNOWN" : "FAILED_RETRYABLE",
+      iqCreationStatus: iqId ? "CREATED" : submitted ? "OUTCOME_UNKNOWN" : jobStatus,
       iqCreationAttemptCount: input.attemptCount,
       iqCreationFinishedAt: now,
       iqCreationDurationMs: input.durationMs,
@@ -1795,6 +1796,14 @@ async function publishSuperadminQueueSummary(input: {
   }
 }
 
+async function authorizeSolicitudJob(job: IqCreateJob) {
+  const source = (await db.doc(`solicitudes/${job.solicitudId}`).get()).data();
+  if (!source || source.rootId !== job.rootId || isIqTerminalOrOmittedSolicitud(source)) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+  await authorizeDeferredIntent({ uid: job.requestedBy, rootId: job.rootId, module: "solicitudes", action: "create",
+    clientId: cleanText(source.clienteId || source.clientId), permission: "operateSolicitudes" });
+  if (!(await verifyDespachoAccess(job.requestedBy, cleanText(source.despachoId)))) throw new HttpsError("permission-denied", "AUTH_DISPATCH_CHANGED");
+}
+
 async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promise<{
   total: number;
   linked: number;
@@ -1817,6 +1826,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
       throw new Error("Cuenta IQ no encontrada.");
     }
     const profile = asRecord(profileSnap.data());
+    for (const job of jobs.slice(0, MAX_JOBS_PER_PROFILE)) await authorizeSolicitudJob(job);
     const password = decryptSecret(profile);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
     const username = cleanText(profile.username);
@@ -1865,6 +1875,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         timeZone,
         items,
         lookupMaxPages: 20,
+        authorizeBeforePost: key => authorizeSolicitudJob(jobByKey.get(key)!.job),
       });
 
       let linked = 0;
@@ -2023,9 +2034,9 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         tx.set(
           job.ref,
           {
-            status: "FAILED_RETRYABLE",
+            status: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
             error: message,
-            nextRunAt: Timestamp.fromMillis(
+            nextRunAt: (error as any)?.code === "permission-denied" ? null : Timestamp.fromMillis(
               Date.now() + RETRYABLE_DELAY_MS,
             ),
             updatedAt: FieldValue.serverTimestamp(),
@@ -2036,8 +2047,8 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         tx.set(
           solicitudRef,
           {
-            iqCreateQueueStatus: "FAILED_RETRYABLE",
-            iqCreationStatus: "FAILED_RETRYABLE",
+            iqCreateQueueStatus: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
+            iqCreationStatus: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
             iqCreationLastError: message,
             iqSyncUpdatedAt: FieldValue.serverTimestamp(),
           },

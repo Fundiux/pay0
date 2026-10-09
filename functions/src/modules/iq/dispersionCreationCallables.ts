@@ -1,3 +1,4 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import {
@@ -317,6 +318,7 @@ async function buildDispersionSchedulerAuth(
   }
 
   const user = record(userSnap.data());
+  await authorizeDeferredIntent({uid, rootId: expectedRootId, module: "wallet", action: "dispersiones"});
   const role = clean(user.role).toLowerCase();
   const rootId =
     clean(user.rootId ?? uid) || uid;
@@ -1419,6 +1421,18 @@ export async function runCreateClientDispersionIqCore(input: {
   const principal = record(
     principalSnap.data(),
   );
+  const authorizeBeforePost = async () => {
+    const current = record((await principalRef.get()).data());
+    if (clean(current.rootId) !== auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+    const userFunded = current.fundingSource?.holderType === "USER";
+    const actor = await authorizeDeferredIntent({uid: auth.uid, rootId: auth.rootId, module: "wallet", action: "dispersiones",
+      ...(userFunded ? {} : {clientId: clean(current.clienteId || current.clientId), permission: "operateDispersiones" as const})});
+    if (userFunded && actor.role !== "superadmin" && current.fundingSource.ownerUid !== auth.uid)
+      throw new HttpsError("permission-denied", "AUTH_FUNDING_OWNER_CHANGED");
+    auth.role = actor.role;
+  };
+  if (!previewOnly) await authorizeBeforePost();
+
   
   if (
     clean(principal.rootId) !==
@@ -1944,6 +1958,7 @@ export async function runCreateClientDispersionIqCore(input: {
     const iqResult =
       await runIqCreateDispersionHttpH4D85A50(
         {
+          authorizeBeforePost,
           apiOrigin:
             clean(
               process.env.PAY0_IQ_API_ORIGIN,

@@ -1,3 +1,4 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -283,6 +284,12 @@ export async function executeComplement(id: string, adapter = providers) {
     const { source, app, solicitud, pago } = await sourceFor(job.applicationId);
     if (source.rootId !== job.rootId) throw Error("REP_JOB_SCOPE");
     if (source.provider !== job.provider) throw Error("REP_PROVIDER_MISMATCH");
+    const authorizeNewEffect = async () => {
+      const clientId = text(solicitud.clienteId || solicitud.clientId);
+      if (text(job.clientId) !== clientId) throw Error("AUTH_SCOPE_CHANGED");
+      await authorizeDeferredIntent({uid: text(job.actorUid), rootId: text(job.rootId), module: "pagos",
+        action: ["create", "conciliate"], clientId, permission: "operatePagos"});
+    };
     if (job.provider === "IQ") {
       if (app.iqApplicationStatus !== "IQ_APPLIED" || app.iqActionExecuted !== true) throw Error("REP_IQ_NOT_APPLIED");
       const lookupGate = await inspectIqComplementGate(job, "LOOKUP");
@@ -306,6 +313,7 @@ export async function executeComplement(id: string, adapter = providers) {
       const requestSession = await adapter.iqSession(job, "REQUEST");
       const afterRequestSession = await inspectIqComplementGate(job, "REQUEST");
       if (!afterRequestSession.allowed) { await updateJob(id, { status: "PAUSED", gateReason: afterRequestSession.reason }, `Solicitud IQ pausada: ${afterRequestSession.reason}.`); return; }
+      await authorizeNewEffect();
       await markIqSending(id); sending = true;
       await markProtectedEffectIntent();
       await adapter.requestIqComplement(job, requestSession);
@@ -315,6 +323,7 @@ export async function executeComplement(id: string, adapter = providers) {
       if (solicitud.despachoId !== PAY0_DISPATCH_ID) throw Error("REP_FACTURAMA_EXTERNAL_DISPATCH");
       await assertPay0Issuer({ db, rootId: job.rootId, companyId: text(solicitud.companyId) });
       const payload = await adapter.prepareFacturamaComplement(job, source, app, solicitud, pago);
+      await authorizeNewEffect();
       await updateJob(id, { status: "SENDING", attemptedAt: FieldValue.serverTimestamp(), payloadHash: hash(JSON.stringify(payload)) }); sending = true;
       await markProtectedEffectIntent();
       const cfdiId = await adapter.emitFacturamaComplement(payload);

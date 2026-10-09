@@ -339,8 +339,10 @@ async function postOnce(
   session: IqHttpAuthSession,
   item: IqSolicitudHttpItemA53,
   catalog: { clientId: number; companyId: number },
+  authorizeBeforePost?: () => Promise<void>,
 ): Promise<{ status: number; bodyText: string }> {
   const form = await buildFormData(item, catalog);
+  await authorizeBeforePost?.();
   const dispatchAt = operationTiming("iq_dispatch_at", item.key || "");
   const response = await fetchIq(new URL("/invoices", session.apiOrigin), {
     method: "POST",
@@ -501,6 +503,7 @@ function baseResult(
 }
 
 export async function runIqCreateInvoiceHttpA53(input: {
+  authorizeBeforePost?: () => Promise<void>;
   erpUrl?: string;
   apiOrigin?: string;
   username: string;
@@ -580,11 +583,13 @@ export async function runIqCreateInvoiceHttpA53(input: {
         ? Math.max(requestedLower, postStartedAtMs - 5000)
         : postStartedAtMs - 5000;
 
+    await input.authorizeBeforePost?.();
     let post: { status: number; bodyText: string };
 
     try {
-      post = await postOnce(session, item, catalog);
+      post = await postOnce(session, item, catalog, input.authorizeBeforePost);
     } catch (error) {
+      if ((error as any)?.code === "permission-denied") throw error;
       result.submitClicked = true;
       result.outcome = "UNKNOWN";
       result.status = "IQ_SOLICITUD_CREATE_UNKNOWN";
@@ -605,10 +610,12 @@ export async function runIqCreateInvoiceHttpA53(input: {
       });
       if (input.sessionHolder) input.sessionHolder.session = session;
       result.authenticated = true;
+      await input.authorizeBeforePost?.();
 
       try {
-        post = await postOnce(session, item, catalog);
+        post = await postOnce(session, item, catalog, input.authorizeBeforePost);
       } catch (error) {
+        if ((error as any)?.code === "permission-denied") throw error;
         result.submitClicked = true;
         result.outcome = "UNKNOWN";
         result.status = "IQ_SOLICITUD_CREATE_UNKNOWN";
@@ -645,7 +652,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
 
     if (post.status !== 201) {
       result.outcome = "REJECTED";
-      result.status = "IQ_SOLICITUD_CREATE_REJECTED";
+      result.status = (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "IQ_SOLICITUD_CREATE_REJECTED";
       result.responseMessage =
         clean(post.bodyText) || `IQ rechazó la solicitud con HTTP ${post.status}.`;
       result.message = result.responseMessage;
@@ -705,6 +712,7 @@ export async function runIqCreateInvoiceHttpA53(input: {
 }
 
 export async function runIqCreateInvoiceBatchHttpA53(input: {
+  authorizeBeforePost?: (key: string) => Promise<void>;
   erpUrl?: string;
   apiOrigin?: string;
   username: string;
@@ -731,6 +739,7 @@ export async function runIqCreateInvoiceBatchHttpA53(input: {
 
   for (const item of input.items.slice(0, 25)) {
     const row = await runIqCreateInvoiceHttpA53({
+      authorizeBeforePost: input.authorizeBeforePost ? () => input.authorizeBeforePost!(item.key || "") : undefined,
       sessionHolder,
       erpUrl: input.erpUrl,
       apiOrigin: input.apiOrigin,
