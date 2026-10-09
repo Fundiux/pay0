@@ -8,6 +8,11 @@ const ts = require('typescript');
 const directory = path.resolve(__dirname, '../../functions/src/modules/iq');
 const allow = new Set(['dispersionHttpCreateCore', 'commissionInstrumentBinding', 'iqDateTime', 'iqHttpClient', 'externalActionsPolicy']);
 let scenario, calls, posts, posted, checks = 0;
+let reservations = 0, observations = 0;
+const safetyRuntime = Object.freeze({
+  reserveProtectedRequest: async () => { reservations++; },
+  observeProtectedResponse: async () => { observations++; },
+});
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 async function fakeFetch(input, init = {}) {
   const url = new URL(input);
@@ -37,7 +42,7 @@ function load(name) {
   const filename = path.join(directory, name + '.ts'), module = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(code, { module, exports: module.exports, process: { env: {} },
-    require: dependency => dependency === 'crypto' ? crypto : load(dependency.replace(/^\.\//, '')),
+    require: dependency => dependency === '../automationSafety/runtime' ? safetyRuntime : dependency === 'crypto' ? crypto : load(dependency.replace(/^\.\//, '')),
     globalThis: Object.freeze({ fetch: fakeFetch }), URL, FormData, AbortController, setTimeout, clearTimeout,
   }, { filename });
   modules.set(name, module.exports);
@@ -54,8 +59,11 @@ const binding = bind(bindInput);
 const item = { associatedName: 'Synthetic partner', clientCandidates: ['Synthetic client'], beneficiaryCandidates: ['Synthetic beneficiary'], clientIqId: '102', currency: 'MXN', operationTypeKey: 'TRANSFERENCIA', percentageLabel: '2', amount: 100, expectedDestinationLast4: '1234', reference: 'SYNTHETIC', fundingHolderType: 'USER', verifiedInstrument: binding };
 function check(condition, label) { assert.ok(condition, label); checks++; }
 async function run(changes = {}, itemChanges = {}) {
-  scenario = changes; calls = posts = 0; posted = null;
-  return execute({ apiOrigin: 'https://synthetic-iq.invalid', username: 'synthetic', password: 'synthetic', item: { ...item, ...itemChanges } });
+  scenario = changes; calls = posts = reservations = observations = 0; posted = null;
+  const result = await execute({ apiOrigin: 'https://synthetic-iq.invalid', username: 'synthetic', password: 'synthetic', item: { ...item, ...itemChanges } });
+  assert.equal(reservations, calls, 'Every fake provider request reserves through the runtime boundary');
+  assert.equal(observations, calls, 'Every fake provider response is observed');
+  return result;
 }
 async function main() {
   check(binding.accountId === '104' && binding.clientId === '102', 'Actual binding retains verified IDs');

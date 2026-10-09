@@ -6,7 +6,12 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '../..');
 const environment = {};
 let networkCalls = 0, checks = 0, lastCall;
-const response = { ok: true };
+let reservations = 0, observations = 0;
+const safetyRuntime = Object.freeze({
+  reserveProtectedRequest: async () => { reservations++; },
+  observeProtectedResponse: async status => { assert.equal(status, 200); observations++; },
+});
+const response = { ok: true, status: 200 };
 const policyPath = 'functions/src/modules/iq/externalActionsPolicy.ts';
 const exportsCache = new Map();
 function load(file) {
@@ -18,7 +23,7 @@ function load(file) {
   }).outputText;
   const fetch = async (input, init) => { networkCalls++; lastCall = { input, init }; return response; };
   vm.runInNewContext(code, { module, exports: module.exports, process: { env: environment },
-    require: name => load(path.relative(root, path.resolve(path.dirname(resolved), `${name}.ts`))),
+    require: name => name === '../automationSafety/runtime' ? safetyRuntime : load(path.relative(root, path.resolve(path.dirname(resolved), `${name}.ts`))),
     globalThis: { fetch }, URL, AbortController, setTimeout, clearTimeout,
   }, { filename: resolved });
   exportsCache.set(resolved, module.exports);
@@ -50,6 +55,7 @@ async function main() {
     checks++;
   }
   check(networkCalls === 0, 'No isolated/unknown mode opens transport');
+  check(reservations === 0 && observations === 0, 'Disabled transport never enters the runtime boundary');
   setEnvironment({ GCLOUD_PROJECT: 'pay-0-system' });
   const init = { method: 'POST', headers: { 'x-synthetic': 'fixture' }, body: 'synthetic', signal: new AbortController().signal };
   assert.equal(await policy.fetchIqExternal('https://iq.invalid/resource', init), response);
@@ -57,6 +63,7 @@ async function main() {
   setEnvironment({ GCLOUD_PROJECT: 'pay-0-system', PAY0_ENVIRONMENT: 'production' });
   await policy.fetchIqExternal('https://iq.invalid/resource');
   check(networkCalls === 2, 'Legacy production transport remains available through stub only');
+  check(reservations === 2 && observations === 2, 'Allowed requests reserve and observe through injected runtime');
   const domains = ['iq', 'clients', 'paymentApplications'];
   let guardedModules = 0;
   for (const domain of domains) {
