@@ -22,6 +22,9 @@ function load(file, dependencies = {}) {
   new Function('exports', 'require', code)(exports, name => { assert(name in dependencies, `Unexpected dependency: ${name}`); return dependencies[name]; });
   return exports;
 }
+const boundedZip = load('functions/src/utils/boundedZip.ts', {
+  'node:zlib': require('node:zlib'), 'node:stream': require('node:stream'),
+});
 function extract(names, context, file = 'functions/src/modules/iq/pagoDepositCallables.ts') {
   const source = fs.readFileSync(file, 'utf8');
   const ast = ts.createSourceFile('module.ts', source, ts.ScriptTarget.Latest, true);
@@ -821,7 +824,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
     crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: () => Date.now() },
     'firebase-admin': { apps: admin.apps, initializeApp: admin.initializeApp, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [present], download: async () => [bytes] }) }) }) },
-    'jszip': { default: JSZip }, 'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
+    '../../utils/boundedZip': boundedZip, 'firebase-functions/v2/https': functionsRequire('firebase-functions/v2/https'),
     '../../utils/logActivity': { logActivity: async () => {}, logActivityTx() {} },
     './domain': functionsRequire('./lib/modules/solicitudDocuments/domain.js'),
     './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
@@ -925,7 +928,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
     crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: (stage,id) => stamp(stage,id) },
     'firebase-admin': { apps: admin.apps, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: path => ({ exists: async () => [stored.has(path)], download: async () => [stored.get(path)] }) }) }) },
-    jszip: { default: JSZip }, 'firebase-functions/v2/https': https,
+    '../../utils/boundedZip': boundedZip, 'firebase-functions/v2/https': https,
     '../../utils/logActivity': { logActivity: async () => {}, logActivityTx() {} },
     './domain': functionsRequire('./lib/modules/solicitudDocuments/domain.js'), './lifecycle': functionsRequire('./lib/modules/solicitudDocuments/lifecycle.js'),
     '../iq/solicitudCreateQueueCallables': queueHandlers,

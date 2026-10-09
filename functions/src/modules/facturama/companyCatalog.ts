@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
-import type JSZip from "jszip";
+import { openBoundedWorkbook, createWorkbookStructureBudget, WorkbookLimitError } from "../../utils/boundedZip";
 import { HttpsError } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -28,9 +28,6 @@ const ALLOWED_STATUS = new Set(["AUTORIZADO", "CONDICIONADO", "REVISIÓN"]);
 const ACTIVE_STATUS = "ACTIVE";
 const MAX_CATALOG_BYTES = 1024 * 1024;
 const MAX_CATALOG_ROWS = 500;
-function getJsZip(): typeof JSZip {
-  return require("jszip");
-}
 
 export type CompanyCatalogEntry = {
   productCode: string;
@@ -90,18 +87,22 @@ function readCellValue(cellXml: string, sharedStrings: string[]): string {
 }
 
 export async function parseCompanyInvoiceCatalogWorkbook(buffer: Buffer): Promise<CompanyCatalogEntry[]> {
-    const zip = await getJsZip().loadAsync(buffer);
-    const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
-    const sharedStrings = [...sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((match) => xmlText(match[1]));
-    const sheetNames = Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+  try {
+    const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
+    const sharedXml = await zip.readText("xl/sharedStrings.xml");
+    const sharedStrings: string[] = [];
+    for (const match of sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)) { budget.sharedString(); sharedStrings.push(xmlText(match[1])); }
+    const sheetNames = zip.sheetNames;
     let rows: Map<number, Map<number, string>> | null = null;
     for (const sheetName of sheetNames) {
-      const xml = await zip.file(sheetName)?.async("string") || "";
+      const xml = await zip.readText(sheetName);
       const candidate = new Map<number, Map<number, string>>();
       for (const rowMatch of xml.matchAll(/<(?:\w+:)?row\b[^>]*\br="(\d+)"[^>]*>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
+        budget.row();
         const cells = new Map<number, string>();
         for (const cellMatch of rowMatch[2].matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)) {
           const reference = /\br="([A-Z]+\d+)"/.exec(cellMatch[1])?.[1] || "";
+          budget.cell(reference);
           if (reference) cells.set(columnNumber(reference), readCellValue(`${cellMatch[1]}>${cellMatch[2]}`, sharedStrings));
         }
         candidate.set(Number(rowMatch[1]), cells);
@@ -164,9 +165,15 @@ export async function parseCompanyInvoiceCatalogWorkbook(buffer: Buffer): Promis
     if (!entries.length) throw new HttpsError("invalid-argument", "El catálogo no contiene conceptos.");
     if (entries.length > MAX_CATALOG_ROWS) throw new HttpsError("invalid-argument", "El catálogo excede el límite de conceptos.");
     return entries;
+  } catch (error) {
+    if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
+    throw error;
+  }
 }
 
 function decodeBase64(value: unknown): Buffer {
+  // Bound the encoded string before regex normalization and Buffer allocation.
+  if (typeof value !== "string" || value.length > 4 * Math.ceil(MAX_CATALOG_BYTES / 3) + 256) throw new HttpsError("invalid-argument", "Archivo Excel invalido o mayor a 1 MB.");
   const raw = String(value || "").replace(/^data:[^;]+;base64,/, "").trim();
   if (!raw || !/^[A-Za-z0-9+/=\s]+$/.test(raw)) throw new HttpsError("invalid-argument", "Archivo Excel inválido.");
   const buffer = Buffer.from(raw, "base64");
