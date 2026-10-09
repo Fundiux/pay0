@@ -1,5 +1,6 @@
 // Actual authorization, restriction and delegation modules; only infrastructure faked.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
+const compiled=new Map();
 class HttpsError extends Error{constructor(code,message,details){super(message);this.code=code;this.details=details;}}
 exports.setup=function setup(){
  const rows=new Map([['users/u',{role:'superadmin',rootId:'r',active:true}],['clientDispersions/d',{rootId:'r',clientId:'c'}],['clients/c',{rootId:'r',active:true,adminId:'u'}],['uploads/x',{rootId:'r',dispersionId:'d',entityId:'d',entityType:'clientDispersions',storagePath:'roots/r/dispersiones/d/docs/COMPROBANTE_DISPERSION/x-file.pdf',sizeBytes:20,contentType:'application/pdf',documentType:'COMPROBANTE_DISPERSION',status:'PENDING',active:false,version:null}]]);
@@ -12,8 +13,10 @@ exports.setup=function setup(){
  const firestore=()=>db;firestore.FieldValue={serverTimestamp:()=>123};
  const admin={apps:[{}],firestore,storage:()=>({bucket:()=>({name:'fake-bucket',file:()=>({getMetadata:async()=>{metadataReads++;if(hook){const fn=hook;hook=null;fn();}return[structuredClone(object)];}})})})};
  const cache=new Map();
- function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const out={};const deps={'firebase-admin':admin,'firebase-admin/firestore':require('node:module').createRequire(path.resolve('functions/package.json'))('firebase-admin/firestore'),'firebase-functions':{logger:{info(){},error(){}},https:{HttpsError}},'firebase-functions/v2/https':{HttpsError},'../../utils/logActivity':{logActivityTx:(tx,_db,e)=>tx.events.push(e),logActivity:async()=>{throw Error('UNEXPECTED_EVENT');}},'../telegram/service':{sendTelegramMessage:async()=>{throw Error('MESSAGE_FORBIDDEN');},sendTelegramDocumentBuffer:async()=>{throw Error('MESSAGE_FORBIDDEN');}}};
- const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const out={};const deps={'crypto':require('node:crypto'),'firebase-admin':admin,'firebase-admin/firestore':require('node:module').createRequire(path.resolve('functions/package.json'))('firebase-admin/firestore'),'firebase-functions':{logger:{info(){},error(){}},https:{HttpsError}},'firebase-functions/v2/https':{HttpsError},'../../utils/logActivity':{logActivityTx:(tx,_db,e)=>tx.events.push(e),logActivity:async()=>{throw Error('UNEXPECTED_EVENT');}},'../telegram/service':{sendTelegramMessage:async()=>{throw Error('MESSAGE_FORBIDDEN');},sendTelegramDocumentBuffer:async()=>{throw Error('MESSAGE_FORBIDDEN');}}};
+ const source=fs.readFileSync(file,'utf8'),key=file+':'+require('node:crypto').createHash('sha256').update(source).digest('hex');
+ if(!compiled.has(key))compiled.set(key,ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText);
+ const code=compiled.get(key);
  new Function('exports','require',code)(out,n=>{if(Object.hasOwn(deps,n))return deps[n];assert.ok(n.startsWith('.'),'unexpected import '+n);return load(path.resolve(path.dirname(file),n+'.ts'));});cache.set(file,out);return out;}
  const api=load('functions/src/modules/dispersionDocuments/service.ts');
  const request=data=>({auth:{uid:'u'},data});

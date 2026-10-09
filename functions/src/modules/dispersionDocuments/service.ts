@@ -1,8 +1,8 @@
+import { randomUUID } from "crypto";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import * as admin from "firebase-admin";
-import { logActivity, logActivityTx } from "../../utils/logActivity";
-import { logger } from "firebase-functions";
+import { logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { sendTelegramDocumentBuffer, sendTelegramMessage } from "../telegram/service";
 import {
@@ -139,69 +139,6 @@ function pickBeneficiaryName(dispersion: any): string {
 
 function pickContentType(data: any): string {
   return cleanText(data?.contentType) || "application/octet-stream";
-}
-
-async function getClientRecipients(clientId: string): Promise<Array<{
-  telegramUserId: string;
-  chatId: string;
-  telegramUsername: string;
-}>> {
-  const cleanClientId = cleanText(clientId);
-  if (!cleanClientId) return [];
-
-  const snap = await db
-    .collection("clientTelegramUsers")
-    .where("clientId", "==", cleanClientId)
-    .where("active", "==", true)
-    .get();
-
-  const rows: Array<{
-    telegramUserId: string;
-    chatId: string;
-    telegramUsername: string;
-  }> = [];
-
-  snap.forEach((doc) => {
-    const data = doc.data() || {};
-    const chatId = cleanText(data.chatId);
-    if (!chatId) return;
-
-    rows.push({
-      telegramUserId: cleanText(data.telegramUserId || doc.id),
-      chatId,
-      telegramUsername: cleanText(data.telegramUsername || ""),
-    });
-  });
-
-  return rows;
-}
-
-async function sendUploadFileToTelegram(input: {
-  botToken: string;
-  chatId: string;
-  storagePath: string;
-  fileName: string;
-  contentType: string;
-  caption: string;
-}) {
-  const bucket = admin.storage().bucket();
-  const storageFile = bucket.file(input.storagePath);
-  const [exists] = await storageFile.exists();
-
-  if (!exists) {
-    throw new Error(`Archivo no encontrado en Storage: ${input.storagePath}`);
-  }
-
-  const [buffer] = await storageFile.download();
-
-  return await sendTelegramDocumentBuffer(
-    input.botToken,
-    input.chatId,
-    input.fileName || "comprobante",
-    buffer,
-    input.contentType || "application/octet-stream",
-    input.caption.slice(0, 1024)
-  );
 }
 
 export async function initDispersionDocumentUploadCore(request: any) {
@@ -540,184 +477,178 @@ export async function deactivateDispersionDocumentCore(request: any) {
   };
 }
 
-export async function notifyClientDispersionComprobanteFromUploadId(
-  uploadId: string,
-  botToken: string
-): Promise<{
-  ok: boolean;
-  notified: boolean;
-  reason: string;
-  sentCount?: number;
-}> {
+const NOTIFICATION_VERSION = 2;
+const MAX_NOTIFICATION_RECIPIENTS = 10;
+const CLAIM_MS = 120_000;
+const MAX_PRE_SEND_ATTEMPTS = 3;
+type DeliveryRecipient = { linkId: string; chatId: string; text: string; document: string };
+const anyPost = (recipients: DeliveryRecipient[]) => recipients.some(r => r.text !== "READY" || r.document !== "READY");
+const completeRecipients = (recipients: DeliveryRecipient[]) => recipients.filter(r => r.text === "SENT" && r.document === "SENT").length;
+const notificationResult = (reason: string, sentCount = 0) => ({ ok: true, notified: sentCount > 0, reason, sentCount });
+
+// No latest-path fallback. Stream bounds apply even if object metadata is false.
+async function readPinnedNotificationFile(upload: any): Promise<Buffer> {
+  const bucket = admin.storage().bucket();
+  const generation = String(upload.storageGeneration || "");
+  if (!/^[1-9][0-9]*$/.test(generation) || !Number.isSafeInteger(upload.sizeBytes) || upload.sizeBytes <= 0 || upload.sizeBytes > MAX_DISPERSION_DOCUMENT_SIZE_BYTES) throw Error("OBJECT_UNVERIFIED");
+  const file = bucket.file(upload.storagePath, { generation });
+  const [metadata] = await file.getMetadata();
+  if (metadata.name !== upload.storagePath || metadata.bucket !== bucket.name || String(metadata.generation) !== generation || Number(metadata.size) !== upload.sizeBytes || metadata.contentType !== upload.contentType) throw Error("OBJECT_CHANGED");
+  const stream = file.createReadStream({ validation: "crc32c" });
+  const chunks: Buffer[] = []; let size = 0;
+  const timer = setTimeout(() => stream.destroy(Error("READ_TIMEOUT")), 10_000);
+  try {
+    for await (const raw of stream) {
+      const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      size += chunk.length;
+      if (size > upload.sizeBytes || size > MAX_DISPERSION_DOCUMENT_SIZE_BYTES) { stream.destroy(); throw Error("OBJECT_TOO_LARGE"); }
+      chunks.push(chunk);
+    }
+    if (size !== upload.sizeBytes) throw Error("OBJECT_SIZE_CHANGED");
+    return Buffer.concat(chunks, size);
+  } finally { clearTimeout(timer); }
+}
+
+// Resolves server-stored authority again before each irreversible send.
+async function notificationScope(tx: admin.firestore.Transaction, uploadId: string, expected?: any) {
+  const upload = (await tx.get(db.doc(`uploads/${uploadId}`))).data();
+  if (!upload || unavailable(upload) || upload.status !== "READY" || upload.active !== true) throw Error("UPLOAD_NOT_READY");
+  const rootId = cleanText(upload.rootId), dispersionId = cleanText(upload.dispersionId), actorUid = cleanText(upload.finalizedBy);
+  if (![rootId, dispersionId, actorUid].every(validId)) throw Error("AUTHORITY_UNVERIFIED");
+  assertUploadIdentity(upload, rootId, dispersionId, uploadId);
+  const { dispersion } = await currentAuthority(actorUid, rootId, dispersionId, tx);
+  const clientId = cleanText(dispersion.clientId || dispersion.clienteId);
+  if (!validId(clientId) || clientId !== cleanText(upload.clientId || upload.clienteId)) throw Error("CLIENT_CHANGED");
+  const client = (await tx.get(db.doc(`clients/${clientId}`))).data();
+  if (unavailable(client) || client?.rootId !== rootId) throw Error("CLIENT_UNAVAILABLE");
+  if (expected && ["rootId", "dispersionId", "storagePath", "storageGeneration", "sizeBytes", "contentType", "finalizedBy"].some(key => upload[key] !== expected[key])) throw Error("OBJECT_CHANGED");
+  return { upload, rootId, dispersionId, clientId, userFunded: dispersion.fundingSource?.holderType === "USER" };
+}
+
+export async function notifyClientDispersionComprobanteFromUploadId(uploadId: string, botToken: string): Promise<{ ok: boolean; notified: boolean; reason: string; sentCount?: number }> {
+  const invocationDeadline = Date.now() + 45_000;
   const cleanUploadId = cleanText(uploadId);
-
-  if (!cleanUploadId) {
-    return { ok: true, notified: false, reason: "missing_upload_id" };
-  }
-
-  const uploadSnap = await db.collection("uploads").doc(cleanUploadId).get();
-
-  if (!uploadSnap.exists) {
-    return { ok: true, notified: false, reason: "upload_not_found" };
-  }
-
-  const upload = uploadSnap.data() || {};
-  const documentType = normalizeDispersionDocumentType(upload.documentType);
-
-  if (documentType !== "COMPROBANTE_DISPERSION") {
-    return { ok: true, notified: false, reason: "not_dispersion_document" };
-  }
-
-  if (cleanText(upload.status).toUpperCase() !== "READY" || upload.active !== true) {
-    return { ok: true, notified: false, reason: "upload_not_ready" };
-  }
-
-  const rootId = cleanText(upload.rootId);
-  const dispersionId = cleanText(upload.dispersionId || upload.entityId);
-  const clientId = cleanText(upload.clienteId || upload.clientId);
-
-  if (!rootId || !dispersionId || !clientId) {
-    return { ok: true, notified: false, reason: "missing_scope" };
-  }
-
+  if (!validId(cleanUploadId)) return notificationResult("missing_upload_id");
+  const initial = (await db.doc(`uploads/${cleanUploadId}`).get()).data();
+  if (!initial) return notificationResult("upload_not_found");
+  const rootId = cleanText(initial.rootId), dispersionId = cleanText(initial.dispersionId || initial.entityId), clientId = cleanText(initial.clientId || initial.clienteId);
+  if (![rootId, dispersionId, clientId].every(validId)) return notificationResult("missing_scope");
+  // Preserve the historical key; validate its entire identity to deny truncation collisions.
   const eventId = safeDocId(`COMPROBANTE_DISPERSION_CLIENTE_${clientId}_${dispersionId}_${cleanUploadId}`);
-  const eventRef = db.collection("telegramClientNotificationEvents").doc(eventId);
-  const eventSnap = await eventRef.get();
-
-  if (eventSnap.exists) {
-    const event = eventSnap.data() || {};
-    const status = cleanText(event.status).toUpperCase();
-
-    if (status === "SENT" || status === "PENDING") {
-      return { ok: true, notified: false, reason: "duplicate" };
+  const eventRef = db.doc(`telegramClientNotificationEvents/${eventId}`), attemptId = randomUUID();
+  const claim: { upload?: any; recipients?: DeliveryRecipient[]; reason?: string; sentCount?: number } = await db.runTransaction(async tx => {
+    const existing = (await tx.get(eventRef)).data();
+    if (existing && (existing.rootId !== rootId || existing.clientId !== clientId || existing.dispersionId !== dispersionId || existing.uploadId !== cleanUploadId)) return { reason: "event_identity_conflict" };
+    if (existing?.status === "SENT") return { reason: "duplicate" };
+    if (existing && existing.deliveryVersion !== NOTIFICATION_VERSION) {
+      // Preserve old state/errors: they cannot prove that no POST reached Telegram.
+      tx.update(eventRef, { reviewRequired: true, reviewReason: "LEGACY_DELIVERY_UNCERTAIN", updatedAt: FieldValue.serverTimestamp() });
+      return { reason: "legacy_delivery_uncertain" };
     }
-  }
-
-  const recipients = await getClientRecipients(clientId);
-
-  await eventRef.set(
-    {
-      eventId,
-      type: "COMPROBANTE_DISPERSION_CLIENTE",
-      status: "PENDING",
-      rootId,
-      clientId,
-      clientName: cleanText(upload.clienteNombre || upload.clientName || "Cliente"),
-      dispersionId,
-      dispersionFolio: cleanText(upload.dispersionFolio || dispersionId),
-      beneficiaryId: cleanText(upload.beneficiaryId),
-      beneficiaryNombre: cleanText(upload.beneficiaryNombre || "Beneficiario"),
-      totalAmount: toMoney(upload.amount),
-      uploadId: cleanUploadId,
-      storagePath: cleanText(upload.storagePath),
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  if (recipients.length === 0) {
-    await eventRef.set(
-      {
-        status: "SKIPPED",
-        reason: "client_without_telegram_recipients",
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    return { ok: true, notified: false, reason: "client_without_telegram_recipients" };
-  }
-
-  const clientName = cleanText(upload.clienteNombre || upload.clientName || "Cliente");
-  const beneficiaryNombre = cleanText(upload.beneficiaryNombre || "Beneficiario");
-  const dispersionFolio = cleanText(upload.dispersionFolio || dispersionId);
-  const amount = toMoney(upload.amount);
-
-  const message =
-    "PAY0 comprobante disponible\n\n" +
-    `Comprobante de dispersion ${dispersionFolio} para ${clientName} por un total de ${formatMoney(amount)}.\n` +
-    `Beneficiario: ${beneficiaryNombre}\n\n` +
-    "Archivo enviado directo por Telegram.";
-
-  let sentCount = 0;
-  const errors: string[] = [];
-
-  for (const recipient of recipients) {
-    try {
-      await sendTelegramMessage(
-        botToken,
-        recipient.chatId,
-        message
-      );
-
-      await sendUploadFileToTelegram({
-        botToken,
-        chatId: recipient.chatId,
-        storagePath: cleanText(upload.storagePath),
-        fileName: cleanText(upload.originalName || upload.filename || "comprobante"),
-        contentType: cleanText(upload.contentType || "application/octet-stream"),
-        caption: "Comprobante",
-      });
-
-      sentCount += 1;
-    } catch (error: any) {
-      const errMessage = String(error?.message || error || "unknown");
-      errors.push(errMessage);
-
-      logger.error("notifyClientDispersionComprobanteFromUploadId recipient error", {
-        clientId,
-        dispersionId,
-        telegramUserId: recipient.telegramUserId,
-        message: errMessage,
-      });
+    if (existing && !["PENDING", "PRE_SEND_FAILED"].includes(existing.status)) return { reason: cleanText(existing.reason || existing.status).toLowerCase(), sentCount: existing.sentCount || 0 };
+    if (existing?.status === "PENDING") {
+      if (existing.leaseUntilMs > Date.now()) return { reason: "in_progress" };
+      if (anyPost(existing.recipients || [])) {
+        tx.update(eventRef, { status: "UNKNOWN", reason: "EXPIRED_AFTER_SEND_STARTED", reviewRequired: true, updatedAt: FieldValue.serverTimestamp() });
+        return { reason: "delivery_unknown" };
+      }
     }
-  }
-
-  await eventRef.set(
-    {
-      status: sentCount > 0 ? "SENT" : "FAILED",
-      reason: sentCount > 0 ? "sent" : "send_failed",
-      sentCount,
-      errors,
-      sentAt: sentCount > 0 ? FieldValue.serverTimestamp() : null,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-    await logActivity({
-    event: "TELEGRAM_COMPROBANTE_DISPERSION_CLIENTE_ENVIADO",
-    rootId,
-    actorUid: "system",
-    actorName: "Sistema",
-    actorUsername: "Sistema",
-    actorRole: "system",
-    entityType: "clientDispersions",
-    entityId: dispersionId,
-    referenceId: dispersionId,
-    referenceFolio: dispersionFolio || dispersionId,
-    referenceType: "telegramDispersionComprobante",
-    amount,
-    description: "Comprobante de dispersion enviado al cliente por Telegram",
-    createdBy: "system",
-    extra: {
-      source: "telegram",
-      clientId,
-      clienteId: clientId,
-      clientName,
-      clienteNombre: clientName,
-      beneficiaryNombre,
-      uploadId: cleanUploadId,
-      sentCount,
-      message: "Comprobante de dispersion enviado al cliente por Telegram",
-    },
+    let scope: Awaited<ReturnType<typeof notificationScope>>;
+    try { scope = await notificationScope(tx, cleanUploadId); }
+    catch {
+      tx.set(eventRef, { rootId, clientId, dispersionId, uploadId: cleanUploadId, deliveryVersion: NOTIFICATION_VERSION,
+        status: "NEEDS_REVIEW", reason: "CURRENT_AUTHORITY_UNAVAILABLE", reviewRequired: true, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { reason: "current_authority_unavailable" };
+    }
+    if (existing && (existing.storagePath !== scope.upload.storagePath || existing.storageGeneration !== scope.upload.storageGeneration)) {
+      tx.update(eventRef, { status: "NEEDS_REVIEW", reason: "BOUND_OBJECT_CHANGED", reviewRequired: true, updatedAt: FieldValue.serverTimestamp() });
+      return { reason: "bound_object_changed" };
+    }
+    if (existing && (!Number.isSafeInteger(existing.attempt) || existing.attempt < 1)) {
+      tx.update(eventRef, { status: "NEEDS_REVIEW", reason: "ATTEMPT_EVIDENCE_INVALID", reviewRequired: true });
+      return { reason: "attempt_evidence_invalid" };
+    }
+    const attempt = Number(existing?.attempt || 0) + 1;
+    const base = { deliveryVersion: NOTIFICATION_VERSION, eventId, type: "COMPROBANTE_DISPERSION_CLIENTE", rootId, clientId, dispersionId, uploadId: cleanUploadId, storagePath: scope.upload.storagePath, storageGeneration: scope.upload.storageGeneration || null, updatedAt: FieldValue.serverTimestamp() };
+    const hold = (reason: string) => { tx.set(eventRef, { ...base, status: "NEEDS_REVIEW", reason, reviewRequired: true }, { merge: true }); return { reason: reason.toLowerCase() }; };
+    if (scope.rootId !== rootId || scope.clientId !== clientId || scope.dispersionId !== dispersionId) return { reason: "scope_changed" };
+    // Candidate only: recipient policy is awaiting user decision. No rollout until resolved.
+    if (scope.userFunded) return hold("USER_RECIPIENT_POLICY_PENDING");
+    if (!/^[1-9][0-9]*$/.test(String(scope.upload.storageGeneration || ""))) return hold("GENERATION_UNVERIFIED");
+    if (!cleanText(botToken)) return hold("TRANSPORT_NOT_CONFIGURED");
+    if (attempt > MAX_PRE_SEND_ATTEMPTS) return hold("PRE_SEND_ATTEMPTS_EXHAUSTED");
+    let recipients: DeliveryRecipient[] = existing?.recipients;
+    if (!existing) {
+      const links = await tx.get(db.collection("clientTelegramUsers").where("clientId", "==", clientId).where("active", "==", true).limit(MAX_NOTIFICATION_RECIPIENTS + 1));
+      if (links.docs.length > MAX_NOTIFICATION_RECIPIENTS) return hold("RECIPIENT_LIMIT_EXCEEDED");
+      recipients = []; const chats = new Set<string>();
+      for (const doc of links.docs) {
+        const link = doc.data(), chatId = cleanText(link.chatId);
+        if (link.rootId !== rootId || link.clientId !== clientId || link.active !== true || !/^-?[0-9]{1,20}$/.test(chatId) || !validId(doc.id)) continue;
+        if (!chats.has(chatId)) { recipients.push({ linkId: doc.id, chatId, text: "READY", document: "READY" }); chats.add(chatId); }
+      }
+      if (!recipients.length) { tx.create(eventRef, { ...base, status: "SKIPPED", reason: "CLIENT_WITHOUT_AUTHORIZED_RECIPIENTS", recipients: [], sentCount: 0 }); return { reason: "client_without_telegram_recipients" }; }
+    }
+    if (!Array.isArray(recipients) || !recipients.length || recipients.length > MAX_NOTIFICATION_RECIPIENTS || anyPost(recipients)) return hold("DELIVERY_EVIDENCE_INVALID");
+    tx.set(eventRef, { ...base, status: "PENDING", reason: "CLAIMED", attemptId, attempt, leaseUntilMs: Date.now() + CLAIM_MS, recipients, sentCount: 0, createdAt: existing?.createdAt || FieldValue.serverTimestamp() }, { merge: true });
+    return { upload: scope.upload, recipients };
   });
-
-  return {
-    ok: true,
-    notified: sentCount > 0,
-    reason: sentCount > 0 ? "sent" : "send_failed",
-    sentCount,
-  };
+  if (!("upload" in claim) || !claim.upload || !claim.recipients) return notificationResult(claim.reason || "not_claimed", "sentCount" in claim ? Number(claim.sentCount) : 0);
+  const upload = claim.upload, recipients = claim.recipients;
+  const finish = async (status: string, reason: string) => db.runTransaction(async tx => {
+    const row = (await tx.get(eventRef)).data();
+    if (row?.attemptId !== attemptId || row.status !== "PENDING") return;
+    const currentRecipients: DeliveryRecipient[] = row.recipients;
+    const sentCount = completeRecipients(currentRecipients);
+    tx.update(eventRef, { status, reason, sentCount, reviewRequired: ["UNKNOWN", "PARTIAL_UNKNOWN", "NEEDS_REVIEW"].includes(status), updatedAt: FieldValue.serverTimestamp(), ...(status === "SENT" ? { sentAt: FieldValue.serverTimestamp() } : {}) });
+    if (status === "SENT") logActivityTx(tx, db, { event: "TELEGRAM_COMPROBANTE_DISPERSION_CLIENTE_ENVIADO", rootId, actorUid: "system", actorRole: "system", entityType: "clientDispersions", entityId: dispersionId, referenceId: dispersionId, referenceType: "telegramDispersionComprobante", description: "Comprobante de dispersion enviado al cliente por Telegram", extra: { clientId, uploadId: cleanUploadId, sentCount } });
+  });
+  let buffer: Buffer;
+  try { buffer = await readPinnedNotificationFile(upload); }
+  catch { await finish("PRE_SEND_FAILED", "OBJECT_READ_FAILED_BEFORE_POST"); return notificationResult("pre_send_failed"); }
+  const message = "PAY0 comprobante disponible\n\n" + `Comprobante de dispersion ${cleanText(upload.dispersionFolio || dispersionId)} para ${cleanText(upload.clienteNombre || upload.clientName || "Cliente")} por un total de ${formatMoney(toMoney(upload.amount))}.\n` + `Beneficiario: ${cleanText(upload.beneficiaryNombre || "Beneficiario")}\n\nArchivo enviado directo por Telegram.`;
+  for (let index = 0; index < recipients.length; index++) {
+    for (const stage of ["text", "document"] as const) {
+      try {
+        await db.runTransaction(async tx => {
+          const row = (await tx.get(eventRef)).data();
+          if (row?.attemptId !== attemptId || row.status !== "PENDING" || row.leaseUntilMs <= Date.now() || Date.now() >= invocationDeadline) throw Error("CLAIM_LOST");
+          const scope = await notificationScope(tx, cleanUploadId, upload);
+          if (scope.userFunded || scope.clientId !== clientId) throw Error("SCOPE_CHANGED");
+          const recipient = row.recipients[index] as DeliveryRecipient;
+          const link = (await tx.get(db.doc(`clientTelegramUsers/${recipient.linkId}`))).data();
+          if (!link || link.active !== true || link.rootId !== rootId || link.clientId !== clientId || cleanText(link.chatId) !== recipient.chatId) throw Error("RECIPIENT_REVOKED");
+          if (recipient[stage] !== "READY") throw Error("STAGE_ALREADY_STARTED");
+          const next = row.recipients.map((r: DeliveryRecipient, i: number) => i === index ? { ...r, [stage]: "IN_FLIGHT" } : r);
+          tx.update(eventRef, { recipients: next, leaseUntilMs: Date.now() + CLAIM_MS, updatedAt: FieldValue.serverTimestamp() });
+        });
+      } catch { await finish("NEEDS_REVIEW", "AUTHORITY_OR_CLAIM_CHANGED_BEFORE_POST"); return notificationResult("delivery_review_required", completeRecipients(recipients)); }
+      try {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let result: any;
+        try {
+          const send = stage === "text" ? sendTelegramMessage(botToken, recipients[index].chatId, message)
+            : sendTelegramDocumentBuffer(botToken, recipients[index].chatId, cleanText(upload.originalName || upload.filename || "comprobante"), buffer, upload.contentType, "Comprobante");
+          result = await Promise.race([send, new Promise((_, reject) => { timer = setTimeout(() => reject(Error("DELIVERY_TIMEOUT")), Math.min(15_000, Math.max(1, invocationDeadline - Date.now()))); })]);
+        } finally { if (timer) clearTimeout(timer); }
+        // Timeout cannot abort the existing shared sender. Persist UNKNOWN and never resend;
+        // a late external success does not turn the uncertain stage into safe retry.
+        if (result?.ok !== true) throw Error("DELIVERY_NOT_CONFIRMED");
+        await db.runTransaction(async tx => {
+          const row = (await tx.get(eventRef)).data();
+          if (row?.attemptId !== attemptId || row.status !== "PENDING" || row.recipients[index][stage] !== "IN_FLIGHT") throw Error("CLAIM_LOST_AFTER_POST");
+          const next = row.recipients.map((r: DeliveryRecipient, i: number) => i === index ? { ...r, [stage]: "SENT" } : r);
+          tx.update(eventRef, { recipients: next, sentCount: completeRecipients(next), updatedAt: FieldValue.serverTimestamp() });
+        });
+        recipients[index][stage] = "SENT";
+      } catch {
+        // Includes transport failures, unstructured Telegram errors and failed receipt writes.
+        // Never log exception strings: they can contain tokens or Telegram response payloads.
+        await finish(anyPost(recipients) ? "PARTIAL_UNKNOWN" : "UNKNOWN", "DELIVERY_UNCERTAIN");
+        return notificationResult("delivery_unknown", completeRecipients(recipients));
+      }
+    }
+  }
+  await finish("SENT", "SENT");
+  return notificationResult("sent", recipients.length);
 }
