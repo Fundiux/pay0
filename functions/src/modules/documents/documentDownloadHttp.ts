@@ -104,6 +104,6 @@ export async function streamPrivateDocumentCore(req: any, res: any, dependencies
   }
 }
 
-// Deliberately not exported from functions/src/index.ts until rollout review.
+// Backend rollout precedes the frontend consumer; legacy signed URL callable remains during migration.
 export const streamPrivateDocument = onRequest({ region:"us-central1", timeoutSeconds:60, memory:"256MiB", cors:false },
   async (req, res) => streamPrivateDocumentCore(req, res));

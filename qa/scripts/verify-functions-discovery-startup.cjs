@@ -24,13 +24,14 @@ const warmupTimeoutMs = 60_000;
 // 1 materiality projection, 1 receipt certificate, 11 corporate resources and
 // 1 scoped voice-activity reader to the certified 309-endpoint baseline.
 // Integration restores two deposit automation endpoints and published receipt correction.
-const expectedEndpointCount = 344;
+// Read-only trusted recovery status and authenticated private document streaming.
+const expectedEndpointCount = 346;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf", "correctPagoReceiptSemanticField",
   "dispatchQueuedPagoIqCreation", "processIqPagoDepositAutomaticTask",
-  "getAuthorizedDocumentDownloadUrl",
+  "getAuthorizedDocumentDownloadUrl", "streamPrivateDocument", "getMyRestrictionStatus",
   "createClientDispersionIq",
   "processIqDispersionCreate",
   "previewPaymentCommissionDistribution",

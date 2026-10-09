@@ -65,7 +65,7 @@
     "qa:release-guard": "node qa/scripts/critical-release-guard.mjs",
     "qa:frontend-build-env": "node qa/scripts/verify-frontend-build-env.mjs",
     "qa:regression-rules": "node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --only firestore \"node qa/scripts/verify-regression-rules.mjs\"",
-    "qa:document-access": "npm run qa:release-guard && npm --prefix functions run build && node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --only firestore \"node qa/scripts/verify-regression-rules.mjs && node qa/scripts/verify-authorized-document-download.cjs\"",
+    "qa:document-access": "npm run qa:release-guard && npm --prefix functions run build && node scripts/run-firebase-clean-env.mjs emulators:exec --project demo-pay0-document-access --config firebase.emulator-tests.json --only firestore \"node qa/scripts/verify-regression-rules.mjs && node qa/scripts/verify-authorized-document-download.cjs\"",
     "qa:iq-payment-profile": "npm --prefix functions run build && node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
     "qa:dispersion-dispatch-routing": "npm --prefix functions run build && node qa/scripts/verify-dispersion-dispatch-routing.cjs",
     "qa:authorized-dispersion-capability": "npm --prefix functions run build && node qa/scripts/verify-authorized-dispersion-capability.cjs",

@@ -29,6 +29,6 @@ const client=load('src/lib/downloadPrivateDocument.ts',{'@/lib/firebaseClient':f
  for(const current of ['deny-second','changed-revision','truncated','switch-user']){mode=current;calls=[];firebase.auth.currentUser=actor;const count=created.length;await assert.rejects(client.downloadPrivateDocument('uploads','doc'));assert.equal(created.length,count,'partial bytes must not be exposed');}
  mode='ok';firebase.auth.currentUser=actor;const second=await client.downloadPrivateDocument('assetDocuments','asset');assert(client.isPrivateDocumentUrl(second));pagehide();assert(!client.isPrivateDocumentUrl(second));
  for(const file of ['src/lib/uploadSolicitudDoc.ts','src/lib/uploadDispersionDoc.ts','src/lib/uploadEntityDocument.ts','src/components/EntityDocumentsPanel.tsx','src/app/assets/documents/page.tsx'])assert(!fs.readFileSync(file,'utf8').includes('getDownloadURL'),file);
- assert(!fs.readFileSync('functions/src/index.ts','utf8').includes('export { streamPrivateDocument }'),'endpoint remains unexported before rollout approval');
- console.log('PASS private document UI: authenticated POST chunk assembly, local URL registry/release, no partial blob after revocation/generation/truncation/account change, consumers remove direct URL generation, endpoint unexported');
+ assert(fs.readFileSync('functions/src/index.ts','utf8').includes('export { streamPrivateDocument }'), 'reviewed bridge endpoint must be exported before frontend rollout');
+ console.log('PASS private document UI: authenticated POST chunk assembly, local URL registry/release, no partial blob after revocation/generation/truncation/account change, consumers remove direct URL generation, reviewed endpoint exported');
 })().catch(error=>{console.error(error);process.exitCode=1;});

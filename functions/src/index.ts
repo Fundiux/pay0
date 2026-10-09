@@ -2855,6 +2855,7 @@ export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, ge
 export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
+export { streamPrivateDocument } from "./modules/documents/documentDownloadHttp";
 export {
   createIqCredentialProfile,
   updateIqCredentialProfile,
