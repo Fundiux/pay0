@@ -2,28 +2,37 @@
 
 Objetivo activo: remediación integral. No hay cierre global.
 
-## Estado verificado al 2026-10-09
+## Estado verificado 2026-10-09, 20:00 UTC
 
-- Fuente: `remediation/pay0-integral-20261009`, último commit `607240d`. Cambios posteriores pendientes visibles en git status; preservar trabajo de agentes.
-- Integración: `.worktrees/pay0-remediation-integration-20261009`, rama `integration/pay0-remediation-20261009`, commit `6b8d2f7e35cb` publicado al remoto. Integra main local `094472f` y fuente hasta `99d1f3a`; main remoto no se modificó.
-- Producción: solamente `logUnauthorizedRouteAttempt` publicado, revisión `logunauthorizedrouteattempt-00012-zal`, ACTIVE, updateTime `2026-10-09T16:37:28.623648236Z`, generation `1791563759100841`. ZIP SHA256 `C3796DC322A716E18D67DA13427FF4CFE303A929ECFA554D898A1D818D7F1B5F`; fuente seleccionada coincide con candidato integrado. Prueba sintética sin autenticación: HTTP401/UNAUTHENTICATED. No se probaron escrituras autenticadas en producción.
-- S02 segundo despliegue verificado desde aa8c659: revision `logunauthorizedrouteattempt-00013-cij`, ACTIVE, generation `1791567236518049`, updateTime `2026-10-09T17:35:34.615925986Z`; sin bindings secretos y HTTP401/UNAUTHENTICATED PASS. La revisión00012 anterior queda como evidencia histórica.
-- Sentinel: proyecto aislado `pay0-sentinel-observe` creado (número `756518473677`), facturación activa, nueve API y repositorio `sentinel-images` aprovisionados. No servicio Cloud Run, ingesta ni contención activados. Terraform recuperado tras DNS mediante verificación del recurso y untaint del estado; ningún recurso recreado. Identidad builder limitada en preparación.
-- S10 backend transaccional/linaje commit `607240d`, pendiente integración. Delegaciones legacy sin procedencia siguen como dependencia de migración. Firestore/Storage directos no acreditan cierre transitivo.
-- Reglas S01 candidatas: 323/325 resultados conformes; dos accesos legítimos a dispersiones superan 1000 expresiones, 24 brechas Storage conocidas separadas. No aplicar parche candidato. Revisión automática rechazó una escritura amplia anterior; cambios posteriores requieren diff acotado y pruebas antes de publicación.
-- Puente documental en worktree `.worktrees/private-document-bridge-20261009`, rama `remediation/private-document-bridge`: POST autenticado por chunks/generation, revalidación actual y blob local; aún sin export ni despliegue. Compatibilidad UI en pruebas.
-- Fuente adicional pendiente de integrar: seed/backfill idempotentes `0b48005`, ambigüedad IQ solicitudes/dispersiones `365e100`, narrowing TS `6fb5534`, servicio Sentinel `efeefb3`, linaje `607240d`. App Check opt-in local probado, aún sin configurar proveedor ni enforcement. Parsers ZIP en corrección.
+- Fuente: remediation/pay0-integral-20261009, incluye 638e176 reglas probadas, 4eeccab verificador IAM, 6b6794b recuperación UI y 10a9668 canario desactivado. Preservar cambios de agentes y archivos históricos sin seguimiento.
+- Integración: .worktrees/pay0-remediation-integration-20261009, rama integration/pay0-remediation-20261009. HEAD b908a3f; integra parsers/publisher (1e25f1a), puente documental (fb0d0d5), reglas/UI/IAM y generador backend+rules. Export de streamPrivateDocument y gate346 aún pendientes de commit. Remoto continúa en6b8d2f7; main no actualizado.
+- Producción S02: logUnauthorizedRouteAttempt-00013-cij, ACTIVE, sin bindings de secretos, HTTP401/UNAUTHENTICATED. Publicado desde aa8c659.
+- Producción incidencias/OCR desde integración b9e21df: resolveclientdispersionincident-00023-yoy, requestclientdispersionincident-00023-lix, parsepagoreceiptpdf-00013-div, correctpagoreceiptsemanticfield-00002-qet. Las cuatro ACTIVE/Ready, tráfico100%, sin secretos, POST vacío401. CLI reportó error al consultar operación de correct, pero verificación independiente confirmó publicación efectiva; no se repitió. Recuperación y hashes en RELEASE-INCIDENTS-OCR.md de integración.
+- Reglas S01 materializadas SOLO LOCAL:325/325PASS,24brechas Storage delegadas conocidas. Reglas integradas coinciden con fuente por gitdiff (bytes de newline pueden variar). No reglas productivas ni writers desplegados.
+- UI ignora autoridad de securityLock legacy; trustedRestrictionV1 consulta estado propio con protección de cambios de cuenta/stale/expiry. Solo getMyRestrictionStatus exportado, writers/revoke siguen sin index export. Frontend todavía no publicado.
+- Puente POST autenticado por chunks, generation/revisión y autoridad actual integrado. Pruebas backend/UI PASS; legacy signedURL callable conservado. Antes de Hosting: backend disponible y compatibilidad documental histórica inventariada. No retirar ramas Storage ni tokens históricos aún.
+- Builds integración Functions y frontend47páginas PASS; discovery346 estricto4.229s PASS. Gate documental emulado actual en curso. Cambios posteriores requieren sus verificaciones.
+- ZIP acotado integrado: límite comprimido/expandido, CRC, entradas y presupuesto de celdas sparse.11 pruebas ZIP +6 parser conforman17; primera compilación de merge detectó cargador JSZip residual y pasó tras retirarlo. Sin publicar callables de importación aún.
 
-## Verificaciones y siguiente lote
+## Sentinel
 
-Predeploy del primer lote PASS: build Functions, discovery 344 exports dentro de 7s, compatibilidad IQ/CSF/documentos, reglas 96 y descargas 42 autorizadas/8 denegadas. Runner de regresión usa demo-pay0 y pasa. Frontend integrado previo: 46 páginas; reconstruir después de cambios de Telegram/App Check. Las pruebas previas no acreditan código posterior.
+Proyecto separado pay0-sentinel-observe (756518473677), billing activo. Builder mínimo, repositorio sentinel-images, SA observer, DB sentinel-observation con delete protection, TTL de4colecciones, exclusión de índices de evidencia y reglas deny-all creados.
 
-1. S02 secrets vacío publicado/verificado; conservar evidencia del lote.
-2. Integrar fuente revisada y adaptar resolver transaccional de Telegram para ancestros, preservando guards financieros de main; builds y pruebas relevantes.
-3. Completar imagen/infra privada Sentinel, IAM negativo, TTL, canary sintético y presupuesto antes de activar sink.
-4. Resolver costo de evaluación de reglas y brechas directas sin denegar accesos legítimos; revisar puente documental antes de rollout.
-5. Telegram requiere orden consumidor compatible, página Hosting, productor; retirar GET después de ventana legacy. No desplegar productor antes de página.
+Imagen observer: sha256:4025eeb29002880c22d52c5e244fb18dab55d69ab6d00f69c8745a296a782feb. Cloud Run observer, topic/subscription y sink todavía no activados. Modo previsto OBSERVE_ONLY; sin autoridad financiera.
 
-No se efectuaron pagos, dispersiones, depósitos ni mensajes de prueba reales. Mantener pausas REP y syncTodayIqInvoicesNow. Preservar archivos sin seguimiento preexistentes y worktrees. Estado/planes Terraform, dotenv y fuentes productivas permanecen ignorados fuera de Git.
+Canario privado pay0-security-canary creado en proyecto financiero, revisión00001-fmm Ready/tráfico100%, modoDISABLED, máximo global y por revisión1, min0, timeout5s. Cinco recursos aplicados sin cambios/destrucciones ajenas. SA solo logging.logEntries.create; imagen sha256:30c8505b6da475a26bf5e1d5f9e4020fe53bb422969aac69918164fae8e8a315. POST anónimo403; token actual del operador401 pendiente diagnóstico. Sin grants públicos de servicio/proyecto observados. No eventos emitidos.
 
-Hitos posteriores: fuente3a9d763 propaga transacción Telegram (10 pruebas); c053e6a App Check opt-in (8 pruebas); 8ebedf1 builder aislado. Imagen Sentinel digest4025eeb29002880c22d52c5e244fb18dab55d69ab6d00f69c8745a296a782feb construida. Apply DB/IAM/TTL en curso. Merge8ebedf1 en integración resuelto (UNKNOWN conserva AUTH_STOPPED); Functionsbuild PASS, frontendbuild en curso. ZIP parser recibió observación de memoria sparse, agente corrige antes de freeze. Generador rules equivalencia33120 PASS, evaluación emulada todavía pendiente de completar.
+IAM observer probado con token600s y binding temporal mínimo retirado/ausencia verificada. Firestore financiero403, Storage financiero403, DB named Begin/Rollback200; default aislada404 y no existe. Matriz completa NOT_VERIFIED: no reinterpretar404 como denegación. Policy Troubleshooter modelado en preparación por agente independiente; distinguir modelado de RPC real. No quedan permisos temporales de esa prueba.
+
+Terraform local verificado en services/pay0-sentinel-observation/infra/.terraform/verified-cli/terraform.exe. Estado, planes, logs, fuentes productivas y dotenv son privados/ignorados. No imprimir tokens/entorno/payloads.
+
+## Próximos pasos
+
+1. Terminar gate documental integrado, guardar exports/gate346 y evidencia; publicar únicamente backend nuevo después de preflight, antes del frontend.
+2. Inventario documental read-only preparado con fixtures, aún sin lecturas productivas. Resolver referencias históricas/tamaño32MiB antes de retirar transporte antiguo o publicar UI que no pueda servirlas.
+3. Completar IAM modelado, postflight privado canario, presupuesto/alertas y servicio OBSERVE_ONLY antes de ingesta. No cerrar aislamiento con404 ni activar contención.
+4. Telegram: consumidor compatible, Hosting de página y después productor; ventana legacy15min. No desplegar productor antes de página.
+5. Integrar/push/main gradualmente con evidencia vigente, manteniendo las capacidades productivas recuperadas y sin despliegue global.
+6. Continuar backlog financiero, delegaciones legacy/migración, workers/autorización, parsers restantes, App Check opt-in y recuperación. No considerar el trabajo integral concluido por terminar estos lotes.
+
+No pagos, dispersiones, depósitos, efectos fiscales ni mensajes de prueba reales. Mantener pausas REP y syncTodayIqInvoicesNow. Preservar worktrees y material histórico.
