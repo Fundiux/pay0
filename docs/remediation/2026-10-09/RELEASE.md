@@ -4,6 +4,8 @@ Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35
 
 ## Candidatos locales
 
+Esta tabla conserva el candidato inicial. Para estado posterior a las 20:00 UTC, prevalece la actualizacion al final; en particular, el orden Telegram vigente exige emisor puente y drenaje antes del consumidor dual, Hosting y emisor final.
+
 | Lote | Commit fuente | Verificación | Publicación |
 |---|---|---|---|
 | Reportes sin contención | 31a9f05 | 4 pruebas y build PASS | Publicado revision00012-zal; HTTP401 PASS; limpieza de binding de secreto pendiente |
@@ -33,3 +35,12 @@ Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35
 4. Publicar por el flujo Git permitido; GitHub main consultado: protected=false, sin reglas devueltas, SHA remoto7dfcd8a.
 5. Desplegar componentes concretos, comprobar revisión efectiva y postflight seguro.
 6. Un fallo bloquea solo ese lote. Si rollback reintroduce vulnerabilidad, priorizar contención compatible o corrección hacia adelante. Nunca repetir un efecto externo incierto.
+
+## Estado confirmado posterior a las 20:00 UTC
+
+- Backend documental y consulta de estado propio publicados desde `d4298e09fe66`: `streamPrivateDocument` revision `streamprivatedocument-00001-cig` (20:17:52.478459991Z) y `getMyRestrictionStatus` revision `getmyrestrictionstatus-00001-hay` (20:18:07.522711461Z). Ambos ACTIVE/Ready, trafico 100%, rechazo no autenticado HTTP401 PASS. No se publicaron reglas, Hosting ni writers por ese lote. Detalle: [RELEASE-DOCUMENT-BACKEND.md](RELEASE-DOCUMENT-BACKEND.md).
+- Inventario secuencial del root seleccionado: 1,446 uploads, 1,361 elegibles, 1,357 con padre canonico y objeto real <=32 MiB, 85 inactivos. Los cuatro casos entityId-only quedaron diagnosticados con padre SOLICITUD ausente, prefijo coincidente y procedencia no verificada; no existe base para reparacion automatica ni para inventar padres. Siete tamanos registrados desconocidos son una dimension adicional, no registros a sumar. Entidades: 23 documentos, 13 activos validos y 10 inactivos; assets: cero. No constituye snapshot atomico ni cobertura de todos los roots. Detalle: [DOCUMENT-INVENTORY.md](DOCUMENT-INVENTORY.md) y [LEGACY-DOCUMENT-COMPATIBILITY.md](LEGACY-DOCUMENT-COMPATIBILITY.md).
+- Sentinel E2E sintetico y deduplicacion PASS tras corregir aliases Pub/Sub: observer `00005-dgr`, dos HTTP200, RECORDED=1/DUPLICATE=1, receipt/incidente HTTP200, eventCount=1, authority=NONE y TTL valido. Ventana cerrada: canary `00006-6wv` Ready/DISABLED y sink apagado. Esto acredita el canario y su replay, no cobertura de productores financieros ni contencion. El intento inicial fallido se conserva en [SENTINEL-ROLLOUT.md](SENTINEL-ROLLOUT.md).
+- Integracion publicada a su rama remota en `3fa5957`; cambio frontend posterior `d08acda` con build en progreso al registrar este hito. Estado temporal: `pendingFrontendHashFix/browser`. No atribuir a ese candidato un build final ni browser PASS hasta recibir evidencia. No hubo deploy Hosting ni Telegram de este lote y no se declara completada la remediacion.
+
+Preflight offline del ZIP SSR productivo frente a integracion `7b56c4c`: 56 rutas app existentes conservadas y 57 en candidato, unica adicion `/descarga/documento`; rutas estaticas 44->45 y dinamicas 12->12. Configuracion de rutas equivalente; Next.js 15.5.25->15.5.27, Node22 en ambos. Sin metadata suficiente para atribuir commit fuente productivo. No se detecto perdida de rutas, pero esta comparacion no prueba equivalencia funcional completa ni sustituye los gates del frontend posterior. Preflight Telegram comunicado por integracion: ocho modulos comparados, iguales salvo `actionTokens`; no implica despliegue ni ejercicio de Telegram real. Orden, entorno y recuperacion en [RELEASE-FRONTEND-TELEGRAM.md](RELEASE-FRONTEND-TELEGRAM.md).
