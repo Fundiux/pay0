@@ -78,7 +78,7 @@ export function createRestrictionService(db: RestrictionDatabase, now = () => Da
           issuedAtMs: instant, expiresAtMs: instant + (input.ttlMs ?? DEFAULT_RESTRICTION_TTL_MS), authorizationVersion: (old?.authorizationVersion ?? 0) + 1,
         };
       } else {
-        if (!old || old.restrictionId !== input.restrictionId || old.authorizationVersion !== input.authorizationVersion) fail("aborted", "La restricción cambió; actualiza la información.");
+        if (!old || old.restrictionId !== input.restrictionId || old.authorizationVersion !== input.authorizationVersion) return fail("aborted", "La restricción cambió; actualiza la información.");
         if (old.state === "REVOKED") fail("failed-precondition", "La restricción ya fue revocada.");
         next = { ...old, state: "REVOKED", revokedAtMs: instant, revokedBy: actorUid, revocationReason: input.revocationReason, authorizationVersion: old.authorizationVersion + 1 };
       }
