@@ -7,7 +7,7 @@ import { requireClientOperationalAccess, normalizeClientAccessPermissions } from
 import { delegationIsCurrent } from "../clientDelegations/policy";
 import { assertDownloadAvailable, downloadTtlMinutes, DownloadTokenError, DOWNLOAD_LEASE_MS,
   DOWNLOAD_STREAM_MS, ownsDownloadEntity, DOWNLOAD_APP_ORIGIN, DOWNLOAD_PAGE_PATH,
-  downloadTokenFromRequest, assertDownloadTransport } from "./downloadTokenPolicy";
+  downloadTokenFromRequest, assertDownloadTransport, downloadIssuance } from "./downloadTokenPolicy";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -68,20 +68,31 @@ export async function createTelegramActionToken(input: TelegramActionTokenInput)
   const row = { ...input, storagePath: cleanStoragePath(input.storagePath), fileName: safeDownloadName(input.fileName) };
   if (input.actionType !== "DOWNLOAD_DOCUMENT") throw new DownloadTokenError(400);
   const ttl = downloadTtlMinutes(input.expiresInMinutes);
+  // Reject bad/expired transition configuration before reading authority or object metadata.
+  downloadIssuance(process.env, Date.now(), ttl);
   await assertCurrentAccess(row);
   if ((await admin.auth().getUser(input.uid)).disabled) throw new DownloadTokenError(403);
   const [metadata] = await admin.storage().bucket().file(row.storagePath).getMetadata();
   const storageGeneration = String(metadata.generation || "");
   if (!/^\d+$/.test(storageGeneration)) throw new DownloadTokenError(403);
   const token = crypto.randomBytes(32).toString("base64url");
-  const expiresDate = new Date(Date.now() + ttl * 60_000);
+  // Re-check the fixed deadline after metadata retrieval; no new token crosses the window.
+  const issuance = downloadIssuance(process.env, Date.now(), ttl);
+  const expiresDate = new Date(issuance.expiresAt);
   await db.collection("telegramActionTokens").doc(token).create({
     actionType: row.actionType, uid: row.uid, rootId: row.rootId, entityType: row.entityType,
     entityId: row.entityId, documentId: row.documentId, storagePath: row.storagePath, fileName: row.fileName,
-    storageGeneration, transportVersion: 2, status: "ACTIVE", attempts: 0, expiresAt: Timestamp.fromDate(expiresDate),
+    storageGeneration, transportVersion: issuance.transportVersion,
+    ...(issuance.transportVersion === 1 ? {
+      legacyBridgeStartedAt: Timestamp.fromMillis(issuance.legacyBridgeStartedAt!),
+      legacyBridgeDeadline: Timestamp.fromMillis(issuance.legacyBridgeDeadline!),
+    } : {}), status: "ACTIVE", attempts: 0, expiresAt: Timestamp.fromDate(expiresDate),
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
-  return { token, url: `${DOWNLOAD_APP_ORIGIN}${DOWNLOAD_PAGE_PATH}#token=${encodeURIComponent(token)}`, expiresAt: expiresDate.toISOString() };
+  const url = issuance.transportVersion === 1
+    ? `https://us-central1-pay-0-system.cloudfunctions.net/telegramDownloadAction?token=${encodeURIComponent(token)}`
+    : `${DOWNLOAD_APP_ORIGIN}${DOWNLOAD_PAGE_PATH}#token=${encodeURIComponent(token)}`;
+  return { token, url, expiresAt: expiresDate.toISOString() };
 }
 
 export const telegramDownloadAction = onRequest({ region: "us-central1", cors: false, timeoutSeconds: 60, memory: "256MiB" }, async (req, res) => {

@@ -4,7 +4,7 @@ Fecha: 2026-10-09. Revision de integracion `c6a1c6b`, merge que incluye `15ee8c4
 
 ## Decision y dependencias
 
-Orden: **telegramDownloadAction -> Hosting -> telegramWebhook**. El consumidor HTTP es `telegramDownloadAction`, exportado desde `functions/src/modules/telegram/actionTokens.ts`. El productor es `telegramWebhook`, exportado desde `functions/src/modules/telegram/webhook.ts`: unico caller de `createTelegramActionToken`, en `/docprueba`. No existe un deploy independiente de `createTelegramActionToken`. Desplegar solo el consumidor no cambia el emisor empaquetado en webhook.
+Orden corregido tras comparar artefacto real: **telegramWebhook LEGACY_BRIDGE -> drenar emisor antiguo -> telegramDownloadAction dual -> Hosting -> telegramWebhook POST_FRAGMENT**. El consumidor HTTP es `telegramDownloadAction`, exportado desde `functions/src/modules/telegram/actionTokens.ts`. El productor es `telegramWebhook`, exportado desde `functions/src/modules/telegram/webhook.ts`: unico caller de `createTelegramActionToken`, en `/docprueba`. No existe un deploy independiente de `createTelegramActionToken`. Desplegar solo el consumidor no cambia el emisor empaquetado en webhook.
 
 | Componente | Candidato / contrato | Evidencia disponible |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Hosting usa integracion de frameworks, no `output: export`: la CLI puede generar
 ## Gates y bloqueadores concretos
 
 1. **Consumidor remoto todavia no acreditado como dual:** su revision es anterior al lote. Antes del emisor nuevo, publicar consumidor y verificar POST/CORS. Hosting puede contener la pagina sin enlaces emitidos, pero no marcar Telegram operativo hasta verificar consumidor y pagina juntos.
-2. **Compatibilidad de capabilities ya emitidas:** GET dual no admite cualquier record viejo. Exige generation, ACTIVE, TTL original <=15 min, createdAt valido y sin transportVersion. Capturar fuente previa autorizada y contrastar campos de emision sin leer tokens reales. Si el productor viejo carece de generation, no anunciar continuidad de sus enlaces: definir una ventana controlada de retirada de emision y expiracion o un emisor transitorio compatible. Nunca relajar generation ni reemitir tokens inseguros para aparentar compatibilidad. Este punto afecta la transicion Telegram, no los documentos canonicos del puente.
+2. **Incompatibilidad confirmada y transicion implementada localmente:** el productor desplegado carece de generation. Sus tokens vigentes reciben 403 del nuevo consumidor, aun con GET/TTL validos. Publicar primero el emisor LEGACY_BRIDGE y drenar los anteriores como se detalla abajo. Nunca asignar generation retrospectivamente ni relajar su verificacion. Este punto afecta la transicion Telegram, no los documentos canonicos del puente.
 3. **HEAD final y artefacto Hosting:** repetir build/gates en la revision finalmente publicada y conservar version Hosting anterior mas backend/rewrite asociado. Los builds anteriores de 47 paginas no certifican automaticamente este HEAD ni el adaptador generado. Revisar que el bundle no apunte a emuladores y que las 7 variables de build esten validadas sin mostrar valores.
 4. **Prueba de navegador aun pendiente:** los tests locales usan React/DOM/fetch falsos. Antes de publicar el emisor, verificar hidratacion real, borrado del fragmento, ruta exacta, vecinas protegidas y ausencia de captura global de location. El test de descarga con contenido debe ser sintetico/aislado, no `/docprueba` productivo.
 5. **Logging GET transitorio:** DOWNLOAD-TRANSPORT.md documenta posible bearer en request logs y propuesta de mitigacion. No se verificaron aqui sinks agregados ni captura externa. No afirmar eliminacion total de exposicion mientras siga GET; ninguna exclusion sustituye POST ni elimina historia ya registrada. Si el gate existente exige exclusion transitoria, revisarla en su alcance preciso antes del consumidor; no conceder IAM amplio ni borrar logs.
@@ -57,12 +57,25 @@ npm run build
 
 Detener al primer exit !=0. `qa:document-access` fija demo-pay0-document-access y emuladores loopback; no sustituir por pay-0-system. Los predeploy Functions incluyen otros gates: inspeccionarlos antes de cada ejecucion, no omitirlos para acelerar. No usar `npm run firebase:deploy` (publica reglas/indexes), ni `npm --prefix functions run deploy` (todas Functions), ni qa:pay0 como sustituto.
 
-Ejecutado ahora en c6a1c6b: **14/14** tests Telegram/pagina PASS, policy verifier PASS, frontend build env **7/7** PASS. No se repitieron builds globales ni emuladores para evitar colision con integracion; quedan como gates de publicacion.
+Preflight inicial en c6a1c6b: **14/14** tests Telegram/pagina PASS, policy verifier PASS, frontend build env **7/7** PASS. Lote posterior de transicion en fuente: **20/20** pruebas (16 backend +4 pagina) y policy verifier PASS. No se repitieron builds globales ni emuladores para evitar colision con integracion; quedan como gates de publicacion.
 
 ## Orden de publicacion propuesto (no ejecutado)
 
 1. Registrar revision/fuentes previas del consumidor y webhook, version live de Hosting y backend/rewrite generado; guardar artefactos en espacio privado ignorado. Verificar permisos/secret bindings por conteos y nombres permitidos, no valores.
-2. Tras gates y decision de compatibilidad legacy, desplegar **solo consumidor**:
+2. Preparar las tres variables SERVER del webhook en configuracion privada revisada (ninguna NEXT_PUBLIC):
+   - `TELEGRAM_DOWNLOAD_TRANSPORT_MODE=LEGACY_BRIDGE`
+   - `TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT` con instante UTC exacto `YYYY-MM-DDTHH:mm:ss.sssZ`.
+   - `TELEGRAM_DOWNLOAD_LEGACY_DEADLINE` con instante UTC posterior, como maximo 60 minutos despues del inicio.
+
+No fijar ventana antes de completar builds: consumirla durante compilacion puede impedir el rollout. Fechas malformadas, futuras al inicio, ventana demasiado larga o vencida fallan cerrado; el deadline no cambia al reiniciar. Debe revisarse el mecanismo de inyeccion Firebase de estos valores sin sobreescribir otros env/secrets. Este lote no configura valores remotos.
+
+Publicar **solo telegramWebhook en modo puente**. El codigo emite generation validada desde metadata, v1 y GET compatibles con el consumidor viejo. Confirmar revision nueva Ready/trafico 100% y ausencia de rutas/tags hacia el productor antiguo. Esperar 15 minutos desde la ultima emision antigua posible, incluyendo solicitudes en vuelo. El webhook tiene timeout 60 s: si solo se conoce el instante de corte de trafico, reservar al menos ese minuto adicional antes de empezar los 15 min; no asumir que el corte termina requests ya aceptados. Verificar ausencia de otras revisiones emisoras; no consultar bodies/tokens de logs. La prueba sintetica reproducible acredita campos, no observa la ultima emision productiva.
+
+```powershell
+firebase deploy --project pay-0-system --only functions:telegramWebhook --non-interactive
+```
+
+Con drenaje confirmado y ventana puente aun vigente, desplegar **solo consumidor**:
 
 ```powershell
 firebase deploy --project pay-0-system --only functions:telegramDownloadAction --non-interactive
@@ -85,14 +98,14 @@ npm run firebase:deploy:hosting
 ```
 
 Registrar release/version y cualquier backend framework actualizado. Verificar pagina publica sin fragmento (error generico, sin autenticacion requerida); pruebas de navegador con fragmento ficticio solo contra fetch interceptado, sin enviarlo al backend real. Verificar login y rutas existentes con mocks/lecturas autorizadas sin operaciones financieras; guard trustedRestriction y descargas completas se prueban en fixtures aislados.
-5. Solo con Hosting/consumer acreditados, publicar **solo emisor**:
+5. Solo con Hosting/consumer acreditados, retirar las variables puente o configurar explicitamente `TELEGRAM_DOWNLOAD_TRANSPORT_MODE=POST_FRAGMENT` (default seguro), y publicar **solo emisor final**:
 
 ```powershell
 firebase deploy --project pay-0-system --only functions:telegramWebhook --non-interactive
 ```
 
 No cambia registro externo del webhook ni ejecuta sendMessage. Verificar revision Ready y secretos declarados sin valores. Prueba de URL v2/emision en harness falso; `/docprueba` productivo manda Telegram y crea token, no es un postflight inocuo.
-6. Registrar hora del ultimo emisor legacy, esperar sus 15 minutos completos sin extender TTL. Si quedan emisores viejos vivos, la ventana no ha terminado. Retirar GET en lote separado con evidencia; la llegada de URLs viejas puede seguir dejando query en request logs incluso si se rechaza la descarga.
+6. Registrar hora del ultimo emisor puente GET, esperar sus 15 minutos completos o su deadline anterior sin extender TTL. Si quedan emisores viejos vivos, la ventana no ha terminado. Retirar GET en lote separado con evidencia; la llegada de URLs viejas puede seguir dejando query en request logs incluso si se rechaza la descarga.
 
 ## Recuperacion
 
@@ -102,3 +115,18 @@ No cambia registro externo del webhook ni ejecuta sendMessage. Verificar revisio
 - No borrar tokens, documentos o evidencia; no alterar datos financieros. La descarga ya entregada no se puede revocar retroactivamente.
 
 Este plan no cierra S03/S06/S10 ni la remediacion integral. Mantener pausas REP/syncToday y rollout independiente de Sentinel.
+
+
+## Comparacion historica y evidencia de transicion
+
+Se consulto metadata de `telegramWebhook-00031-yeg` y se descargo por GET la generacion exacta **1789965994022008**, sin exponer token ni origen privado. ZIP SHA256 `250f7ab8072e11c58fd6fb864b5a117b94cef38e28deb5861ec578103696c220`. Solo se extrajeron actionTokens.ts y webhook.ts; no .env. Hash original actionTokens.ts: `dc62dc7779379e1092ca994937abc5b1591577d2e573a6470409e801f9371335`; webhook.ts: `46f957f23a0dba1916611b7a9cb88347763436481dc490838468984c09a07e4c`.
+
+El emisor historico guarda createdAt servidor y expiresAt; `/docprueba` fija 15 minutos. El helper generico antiguo no limita el maximo, pero ese es su unico caller observado. No guarda storageGeneration, attempts ni transportVersion. Su consumidor GET lee status/actionType/expiresAt/storagePath, obtiene metadata y transmite el objeto por path; ignora campos nuevos. Por tanto acepta tokens puente con generation y v1, pero **el consumidor antiguo sigue sin fijar generation ni revalidar autoridad**: esos controles de lectura llegan al desplegar el dual. Esta ventana no se presenta como remediacion completa ni ampliacion de la seguridad del lector anterior.
+
+El nuevo emisor bridge mantiene validacion actual de actor/root/documento/delegacion, Auth y metadata. Guarda generation al emitir, v1, inicio/deadline durables y `expiresAt=min(now+TTL,deadline)`; comprueba ventana antes de lecturas y de nuevo tras metadata. El default final sigue v2 y fragmento. V2 nunca admite GET. V1 GET exige ventana durable valida, TTL original <=15 min y deadline vigente. No hay backfill, renovacion de tokens anteriores ni cambio automatico a v2 cuando vence bridge.
+
+Fixture historico normalizado solo en EOL, mas cabecera de procedencia: `qa/scripts/fixtures/remediation-telegram-legacy-actionTokens.ts.fixture`; no entra al compilador de aplicacion. Tests ejecutan funciones reales transpiladas con SDK/Storage/Auth falsos: emisor viejo -> consumer nuevo **403**, bridge -> consumer viejo **200**, bridge -> consumer dual **200**; v2 GET **410**. Tambien prueban ventana invalida/vencida, no extension por reinicio, cambio tras metadata y generacion ausente sin migracion implicita. Ningun token o dato productivo se incorpora al fixture.
+
+Si la ventana vence antes de completar el rollout, falla solo la emision de la capability en este camino; no pasar a POST sin pagina ni extender fechas automaticamente. Detener, revisar estado efectivo y programar otra ventana explicita si corresponde. Preservar el consumidor viejo hasta completar drenaje, y luego no restaurarlo para aceptar enlaces inseguros.
+
+Validacion final del lote puente: `npm --prefix functions run build` PASS, 20/20 pruebas sinteticas, policy verifier y diff check PASS. No cambio frontend ni build frontend adicional en este lote; integracion repetira los gates del candidato final antes de Hosting.

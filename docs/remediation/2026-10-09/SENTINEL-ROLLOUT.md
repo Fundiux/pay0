@@ -1,6 +1,8 @@
 # Sentinel: infraestructura privada y verificación efectiva
 
-2026-10-09: observador privado pay0-sentinel-observer-00001-kwj Ready/tráfico100% en proyecto aislado pay0-sentinel-observe. DBnamed sentinel-observation, deny-all cliente, TTL4colecciones y exclusión índices evidencia creados. Runtime sin permisos financieros; canario financiero privado00001-fmm sigue DISABLED. Topic/subscription/DLQ y sink pay0-sentinel-observe-v1 creados; sink DISABLED, sin emisiones todavía.
+2026-10-09, estado actualizado comunicado por integracion: observer privado pay0-sentinel-observer-00003-br8 con trafico100%. Ventana sintetica cerrada mediante root apply PASS: canary00004-tjn Ready, modo DISABLED y sinkdisabled:true confirmados en estado Terraform. E2E NO PASS: dos POST CANARY aceptados no produjeron receipt ni incidente verificable. Runtime permanece OBSERVE_ONLY, sin autoridad financiera ni writer de restricciones activado.
+
+El proyecto aislado pay0-sentinel-observe conserva DBnamed sentinel-observation, deny-all cliente, TTL de4colecciones, indices de evidencia y transporte topic/subscription/DLQ/sink pay0-sentinel-observe-v1. La infraestructura desplegada no demuestra procesamiento exitoso de eventos.
 
 Presupuesto mensual300MXN creado para únicamente projects/756518473677, sin créditos, umbrales reales50/90/100 y forecast100. Destinatarios IAM predeterminados de facturación, sin mensajes de prueba ni canal inventado. Es alerta, no límite duro; no incluye canario/Logging en proyecto financiero. Min0/máximo1 a nivel servicio y revisión; costos y cuotas documentados en SENTINEL-COST-CONTROLS.md.
 
@@ -16,6 +18,18 @@ Primer intento de provisión indicó Workload Identity API deshabilitada, sin cr
 
 Dos replanes fallidos son errores de herramienta/configuración, no infraestructura omitida: PowerShell serializó lista de origen como objeto (corregido con ConvertTo-Json -InputObject); deletion_policy no admitido (corregido lifecycle). Estados, planes y logs privados ignorados conservan evidencia. La creación del service agent se audita en IaC; su provider Read no certifica existencia, por lo que el grant efectivo aporta comprobación adicional.
 
-## Pendiente
+## Ventana sintetica ejecutada: E2E fallido
 
-Prueba CANARY_DRY_RUN privada, luego revisión exacta en allowlist y synthetic E2E de Logging/PubSub/observer/Firestore con un evento y replay. HTTP200 del publisher por sí solo no demuestra persistencia. No activar productores financieros ni contención; ningún writer de restricciones exportado. Verificar estado aplicado, revisar métricas/budget y apagar solo sink/canary de prueba al concluir la ventana.
+- DRY_RUN revision00002-9fs: POST200 y cleanupPASS. Esto verifica respuesta del productor privado, no persistencia.
+- CANARY revision00003-n27: dos POST200 y cleanupPASS. No se atribuye procesamiento exitoso a esos codigos HTTP.
+- Observer revision00003-br8, trafico100%: una entrega observada termino HTTP204 con INVALID_ENVELOPE. Esa respuesta no acredita un incidente procesado.
+- Verificador: seis pares consultados devolvieron404 para receipt/incidente; ninguna persistencia verificada. No hubo E2E satisfactorio ni prueba de replay/idempotencia completada.
+- Cierre: root applyPASS; sinkdisabled:true y canary00004-tjn Ready/DISABLED confirmados. La ventana esta cerrada, no abierta ni pendiente de apagar.
+
+Los resultados fueron reportados por integracion. Este cambio es documental: no repite POST, consultas cloud o aplicacion Terraform. Las pruebas sinteticas no ejecutaron efectos financieros ni activaron contencion.
+
+## Diagnostico y siguientes gates
+
+Se investigan los aliases oficiales del envelope Pub/Sub message_id/publish_time frente a los nombres esperados por el parser. Un agente independiente prepara la correccion. Es hipotesis de causa y trabajo en curso: no afirmar que ya quedo resuelto ni que se desplego. Mantener evidencia del INVALID_ENVELOPE y los404sin reinterpretarlos como ausencia esperada exitosa.
+
+Primero revisar contrato/parser y pruebas con el envelope oficial; despues build y despliegue acotado de la revision corregida, y solo entonces una nueva ventana sintetica explicitamente controlada con evento+replay. Exigir receipt/incidente persistidos e idempotencia, no solo HTTP200/204. Volver a cerrar sink/canary y comprobar estado al terminar. No activar productores financieros ni contencion; writers de restricciones siguen sin exportarse.
