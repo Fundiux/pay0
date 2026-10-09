@@ -1,8 +1,28 @@
-﻿export const DOWNLOAD_LEASE_MS = 70_000;
+export const DOWNLOAD_LEASE_MS = 70_000;
 export const DOWNLOAD_STREAM_MS = 55_000;
 export const DOWNLOAD_MAX_ATTEMPTS = 3;
 export const DOWNLOAD_APP_ORIGIN = "https://pay-0-system.web.app";
 export const DOWNLOAD_PAGE_PATH = "/descarga/documento";
+export const DOWNLOAD_LEGACY_WINDOW_MS = 60 * 60_000;
+type DownloadIssuance = { transportVersion: 1 | 2; expiresAt: number; legacyBridgeStartedAt?: number; legacyBridgeDeadline?: number };
+/** Server configuration only. A fixed UTC window cannot extend itself on cold starts. */
+export function downloadIssuance(env: Record<string, string | undefined>, now: number, ttlMinutes: number): DownloadIssuance {
+  downloadTtlMinutes(ttlMinutes);
+  const mode = env.TELEGRAM_DOWNLOAD_TRANSPORT_MODE || "POST_FRAGMENT";
+  if (mode === "POST_FRAGMENT") return { transportVersion: 2, expiresAt: now + ttlMinutes * 60_000 };
+  if (mode !== "LEGACY_BRIDGE") throw new DownloadTokenError(503);
+  const parse = (value: string | undefined) => {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return NaN;
+    const millis = Date.parse(value);
+    return Number.isFinite(millis) && new Date(millis).toISOString() === value ? millis : NaN;
+  };
+  const start = parse(env.TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT);
+  const deadline = parse(env.TELEGRAM_DOWNLOAD_LEGACY_DEADLINE);
+  if (!Number.isFinite(start) || !Number.isFinite(deadline) || deadline <= start ||
+      deadline - start > DOWNLOAD_LEGACY_WINDOW_MS || now < start || now >= deadline) throw new DownloadTokenError(503);
+  return { transportVersion: 1, expiresAt: Math.min(now + ttlMinutes * 60_000, deadline),
+    legacyBridgeStartedAt: start, legacyBridgeDeadline: deadline };
+}
 export function downloadTokenFromRequest(method: string, query: any, body: any): string {
   const value = method === "POST" ? body?.token : query?.token;
   if (method === "POST" && (!body || typeof body !== "object" || Array.isArray(body) ||
@@ -12,10 +32,17 @@ export function downloadTokenFromRequest(method: string, query: any, body: any):
 }
 export function assertDownloadTransport(row: any, method: string, now: number): void {
   if (method === "POST") return;
-  // Compatibility only for pre-migration records, never for newly issued tokens.
+  // v2 never uses GET. Only explicitly bounded bridge issuance may opt into v1.
+  if (row?.transportVersion === 1) {
+    const start = timestampMillis(row.legacyBridgeStartedAt);
+    const deadline = timestampMillis(row.legacyBridgeDeadline);
+    const issued = timestampMillis(row.createdAt);
+    if (start <= 0 || deadline <= start || deadline - start > DOWNLOAD_LEGACY_WINDOW_MS ||
+        issued < start || issued >= deadline || now >= deadline || timestampMillis(row.expiresAt) > deadline) throw new DownloadTokenError(410);
+  } else if (row?.transportVersion !== undefined) throw new DownloadTokenError(410);
   const createdAt = timestampMillis(row?.createdAt);
   const expiresAt = timestampMillis(row?.expiresAt);
-  if (row?.transportVersion !== undefined || createdAt <= 0 || createdAt > now ||
+  if (createdAt <= 0 || createdAt > now ||
       expiresAt <= createdAt || expiresAt - createdAt > 900000 || now - createdAt >= 900000) throw new DownloadTokenError(410);
 }
 export class DownloadTokenError extends Error {
