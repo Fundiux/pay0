@@ -148,7 +148,7 @@ const signature = buildSignaturePng().toString("base64");
 let signatureHandledByCore = false;
 if (process.env.SMOKE_SIGNATURE_MODE === "core") {
   const { submitSolicitudSignature } = await import("../../functions/lib/modules/signatureLinks/callables.js");
-  const signatureResult = await submitSolicitudSignature.run({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } });
+  const signatureResult = await submitSolicitudSignature.run({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Almacen sintetico", receiptAddress: "Calle de pruebas 123, CDMX", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } });
   assert.equal(signatureResult?.ok, true, "La firma publica debe confirmar exito.");
   console.log("SMOKE_STAGE=signature_core_passed");
   signatureHandledByCore = true;
@@ -157,7 +157,7 @@ if (!signatureHandledByCore) {
 const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST || "127.0.0.1:5001";
 const response = await fetch(`http://${functionsHost}/${projectId}/us-central1/submitSolicitudSignature`, {
   method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } }),
+  body: JSON.stringify({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Almacen sintetico", receiptAddress: "Calle de pruebas 123, CDMX", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } }),
 });
 const payload = await response.json();
 // Callable v2 uses `result` in the emulator and `data` in some runtimes.

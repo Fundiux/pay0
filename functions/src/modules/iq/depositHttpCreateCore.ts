@@ -276,8 +276,12 @@ async function dispatchDepositPost(
     const responseMessage = String(body.message ?? "");
 
     if (response.status !== 201 || responseMessage !== "success") {
+      // Only explicit client-side refusals prove that this POST was rejected.
+      // A gateway/server timeout, conflict, throttle or unexpected success body
+      // may follow a committed deposit. Recover its ID; never enable blind replay.
+      const unequivocalRejection = new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]);
       return {
-        state: "POST_REJECTED",
+        state: unequivocalRejection.has(response.status) ? "POST_REJECTED" : "OUTCOME_UNKNOWN",
         postDispatchedAt,
         postAcknowledgedAt,
         httpStatus: response.status,

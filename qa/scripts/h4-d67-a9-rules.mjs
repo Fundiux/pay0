@@ -219,6 +219,30 @@ try {
         },
       ],
       [
+        "upPagoAdmin",
+        {
+          rootId: "rootA",
+          entityType: "pagos",
+          entityId: "pagoA",
+          createdBy: "adminA",
+          status: "PENDING",
+          storagePath:
+            "roots/rootA/pagos/pagoA/docs/COMPROBANTE_PAGO/upPagoAdmin-file.pdf",
+        },
+      ],
+      [
+        "upPagoRoot",
+        {
+          rootId: "rootA",
+          entityType: "pagos",
+          entityId: "pagoA",
+          createdBy: "rootA",
+          status: "PENDING",
+          storagePath:
+            "roots/rootA/pagos/pagoA/docs/COMPROBANTE_PAGO/upPagoRoot-file.pdf",
+        },
+      ],
+      [
         "upDisp",
         {
           rootId: "rootA",
@@ -331,6 +355,7 @@ try {
 
   const solStorage = env.authenticatedContext("solUser").storage();
   const payStorage = env.authenticatedContext("payUser").storage();
+  const adminStorage = env.authenticatedContext("adminA").storage();
   const dispStorage = env.authenticatedContext("dispUser").storage();
   const deniedStorage = env.authenticatedContext("deniedUser").storage();
   const sameRootStorage = env.authenticatedContext("sameRoot").storage();
@@ -433,6 +458,40 @@ try {
         {
           customMetadata: {
             uploadid: "upPago",
+          },
+        },
+      ),
+    );
+  });
+
+  await test("Admin puede completar el upload preparado de Pago", async () => {
+    await assertSucceeds(
+      uploadBytes(
+        ref(
+          adminStorage,
+          "roots/rootA/pagos/pagoA/docs/COMPROBANTE_PAGO/upPagoAdmin-file.pdf",
+        ),
+        new Uint8Array([1, 2]),
+        {
+          customMetadata: {
+            uploadid: "upPagoAdmin",
+          },
+        },
+      ),
+    );
+  });
+
+  await test("Superadmin puede completar el upload preparado de Pago", async () => {
+    await assertSucceeds(
+      uploadBytes(
+        ref(
+          superStorage,
+          "roots/rootA/pagos/pagoA/docs/COMPROBANTE_PAGO/upPagoRoot-file.pdf",
+        ),
+        new Uint8Array([1, 2]),
+        {
+          customMetadata: {
+            uploadid: "upPagoRoot",
           },
         },
       ),

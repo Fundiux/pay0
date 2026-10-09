@@ -20,6 +20,7 @@ import {
 import { enqueueIqInvoiceImportJob } from "./solicitudInvoiceImportCallables";
 import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
+import { systemNoteAuthor } from "../notes/domain";
 import { assertIqAuthorized } from "./authorization";
 
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
@@ -684,9 +685,9 @@ async function markRejected(input: {
 
     tx.set(noteRef, {
       rootId: input.job.rootId,
-      createdBy: "system",
-      createdByName: "Sistema",
-      createdByRole: "system",
+      ...systemNoteAuthor("IQ", "REJECTION"),
+      referenceType: "solicitud",
+      referenceId: input.job.solicitudId,
       source: "DESPACHO",
       text: userMessage,
       createdAt: now,

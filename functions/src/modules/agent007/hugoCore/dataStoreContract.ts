@@ -4,13 +4,13 @@ import { MemoryQuery, MemoryRetrieval, HugoMemoryKind, HugoMemoryRecord } from "
 
 export type HugoConversationState = { history: any[]; memory: HugoMemory; recentEntities: RecentEntity[]; conversationState?: ConversationState };
 export type HugoTraceFilter = { conversationId?: string; resultStatus?: string; tool?: string; sourceSystem?: string; completeness?: string; errorOnly?: boolean; from?: Date; to?: Date; cursor?: string; limit?: number };
-export type HugoTurnInput = { rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
+export type HugoTurnInput = { rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
 export interface HugoDataStore {
   loadConversationState(identity: { uid: string; rootId: string }, conversationId: string): Promise<HugoConversationState>;
   listObservations(rootId: string, limit?: number): Promise<any[]>;
   listRecommendations(rootId: string, limit?: number): Promise<any[]>;
   recordObservation(rootId: string, payload: Record<string, any>): Promise<string>;
-  listMessages(rootId: string, uid: string, limit?: number): Promise<any[]>;
+  listMessages(rootId: string, uid: string, limit?: number, conversationId?: string): Promise<any[]>;
   markMessagesRead(rootId: string, uid: string): Promise<number>;
   saveTurn(input: HugoTurnInput): Promise<{ id: string; createdAt: unknown }>;
   saveErrorTrace(rootId: string, traceId: string, payload: Record<string, any>): Promise<void>;

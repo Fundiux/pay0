@@ -12,7 +12,7 @@ setup("login superadmin with firebase email password", async ({ page }) => {
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  await page.locator("input[type=email], input[name=email], input[placeholder*=correo i], input[placeholder*=email i]").first().fill(email);
+  await page.locator("input[autocomplete=username], input[type=email], input[name=email], input[placeholder*=correo i], input[placeholder*=email i]").first().fill(email);
   await page.locator("input[type=password], input[name=password], input[placeholder*=password i], input[placeholder*=contrasena i]").first().fill(password);
   await page.locator("button[type=submit], button:has-text(\"Entrar\"), button:has-text(\"Login\"), button:has-text(\"Iniciar\")").first().click();
 

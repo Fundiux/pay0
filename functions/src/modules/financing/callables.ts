@@ -1,3 +1,4 @@
+import { manualNoteAuthor } from "../notes/domain";
 import {
   getApps,
   initializeApp } from "firebase-admin/app";
@@ -22,7 +23,8 @@ import { buildCanonicalFolio,
 import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
 import { logActivity,
   logActivityTx } from "../../utils/logActivity";
-import { assertAuthorized } from "../../utils/authGuard";
+import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
+import { assertDispersionFundingOwner } from "./dispersionFunding";
 import {
   applyForwardOnlyDispersionTx,
   prepareForwardOnlyDispersionTx,
@@ -37,6 +39,9 @@ import {
   projectCanonicalDispersionFinancialBatchState,
   type CanonicalFinancialBatchAccountState,
 } from "./dispersionFinancial";
+import { resolveDispersionDespachoId } from "./dispersionDispatchResolver";
+import { canRunIqAutomationForDispatch } from "../dispatches/domain";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "../iq/originIdentity";
 
 if (!getApps().length) {
   initializeApp();
@@ -112,23 +117,55 @@ export const listScopedClientDispersions = onCall(
     const cursorSeconds = Number(request.data?.cursorSeconds || 0);
     const cursorNanoseconds = Number(request.data?.cursorNanoseconds || 0);
     const cursorId = String(request.data?.cursorId || "").trim();
-    let query = db.collection("clientDispersions")
+    const baseQuery = db.collection("clientDispersions")
       .where("rootId", "==", rootId)
       .orderBy("createdAt", "desc")
-      .orderBy(FieldPath.documentId())
-      .limit(limit + 1);
-    if (cursorSeconds > 0 && cursorId) {
-      query = query.startAfter(new Timestamp(cursorSeconds, cursorNanoseconds), cursorId) as any;
+      .orderBy(FieldPath.documentId(), "desc");
+    const role = normalizeRole(profile.role);
+    const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    const clientAccess = new Map<string, boolean>();
+    let scanCursor: { seconds: number; nanoseconds: number; id: string } | null = cursorSeconds > 0 && cursorId ? { seconds: cursorSeconds, nanoseconds: cursorNanoseconds, id: cursorId } : null;
+    let scanned = 0, exhausted = false, lastScanned: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    // Apply access before the result limit. A bounded scan cursor lets callers continue
+    // across pages containing another user's private commissions without losing rows.
+    while (docs.length < limit && scanned < 2000 && !exhausted) {
+      const scanPageSize = Math.min(200, 2000 - scanned);
+      let query = baseQuery.limit(scanPageSize);
+      if (scanCursor) query = query.startAfter(new Timestamp(scanCursor.seconds, scanCursor.nanoseconds), scanCursor.id);
+      const page = await query.get();
+      exhausted = page.empty;
+      for (const doc of page.docs) {
+        scanned += 1; lastScanned = doc;
+        const data = doc.data(), createdAt: any = doc.get("createdAt");
+        scanCursor = { seconds: createdAt?.seconds || 0, nanoseconds: createdAt?.nanoseconds || 0, id: doc.id };
+        const funding: any = data.fundingSource || {};
+        let allowed = role === "superadmin";
+        if (!allowed && funding.holderType === "USER") allowed = funding.ownerUid === uid && funding.sourceClientId === String(data.clientId || data.clienteId || "");
+        else if (!allowed) {
+          allowed = [data.adminId, data.operadorId, data.createdBy].includes(uid);
+          const clientId = String(data.clientId || data.clienteId || "").trim();
+          if (!allowed && clientId) {
+            if (!clientAccess.has(clientId)) {
+              try { await requireClientOperationalAccess({ uid, role: role as any, rootId, clientId, permission: "view" }); clientAccess.set(clientId, true); }
+              catch { clientAccess.set(clientId, false); }
+            }
+            allowed = clientAccess.get(clientId) === true;
+          }
+        }
+        if (allowed) {
+          try { assertDispersionFundingOwner({ rootId, uid, role, dispersion: data }); docs.push(doc); } catch { /* Continue past a private USER row using the scan cursor. */ }
+        }
+        if (docs.length === limit) break;
+      }
+      if (page.size < scanPageSize && docs.length < limit) exhausted = true;
     }
-    const snap = await query.get();
-    const docs = snap.docs.slice(0, limit);
-    const last = docs[docs.length - 1];
+    const last = lastScanned;
     const createdAt: any = last?.get("createdAt");
 
     return {
       rows: docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       limit,
-      hasMore: snap.docs.length > limit,
+      hasMore: !exhausted && Boolean(last),
       nextCursor: last ? { seconds: createdAt?.seconds || 0, nanoseconds: createdAt?.nanoseconds || 0, id: last.id } : null,
     };
   }
@@ -357,14 +394,7 @@ export const createClientDispersion = onCall(
     const reference = String(data.reference || "").trim() || null;
     const empresaId = String(data.empresaId || "").trim() || null;
     const asociadoId = String(data.asociadoId || "").trim() || null;
-    const despachoId = String(data.despachoId || "").trim();
-
-    if (!despachoId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "despachoId requerido.",
-      );
-    }
+    const requestedDespachoId = String(data.despachoId || "").trim();
 
     const userSnap = await db.doc(`users/${uid}`).get();
     if (!userSnap.exists) {
@@ -379,6 +409,23 @@ export const createClientDispersion = onCall(
     }
 
     const rootId = String(profile.rootId || uid).trim();
+    const despachoId = await resolveDispersionDespachoId({
+      db,
+      rootId,
+      role,
+      requestedDespachoId,
+    });
+    const despachoSnap = await db.doc(`despachos/${despachoId}`).get();
+    const dispersionOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "dispersiones",
+          despachoId,
+          companyId: empresaId,
+        })
+      : null;
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
@@ -662,6 +709,7 @@ export const createClientDispersion = onCall(
         adminId: clientAdminId,
         actorUid: uid,
         actorRole: role,
+        ...(dispersionOriginIdentity ? buildIqOriginIdentityPatch(dispersionOriginIdentity) : {}),
         accessSource,
         delegatedClientAccessPath,
         folio,
@@ -901,13 +949,7 @@ export const createClientDispersionsMassive = onCall(
     const idempotencyDocRef = idempotencyKey ? operationIdempotencyRef(idempotencyOperation, uid, idempotencyKey) : null;
     const clienteId = assertClienteId(data.clienteId);
     // H4_D87_A58_A33_MASSIVE_DESPACHO_CONTRACT
-    const despachoId = String(data.despachoId || "").trim();
-    if (!despachoId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "despachoId requerido para dispersion masiva.",
-      );
-    }
+    const requestedDespachoId = String(data.despachoId || "").trim();
     const rawItems: any[] = Array.isArray(data.items) ? data.items : [];
 
     if (rawItems.length === 0) {
@@ -932,6 +974,22 @@ export const createClientDispersionsMassive = onCall(
     }
 
     const rootId = String(profile.rootId || uid).trim();
+    const despachoId = await resolveDispersionDespachoId({
+      db,
+      rootId,
+      role,
+      requestedDespachoId,
+    });
+    const despachoSnap = await db.doc(`despachos/${despachoId}`).get();
+    const dispersionOriginIdentity = despachoSnap.exists && canRunIqAutomationForDispatch(despachoSnap.data())
+      ? await captureIqOriginIdentity({
+          actorUid: uid,
+          rootId,
+          role,
+          moduleKey: "dispersiones",
+          despachoId,
+        })
+      : null;
     const actorUsername = String(
       profile.username ||
       profile.actorUsername ||
@@ -1872,6 +1930,7 @@ export const createClientDispersionsMassive = onCall(
           adminId: clientAdminId,
           actorUid: uid,
           actorRole: role,
+          ...(dispersionOriginIdentity ? buildIqOriginIdentityPatch(dispersionOriginIdentity) : {}),
           accessSource,
           delegatedClientAccessPath,
           folio,
@@ -2161,6 +2220,8 @@ export const requestClientDispersionIncident = onCall(
     }
 
     const dispersion = dispersionSnap.data() || {};
+    assertDispersionFundingOwner({ rootId, uid, role, dispersion });
+    if (dispersion.fundingSource?.holderType === "USER") throw new HttpsError("failed-precondition", "El retiro de utilidad se cancela desde Mi cuenta; un envío en proceso o incierto requiere conciliación.");
     const dispersionRootId = String(dispersion.rootId || "").trim();
     const dispersionAdminId = String(dispersion.adminId || "").trim();
     const dispersionOperadorId = String(dispersion.operadorId || "").trim();
@@ -2303,6 +2364,8 @@ export const resolveClientDispersionIncident = onCall(
       }
 
       const dispersion = dispersionSnap.data() || {};
+    assertDispersionFundingOwner({ rootId, uid, role, dispersion });
+    if (dispersion.fundingSource?.holderType === "USER") throw new HttpsError("failed-precondition", "El retiro de utilidad se cancela desde Mi cuenta; un envío en proceso o incierto requiere conciliación.");
       const currentStatus = String(dispersion.status || "").trim().toUpperCase();
       const currentIncidentStatus = String(dispersion.incidentStatus || "").trim().toUpperCase();
 
@@ -2518,6 +2581,7 @@ export const addClientDispersionNota = onCall(
     }
 
     const dispersion = dispersionSnap.data() || {};
+    assertDispersionFundingOwner({ rootId, uid, role, dispersion });
     const dispersionRootId = String(dispersion.rootId || "").trim();
     const dispersionAdminId = String(dispersion.adminId || "").trim();
     const dispersionOperadorId = String(dispersion.operadorId || "").trim();
@@ -2532,7 +2596,7 @@ export const addClientDispersionNota = onCall(
       throw new HttpsError("failed-precondition", "Dispersion sin cliente asociado.");
     }
 
-    await requireClientOperationalAccess({
+    if (dispersion.fundingSource?.holderType !== "USER") await requireClientOperationalAccess({
       uid,
       role: role === "operator" ? "operador" : (role as any),
       rootId,
@@ -2545,9 +2609,7 @@ export const addClientDispersionNota = onCall(
 
     const noteRef = await dispersionRef.collection("notas").add({
       text,
-      createdBy: uid,
-      createdByRole: role,
-      createdByName: actorUsername,
+      ...manualNoteAuthor(uid, profile),
       actorUsername,
       rootId: dispersionRootId || rootId,
       adminId: dispersionAdminId || null,

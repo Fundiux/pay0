@@ -1,10 +1,10 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { assertAuthorized } from "../../utils/authGuard";
+import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+import { assertNoteScope, manualNoteAuthor } from "./domain";
 
 import {
   db,
-  getActivityAdminId,
   getMyUser,
   getRootId,
   requireAuth,
@@ -32,16 +32,16 @@ export const addSolicitudNota = onCall(
 
     const data = snap.data()!;
 
-    if (data.rootId !== rootId) {
-      throw new HttpsError("permission-denied", "No autorizado.");
-    }
+    assertNoteScope(data, { uid, rootId, role: getUserRole(me) });
 
     const now = FieldValue.serverTimestamp();
 
     await ref.collection("notas").add({
       rootId,
-      createdBy: uid,
-      text: String(text),
+      ...manualNoteAuthor(uid, me),
+      referenceType: "solicitud",
+      referenceId: String(solicitudId),
+      text: String(text).trim(),
       createdAt: now,
     });
 
@@ -73,20 +73,14 @@ export const addPagoNota = onCall(
 
     const data = snap.data()!;
 
-    if (data.rootId !== rootId) {
-      throw new HttpsError("permission-denied", "No autorizado.");
-    }
-
-    const actorRole = String(me?.role || "unknown");
-    const actorId = String(me?.name || me?.displayName || me?.email || uid);
-    getActivityAdminId(me, uid, rootId);
+    assertNoteScope(data, { uid, rootId, role: getUserRole(me) });
 
     await ref.collection("notas").add({
       rootId,
       text: String(text).trim(),
-      createdBy: uid,
-      createdByName: actorId,
-      createdByRole: actorRole,
+      ...manualNoteAuthor(uid, me),
+      referenceType: "pago",
+      referenceId: String(pagoId),
       createdAt: FieldValue.serverTimestamp(),
     });
 

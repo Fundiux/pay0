@@ -116,3 +116,12 @@ The canonical dependency map, experiment results, failure matrix and portability
 ## Phase 7 — evidence and evaluation boundary
 
 Phase 7 adds provider-neutral appropriate-effect semantics, frozen DEVELOPMENT/VALIDATION/HOLDOUT evaluation assets and auditable root-scoped human review. The only claim-validation extension is an explicit alias map from known context locations to canonical evidence IDs. Model settings, provider selection and production routing remain unchanged. See `docs/HUGO_PHASE7.md`.
+# Daily conversation history and Realtime transcripts
+
+Hugo history and Hugo memory are separate contracts. History records what was exchanged; memory keeps only governed facts, decisions and verified experience selected by the existing memory workflow.
+
+The main `/hugo` conversation reads one calendar day at a time using `America/Mexico_City`. The callable derives the authenticated user's canonical conversation ID, applies Firestore timestamp bounds before reading, and returns bounded pages of written messages plus compact voice-session summaries. Voice transcript turns are fetched only when the owner opens a session. A caller cannot provide a UID, root ID or conversation ID to discover another conversation.
+
+Voice sessions live below the canonical `agent007Conversations/{conversationId}` aggregate. Each session stores bounded lifecycle events and structured turns with `sessionId`, `turnId`, `responseId`, speaker, relative timestamp, duration and interruption state. Audio is not stored.
+
+Realtime already emits Hugo's `response.output_audio_transcript.delta` and `response.output_audio_transcript.done` events as part of the paid response, so those are persisted without a second inference. User input transcription is not enabled: OpenAI documents that `conversation.item.input_audio_transcription.*` requires a separate transcription model and is billed separately. User turns are retained with timing and `NOT_ENABLED_NO_SECOND_INFERENCE` until a self-hosted transcription option is approved. The preferred next experiment is `faster-whisper` on ephemeral audio with immediate deletion; a second paid transcription API remains the last fallback.

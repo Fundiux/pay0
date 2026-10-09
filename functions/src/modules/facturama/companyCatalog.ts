@@ -90,7 +90,8 @@ function readCellValue(cellXml: string, sharedStrings: string[]): string {
 }
 
 export async function parseCompanyInvoiceCatalogWorkbook(buffer: Buffer): Promise<CompanyCatalogEntry[]> {
-    const zip = await getJsZip().loadAsync(buffer);
+    const JSZip = getJsZip();
+    const zip = await JSZip.loadAsync(buffer);
     const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
     const sharedStrings = [...sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((match) => xmlText(match[1]));
     const sheetNames = Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));

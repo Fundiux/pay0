@@ -49,6 +49,7 @@ export const listUsers = onCall(
           uid: d.id,
           email: x.email ?? null,
           displayName: x.displayName ?? x.nombreUsuario ?? null,
+          username: x.usernameNormalized ?? x.username ?? null,
           phone: x.phone ?? null,
           role: x.role ?? null,
           rootId: x.rootId ?? null,

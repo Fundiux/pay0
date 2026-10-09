@@ -326,9 +326,16 @@ export const createClientBeneficiary = onCall(
       throw new HttpsError("invalid-argument", "Debes capturar al menos un metodo.");
     }
 
-    const scope = await resolveClientScope(uid, role as Pay0Role, rootId, adminScopeId, clientId);
-    const adminId = scope.clientAdminId || adminScopeId;
-    const operadorId = scope.resolvedOperadorId || null;
+    const scope = await requireClientOperationalAccess({
+      uid,
+      role: role as Pay0Role,
+      rootId,
+      clientId,
+      permission: "operateBeneficiarios",
+      errorMessage: "No autorizado para crear beneficiarios de este cliente.",
+    });
+    const adminId = scope.economicOwnerAdminId || adminScopeId;
+    const operadorId = scope.economicOwnerOperadorId || null;
 
     const preparedMethods = methodsInput.map((item: any) => buildMethodPayload(item));
 
@@ -407,8 +414,8 @@ export const createClientBeneficiary = onCall(
       operadorId,
       actorUid: uid,
       actorRole: role,
-      accessSource: scope.accessSource,
-      delegatedClientAccessPath: scope.delegatedClientAccessPath,
+      accessSource: scope.source,
+      delegatedClientAccessPath: scope.delegationPath,
       createdBy: uid,
       updatedBy: uid,
       clientId,
@@ -457,8 +464,8 @@ export const createClientBeneficiary = onCall(
         operadorId,
         actorUid: uid,
         actorRole: role,
-        accessSource: scope.accessSource,
-        delegatedClientAccessPath: scope.delegatedClientAccessPath,
+        accessSource: scope.source,
+        delegatedClientAccessPath: scope.delegationPath,
         createdBy: uid,
         updatedBy: uid,
         beneficiaryId: beneficiaryRef.id,

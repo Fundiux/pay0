@@ -1,4 +1,5 @@
 import { DEFAULT_IQ_ERP_URL } from "./config";
+import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -623,7 +624,6 @@ async function finalizeIqCreation(input: {
   const creationRef = db
     .collection("iqSolicitudCreations")
     .doc(input.solicitudId);
-  const noteRef = input.solicitudRef.collection("notas").doc("iq-folio");
   const now = FieldValue.serverTimestamp();
 
   await db.runTransaction(async (tx: Transaction) => {
@@ -734,24 +734,8 @@ async function finalizeIqCreation(input: {
         formError: FieldValue.delete(),
       };
 
-      tx.set(
-        noteRef,
-        {
-          rootId: input.auth.rootId,
-          createdBy: input.auth.uid,
-          createdByName: getActorName(input.auth),
-          createdByRole: input.auth.role,
-          source: "IQ",
-          text: `FOLIO IQ: ${input.iqId}`,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          merge: true,
-        },
-      );
-
-      solicitationPatch.hasUnreadMsg = true;
+      // The IQ folio already lives on the request and its creation record.
+      // Linking it must not create a conversation or an unread-note badge.
     } else if (input.status === "OUTCOME_UNKNOWN") {
       solicitationPatch.iqReconciliationStatus = "PENDING";
       solicitationPatch.iqReconciliationAttemptCount = 0;
@@ -1275,7 +1259,7 @@ export const createSolicitudIq = onCall(
     const username = cleanText(profile.username);
     const profileAlias = cleanText(profile.alias);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
-    const associatedName = username;
+    const associatedName = requireIqAssociatedName(profile.associatedName);
 
     const pay0ClientId = cleanText(
       solicitud.clienteId ??
@@ -1465,6 +1449,7 @@ export const createSolicitudIq = onCall(
           iqId: reservation.iqId,
           iqProfileId: profileId,
           iqProfileAlias: profileAlias || null,
+          iqAssociatedName: associatedName,
           attemptCount: reservation.attemptCount,
           idempotent: true,
           fingerprint: reservation.fingerprint,
@@ -1515,6 +1500,7 @@ export const createSolicitudIq = onCall(
         attemptCount: reservation.attemptCount,
         iqProfileId: profileId,
         iqProfileAlias: profileAlias || null,
+        iqAssociatedName: associatedName,
         fingerprint,
         startedAtMs,
         targetDateIso,

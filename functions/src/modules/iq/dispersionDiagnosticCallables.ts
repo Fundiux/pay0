@@ -74,7 +74,7 @@ export const getIqDispersionDiagnostic = onCall(
         .limit(limit)
         .get();
     } catch {
-      snap = await db.collection("clientDispersions").limit(limit).get();
+      snap = await db.collection("clientDispersions").where("rootId", "==", auth.rootId).limit(limit).get();
     }
 
     const docsByDispersion = new Map<string, number>();
@@ -97,7 +97,7 @@ export const getIqDispersionDiagnostic = onCall(
       .filter((doc) => {
         const data = record(doc.data());
         const rowRootId = clean(data.rootId);
-        return !rowRootId || rowRootId === auth.rootId;
+        return rowRootId === auth.rootId;
       })
       .map((doc) => {
         const data = record(doc.data());

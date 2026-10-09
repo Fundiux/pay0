@@ -9,9 +9,31 @@ import { HUGO_V2_CONFIG } from "./intelligenceConfig";
 import { checkExhaustiveness } from "./exhaustivenessPolicy";
 import { HugoLearningStore } from "./learningStore";
 import { applyHugoContextBudget, compactLearningExperience, HugoBudgetReport } from "./learningContextBudget";
+import { formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./interactionSemantics";
 
 function fallbackReply(message: string, name: string, context: any): string {
   const normalized = message.toLocaleLowerCase("es-MX");
+  const platform = context.platformFacts || {};
+  if (platform.clientCount?.matchStatus === "CURRENT_USER") return `${Number(platform.clientCount.clientCount || 0)}.`;
+  if (platform.clientCount?.matchStatus === "EXACT") return `${platform.clientCount.user?.displayName || "El usuario"} tiene ${Number(platform.clientCount.clientCount || 0)} clientes activos visibles dentro del alcance autorizado.`;
+  if (platform.clientCount?.matchStatus === "CONFIRM_CURRENT_USER") return `¿Te refieres a ${platform.clientCount.suggestedDisplayName || "tu usuario actual"}, tu usuario actual?`;
+  if (platform.clientCount?.matchStatus === "AMBIGUOUS") return "Encontré más de un usuario dentro de tu ámbito con esa referencia. Indica el nombre completo o correo para evitar consultar a la persona equivocada.";
+  if (platform.clientCount?.matchStatus === "NOT_FOUND") return "No encontré un usuario con esa referencia dentro de tu ámbito autorizado.";
+  if (/\bassets\b/i.test(normalized) && Array.isArray(platform.systems)) return formatSystemCatalog(platform.systems, message);
+  if (platform.authorizedCapabilities) {
+    return formatAuthorizedCapabilities(platform.authorizedCapabilities, platform.lastDiagnostic);
+  }
+  if (Array.isArray(platform.systems)) return formatSystemCatalog(platform.systems, message);
+  if (platform.latestSolicitud) return formatLatestSolicitud(platform.latestSolicitud);
+  const payments = Array.isArray(context.pagos) ? context.pagos : [];
+  if (payments.length && /\b(ultimo|último|reciente|recibido|anterior|previo)\b/i.test(normalized)) {
+    const row = payments[0], amount = Number(row.monto || 0).toLocaleString("es-MX", { style: "currency", currency: row.moneda || "MXN" });
+    return `${/\b(anterior|previo)\b/i.test(normalized) ? "El pago recibido anterior" : "El pago recibido más reciente"} es ${row.folio || "sin folio visible"}, por ${amount}, de ${row.pagador || "pagador no registrado"}, con estado ${row.estado || "no registrado"}.`;
+  }
+  if (payments.length > 1 && /\b(muestra|muéstrame|lista|ultimos|últimos)\b/i.test(normalized)) return payments.map((row: any, index: number) => `${index + 1}. ${row.folio || "sin folio"}, ${Number(row.monto || 0).toLocaleString("es-MX", { style: "currency", currency: row.moneda || "MXN" })}, ${row.estado || "sin estado"}`).join(" ");
+  if (payments.length === 1 && /\b(cuanto|cuánto|monto|importe)\b/i.test(normalized)) return `${Number(payments[0].monto || 0).toLocaleString("es-MX", { style: "currency", currency: payments[0].moneda || "MXN" })}.`;
+  if (payments.length === 1 && /\b(quien|quién|hizo|pagador)\b/i.test(normalized)) return payments[0].pagador ? `${payments[0].pagador}.` : "El pagador no está registrado en PAY0 para ese pago.";
+  if (payments.length === 1 && /\b(conciliad)\b/i.test(normalized)) return payments[0].conciliado ? "Sí, está conciliado." : `No. Su estado actual es ${payments[0].estado || "no registrado"}.`;
   if (/^(hola|buen(os|as)?\s+(dias|tardes|noches)|qué tal|que tal)[!.\s]*$/.test(normalized)) {
     return `Hola, ${name}. Estoy atento. Puedo revisar contigo solicitudes, pagos, facturación y las dudas que vaya detectando.`;
   }
@@ -29,7 +51,7 @@ function fallbackReply(message: string, name: string, context: any): string {
   return `Entendido, ${name}. Guardé tu mensaje en esta conversación. Todavía no tengo evidencia suficiente para afirmarlo como una regla; cuando vea un caso relacionado te lo señalaré para que lo confirmemos.`;
 }
 
-export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
+export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; routingSignals?: { intent: string; risk: "READ" | "WRITE" | "EXTERNAL_SIDE_EFFECT"; complexity: "LOW" | "MEDIUM" | "HIGH"; requiredCapabilities: string[] }; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
 export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
 
 export class HugoConversationCore {
@@ -68,6 +90,8 @@ export class HugoConversationCore {
         `El estado actual de ${exactRow.folio} en PAY0 es ${exactRow.estado}.` :
         !/\b(comparar?|mayor|menor)\b/i.test(input.message) && /\b(cu[aá]nto|monto|importe)\b/i.test(input.message) && exactRow.monto != null && exactRow.monto !== "" && Number.isFinite(Number(exactRow.monto)) ?
           `El monto registrado de ${exactRow.folio} en PAY0 es ${Number(exactRow.monto).toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.` : null : null;
+    const deterministicOperationalReply = v2 && !policyReply && !input.commandReply && requested.some(row => ["searchReceivedPagos", "getPagoById", "countClientsForCurrentUser", "countClientsForUser", "getLatestSolicitud", "getSystemCatalog", "getAuthorizedCapabilities", "getLastOperationDiagnostic"].includes(row.name))
+      ? fallbackReply(input.message, input.name, built.context) : null;
     const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
     const learningContext = built.context as any;
     let learningUsage: ConversationOutput["learningUsage"];
@@ -95,12 +119,12 @@ export class HugoConversationCore {
     const budget = v2 ? applyHugoContextBudget(learningContext) : undefined;
     if (learningUsage) learningUsage.includedIds = (learningContext.learningExperiences || []).map((row: any) => row.id);
     const budgetReply = budget?.exceeded ? "El contexto excede el límite seguro. Puedo revisar un folio concreto con menos antecedentes." : null;
-    const skipModel = input.commandReply || policyReply || exactFactReply || learningUnavailableReply || conflictReply || budgetReply;
+    const skipModel = input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply;
     let model: ModelOutput = skipModel ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: input.commandReply ? "COMMAND_HANDLED" : "POLICY_HANDLED" } :
       !this.model ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: "MODEL_UNAVAILABLE" } :
         { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null };
     if (!skipModel && this.model) {
-      try { model = this.model.generateCanonical ? await this.model.generateCanonical(canonicalModelRequest({ message: input.message, name: input.name, context: built.context, history, promptVersion, capability: input.modelCapability })) :
+      try { model = this.model.generateCanonical ? await this.model.generateCanonical(canonicalModelRequest({ message: input.message, name: input.name, context: built.context, history, promptVersion, capability: input.modelCapability, profile: input.profile, scope: input.scope, routingSignals: input.routingSignals })) :
         await this.model.generate({ message: input.message, name: input.name, context: built.context, history, promptVersion }); }
       catch (error) { model = { text: null, model: "unavailable", modelVersion: "unknown", promptVersion, tokenUsage: null,
         error: error instanceof Error && /timeout|abort/i.test(error.name + " " + error.message) ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE" }; }
@@ -114,8 +138,8 @@ export class HugoConversationCore {
     const modelFailureReply = v2 && model.error && !["COMMAND_HANDLED", "POLICY_HANDLED", "EMULATOR_DISABLED"].includes(model.error) ?
       model.error === "MAX_TOKENS" ? "No pude completar una respuesta verificable. Puedes pedirme revisar un folio concreto de nuevo." :
         "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana." : null;
-    const text = input.commandReply || policyReply || exactFactReply || learningUnavailableReply || conflictReply || budgetReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context);
-    return { text, source: policyReply || exactFactReply || learningUnavailableReply || conflictReply || budgetReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : exactFactReply ? "EXACT_FACT" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
+    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
+    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
       context: built.context, pieces: built.pieces,
       recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, conversationState: "conversationState" in built ? built.conversationState : undefined,
       memoryUsage: "memoryUsage" in built ? built.memoryUsage : undefined, composition: "composition" in built ? built.composition : undefined,

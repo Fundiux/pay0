@@ -1,9 +1,13 @@
-﻿# PAY0 — Tracker de trabajo y continuidad
+# PAY0 — Tracker de trabajo y continuidad
+
+## Remediación integral — 2026-10-09
+
+Estado vigente: implementación y validación en curso; integración aislada de ambas líneas. Los cortes siguientes se conservan como evidencia histórica y no certifican este candidato. Consulte [continuidad de remediación](docs/remediation/2026-10-09/HANDOFF.md). La autorización continua del encargo actual permite integración y despliegues delimitados, sin pruebas financieras reales.
 
 Actualizado: 2026-10-08 (America/Mexico_City)
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
-## Corte vigente — 2026-10-08
+## Corte histórico — 2026-10-08
 
 - Rama: `fix/iq-latency-reactivity`; base funcional inspeccionada: `f7dc2a6`. Actualización documental en la misma línea de trabajo; no requiere cambiar ni integrar ramas.
 - **P0 continúa abierto.** El [informe R6](docs/P0-IQ-LATENCY-REACTIVITY-2026-10-06.md) declaró su candidato listo para despliegue, sin desplegar ni certificar producción. Los commits posteriores y el trabajo sin commit requieren su propia validación.
@@ -31,6 +35,38 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 ## Historial hasta el 2026-09-20
 
 Los estados, cifras y prioridades siguientes corresponden a sus fechas originales. Se conservan como evidencia histórica; no deben interpretarse como validación del candidato de octubre.
+
+## Corte histórico ASTRA — 2026-09-28
+
+ASTRA: **publicación técnica verificada; preparada para validación humana**. En el producto quedan las decisiones descritas abajo; el cierre global requiere completar main, push y comprobar CI después de este registro. Esta entrada prevalece sobre los cierres históricos cuando exista contradicción. La tabla completa de 22 puntos está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
+
+La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del despliegue. Los cuatro vínculos históricos ya se migraron: ocho documentos canónicos activos, cero copias legacy activas y estados financieros conservados.
+
+La integración publicada contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Las reglas coinciden con la fuente, los 100 índices están listos y las 284 Functions tienen revisión nueva y tráfico verificado. Se aplicaron 13 aliases y tres recursos corporativos con seis artefactos verificados. El permiso técnico de 23 callables se completó con aprobación específica del usuario; 26 comprobaciones anónimas confirmaron que la autenticación sigue exigida. Hosting `ae9632f51fe79634` / SSR `00570-rol`: **70/70 postflight**, nueve rutas y 14 assets idénticos al build. Evidencia: [publicación ASTRA](docs/audits/ASTRA-PUBLICATION-2026-09-28.md).
+
+Rama de implementación: `integration/astra-cycle-20260928`. La integración a main usa fast-forward y push normal; las referencias definitivas se verifican después de registrar este informe y se reportan en la entrega. Los worktrees y cambios ajenos permanecen preservados.
+
+Decisiones humanas separadas: símbolo visual; aceptación de voz P0/P0.5 y promoción; hora/días del corte diario; cuenta de facturación para staging (`billingEnabled:false`). Ninguna activa comisiones, REP ni un proveedor real automáticamente.
+
+Actualizado: 2026-09-28
+Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
+
+## BASE860115-05 / Punto 2 — Identidad de pestaña/navegador — 2026-09-27
+
+- Estado: **cerrado, validado y desplegado en producción**.
+- La identidad pública del navegador es ahora `PAY0`: título canónico y plantilla, application name, descripción, manifest PWA, OpenGraph y Twitter metadata. La lógica cliente del layout quedó encapsulada en `RootClientShell` para permitir metadata de servidor sin cambiar autenticación ni navegación.
+- Los identificadores internos de Firebase permanecen intactos. El dominio técnico puede contener `pay-0-system`, pero ese texto no aparece como nombre en título ni metadatos visibles.
+- Verificación: frontend build PASS con 44 rutas, baseline y 22 controles críticos PASS; `/`, `/login`, `/pagos` y `/manifest.webmanifest` HTTP 200 en producción. Las tres páginas muestran título y OpenGraph `PAY0`; no se detectó identidad técnica en los campos públicos auditados. Emuladores apagados y sin errores SSR recientes.
+- Producción: Hosting/SSR `ssrpay0system-00558-nit` `ACTIVE` con 100% del tráfico. Commit funcional: `1e638e6`.
+
+## BASE860115-05 / Punto 1 — Complementos de pago PPD — 2026-09-27
+
+- Estado: **cerrado, validado y desplegado en producción**.
+- Se consolidó un solo pipeline canónico de REP. La automatización adopta evidencia válida del importador retirado, la revalida y la guarda como XML/PDF del Pago ligados por `applicationId`; las copias legacy de Solicitud quedan inactivas y auditadas.
+- El caso productivo `AP1C13U3E5` quedó `RECEIVED` en seguimiento y job, con exactamente dos documentos canónicos `READY` y cero documentos legacy activos. Su diferencia fiscal de un centavo se acepta sólo en la ruta legacy, con marca explícita; los flujos nuevos conservan igualdad exacta.
+- La consulta segura continúa para jobs IQ bloqueados exclusivamente por elegibilidad no verificable, permitiendo descubrir un REP generado posteriormente sin repetir el POST. El detalle del pago muestra descargas autorizadas XML/PDF por aplicación.
+- Verificación: Functions/frontend builds PASS, autorización y baseline PASS, 22 controles críticos PASS y smoke Firestore+Storage PASS con 26 escenarios y cero acciones externas. Emuladores apagados.
+- Producción: `enqueueAutomaticPaymentComplement` `00005-lal`, `checkPaymentComplementsDaily` `00009-gak` y SSR `ssrpay0system-00556-fax` están `ACTIVE`; scheduler `ENABLED` a las 19:00 `America/Mexico_City`; `/pagos` HTTP 200; sin errores posteriores en logs. Se eliminaron las tres Functions legacy duplicadas. Commits: `ebdeaf4`, `3e085d5`.
 
 ## ASSETS — dashboard interactivo, fechas operativas y acceso gobernado — 2026-09-20
 

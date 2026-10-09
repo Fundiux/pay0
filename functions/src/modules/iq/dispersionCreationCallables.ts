@@ -1,3 +1,5 @@
+import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
+import { bindVerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import {
@@ -8,10 +10,14 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { resolveIqBeneficiaryInstrument } from "./dispersionHttpCreateCore";
+import { requireIqAssociatedName } from "./associatedName";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { assertDispersionDestination } from "./dispersionDestinationGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { assertAuthorized } from "../../utils/authGuard";
+import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
+import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "./originIdentity";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -49,6 +55,9 @@ type IqAccess = {
   username: string;
   password: string;
   erpUrl: string;
+  originIqProfileId?: string;
+  effectiveIqProfileId?: string;
+  identityResolutionReason?: string;
 };
 
 type LegReservation = {
@@ -327,9 +336,10 @@ async function buildDispersionSchedulerAuth(
     user.deleted === true ||
     user.isDeleted === true ||
     Boolean(user.deletedAt);
+  const hasPersistedIqOrigin = Boolean(clean(principal.originIqProfileId));
 
   if (
-    inactive ||
+    (!hasPersistedIqOrigin && inactive) ||
     !["superadmin", "admin", "operador"].includes(role)
   ) {
     throw new HttpsError(
@@ -338,11 +348,19 @@ async function buildDispersionSchedulerAuth(
     );
   }
 
+  if (!hasPersistedIqOrigin) {
+    assertAuthorized({ uid }, user, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "wallet",
+      requiredAction: "dispersiones",
+    });
+  }
+
   const principalRootId =
     clean(principal.rootId);
 
   if (
-    rootId !== expectedRootId ||
+    (!hasPersistedIqOrigin && rootId !== expectedRootId) ||
     (
       principalRootId &&
       principalRootId !== expectedRootId
@@ -357,7 +375,7 @@ async function buildDispersionSchedulerAuth(
   return {
     uid,
     role,
-    rootId,
+    rootId: hasPersistedIqOrigin ? expectedRootId : rootId,
     username:
       clean(
         user.username ??
@@ -373,6 +391,7 @@ function isDispersionCreateSchedulerCandidate(
   principal: AnyDoc,
   rootId: string,
 ): boolean {
+  if (principal.iqExecutionHeld === true) return false;
   if (clean(principal.rootId) !== rootId) {
     return false;
   }
@@ -457,29 +476,6 @@ async function verifyDespachoAccess(
       "failed-precondition",
       "El despacho esta inactivo.",
     );
-  }
-
-  if (auth.role !== "superadmin") {
-    const accessSnap = await db
-      .collection(
-        "userDespachoAccess",
-      )
-      .doc(auth.uid)
-      .collection("despachos")
-      .doc(despachoId)
-      .get();
-
-    if (
-      !accessSnap.exists ||
-      record(
-        accessSnap.data(),
-      ).active !== true
-    ) {
-      throw new HttpsError(
-        "permission-denied",
-        "El usuario no tiene acceso activo al despacho del tramo.",
-      );
-    }
   }
 
   const marker = upper(
@@ -601,6 +597,7 @@ async function loadIqAccess(
   auth: AuthContext,
   despachoId: string,
   sourceChannel: string,
+  movement?: AnyDoc,
 ): Promise<IqAccess> {
   const canonicalSourceChannel =
     upper(sourceChannel);
@@ -618,6 +615,30 @@ async function loadIqAccess(
     auth,
     despachoId,
   );
+  if (movement && (clean(movement.originIqProfileId) || clean(movement.iqCredentialProfileId))) {
+    const identity = await resolveEffectiveIqIdentity({
+      movement,
+      rootId: auth.rootId,
+      authorizedActorUid: auth.uid,
+      encryptionSecret: IQ_CREDENTIALS_KEY.value(),
+      includePassword: true,
+    });
+    assertIqIdentityInvariant(identity);
+    return {
+      profileId: identity.effectiveIqProfileId,
+      profileAlias: identity.credentialProfile.profileAlias,
+      associatedName: requireIqAssociatedName(
+        identity.originIqContext.associatedName ||
+        clean(despacho.iqAssociatedName ?? despacho.associatedName),
+      ),
+      username: identity.credentialProfile.username,
+      password: identity.credentialProfile.password,
+      erpUrl: identity.credentialProfile.erpUrl,
+      originIqProfileId: identity.originIqProfileId,
+      effectiveIqProfileId: identity.effectiveIqProfileId,
+      identityResolutionReason: identity.identityResolutionReason,
+    };
+  }
   const accessSnap = await db
     .collection("iqUserAccess")
     .doc(auth.uid)
@@ -625,45 +646,17 @@ async function loadIqAccess(
   const access = record(
     accessSnap.data(),
   );
-
-  if (
-    !accessSnap.exists ||
-    access.active !== true ||
-    access.iqEnabled !== true
-  ) {
+  const executionAccess = decideIqDispersionExecutionAccess({
+    uid: auth.uid,
+    role: auth.role,
+    rootId: auth.rootId,
+    despacho,
+    iqAccess: accessSnap.exists ? access : null,
+  });
+  if (!executionAccess.allowed) {
     throw new HttpsError(
-      "failed-precondition",
-      "El usuario no tiene acceso IQ activo.",
-    );
-  }
-
-  if (
-    clean(access.rootId) &&
-    clean(access.rootId) !==
-      auth.rootId
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "El acceso IQ esta fuera de scope.",
-    );
-  }
-
-  const allowedModules =
-    record(access.allowedModules);
-
-  if (
-    auth.role !== "superadmin" &&
-    allowedModules.dispersiones !==
-      true &&
-    allowedModules.dispersions !==
-      true &&
-    allowedModules.walletDispersiones !==
-      true &&
-    allowedModules.wallet !== true
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "El usuario no tiene habilitado el modulo IQ Dispersiones.",
+      executionAccess.code === "IQ_ACCESS_INACTIVE" ? "failed-precondition" : "permission-denied",
+      executionAccess.message,
     );
   }
 
@@ -734,12 +727,13 @@ async function loadIqAccess(
     profileAlias:
       clean(profile.alias) ||
       profileId,
-    associatedName:
+    associatedName: requireIqAssociatedName(
       clean(
         despacho.iqAssociatedName ??
           despacho.associatedName ??
           access.associatedName,
-      ) || username,
+      ) || profile.associatedName,
+    ),
     username,
     password:
       decryptSecret(profile),
@@ -1223,6 +1217,12 @@ async function persistLegResult(
             ),
           iqCredentialProfileId:
             access.profileId,
+          originIqProfileId:
+            access.originIqProfileId || access.profileId,
+          effectiveIqProfileId:
+            access.effectiveIqProfileId || access.profileId,
+          iqIdentityResolutionReason:
+            access.identityResolutionReason || "LEGACY_ACTOR_ACCESS",
           iqCredentialProfileAlias:
             access.profileAlias ||
             null,
@@ -1389,6 +1389,7 @@ export async function runCreateClientDispersionIqCore(input: {
   auth: AuthContext;
   dispersionId: string;
   previewOnly?: boolean;
+  allowCommissionExecution?: boolean;
 }) {
   const auth = input.auth;
   const dispersionId = clean(input.dispersionId);
@@ -1419,6 +1420,9 @@ export async function runCreateClientDispersionIqCore(input: {
   const principal = record(
     principalSnap.data(),
   );
+  assertDispersionFundingOwner({ rootId: auth.rootId, uid: auth.uid, role: auth.role, dispersion: principal });
+  if (principal.fundingSource?.holderType === "USER" && input.allowCommissionExecution !== true && !previewOnly) throw new HttpsError("permission-denied", "La utilidad debe ejecutarse desde su solicitud de comisión autorizada.");
+  if (principal.iqExecutionHeld === true && !previewOnly && !(input.allowCommissionExecution === true && principal.fundingSource?.holderType === "USER")) throw new HttpsError("failed-precondition", "La dispersión conserva una retención explícita de ejecución.");
   
   if (
     clean(principal.rootId) !==
@@ -1537,6 +1541,22 @@ export async function runCreateClientDispersionIqCore(input: {
   const method = record(
     methodSnap.data(),
   );
+  let commissionHistoricalLeg: AnyDoc | undefined;
+  if (principal.fundingSource?.holderType === "USER") {
+    const funding = record(principal.fundingSource);
+    const [commissionSnap, commissionRequestSnap, ownerSnap] = await Promise.all([
+      db.doc(`commissionDistributions/${clean(funding.commissionDistributionId)}`).get(),
+      db.doc(`commissionDispersionRequests/${clean(funding.commissionDistributionId)}`).get(),
+      db.doc(`users/${clean(funding.ownerUid)}`).get(),
+    ]);
+    const commission = record(commissionSnap.data());
+    const owner = record(ownerSnap.data());
+    const historicalLeg = (Array.isArray(commission.legs) ? commission.legs : []).find((leg: AnyDoc) => clean(leg.legId) === clean(funding.commissionLegId));
+    assertAuthorized({ uid: clean(funding.ownerUid) }, owner, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
+    const verifiedAt = timestampMillis(method.iqVerifiedAt);
+    if (owner.disabled === true || owner.deleted === true || owner.deletedAt || clean(owner.rootId || funding.ownerUid) !== auth.rootId || auth.uid !== clean(funding.ownerUid) || clean(funding.sourceClientId) !== clientId || commission.ownerUid !== funding.ownerUid || commission.rootId !== auth.rootId || commission.clientId !== clientId || commissionRequestSnap.data()?.status !== "PROCESSING" || !historicalLeg || historicalLeg.canonicalDispersionId !== dispersionId || historicalLeg.methodId !== methodId || historicalLeg.beneficiaryId !== beneficiaryId || historicalLeg.amountMinor !== Math.round(money(principal.amount) * 100) || clean(method.commissionOwnerUid) !== clean(funding.ownerUid) || upper(method.iqLinkStatus) !== "VERIFIED" || !verifiedAt || Date.now() - verifiedAt > 86400000 || clean(method.iqAccountId) !== clean(historicalLeg.iqAccountId) || clean(method.iqBeneficiaryId) !== clean(historicalLeg.iqBeneficiaryId) || clean(method.last4) !== clean(historicalLeg.instrumentLast4)) throw new HttpsError("failed-precondition", "El titular, la reserva o el instrumento histórico de comisión requiere revisión.");
+    commissionHistoricalLeg = historicalLeg;
+  }
   assertDispersionDestination({ rootId: auth.rootId, clientId, beneficiaryId, dispersionId,
     client, beneficiary, method, legs: legsSnap.docs.map(doc => record(doc.data())) });
   const destination =
@@ -1679,6 +1699,7 @@ export async function runCreateClientDispersionIqCore(input: {
             auth,
             despachoId,
             clean(leg.channel),
+            { ...leg, ...principal },
           );
       } catch (error) {
         const message =
@@ -1831,6 +1852,7 @@ export async function runCreateClientDispersionIqCore(input: {
           auth,
           despachoId,
           clean(leg.channel),
+          { ...leg, ...principal },
         );
     } catch (error) {
       const message =
@@ -1878,6 +1900,14 @@ export async function runCreateClientDispersionIqCore(input: {
     const item:
       IqDispersionCreateItemH4D82A4A1 =
       {
+        ...(principal.fundingSource?.holderType === "USER" ? {
+          fundingHolderType: "USER" as const,
+          verifiedInstrument: bindVerifiedIqCommissionInstrument({
+            rootId: auth.rootId, despachoId, profileId: access.profileId,
+            clientIqId: clean(record(client.iqLink).clientId ?? client.iqClientId),
+            operationTypeKey, method, historicalLeg: commissionHistoricalLeg,
+          }),
+        } : {}),
         associatedName:
           access.associatedName,
         clientCandidates,
@@ -2007,7 +2037,7 @@ export async function runCreateClientDispersionIqCore(input: {
     );
   
   await db
-    .collection("activityLog")
+    .collection("pay0ActivityLog")
     .doc()
     .set({
       rootId: auth.rootId,
@@ -2015,6 +2045,8 @@ export async function runCreateClientDispersionIqCore(input: {
         "DISPERSION_IQ_GENERACION",
       eventType:
         "DISPERSION_IQ_GENERACION",
+      sourceSystem: "PAY0",
+      activitySchemaVersion: 2,
       actorUid: auth.uid,
       actorUsername:
         auth.username,
@@ -2143,7 +2175,7 @@ export const resolveCommissionInstrumentIq = onCall(
     const expectedLast4 = clean(method.last4 ?? method.masked).replace(/\D+/g, "").slice(-4);
     const operationTypeKey = upper(method.destinationKind) === "TARJETA" ? "TDC" : upper(method.destinationKind) === "CLABE" ? "TRANSFERENCIA" : "";
     if (!expectedLast4 || !operationTypeKey) throw new HttpsError("failed-precondition", "El instrumento no tiene tipo o terminación compatible con IQ.");
-    const access = await loadIqAccess(auth, despachoId, "IQ");
+    const access = await loadIqAccess(auth, despachoId, "IQ", payment);
     const methodRef = methodSnap.ref;
     await methodRef.set({ iqLinkStatus: "SYNCING", iqLastError: null, iqSyncStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     try {

@@ -4195,9 +4195,7 @@ export const manualLinkPagoIqDeposit = onCall(
     await pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: `Deposito IQ vinculado manualmente: ${iqDepositId}${note ? ` | ${note}` : ""}`,
-      createdBy: auth.uid,
-      createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-      createdByRole: auth.role,
+      ...manualNoteAuthor(auth.uid, auth.user),
       createdAt: now,
     }).catch(() => undefined);
 
@@ -4305,9 +4303,7 @@ export const omitPagoIqDepositAutomation = onCall(
     await pagoRef.collection("notas").add({
       rootId: auth.rootId,
       text: `Seguimiento IQ Pagos omitido manualmente: ${reason}`,
-      createdBy: auth.uid,
-      createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-      createdByRole: auth.role,
+      ...manualNoteAuthor(auth.uid, auth.user),
       createdAt: now,
     }).catch(() => undefined);
 
@@ -4586,9 +4582,7 @@ export const manualLinkPagoIqDepositHttp = onRequest(
       await pagoRef.collection("notas").add({
         rootId: auth.rootId,
         text: `Deposito IQ vinculado manualmente: ${iqDepositId}${note ? ` | ${note}` : ""}`,
-        createdBy: auth.uid,
-        createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-        createdByRole: auth.role,
+        ...manualNoteAuthor(auth.uid, auth.user),
         createdAt: now,
       }).catch(() => undefined);
 
@@ -4699,9 +4693,7 @@ export const omitPagoIqDepositAutomationHttp = onRequest(
       await pagoRef.collection("notas").add({
         rootId: auth.rootId,
         text: `Seguimiento IQ Pagos omitido manualmente: ${reason}`,
-        createdBy: auth.uid,
-        createdByName: cleanText(auth.user.username ?? auth.user.name ?? auth.uid),
-        createdByRole: auth.role,
+        ...manualNoteAuthor(auth.uid, auth.user),
         createdAt: now,
       }).catch(() => undefined);
 

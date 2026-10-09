@@ -155,6 +155,20 @@ function assertPagoSolicitudMatch(pago: DocumentData, solicitud: DocumentData): 
   }
 }
 
+function inheritedIqOrigin(...sources: DocumentData[]): Record<string, unknown> {
+  const source = sources.find((item) => cleanText(item?.originIqProfileId));
+  if (!source) return {};
+  return {
+    originActorUid: cleanText(source.originActorUid || source.createdBy),
+    originRootId: cleanText(source.originRootId || source.rootId),
+    originIqProfileId: cleanText(source.originIqProfileId),
+    originIqContext: source.originIqContext || null,
+    originClientIqLink: source.originClientIqLink || null,
+    identityRevision: cleanText(source.identityRevision) || "IQ_ORIGIN_IDENTITY_V1",
+    identityCapturedAt: source.identityCapturedAt || null,
+  };
+}
+
 function assertReservationCompatible(
   reservation: DocumentData,
   actor: PaymentApplicationActor,
@@ -498,6 +512,9 @@ export async function preparePaymentApplicationIqPlan(params: {
       createdBy: actor.uid,
       createdByRole: actor.role,
       createdByName: actor.displayName,
+      ...inheritedIqOrigin(pago, reservation),
+      authorizedBy: actor.uid,
+      authorizedAt: FieldValue.serverTimestamp(),
       planId,
       reservationId,
       pagoId: batch.pagoId,
@@ -518,6 +535,7 @@ export async function preparePaymentApplicationIqPlan(params: {
         rootId: actor.rootId,
         adminId: actor.adminId,
         createdBy: actor.uid,
+        ...inheritedIqOrigin(pago, reservation),
         planId,
         reservationId,
         planItemId: item.planItemId,
@@ -550,6 +568,7 @@ export async function preparePaymentApplicationIqPlan(params: {
         rootId: actor.rootId,
         adminId: actor.adminId,
         createdBy: actor.uid,
+        ...inheritedIqOrigin(pago, reservation),
         planId,
         reservationId,
         planItemId: item.planItemId,
@@ -576,6 +595,7 @@ export async function preparePaymentApplicationIqPlan(params: {
         rootId: actor.rootId,
         adminId: actor.adminId,
         createdBy: actor.uid,
+        ...inheritedIqOrigin(pago, reservation),
         lockId: item.lockId,
         solicitudId: item.solicitudId,
         pagoId: batch.pagoId,

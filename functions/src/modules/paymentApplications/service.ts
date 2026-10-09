@@ -1,8 +1,11 @@
+import { systemNoteAuthor } from "../notes/domain";
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, type DocumentData, type DocumentSnapshot } from "firebase-admin/firestore";
 import { buildPagoCoverageApplyPatch, getPagoCoverageState } from "../deposits/foundation";
 import { normalizePagoStatus } from "../pagos/domain";
 import { money2 } from "../shared/money";
+import { assertAuthorized } from "../../utils/authGuard";
+import { AUTOMATIC_CANDIDATE_LIMIT, decideAutomaticPayment } from "./automaticDomain";
 import {
   applySolicitudCoverageAmount,
   getSolicitudCoverageState,
@@ -50,6 +53,20 @@ type ReservationResult = {
   iqActionExecuted: false;
   result?: Record<string, any> | null;
 };
+
+function inheritedIqOrigin(pago: DocumentData): Record<string, unknown> {
+  const profileId = String(pago?.originIqProfileId || "").trim();
+  if (!profileId) return {};
+  return {
+    originActorUid: String(pago?.originActorUid || pago?.createdBy || "").trim(),
+    originRootId: String(pago?.originRootId || pago?.rootId || "").trim(),
+    originIqProfileId: profileId,
+    originIqContext: pago?.originIqContext || null,
+    originClientIqLink: pago?.originClientIqLink || null,
+    identityRevision: String(pago?.identityRevision || "IQ_ORIGIN_IDENTITY_V1"),
+    identityCapturedAt: pago?.identityCapturedAt || null,
+  };
+}
 
 
 
@@ -299,6 +316,9 @@ export async function reservePaymentApplicationBatch(params: {
 
     tx.set(reservationRef, {
       ...buildReservationPayload({ actor, batch, status: "RESERVED" }),
+      ...inheritedIqOrigin(pago),
+      authorizedBy: actor.uid,
+      authorizedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -318,6 +338,7 @@ export async function reservePaymentApplicationBatch(params: {
 export async function applyPaymentApplicationBatchAtomic(params: {
   actor: PaymentApplicationActor;
   batch: NormalizedPaymentApplicationBatch;
+  automaticSourceDigest?: string;
 }): Promise<ReservationResult> {
   const { actor, batch } = params;
   const reservationId = buildPaymentApplicationReservationId({
@@ -373,6 +394,19 @@ export async function applyPaymentApplicationBatchAtomic(params: {
     }
 
     const coverage = getPagoCoverageState(pago);
+    if (params.automaticSourceDigest) {
+      const user = await tx.get(db.doc(`users/${actor.uid}`));
+      assertAuthorized({ uid: actor.uid }, user.data(), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
+      if (String(user.get("rootId") || actor.uid) !== actor.rootId) throw new HttpsError("permission-denied", "Usuario fuera del root del pago.");
+      const receipts = await tx.get(db.collection("uploads").where("pagoId", "==", batch.pagoId).where("documentType", "==", "COMPROBANTE_PAGO").where("active", "==", true).limit(10));
+      if (!receipts.docs.some(doc => doc.get("rootId") === actor.rootId && doc.get("status") === "READY" && doc.get("storagePath")))
+        throw new HttpsError("failed-precondition", "El comprobante aún no está disponible.");
+      const candidates = await tx.get(db.collection("solicitudes").where("rootId", "==", actor.rootId).where("clienteId", "==", pago.clienteId).limit(AUTOMATIC_CANDIDATE_LIMIT + 1));
+      const liveDecision = decideAutomaticPayment(batch.pagoId, pago, candidates.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      if (liveDecision.sourceDigest !== params.automaticSourceDigest || liveDecision.batch?.requestHash !== batch.requestHash) {
+        throw new HttpsError("failed-precondition", "La coincidencia automática cambió; requiere revisión.");
+      }
+    }
     if (coverage.available <= 0) {
       throw new HttpsError(
         "failed-precondition",
@@ -625,6 +659,9 @@ export async function applyPaymentApplicationBatchAtomic(params: {
         status: "APLICADA",
         iqExecutionStatus: "NOT_REQUESTED",
         iqActionExecuted: false,
+        ...inheritedIqOrigin(pago),
+        authorizedBy: actor.uid,
+        authorizedAt: FieldValue.serverTimestamp(),
         createdBy: actor.uid,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -657,9 +694,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
         {
           rootId: actor.rootId,
           text: `Pago ${paymentFolio} aplicado por ${requested.montoAplicado.toFixed(2)} en lote atomico ${reservationId}.`,
-          createdBy: actor.uid,
-          createdByName: actor.displayName,
-          createdByRole: actor.role,
+          ...systemNoteAuthor("PAYMENT_APPLICATION", "APPLICATION", actor.uid),
           batchReservationId: reservationId,
           createdAt: FieldValue.serverTimestamp(),
         },
@@ -690,7 +725,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
             iqExecutionStatus: "NOT_REQUESTED",
           },
         },
-        db.collection("activityLog").doc(
+        db.collection("pay0ActivityLog").doc(
           buildPaymentApplicationActivityId(applicationId, "APPLIED"),
         ),
       );
@@ -721,7 +756,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
               iqExecutionStatus: "NOT_REQUESTED",
             },
           },
-          db.collection("activityLog").doc(
+          db.collection("pay0ActivityLog").doc(
             buildPaymentApplicationActivityId(applicationId, "COMPLETED"),
           ),
         );
@@ -739,6 +774,10 @@ export async function applyPaymentApplicationBatchAtomic(params: {
 
     tx.update(pagoRef, {
       ...coveragePatch,
+      ...(params.automaticSourceDigest ? { automaticApplication: {
+        status: "APPLIED", reason: "EXACT_INVOICE_REFERENCE", sourceDigest: params.automaticSourceDigest,
+        reservationId, matchedCount: batch.applications.length, updatedAt: FieldValue.serverTimestamp(),
+      } } : {}),
       status: nextPagoStatus,
       hasUnreadMsg: true,
       lastPaymentApplicationReservationId: reservationId,
@@ -766,9 +805,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
       {
         rootId: actor.rootId,
         text: `Lote atomico ${reservationId}: ${batch.applications.length} aplicacion(es) por ${batch.totalAmount.toFixed(2)}.`,
-        createdBy: actor.uid,
-        createdByName: actor.displayName,
-        createdByRole: actor.role,
+        ...systemNoteAuthor("PAYMENT_APPLICATION", "APPLICATION", actor.uid),
         batchReservationId: reservationId,
         createdAt: FieldValue.serverTimestamp(),
       },
@@ -802,6 +839,9 @@ export async function applyPaymentApplicationBatchAtomic(params: {
           status: "APPLIED",
           result,
         }),
+        ...inheritedIqOrigin(pago),
+        authorizedBy: actor.uid,
+        authorizedAt: FieldValue.serverTimestamp(),
         createdAt: reservationSnap.exists
           ? reservationSnap.data()?.createdAt || FieldValue.serverTimestamp()
           : FieldValue.serverTimestamp(),

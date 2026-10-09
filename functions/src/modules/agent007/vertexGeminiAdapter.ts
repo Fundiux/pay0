@@ -4,6 +4,10 @@ import { HugoModelAdapter, ModelOutput, HugoModelRequest, HugoModelResponse, Mod
 import { hugoV2Prompt, HUGO_V2_PROMPT_VERSION } from "./hugoCore/hugoV2Prompt";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
+export const geminiMaxOutputTokens = () => {
+  const configured = Number(process.env.HUGO_GEMINI_MAX_OUTPUT_TOKENS || 1200);
+  return Math.min(8192, Math.max(1200, Number.isFinite(configured) ? Math.round(configured) : 1200));
+};
 export class VertexGeminiAdapter implements HugoModelAdapter {
   async generateCanonical(request: HugoModelRequest): Promise<HugoModelResponse> {
     const context = request.intelligence.contextSnapshot;
@@ -42,13 +46,14 @@ export class VertexGeminiAdapter implements HugoModelAdapter {
         return { text: clean(candidate?.content?.parts?.map((part: any) => part?.text || "").join(" "), 6000) || null,
           finishReason: clean(candidate?.finishReason, 40).toUpperCase(), usage, modelVersion: clean(payload?.modelVersion, 80) || base.modelVersion };
       };
-      const first = await generate(prompt, 1200);
+      const outputLimit = geminiMaxOutputTokens();
+      const first = await generate(prompt, outputLimit);
       if (first.text && first.finishReason === "STOP") return { ...base, modelVersion: first.modelVersion, text: first.text, attempts, tokenUsage: first.usage ? { input: first.usage.promptTokenCount, output: first.usage.candidatesTokenCount,
         cachedInput: first.usage.cachedContentTokenCount, reasoning: first.usage.thoughtsTokenCount } : null };
       if (first.finishReason === "MAX_TOKENS") {
         console.warn("[Hugo] Vertex output reached token limit; retrying compact response");
         const compactPrompt = `${prompt}\n\nINSTRUCCIÓN DE FORMATO OBLIGATORIA: Responde de nuevo de forma completa y compacta. Resume por estado, incluye como máximo 8 folios representativos, indica cuántos adicionales hay y termina todas las frases.`;
-        const retry = await generate(compactPrompt, 1200);
+        const retry = await generate(compactPrompt, outputLimit);
         if (retry.text && retry.finishReason === "STOP") return { ...base, modelVersion: retry.modelVersion, text: retry.text, attempts, tokenUsage: retry.usage ? { input: retry.usage.promptTokenCount, output: retry.usage.candidatesTokenCount,
           cachedInput: retry.usage.cachedContentTokenCount, reasoning: retry.usage.thoughtsTokenCount } : null };
         console.warn("[Hugo] Discarded incomplete retry", retry.finishReason || "UNKNOWN");

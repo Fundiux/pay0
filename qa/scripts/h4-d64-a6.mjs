@@ -83,9 +83,13 @@ test("edicion controlada de monto permite solo caso valido", () => {
   assert.equal(decision.correctionVersion, 1);
 });
 
-test("edicion de monto bloquea rol, aplicaciones y posteo", () => {
-  expectHttpsCode(() => docs.validateRejectedPagoAmountCorrectionH4D64A7({
+test("edicion de pago rechazado permite administradores y bloquea operador, aplicaciones y posteo", () => {
+  const adminDecision = docs.validateRejectedPagoAmountCorrectionH4D64A7({
     role: "admin", pago: baseRejected, newAmount: 1200, hasRegisteredApplications: false,
+  });
+  assert.equal(adminDecision.previousAmount, 1000);
+  expectHttpsCode(() => docs.validateRejectedPagoAmountCorrectionH4D64A7({
+    role: "operador", pago: baseRejected, newAmount: 1200, hasRegisteredApplications: false,
   }), "permission-denied");
   expectHttpsCode(() => docs.validateRejectedPagoAmountCorrectionH4D64A7({
     role: "superadmin", pago: { ...baseRejected, montoAplicado: 1 }, newAmount: 1200, hasRegisteredApplications: false,
@@ -119,8 +123,8 @@ test("nuevo comprobante conserva terminal y abre nueva generacion", () => {
   assert.equal(unlock.iqDepositRetryGeneration, "upload-nuevo");
   assert.equal(queue.iqDepositCreationStatus, "QUEUED");
   assert.equal(queue.iqDepositCreationQueuedUploadId, "upload-nuevo");
-  assert.equal(queue.iqDepositOnDemandGeneration, "upload-nuevo");
-  assert.equal(queue.iqDepositOnDemandStatus, "READY_TO_ENQUEUE");
+  assert.equal(queue.iqDepositOnDemandGeneration, undefined);
+  assert.equal(queue.iqDepositOnDemandStatus, undefined);
 });
 
 test("alertas Telegram se construyen sin enviar", () => {
