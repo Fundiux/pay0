@@ -6,12 +6,16 @@ terraform {
   }
 }
 provider "google" {
-  project = var.project_id
-  region  = "us-central1"
+  billing_project       = "pay-0-system"
+  user_project_override = true
+  project               = var.project_id
+  region                = "us-central1"
 }
 provider "google-beta" {
-  project = var.project_id
-  region  = "us-central1"
+  billing_project       = "pay-0-system"
+  user_project_override = true
+  project               = var.project_id
+  region                = "us-central1"
 }
 variable "project_id" {
   type = string

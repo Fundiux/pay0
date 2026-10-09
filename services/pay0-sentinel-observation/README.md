@@ -1,3 +1,5 @@
+> Estado de ejecución: imagen construida y recursos bootstrap/builder aprovisionados. Digest y límites exactos en docs/remediation/2026-10-09/SENTINEL-DEPLOYMENT.md. Las notas de preflight originales abajo conservan evidencia histórica; servicio/ingesta todavía sin activar.
+
 # Servicio aislado Sentinel
 
 Node22, HTTP nativo, OBSERVE_ONLY, sin exports de Functions financieras. No se desplegó. Docker se construye desde raíz del repositorio: `docker build -f services/pay0-sentinel-observation/Dockerfile .`. Imagen final solo contiene dependencias Firestore/OIDC, core compilado y servicio; no Firebase Admin ni módulos financieros.
