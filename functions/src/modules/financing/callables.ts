@@ -2195,7 +2195,8 @@ export const requestClientDispersionIncident = onCall(
       throw new HttpsError("invalid-argument", "incidentType invalido.");
     }
 
-    const userSnap = await db.doc(`users/${uid}`).get();
+    await db.runTransaction(async (tx) => {
+    const userSnap = await tx.get(db.doc(`users/${uid}`));
     if (!userSnap.exists) {
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
@@ -2213,7 +2214,7 @@ export const requestClientDispersionIncident = onCall(
     ).trim();
 
     const dispersionRef = db.doc(`clientDispersions/${dispersionId}`);
-    const dispersionSnap = await dispersionRef.get();
+    const dispersionSnap = await tx.get(dispersionRef);
 
     if (!dispersionSnap.exists) {
       throw new HttpsError("not-found", "Dispersion no encontrada.");
@@ -2242,6 +2243,7 @@ export const requestClientDispersionIncident = onCall(
       rootId,
       clientId: dispersionClientId,
       permission: "requestDispersionIncidents",
+      transaction: tx,
       errorMessage: "No autorizado para solicitar incidencias de esta dispersion.",
     });
 
@@ -2255,7 +2257,7 @@ export const requestClientDispersionIncident = onCall(
       throw new HttpsError("failed-precondition", "La dispersion ya tiene una incidencia solicitada.");
     }
 
-    await dispersionRef.set(
+    tx.set(dispersionRef,
       {
         incidentStatus: "SOLICITADA",
         incidentType,
@@ -2270,7 +2272,7 @@ export const requestClientDispersionIncident = onCall(
       { merge: true }
     );
 
-    await logActivity({
+    logActivityTx(tx, db, {
       event: "DISPERSION_INCIDENCIA_SOLICITADA",
       rootId: dispersionRootId || rootId,
       adminId: dispersionAdminId || null,
@@ -2290,6 +2292,8 @@ export const requestClientDispersionIncident = onCall(
         operadorId: dispersionOperadorId || null,
         incidentType,
       },
+    });
+
     });
 
     return {

@@ -27,3 +27,13 @@ Sources: architecture audit `05-FINANCIAL-INTEGRITY.md` (wallet/dispersion autho
 | Local incident correction | FI-01 confirmed against current integrated callback and fixed with a six-line root boundary. Source principal also lacks this root check, but it was not edited. |
 
 Remaining meaningful suites: payment correction after first posting, application/reservation sums across concurrent transactions, complete USER cancellation with crash/replay between global and per-despacho reversals, and reservation/earning conservation over valid split routes. This report closes only FI-01 locally, not the overall financial audit.
+
+## FI-02: incident request after terminal transition (P1, reproduced and fixed locally)
+
+Neighbor review found no second explicit foreign-root bypass among the four funding-owner callsites: list queries constrain root; request and note callables reject explicit foreign roots and require CLIENT authority. Empty-root legacy compatibility is a separate migration question and remains unchanged.
+
+`requestClientDispersionIncident` read REGISTRADA outside a transaction, awaited client authority, then merged SOLICITADA. Reproduction against immutable baseline `deed00a` interleaves a concurrent cancellation after that read: one late write leaves the document CANCELADA + SOLICITADA, overwriting its RESUELTA incident marker. This is a terminal/incident consistency violation; no duplicate reimbursement is claimed.
+
+Minimal fix in the same callable: transaction reads the current actor and dispersion, resolves client/delegation authority using that transaction, checks terminal/incident states, and writes the request plus `logActivityTx` atomically. Firestore read versions provide conflict detection and retry; there is no manual timestamp comparison. Root-empty policy is unchanged and FI-01's resolution hunk remains intact.
+
+New test `qa/scripts/remediation-financial-incident-race.test.cjs` extracts the actual callback. Real actor and funding guards; fake client-authority adapter asserts the same transaction is passed; fake Firestore tracks read versions, discards writes/audit on conflict, and retries. Before mode `PAY0_EXPECT_VULNERABLE=1` loads deed00a and reproduces one late terminal write. Default mode passes terminal CANCELADA/DEVUELTA races, concurrent competing incident, root change and actor disablement with zero committed request/audit writes; valid request yields exactly one write and one audit; replay yields none; root-empty legacy request remains compatible. FI-01 test still passes. No real Firestore concurrency claim is made from the fake scheduler, and no external provider or balance operations occurred.
