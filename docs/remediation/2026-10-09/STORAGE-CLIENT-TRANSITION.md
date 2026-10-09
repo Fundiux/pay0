@@ -1,5 +1,9 @@
 # Storage client transition: compatibility gates
 
+## Deployment update 2026-10-09 23:05 UTC
+
+Integration c29260b (including isolated fix055f17b and portable fixture) is pushed. The corrected callable is deployed: getauthorizeddocumentdownloadurl-00004-vat ACTIVE/Ready,100% traffic; source generation1791586901568255, updateTime23:03:00.551536764Z. Timeout30s/memory256Mi/no secret references unchanged. CLI exit0. Unauthenticated synthetic uploadId POST401/UNAUTHENTICATED; no real document access tested. Functions build, policy verifier,13 focused checks and normal predeploy96 rules+42 simulated downloads PASS. The historical red integration evidence below predates this release. Historical signed URLs, generation pinning, post-validation authority changes, Storage fallback retirement and legacy provenance remain unresolved as described below.
+
 Review: 2026-10-09. Read-only code/artifact review; this document is the sole edited file. No rules changes, production data writes, document downloads or provider effects.
 
 ## Decision

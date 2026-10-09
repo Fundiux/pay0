@@ -2,6 +2,10 @@
 
 Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35cb, rama remota integration/pay0-remediation-20261009. Main remoto sin cambios. Estado efectivo y recuperación en HANDOFF.md; las filas siguientes conservan detalle del candidato inicial, no son cierre global.
 
+## Lote documental compatible: desplegado 2026-10-09 23:03 UTC
+
+Candidate integration c29260b, pushed before deployment. Only getAuthorizedDocumentDownloadUrl published; revision00004-vat ACTIVE/Ready100%, source generation1791586901568255. CLI exit0, timeout30s/memory256Mi/no secret references, synthetic unauthenticated POST401 verified. Build/policy/focused13/predeploy96+42 PASS. Previous00003-xuj source generation1790583836497870 preserved in private getAuthorizedDocumentDownloadUrl-pre-bridge.zip, SHA256 C50F0D7A95BB24CAF156022AE1145503D34F2110F9C39DF71921EE52A190DB1F. Prefer compatible forward correction; old artifact lacks current authority checks and rollback would reintroduce that gap. No real download, rule publication or historical token rotation. Contract remains300s path-based bearer; see STORAGE-CLIENT-TRANSITION.md for residual limitations.
+
 ## Candidatos locales
 
 Esta tabla conserva el candidato inicial. Para estado posterior a las 20:00 UTC, prevalece la actualizacion al final; en particular, el orden Telegram vigente exige emisor puente y drenaje antes del consumidor dual, Hosting y emisor final.
