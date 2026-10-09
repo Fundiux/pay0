@@ -1,3 +1,4 @@
+import { getCurrentClientDelegationAccess } from "../clientDelegations/access";
 import * as admin from "firebase-admin";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { logger } from "firebase-functions";
@@ -69,17 +70,7 @@ async function canAccessDispersion(user: any, uid: string, rootId: string, dispe
   const clientId = cleanText(dispersion?.clienteId || dispersion?.clientId || "");
   if (!clientId) return false;
 
-  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
-  if (!accessSnap.exists) return false;
-
-  const access: any = accessSnap.data() || {};
-  if (access.active !== true) return false;
-
-  const accessRootId = cleanText(access.rootId);
-  if (accessRootId && accessRootId !== rootId) return false;
-
-  const permissions = access.permissions || {};
-  return permissions.operate === true || permissions.operateDispersiones === true;
+  return (await getCurrentClientDelegationAccess(uid, clientId, "operateDispersiones")) !== null;
 }
 
 async function loadDispersionOrThrow(input: {

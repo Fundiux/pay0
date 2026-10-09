@@ -4,7 +4,7 @@ import { buildCanonicalFolio, nextSequenceTx } from "../sequences/service";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { assertAuthorized } from "../../utils/authGuard";
-import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -53,18 +53,7 @@ async function getRootId(uid: string) {
 }
 
 async function getActiveClientDelegationAccess(uid: string, clientId: string) {
-  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
-  if (!accessSnap.exists) return null;
-
-  const data: any = accessSnap.data() || {};
-  if (data?.active !== true) return null;
-  if (data?.permissions?.view === false) return null;
-
-  return {
-    id: accessSnap.id,
-    path: accessSnap.ref.path,
-    data,
-  };
+  return getCurrentClientDelegationAccess(uid, clientId, "operateBeneficiarios");
 }
 
 function getAdminScopeId(user: any, uid: string, rootId: string) {

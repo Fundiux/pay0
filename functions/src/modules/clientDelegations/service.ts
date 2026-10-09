@@ -3,7 +3,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { getUserRole, normalizeRole } from "../../utils/authGuard";
 import type { ClientDelegationConfigItem } from "./types";
-import { normalizeClientAccessPermissions } from "./access";
+import { normalizeClientAccessPermissions, resolveClientOperationalAccess } from "./access";
+import { canonicalDelegationTime } from "./policy";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -66,6 +67,12 @@ function assertTargetAllowed(params: {
 
   const targetRole = normalizeRole(target?.role ?? target?.supervisorRole) as Role;
 
+  if (!["admin", "operador"].includes(targetRole) || target.active === false
+    || target.isActive === false || target.isDeleted === true || target.disabled === true
+    || target.deleted === true || target.deletedAt != null) {
+    throw new HttpsError("permission-denied", "Usuario objetivo no disponible para delegación.");
+  }
+
   if (targetRole === "superadmin") {
     throw new HttpsError("permission-denied", "No se delegan clientes a superadmin.");
   }
@@ -80,15 +87,6 @@ function assertTargetAllowed(params: {
   if (callerRootId !== targetRootId) {
     throw new HttpsError("permission-denied", "Usuario objetivo fuera de tu root.");
   }
-}
-
-async function hasActiveDelegation(uid: string, clientId: string) {
-  const snap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
-
-  if (!snap.exists) return false;
-
-  const data: any = snap.data() || {};
-  return data.active === true && data?.permissions?.operate === true;
 }
 
 async function canCallerGrantClient(params: {
@@ -131,7 +129,10 @@ async function canCallerGrantClient(params: {
     return true;
   }
 
-  return hasActiveDelegation(callerUid, clientId);
+  const access = await resolveClientOperationalAccess({
+    uid: callerUid, role: callerRole, rootId: callerRootId, clientId, client,
+  });
+  return access.allowed && access.permissions.operate === true;
 }
 
 async function getCallerContext(request: any, targetUid: string) {
@@ -188,7 +189,11 @@ function cleanReason(value: any) {
 }
 
 function normalizeIncomingPermissions(raw: any, active: boolean) {
-  const legacy = normalizeClientAccessPermissions(raw || {}, active);
+  if (raw !== undefined && (raw === null || typeof raw !== "object" || Array.isArray(raw)
+    || Object.values(raw).some(value => typeof value !== "boolean"))) {
+    throw new HttpsError("invalid-argument", "Los permisos de delegación deben ser booleanos.");
+  }
+  const legacy = normalizeClientAccessPermissions(raw ?? {}, active);
 
   if (!active) {
     return normalizeClientAccessPermissions(
@@ -236,9 +241,23 @@ function normalizeIncomingClientAccessItems(data: any): IncomingClientAccessItem
       const clientId = cleanString(item?.clientId || item?.id);
       if (!clientId) return;
 
+      if (item?.active !== undefined && typeof item.active !== "boolean") {
+        throw new HttpsError("invalid-argument", "El estado de delegación debe ser booleano.");
+      }
       const active = item?.active !== false;
       const mode = cleanMode(item?.mode);
-      const expiresAt = item?.expiresAt || null;
+      let expiresAt: admin.firestore.Timestamp | null;
+      let startsAt: admin.firestore.Timestamp | null;
+      try {
+        expiresAt = canonicalDelegationTime(item?.expiresAt);
+        startsAt = canonicalDelegationTime(item?.startsAt);
+      } catch {
+        throw new HttpsError("invalid-argument", `Fecha de delegación inválida para cliente ${clientId}.`);
+      }
+      if (expiresAt && (expiresAt.toMillis() <= Date.now()
+        || (startsAt && startsAt.toMillis() >= expiresAt.toMillis()))) {
+        throw new HttpsError("invalid-argument", `La delegación requiere vigencia futura para cliente ${clientId}.`);
+      }
 
       if (mode === "TEMPORARY" && !expiresAt) {
         throw new HttpsError(
@@ -250,9 +269,9 @@ function normalizeIncomingClientAccessItems(data: any): IncomingClientAccessItem
       map.set(clientId, {
         clientId,
         active,
-        permissions: normalizeIncomingPermissions(item?.permissions || {}, active),
+        permissions: normalizeIncomingPermissions(item?.permissions, active),
         mode,
-        startsAt: item?.startsAt || null,
+        startsAt,
         expiresAt,
         grantReason: cleanReason(item?.grantReason),
       });
@@ -423,8 +442,8 @@ export async function setUserClientAccessService(request: any) {
     const clientId = item.clientId;
     const clientSnap = await db.doc(`clients/${clientId}`).get();
 
-    if (!clientSnap.exists) {
-      continue;
+    if (!clientSnap.exists || clientSnap.data()?.active === false) {
+      throw new HttpsError("failed-precondition", `Cliente no disponible: ${clientId}`);
     }
 
     const client: any = clientSnap.data() || {};
@@ -439,6 +458,22 @@ export async function setUserClientAccessService(request: any) {
 
     if (!canGrant) {
       throw new HttpsError("permission-denied", `No puedes delegar este cliente: ${clientId}`);
+    }
+
+    const grantorAccess = await resolveClientOperationalAccess({
+      uid: ctx.callerUid, role: ctx.callerRole, rootId: ctx.callerRootId, clientId, client,
+    });
+    if (!grantorAccess.allowed) throw new HttpsError("permission-denied", "Acceso del otorgante no vigente.");
+    if (grantorAccess.source === "DELEGATED") {
+      for (const [key, enabled] of Object.entries(item.permissions)) {
+        if (enabled === true && (grantorAccess.permissions as any)[key] !== true) {
+          throw new HttpsError("permission-denied", "No puedes ampliar los permisos de tu delegación.");
+        }
+      }
+      const parentExpiry = canonicalDelegationTime(grantorAccess.delegation.expiresAt);
+      if (parentExpiry && (!item.expiresAt || item.expiresAt.toMillis() > parentExpiry.toMillis())) {
+        throw new HttpsError("permission-denied", "No puedes ampliar la vigencia de tu delegación.");
+      }
     }
 
     const clientAdminId = String(client?.adminId || "").trim();

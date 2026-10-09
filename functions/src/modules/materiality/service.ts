@@ -1,4 +1,4 @@
-import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
 import { normalizeRole } from "../../utils/authGuard";
 import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -78,8 +78,7 @@ function isTerminalSolicitudStatus(status: unknown): boolean {
 
 async function hasDelegatedClientAccess(uid: string, clienteId: string): Promise<boolean> {
   if (!uid || !clienteId) return false;
-  const snap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
-  return snap.exists && snap.data()?.active === true;
+  return (await getCurrentClientDelegationAccess(uid, clienteId, "viewBasic")) !== null;
 }
 
 async function assertCanAccessClient(user: any, uid: string, rootId: string, client: any, clienteId: string): Promise<void> {

@@ -1,5 +1,7 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
+import { delegationIsCurrent } from "./policy";
+import { getUserRole } from "../../utils/authGuard";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -61,27 +63,6 @@ function cleanId(value: any) {
   return String(value || "").trim();
 }
 
-function toMillis(value: any): number | null {
-  if (!value) return null;
-
-  if (typeof value?.toMillis === "function") {
-    const n = Number(value.toMillis());
-    return Number.isFinite(n) ? n : null;
-  }
-
-  if (typeof value?.seconds === "number") {
-    return value.seconds * 1000;
-  }
-
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function isExpired(value: any) {
-  const ms = toMillis(value);
-  return ms !== null && ms > 0 && ms < Date.now();
-}
-
 function buildDefaultPermissions(allow: boolean): ClientAccessPermissions {
   return {
     view: allow,
@@ -101,22 +82,25 @@ export function normalizeClientAccessPermissions(
   input: any,
   active: boolean
 ): ClientAccessPermissions {
-  const permissions = input || {};
-
-  const legacyView = active && permissions?.view !== false;
-  const legacyOperate = active && permissions?.operate !== false;
-
+  if (!active || (input !== undefined && (input === null || typeof input !== "object" || Array.isArray(input)))) {
+    return buildDefaultPermissions(false);
+  }
+  const permissions = input ?? {};
+  const permission = (key: string, fallback: boolean) =>
+    Object.prototype.hasOwnProperty.call(permissions, key) ? permissions[key] === true : fallback;
+  const legacyView = permission("view", true);
+  const legacyOperate = permission("operate", true);
   return {
-    view: legacyView,
+    view: permission("viewBasic", legacyView),
     operate: legacyOperate,
-    viewBasic: permissions?.viewBasic ?? legacyView,
-    operateSolicitudes: permissions?.operateSolicitudes ?? legacyOperate,
-    operatePagos: permissions?.operatePagos ?? legacyOperate,
-    operateBeneficiarios: permissions?.operateBeneficiarios ?? legacyOperate,
-    operateDispersiones: permissions?.operateDispersiones ?? legacyOperate,
-    viewBalanceInDispersion: permissions?.viewBalanceInDispersion ?? legacyView,
-    requestDispersionIncidents: permissions?.requestDispersionIncidents ?? legacyOperate,
-    commentDispersionNotes: permissions?.commentDispersionNotes ?? legacyOperate,
+    viewBasic: permission("viewBasic", legacyView),
+    operateSolicitudes: permission("operateSolicitudes", legacyOperate),
+    operatePagos: permission("operatePagos", legacyOperate),
+    operateBeneficiarios: permission("operateBeneficiarios", legacyOperate),
+    operateDispersiones: permission("operateDispersiones", legacyOperate),
+    viewBalanceInDispersion: permission("viewBalanceInDispersion", legacyView),
+    requestDispersionIncidents: permission("requestDispersionIncidents", legacyOperate),
+    commentDispersionNotes: permission("commentDispersionNotes", legacyOperate),
   };
 }
 
@@ -235,6 +219,13 @@ export async function resolveClientOperationalAccess(
     throw new HttpsError("failed-precondition", "Cliente inactivo.");
   }
 
+  const user = (await db.doc(`users/${uid}`).get()).data();
+  if (!user || !rootId || !["superadmin", "admin", "operador"].includes(role) || getUserRole(user) !== role || cleanId(user.rootId || uid) !== rootId
+    || user.active === false || user.isActive === false || user.isDeleted === true || user.disabled === true
+    || user.deleted === true || user.deletedAt != null) {
+    return deniedAccess({ uid, role, rootId, clientId, client, reason: "CLIENT_ACCESS_ACTOR_INVALID" });
+  }
+
   const owner = getClientEconomicOwner(client);
   const clientRootId = cleanId(client?.rootId);
 
@@ -313,7 +304,7 @@ export async function resolveClientOperationalAccess(
     });
   }
 
-  if (delegation?.revokedAt) {
+  if (delegation?.revokedAt != null) {
     return deniedAccess({
       uid,
       role,
@@ -324,7 +315,7 @@ export async function resolveClientOperationalAccess(
     });
   }
 
-  if (isExpired(delegation?.expiresAt)) {
+  if (!delegationIsCurrent(delegation)) {
     return deniedAccess({
       uid,
       role,
@@ -335,9 +326,15 @@ export async function resolveClientOperationalAccess(
     });
   }
 
+  if (("rootId" in delegation && delegation.rootId !== rootId)
+    || ("targetUid" in delegation && delegation.targetUid !== uid)
+    || ("clientId" in delegation && delegation.clientId !== clientId)) {
+    return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_SCOPE_INVALID" });
+  }
+
   const permissions = normalizeClientAccessPermissions(delegation?.permissions, true);
 
-  if (permissions.view !== true && permissions.operate !== true) {
+  if (!Object.values(permissions).some(value => value === true)) {
     return deniedAccess({
       uid,
       role,
@@ -379,6 +376,21 @@ export async function requireClientOperationalAccess(
   }
 
   return access;
+}
+
+// Compatibility adapter for legacy domain helpers. The current actor, scope,
+// lifetime and granular permission are resolved on every call.
+export async function getCurrentClientDelegationAccess(
+  uid: string, clientId: string, permission: ClientAccessPermissionKey
+) {
+  const user = (await db.doc(`users/${uid}`).get()).data();
+  if (!user) return null;
+  const access = await resolveClientOperationalAccess({
+    uid, clientId, role: getUserRole(user) as ClientAccessRole,
+    rootId: cleanId(user.rootId || uid),
+  });
+  if (!access.allowed || access.source !== "DELEGATED" || access.permissions[permission] !== true) return null;
+  return { id: access.delegationId, path: access.delegationPath, data: access.delegation };
 }
 
 export function buildClientAccessOperationPatch(access: ResolvedClientAccess) {

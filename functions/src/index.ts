@@ -37,7 +37,7 @@ import { normalizeSolicitudBackendStatus, canTransitionSolicitudBackendStatus, n
 import { canCancelSolicitudWithAbonos, needsUuidOrRelatedForSatCancel01, needsUuidOrRelatedForEnSustitucion, getSolicitudStatusEventMeta, getSolicitudRechazadaEventMeta } from "./utils/solicitudStatusHandlerRules";
 import { buildSolicitudCanceladaPatch, buildSolicitudEnSustitucionPatch, getSolicitudCanceladaEventMeta, getSolicitudEnSustitucionEventMeta } from "./utils/solicitudStatusPatches";
 import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } from "./modules/iq/solicitudCancellationService";
-import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
+import { getCurrentClientDelegationAccess } from "./modules/clientDelegations/access";
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
@@ -79,19 +79,7 @@ async function getActiveClientDelegationAccess(
   clienteId: string,
   requiredPermission: "operateSolicitudes" | "operatePagos"
 ) {
-  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
-  if (!accessSnap.exists) return null;
-
-  const data: any = accessSnap.data() || {};
-  if (data?.active !== true) return null;
-  const permissions = normalizeClientAccessPermissions(data?.permissions, true);
-  if (permissions.view !== true || permissions[requiredPermission] !== true) return null;
-
-  return {
-    id: accessSnap.id,
-    path: accessSnap.ref.path,
-    data,
-  };
+  return getCurrentClientDelegationAccess(uid, clienteId, requiredPermission);
 }
 
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";

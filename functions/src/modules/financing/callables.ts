@@ -19,7 +19,7 @@ import { assertAdvanceAmount,
 import { buildCanonicalFolio,
   buildCounterPath,
   nextSequenceTx } from "../sequences/service";
-import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
 import { logActivity,
   logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -89,18 +89,7 @@ function storeOperationIdempotencyTx(tx: any, ref: any, input: OperationIdempote
   });
 }
 async function getActiveClientDelegationAccess(uid: string, clientId: string) {
-  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
-  if (!accessSnap.exists) return null;
-
-  const data: any = accessSnap.data() || {};
-  if (data?.active !== true) return null;
-  if (data?.permissions?.view === false) return null;
-
-  return {
-    id: accessSnap.id,
-    path: accessSnap.ref.path,
-    data,
-  };
+  return getCurrentClientDelegationAccess(uid, clientId, "operateDispersiones");
 }
 
 export const listScopedClientDispersions = onCall(
