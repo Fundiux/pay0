@@ -85,6 +85,21 @@ function Invoke-IqEnvPhase([string]$Target,[byte[]]$Original,[byte[]]$Staged,[sc
     }
   }
 }
+function Invoke-IqNodeLogged([string[]]$Arguments,[string]$LogFile) {
+  $nodeExecutable=(Get-Command node.exe -ErrorAction Stop).Source
+  $savedPreference=$ErrorActionPreference
+  $nativeExit=$null
+  try {
+    # Windows PowerShell represents native stderr as ErrorRecord. Preserve that
+    # output in the private log; determine success from the actual exit code.
+    $ErrorActionPreference='Continue'
+    $global:LASTEXITCODE=$null
+    & $nodeExecutable @Arguments *> $LogFile
+    $nativeExit=$LASTEXITCODE
+  } finally { $ErrorActionPreference=$savedPreference }
+  if($null -eq $nativeExit){throw 'NATIVE_PROCESS_NOT_COMPLETED'}
+  return [int]$nativeExit
+}
 function Get-IqLiveSnapshot([string]$Name) {
   if($Name -notin $script:IqNames){throw 'FUNCTION_SCOPE_INVALID'}
   $token=(& gcloud.cmd auth print-access-token --project pay-0-system --quiet 2>$null | Out-String).Trim()
@@ -150,7 +165,7 @@ try {
         & $journal 'DEPLOY_STARTED'
         $selector=(@($group|ForEach-Object{'functions:'+$_}) -join ',')
         Push-Location $worktree
-        try { & node scripts/run-firebase-clean-env.mjs deploy --project pay-0-system --only $selector --non-interactive *> (Join-Path $runDir ('deploy-group'+$phase+'.log'));if($LASTEXITCODE -ne 0){throw 'FIREBASE_DEPLOY_FAILED'} } finally {Pop-Location}
+        try { $deployExit=Invoke-IqNodeLogged @('scripts/run-firebase-clean-env.mjs','deploy','--project','pay-0-system','--only',$selector,'--non-interactive') (Join-Path $runDir ('deploy-group'+$phase+'.log')); & $journal ('DEPLOY_EXIT_'+$deployExit); if($deployExit -ne 0){throw 'FIREBASE_DEPLOY_FAILED'} } finally {Pop-Location}
         foreach($name in $group){Assert-IqPostflight $snapshots[$name] (Get-IqLiveSnapshot $name) $plan.Envs[$name] $plan.Configs[$name]}
         & $journal 'POSTFLIGHT_PASS'
       } finally {if($null -eq $savedDebug){Remove-Item Env:DEBUG -ErrorAction SilentlyContinue}else{$env:DEBUG=$savedDebug}}

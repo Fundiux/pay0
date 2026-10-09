@@ -65,6 +65,13 @@ try {
   Check ($events[0] -eq 'BEFORE_ENV_CHANGE' -and $events[$events.Count-1] -eq 'ENV_RESTORED') 'journalOrdering'
   Reject {Invoke-IqEnvPhase $file $original $staged {throw 'FAKE_DEPLOY_FAILURE'} $journal} 'FAKE_DEPLOY_FAILURE'
   Check ((Get-IqHash ([IO.File]::ReadAllBytes($file))) -eq $originalHash) 'exactRestoreFailure'
+  $nativeScript=Join-Path $dir 'native.cjs';$nativeLog=Join-Path $dir 'native.log'
+  [IO.File]::WriteAllText($nativeScript,'process.stderr.write("SYNTHETIC_WARNING\n");process.exitCode=0;')
+  Check ((Invoke-IqNodeLogged @($nativeScript) $nativeLog) -eq 0) 'stderrDoesNotInventFailure'
+  Check (([IO.File]::ReadAllText($nativeLog)).Contains('SYNTHETIC_WARNING')) 'stderrRetainedPrivately'
+  Check ($ErrorActionPreference -eq 'Stop') 'errorPreferenceRestored'
+  [IO.File]::WriteAllText($nativeScript,'process.stderr.write("SYNTHETIC_FAILURE\n");process.exitCode=7;')
+  Check ((Invoke-IqNodeLogged @($nativeScript) $nativeLog) -eq 7) 'nativeFailureExitPreserved'
   $external=[Text.Encoding]::UTF8.GetBytes('EXTERNAL=mutation')
   Reject {Invoke-IqEnvPhase $file $original $staged {[IO.File]::WriteAllBytes($file,$external)} $journal} 'LOCAL_ENV_CONFLICT_BACKUP_RETAINED'
   Check ((Get-IqHash ([IO.File]::ReadAllBytes($file))) -eq (Get-IqHash $external)) 'neverOverwriteExternalMutation'
