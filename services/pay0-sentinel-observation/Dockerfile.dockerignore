@@ -18,3 +18,7 @@
 !functions/src/modules/sentinel/store.ts
 !functions/src/modules/sentinel/transactionalStore.ts
 !functions/src/modules/sentinel/ingress.ts
+
+!functions/src/modules/securityObservation/
+!functions/src/modules/securityObservation/signedContract.ts
+!services/pay0-sentinel-observation/src/trusted-producers.json
