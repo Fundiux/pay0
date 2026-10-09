@@ -1,8 +1,8 @@
 # Sentinel: infraestructura privada y verificación efectiva
 
-2026-10-09, estado actualizado comunicado por integracion: observer privado pay0-sentinel-observer-00003-br8 con trafico100%. Ventana sintetica cerrada mediante root apply PASS: canary00004-tjn Ready, modo DISABLED y sinkdisabled:true confirmados en estado Terraform. E2E NO PASS: dos POST CANARY aceptados no produjeron receipt ni incidente verificable. Runtime permanece OBSERVE_ONLY, sin autoridad financiera ni writer de restricciones activado.
+2026-10-09, estado actualizado comunicado por integracion: **E2E sintetico PASS** tras corregir aliases Pub/Sub. Observer privado `pay0-sentinel-observer-00005-dgr`: dos entregas HTTP200, metricas RECORDED=1 y DUPLICATE=1. GET exactos receipt200/incidente200; verificador OBSERVE_ONLY_SINGLE_EVENT_VERIFIED, eventCount=1, authority=NONE y TTL valido. Ventana cerrada mediante root apply PASS: canary `00006-6wv` Ready/DISABLED y sinkdisabled:true confirmados en estado Terraform. Runtime permanece OBSERVE_ONLY, sin autoridad financiera ni writer de restricciones activado. El primer intento fallido se conserva abajo como antecedente.
 
-El proyecto aislado pay0-sentinel-observe conserva DBnamed sentinel-observation, deny-all cliente, TTL de4colecciones, indices de evidencia y transporte topic/subscription/DLQ/sink pay0-sentinel-observe-v1. La infraestructura desplegada no demuestra procesamiento exitoso de eventos.
+El proyecto aislado pay0-sentinel-observe conserva DBnamed sentinel-observation, deny-all cliente, TTL de4colecciones, indices de evidencia y transporte topic/subscription/DLQ/sink pay0-sentinel-observe-v1. El E2E acredita el evento sintetico fijo y su replay; no certifica cobertura de productores financieros ni contencion.
 
 Presupuesto mensual300MXN creado para únicamente projects/756518473677, sin créditos, umbrales reales50/90/100 y forecast100. Destinatarios IAM predeterminados de facturación, sin mensajes de prueba ni canal inventado. Es alerta, no límite duro; no incluye canario/Logging en proyecto financiero. Min0/máximo1 a nivel servicio y revisión; costos y cuotas documentados en SENTINEL-COST-CONTROLS.md.
 
@@ -18,18 +18,23 @@ Primer intento de provisión indicó Workload Identity API deshabilitada, sin cr
 
 Dos replanes fallidos son errores de herramienta/configuración, no infraestructura omitida: PowerShell serializó lista de origen como objeto (corregido con ConvertTo-Json -InputObject); deletion_policy no admitido (corregido lifecycle). Estados, planes y logs privados ignorados conservan evidencia. La creación del service agent se audita en IaC; su provider Read no certifica existencia, por lo que el grant efectivo aporta comprobación adicional.
 
-## Ventana sintetica ejecutada: E2E fallido
+## Primera ventana sintetica: antecedente fallido
 
 - DRY_RUN revision00002-9fs: POST200 y cleanupPASS. Esto verifica respuesta del productor privado, no persistencia.
 - CANARY revision00003-n27: dos POST200 y cleanupPASS. No se atribuye procesamiento exitoso a esos codigos HTTP.
 - Observer revision00003-br8, trafico100%: una entrega observada termino HTTP204 con INVALID_ENVELOPE. Esa respuesta no acredita un incidente procesado.
-- Verificador: seis pares consultados devolvieron404 para receipt/incidente; ninguna persistencia verificada. No hubo E2E satisfactorio ni prueba de replay/idempotencia completada.
-- Cierre: root applyPASS; sinkdisabled:true y canary00004-tjn Ready/DISABLED confirmados. La ventana esta cerrada, no abierta ni pendiente de apagar.
+- Verificador: seis pares consultados devolvieron404 para receipt/incidente; ninguna persistencia verificada en esa primera ventana. No hubo entonces E2E satisfactorio ni prueba de replay/idempotencia completada.
+- Cierre de la primera ventana: root applyPASS; sinkdisabled:true y canary00004-tjn Ready/DISABLED confirmados entonces. Esa ventana quedo cerrada antes de la correccion.
 
 Los resultados fueron reportados por integracion. Este cambio es documental: no repite POST, consultas cloud o aplicacion Terraform. Las pruebas sinteticas no ejecutaron efectos financieros ni activaron contencion.
 
-## Diagnostico y siguientes gates
+## Correccion y segunda ventana: E2E PASS
 
-Se investigan los aliases oficiales del envelope Pub/Sub message_id/publish_time frente a los nombres esperados por el parser. Un agente independiente prepara la correccion. Es hipotesis de causa y trabajo en curso: no afirmar que ya quedo resuelto ni que se desplego. Mantener evidencia del INVALID_ENVELOPE y los404sin reinterpretarlos como ausencia esperada exitosa.
+La correccion `d911c55` admite los aliases oficiales message_id/publish_time, exigiendo igualdad exacta si tambien aparecen messageId/publishTime. El LogEntry sintetico inspeccionado no tenia campos extra incompatibles. Pasaron21tests (12servicio/9productor), build del core y staging de18archivos/80.4KiB. Cloud Build `2daebc49-c854-4798-b034-893b8005643b` termino SUCCESS; imagen observer `sha256:8968768dc71dd286d799944674b060abba5b7d47d4f244d50724fe7a70326977`, fuente `d911c55`.
 
-Primero revisar contrato/parser y pruebas con el envelope oficial; despues build y despliegue acotado de la revision corregida, y solo entonces una nueva ventana sintetica explicitamente controlada con evento+replay. Exigir receipt/incidente persistidos e idempotencia, no solo HTTP200/204. Volver a cerrar sink/canary y comprobar estado al terminar. No activar productores financieros ni contencion; writers de restricciones siguen sin exportarse.
+- CANARY `00005-xgm`: dos POST200; ambos bindings temporales REMOVED_VERIFIED.
+- Observer corregido `00005-dgr`: dos HTTP200 y metricas RECORDED=1/DUPLICATE=1, confirmando procesamiento y replay, no solo aceptacion por Logging.
+- Lecturas exactas en la DB aislada: receipt200 e incidente200; OBSERVE_ONLY_SINGLE_EVENT_VERIFIED con eventCount=1, authority=NONE y TTL valido.
+- Cierre applyPASS: sink apagado y canary `00006-6wv` Ready/DISABLED confirmados por estado Terraform. No hay ventana pendiente de apagar.
+
+La segunda ventana satisface el gate E2E sintetico. No reinterpreta los204/404 iniciales como exito: aquellos mensajes fueron reconocidos sin persistencia. Siguientes lotes: definir e integrar productores backend reales bajo contratos revisados y mantener observacion sin autoridad financiera. No activar contencion ni exportar writers de restricciones por este resultado. La evidencia remota fue comunicada por integracion; esta actualizacion documental no repitio operaciones cloud.
