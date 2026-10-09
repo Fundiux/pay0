@@ -433,6 +433,49 @@ export async function bindClientCsfIntake(params: {
   },{merge:true});
 }
 
+export async function resolveClientCsfContinuationAction(params: {
+  intakeId: string;
+  clientId: string;
+  uid: string;
+  rootId: string;
+  allowFinalizedCreate?: boolean;
+  readDocument?: (path: string) => Promise<FirebaseFirestore.DocumentSnapshot>;
+}): Promise<"create" | "edit"> {
+  const intakeId = clean(params.intakeId);
+  const clientId = clean(params.clientId);
+  if (!intakeId || !clientId) {
+    throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
+  }
+
+  const read = params.readDocument || ((path: string) => db.doc(path).get());
+  const [intakeSnap, clientSnap] = await Promise.all([
+    read(`clientCsfIntakes/${intakeId}`),
+    read(`clients/${clientId}`),
+  ]);
+  if (!intakeSnap.exists || !clientSnap.exists) {
+    throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
+  }
+
+  const intake: any = intakeSnap.data() || {};
+  const client: any = clientSnap.data() || {};
+  const linkedIntakeId = clean(client?.fiscalProfile?.csfIntakeId);
+  if (
+    clean(intake.rootId) !== params.rootId ||
+    clean(client.rootId) !== params.rootId ||
+    clean(intake.createdBy) !== params.uid ||
+    clean(intake.clientId) !== clientId ||
+    linkedIntakeId !== intakeId ||
+    !["CLIENT_CREATED", "FINALIZED"].includes(clean(intake.status))
+  ) {
+    throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
+  }
+
+  const isCreateContinuation =
+    clean(client.createdBy) === params.uid &&
+    (clean(intake.status) === "CLIENT_CREATED" || params.allowFinalizedCreate === true);
+  return isCreateContinuation ? "create" : "edit";
+}
+
 export async function finalizeClientCsfIntake(params: {
   intakeId: string;
   clientId: string;
