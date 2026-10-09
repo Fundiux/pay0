@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { operationTiming } from "../../utils/operationTiming";
 import * as admin from "firebase-admin";
-import type JSZip from "jszip";
+import { openBoundedWorkbook, createWorkbookStructureBudget, WorkbookLimitError } from "../../utils/boundedZip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
@@ -17,9 +17,6 @@ if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
 
-function getJsZip(): typeof JSZip {
-  return require("jszip");
-}
 function isSolicitudIqTerminalForReplacementH4D58H(solicitud: Record<string, unknown>): boolean {
   if (solicitud.iqTerminalLocked === true) return true;
   if (solicitud.iqSolicitudTerminalLocked === true) return true;
@@ -131,26 +128,31 @@ function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g
 function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
 
 async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
-  const [buffer] = await bucket.file(storagePath).download();
+  // Fetch one extra byte so an oversized object is rejected before full allocation.
+  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
   return parseOcFiscalMetadataBuffer(buffer);
 }
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
 export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
-  const zip = await getJsZip().loadAsync(buffer);
-  const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
-  const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => xmlValue(match[1]));
-  const sheetNames = Object.keys(zip.files).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+  try {
+  const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
+  const sharedXml = await zip.readText("xl/sharedStrings.xml");
+  const shared: string[] = [];
+  for (const match of sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)) { budget.sharedString(); shared.push(xmlValue(match[1])); }
+  const sheetNames = zip.sheetNames;
   const parseRows = async (sheetName: string): Promise<string[][]> => {
-    const sheet = await zip.file(sheetName)?.async("string") || "";
+    const sheet = await zip.readText(sheetName);
     const parsed: string[][] = [];
     for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      budget.row();
       const values: string[] = [];
       // Ignore self-closing cells from merged ranges. The former expression
       // treated `<c .../>` as an opening tag and then consumed the next real
       // cell, shifting values such as regimen, CP and uso CFDI one column.
       for (const cell of row[1].matchAll(/<c\b([^>]*[^/])>([\s\S]*?)<\/c>/g)) {
         const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "";
+        budget.cell(reference, true);
         const raw = cell[2].match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || cell[2].match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "";
         values[excelColumn(reference) - 1] = cell[1].includes('t="s"') ? shared[Number(raw)] || "" : xmlValue(raw);
       }
@@ -260,6 +262,10 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   // CSF remains a fiscal validation source, but no quote should display a
   // placeholder when the OC already supplies the data.
   return code && unit ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items } : null;
+  } catch (error) {
+    if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
+    throw error;
+  }
 }
 
 function cleanCfdiText(value: any): string {
