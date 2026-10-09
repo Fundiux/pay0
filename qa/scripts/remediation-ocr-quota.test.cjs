@@ -1,0 +1,236 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const ts = require('typescript');
+const { test } = require('node:test');
+
+class HttpsError extends Error {
+  constructor(code, message) { super(message); this.code = code; }
+}
+function load(file, deps) {
+  const exports = {};
+  const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  new Function('exports', 'require', source)(exports, name => {
+    assert(Object.hasOwn(deps, name), `Unexpected dependency: ${name}`);
+    return deps[name];
+  });
+  return exports;
+}
+const generated = load('functions/src/modules/users/authorizationPolicy.generated.ts', {});
+const defaults = load('functions/src/modules/users/defaultModules.ts', { './authorizationPolicy.generated': generated });
+const authz = load('functions/src/modules/users/authorization.ts', { './defaultModules': defaults });
+const guard = load('functions/src/utils/authGuard.ts', {
+  'firebase-functions': { https: { HttpsError } }, '../modules/users/authorization': authz,
+});
+const quota = load('functions/src/modules/pagos/receiptOcrQuota.ts', {
+  crypto, 'firebase-functions/v2/https': { HttpsError }, '../../utils/authGuard': guard,
+});
+const key = (scope, value) => `receiptProcessingQuotas/${scope}_${crypto.createHash('sha256').update(value).digest('hex')}`;
+const profile = (rootId = 'r1') => ({ role: 'operador', rootId, active: true });
+
+// Optimistic transactions retry on observed-version conflict and commit writes
+// atomically. This fake models races; it never connects to Firebase or Vision.
+function database(seed = {}) {
+  const docs = new Map(Object.entries(seed)), versions = new Map();
+  return {
+    docs, conflicts: 0,
+    doc: path => ({ path, id: path.split('/').at(-1), get: async () => {
+      const value = docs.get(path); return { exists: value !== undefined, id: path.split('/').at(-1), data: () => value,
+        get: field => field.split('.').reduce((v, key) => v?.[key], value) };
+    }, set: async value => docs.set(path, value) }),
+    async getAll(...refs) { return Promise.all(refs.map(ref => ref.get())); },
+    async runTransaction(run) {
+      for (let attempt = 0; attempt < 1000; attempt++) {
+        const reads = new Map(), writes = new Map();
+        const get = async reference => {
+          const ref = reference.path || reference;
+          reads.set(ref, versions.get(ref) || 0);
+          const data = docs.get(ref);
+          return { exists: data !== undefined, data: () => data === undefined ? undefined : structuredClone(data) };
+        };
+        await run({ get, getAll: (...refs) => Promise.all(refs.map(get)), set: (ref, data) => writes.set(ref.path || ref, data) });
+        if ([...reads].some(([ref, version]) => (versions.get(ref) || 0) !== version)) { this.conflicts++; continue; }
+        for (const [ref, data] of writes) { docs.set(ref, data); versions.set(ref, (versions.get(ref) || 0) + 1); }
+        return;
+      }
+      throw Error('Too many synthetic transaction conflicts');
+    },
+  };
+}
+
+test('PAY0 profile and pagos.create permission are mandatory; rejected calls reserve nothing', async () => {
+  for (const user of [undefined, { ...profile(), active: false }, { ...profile(), deleted: true },
+    { ...profile(), role: 'visitor' }, { ...profile(), modules: { pagos: { view: true, create: false } } },
+    { ...profile(), modules: { pagos: { view: false, create: true } } }]) {
+    const db = database(user ? { 'users/u1': user } : {});
+    await assert.rejects(quota.reserveReceiptProcessing(db, { uid: 'u1' }, 1000), { code: 'permission-denied' });
+    assert.equal([...db.docs.keys()].filter(k => k.startsWith('receiptProcessingQuotas/')).length, 0);
+  }
+  await assert.rejects(quota.reserveReceiptProcessing(database(), undefined, 1000), { code: 'unauthenticated' });
+});
+
+test('concurrent actor reservations never exceed 60; failed root reservation never charges actor', async () => {
+  const db = database({ 'users/u1': profile() });
+  const results = await Promise.allSettled(Array.from({ length: 70 }, () => quota.reserveReceiptProcessing(db, { uid: 'u1' }, 1000)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 60);
+  assert(results.filter(r => r.status === 'rejected').every(r => r.reason.code === 'resource-exhausted'));
+  assert(db.conflicts > 0);
+  assert.equal(db.docs.get(key('actor', 'u1')).used, 60);
+  assert.equal(db.docs.get(key('root', 'r1')).used, 60);
+
+  const rootDb = database({ 'users/u1': profile(), 'users/u2': profile(),
+    [key('root', 'r1')]: { used: 599, windowStartedAtMs: 1000 } });
+  const rootResults = await Promise.allSettled(['u1', 'u2'].map(uid => quota.reserveReceiptProcessing(rootDb, { uid }, 1000)));
+  assert.equal(rootResults.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(rootDb.docs.get(key('root', 'r1')).used, 600);
+  assert.equal([...rootDb.docs.keys()].filter(k => k.startsWith('receiptProcessingQuotas/actor_')).length, 1);
+});
+
+test('window expiry is exact, root changes do not reset actor quota, and corrupt counters fail closed', async () => {
+  const state = { used: 60, windowStartedAtMs: 1000 };
+  const db = database({ 'users/u1': profile('new-root'), [key('actor', 'u1')]: state });
+  await assert.rejects(quota.reserveReceiptProcessing(db, { uid: 'u1' }, 3600999), { code: 'resource-exhausted' });
+  await quota.reserveReceiptProcessing(db, { uid: 'u1' }, 3601000);
+  assert.deepEqual(db.docs.get(key('actor', 'u1')), { version: 1, used: 1, windowStartedAtMs: 3601000 });
+  assert.equal(db.docs.has(key('root', 'r1')), false);
+  for (const bad of [{ used: -1, windowStartedAtMs: 1 }, { used: 0, windowStartedAtMs: 1001 }, { used: '0', windowStartedAtMs: 1 }]) {
+    const corrupt = database({ 'users/u1': profile(), [key('actor', 'u1')]: bad });
+    await assert.rejects(quota.reserveReceiptProcessing(corrupt, { uid: 'u1' }, 1000), { code: 'resource-exhausted' });
+  }
+});
+
+function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOcrMode = false) {
+  const http = { HttpsError, onCall: (_options, fn) => fn };
+  const module = load('functions/src/modules/pagos/receiptPdfCallables.ts', {
+    'firebase-functions/v2/https': http,
+    'firebase-admin/firestore': { FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP', increment: value => value } }, './receiptOcrQuota': quota,
+    'node:crypto': crypto,
+    '../sharedCallables/helpers': { db, getMyUser: async uid => db.docs.get(`users/${uid}`), getRootId: async uid => db.docs.get(`users/${uid}`)?.rootId || uid },
+    '../../utils/authGuard': guard,
+    './receiptSemantics': load('functions/src/modules/pagos/receiptSemantics.ts', {}),
+    './receiptLearning': load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto }),
+    './receiptIdentification': { identifyParsedReceipt: async input => ({ outcome: 'REVIEW_REQUIRED', analysisId: input.analysisId, readerVersion: input.readerVersion, semanticReceipt: input.semanticReceipt }) },
+    'pdf-parse': async (_bytes, options) => { counters.pdf++; assert.equal(options.max, 5); return { text: pdfOcrMode ? '' : 'Monto: 100 MXN', numpages: pdfPages }; },
+    '@google-cloud/vision': { v1: { ImageAnnotatorClient: class {
+      async documentTextDetection() { counters.vision++; if (providerError) throw Error('SECRET_PROVIDER_RESPONSE'); return [{ fullTextAnnotation: { text: 'Monto: 100 MXN' } }]; }
+      async batchAnnotateFiles(input) {
+        counters.vision++;
+        assert.deepEqual(input.requests[0].pages, Array.from({length: pdfPages}, (_, i) => i + 1));
+        const count = pdfOcrMode === 'partial' ? pdfPages - 1 : pdfPages;
+        return [{ responses: [{ totalPages: pdfPages, responses: Array.from({length:count}, () => pdfOcrMode === 'page-error' ? { error: { message: 'SECRET_PAGE_ERROR' } } : { fullTextAnnotation: { text: 'Monto: 100 MXN' } }) }] }];
+      }
+    } } },
+  });
+  module.parsePagoReceiptPdf.correct = module.correctPagoReceiptSemanticField;
+  return module.parsePagoReceiptPdf;
+}
+
+test('callable rejects unauthorized and oversized requests before parser/provider; permitted PDF keeps result contract', async () => {
+  const counters = { pdf: 0, vision: 0 }, db = database();
+  const parse = receiptHandler(db, counters);
+  const input = { auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-synthetic').toString('base64'), contentType: 'application/pdf', rootId: 'forged' } };
+  await assert.rejects(parse(input), { code: 'permission-denied' });
+  assert.deepEqual(counters, { pdf: 0, vision: 0 });
+  db.docs.set('users/u1', profile());
+  await assert.rejects(parse({ ...input, data: { base64: 'A'.repeat(1400000) } }), { code: 'invalid-argument' });
+  const result = await parse(input);
+  assert.equal(result.ok, true); assert.equal(result.textSource, 'PDF_TEXT'); assert.equal(result.receipt.amount, 100);
+  assert.match(result.analysisId, /^[a-f0-9]{64}$/); assert.equal(result.readerVersion, 'PAY0_RECEIPT_SEMANTIC_V1');
+  assert.ok(result.semanticReceipt.fields); assert.equal(result.identification.analysisId, result.analysisId); assert.equal(result.cacheHit, false);
+  const cached = await parse(input); assert.equal(cached.cacheHit, true); assert.equal(cached.providerCalls, 0);
+  assert.deepEqual(cached.semanticReceipt, result.semanticReceipt);
+  assert.deepEqual(counters, { pdf: 1, vision: 0 });
+  assert.equal(db.docs.has(key('root', 'forged')), false);
+});
+
+test('OCR failures remain charged and never expose provider errors', async () => {
+  const counters = { pdf: 0, vision: 0 }, db = database({ 'users/u1': profile() });
+  const parse = receiptHandler(db, counters, true);
+  await assert.rejects(parse({ auth: { uid: 'u1' }, data: { base64: 'aGVsbG8=', contentType: 'image/png' } }), error => {
+    assert.equal(error.code, 'failed-precondition'); assert(!error.message.includes('SECRET')); return true;
+  });
+  assert.equal(counters.vision, 1); assert.equal(db.docs.get(key('actor', 'u1')).used, 1);
+});
+
+
+test('long PDF is rejected explicitly instead of returning partial extraction or invoking OCR', async () => {
+  const counters = { pdf: 0, vision: 0 }, db = database({ 'users/u1': profile() });
+  const parse = receiptHandler(db, counters, false, 6);
+  await assert.rejects(parse({ auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-1.4 synthetic').toString('base64'), contentType: 'application/pdf' } }), error => {
+    assert.equal(error.code, 'invalid-argument'); assert.match(error.message, /5 paginas/); return true;
+  });
+  assert.equal(counters.pdf, 1); assert.equal(counters.vision, 0);
+});
+
+
+test('receipt memory keys isolate roots; advisory never promotes or overrides accepted evidence', () => {
+  const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
+  const pattern = learning.receiptPattern({ readerVersion: 'v1', bankName: 'Banco', evidenceLabel: 'Folio', fromField: 'folio', toField: 'reference' });
+  assert.notEqual(learning.receiptMemoryId('root-a', pattern.key), learning.receiptMemoryId('root-b', pattern.key));
+  assert.equal(learning.receiptMemoryId('root-a', pattern.key), learning.receiptMemoryId('root-a', pattern.key));
+  const advisory = { patternKey: pattern.key, memoryPatternKey: pattern.key, memoryStatus: 'CANDIDATE', documentEvidenceDecision: 'ACCEPTED' };
+  assert.equal(learning.memoryCanAdvise(advisory), false);
+  assert.equal(learning.memoryCanAdvise({ ...advisory, documentEvidenceDecision: 'MISSING' }), true);
+  assert.equal(learning.memoryCanAdvise({ ...advisory, documentEvidenceDecision: 'MISSING', memoryStatus: 'REJECTED' }), false);
+});
+
+test('semantic reader keeps transfer, balance, commission and ambiguous execution distinct', () => {
+  const semantics = load('functions/src/modules/pagos/receiptSemantics.ts', {});
+  const text = 'Monto transferido: 100 MXN\nSaldo disponible: 900 MXN\nComision bancaria: 10 MXN\nReferencia: 1234567\nClave de rastreo: ABC123';
+  const semantic = semantics.buildSemanticReceipt(text, { amount: 100, amountVerified: true, executionConfirmed: false, dateVerified: false, reference: '1234567' });
+  assert.equal(semantic.fields.transferAmount.value, 100);
+  assert.equal(semantic.fields.accountBalance.value, 900);
+  assert.equal(semantic.fields.bankCommission.value, 10);
+  assert.ok(semantic.reviewRequired);
+  assert.equal(semantic.fields.reference.value, '1234567');
+  assert.ok(semantic.fields.trackingKey.value);
+});
+
+
+test('correction writes root-scoped candidate memories without cross-root overwrite or promotion', async () => {
+  const db = database({ 'users/u1': profile('root-a'), 'users/u2': profile('root-b') });
+  const fields = { reference: { value: '12345', normalizedValue: '12345', label: 'Referencia', confidence: 'HIGH', decision: 'ACCEPTED' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } };
+  for (const [id, rootId] of [['a'.repeat(64), 'root-a'], ['b'.repeat(64), 'root-b']]) db.docs.set(`pagoReceiptAnalyses/${id}`, { rootId, readerVersion: 'PAY0_RECEIPT_SEMANTIC_V1', contentSha256: 'c'.repeat(64), semanticReceipt: { fields } });
+  const handler = receiptHandler(db, { pdf: 0, vision: 0 });
+  const a = await handler.correct({ auth: { uid: 'u1' }, data: { analysisId: 'a'.repeat(64), field: 'reference', correctedField: 'folio', correctedValue: '12345' } });
+  const b = await handler.correct({ auth: { uid: 'u2' }, data: { analysisId: 'b'.repeat(64), field: 'reference', correctedField: 'folio', correctedValue: '12345' } });
+  assert.notEqual(a.memoryId, b.memoryId);
+  assert.equal(db.docs.get(`agent007Memory/${a.memoryId}`).rootId, 'root-a');
+  assert.equal(db.docs.get(`agent007Memory/${b.memoryId}`).rootId, 'root-b');
+  assert.equal(db.docs.get(`agent007Memory/${a.memoryId}`).status, 'CANDIDATE');
+  assert.equal(db.docs.has(`agent007Memory/receipt_${a.patternKey}`), false);
+});
+
+test('legacy memory fallback reads only same root and scoped candidate takes precedence', async () => {
+  const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
+  const readerVersion = 'PAY0_RECEIPT_SEMANTIC_V1';
+  const bytes = Buffer.from('%PDF-synthetic');
+  const contentSha = crypto.createHash('sha256').update(bytes).digest('hex');
+  const analysisId = crypto.createHash('sha256').update(`r1|${contentSha}|${readerVersion}`).digest('hex');
+  const pattern = learning.receiptPattern({ readerVersion, bankName: 'Banco', evidenceLabel: 'Referencia', fromField: 'reference', toField: 'folio' });
+  for (const memoryRoot of ['r1', 'foreign']) {
+    const db = database({ 'users/u1': profile() });
+    db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion, processingPolicyVersion: 2, receipt: { amount: 100 }, textSource: 'PDF_TEXT', semanticReceipt: { readerVersion, fields: { reference: { label: 'Referencia', value: '12345' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } } } });
+    db.docs.set(`agent007Memory/receipt_${pattern.key}`, { rootId: memoryRoot, status: 'CANDIDATE', content: 'legacy', receiptLearning: { key: pattern.key } });
+    const handler = receiptHandler(db, { pdf: 0, vision: 0 });
+    const input = { auth: { uid: 'u1' }, data: { base64: bytes.toString('base64'), contentType: 'application/pdf' } };
+    const result = await handler(input);
+    assert.equal(result.learningContext.length, memoryRoot === 'r1' ? 1 : 0);
+    db.docs.set(`agent007Memory/${learning.receiptMemoryId('r1', pattern.key)}`, { rootId: 'r1', status: 'CANDIDATE', content: 'scoped', receiptLearning: { key: pattern.key } });
+    const scoped = await handler(input); assert.equal(scoped.learningContext.length, 1); assert.equal(scoped.learningContext[0].content, 'scoped');
+  }
+});
+
+
+test('PDF OCR requests verified pages and rejects partial or errored responses', async () => {
+  for (const mode of ['complete', 'partial', 'page-error']) {
+    const counters = { pdf: 0, vision: 0 }, db = database({ 'users/u1': profile() });
+    const handler = receiptHandler(db, counters, false, 2, mode);
+    const input = { auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-synthetic').toString('base64'), contentType: 'application/pdf' } };
+    if (mode === 'complete') assert.equal((await handler(input)).textSource, 'VISION_OCR');
+    else await assert.rejects(handler(input), error => error.code === 'failed-precondition' && !error.message.includes('SECRET'));
+    assert.deepEqual(counters, { pdf: 1, vision: 1 });
+  }
+});
