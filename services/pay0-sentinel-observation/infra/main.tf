@@ -172,7 +172,7 @@ resource "google_project_service_identity" "pubsub" {
 }
 resource "google_service_account_iam_member" "push_token" {
   service_account_id = google_service_account.push.name
-  role               = "roles/iam.serviceAccountTokenCreator"
+  role               = "roles/iam.serviceAccountOpenIdTokenCreator"
   member             = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
 resource "google_cloud_run_v2_service" "observer" {
