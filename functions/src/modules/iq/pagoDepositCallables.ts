@@ -1,3 +1,4 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { operationTiming } from "../../utils/operationTiming";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { enqueueAutomaticPagoCreation, isAutomaticPagoRecoveryDue, matchesPagoGeneration } from "./pagoImmediateDispatch";
@@ -245,20 +246,8 @@ async function getAuthContext(request: {
   }
 
   const user = asRecord(userSnap.data());
-  const token = asRecord(request.auth?.token);
-
-  const role = cleanText(
-    token.role ??
-    token.userRole ??
-    user.role,
-  ).toLowerCase();
-
-  const rootId = cleanText(
-    token.rootId ??
-    token.root_id ??
-    user.rootId ??
-    uid,
-  );
+  const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
+  const rootId = cleanText(user.rootId ?? uid);
 
   return {
     uid,
@@ -1399,7 +1388,25 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     input.sessionHolders.set(ctx.access.profileId, sessionHolder);
   }
 
+  const authorizeBeforePost = async () => {
+    const current = asRecord((await pagoRef.get()).data());
+    if (cleanText(current.rootId) !== input.auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+    try {
+      if (input.source === "TASK" && cleanText(current.iqDepositOnDemandRequestedByUid) !== input.actor.uid)
+        throw new HttpsError("permission-denied", "AUTH_INTENT_ACTOR_CHANGED");
+      await authorizeDeferredIntent({ uid: input.source === "TASK" ? input.actor.uid : input.auth.uid,
+        rootId: input.auth.rootId, module: "pagos", action: ["create", "conciliate"],
+        clientId: cleanText(current.clienteId || current.clientId), permission: "operatePagos" });
+    } catch (error) {
+      if ((error as any)?.code === "permission-denied") await pagoRef.set({
+        iqDepositAuthorizationStatus: "AUTH_STOPPED", iqDepositAuthorizationCheckedAt: FieldValue.serverTimestamp(),
+      }, {merge:true});
+      throw error;
+    }
+  };
+  await authorizeBeforePost();
   const httpResult = await runPagoDepositHttpCreateFlow({
+    authorizeBeforePost,
     sessionHolder,
     expectedUploadId: input.expectedUploadId,
     pagoId: ctx.pagoId,
@@ -4382,9 +4389,7 @@ const getHttpAuthContextH4D50F = async (req: any): Promise<{
     throw new HttpsError("permission-denied", "Perfil PAY0 no autorizado.");
   }
   const user = asRecord(userSnap.data());
-  if (user.active === false) {
-    throw new HttpsError("permission-denied", "Usuario PAY0 inactivo.");
-  }
+  assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
   const role = cleanText(user.role).toLowerCase();
   const rootId = cleanText(user.rootId ?? (role === "superadmin" ? uid : ""));
 

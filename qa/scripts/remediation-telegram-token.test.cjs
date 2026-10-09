@@ -14,7 +14,7 @@ function load(file, dependencies) {
 }
 const policy = load('functions/src/modules/telegram/downloadTokenPolicy.ts', {});
 const time = n => ({toMillis:()=>n});
-const active = () => ({status:'ACTIVE',actionType:'DOWNLOAD_DOCUMENT',expiresAt:time(Date.now()+900000),storageGeneration:'7',uid:'u',rootId:'r',entityType:'solicitud',entityId:'s',documentId:'d',storagePath:'roots/r/solicitudes/s/docs/PDF/a.pdf',fileName:'a.pdf',attempts:0});
+const active = () => ({status:'ACTIVE',actionType:'DOWNLOAD_DOCUMENT',createdAt:time(Date.now()),expiresAt:time(Date.now()+899000),storageGeneration:'7',uid:'u',rootId:'r',entityType:'solicitud',entityId:'s',documentId:'d',storagePath:'roots/r/solicitudes/s/docs/PDF/a.pdf',fileName:'a.pdf',attempts:0});
 function harness() {
   const rows = new Map([
     ['telegramActionTokens/'+'a'.repeat(43), active()], ['users/u',{role:'admin',active:true,rootId:'r'}],
@@ -75,4 +75,39 @@ test('current delegated user can download; revoked or expired delegation denies'
 });
 test('revocation during stream is never overwritten by settlement',async()=>{
  const h=harness(),res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);await waitStream(h);h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status='REVOKED';h.streams[0].end('PDF');await p;assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status,'REVOKED');
+});
+
+test('POST body transport and exact CORS preflight never put bearer in URL',async()=>{
+ const h=harness(); const headers={origin:policy.DOWNLOAD_APP_ORIGIN,'content-type':'application/json'};
+ const req={method:'POST',headers,query:{},body:{token:'a'.repeat(43)}};
+ const res=h.response();const p=h.app.telegramDownloadAction(req,res);await waitStream(h);h.streams[0].end('PDF');await p;
+ assert.equal(res.statusCode,200);assert.equal(res.headers['Access-Control-Allow-Origin'],policy.DOWNLOAD_APP_ORIGIN);
+ assert.equal(res.headers['Access-Control-Expose-Headers'],'Content-Disposition');
+ for(const origin of [policy.DOWNLOAD_APP_ORIGIN,'https://evil.example',policy.DOWNLOAD_APP_ORIGIN+'.evil.example']){
+   const r=h.response();await h.app.telegramDownloadAction({method:'OPTIONS',headers:{origin,'access-control-request-method':'POST','access-control-request-headers':'content-type'},query:{}},r);
+   assert.equal(r.statusCode,origin===policy.DOWNLOAD_APP_ORIGIN?204:403);
+ }
+});
+
+test('malformed body, URL query on POST, content type and foreign origin fail before streaming',async()=>{
+ const headers={origin:policy.DOWNLOAD_APP_ORIGIN,'content-type':'application/json'};
+ for(const patch of [{body:null},{body:'a'.repeat(43)},{body:[]},{body:{token:['a'.repeat(43)]}},{body:{token:'a'.repeat(43),rootId:'r'}},{query:{token:'a'.repeat(43)}},{headers:{...headers,'content-type':'text/plain'}},{headers:{...headers,origin:'https://evil.example'}},{headers:{'content-type':'application/json'}}]){
+  const h=harness(),res=h.response();await h.app.telegramDownloadAction({method:'POST',headers,query:{},body:{token:'a'.repeat(43)},...patch},res);
+  assert.ok([400,403].includes(res.statusCode));assert.equal(h.streams.length,0);assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).attempts,0);
+ }
+});
+
+test('new issuance returns only fragment URL and version2 cannot use legacy GET',async()=>{
+ const h=harness();const result=await h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15});
+ const link=new URL(result.url);assert.equal(link.origin,policy.DOWNLOAD_APP_ORIGIN);assert.equal(link.pathname,'/descarga/documento');assert.equal(link.search,'');assert.equal(link.hash,'#token='+result.token);
+ assert.equal(h.rows.get('telegramActionTokens/'+result.token).transportVersion,2);
+ h.rows.get('telegramActionTokens/'+'a'.repeat(43)).transportVersion=2;
+ const res=h.response();await h.app.telegramDownloadAction(h.request(),res);assert.equal(res.statusCode,410);assert.equal(h.streams.length,0);
+});
+
+test('legacy GET compatibility is bounded by original server issuance and TTL, never extended',()=>{
+ const now=1800000000000;const row={createdAt:time(now-1000),expiresAt:time(now+899000)};
+ assert.doesNotThrow(()=>policy.assertDownloadTransport(row,'GET',now));
+ for(const bad of [{...row,transportVersion:2},{...row,createdAt:null},{...row,createdAt:time(now+1)},{...row,expiresAt:time(now+899001)},{...row,createdAt:time(now-900000),expiresAt:time(now)}])assert.throws(()=>policy.assertDownloadTransport(bad,'GET',now));
+ assert.throws(()=>policy.assertDownloadTransport(row,'GET',now+899000));
 });

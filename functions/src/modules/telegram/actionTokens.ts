@@ -6,7 +6,8 @@ import { assertAuthorized } from "../../utils/authGuard";
 import { requireClientOperationalAccess, normalizeClientAccessPermissions } from "../clientDelegations/access";
 import { delegationIsCurrent } from "../clientDelegations/policy";
 import { assertDownloadAvailable, downloadTtlMinutes, DownloadTokenError, DOWNLOAD_LEASE_MS,
-  DOWNLOAD_STREAM_MS, ownsDownloadEntity } from "./downloadTokenPolicy";
+  DOWNLOAD_STREAM_MS, ownsDownloadEntity, DOWNLOAD_APP_ORIGIN, DOWNLOAD_PAGE_PATH,
+  downloadTokenFromRequest, assertDownloadTransport } from "./downloadTokenPolicy";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -77,20 +78,39 @@ export async function createTelegramActionToken(input: TelegramActionTokenInput)
   await db.collection("telegramActionTokens").doc(token).create({
     actionType: row.actionType, uid: row.uid, rootId: row.rootId, entityType: row.entityType,
     entityId: row.entityId, documentId: row.documentId, storagePath: row.storagePath, fileName: row.fileName,
-    storageGeneration, status: "ACTIVE", attempts: 0, expiresAt: Timestamp.fromDate(expiresDate),
+    storageGeneration, transportVersion: 2, status: "ACTIVE", attempts: 0, expiresAt: Timestamp.fromDate(expiresDate),
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
-  return { token, url: `https://us-central1-pay-0-system.cloudfunctions.net/telegramDownloadAction?token=${encodeURIComponent(token)}`, expiresAt: expiresDate.toISOString() };
+  return { token, url: `${DOWNLOAD_APP_ORIGIN}${DOWNLOAD_PAGE_PATH}#token=${encodeURIComponent(token)}`, expiresAt: expiresDate.toISOString() };
 }
 
 export const telegramDownloadAction = onRequest({ region: "us-central1", cors: false, timeoutSeconds: 60, memory: "256MiB" }, async (req, res) => {
   res.setHeader("Cache-Control", "no-store, max-age=0");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  if (req.method !== "GET") { res.status(405).send("Método no permitido."); return; }
+  const origin = req.headers.origin;
+  res.setHeader("Vary", "Origin");
+  if (origin && origin !== DOWNLOAD_APP_ORIGIN) { res.status(403).send("Descarga no disponible."); return; }
+  if (origin === DOWNLOAD_APP_ORIGIN) {
+    res.setHeader("Access-Control-Allow-Origin", DOWNLOAD_APP_ORIGIN);
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+  }
+  if (req.method === "OPTIONS") {
+    if (origin !== DOWNLOAD_APP_ORIGIN || req.headers["access-control-request-method"] !== "POST" ||
+        String(req.headers["access-control-request-headers"] || "").split(",").some(value => value.trim() && value.trim().toLowerCase() !== "content-type")) {
+      res.status(403).send("Descarga no disponible."); return;
+    }
+    res.setHeader("Access-Control-Allow-Methods", "POST");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.status(204).send(""); return;
+  }
+  if (req.method !== "GET" && req.method !== "POST") { res.status(405).send("Método no permitido."); return; }
+  if (req.method === "POST" && (origin !== DOWNLOAD_APP_ORIGIN ||
+      !/^application\/json(?:\s*;|$)/i.test(String(req.headers["content-type"] || "")))) { res.status(403).send("Descarga no disponible."); return; }
   if (req.headers.range) { res.status(416).send("Rango no disponible."); return; }
-  const token = req.query.token;
-  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) { res.status(400).send("Token inválido."); return; }
+  let token: string;
+  try { token = downloadTokenFromRequest(req.method, req.query, req.body); }
+  catch { res.status(400).send("Descarga no disponible."); return; }
   const ref = db.collection("telegramActionTokens").doc(token);
   const leaseId = crypto.randomBytes(16).toString("hex");
   let acquired = false;
@@ -107,10 +127,12 @@ export const telegramDownloadAction = onRequest({ region: "us-central1", cors: f
   try {
     const initial = (await ref.get()).data();
     assertDownloadAvailable(initial, Date.now());
+    assertDownloadTransport(initial, req.method, Date.now());
     if (!validId(initial!.uid) || (await admin.auth().getUser(initial!.uid)).disabled) throw new DownloadTokenError(403);
     const row = await db.runTransaction(async tx => {
       const data = (await tx.get(ref)).data();
       assertDownloadAvailable(data, Date.now());
+      assertDownloadTransport(data, req.method, Date.now());
       if (data!.uid !== initial!.uid) throw new DownloadTokenError(403);
       await assertCurrentAccess(data, tx);
       tx.update(ref, { leaseId, leaseUntil: Timestamp.fromMillis(Date.now() + DOWNLOAD_LEASE_MS),

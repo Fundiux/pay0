@@ -912,6 +912,7 @@ function resultBase(
 
 export async function runIqCreateDispersionHttpH4D85A50(
   input: {
+    authorizeBeforePost?: () => Promise<void>;
     apiOrigin?: string;
     username: string;
     password: string;
@@ -1141,6 +1142,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
       new URL("/dispersions", apiOrigin);
     const dispatchedAtMs = Date.now();
 
+    await input.authorizeBeforePost?.();
     postDispatched = true;
 
     let response: Response;

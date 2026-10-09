@@ -1,3 +1,4 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
@@ -1566,6 +1567,12 @@ export const createSolicitudIq = onCall(
       markPerf("credential_decrypt");
 
       browserResult = await runIqCreateInvoiceHttpA53({
+        authorizeBeforePost: async () => {
+          const current = (await solicitudRef.get()).data();
+          if (!current || current.rootId !== auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+          await authorizeDeferredIntent({uid: auth.uid, rootId: auth.rootId, module: "solicitudes", action: "create",
+            clientId: cleanText(current.clienteId || current.clientId), permission: "operateSolicitudes"});
+        },
         erpUrl,
         username,
         password,

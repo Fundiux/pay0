@@ -126,6 +126,7 @@ export interface RecoveryOptions {
 }
 
 export interface CreateDepositInput {
+  authorizeBeforePost?: () => Promise<void>;
   auth: IqAuthContext;
   identity: DepositIdentity;
   voucher: VoucherInput;
@@ -250,6 +251,9 @@ async function dispatchDepositPost(
   form.set("voucher", voucherBlob, input.voucher.originalName);
 
   const postDispatchedAt = new Date().toISOString();
+
+  // Outside the transport catch: a denied intent was never sent to IQ.
+  await input.authorizeBeforePost?.();
 
   await input.journal.transition({
     pay0PagoId: input.identity.pay0PagoId,

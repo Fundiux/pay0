@@ -20,7 +20,8 @@ function load(file, deps) {
 }
 const generated = load('functions/src/modules/users/authorizationPolicy.generated.ts', {});
 const defaults = load('functions/src/modules/users/defaultModules.ts', { './authorizationPolicy.generated': generated });
-const authz = load('functions/src/modules/users/authorization.ts', { './defaultModules': defaults });
+const restrictions = load('functions/src/modules/users/restrictions.ts', {});
+const authz = load('functions/src/modules/users/authorization.ts', { './defaultModules': defaults, './restrictions': restrictions });
 const guard = load('functions/src/utils/authGuard.ts', {
   'firebase-functions': { https: { HttpsError } }, '../modules/users/authorization': authz,
 });
