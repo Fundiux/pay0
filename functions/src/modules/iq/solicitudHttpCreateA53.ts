@@ -651,10 +651,15 @@ export async function runIqCreateInvoiceHttpA53(input: {
     };
 
     if (post.status !== 201) {
-      result.outcome = "REJECTED";
-      result.status = (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "IQ_SOLICITUD_CREATE_REJECTED";
+      const unequivocalRejection = new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]).has(post.status);
+      // Timeout, server errors and unexpected success responses do not prove
+      // that IQ rejected the mutation. Consumers must block another POST.
+      result.outcome = unequivocalRejection ? "REJECTED" : "UNKNOWN";
+      result.status = unequivocalRejection ? "IQ_SOLICITUD_CREATE_REJECTED" : "IQ_SOLICITUD_CREATE_UNKNOWN";
       result.responseMessage =
         clean(post.bodyText) || `IQ rechazó la solicitud con HTTP ${post.status}.`;
+      if (!unequivocalRejection) result.responseMessage =
+        `IQ devolvio HTTP ${post.status} con resultado incierto. No repetir el POST; requiere conciliacion.`;
       result.message = result.responseMessage;
       result.errors = [`IQ_SOLICITUD_HTTP_${post.status}`];
       return result;
@@ -700,8 +705,10 @@ export async function runIqCreateInvoiceHttpA53(input: {
     return result;
   } catch (error) {
     if (input.sessionHolder) input.sessionHolder.session = undefined;
-    result.status = "IQ_SOLICITUD_CREATE_REJECTED";
-    result.outcome = "REJECTED";
+    const effectUncertain = result.submitClicked && result.postAccepted;
+    result.status = effectUncertain ? "IQ_SOLICITUD_CREATE_UNKNOWN" :
+      (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "IQ_SOLICITUD_CREATE_REJECTED";
+    result.outcome = effectUncertain ? "UNKNOWN" : "REJECTED";
     result.message =
       clean(error instanceof Error ? error.message : error) ||
       "IQ_SOLICITUD_HTTP_ERROR";
