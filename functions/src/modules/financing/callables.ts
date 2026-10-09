@@ -2364,6 +2364,12 @@ export const resolveClientDispersionIncident = onCall(
       }
 
       const dispersion = dispersionSnap.data() || {};
+      // Financial incident resolution must remain inside the actor's root,
+      // including CLIENT funding (whose funding-owner guard is a no-op).
+      if (String(dispersion.rootId || "").trim() !== rootId) {
+        throw new HttpsError("permission-denied", "Dispersion fuera de alcance.");
+      }
+
     assertDispersionFundingOwner({ rootId, uid, role, dispersion });
     if (dispersion.fundingSource?.holderType === "USER") throw new HttpsError("failed-precondition", "El retiro de utilidad se cancela desde Mi cuenta; un envío en proceso o incierto requiere conciliación.");
       const currentStatus = String(dispersion.status || "").trim().toUpperCase();
