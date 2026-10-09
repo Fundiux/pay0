@@ -157,3 +157,30 @@ Los campos retry/rate explicitados por el candidato 9616055+a18533d concuerdan c
 Campos no devueltos no se convierten en una configuracion inventada. El scheduler de deposito sigue habilitado y puede ejecutar su consulta al publicarse; las pausas de los otros dos permanecen verificadas en esta ventana. No hubo creacion, ejecucion, retry, purge, pause/resume ni lectura de documentos IQ. Metadata privada conservada como evidencia local ignorada; solo configuracion y agregados en este documento.
 
 Gate de comparacion de colas **satisfecho para campos declarados**. Pendiente concreto para autorizar deposito3: diff transitivo de flow/adapters/dispatcher/runtime/autoridad por artefacto A/B, suite financiera17 coordinada y build/discovery del SHA final, comparacion de entorno/identidad/plan efectivo sin valores privados y decision central de ventana con Tasks RUNNING/scheduler ENABLED. No reabrir associatedName como requisito nuevo; no afirmar que estas lecturas acreditan drenaje de trabajos. Los tests permanecen fuera de integracion mientras termine su congelamiento.
+
+
+## Candidato c29260b: deposito3, compatibilidad y gate financiero PASS
+
+Revision exacta `c29260bef02192cdb98def40770bb8cb51378691`, fuente integrada sin cambios durante esta verificacion. Se confirmo igualdad con git show del commit para diez fuentes: callable, flow, adapters, dispatcher, automationRuntime, queue helper, iqHttpClient, externalActionsPolicy, authorizeDeferredIntent y SafetyRuntime. Esas dependencias de deposito no cambiaron entre 9616055 y c29260b; no se reutiliza esa afirmacion para otros dominios modificados entre ambos commits.
+
+Comparacion selectiva por artefacto vigente, sin ejecutar sus fuentes:
+
+| Dependencia | On-demand, grupo A | Automatico/scheduler, grupo B | Interpretacion del candidato |
+| --- | --- | --- | --- |
+| pagoDepositHttpCreateFlow | Agrega expectedUploadId y callback | Agrega callback | Autoridad actual antes de preparar y justo antes de POST; identidad de comprobante conservada |
+| depositHttpCreateFirebaseAdapters | Agrega guard transaccional de generacion/status/omision/terminal | Igual | No debilita locks; lleva on-demand al contrato ya publicado en B |
+| pagoImmediateDispatch | Ausente del paquete A | Solo timing adicional y comentario | Mantiene ID determinista y reserva de generacion; no requiere redeploy del trigger solo por import compartido |
+| automationRuntime | Separa lectura de elegibilidad de claim de intervalo | Igual | readEnabled no consume intervalo; scheduler conserva claim transaccional |
+| iqOnDemandTaskQueue / iqHttpClient | Iguales | Iguales | Sin cambio del transporte de cola ni construccion de solicitud IQ en estos helpers |
+| authorizeDeferredIntent | Nuevo | Nuevo | Perfil PAY0 vigente, root y permiso/delegacion antes del efecto; no reemplaza identidad economica IQ persistida |
+| externalActionsPolicy | Agrega reserveProtectedRequest/observeProtectedResponse | Igual cambio | Hooks de SafetyRuntime recorren contexto AsyncLocal; sin contexto son no-op y no crean control global nuevo |
+
+No se detecto perdida de capacidad en este delta. La nueva negativa por autoridad revocada es intencional; conserva UNKNOWN y no habilita un POST de recuperacion. Estas conclusiones son selectivas, no una certificacion universal de todo codigo empaquetado o de datos productivos.
+
+**Suite financiera integrada PASS, exit0**, ejecutada sobre c29260b con demo-pay0-financial y Firestore127.0.0.1:18087. Diecisiete escenarios documentados: cinco workers/un POST, respuesta perdida y lease vencido sin replay, nueve respuestas ambiguas con consulta sin coincidencia y bloqueo, control422, fencing SafetyRuntime, REP/cuotas y materializacion de comision. Proveedores falsos y global.fetch bloqueado; sin IQ real. TEMP/TMP aislados en directorio ignorado, DEBUG vacio. Runner cerro Firestore/hub/logging; 18087/14407/14507 libres. Listener9150 transitorio fue inspeccionado sin detener procesos ajenos. Integracion git status limpio al finalizar. No se repitio build ni se modifico codigo/entorno persistente.
+
+**Decision de compatibilidad: deposito3 pasa revision selectiva de fuente y gate financiero; es el siguiente lote candidato concreto.** Funciones exactas: processIqPagoDepositOnDemandTask, processIqPagoDepositAutomaticTask y processIqPagoDepositCreateQueue. Publicarlas como unidad logica revisada; no incluir REP, syncToday, trigger de encolado, solicitud o dispersion/comision incidentalmente. Esto no es autorizacion para desplegar desde este subtask.
+
+Gates pendientes exclusivamente de release: confirmar revision/generaciones siguen iguales si paso otra ventana; acreditar build/discovery/predeploy contra SHA congelado (usar evidencia central existente si corresponde, no reconstruir sin motivo); comparar en memoria env/identidades y plan efectivo del selector tres, especialmente defaults max20/concurrency80 y bindings IQ_CREDENTIALS_KEY2/TELEGRAM_BOT_TOKEN1; preservar Tasks RUNNING y Scheduler/pausas segun decision central, sin afirmar colas drenadas porque stats omitio conteos. Revalidar esas metadata despues de publicar. No falta un gate nuevo de associatedName para este lote.
+
+Recuperacion exacta: on-demand vuelve, solo si es seguro, a revision00034-jot/generacion1790638545672827/ZIP grupo A; automatico00001-gox/generacion1791370236816575 y scheduler00020-naz/generacion1791370286964567 usan grupo B. Los hashes completos y ZIP por endpoint estan en la matriz anterior. Un rollback de codigo anterior puede restaurar clasificacion insegura de respuestas ambiguas: ante incidencia, no liberar retryBlocked ni reenviar; preferir correccion hacia adelante y conservar estados UNKNOWN/auditoria. No se ensaya rollback ni se modifica trafico en esta verificacion.
