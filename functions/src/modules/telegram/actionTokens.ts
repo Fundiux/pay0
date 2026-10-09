@@ -45,7 +45,7 @@ async function assertCurrentAccess(row: any, tx?: FirebaseFirestore.Transaction)
     const client = (await read(db.collection("clients").doc(clientId))).data();
     if (!client || client.rootId !== row.rootId) throw new DownloadTokenError(403);
     const permission = row.entityType === "solicitud" ? "operateSolicitudes" : "operateDispersiones";
-    const access = await requireClientOperationalAccess({ uid: row.uid, rootId: row.rootId, role, clientId, client, permission });
+    const access = await requireClientOperationalAccess({ uid: row.uid, rootId: row.rootId, role, clientId, client, permission, transaction: tx });
     if (access.source === "DELEGATED") {
       // Add the grant to the transaction read set and check current time/permissions again.
       const grant = (await read(db.doc(`userClientAccess/${row.uid}/clients/${clientId}`))).data();

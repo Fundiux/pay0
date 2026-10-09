@@ -22,7 +22,7 @@ function harness() {
     ['uploads/d',{rootId:'r',active:true,solicitudId:'s',storagePath:active().storagePath}],
     ['userClientAccess/u/clients/c',{active:true,permissions:{operateSolicitudes:true}}],
   ]);
-  const deleted = Symbol('delete'); const logs=[]; const streams=[]; const generations=[];
+  const deleted = Symbol('delete'); const logs=[]; const streams=[]; const generations=[]; const accessTransactions=[];
   let chain=Promise.resolve(); let disabled=false; let roleAllowed=true; let delegationAllowed=true;
   const ref = p => ({path:p,get:async()=>({data:()=>rows.get(p)}), create:async value=>rows.set(p,value)});
   const transaction = {get:async r=>({data:()=>rows.get(r.path)}),update:(r,patch)=>{const row=rows.get(r.path); for(const [k,v] of Object.entries(patch)){ if(v===deleted) delete row[k]; else row[k]=v; }}};
@@ -35,13 +35,13 @@ function harness() {
     'firebase-admin':admin,'firebase-functions':{logger:{error:(...args)=>logs.push(args)}},
     'firebase-functions/v2/https':{onRequest:(_opts,handler)=>handler},
     '../../utils/authGuard':{assertAuthorized:(_auth,user)=>{if(!roleAllowed||!user||user.active===false)throw Object.assign(Error('PRIVATE_BEARER'),{code:'permission-denied'});return user.role;}},
-    '../clientDelegations/access':{requireClientOperationalAccess:async()=>{if(!delegationAllowed)throw Object.assign(Error('denied'),{code:'permission-denied'});return {source:'DELEGATED'};},normalizeClientAccessPermissions:p=>p||{}},
+    '../clientDelegations/access':{requireClientOperationalAccess:async input=>{accessTransactions.push(input.transaction);if(!delegationAllowed)throw Object.assign(Error('denied'),{code:'permission-denied'});return {source:'DELEGATED'};},normalizeClientAccessPermissions:p=>p||{}},
     '../clientDelegations/policy':{delegationIsCurrent:g=>!!g?.active&&!g.revokedAt&&(!g.expiresAt||g.expiresAt.toMillis()>Date.now())},
     './downloadTokenPolicy':policy,
   });
   const response=()=>{const r=new Writable({write(_chunk,_encoding,cb){r.headersSent=true;cb();}});r.headersSent=false;r.statusCode=200;r.headers={};r.setHeader=(k,v)=>r.headers[k]=v;r.status=s=>{r.statusCode=s;return r;};r.send=body=>{r.end(body);return r;};return r;};
   const request=()=>({method:'GET',headers:{},query:{token:'a'.repeat(43)}});
-  return {app,rows,logs,streams,generations,response,request,setDisabled:v=>disabled=v,setDelegation:v=>delegationAllowed=v};
+  return {app,rows,logs,streams,generations,response,request,transaction,accessTransactions,setDisabled:v=>disabled=v,setDelegation:v=>delegationAllowed=v};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function waitStream(h,n=1){for(let i=0;i<30&&h.streams.length<n;i++)await tick();assert.equal(h.streams.length,n);}
@@ -71,7 +71,7 @@ test('disabled identity, wrong object, root or inactive upload cannot stream',as
 });
 test('current delegated user can download; revoked or expired delegation denies',async()=>{
  for(const state of ['current','revoked','expired']){const h=harness();h.rows.get('solicitudes/s').adminId='other';const grant=h.rows.get('userClientAccess/u/clients/c');if(state==='revoked')grant.revokedAt=time(1);if(state==='expired')grant.expiresAt=time(1);
- const res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);if(state==='current'){await waitStream(h);h.streams[0].end('PDF');}await p;assert.equal(res.statusCode,state==='current'?200:403);}
+ const res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);if(state==='current'){await waitStream(h);assert.ok(h.accessTransactions.includes(h.transaction), 'grant ancestry must share lease transaction');h.streams[0].end('PDF');}await p;assert.equal(res.statusCode,state==='current'?200:403);}
 });
 test('revocation during stream is never overwritten by settlement',async()=>{
  const h=harness(),res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);await waitStream(h);h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status='REVOKED';h.streams[0].end('PDF');await p;assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status,'REVOKED');
