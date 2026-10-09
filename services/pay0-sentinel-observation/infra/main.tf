@@ -282,12 +282,23 @@ resource "google_pubsub_subscription_iam_member" "dead_reader" {
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
+resource "google_project_service" "source_workload_identity" {
+  project            = "pay-0-system"
+  service            = "workloadidentity.googleapis.com"
+  disable_on_destroy = false
+}
+resource "google_workload_identity_service_agent" "source_logging" {
+  parent = "projects/751158244178/locations/global/serviceProducers/logging.googleapis.com"
+  lifecycle { prevent_destroy = true }
+  depends_on = [google_project_service.source_workload_identity]
+}
 resource "google_logging_project_sink" "events" {
   project                = "pay-0-system"
   name                   = "pay0-sentinel-observe-v1"
   destination            = "pubsub.googleapis.com/${google_pubsub_topic.events.id}"
   unique_writer_identity = true
   disabled               = !var.activate_sink
+  depends_on             = [google_workload_identity_service_agent.source_logging]
   filter = join("\n", [
     "resource.type=\"cloud_run_revision\"",
     "resource.labels.location=\"us-central1\"",
@@ -297,8 +308,9 @@ resource "google_logging_project_sink" "events" {
   ])
 }
 resource "google_pubsub_topic_iam_member" "sink" {
-  project = google_project.observation.project_id
-  topic   = google_pubsub_topic.events.name
-  role    = "roles/pubsub.publisher"
-  member  = google_logging_project_sink.events.writer_identity
+  project    = google_project.observation.project_id
+  topic      = google_pubsub_topic.events.name
+  role       = "roles/pubsub.publisher"
+  member     = google_logging_project_sink.events.writer_identity
+  depends_on = [google_workload_identity_service_agent.source_logging]
 }
