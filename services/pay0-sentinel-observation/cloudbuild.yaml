@@ -1,0 +1,9 @@
+# Execute only after central infrastructure/build-identity review. Context must be
+# fresh .build/context-* from scripts/stage-build.mjs, never the whole repo.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'services/pay0-sentinel-observation/Dockerfile', '-t', '${_IMAGE}', '.']
+images: ['${_IMAGE}']
+timeout: 600s
+options:
+  logging: CLOUD_LOGGING_ONLY
