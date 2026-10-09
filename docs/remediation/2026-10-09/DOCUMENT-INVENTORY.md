@@ -2,6 +2,27 @@
 
 Estado: herramienta preparada y probada con fixtures; este agente no ejecuto lecturas productivas ni escrituras cloud. Integracion reporto un bootstrap de100 documentos, documentado abajo; no es cierre historico. Ningun cambio de bridge/rules/UI. No demuestra compatibilidad historica real ni autoriza retirar Storage/getDownloadURL. Fuente revisada: DOCUMENT-ROLLOUT-COVERAGE.md y downloadAccess.ts de .worktrees/private-document-bridge-20261009, mas escritores y verifiedStorageObject del checkout principal.
 
+## Resultado completo del root examinado (reporte de integracion)
+
+El recorrido uploads de root index0 termino en checkpoint privado .firebase/document-inventory/sample-uploads-size-root0.json. Este agente no abrio ese archivo; los siguientes conteos fueron comunicados por integracion. Sustituyen la muestra inicial100 como evidencia de cobertura de ESE root:
+
+| Coleccion / categoria | Conteo |
+|---|---:|
+| uploads escaneados |1446|
+| uploads con estado elegible |1361|
+| uploads con padre canonico concordante y objeto actual <=32MiB |1357|
+| uploads inactivos/no elegibles |85|
+| uploads entityId-only sin padre canonico |4|
+| uploads con tamano declarado desconocido |7|
+| entityDocuments escaneados |23|
+| entityDocuments activos, padre valido y objeto <=32MiB |13|
+| entityDocuments inactivos |10|
+| assetDocuments en root index0 |0|
+
+Consistencia de categorias:1361+85=1446 y1357+4=1361. Los7tamanos declarados desconocidos son una dimension distinta; no sumarlos como7documentos extra ni inferir intersecciones no reportadas. La verificacion Storage permite confirmar el tamano actual de1357uploads y13entityDocuments, aunque algun tamano declarado falte. No se inspeccionaron bytes, MIME, tokens custom ni URL.
+
+Estas lecturas fueron paginadas y secuenciales, no un snapshot transaccional global. Altas con ID previo al cursor o cambios durante el recorrido pueden escapar de la vista combinada. El resultado no acredita otros roots, documentos sin rootId, objetos sin registro, permisos de un actor concreto, lineage, generaciones historicas ni revocacion de URLs bearer. Los4registros legacy siguen bloqueados por metadatos incompletos; no cuentan como descargas compatibles. No declarar cierre total ni cambiar el resolver para hacerlos pasar.
+
 ## Herramienta y modo seguro predeterminado
 
 - qa/scripts/remediation-document-inventory.mjs: sin flags de ejecucion devuelve solo plan DRY_RUN y no carga firebase-admin ni abre red.
@@ -68,7 +89,7 @@ Adapter REST selecciona root por index desde ese checkpoint; nunca requiere escr
 node qa/scripts/remediation-document-inventory-rest.mjs --execute-read-only --bootstrap .firebase/document-inventory/bootstrap-uploads.json --root-index 0 --checkpoint .firebase/document-inventory/sample-uploads-root0.json --max-records 100 --page-size 25
 ```
 
-Este agente NO ejecuto el comando remoto. El adapter fija uploads y maximo100 registros por invocacion; usa FIELDS, filtro rootId exacto y cursor exclusivo por __name__. Padres se consultan por ID canonico, limit1 y solo6 campos root/estado/lifecycle. Las respuestas estan acotadas a512KiB, timeout30s y redirect:error; el endpoint de proyecto es constante. No imprime mensaje original de proveedor, rutas o datos leidos. Checkpoints bajo carpeta ignorada y bootstrap/inventario deben ser archivos distintos.
+Este agente NO ejecuto el comando remoto. El adapter usa uploads por defecto, acepta familias whitelist y mantiene maximo100 registros globales por invocacion; usa FIELDS, filtro rootId exacto y cursor exclusivo por __name__. Padres se consultan por ID canonico, limit1 y solo6 campos root/estado/lifecycle. Las respuestas estan acotadas a512KiB, timeout30s y redirect:error; el endpoint de proyecto es constante. No imprime mensaje original de proveedor, rutas o datos leidos. Checkpoints bajo carpeta ignorada y bootstrap/inventario deben ser archivos distintos.
 
 Storage sigue DESACTIVADO en la primera muestra. El flag opcional --with-storage-metadata solo solicita fields=size al endpoint fijo pay-0-system.firebasestorage.app, coincidente con getStorage(app,"gs://pay-0-system.firebasestorage.app") en src/lib/firebaseClient.ts. La referencia anterior appspot procedia de scripts historicos y fue corregida antes de cualquier lectura Storage; no debe usarse para inferir objetos ausentes. No consulta custom metadata/tokens ni contenido. Su presupuesto queda igual a max-records. La muestra puede detectar problemas de metadata declarada; sin Storage no confirma tamano actual, generacion ni existencia del objeto.
 
@@ -91,3 +112,18 @@ Suite conjunta25/25PASS:8core+5bootstrap+6REST+6conteos/familias, incluyendo cot
 La primera consulta count ejecutada por integracion recibio HTTP200 pero el parser fallo: se habia usado aggregationFields en codigo y fakes. El campo oficial es result.aggregateFields; parser y fixtures corregidos, con prueba que rechaza explicitamente la grafia anterior. El intento fallido no constituye un resultado de conteo ni se contabiliza como gatePASS. El agente no repitio consultas productivas. Referencia primaria: [proto oficial AggregationResult](https://github.com/googleapis/googleapis/blob/master/google/firestore/v1/aggregation_result.proto), campo aggregate_fields; los tipos instalados de @google-cloud/firestore exponen aggregateFields y la prueba verifica ese contrato.
 
 Integracion reporto inventario entityDocuments/assetDocuments completado SOLO para rootindex0:23entityDocuments escaneados,13activos y10inactivos;13padres concordantes y13objetos dentro de32MiB. assetDocuments0 en ese root. No extrapolar a otros roots ni declarar cierre global. Suite local actual26/26PASS (conteos7+REST6+bootstrap5+core8).
+
+## Siguiente diagnostico de los cuatro legacy: propuesta read-only, no ejecutada
+
+El checkpoint agregado actual guarda conteos y ultimo cursor, NO la lista de los4documentos anomalos. Por eso no puede obtenerse una lista de4IDs a partir de ese archivo ni reanudar desde su cursor final para encontrarlos. Usarlo solo como evidencia de alcance/conteos y conservarlo intacto. El root se obtiene por index0 desde bootstrap privado; nunca por un UID pegado en comandos o stdout.
+
+Propuesta para revision antes de implementar/ejecutar:
+
+1. Validar proyecto pay-0-system, root index0, familias uploads y hash de alcance del checkpoint terminado. Guardar un checkpoint diagnostico NUEVO, ignorado, con hash del origen y cursor desde el principio; no sobrescribir inventario ni bootstrap.
+2. Repetir solo proyeccion minima de metadata requerida para detectar estado elegible y falta del campo padre canonico: rootId,estado/lifecycle,entityType,entityId y solicitudId/pagoId/dispersionId. No leer URLs, nombres, tokens ni bytes. Paginas de hasta100, presupuesto100por invocacion y tope total1500documentos para este censo conocido1446. Detener y pedir nueva revision de alcance si cambia la poblacion o aparecen mas de4candidatos; no ampliar automaticamente.
+3. Guardar IDs, updateTime y metadatos de referencia de esos candidatos exclusivamente en un manifest local ignorado, maximo4. stdout solo progreso/conteos y enums. Si el nuevo censo encuentra menos o mas de4 o datos cambiados, marcar SOURCE_CHANGED y no equiparar automaticamente los hallazgos al censo anterior.
+4. Para cada candidato, usar entityType exacto en whitelist para elegir coleccion; entityId solo identifica que padre inspeccionar, NO concede permiso. Consultar maximo1padre por candidato con root/estado/lifecycle, y revalidar version del upload. Proyectar storagePath solo si hace falta clasificar consistencia del prefijo contra ese padre, mantenerlo exclusivamente en memoria; no consultar Storage ni emitir rutas. Presupuesto adicional maximo4lecturas de padres y4relecturas de upload, sin escrituras.
+5. Emitir por indice opaco categorias cerradas: familia SOLICITUD/PAGO/DISPERSION/UNKNOWN; referencia VALID/MISSING/INVALID/CONFLICTING; padre SAME_ROOT_ACTIVE/MISSING/OTHER_ROOT/INACTIVE/UNRESOLVED; prefijo MATCH/MISMATCH/UNVERIFIABLE; procedencia UNVERIFIED salvo evidencia independiente futura. Ningun dato original, IDs, cliente, root, path o nombre aparece en stdout.
+6. Entregar conteos y posible plan de reparacion para revision. Un padre coincidente no prueba procedencia ni autoriza mutacion. Cualquier reparacion requerira autorizacion separada, precondicion CAS y audit atomico; este diagnostico no escribe cloud ni agrega fallback al puente.
+
+Coste propuesto: como maximo1500documentos de reescaneo, hasta8lecturas de diagnostico y queries vacios minimos. No se hizo ese reescaneo ni se consultaron los4padres durante esta actualizacion documental. Alternativa de reutilizar IDs requeriria un manifest privado previo que hoy no existe en el checkpoint agregado; no inventar que se guardaron.
