@@ -25,7 +25,28 @@ Se transpilaron ambos cuerpos TypeScript en VM con SDK/Firestore/guardas y signe
 
 Signer invocado0veces en casos sin padre. Las guardas de rol/delegacion se sustituyeron por fakes para aislar la seleccion de padre; NO se presenta este ensayo como prueba completa de autorizacion. Los fixtures no contienen datos reales y no se persistio muestra productiva en el repositorio.
 
-## Muestra reportada por integracion
+## Resultado completo del root examinado (reporte de integracion)
+
+El recorrido uploads de root index0 termino en checkpoint privado .firebase/document-inventory/sample-uploads-size-root0.json. Este agente no abrio ese archivo; los siguientes conteos fueron comunicados por integracion. Sustituyen la muestra inicial100 como evidencia de cobertura de ESE root:
+
+| Coleccion / categoria | Conteo |
+|---|---:|
+| uploads escaneados |1446|
+| uploads con estado elegible |1361|
+| uploads con padre canonico concordante y objeto actual <=32MiB |1357|
+| uploads inactivos/no elegibles |85|
+| uploads entityId-only sin padre canonico |4|
+| uploads con tamano declarado desconocido |7|
+| entityDocuments escaneados |23|
+| entityDocuments activos, padre valido y objeto <=32MiB |13|
+| entityDocuments inactivos |10|
+| assetDocuments en root index0 |0|
+
+Consistencia de categorias:1361+85=1446 y1357+4=1361. Los7tamanos declarados desconocidos son una dimension distinta; no sumarlos como7documentos extra ni inferir intersecciones no reportadas. La verificacion Storage permite confirmar el tamano actual de1357uploads y13entityDocuments, aunque algun tamano declarado falte. No se inspeccionaron bytes, MIME, tokens custom ni URL.
+
+Estas lecturas fueron paginadas y secuenciales, no un snapshot transaccional global. Altas con ID previo al cursor o cambios durante el recorrido pueden escapar de la vista combinada. El resultado no acredita otros roots, documentos sin rootId, objetos sin registro, permisos de un actor concreto, lineage, generaciones historicas ni revocacion de URLs bearer. Los4registros legacy siguen bloqueados por metadatos incompletos; no cuentan como descargas compatibles. No declarar cierre total ni cambiar el resolver para hacerlos pasar.
+
+## Muestra inicial reportada por integracion (historica)
 
 Primera pagina100uploads:94estatus elegibles,6inactivos;93rutas docs,93tamanos declarados <=32MiB y93padres concordantes. Un registro combina MISSING_CANONICAL_PARENT_FIELD,ENTITY_ID_ONLY_LEGACY,CANONICAL_PARENT_UNRESOLVED,INVALID_OR_UNVERIFIABLE_PREFIX,RECORDED_SIZE_UNKNOWN. Estas banderas no prueban path malicioso: sin padre canonico no puede verificarse prefijo, y se mantiene el rechazo ya existente.
 
@@ -33,6 +54,10 @@ La muestra posterior con Storage, ejecutada por integracion contra bucketcanonic
 
 ## Recomendacion sin ampliar permisos
 
-No introducir fallback entityId como supuesta restauracion: el callable probado no lo tenia. Mantener el caso como defecto preexistente de metadata; no ocultarlo ni concluir que el archivo desaparecio. Si se decide repararlo, primero comprobar procedencia de la fila y correspondencia con entidad padre canonica, root/lifecycle y objeto esperado. Cualquier cambio de campo exige plan revisado, CAS contra version/estado leidos y auditoria atomica; aun con metadatos reparados, el resolver debe revalidar permisos/delegacion/restriccion actuales.
+No introducir fallback entityId como supuesta restauracion: el callable probado no lo tenia. Mantener los4casos como defectos preexistentes de metadata segun el mismo patron probado; no ocultarlo ni concluir que el archivo desaparecio. Si se decide repararlo, primero comprobar procedencia de la fila y correspondencia con entidad padre canonica, root/lifecycle y objeto esperado. Cualquier cambio de campo exige plan revisado, CAS contra version/estado leidos y auditoria atomica; aun con metadatos reparados, el resolver debe revalidar permisos/delegacion/restriccion actuales.
 
 Un fallback futuro entityType+entityId seria compatibilidad nueva, que requiere diseno y pruebas especificas: familia whitelist exacta, ID valido, ninguna contradiccion con campos canonicos, padre existente/root/lifecycle, autoridad vigente en transaccion y prefijo Storage solo como comprobacion de consistencia. URL/path nunca aportan permiso. No se propuso ni ejecuto esa ampliacion para este rollout.
+
+## Diagnostico pendiente sin ampliar autoridad
+
+El plan detallado esta en DOCUMENT-INVENTORY.md: el checkpoint agregado no conserva IDs de anomalos, por lo que se propone reescaneo de metadata bajo el mismo root con nuevo checkpoint privado,100porlote/tope1500, maximo4candidatos y8lecturas adicionales padre/revalidacion. No se ejecuto. El unico resultado publico seria conteos/enums, sin IDs ni datos. EntityId se usaria para consultar un candidato padre, nunca como permiso ni sustitucion automatica del campo canonico. Conservar rechazo legacy hasta que una reparacion especifica tenga evidencia y revision propias.

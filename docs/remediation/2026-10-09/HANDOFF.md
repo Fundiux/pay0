@@ -1,38 +1,47 @@
-# Continuidad de ejecución
+# Continuidad de ejecucion
 
-Objetivo activo: remediación integral. No hay cierre global.
+Objetivo activo: remediacion integral. No hay cierre global.
 
-## Estado verificado 2026-10-09, 20:00 UTC
+## Estado consolidado 2026-10-09
 
-- Fuente: remediation/pay0-integral-20261009, incluye 638e176 reglas probadas, 4eeccab verificador IAM, 6b6794b recuperación UI y 10a9668 canario desactivado. Preservar cambios de agentes y archivos históricos sin seguimiento.
-- Integración: .worktrees/pay0-remediation-integration-20261009, rama integration/pay0-remediation-20261009. HEAD b908a3f; integra parsers/publisher (1e25f1a), puente documental (fb0d0d5), reglas/UI/IAM y generador backend+rules. Export de streamPrivateDocument y gate346 aún pendientes de commit. Remoto continúa en6b8d2f7; main no actualizado.
-- Producción S02: logUnauthorizedRouteAttempt-00013-cij, ACTIVE, sin bindings de secretos, HTTP401/UNAUTHENTICATED. Publicado desde aa8c659.
-- Producción incidencias/OCR desde integración b9e21df: resolveclientdispersionincident-00023-yoy, requestclientdispersionincident-00023-lix, parsepagoreceiptpdf-00013-div, correctpagoreceiptsemanticfield-00002-qet. Las cuatro ACTIVE/Ready, tráfico100%, sin secretos, POST vacío401. CLI reportó error al consultar operación de correct, pero verificación independiente confirmó publicación efectiva; no se repitió. Recuperación y hashes en RELEASE-INCIDENTS-OCR.md de integración.
-- Reglas S01 materializadas SOLO LOCAL:325/325PASS,24brechas Storage delegadas conocidas. Reglas integradas coinciden con fuente por gitdiff (bytes de newline pueden variar). No reglas productivas ni writers desplegados.
-- UI ignora autoridad de securityLock legacy; trustedRestrictionV1 consulta estado propio con protección de cambios de cuenta/stale/expiry. Solo getMyRestrictionStatus exportado, writers/revoke siguen sin index export. Frontend todavía no publicado.
-- Puente POST autenticado por chunks, generation/revisión y autoridad actual integrado. Pruebas backend/UI PASS; legacy signedURL callable conservado. Antes de Hosting: backend disponible y compatibilidad documental histórica inventariada. No retirar ramas Storage ni tokens históricos aún.
-- Builds integración Functions y frontend47páginas PASS; discovery346 estricto4.229s PASS. Gate documental emulado actual en curso. Cambios posteriores requieren sus verificaciones.
-- ZIP acotado integrado: límite comprimido/expandido, CRC, entradas y presupuesto de celdas sparse.11 pruebas ZIP +6 parser conforman17; primera compilación de merge detectó cargador JSZip residual y pasó tras retirarlo. Sin publicar callables de importación aún.
+- Fuente: `remediation/pay0-integral-20261009`, incluye `67adc86` (provision de identidad Logging), `55b3b77` (push OIDC minimo), `28b3bd9` (presupuesto y limites) y los lotes anteriores. Preservar cambios de agentes y archivos historicos sin seguimiento.
+- Integracion: `.worktrees/pay0-remediation-integration-20261009`, rama `integration/pay0-remediation-20261009`, HEAD `93d8f09`. Referencia remota local `origin/integration/pay0-remediation-20261009`: `d4298e0`; no se hizo fetch en esta revision. Main no actualizado. La integracion incorpora ambas historias y capacidades productivas recuperadas; no interpretar cada commit integrado como desplegado.
+- Produccion S02: `logUnauthorizedRouteAttempt-00013-cij`, ACTIVE, sin secretos, HTTP 401/UNAUTHENTICATED. Publicado desde `aa8c659`; reportes OBSERVE_ONLY, sin autoridad de contencion.
+- Produccion incidencias/OCR desde `b9e21df`: resolve `00023-yoy`, request `00023-lix`, parse `00013-div`, correct `00002-qet`, ACTIVE/Ready, trafico 100%, sin secretos, POST vacio 401. La verificacion independiente resolvio el error CLI de consulta de correct sin repetir despliegue. Evidencia: RELEASE-INCIDENTS-OCR.md.
+- Backend documental/recuperacion desplegado desde `d4298e09fe66`: `streamPrivateDocument-00001-cig` y `getMyRestrictionStatus-00001-hay`, ACTIVE/Ready, trafico 100%, sin secretos; postflight 401 PASS. No Hosting, reglas ni writers publicados. Evidencia: RELEASE-DOCUMENT-BACKEND.md.
+- UI integrada ignora autoridad legacy securityLock; consulta estado propio trustedRestrictionV1 y protege carga/cambio de cuenta/stale/expiry. Frontend no publicado. Writers/revoke siguen sin export.
+- Puente POST autenticado por chunks, generation y autoridad actual integrado y backend disponible. Consumidores productivos conservan transporte anterior; callable legacy sigue disponible. No retirar ramas Storage ni tokens historicos aun.
+- Reglas S01 SOLO LOCAL: 325/325 PASS, 24 brechas Storage delegadas conocidas. No reglas productivas desplegadas. Linaje/TOCTOU de delegaciones probado en backend; grants legacy sin procedencia y acceso directo siguen pendientes.
+- Validacion del backend publicado: builds Functions y frontend (47 paginas) PASS, discovery 346 estricto PASS (4.229 s y predeploy 2.317 s), reglas documentales 96, descargas 42/14 tipos/3 roles/8 denegaciones, contratos chunk/revocacion/generation/accountchange y recuperacion UI PASS. Primer intento con ID productivo fue detenido por guard antes de escrituras; runner corregido a demo y repeticion completa PASS. Cambios posteriores requieren sus propios gates.
+- ZIP acotado integrado: limites comprimido/expandido, CRC, entradas y celdas sparse; 17 pruebas PASS. Callables de importacion no publicados por este lote.
+
+## Inventario documental
+
+Recorrido completado del root index0, segun DOCUMENT-INVENTORY.md y LEGACY-DOCUMENT-COMPATIBILITY.md: 1446 uploads, 1361 elegibles, 1357 con padre canonico concordante y objeto actual <=32 MiB, 85 inactivos y 4 entityId-only sin padre canonico. Los 7 tamanos declarados desconocidos son una dimension distinta, no documentos adicionales. Entidades: 23 registros, 13 activos compatibles por metadata/objeto y 10 inactivos. Assets: 0 en ese root.
+
+Los 4 legacy siguen bloqueados; prueba comparativa del resolver previo demuestra rechazo preexistente para ese patron, no autoriza fallback entityId. No se descargaron bytes ni inspeccionaron URLs/tokens. El recorrido paginado no es snapshot global ni cubre otros roots, registros sin rootId, objetos sin registro, autoridad de cada actor o revocacion de URLs bearer. La muestra inicial de 100 de RELEASE-DOCUMENT-BACKEND queda superada para ese root, no como cierre historico total.
 
 ## Sentinel
 
-Proyecto separado pay0-sentinel-observe (756518473677), billing activo. Builder mínimo, repositorio sentinel-images, SA observer, DB sentinel-observation con delete protection, TTL de4colecciones, exclusión de índices de evidencia y reglas deny-all creados.
+Proyecto aislado `pay0-sentinel-observe` (756518473677), billing activo. Observer privado `00001-kwj` Ready/trafico 100%; topic/subscription/DLQ, DB named `sentinel-observation`, deny-all cliente, TTL de 4 colecciones e indices de evidencia configurados. Runtime OBSERVE_ONLY sin autoridad financiera. Imagen observer `sha256:4025eeb29002880c22d52c5e244fb18dab55d69ab6d00f69c8745a296a782feb`.
 
-Imagen observer: sha256:4025eeb29002880c22d52c5e244fb18dab55d69ab6d00f69c8745a296a782feb. Cloud Run observer, topic/subscription y sink todavía no activados. Modo previsto OBSERVE_ONLY; sin autoridad financiera.
+Presupuesto de alertas 300 MXN mensual creado solo para proyecto aislado, actual 50/90/100 y forecast 100, destinatarios IAM predeterminados de facturacion. No es hard cap ni incluye coste del canary/Logging financiero. Observer min 0 y max 1 por servicio/revision. Sin mensajes de prueba de presupuesto ni canales inventados.
 
-Canario privado pay0-security-canary creado en proyecto financiero, revisión00001-fmm Ready/tráfico100%, modoDISABLED, máximo global y por revisión1, min0, timeout5s. Cinco recursos aplicados sin cambios/destrucciones ajenas. SA solo logging.logEntries.create; imagen sha256:30c8505b6da475a26bf5e1d5f9e4020fe53bb422969aac69918164fae8e8a315. POST anónimo403; token actual del operador401 pendiente diagnóstico. Sin grants públicos de servicio/proyecto observados. No eventos emitidos.
+El apply parcial inicial fallo solo al asignar publisher a la identidad Logging. Recuperacion declarada en `67adc86`: API Workload Identity del origen, provision explicita del service agent y publisher solo sobre topic; apply posterior PASS, sin roles amplios adicionales. Push usa solo OpenIdTokenCreator sobre SA push; esta tiene run.invoker del observer. Sink permanece **DISABLED**.
 
-IAM observer probado con token600s y binding temporal mínimo retirado/ausencia verificada. Firestore financiero403, Storage financiero403, DB named Begin/Rollback200; default aislada404 y no existe. Matriz completa NOT_VERIFIED: no reinterpretar404 como denegación. Policy Troubleshooter modelado en preparación por agente independiente; distinguir modelado de RPC real. No quedan permisos temporales de esa prueba.
+IAM runtime verificado: observer Firestore financiero 403 y Storage 403, DB named Begin/Rollback 200. Default aislada no existe: RPC 404 no prueba denegacion; Policy Troubleshooter modela cuatro permisos default DENIED/named GRANTED. Canario: Firestore financiero/DB named/Storage 403 y prueba anterior autenticada 503/PUBLISHER_DISABLED. Bindings temporales retirados y ausencia comprobada; distinguir modelado de RPC real.
 
-Terraform local verificado en services/pay0-sentinel-observation/infra/.terraform/verified-cli/terraform.exe. Estado, planes, logs, fuentes productivas y dotenv son privados/ignorados. No imprimir tokens/entorno/payloads.
+Actualizacion operativa comunicada por integracion, posterior al estado DISABLED de SENTINEL-ROLLOUT.md: canario privado revision `00002-9fs` en **CANARY_DRY_RUN**, allowlist y filtro ajustados. Root esta ejecutando el POST dry-run: **resultado pendiente, no PASS**. No atribuir emision/persistencia ni E2E a Ready, al modo dry-run o a un HTTP aislado. El sink sigue apagado. Sin writers de restricciones exportados ni contencion activada.
 
-## Próximos pasos
+Terraform local: `services/pay0-sentinel-observation/infra/.terraform/verified-cli/terraform.exe`. Estado, planes, logs y credenciales son privados/ignorados; no imprimir tokens/entorno/payloads. Este handoff se actualizo solo con documentos, commits locales y estado comunicado por integracion; sin operaciones remotas.
 
-1. Terminar gate documental integrado, guardar exports/gate346 y evidencia; publicar únicamente backend nuevo después de preflight, antes del frontend.
-2. Inventario documental read-only preparado con fixtures, aún sin lecturas productivas. Resolver referencias históricas/tamaño32MiB antes de retirar transporte antiguo o publicar UI que no pueda servirlas.
-3. Completar IAM modelado, postflight privado canario, presupuesto/alertas y servicio OBSERVE_ONLY antes de ingesta. No cerrar aislamiento con404 ni activar contención.
-4. Telegram: consumidor compatible, Hosting de página y después productor; ventana legacy15min. No desplegar productor antes de página.
-5. Integrar/push/main gradualmente con evidencia vigente, manteniendo las capacidades productivas recuperadas y sin despliegue global.
-6. Continuar backlog financiero, delegaciones legacy/migración, workers/autorización, parsers restantes, App Check opt-in y recuperación. No considerar el trabajo integral concluido por terminar estos lotes.
+## Proximos pasos
 
-No pagos, dispersiones, depósitos, efectos fiscales ni mensajes de prueba reales. Mantener pausas REP y syncTodayIqInvoicesNow. Preservar worktrees y material histórico.
+1. Obtener resultado del POST dry-run privado y registrar evidencia. Luego decidir ventana sintetica E2E Logging/PubSub/observer/Firestore con un evento y replay, verificando persistencia/idempotencia; no activar productores financieros ni contencion.
+2. Resolver los 4 metadatos legacy con diagnostico acotado y plan CAS/auditoria si procede; no ampliar autoridad para forzar compatibilidad. Revisar cobertura historica restante antes de Hosting y mantener transporte compatible.
+3. Publicar frontend solo tras sus gates; no retirar lecturas Storage delegadas o tokens historicos por el mero despliegue del puente. Mantener pendientes reglas y grants legacy sin procedencia.
+4. Telegram: consumidor compatible, Hosting de pagina y despues productor; ventana legacy 15 min. No desplegar productor antes de pagina.
+5. Integrar/push/main gradualmente con evidencia vigente, sin despliegue global. Conservar pruebas y pausas de cada lote.
+6. Continuar backlog financiero, delegaciones/migracion, workers/autorizacion, parsers restantes, App Check opt-in y recuperacion. AR-10 tiene revision individual en LEGACY-RESOLUTION.md; no confundir clasificacion estatica con retiro/reactivacion ni cierre productivo.
+
+No pagos, dispersiones, depositos, efectos fiscales ni mensajes de prueba reales. Mantener pausas REP y syncTodayIqInvoicesNow. Preservar worktrees y material historico.
