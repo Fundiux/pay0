@@ -4,7 +4,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {memoryCredential,boundedJson,PROJECT} from './remediation-document-inventory-bootstrap.mjs';
 import {FIELDS,FAMILIES,inventory} from './remediation-document-inventory.mjs';
-export const BUCKET='pay-0-system.appspot.com';
+export const BUCKET='pay-0-system.firebasestorage.app';
 const DOCUMENTS=`projects/${PROJECT}/databases/(default)/documents`;
 const API=`https://firestore.googleapis.com/v1/${DOCUMENTS}:runQuery`;
 const PARENT_FIELDS=['rootId','status','active','isDeleted','deleted','deletedAt'];
