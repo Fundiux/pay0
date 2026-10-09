@@ -1,3 +1,4 @@
+import { observationEvidenceResolver, assertResolvedOutcomeTime } from "./observationEvidence";
 import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "./hugoCore/evidenceIdentity";
 import { createHash } from "node:crypto";
 import { Firestore } from "firebase-admin/firestore";
@@ -28,7 +29,8 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
         canonicalEvidenceType(d.entityReference?.entityType) !== canonicalEvidenceType(input.features.entityType)) throw new HttpsError("failed-precondition", "Falta decisión vinculada a observación.");
       const [observationSnap, traceSnap] = await Promise.all([tx.get(this.db.collection("agent007Observations").doc(d.links.observationId)),
         input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null)]);
-      const o = observationSnap.data(), t = traceSnap?.data();
+      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
+      const o = (await resolveEvidence(observationSnap.id, observationSnap.data())).observation, t = traceSnap?.data();
       if (!o || o.rootId !== rootId || o.caseId !== d.entityReference?.entityId || input.traceId && !t) throw new HttpsError("failed-precondition", "Observación o traza fuera de ámbito.");
       const now = new Date().toISOString(); let record: LearningExperience;
       try { record = buildDraftExperience({ rootId, experienceId: id, decisionMemoryId: input.decisionId, domain: input.domain, taskType: input.taskType, intent: input.intent,
@@ -60,7 +62,12 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
         tx.get(this.db.collection("agent007Observations").doc(m.links.observationId)), tx.get(this.db.collection("agent007Memory").doc(m.links.decisionId)),
         tx.get(this.db.collection("agent007Observations").doc(m.links.outcomeId)), input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null),
       ]);
-      const o = obsSnap.data(), d = decisionSnap.data(), z = outcomeSnap.data(), t = traceSnap?.data();
+      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
+      const [initialEvidence, outcomeEvidence] = await Promise.all([
+        resolveEvidence(obsSnap.id, obsSnap.data()), resolveEvidence(outcomeSnap.id, outcomeSnap.data()),
+      ]);
+      const o = initialEvidence.observation, d = decisionSnap.data(), z = outcomeEvidence.observation, t = traceSnap?.data();
+      assertResolvedOutcomeTime(outcomeEvidence, Date.parse(d?.decision?.decisionAt || ""));
       if (!o || !d || !z || input.traceId && !t) throw new HttpsError("failed-precondition", "Faltan fuentes de experiencia.");
       const now = new Date().toISOString();
       let record: LearningExperience;
@@ -107,7 +114,9 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
       const snap = await tx.get(target), row = snap.data() as LearningExperience | undefined;
       if (!row || row.rootId !== scope) throw new HttpsError("not-found", "Experiencia no encontrada.");
       if (row.state !== "WAITING_FOR_OUTCOME" || row.outcome) throw new HttpsError("failed-precondition", "La experiencia ya tiene resultado o no está pendiente.");
-      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId)), z = outcomeSnap.data();
+      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId));
+      const evidence = await observationEvidenceResolver(this.db, tx, scope)(outcomeId, outcomeSnap.data()), z = evidence.observation;
+      assertResolvedOutcomeTime(evidence, Date.parse(row.humanDecision?.decidedAt || ""), row.correction ? Date.parse(row.correction.correctedAt) : undefined);
       if (!sameEvidenceIdentity(observationEntity(z), { sourceSystem: row.entityReferences[0]?.system, entityType: row.entityReferences[0]?.entityType, entityId: row.entityReferences[0]?.entityId }))
         throw new HttpsError("failed-precondition", "Identidad del resultado incompleta o incompatible: sistema, tipo e identificador requeridos.");
       const decisionAt = row.humanDecision?.decidedAt, correctedAt = row.correction?.correctedAt, occurredAt = iso(z?.createdAt);
