@@ -18,7 +18,7 @@ const schema = load('schema', { 'node:crypto': crypto });
 const policy = load('policy');
 const { ObservationDetector, OBSERVATION_LIMITS } = load('detector', { './schema': schema, './policy': policy });
 const { createObservationIngress } = load('ingress');
-const { NamespacedObservationStore } = load('transactionalStore');
+const { NamespacedObservationStore } = load('transactionalStore', { './schema': schema });
 const NOW = 1800000000000;
 const server = { rootId: 'r1', actorUid: 'u1', publisherId: 'pay0-backend', source: 'SERVER' };
 const client = { ...server, source: 'CLIENT', publisherId: 'client-report-collector' };
@@ -172,4 +172,81 @@ test('persistence adapter confines every read/write to fixed incident namespace 
   assert.throws(() => adapter.transact('../users', async () => {}), /INVALID_OBSERVATION_NAMESPACE/);
   await assert.rejects(adapter.transact(schema.digest('r1'), async tx => tx.readIncident('../users/u1')), /INVALID_OBSERVATION_KEY/);
   assert(paths.every(path => !path.includes('/users/')));
+});
+
+test('same identity with different admitted content conflicts without writes, quota or authority', async () => {
+  for (const patch of [{ eventType: 'DUPLICATE_EFFECT_SUSPECTED' }, { origin: 'SERVER_AUTH_DECISION' },
+    { occurredAtMs: NOW - 1 }, { intentionId: 'different' }, { attemptId: 'different' }, { effectId: 'different' }]) {
+    const db = store(), detector = new ObservationDetector(db, () => NOW);
+    assert.equal((await detector.ingest(event(), server)).outcome, 'RECORDED');
+    const before = structuredClone([...db.data]);
+    assert.deepEqual(await detector.ingest(event(patch), server), { decision: 'OBSERVE_ONLY', restricted: false, outcome: 'EVENT_CONTENT_CONFLICT' });
+    assert.deepEqual([...db.data], before);
+  }
+});
+
+test('receipt binding is stable for reordered keys and absent/null optional correlations', async () => {
+  const db = store(), detector = new ObservationDetector(db, () => NOW);
+  const input = event({ intentionId: null, attemptId: null, effectId: null });
+  assert.equal((await detector.ingest(input, server)).outcome, 'RECORDED');
+  const reordered = Object.fromEntries(Object.entries(input).reverse());
+  delete reordered.intentionId; delete reordered.attemptId; delete reordered.effectId;
+  assert.equal((await detector.ingest(reordered, server)).outcome, 'DUPLICATE');
+  const receipt = db.entries('receipts')[0][1];
+  assert.equal(receipt.contentBindingVersion, 'PAY0-EVENT-CONTENT@1');
+  assert.match(receipt.contentDigest, /^[a-f0-9]{64}$/);
+});
+
+test('legacy receipts and corrupt bindings fail closed explicitly without rewriting evidence', async () => {
+  for (const change of [row => { delete row.contentDigest; delete row.contentBindingVersion; },
+    row => { row.contentDigest = 'bad'; }, row => { row.contentBindingVersion = 'unknown'; },
+    row => { row.event.occurredAtMs--; }, row => { delete row.contentDigest; }]) {
+    const db = store(), detector = new ObservationDetector(db, () => NOW);
+    await detector.ingest(event(), server);
+    const [key, row] = db.entries('receipts')[0]; change(row); db.data.set(key, row);
+    const before = structuredClone([...db.data]);
+    const legacy = !Object.hasOwn(row, 'contentDigest') && !Object.hasOwn(row, 'contentBindingVersion');
+    assert.equal((await detector.ingest(event(), server)).outcome, legacy ? 'LEGACY_RECEIPT_UNVERIFIED' : 'RECEIPT_BINDING_INVALID');
+    assert.deepEqual([...db.data], before);
+  }
+});
+
+test('simultaneous conflicting origins admit exactly one receipt and one quota charge', async () => {
+  const db = store(), detector = new ObservationDetector(db, () => NOW);
+  const outcomes = await Promise.all([detector.ingest(event(), server), detector.ingest(event({ origin: 'SERVER_AUTH_DECISION' }), server)]);
+  assert.deepEqual(outcomes.map(r => r.outcome).sort(), ['EVENT_CONTENT_CONFLICT', 'RECORDED']);
+  assert.equal(db.entries('receipts').length, 1); assert.equal(db.entries('incidents').length, 1);
+  assert.ok(db.entries('quotas').every(([, row]) => row.accepted === 1));
+});
+
+test('identity remains root/publisher/actor/event scoped and each transaction reads exactly three receipt slots', async () => {
+  const db = store(), receiptReads = [];
+  const wrapped = { transact: (root, operation) => db.transact(root, tx => {
+    const reads = []; receiptReads.push(reads);
+    return operation({ ...tx, readReceipt: key => { reads.push(key); return tx.readReceipt(key); } });
+  }) };
+  const detector = new ObservationDetector(wrapped, () => NOW);
+  for (const [input, ingress] of [[event(), server], [event({ rootId: 'r2' }), { ...server, rootId: 'r2' }],
+    [event({ actorUid: 'u2' }), { ...server, actorUid: 'u2' }], [event(), { ...server, publisherId: 'other-backend' }]]) {
+    assert.equal((await detector.ingest(input, ingress)).outcome, 'RECORDED');
+  }
+  assert.equal((await detector.ingest(event(), server)).outcome, 'DUPLICATE');
+  assert.equal((await detector.ingest(event({ origin: 'SERVER_AUTH_DECISION' }), server)).outcome, 'EVENT_CONTENT_CONFLICT');
+  assert.ok(receiptReads.every(reads => reads.length === 3 && new Set(reads).size === 3));
+  assert.equal(db.entries('receipts').length, 4);
+});
+
+test('adapter refuses new receipts without valid binding and never backfills legacy reads', async () => {
+  const db = store(), detector = new ObservationDetector(db, () => NOW); await detector.ingest(event(), server);
+  const receipt = db.entries('receipts')[0][1]; let creates = 0;
+  const adapter = new NamespacedObservationStore({ runTransaction: async operation => operation({
+    read: async () => ({ legacy: true }), create: () => { creates++; }, replace: () => { throw Error('UNEXPECTED_WRITE'); },
+  }) });
+  const root = schema.digest('r1'), key = schema.digest('receipt');
+  for (const value of [{ ...receipt, contentDigest: undefined }, { ...receipt, contentBindingVersion: undefined },
+    { ...receipt, event: { ...receipt.event, eventType: 'SCOPE_MISMATCH' } }]) {
+    await assert.rejects(adapter.transact(root, tx => tx.createReceipt(key, value)), /INVALID_RECEIPT_BINDING/);
+  }
+  assert.equal(creates, 0);
+  assert.deepEqual(await adapter.transact(root, tx => tx.readReceipt(key)), { legacy: true });
 });

@@ -1,3 +1,4 @@
+import { EVENT_CONTENT_BINDING, securityEventContentDigest } from "./schema";
 import type { ObservationIncident, ObservationReceipt, ObservationStore, ObservationTransaction, QuotaState } from "./store";
 
 /** Persistence port supplied by the incident writer, not the detector identity.
@@ -28,7 +29,10 @@ export class NamespacedObservationStore implements ObservationStore {
         readReceipt: async key => await transaction.read(path("receipts", key)) as ObservationReceipt | null,
         readIncident: async key => await transaction.read(path("incidents", key)) as ObservationIncident | null,
         writeQuota: (key, value) => transaction.replace(path("quotas", key), value),
-        createReceipt: (key, value) => transaction.create(path("receipts", key), value),
+        createReceipt: (key, value) => {
+          if (value.contentBindingVersion !== EVENT_CONTENT_BINDING || value.contentDigest !== securityEventContentDigest(value.event)) throw new Error("INVALID_RECEIPT_BINDING");
+          transaction.create(path("receipts", key), value);
+        },
         writeIncident: (key, value) => transaction.replace(path("incidents", key), value),
       });
     });

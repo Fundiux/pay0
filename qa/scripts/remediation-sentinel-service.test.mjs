@@ -201,3 +201,35 @@ test('documented PubSub push aliases reach the real detector; mismatches remain 
   assert.deepEqual(metrics, ['RECORDED', 'DUPLICATE', 'INVALID_ENVELOPE']);
   assert.equal([...db.rows.entries()].filter(([path]) => path.includes('/incidents/'))[0][1].eventCount, 1);
 });
+
+test('semantic replay ignores changing delivery metadata and HTTP ACKs permanent binding outcomes', async t => {
+  const { detector, db } = fixture(); const metrics = [];
+  const server = createObservationServer({ config, detector, now: () => NOW, metric: code => metrics.push(code), verify: async () => {} });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(() => server.close());
+  assert.equal((await request(server, JSON.stringify(envelope('bound-event')))).status, 200);
+  const first = structuredClone([...db.rows.entries()]);
+  const replay = envelope('bound-event', log => {
+    log.timestamp = new Date(NOW + 1000).toISOString(); log.receiveTimestamp = new Date(NOW + 2000).toISOString(); log.insertId = 'new-delivery-id';
+  });
+  replay.message.messageId = '456'; replay.message.publishTime = new Date(NOW + 3000).toISOString(); replay.deliveryAttempt = 4;
+  let response = await request(server, JSON.stringify(replay));
+  assert.equal(response.status, 200); assert.deepEqual(JSON.parse(response.data), { outcome: 'DUPLICATE', decision: 'OBSERVE_ONLY', restricted: false });
+  assert.deepEqual([...db.rows.entries()], first);
+  response = await request(server, JSON.stringify(envelope('bound-event', log => { log.jsonPayload.event.occurredAtMs--; })));
+  assert.equal(response.status, 200); assert.deepEqual(JSON.parse(response.data), { outcome: 'EVENT_CONTENT_CONFLICT', decision: 'OBSERVE_ONLY', restricted: false });
+  assert.deepEqual([...db.rows.entries()], first);
+  const [receiptPath, receipt] = [...db.rows.entries()].find(([path]) => path.includes('/receipts/'));
+  delete receipt.contentDigest; delete receipt.contentBindingVersion;
+  const legacy = structuredClone([...db.rows.entries()]);
+  response = await request(server, JSON.stringify(envelope('bound-event')));
+  assert.equal(response.status, 200); assert.equal(JSON.parse(response.data).outcome, 'LEGACY_RECEIPT_UNVERIFIED');
+  assert.deepEqual([...db.rows.entries()], legacy);
+  db.rows.set(receiptPath, { ...receipt, contentDigest: 'bad' });
+  const corrupt = structuredClone([...db.rows.entries()]);
+  response = await request(server, JSON.stringify(envelope('bound-event')));
+  assert.equal(response.status, 200); assert.equal(JSON.parse(response.data).outcome, 'RECEIPT_BINDING_INVALID');
+  assert.deepEqual([...db.rows.entries()], corrupt);
+  assert.deepEqual(metrics, ['RECORDED', 'DUPLICATE', 'EVENT_CONTENT_CONFLICT', 'LEGACY_RECEIPT_UNVERIFIED', 'RECEIPT_BINDING_INVALID']);
+  assert.ok(metrics.every(code => /^[A-Z_]+$/.test(code)));
+  assert.equal(db.rows.get(GLOBAL_PATH).day.count, 1);
+});

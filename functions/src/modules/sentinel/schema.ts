@@ -85,3 +85,22 @@ export function sanitizeSecurityEvent(raw: unknown, ingress: VerifiedIngress, no
     origin: row.origin as Origin, eventType: row.eventType as EventType, occurredAtMs,
   };
 }
+
+/** Versioned semantic binding, not producer authentication. Delivery timestamps,
+ * Pub/Sub IDs, signatures and observedAt never enter this tuple. Optional IDs
+ * have already been normalized to null and hashed by sanitizeSecurityEvent. */
+export const EVENT_CONTENT_BINDING = "PAY0-EVENT-CONTENT@1" as const;
+export function securityEventContentDigest(event: SanitizedEvent): string {
+  const names = ["schemaVersion", "rootId", "actorUid", "publisherDigest", "eventDigest", "intentionDigest", "attemptDigest", "effectDigest", "origin", "eventType", "occurredAtMs"];
+  if (!event || typeof event !== "object" || Array.isArray(event)) throw Error("INVALID_EVENT_BINDING");
+  const descriptors = Object.getOwnPropertyDescriptors(event);
+  if (Object.keys(descriptors).sort().join(",") !== names.slice().sort().join(",") ||
+      Object.values(descriptors).some(row => !Object.prototype.hasOwnProperty.call(row, "value"))) throw Error("INVALID_EVENT_BINDING");
+  const hash = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+  if (event.schemaVersion !== SENTINEL_SCHEMA || !identifier(event.rootId) || !identifier(event.actorUid) ||
+      !hash(event.publisherDigest) || !hash(event.eventDigest) ||
+      [event.intentionDigest, event.attemptDigest, event.effectDigest].some(value => value !== null && !hash(value)) ||
+      !["SERVER_AUTH_DECISION", "SERVER_EXECUTION", "CLIENT_REPORTED"].includes(event.origin) ||
+      !EVENT_TYPES.includes(event.eventType) || !Number.isSafeInteger(event.occurredAtMs) || event.occurredAtMs < 0) throw Error("INVALID_EVENT_BINDING");
+  return digest([EVENT_CONTENT_BINDING, ...names.map(name => event[name as keyof SanitizedEvent])]);
+}

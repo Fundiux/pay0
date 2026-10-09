@@ -3,6 +3,9 @@ import type { SanitizedEvent } from "./schema";
 
 export interface QuotaState { windowStartedAtMs: number; accepted: number }
 export interface ObservationReceipt {
+  // Optional only when reading legacy evidence; all new creates require both.
+  contentBindingVersion?: "PAY0-EVENT-CONTENT@1";
+  contentDigest?: string;
   eventDigest: string;
   event: SanitizedEvent;
   incidentKey: string;
