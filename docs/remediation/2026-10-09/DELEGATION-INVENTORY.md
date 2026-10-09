@@ -151,3 +151,86 @@ are not fully evaluated. Inactive records remain diagnostically visible.
 14/14 terminal tests PASS locally, including four distinct grantors/clients and
 exactly twelve reads; existing inventory suite 24/24 PASS remains required.
 No production diagnostic, migration, new grantAuthority, build or deployment.
+
+## Reported terminal diagnostic, 2026-10-09
+
+The coordinating agent reports remote execution of `d96f283` PASS: 88 scanned,
+four grants, six masked profile/client reads, one distinct grantor, and zero
+conflicting, missing or invalid grantor references. All four recipients returned
+REQUIRES_ANCESTOR_REVIEW at the intentional parent-read boundary; the grantor
+returned CURRENT_SUPERADMIN_TERMINAL for all four. Two grants were current by
+lifetime and two inactive. This reviewer did not execute or reopen private remote
+responses. No exact execution timestamp was supplied for this second diagnostic.
+
+The single current superadmin terminal supplies a useful present-authority
+antecedent. It does not evaluate the four complete grants, their normalized
+permissions or historical issuance legality. Recipient ancestor-review results
+are intentionally incomplete, not a claim that the grants are denied.
+
+## Bounded complete-grant evaluation; local implementation approved
+
+Keep the terminal tool and completed inventory checkpoint unchanged. A new
+script/test would request the existing grant projection plus the complete
+`permissions` field. Complete-field projection preserves malformed null/array
+values that the backend rejects; selecting only named subfields could erase that
+shape evidence. Keep the same profile and client masks described above.
+
+One collectionGroup query, at most 100 scanned entries. Require exactly four
+in-scope grant paths, no fifth matching path, and at most one distinct referenced
+grantor. Do not hardcode IDs or infer a relationship by root/index alone. Derive
+references from the actual returned grants with backend precedence. A complete
+short query page is required before evaluating this cohort. A changed count,
+missing scope evidence or changed grantor cohort must stop for review.
+
+Preload at most five unique profiles (four recipients and one grantor) and four
+unique clients: nine masked GETs worst case, plus the one bounded query. The prior
+six-read result suggests deduplication but does not justify assuming a particular
+client count. Grants and permissions come from the query, not further grant GETs.
+All cached references are explicitly enumerated in memory; nothing identifying
+is printed or persisted. No private historical checkpoint is rewritten.
+
+Execute the real backend resolver over these preloaded snapshots with a fixed
+clock. Its document adapter may return only an enumerated cached user/client/grant.
+Any attempted parent/user/grant access outside that cohort aborts with a fixed
+COHORT_INCOMPLETE error without a new remote lookup. Do not fabricate missing
+parents, default an unrecognized reference to success, or continue recursively.
+
+Aggregate allowed/source/reason using fixed known categories, plus true/false
+counts for each canonical permission: view, operate, viewBasic,
+operateSolicitudes, operatePagos, operateBeneficiarios, operateDispersiones,
+viewBalanceInDispersion, requestDispersionIncidents, commentDispersionNotes.
+Use actual resolver reasons for inactive or denied grants. Unknown backend
+reason/source values should fail closed, not leak raw strings. This is still a
+nontransactional observation of current snapshots, never historical authorization
+or a decision to migrate data.
+
+Required synthetic cases: complete permitted cohort, two inactive records,
+explicit permission revocation and inheritance/intersection, restricted grantor,
+wrong root, changed fifth grant/second grantor, missing parent, unexpected backend
+reference and zero extra reads after any cohort escape. Test against actual
+backend modules and typed timestamps with fixed clocks. No further remote read is
+authorized by this design document itself.
+
+### Complete-cohort local implementation and gates
+
+The coordinating agent approved the new helper/tests, not another remote run.
+Files: `scripts/diagnose-delegation-complete-cohort.mjs` and
+`qa/scripts/remediation-delegation-complete-cohort.test.mjs`. Existing terminal
+and inventory code remain unchanged. Dry run is default; future approved use has
+`--execute-read-only --bootstrap <private file> --root-index <index>`.
+
+Exactly four scoped grants and a short query page are required. The enumerated
+cohort may reference at most one grantor; IDs are derived from actual metadata and
+kept in memory. At most nine masked reads populate the cache before the backend
+resolver runs. No resolver read can reach the network, even on error. Output
+includes aggregate cached resolver-read counts by users/clients/grants, never
+references. Live snapshots are sequential, not atomic; a positive result remains
+current-snapshot evidence only. Backend source/reasons and ten permission flags
+are validated against fixed schemas before emitting aggregate counts.
+
+12/12 new tests PASS: actual resolver allowed/denied grants, inactive reasons,
+explicit and malformed permissions, cached parent intersection, legacy unverified
+provenance retained, restricted/revoked-module/wrong-root grantor, missing or
+unexpected reference with zero extra remote reads, fifth grant/second grantor,
+incomplete query, exact nine-read upper bound, typed timestamp/fixed-clock expiry,
+and projection/transport shape. No new remote execution, mutation or build.
