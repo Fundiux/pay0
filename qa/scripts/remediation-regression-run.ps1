@@ -22,7 +22,7 @@ $taskSettings = @{
 [System.IO.File]::WriteAllText($taskConfig, ($taskSettings | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
 Push-Location $taskRoot
 try {
-  & firebase.cmd emulators:exec --project demo-pay0-regression --config $taskConfig --only firestore,storage 'node qa/scripts/client-csf-create-regression.cjs && node qa/scripts/verify-regression-rules.mjs && node qa/scripts/verify-authorized-document-download.cjs'
+  & firebase.cmd emulators:exec --project demo-pay0 --config $taskConfig --only firestore,storage 'node qa/scripts/client-csf-create-regression.cjs && node qa/scripts/verify-regression-rules.mjs && node qa/scripts/verify-authorized-document-download.cjs'
   if ($LASTEXITCODE -ne 0) { throw "Integrated regression suite failed: $LASTEXITCODE" }
 } finally {
   Pop-Location
