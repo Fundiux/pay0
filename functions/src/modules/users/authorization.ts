@@ -80,6 +80,8 @@ export function decideUserAuthorization(params: {
     return { allowed: false, role, reason: "USER_INACTIVE" };
   }
 
+  if (!role) return { allowed: false, role, reason: "ROLE_NOT_ALLOWED" };
+
   const requirement = params.requirement || {};
   if (requirement.allowedRoles?.length && !requirement.allowedRoles.includes(role as CanonicalUserRole)) {
     return { allowed: false, role, reason: "ROLE_NOT_ALLOWED" };
