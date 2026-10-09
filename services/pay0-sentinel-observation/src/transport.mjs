@@ -1,6 +1,14 @@
 const plain = value => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 const keys = (value, allowed, required = allowed) => plain(value) && Object.keys(value).every(key => allowed.includes(key)) && required.every(key => Object.hasOwn(value, key));
 const fixedError = () => { throw new Error('INVALID_ENVELOPE'); };
+// Wrapped Pub/Sub push documents both JSON spellings, often together.
+// Never silently prefer one if duplicate fields disagree.
+function aliasedString(value, camel, snake) {
+  const hasCamel = Object.hasOwn(value, camel), hasSnake = Object.hasOwn(value, snake);
+  if ((!hasCamel && !hasSnake) || (hasCamel && typeof value[camel] !== 'string') ||
+      (hasSnake && typeof value[snake] !== 'string') || (hasCamel && hasSnake && value[camel] !== value[snake])) fixedError();
+  return hasCamel ? value[camel] : value[snake];
+}
 
 export function createOidcVerifier(authClient, config, now = () => Date.now()) {
   return async authorization => {
@@ -18,10 +26,12 @@ export function createOidcVerifier(authClient, config, now = () => Date.now()) {
 export function decodeEnvelope(body, config, now = () => Date.now()) {
   if (!keys(body, ['message', 'subscription', 'deliveryAttempt'], ['message', 'subscription']) || body.subscription !== config.subscription) fixedError();
   const m = body.message;
-  if (!keys(m, ['data', 'messageId', 'publishTime', 'attributes', 'orderingKey'], ['data', 'messageId', 'publishTime']) ||
-      typeof m.messageId !== 'string' || !/^\d{1,128}$/.test(m.messageId) || typeof m.data !== 'string' || m.data.length > Math.ceil(config.maxLogBytes / 3) * 4 ||
+  if (!keys(m, ['data', 'messageId', 'message_id', 'publishTime', 'publish_time', 'attributes', 'orderingKey'], ['data'])) fixedError();
+  const messageId = aliasedString(m, 'messageId', 'message_id');
+  const publishTimeText = aliasedString(m, 'publishTime', 'publish_time');
+  if (!/^\d{1,128}$/.test(messageId) || typeof m.data !== 'string' || m.data.length > Math.ceil(config.maxLogBytes / 3) * 4 ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(m.data)) fixedError();
-  const publishTime = Date.parse(m.publishTime);
+  const publishTime = Date.parse(publishTimeText);
   if (!Number.isFinite(publishTime) || publishTime > now() + 60000 || publishTime < now() - 86400000) fixedError();
   const data = Buffer.from(m.data, 'base64');
   if (data.length > config.maxLogBytes || data.toString('base64') !== m.data) fixedError();

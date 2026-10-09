@@ -94,6 +94,48 @@ test('envelope rejects wrong subscription producer revision root actor and free-
   assert.throws(() => decodeEnvelope({ ...envelope(), subscription: 'other' }, config, () => NOW));
   const large = envelope(); large.message.data = 'A'.repeat(12000); assert.throws(() => decodeEnvelope(large, config, () => NOW));
 });
+
+test('wrapped push accepts documented matching camel/snake metadata aliases without mutating input', () => {
+  const expected = decodeEnvelope(envelope(), config, () => NOW);
+  for (const style of ['both', 'snake', 'mixed-id', 'mixed-time']) {
+    const body = envelope();
+    body.message.message_id = body.message.messageId;
+    body.message.publish_time = body.message.publishTime;
+    if (style === 'snake' || style === 'mixed-id') delete body.message.messageId;
+    if (style === 'snake' || style === 'mixed-time') delete body.message.publishTime;
+    const before = structuredClone(body);
+    assert.deepEqual(decodeEnvelope(body, config, () => NOW), expected);
+    assert.deepEqual(body, before);
+  }
+  const maximum = envelope();
+  Object.assign(maximum.message, { message_id: maximum.message.messageId, publish_time: maximum.message.publishTime, attributes: { synthetic: 'only' }, orderingKey: 'synthetic' });
+  maximum.deliveryAttempt = 5;
+  assert.deepEqual(decodeEnvelope(maximum, config, () => NOW), expected);
+});
+
+test('push aliases reject contradictions invalid types missing metadata and unrelated extra fields', () => {
+  const changes = [
+    m => m.message_id = '999', m => m.publish_time = new Date(NOW + 1).toISOString(),
+    m => m.message_id = 123, m => m.publish_time = null,
+    m => { m.messageId = 123; }, m => { m.publishTime = null; },
+    m => { delete m.messageId; delete m.message_id; },
+    m => { delete m.publishTime; delete m.publish_time; },
+    m => { m.messageId = m.message_id = 'not-numeric'; },
+    m => { m.publishTime = m.publish_time = 'invalid-time'; },
+    m => { m.publishTime = m.publish_time = new Date(NOW - 86400001).toISOString(); },
+    m => { m.publishTime = m.publish_time = new Date(NOW + 60001).toISOString(); },
+    m => { m.messageId = m.message_id = '1'.repeat(129); },
+    m => { m.messageID = m.messageId; }, m => { m.ordering_key = 'not-documented'; },
+    // Even equivalent timestamps must have identical duplicate spelling values.
+    m => { m.publish_time = m.publishTime.replace('Z', '+00:00'); },
+  ];
+  for (const change of changes) {
+    const body = envelope();
+    Object.assign(body.message, { message_id: body.message.messageId, publish_time: body.message.publishTime });
+    change(body.message);
+    assert.throws(() => decodeEnvelope(body, config, () => NOW), { message: 'INVALID_ENVELOPE' });
+  }
+});
 test('real core and transactional adapter atomically dedupe with TTL and one global debit', async () => {
   const { db, detector } = fixture(); const decoded = decodeEnvelope(envelope(), config, () => NOW);
   const results = await Promise.all(Array.from({ length: 12 }, () => detector.ingest(decoded.event, decoded.ingress)));
@@ -141,4 +183,21 @@ test('native HTTP verifies before body, ACKs poison and retries store failures w
   assert.equal(result.status, 503); assert.ok(!result.data.includes('PRIVATE'));
   assert.equal(verified, 5); assert.deepEqual(metrics, ['UNAUTHENTICATED', 'INVALID_ENVELOPE', 'INVALID_ENVELOPE', 'RECORDED', 'STORE_UNAVAILABLE']);
   assert.equal((await request(server, '', { method: 'GET', path: '/healthz' })).status, 200);
+});
+
+test('documented PubSub push aliases reach the real detector; mismatches remain poison ACK without writes', async t => {
+  const { detector, db } = fixture(); const metrics = []; let verified = 0;
+  const server = createObservationServer({ config, detector, now: () => NOW, metric: code => metrics.push(code), verify: async header => { verified++; assert.equal(header, 'Bearer allowed'); } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(() => server.close());
+  const body = envelope('alias-event');
+  Object.assign(body.message, { message_id: body.message.messageId, publish_time: body.message.publishTime });
+  assert.equal((await request(server, JSON.stringify(body))).status, 200);
+  assert.equal((await request(server, JSON.stringify(body))).status, 200);
+  const before = structuredClone([...db.rows.entries()]);
+  body.message.message_id = '456';
+  assert.equal((await request(server, JSON.stringify(body))).status, 204);
+  assert.deepEqual([...db.rows.entries()], before);
+  assert.equal(verified, 3);
+  assert.deepEqual(metrics, ['RECORDED', 'DUPLICATE', 'INVALID_ENVELOPE']);
+  assert.equal([...db.rows.entries()].filter(([path]) => path.includes('/incidents/'))[0][1].eventCount, 1);
 });
