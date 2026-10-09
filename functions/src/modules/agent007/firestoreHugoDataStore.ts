@@ -1,3 +1,4 @@
+import { observationEvidenceResolver, assertResolvedOutcomeTime } from "./observationEvidence";
 import { sameEvidenceIdentity, observationEntity } from "./hugoCore/evidenceIdentity";
 import { FieldValue, Firestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -162,7 +163,12 @@ export class FirestoreHugoDataStore implements HugoDataStore {
     // Source evidence and creation share one read set: a concurrent revocation retries validation.
     return this.db.runTransaction(async tx => {
       const [observation, decision, outcome, existing] = await Promise.all([tx.get(this.observationRef(observationId)), tx.get(this.memoryRef(decisionId)), tx.get(this.observationRef(outcomeId)), tx.get(ref)]);
-      const a = observation.data(), d = decision.data() as HugoMemoryRecord | undefined, z = outcome.data();
+      const resolveEvidence = observationEvidenceResolver(this.db, tx, scope);
+      const [initialEvidence, outcomeEvidence] = await Promise.all([
+        resolveEvidence(observationId, observation.data()), resolveEvidence(outcomeId, outcome.data()),
+      ]);
+      const a = initialEvidence.observation, d = decision.data() as HugoMemoryRecord | undefined, z = outcomeEvidence.observation;
+      assertResolvedOutcomeTime(outcomeEvidence, Date.parse(d?.decision?.decisionAt || ""));
       if (!sameEvidenceIdentity(observationEntity(a), d?.entityReference, observationEntity(z)))
         throw new HttpsError("failed-precondition", "Identidad de evidencia incompleta o incompatible: sistema, tipo e identificador requeridos.");
       const observedAt = a?.createdAt?.toMillis?.(), decidedAt = Date.parse(d?.decision?.decisionAt || ""), outcomeAt = z?.createdAt?.toMillis?.();
