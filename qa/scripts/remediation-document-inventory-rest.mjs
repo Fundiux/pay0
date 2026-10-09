@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 import {memoryCredential,boundedJson,PROJECT} from './remediation-document-inventory-bootstrap.mjs';
 import {FIELDS,FAMILIES,inventory} from './remediation-document-inventory.mjs';
 export const BUCKET='pay-0-system.firebasestorage.app';
+export function parseFamilies(value='uploads'){const families=value.split(',');assert.ok(families.length&&new Set(families).size===families.length&&families.every(family=>FAMILIES.includes(family)));return families;}
 const DOCUMENTS=`projects/${PROJECT}/databases/(default)/documents`;
 const API=`https://firestore.googleapis.com/v1/${DOCUMENTS}:runQuery`;
 const PARENT_FIELDS=['rootId','status','active','isDeleted','deleted','deletedAt'];
@@ -28,13 +29,14 @@ export function restAdapter({credential,rootId,fetchImpl=fetch,save}){
  };
 }
 export async function main(args){
- const values={};let execute=false,metadata=false;for(let i=0;i<args.length;i++){if(args[i]==='--execute-read-only'){execute=true;continue;}if(args[i]==='--with-storage-metadata'){metadata=true;continue;}assert.ok(['--bootstrap','--root-index','--checkpoint','--max-records','--page-size'].includes(args[i])&&args[i+1]&&!args[i+1].startsWith('--'));assert.ok(!Object.hasOwn(values,args[i]));values[args[i]]=args[++i];}
+ const values={};let execute=false,metadata=false;for(let i=0;i<args.length;i++){if(args[i]==='--execute-read-only'){execute=true;continue;}if(args[i]==='--with-storage-metadata'){metadata=true;continue;}assert.ok(['--bootstrap','--root-index','--checkpoint','--max-records','--page-size','--families'].includes(args[i])&&args[i+1]&&!args[i+1].startsWith('--'));assert.ok(!Object.hasOwn(values,args[i]));values[args[i]]=args[++i];}
+ const families=parseFamilies(values['--families']||'uploads');
  const maxRecords=Number(values['--max-records']||100),pageSize=Number(values['--page-size']||25),index=Number(values['--root-index']||0);assert.ok(Number.isInteger(maxRecords)&&maxRecords>=1&&maxRecords<=100);assert.ok(Number.isInteger(pageSize)&&pageSize>=1&&pageSize<=100);assert.ok(Number.isInteger(index)&&index>=0);
- if(!execute){console.log(JSON.stringify({mode:'DRY_RUN',project:PROJECT,rootIndex:index,families:['uploads'],maxRecords,pageSize,maxMetadataReads:metadata?maxRecords:0,noNetwork:true,noCredential:true}));return;}
+ if(!execute){console.log(JSON.stringify({mode:'DRY_RUN',project:PROJECT,rootIndex:index,families,maxRecords,pageSize,maxMetadataReads:metadata?maxRecords:0,noNetwork:true,noCredential:true}));return;}
  assert.ok(values['--bootstrap']&&values['--checkpoint']);assert.ok(!process.env.FIRESTORE_EMULATOR_HOST&&!process.env.FIREBASE_STORAGE_EMULATOR_HOST);process.env.DEBUG='';
  const base=path.resolve('.firebase/document-inventory')+path.sep,bootstrap=path.resolve(values['--bootstrap']),checkpointFile=path.resolve(values['--checkpoint']);assert.ok(bootstrap.startsWith(base)&&checkpointFile.startsWith(base)&&bootstrap!==checkpointFile&&bootstrap.endsWith('.json')&&checkpointFile.endsWith('.json'));
  const rootId=selectBootstrapRoot(JSON.parse(fs.readFileSync(bootstrap,'utf8')),index);
- const options={project:PROJECT,root:rootId,bucket:metadata?BUCKET:'',families:['uploads'],pageSize,maxRecords,maxMetadata:maxRecords,withStorageMetadata:metadata};
+ const options={project:PROJECT,root:rootId,bucket:metadata?BUCKET:'',families,pageSize,maxRecords,maxMetadata:maxRecords,withStorageMetadata:metadata};
  const checkpoint=fs.existsSync(checkpointFile)?JSON.parse(fs.readFileSync(checkpointFile,'utf8')):null;
  const adapter=restAdapter({credential:memoryCredential(),rootId,save:async state=>{fs.mkdirSync(path.dirname(checkpointFile),{recursive:true});fs.writeFileSync(checkpointFile+'.pending',JSON.stringify(state,null,2)+'\n',{mode:0o600});fs.renameSync(checkpointFile+'.pending',checkpointFile);}});
  const result=await inventory(adapter,options,checkpoint);console.log(JSON.stringify({...result.summary,rootIndex:index,sampleOnly:true}));
