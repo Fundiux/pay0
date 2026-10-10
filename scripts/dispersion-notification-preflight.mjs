@@ -35,13 +35,14 @@ function fields(doc,allowed){
  if(!plain(doc)||!plain(doc.fields)||Object.keys(doc.fields).some(k=>!allowed.some(a=>a.split('.')[0]===k)))fail();
  return Object.fromEntries(Object.entries(doc.fields).map(([k,v])=>[k,decode(v)]));
 }
-export function restAdapter({credential,fetchImpl=fetch}){
- let requests=0;const deadline=Date.now()+120000;
+export function restAdapter({credential,fetchImpl=fetch,now=Date.now}){
+ let requests=0;const deadline=now()+120000;
  async function read(url,body){
-  if(++requests>126||Date.now()>deadline)fail();
+  if(++requests>126||now()>=deadline)fail();
   const u=new URL(url);if(!['https://firestore.googleapis.com','https://storage.googleapis.com'].includes(u.origin))fail();
   const token=await credential.getAccessToken();
-  const response=await fetchImpl(url,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token.access_token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(Math.min(10000,Math.max(1,deadline-Date.now())))});
+  if(now()>=deadline)fail();
+  const response=await fetchImpl(url,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token.access_token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(Math.min(10000,Math.max(1,deadline-now())))});
   if(response.status===404){await response.body?.cancel();return null;}
   return boundedJson(response);
  }

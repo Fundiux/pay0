@@ -2,7 +2,9 @@
 
 Script: `scripts/dispersion-notification-preflight.mjs`. Default sin red ni
 credenciales. No migración, atestación, envío ni escritura remota. Pruebas
-sintéticas: 30/30 PASS; incluidas en regresión conjunta 164/164 PASS (2.46 s).
+sintéticas: 31/31 PASS (0.31 s), incluido agotamiento del deadline durante la
+obtención de credenciales. Las primeras 30 formaron parte de la regresión
+conjunta 164/164 PASS (2.46 s).
 No se ha consultado producción.
 
 ## Contrato y límites
@@ -36,7 +38,9 @@ en memoria para identificar el objeto y nunca se incluye en salida/checkpoint.
 Por registro: hasta cuatro GET Firestore (dispersión, cliente, actor, evento) y
 un GET GCS, todos proyectados. Máximo 126 HTTP por invocación, respuesta JSON
 <=512 KiB, timeout por HTTP <=10 s y presupuesto de transporte de 120 s; la
-obtención local de credenciales conserva su propio timeout de 30 s. No retry
+obtención local de credenciales conserva su propio timeout de 30 s y puede
+prolongar la terminación local hasta ese residual. Se comprueba nuevamente el
+deadline después de obtenerla: si se agotó, no comienza el HTTP. No retry
 automático. GCS solicita únicamente name/bucket/generation/metageneration/size/
 contentType y metadata de uploadid/uploadId/dispersionId/documentType. No solicita
 firebaseStorageDownloadTokens, downloadURL ni alt=media; si el servidor devuelve
