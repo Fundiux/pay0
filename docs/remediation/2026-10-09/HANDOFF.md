@@ -2,6 +2,19 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**En curso 2026-10-10 04:23 UTC (prevalece):** deploy Hugo4 session34858,
+helper060d40769fakePASS+preflightrealPASS, integrationec64a14d9fe469ee904620e5086cd55238b364c9
+publicada y congelada. Journal privado `.firebase/hugo-evidence-deploy/782d671bd71b45c7aa78fe49d326f630/`:
+PREPARED04:23:10, ENV_STAGED y HUGO_DEPLOY_STARTED04:23:27. Demora prolongada
+al devolver control de tool ocurrio antes de estos markers; no causa demostrada.
+No repetir Execute. Gates candidato exacto: FunctionsbuildPASS, policyPASS,
+90testsPASS(incl92assertmanifest), phase4/5+historico15/3retriesSDK PASS.
+Buildfuente1361 tambienPASS incluye Sentinel8b0adcd; nointegrado/deploySentinel.
+Firestore8258074 fuente probado518/budget0/policyPASS, NOintegrado ni publicado.
+CPU/tests/emuladores pausados durante predeployHugo; agentes preparan helper
+Firestore y receptorSentinel estricto sinactivar. Falta postflight Hugo y
+restauracion dotenv; usar journal/sesion. No revision nueva certificada aun.
+
 **Checkpoint 2026-10-10 00:41 UTC (prevalece):** IQ on-demand publicado y
 verificado desde a71a8b8. Sesion13401 exit0; revision00035-kin,
 source1791592724987856, FunctionACTIVE00:39:51.944719211Z,
