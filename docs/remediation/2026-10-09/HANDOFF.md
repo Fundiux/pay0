@@ -2,6 +2,24 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente: gate IAM sintetico aprobado y limpiado.**
+
+Fuente fbf6909, contrato REST corregido c9586d7: 36 pruebas locales PASS.
+Terraform verification-infra creo solamente dos roles, sin bindings/runtime;
+plan y apply verificados. Primer gate fallo antes de seed/grants por politica
+SA vacia. Execute corregido94266 PASS: lectura exacta permitida bajo condicion,
+escrituras y base financiera denegadas; condicion distinta vuelve a denegar.
+Postflight independiente PASS: tres condiciones temporales ausentes, ambos paths
+sinteticos404, canario00006-6wv DISABLED/100%, journalscerrados y sinlock. No tokens
+persistidos ni activacion productora. Ver SENTINEL-PRODUCER-IAM-GATE.md.
+
+Notas: candidato aislado desde2613559, pruebas backend/UI y ambos builds en curso
+de cierre; aun sin integracion. Telegram: transporte con redaccion/AbortSignal
+opcional y CRLF corregido en add1ac1: 23 pruebas, build y revision root PASS; no integrado. Bundle
+interno: PoC2pares conserva346exports y mejora mediciones; candidato reproducible
+opt-in en implementacion, sin modificar build desplegable ni gates. Descarga e
+IQ6 siguen sin nuevo deploy. Integracion permanece2613559.
+
 **Checkpoint posterior: reglas congeladas; alternativa de lectura en servidor.**
 
 El candidato de reglas `05436269` terminó con 36 controles aprobados sin errores

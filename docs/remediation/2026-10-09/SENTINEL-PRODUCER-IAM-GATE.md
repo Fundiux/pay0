@@ -235,3 +235,25 @@ options.requestedPolicyVersion=3 en query y cuerpo vacio; projects.getIamPolicy
 conserva options en body. [Referencia oficial IAM](https://docs.cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/getIamPolicy).
 La suite ahora comprueba ambos contratos, etag/version y politica sin bindings:
 36/36 PASS sin red. El gate real todavia no acredita lectura condicionada.
+
+## Gate real y cierre independiente aprobados
+
+Execute corregido c9586d7, sesion94266 exit0, passed=true y cleanupVerified=true.
+Con token impersonado en memoria: baseline get/query DENIED; condicion positiva
+permitio get/query del fixture exacto; create/update/delete DENIED; GET sintetico
+a base financiera DENIED. Tras retirar la condicion positiva y colocar la que
+apunta a otra base, get/query del fixture existente volvieron a DENIED.
+No se creo una segunda base para la prueba ni se leyeron documentos financieros.
+
+El helper retiro y verifico sus tres bindings temporales y comprobo ausencia de
+los dos paths sinteticos. Postflight independiente de solo lectura PASS: las tres
+condiciones ausentes, ambos paths404, canario00006-6wv al100% y DISABLED, todos los
+journals CLEANUP_VERIFIED y ningun lock abierto. Los dos roles definidos permanecen
+sin estos grants; no se borran ni se interpreta enable=false como recuperacion.
+
+Esta evidencia acredita el escenario IAM probado, no la totalidad de permisos
+heredados ni la identidad productora definitiva. No hubo activacion del productor,
+Cloud Run, logging de prueba, mensajes ni efectos financieros. El token emitido
+conserva su vencimiento original: quitar el permiso de emision no equivale a
+revocarlo; la condicion positiva de lectura ya habia demostrado denegacion antes
+del cierre y las asignaciones quedaron retiradas.
