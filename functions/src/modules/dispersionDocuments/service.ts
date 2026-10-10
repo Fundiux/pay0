@@ -1,4 +1,5 @@
-import { getCurrentClientDelegationAccess } from "../clientDelegations/access";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import * as admin from "firebase-admin";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { logger } from "firebase-functions";
@@ -14,7 +15,6 @@ import {
   sanitizeFilename,
   toMoney,
 } from "./domain";
-import { getEffectiveUserModules, isCanonicalUserActive } from "../users/authorization";
 import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -24,7 +24,7 @@ const FieldValue = admin.firestore.FieldValue;
 
 function requireAuthLike(request: any): string {
   const uid = request?.auth?.uid;
-  if (!uid) {
+  if (!validId(uid)) {
     throw new HttpsError("unauthenticated", "No autenticado.");
   }
   return String(uid);
@@ -48,57 +48,62 @@ function getRootIdFromUser(user: any, uid: string): string {
   return String(user?.rootId || uid || "").trim();
 }
 
-function canUploadDispersionDocs(user: any): boolean {
-  const role = getRole(user);
-  if (!isCanonicalUserActive(user)) return false;
-  if (role === "superadmin") return true;
-  return getEffectiveUserModules(user)?.wallet?.dispersiones === true;
+function validId(value: unknown): value is string {
+  return typeof value === "string" && !!value && value.length <= 160 && !/[\\/\x00-\x1f]/.test(value) && value !== "." && value !== "..";
 }
-
-async function canAccessDispersion(user: any, uid: string, rootId: string, dispersion: any): Promise<boolean> {
-  const role = getRole(user);
+function authorizeUser(uid: string, user: any) {
+  assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
+}
+function unavailable(row: any) {
+  return !row || row.deleted === true || row.isDeleted === true || row.deletedAt != null || row.active === false || ["DELETED", "ELIMINADA", "ELIMINADO"].includes(String(row.status || "").toUpperCase());
+}
+// Reuse canonical USER funding ownership against the transaction-current parent.
+async function currentAuthority(uid: string, rootId: string, dispersionId: string, tx?: admin.firestore.Transaction) {
+  if (![uid, rootId, dispersionId].every(validId)) throw new HttpsError("invalid-argument", "Referencia invalida.");
+  const read = (path: string) => tx ? tx.get(db.doc(path)) : db.doc(path).get();
+  const user = (await read(`users/${uid}`)).data();
+  authorizeUser(uid, user);
+  if (getRootIdFromUser(user, uid) !== rootId) throw new HttpsError("permission-denied", "Usuario fuera de alcance.");
+  const dispersion = (await read(`clientDispersions/${dispersionId}`)).data();
+  if (unavailable(dispersion) || dispersion?.rootId !== rootId) throw new HttpsError("permission-denied", "Dispersion fuera de alcance.");
+  const role = getUserRole(user), source = dispersion.fundingSource;
+  const clientId = cleanText(dispersion.clientId || dispersion.clienteId);
   assertDispersionFundingOwner({ rootId, uid, role, dispersion });
-  if (dispersion.fundingSource?.holderType === "USER") return true;
-  const dispersionRootId = String(dispersion?.rootId || "").trim();
-  const dispersionAdminId = String(dispersion?.adminId || "").trim();
-  const dispersionOperadorId = String(dispersion?.operadorId || "").trim();
-  const dispersionCreatedBy = String(dispersion?.createdBy || "").trim();
-
-  if (dispersionRootId && dispersionRootId !== rootId) return false;
-
-  if (role === "superadmin") return true;
-  if (role === "admin" && (dispersionAdminId === uid || dispersionCreatedBy === uid)) return true;
-  if (role === "operador" && (dispersionOperadorId === uid || dispersionCreatedBy === uid)) return true;
-
-  const clientId = cleanText(dispersion?.clienteId || dispersion?.clientId || "");
-  if (!clientId) return false;
-
-  return (await getCurrentClientDelegationAccess(uid, clientId, "operateDispersiones")) !== null;
+  if (source?.holderType === "USER") {
+    if (!validId(clientId) || !validId(source.ownerUid)) {
+      throw new HttpsError("permission-denied", "Retiro de utilidad fuera del alcance del titular.");
+    }
+  } else if (role !== "superadmin") {
+    if (!validId(clientId)) throw new HttpsError("permission-denied", "Cliente no disponible.");
+    await requireClientOperationalAccess({ uid, role, rootId, clientId, permission: "operateDispersiones", transaction: tx });
+  }
+  return { user, dispersion };
 }
-
-async function loadDispersionOrThrow(input: {
-  dispersionId: string;
-  uid: string;
-  user: any;
-  rootId: string;
-}) {
-  const dispersionRef = db.collection("clientDispersions").doc(input.dispersionId);
-  const dispersionSnap = await dispersionRef.get();
-
-  if (!dispersionSnap.exists) {
-    throw new HttpsError("not-found", "Dispersion no encontrada.");
+function assertUploadIdentity(upload: any, rootId: string, dispersionId: string, uploadId: string) {
+  const prefix = `roots/${rootId}/dispersiones/${dispersionId}/docs/COMPROBANTE_DISPERSION/${uploadId}-`;
+  const path = upload.storagePath;
+  if (upload.rootId !== rootId || upload.entityType !== "clientDispersions" || upload.dispersionId !== dispersionId || upload.entityId !== dispersionId ||
+      upload.documentType !== "COMPROBANTE_DISPERSION" || typeof path !== "string" || !path.startsWith(prefix) || path.length <= prefix.length ||
+      /[\\\x00-\x1f]/.test(path) || path.slice(prefix.length).includes("/") || path.split("/").some(x => x === "." || x === "..")) {
+    throw new HttpsError("failed-precondition", "Identidad del comprobante invalida.");
   }
-
-  const dispersion = dispersionSnap.data() || {};
-
-  if (!(await canAccessDispersion(input.user, input.uid, input.rootId, dispersion))) {
-    throw new HttpsError("permission-denied", "Dispersion fuera de alcance.");
+}
+async function verifyUploadMetadata(upload: any) {
+  try {
+    const bucket = admin.storage().bucket();
+    const [metadata] = await bucket.file(upload.storagePath).getMetadata();
+    const size = Number(metadata.size), generation = String(metadata.generation || "");
+    if (metadata.name !== upload.storagePath || metadata.bucket !== bucket.name || !/^[1-9][0-9]*$/.test(generation) ||
+        !/^[1-9][0-9]*$/.test(String(metadata.metageneration || "")) || !Number.isSafeInteger(size) || size <= 0 || size > MAX_DISPERSION_DOCUMENT_SIZE_BYTES ||
+        size !== upload.sizeBytes || metadata.contentType !== upload.contentType ||
+        (upload.storageGeneration != null && String(upload.storageGeneration) !== generation)) {
+      throw new HttpsError("failed-precondition", "Metadatos del archivo no coinciden con la carga.");
+    }
+    return { storageGeneration: generation, storageMetageneration: String(metadata.metageneration) };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("failed-precondition", "No se pudo verificar el archivo en Storage.");
   }
-
-  return {
-    dispersionRef,
-    dispersion,
-  };
 }
 
 function pickDispersionFolio(dispersion: any, dispersionId: string): string {
@@ -207,9 +212,7 @@ export async function initDispersionDocumentUploadCore(request: any) {
     throw new HttpsError("permission-denied", "Usuario no encontrado.");
   }
 
-  if (!canUploadDispersionDocs(user)) {
-    throw new HttpsError("permission-denied", "No autorizado para subir comprobantes.");
-  }
+  authorizeUser(uid, user);
 
   const rootId = getRootIdFromUser(user, uid);
   const data = request.data || {};
@@ -221,11 +224,11 @@ export async function initDispersionDocumentUploadCore(request: any) {
   const documentType = normalizeDispersionDocumentType(data.documentType || "COMPROBANTE_DISPERSION");
   const documentTypeLabel = getDispersionDocumentTypeLabel(documentType);
 
-  if (!dispersionId || !originalName) {
+  if (!validId(dispersionId) || !originalName) {
     throw new HttpsError("invalid-argument", "dispersionId y originalName son obligatorios.");
   }
 
-  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
     throw new HttpsError("invalid-argument", "Tamano de archivo invalido.");
   }
 
@@ -233,22 +236,17 @@ export async function initDispersionDocumentUploadCore(request: any) {
     throw new HttpsError("invalid-argument", "El archivo excede el limite de 1 MB.");
   }
 
-  const { dispersion } = await loadDispersionOrThrow({
-    dispersionId,
-    uid,
-    user,
-    rootId,
-  });
-
   const safeName = sanitizeFilename(originalName);
   const uploadId = db.collection("uploads").doc().id;
   const storagePath = `roots/${rootId}/dispersiones/${dispersionId}/docs/${documentType}/${uploadId}-${safeName}`;
+  await db.runTransaction(async tx => {
+  const { dispersion, user: currentUser } = await currentAuthority(uid, rootId, dispersionId, tx);
   const dispersionFolio = pickDispersionFolio(dispersion, dispersionId);
   const clienteId = pickClientId(dispersion);
   const clienteNombre = pickClientName(dispersion);
   const beneficiaryNombre = pickBeneficiaryName(dispersion);
 
-  await db.collection("uploads").doc(uploadId).set({
+  tx.create(db.collection("uploads").doc(uploadId), {
     rootId,
     adminId: dispersion.adminId || rootId,
     operadorId: dispersion.operadorId || null,
@@ -281,9 +279,11 @@ export async function initDispersionDocumentUploadCore(request: any) {
     version: null,
 
     createdBy: uid,
-    createdUsername: getUsername(user, uid),
+    createdUsername: getUsername(currentUser, uid),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+  });
+
   });
 
   return {
@@ -302,9 +302,7 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
     throw new HttpsError("permission-denied", "Usuario no encontrado.");
   }
 
-  if (!canUploadDispersionDocs(user)) {
-    throw new HttpsError("permission-denied", "No autorizado para finalizar comprobantes.");
-  }
+  authorizeUser(uid, user);
 
   const rootId = getRootIdFromUser(user, uid);
   const data = request.data || {};
@@ -312,7 +310,7 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
   const uploadId = cleanText(data.uploadId);
   const storagePathIn = cleanText(data.storagePath);
 
-  if (!uploadId) {
+  if (!validId(uploadId)) {
     throw new HttpsError("invalid-argument", "uploadId requerido.");
   }
 
@@ -335,33 +333,49 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
     throw new HttpsError("failed-precondition", "Upload sin dispersionId.");
   }
 
-  await loadDispersionOrThrow({
-    dispersionId,
-    uid,
-    user,
-    rootId,
-  });
-
-  if (storagePathIn && storagePathIn !== cleanText(upload.storagePath)) {
-    throw new HttpsError("invalid-argument", "storagePath no coincide con el registro.");
-  }
-
-  try {
-    const bucket = admin.storage().bucket();
-    const [exists] = await bucket.file(cleanText(upload.storagePath)).exists();
-
-    if (!exists) {
-      throw new HttpsError("failed-precondition", "El archivo no existe en Storage.");
-    }
-  } catch (e: any) {
-    if (e instanceof HttpsError) throw e;
-    throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
-  }
+  if (!validId(uploadId) || !validId(dispersionId)) throw new HttpsError("invalid-argument", "Referencia invalida.");
+  await currentAuthority(uid, rootId, dispersionId);
+  assertUploadIdentity(upload, rootId, dispersionId, uploadId);
+  if (storagePathIn && storagePathIn !== upload.storagePath) throw new HttpsError("invalid-argument", "storagePath no coincide con el registro.");
+  const verifiedMetadata = await verifyUploadMetadata(upload);
 
   const documentType = normalizeDispersionDocumentType(upload.documentType);
   let finalVersion = 1;
 
   await db.runTransaction(async (tx) => {
+    // Re-read the target before changing any active version. A repeated finalize
+    // must not replace itself, increment its version, or revive a retired upload.
+    const currentSnap = await tx.get(uploadRef);
+    if (!currentSnap.exists) {
+      throw new HttpsError("not-found", "Upload no existe.");
+    }
+    const current = currentSnap.data() || {};
+    const { user: currentUser } = await currentAuthority(uid, rootId, dispersionId, tx);
+    assertUploadIdentity(current, rootId, dispersionId, uploadId);
+    if (cleanText(current.rootId) !== rootId) {
+      throw new HttpsError("permission-denied", "No autorizado.");
+    }
+    if (cleanText(current.dispersionId || current.entityId) !== dispersionId ||
+        cleanText(current.storagePath) !== cleanText(upload.storagePath) ||
+        current.documentType !== upload.documentType || current.entityType !== upload.entityType ||
+        (current.storageGeneration !== upload.storageGeneration && current.storageGeneration !== verifiedMetadata.storageGeneration) || current.entityId !== upload.entityId ||
+        current.sizeBytes !== upload.sizeBytes || current.contentType !== upload.contentType) {
+      throw new HttpsError("failed-precondition", "El comprobante cambio. Vuelve a cargarlo.");
+    }
+    if (current.deleted === true || current.isDeleted === true || current.deletedAt != null) {
+      throw new HttpsError("failed-precondition", "El comprobante ya no puede finalizarse.");
+    }
+    const currentStatus = cleanText(current.status).toUpperCase();
+    if (currentStatus === "READY" && current.active === true) {
+      if (!Number.isSafeInteger(current.version) || current.version < 1) {
+        throw new HttpsError("failed-precondition", "Version de comprobante invalida.");
+      }
+      finalVersion = current.version;
+      return;
+    }
+    if (currentStatus !== "PENDING" || current.active !== false) {
+      throw new HttpsError("failed-precondition", "El comprobante ya no puede finalizarse.");
+    }
     const activeQuery = db
       .collection("uploads")
       .where("rootId", "==", rootId)
@@ -392,8 +406,9 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
       status: "READY",
       active: true,
       version: finalVersion,
+      ...verifiedMetadata,
       finalizedBy: uid,
-      finalizedUsername: getUsername(user, uid),
+      finalizedUsername: getUsername(currentUser, uid),
       finalizedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -403,8 +418,8 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
       rootId,
       adminId: upload.adminId || rootId,
       actorUid: uid,
-      actorUsername: getUsername(user, uid),
-      actorRole: getRole(user),
+      actorUsername: getUsername(currentUser, uid),
+      actorRole: getRole(currentUser),
       entityType: "clientDispersions",
       entityId: dispersionId,
       referenceId: dispersionId,
@@ -445,14 +460,12 @@ export async function deactivateDispersionDocumentCore(request: any) {
     throw new HttpsError("permission-denied", "Usuario no encontrado.");
   }
 
-  if (!canUploadDispersionDocs(user)) {
-    throw new HttpsError("permission-denied", "No autorizado para desactivar comprobantes.");
-  }
+  authorizeUser(uid, user);
 
   const rootId = getRootIdFromUser(user, uid);
   const uploadId = cleanText(request?.data?.uploadId);
 
-  if (!uploadId) {
+  if (!validId(uploadId)) {
     throw new HttpsError("invalid-argument", "uploadId requerido.");
   }
 
@@ -471,29 +484,32 @@ export async function deactivateDispersionDocumentCore(request: any) {
 
   const dispersionId = cleanText(upload.dispersionId || upload.entityId);
 
-  await loadDispersionOrThrow({
-    dispersionId,
-    uid,
-    user,
-    rootId,
-  });
-
-  await uploadRef.update({
+  await db.runTransaction(async tx => {
+  const current = (await tx.get(uploadRef)).data();
+  const { user: currentUser } = await currentAuthority(uid, rootId, dispersionId, tx);
+  if (!current) throw new HttpsError("not-found", "Comprobante no existe.");
+  assertUploadIdentity(current, rootId, dispersionId, uploadId);
+  for (const key of ["rootId", "dispersionId", "entityId", "entityType", "storagePath", "storageGeneration", "documentType"]) {
+    if (current[key] !== upload[key]) throw new HttpsError("failed-precondition", "El comprobante cambio.");
+  }
+  if (current.status === "INACTIVE" && current.active === false) return;
+  if (unavailable(current) || current.status !== "READY" || current.active !== true) throw new HttpsError("failed-precondition", "Comprobante no vigente.");
+  tx.update(uploadRef, {
     active: false,
     status: "INACTIVE",
     deactivatedBy: uid,
-    deactivatedUsername: getUsername(user, uid),
+    deactivatedUsername: getUsername(currentUser, uid),
     deactivatedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-    await logActivity({
+    logActivityTx(tx, db, {
     event: "DOCUMENTO_DISPERSION_DESACTIVADO",
     rootId,
     adminId: upload.adminId || rootId,
     actorUid: uid,
-    actorUsername: getUsername(user, uid),
-    actorRole: getRole(user),
+    actorUsername: getUsername(currentUser, uid),
+    actorRole: getRole(currentUser),
     entityType: "clientDispersions",
     entityId: dispersionId,
     referenceId: dispersionId,
@@ -513,6 +529,8 @@ export async function deactivateDispersionDocumentCore(request: any) {
       documentTypeLabel: upload.documentTypeLabel || null,
       uploadId,
     },
+  });
+
   });
 
   return {
