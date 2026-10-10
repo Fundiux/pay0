@@ -178,6 +178,10 @@ resource "google_service_account_iam_member" "push_token" {
 resource "google_cloud_run_v2_service" "observer" {
   lifecycle {
     precondition {
+      condition     = local.signed_legacy_disjoint && length(local.observation_sink_filter) <= 20000
+      error_message = "Signed and legacy service/publisher scopes must be disjoint; listUsers is signed-only and the sink filter must fit Logging limits."
+    }
+    precondition {
       condition     = var.image_digest != null && length(var.allowed_origins) > 0
       error_message = "Full deployment requires a reviewed immutable image and explicit canary origins; only bootstrap targets may omit them."
     }
@@ -207,14 +211,14 @@ resource "google_cloud_run_v2_service" "observer" {
       }
       ports { container_port = 8080 }
       dynamic "env" {
-        for_each = {
+        for_each = merge({
           OBSERVATION_PROJECT_ID  = var.project_id
           OBSERVATION_DATABASE_ID = "sentinel-observation"
           PUSH_SERVICE_ACCOUNT    = google_service_account.push.email
           # Stable default run.app URL derived from project number, not service.uri cycle.
           PUSH_AUDIENCE        = "https://pay0-sentinel-observer-${google_project.observation.number}.us-central1.run.app"
           ALLOWED_ORIGINS_JSON = jsonencode(var.allowed_origins)
-        }
+        }, local.signed_env)
         content {
           name  = env.key
           value = env.value
@@ -293,19 +297,19 @@ resource "google_workload_identity_service_agent" "source_logging" {
   depends_on = [google_project_service.source_workload_identity]
 }
 resource "google_logging_project_sink" "events" {
+  lifecycle {
+    precondition {
+      condition     = local.signed_legacy_disjoint && length(local.observation_sink_filter) <= 20000
+      error_message = "Signed and legacy service/publisher scopes must be disjoint; listUsers is signed-only and the sink filter must fit Logging limits."
+    }
+  }
   project                = "pay-0-system"
   name                   = "pay0-sentinel-observe-v1"
   destination            = "pubsub.googleapis.com/${google_pubsub_topic.events.id}"
   unique_writer_identity = true
   disabled               = !var.activate_sink
   depends_on             = [google_workload_identity_service_agent.source_logging]
-  filter = join("\n", [
-    "resource.type=\"cloud_run_revision\"",
-    "resource.labels.location=\"us-central1\"",
-    "logName=\"projects/pay-0-system/logs/pay0_security_observation\"",
-    "jsonPayload.schemaVersion=\"PAY0-SECURITY-ENVELOPE@1\"",
-    "(${join(" OR ", [for filter in local.origin_filters : "(${filter})"])})"
-  ])
+  filter                 = local.observation_sink_filter
 }
 resource "google_pubsub_topic_iam_member" "sink" {
   project    = google_project.observation.project_id
