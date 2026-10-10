@@ -2,7 +2,23 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint posterior: receptor Sentinel publicado; descarga exacta integrada.**
+**Checkpoint 20:36 UTC: descarga detenida antes de upload; Sentinel sigue publicado.**
+Integracion `26135597ce50f23818150a696218d17079e44596` limpia/subida, QRCodeaad6eee
+integrado2613559. Build24034 PASS,15PNGchecks y guard3218/CLI3605/346PASS.
+DOWNLOADExecute95532 fallo finalCLI9351ms trasoldguard2579PASS. Journal privado
+8100617d8eff41ac8cff6fe978ecdd2c restauro entorno20:36:43.0408582Z; hashoriginal572...
+independientePASS y postfailurePreflight PASS1:00004-vat/configsin cambios.
+No retryidentico. Postflightc20f0b1a requiere nuevo pin y journalcompleto; NOusar.
+Baseline investiga CPU/wall/I/O trasventana rules707 de candidato0543.
+Fuente e73f026 inventario CLIENT34testsPASS. Rootleyo y ejecutometadata: root0
+85clientes(84sinvinculos+1con1valido),3uploadsCLIENTsin generation/confinalizador,
+3objetosactualesidentity+encodingidentity/ausente. Filtrosagotados/rootseleccionado,
+bootstraporiginal100uploads/1rootobservado; noallroots/snapshot/replay/backfill.
+IAMgate productor propuesto y revisado; helper/sdk/IaC local en preparacion,
+ningun grant/recurso/tokenfixture creado. Sentinel00006-spv Ready100 permanece
+con sinkoff/canaryDISABLED/trustvacio. No sesionesdeploy activas tras95532exit1.
+
+**Checkpoint historico: receptor Sentinel publicado; descarga exacta integrada.**
 Sentinel Execute23607 exit0, plan0add/1update/0destroy soloimagen; observer00006-spv
 Ready/trafico100%, controles/IAMiguales, canary00006-6wvDISABLED/sinkoff/trustvacio.
 Ver SENTINEL-RECEIVER-RELEASE-PREFLIGHT.md para planhash, lockWindows reconciliado,

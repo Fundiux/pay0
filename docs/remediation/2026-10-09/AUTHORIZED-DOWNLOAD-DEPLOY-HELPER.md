@@ -62,3 +62,26 @@ Para futura ejecución revisada desde la fuente principal:
 No se fija HEAD candidato aquí: el coordinador debe integrar los commits
 `b77765a` y el ajuste de opciones, completar gates y pasar el HEAD exacto.
 Este lote conserva URL bearer300s; generation pin no es revocación por GET.
+
+## Primer Execute, 2026-10-10: sin upload
+
+Candidato integrado/subido `26135597ce50f23818150a696218d17079e44596` incluye
+pin de generacion (`c691095`), limites (`6e28949`) y QRCode diferido (`2613559`).
+Build Functions, 35 pruebas de descarga, 24 comprobaciones de runtime y 15 de QR
+PASS. Gate previo warm3568/strict3218/CLI3605 ms con346 endpoints PASS. El cambio
+QRCode conserva dos PNG reales y manifest completo; no garantiza estabilidad
+bajo carga variable del host.
+
+Preflight exacto PASS. Execute95532/journal8100617d8eff41ac8cff6fe978ecdd2c empezo
+20:30:43.8500614Z; guard inicial2579ms PASS, gate CLI final STARTUP_LIMIT9351ms
+frente al maximo7000ms. Fallo20:36:42.9670329Z antes de upload; dotenv restaurado
+20:36:43.0408582Z a SHA572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+Lectura de hash independiente y Preflight posterior PASS1funcion/cloudWrites0/
+dotenvWrites0: revision00004-vat y configuracion previas conservadas.
+
+No segundo Execute identico ni nueva revision publicada. El postflight privado
+c20f0b1a esta preparado para pins nuevos explicitos y journalcompleto, pero no
+se ejecuta sobre este fallo. Incluye GCF/RunReady100, dotenv/env/config y POSTsin
+Auth401; declara falta de baseline historico de maxInstances a nivel servicioRun.
+Siguiente investigacion: distinguir CPU/wall/I/O del descubrimiento local tras
+predeploy; no relajar gates ni atribuir un fallo al ENOENT secundario del wrapper.
