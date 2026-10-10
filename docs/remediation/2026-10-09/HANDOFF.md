@@ -390,3 +390,33 @@ UI18, Functions67453 PASS. Batch8 descartado por mayorRSS sin mejora en expansio
 RSSserialbatch4hasta196.77MiB no certifica concurrency80/256MiB: sigue gateabierto.
 Benchmarkindexcompleto347/handlerreal98831 PASS33/33 y puertoscerrados: baseline92.3-92.8MiB, highwater182.89MiB controlchars/156.58ASCII. Siguiente gateHTTP SDK/Framework antes concurrency1+256MiB; noLinuxlocal (Docker/WSLausentes).
 Sin integracion ni publicar nuevo callable. Preservar artefactos privados y WIP ajeno.
+
+## Punto de reanudacion: intento detenido antes de confirmacion
+
+Controller productor c33477ba8b047c6673ba7064edd32ee8b00a076c5ac182cd538b514c2057a360
+revisado completo por root y24testsPASS. Execute77476 termino
+APPLY_FAILED_TREE_COMMAND_CONFIRMED antes de enviar yes: journal de intento existe,
+yes-intent ausente, estado serial1/hashfb4eab889b6cfe3af6dc26ca9c5af20bdfc2923fb653c6cf4cd11669fbe358a0
+identico. No reapply ni restauracion de estado. Lock Terraform residual preservado;
+no procesos terraform/provider encontrados en comprobacion posterior. El lock tiene
+operation/version/path/Who/UUID esperados. Diagnostico local builtin elevado pasa
+guard estricto; causa del intento original aun no demostrada. No relajar igualdad
+de propietario basandose en reproduccion sandbox (identidad del sandbox diferente).
+Siguiente paso: diagnosticos seguros por etapa, reconciliar lock y nuevo intento
+solo con causa/control revisado; preservar intento/backup originales.
+
+Reconciliacion remota posterior de solo lectura PASS: SA/tresroles/ring ausentes,
+KMS API fuenteDISABLED/aisladoENABLED. Una lectura intermedia ServiceUsage fue
+READ_UNVERIFIED; comprobacion posterior devuelve200 en ambas APIs y404 en recursos.
+No permisos concedidos, claves creadas, activacion ni efectos financieros.
+
+Notas gateHTTP55742 PASS33/33: Framework5.0.5 privado, SDKcallable HTTP real,
+index347, cliente separado, Auth externo sintetico y Firestore demo. RSShighwater
+HTTP max184.64MiB; max global medido205.96MiB. Candidato256MiB/concurrency1;
+Functions15463PASS. Evidencia Windows, no observacion CloudRun/Linux. Root reviso
+producto/tests; agente finaliza prerequisito reproducible y commit, sin integracion.
+
+Bundle activacion: root reviso dispatcher/instalador/packer y pidio corregir rechazo
+de symlinks colgantes antes del build instalado. NORMAL sigue default, BUNDLED_V1
+solo proceso. Packer real con fixture y contrato CLI15.3.1 PASS; gates de artefacto
+instalado todavia pendientes. No nuevo intento de deploy IQ6/download.
