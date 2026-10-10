@@ -12,7 +12,22 @@ GET de `pay0-listusers-observer@pay-0-system.iam.gserviceaccount.com`: 404. Pol�
 
 KMS keyRings us-central1 en pay0-sentinel-observe devolvió403; ErrorInfo no contenía entradas con reason. Consulta independiente Service Usage confirmó `cloudkms.googleapis.com: DISABLED`. No se habilitó. No afirmar que el403 demuestra ausencia de clave ni denegación IAM efectiva. Existencia ring/key/version pendiente.
 
-La revisión automática rechazó descargar el ZIP exacto al respaldo privado ignorado porque no encontró autorización específica para exportar un artefacto productivo que podría contener código/datos sensibles. No se reintentó ni cambió destino. Pin metadata disponible; comparación byte/semántica contra fuente publicada NO realizada. La revisión central decide si la autorización existente permite nueva evaluación. El siguiente análisis corresponde a fuente local, no se etiqueta como fuente productiva verificada.
+La revisión automática inicial rechazó descargar el ZIP al respaldo privado ignorado. Root aportó autorización literal del encargo y comprobó el destino dentro del workspace ignorado; una nueva revisión aprobó la misma acción. Descarga central exit0: 6053816 bytes, generación1790583721309928, SHA256 `c50f0d7a95bb24caf156022ae1145503d34f2110f9c39df71921ee52a190db1f`. Rechazo resuelto mediante revisión, no workaround. Comparación offline posterior limitada a whitelist de módulos de usuarios/guard y list.js compilado; sin extraer env ni ejecutar el artefacto.
+
+### Comparación exacta del artefacto
+
+| Archivo publicado | SHA256 | Resultado |
+|---|---|---|
+| src/modules/users/list.ts | 551add9879c1d5294dd29ff5ec31ffa2a6d412709af9bc64e019bd86600fe92e | Misma consulta/perfil/options; publicado sin wrapper observado |
+| src/utils/authGuard.ts | 19617aa6df563e0ebc4d6acb0bc59142b6fdaf36b2db42d6a0384f9cbf47a78e | Fuente añade respuesta específica ACCOUNT_RESTRICTED/CONTACT_SUPPORT |
+| src/modules/users/authorization.ts | d30947e30357207dfc8488c0988b5e563dbe4c16124179bcbc1c124ca1267e56 | Fuente añade evaluación trustedRestriction antes de bypass y rechazo de rol vacío |
+| src/modules/users/defaultModules.ts | d0271c7df9bd88c0ce2eb4d9542718eabc3333dbe8ccc280510031b3abeec493 | Igual al normalizar finales de línea |
+| src/modules/users/authorizationPolicy.generated.ts | 83e88167b224377e3f36c773a17cf25ebfdaf2f1a50bf73bd20137144beebe95 | Texto idéntico |
+| lib/modules/users/list.js | 8efe3560940c44b2b7b47f00a983bdc318a73b1cd6e2146e486d80c33a39e5d1 | Compilado inspeccionado estáticamente, nunca ejecutado |
+
+`restrictions.ts` y `securityObservation/authorizationDenied.ts` no existen en el ZIP publicado. Restricción y wrapper son cambios reales del próximo candidato, no capacidades de esta revisión productiva. El camino publicado sigue siendo get perfil + query users, sin Auth Admin ni escrituras; no se certifica aquí el grafo entero de inicialización de index.
+
+Hallazgo de compatibilidad: publicado incluye `username: x.usernameNormalized ?? x.username ?? null`, ausente en fuente principal. **Integración ya conserva ese campo**; no es un bloqueo nuevo de integración, pero impide copiar list.ts principal completo encima. Preservar ese hunk al integrar futura identidad/wiring y probar el contrato de salida. Comparación semántica normaliza CRCRLF/CRLF, sin modificar el archivo del ZIP.
 
 ## Dependencias funcionales locales y privilegio propuesto
 
@@ -47,4 +62,4 @@ Deadline compartido750ms para metadata+KMS+Logging, guard exterior<=1000ms; un i
 
 ## Pendientes concretos
 
-Artefacto exacto bloqueado por revisión automática; KMS API deshabilitada/existencia desconocida; SA ausente; IAM efectivo y exclusividad sin cerrar; compatibilidad SDK/startup con SA mínima sin probar. No tests CPU, builds ni emuladores durante ventana IQ. Metadatos privados limitados bajo .firebase/sentinel-producer-preflight, fuera de Git. No se declara este lote listo para activación.
+Comparación whitelist del artefacto completada; preservar username que integración ya tiene. KMS API deshabilitada/existencia desconocida; SA ausente; IAM efectivo y exclusividad sin cerrar; compatibilidad SDK/startup con SA mínima sin probar. No tests CPU, builds ni emuladores. Metadatos y respaldo privados limitados bajo .firebase/sentinel-producer-preflight, fuera de Git. No se declara este lote listo para activación.
