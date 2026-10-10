@@ -2,6 +2,20 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint 2026-10-10 18:04 UTC (prevalece): documental PUBLICADO.**
+Execute24864 y postflight43604 exit0 desde a276e03. Init00016-zot,
+finalize00017-jaz y deactivate00017-rob ACTIVE/Ready100, POSTsinAuth401.
+Env restaurado18:01:54.9398117Z/hash572... independiente PASS. Detalle,
+generaciones, gates y recuperacion en RELEASE-DISPERSION-DOCUMENT-CORE.md.
+No repetir helper antiguo: sus pins ya cambiaron. Notifier legacy intacto;
+reintentos/claim/envio Telegram siguen abiertos, USER no-send preservado.
+CPU liberada tras upload. IQ6 helperd32d032/122fakesPASS y preflight21568
+metadata PASS exit0; NO Execute IQ6. Integracion permanece a276e03.
+Sentinel build7fuentes/stage22archivos y23tests(incl83checkscrypto) PASS;
+contexto local x6s45T, sin imagen nueva ni activacion. Grantor reglas sigue
+fallando presupuesto; descargas generation pin35tests/build57354 PASS.
+
+
 **Checkpoint 2026-10-10 17:55 UTC (prevalece): documental EN DESPLIEGUE.**
 Execute session24864; helper d1061c6, 74 pruebas sinteticas y preflight real74856 PASS.
 Candidato a276e0397bb2e7e7494ae9dd7588efa8a0537c93 publicado en rama

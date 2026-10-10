@@ -4,7 +4,7 @@ Estado mas reciente: Firestore ruleset76fda1a0 y los cuatro consumidores Hugo
 00003 fueron publicados desde5a4457e y verificados el2026-10-10. Ver
 [FIRESTORE-RELEASE-PREFLIGHT.md](FIRESTORE-RELEASE-PREFLIGHT.md) y
 [RELEASE-HUGO-EVIDENCE.md](RELEASE-HUGO-EVIDENCE.md). Storage permanece sin cambio.
-IQ deposito ya publicado; otros IQ y core documental siguientes siguen pendientes.
+IQ deposito ya publicado; otros seis IQ siguen pendientes. Core documental publicado desde a276e03: init00016-zot, finalize00017-jaz, deactivate00017-rob, ACTIVE/Ready100/401. Ver [RELEASE-DISPERSION-DOCUMENT-CORE.md](RELEASE-DISPERSION-DOCUMENT-CORE.md); notifier sin cambios y entrega aun parcial.
 
 Primer lote publicado: logUnauthorizedRouteAttempt desde integración 6b8d2f7e35cb, rama remota integration/pay0-remediation-20261009. Main remoto sin cambios. Estado efectivo y recuperación en HANDOFF.md; las filas siguientes conservan detalle del candidato inicial, no son cierre global.
 
