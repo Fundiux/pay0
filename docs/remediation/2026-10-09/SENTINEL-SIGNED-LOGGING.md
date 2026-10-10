@@ -1,5 +1,44 @@
 # Writer firmado de Logging: composición preparada y apagada
 
+Actualización 2026-10-10: la factoría exige ahora una ventana fija explícita y la
+composición preparada conserva una sola instancia. Suite actual: 102 checks PASS,
+network=0, realCredentials=0, productionPort=DISABLED. El build central previo
+corresponde al writer anterior; esta modificación TS queda congelada pendiente
+del próximo build central. No se ejecutaron builds ni cambios remotos aquí.
+
+## Ventana finita y composición preparada
+
+La configuración exige exactamente `window: { issuedAtMs, startsAtMs, endsAtMs }`,
+con enteros seguros no negativos, issued <= starts < ends y ends-issued <=1hora.
+No se calcula ni renueva ningún límite a partir de Date.now. Las tres cifras se
+capturan al construir la factoría; mutar luego el objeto original no cambia la
+ventana. Antes de starts retorna DISABLED sin credenciales, firma ni Logging.
+Desde ends cierra permanentemente esa instancia. Un retroceso respecto al mayor
+reloj ya observado, o un reloj inválido, también la cierra permanentemente; avanzar
+de nuevo no la reabre ni reinicia cuotas.
+
+Se vuelve a comprobar la ventana antes de obtener credenciales, después de
+obtenerlas, antes/después de firmar, antes de cada petición metadata/KMS/Logging,
+y antes de devolver ACCEPTED. La expiración durante una fase devuelve WRITE_FAILED
+y no inicia la fase siguiente. Una escritura ya procesada puede existir aunque
+expire la ventana antes de confirmar: no hay reintento automático. El reloj de
+ventana y los AbortSignals son controles cooperativos; no constituyen un límite
+duro de CPU ni una garantía de cancelación retroactiva del proveedor.
+
+`getPreparedSignedLoggingComposition` construye una única instancia por módulo,
+sin I/O, y devuelve la misma para el mismo objeto de configuración. Otro objeto
+se rechaza en vez de reemplazar la instancia, extender su ventana o reiniciar sus
+budgets. La factoría directa sigue disponible para pruebas; el futuro wiring debe
+obtener la composición una sola vez fuera del handler. Este accessor no está
+conectado a listUsers ni exportado desde index; el puerto productivo sigue DISABLED.
+Reiniciar el proceso reinicia cuotas locales, pero conserva los límites absolutos
+que debe suministrar el despliegue revisado. No se afirma presupuesto global.
+
+Pruebas añadidas: ventana ausente/inválida/>1hora, inicio inclusivo y fin exclusivo,
+mutación de configuración, intento de reabrir tras expirar, retroceso de reloj,
+expiración tras credential/KMS/Logging, ausencia de fase posterior, composición
+inerte estable, rechazo de nueva configuración y cuotas compartidas entre accesos.
+
 Estado: código local nuevo, sin consumidores productivos, activación, IAM, KMS/metadata/Logging reales ni cambios en publisher/listUsers. El puerto exportado signedLoggingObservationPort devuelve siempre DISABLED y no admite bandera de entorno o booleano de activación. La factoría separada createPreparedSignedLoggingWriter existe para pruebas y una composición futura que requiere revisión explícita; no se importa desde un handler.
 
 ## Datos y autoridad

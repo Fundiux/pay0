@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
 const ts=require('../../functions/node_modules/typescript'),cache=new Map();
 function load(name){if(cache.has(name))return cache.get(name);const mod={exports:{}};const source=fs.readFileSync('functions/src/modules/securityObservation/'+name+'.ts','utf8');const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInThisContext('(function(require,module,exports){'+compiled+'\n})')(id=>id==='node:crypto'?crypto:id.startsWith('./')?load(id.slice(2)):(()=>{throw Error('UNEXPECTED_IMPORT');})(),mod,mod.exports);cache.set(name,mod.exports);return mod.exports;}
-const {createPreparedSignedLoggingWriter,signedLoggingObservationPort}=load('signedLoggingWriter');
+const {createPreparedSignedLoggingWriter,getPreparedSignedLoggingComposition,signedLoggingObservationPort}=load('signedLoggingWriter');
 const {observationCrc32c}=load('kmsSigner');
 const key='projects/demo-observer/locations/us-central1/keyRings/observe/cryptoKeys/listusers/cryptoKeyVersions/1',NOW=1791500000000;
 const email='pay0-listusers-observer@pay-0-system.iam.gserviceaccount.com',token='SYNTHETIC_NOT_A_CREDENTIAL_123456789',sig=Buffer.alloc(384,8);
@@ -14,7 +14,7 @@ function harness(change={}){
  const credential=async signal=>{metadataCount++;calls.push({kind:'credential',signal});return{accessToken:token,serviceAccount:email,projectId:'pay-0-system'};};
  const fetchImpl=async(url,opts)=>{assert.equal(opts.redirect,'error');assert.equal(opts.method,'POST');assert.equal(opts.headers.Authorization,'Bearer '+token);if(url==='https://cloudkms.googleapis.com/v1/'+key+':asymmetricSign'){calls.push({kind:'kms',signal:opts.signal,body:JSON.parse(opts.body)});return kms();}
  assert.equal(url,'https://logging.googleapis.com/v2/entries:write');calls.push({kind:'logging',signal:opts.signal});entries.push(JSON.parse(opts.body));return logging();};
- const options={resource:{...resource},audience:'pay0-observation-v1',keyVersion:key,allowedKeyVersions:[key],expectedServiceAccount:email,roots:['root-a'],actors:['actor-a'],now:()=>NOW,credential,fetchImpl,...change};
+ const options={resource:{...resource},audience:'pay0-observation-v1',keyVersion:key,allowedKeyVersions:[key],expectedServiceAccount:email,roots:['root-a'],actors:['actor-a'],window:{issuedAtMs:NOW,startsAtMs:NOW,endsAtMs:NOW+3600000},now:()=>NOW,credential,fetchImpl,...change};
  return{writer:createPreparedSignedLoggingWriter(options),calls,entries,options,get metadataCount(){return metadataCount;}};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));let checks=0;
@@ -48,5 +48,28 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));let checks=0;
  assert.equal(await full.writer.authorizationDenied(context),'ACCEPTED');assert.equal(urls.length,5);checks+=2;
  const snapshot=harness();snapshot.options.resource.projectId='other';snapshot.options.roots[0]='other';assert.equal(await snapshot.writer.authorizationDenied(context),'ACCEPTED');checks++;
  for(const options of[{timeoutMs:751},{resource:{...resource,projectId:'other'}},{allowedKeyVersions:[]}]){assert.throws(()=>harness(options));checks++;}
+ // No window fallback/renewal; missing, reversed and wider-than-one-hour windows fail construction.
+ for(const window of[undefined,{}, {issuedAtMs:NOW,startsAtMs:NOW,endsAtMs:NOW+3600001}, {issuedAtMs:NOW+1,startsAtMs:NOW,endsAtMs:NOW+100}, {issuedAtMs:NOW,startsAtMs:NOW,endsAtMs:NOW}, {issuedAtMs:NaN,startsAtMs:NOW,endsAtMs:NOW+100}]){assert.throws(()=>harness({window}));checks++;}
+ let finiteClock=NOW;const finite=harness({window:{issuedAtMs:NOW,startsAtMs:NOW+100,endsAtMs:NOW+1000},now:()=>finiteClock});
+ assert.equal(await finite.writer.authorizationDenied(context),'DISABLED');assert.equal(finite.calls.length,0);checks+=2;
+ finiteClock=NOW+100;assert.equal(await finite.writer.authorizationDenied(context),'ACCEPTED');checks++;
+ finite.options.window.endsAtMs=NOW+7200000;finiteClock=NOW+1000;const finiteCount=finite.calls.length;
+ assert.equal(await finite.writer.authorizationDenied(context),'DISABLED');assert.equal(finite.calls.length,finiteCount);checks+=2;
+ finiteClock=NOW+500;assert.equal(await finite.writer.authorizationDenied(context),'DISABLED');assert.equal(finite.calls.length,finiteCount);checks+=2;
+ let rollbackClock=NOW;const rollback=harness({now:()=>rollbackClock});assert.equal(await rollback.writer.authorizationDenied(context),'ACCEPTED');
+ rollbackClock=NOW+60000;assert.equal(await rollback.writer.authorizationDenied(context),'ACCEPTED');const rollbackCount=rollback.calls.length;
+ rollbackClock=NOW+1;assert.equal(await rollback.writer.authorizationDenied(context),'DISABLED');rollbackClock=NOW+120000;
+ assert.equal(await rollback.writer.authorizationDenied(context),'DISABLED');assert.equal(rollback.calls.length,rollbackCount);checks+=3;
+ for(const phase of ['credential','kms','logging']){
+  let phaseClock=NOW;const invoked=[];
+  const x=harness({window:{issuedAtMs:NOW,startsAtMs:NOW,endsAtMs:NOW+100},now:()=>phaseClock,credential:async()=>{invoked.push('credential');if(phase==='credential')phaseClock=NOW+100;return{accessToken:token,serviceAccount:email,projectId:'pay-0-system'};},fetchImpl:async url=>{const leg=url.startsWith('https://cloudkms.')?'kms':'logging';invoked.push(leg);if(leg===phase)phaseClock=NOW+100;return leg==='kms'?kms():logging();}});
+  assert.equal(await x.writer.authorizationDenied(context),'WRITE_FAILED');assert.deepEqual(invoked,['credential','kms','logging'].slice(0,['credential','kms','logging'].indexOf(phase)+1));
+  assert.equal(await x.writer.authorizationDenied(context),'DISABLED');checks+=3;
+ }
+ const singletonFixture=harness();const singleton=getPreparedSignedLoggingComposition(singletonFixture.options);
+ assert.equal(singletonFixture.calls.length,0);assert.equal(getPreparedSignedLoggingComposition(singletonFixture.options),singleton);assert.throws(()=>getPreparedSignedLoggingComposition({...singletonFixture.options}));checks+=3;
+ for(let i=0;i<6;i++)assert.equal(await getPreparedSignedLoggingComposition(singletonFixture.options).authorizationDenied(context),'ACCEPTED');
+ assert.equal(await getPreparedSignedLoggingComposition(singletonFixture.options).authorizationDenied(context),'RATE_LIMITED');assert.equal(singletonFixture.metadataCount,6);checks+=2;
+ assert.equal(await signedLoggingObservationPort.authorizationDenied(context),'DISABLED');checks++;
  console.log('SENTINEL_SIGNED_LOGGING_FAKE_PASS checks='+checks+' network=0 realCredentials=0 productionPort=DISABLED');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -44,18 +44,35 @@ async function confirmLogging(response: Response, signal: AbortSignal) {
 /** Prepared capability for synthetic tests and a separately reviewed future
  * composition. Nothing imports it from a deployed handler. Caller context must
  * come from verified auth and a freshly reread profile, never a request body. */
-export function createPreparedSignedLoggingWriter(options: {
+type SignedLoggingWriterOptions = {
   resource: ObservationResource; audience: string; keyVersion: string; allowedKeyVersions: string[];
   expectedServiceAccount: string; roots: string[]; actors: string[];
+  window: { issuedAtMs: number; startsAtMs: number; endsAtMs: number };
   credential?: (signal: AbortSignal) => Promise<ObservationCredential>;
   fetchImpl?: typeof fetch; now?: () => number; timeoutMs?: number;
-}) {
-  const resource = { ...options.resource }, now = options.now || Date.now, fetchImpl = options.fetchImpl || fetch;
+};
+export function createPreparedSignedLoggingWriter(options: SignedLoggingWriterOptions) {
+  const resource = { ...options.resource }, now = options.now || Date.now, rawFetch = options.fetchImpl || fetch;
+  const window = exactSignedObject(options.window, ["issuedAtMs", "startsAtMs", "endsAtMs"]);
+  const issued = window.issuedAtMs as number, starts = window.startsAtMs as number, ends = window.endsAtMs as number;
+  if (![issued, starts, ends].every(value => Number.isSafeInteger(value) && value >= 0) ||
+      issued > starts || starts >= ends || ends - issued > 3600000) throw failed();
+  let highestClock = -1, closed = false;
+  const windowTime = () => {
+    const stamp = now();
+    if (closed || !Number.isSafeInteger(stamp) || stamp < 0 || stamp < highestClock || stamp >= ends) { closed = true; throw failed(); }
+    highestClock = stamp;
+    if (stamp < starts) throw failed();
+    return stamp;
+  };
+  // A supplied fixed window is never recomputed from the clock. Every metadata,
+  // KMS and Logging request rechecks it; clock rollback closes this writer forever.
+  const fetchImpl: typeof fetch = (url, init) => { windowTime(); return rawFetch(url, init); };
   const timeoutMs = options.timeoutMs ?? 750;
   if (resource.projectId !== "pay-0-system" || ![resource.serviceName, resource.revisionName, resource.configurationName].every(signedIdentifier) ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 750) throw failed();
   const signerConfig = { keyVersion: options.keyVersion, allowedKeyVersions: [...options.allowedKeyVersions], expectedServiceAccount: options.expectedServiceAccount,
-    audience: options.audience, serviceName: resource.serviceName, revisionName: resource.revisionName, roots: [...options.roots], actors: [...options.actors], fetchImpl, now };
+    audience: options.audience, serviceName: resource.serviceName, revisionName: resource.revisionName, roots: [...options.roots], actors: [...options.actors], fetchImpl, now: windowTime };
   const credential = options.credential || createObservationMetadataCredential({ expectedServiceAccount: signerConfig.expectedServiceAccount, expectedProjectId: "pay-0-system", fetchImpl });
   // Validate fixed signer configuration while construction still performs no I/O.
   createKmsObservationSigner({ ...signerConfig, credential });
@@ -66,8 +83,8 @@ export function createPreparedSignedLoggingWriter(options: {
       try {
         const context = exactSignedObject(trustedContext, ["rootId", "actorUid"]);
         if (!signedIdentifier(context.rootId) || !signedIdentifier(context.actorUid) || !signerConfig.roots.includes(context.rootId) || !signerConfig.actors.includes(context.actorUid)) return "INVALID_CONTEXT";
-        rootId = context.rootId; actorUid = context.actorUid; timestamp = now();
-        if (!Number.isSafeInteger(timestamp) || timestamp < 0) return "INVALID_CONTEXT";
+        rootId = context.rootId; actorUid = context.actorUid;
+        try { timestamp = windowTime(); } catch { return "DISABLED"; }
         id = randomUUID();
         tuple = [SIGNED_SCHEMA, signerConfig.audience, signerConfig.keyVersion, "pay-0-system", "listUsers", resource.serviceName, resource.revisionName,
           rootId, actorUid, id, "AUTHORIZATION_DENIED", "SERVER_AUTH_DECISION", timestamp, timestamp, timestamp + 86400000];
@@ -82,9 +99,11 @@ export function createPreparedSignedLoggingWriter(options: {
       const abort = () => controller.abort(); const timer = setTimeout(abort, timeoutMs);
       parentSignal?.addEventListener("abort", abort, { once: true }); if (parentSignal?.aborted) abort();
       try {
-        const identity = { ...await pending(() => credential(signal), signal) };
+        const identity = { ...await pending(() => { windowTime(); return credential(signal); }, signal) };
+        windowTime();
         const signer = createKmsObservationSigner({ ...signerConfig, credential: async childSignal => { live(childSignal); return identity; } });
-        const signed = await pending(() => signer(tuple, signal), signal);
+        const signed = await pending(() => { windowTime(); return signer(tuple, signal); }, signal);
+        windowTime();
         const entry = {
           logName: "projects/pay-0-system/logs/pay0_security_observation", resource: { type: "cloud_run_revision", labels: {
             project_id: resource.projectId, service_name: resource.serviceName, revision_name: resource.revisionName,
@@ -97,10 +116,25 @@ export function createPreparedSignedLoggingWriter(options: {
         const response = await pending(() => fetchImpl("https://logging.googleapis.com/v2/entries:write", { method: "POST", redirect: "error", signal,
           headers: { Authorization: "Bearer " + identity.accessToken, "Content-Type": "application/json" }, body }), signal,
           late => { void late.body?.cancel().catch(() => {}); });
-        await confirmLogging(response, signal); live(signal);
+        await confirmLogging(response, signal); live(signal); windowTime();
         return "ACCEPTED";
       } catch { return "WRITE_FAILED"; }
       finally { clearTimeout(timer); parentSignal?.removeEventListener("abort", abort); controller.abort(); busy = false; }
     },
   });
+}
+
+// Future composition must acquire one writer once, outside a handler. This slot
+// accepts one configuration object for the module lifetime; it cannot replace a
+// used/expired writer or reset its budgets by passing a fresh configuration.
+// It is not imported by production and does not change the DISABLED port above.
+let preparedComposition: { configuration: SignedLoggingWriterOptions; writer: ReturnType<typeof createPreparedSignedLoggingWriter> } | undefined;
+export function getPreparedSignedLoggingComposition(configuration: SignedLoggingWriterOptions) {
+  if (preparedComposition) {
+    if (preparedComposition.configuration !== configuration) throw failed();
+    return preparedComposition.writer;
+  }
+  const writer = createPreparedSignedLoggingWriter(configuration);
+  preparedComposition = { configuration, writer };
+  return writer;
 }
