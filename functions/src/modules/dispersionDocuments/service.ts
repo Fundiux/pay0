@@ -597,15 +597,17 @@ export async function notifyClientDispersionComprobanteFromUploadId(uploadId: st
   const upload = claim.upload, recipients = claim.recipients;
   const finish = async (status: string, reason: string) => db.runTransaction(async tx => {
     const row = (await tx.get(eventRef)).data();
-    if (row?.attemptId !== attemptId || row.status !== "PENDING") return;
+    if (row?.attemptId !== attemptId || row.status !== "PENDING") return false;
     const currentRecipients: DeliveryRecipient[] = row.recipients;
     const sentCount = completeRecipients(currentRecipients);
+    if (status === "SENT" && sentCount !== recipients.length) return false;
     tx.update(eventRef, { status, reason, sentCount, reviewRequired: ["UNKNOWN", "PARTIAL_UNKNOWN", "NEEDS_REVIEW"].includes(status), updatedAt: FieldValue.serverTimestamp(), ...(status === "SENT" ? { sentAt: FieldValue.serverTimestamp() } : {}) });
     if (status === "SENT") logActivityTx(tx, db, { event: "TELEGRAM_COMPROBANTE_DISPERSION_CLIENTE_ENVIADO", rootId, actorUid: "system", actorRole: "system", entityType: "clientDispersions", entityId: dispersionId, referenceId: dispersionId, referenceType: "telegramDispersionComprobante", description: "Comprobante de dispersion enviado al cliente por Telegram", extra: { clientId, uploadId: cleanUploadId, sentCount } });
+    return true;
   });
   let buffer: Buffer;
   try { buffer = await readPinnedNotificationFile(upload); }
-  catch { await finish("PRE_SEND_FAILED", "OBJECT_READ_FAILED_BEFORE_POST"); return notificationResult("pre_send_failed"); }
+  catch { const persisted = await finish("PRE_SEND_FAILED", "OBJECT_READ_FAILED_BEFORE_POST"); return notificationResult(persisted ? "pre_send_failed" : "delivery_status_unconfirmed"); }
   const message = "PAY0 comprobante disponible\n\n" + `Comprobante de dispersion ${cleanText(upload.dispersionFolio || dispersionId)} para ${cleanText(upload.clienteNombre || upload.clientName || "Cliente")} por un total de ${formatMoney(toMoney(upload.amount))}.\n` + `Beneficiario: ${cleanText(upload.beneficiaryNombre || "Beneficiario")}\n\nArchivo enviado directo por Telegram.`;
   for (let index = 0; index < recipients.length; index++) {
     for (const stage of ["text", "document"] as const) {
@@ -622,7 +624,7 @@ export async function notifyClientDispersionComprobanteFromUploadId(uploadId: st
           const next = row.recipients.map((r: DeliveryRecipient, i: number) => i === index ? { ...r, [stage]: "IN_FLIGHT" } : r);
           tx.update(eventRef, { recipients: next, leaseUntilMs: Date.now() + CLAIM_MS, updatedAt: FieldValue.serverTimestamp() });
         });
-      } catch { await finish("NEEDS_REVIEW", "AUTHORITY_OR_CLAIM_CHANGED_BEFORE_POST"); return notificationResult("delivery_review_required", completeRecipients(recipients)); }
+      } catch { const persisted = await finish("NEEDS_REVIEW", "AUTHORITY_OR_CLAIM_CHANGED_BEFORE_POST"); return persisted ? notificationResult("delivery_review_required", completeRecipients(recipients)) : notificationResult("delivery_status_unconfirmed"); }
       try {
         let timer: ReturnType<typeof setTimeout> | undefined;
         let result: any;
@@ -644,11 +646,11 @@ export async function notifyClientDispersionComprobanteFromUploadId(uploadId: st
       } catch {
         // Includes transport failures, unstructured Telegram errors and failed receipt writes.
         // Never log exception strings: they can contain tokens or Telegram response payloads.
-        await finish(anyPost(recipients) ? "PARTIAL_UNKNOWN" : "UNKNOWN", "DELIVERY_UNCERTAIN");
-        return notificationResult("delivery_unknown", completeRecipients(recipients));
+        const persisted = await finish(anyPost(recipients) ? "PARTIAL_UNKNOWN" : "UNKNOWN", "DELIVERY_UNCERTAIN");
+        return persisted ? notificationResult("delivery_unknown", completeRecipients(recipients)) : notificationResult("delivery_status_unconfirmed");
       }
     }
   }
-  await finish("SENT", "SENT");
-  return notificationResult("sent", recipients.length);
+  const persisted = await finish("SENT", "SENT");
+  return persisted ? notificationResult("sent", recipients.length) : notificationResult("delivery_status_unconfirmed");
 }

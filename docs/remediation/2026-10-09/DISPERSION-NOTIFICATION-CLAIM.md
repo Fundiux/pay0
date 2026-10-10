@@ -97,3 +97,24 @@ Build Functions central ROOT PASS con notifier, Hugo y contrato firmado,
 confirmado por coordinacion despues de congelar esta fuente. Contencion SDK
 pendiente; no certifica despliegue, discovery Functions ni entrega real. No se
 consultaron eventos, vinculos o documentos de produccion ni se enviaron mensajes.
+
+## Corrección separada: confirmación durable de finish
+
+Reproducción con el servicio real y módulos nuevos por caso: el fixture cambia
+attemptId después de persistir los dos recibos SENT y antes de finish. La prueba
+falló antes de corregir: respuesta `sent`, evento PENDING y cero auditorías SENT.
+Los recibos de cada parte confirmaban entrega; eso no confirmaba el cierre durable
+del evento bajo el claim actual.
+
+finish ahora devuelve si su transacción pudo cerrar el estado con su propio claim.
+Sólo un cierre confirmado devuelve `sent/notified=true`; además verifica que todos
+los recibos actuales estén SENT. Claim perdido devuelve
+`delivery_status_unconfirmed/notified=false`, conserva los recibos, no reabre el
+evento y no reintenta envíos. Los otros cierres también verifican persistencia
+antes de anunciar su resultado. Un error de Firestore continúa propagándose sin
+inventar éxito.
+
+Regresión posterior: 164/164 PASS (133 previas, 30 preflight, 1 reproducción de
+finish), 2.46 s. Build central Functions con el ajuste finish y nuevo contrato KMS
+PASS, confirmado por coordinación tras congelar la fuente. Sin nube, mensajes,
+emuladores ni cambio de política USER/legacy.
