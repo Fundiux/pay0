@@ -2,6 +2,22 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint 2026-10-10 17:55 UTC (prevalece): documental EN DESPLIEGUE.**
+Execute session24864; helper d1061c6, 74 pruebas sinteticas y preflight real74856 PASS.
+Candidato a276e0397bb2e7e7494ae9dd7588efa8a0537c93 publicado en rama
+integration/pay0-remediation-20261009; tracked limpio e inmovilizado.
+Journal privado c7b26b3d1ccd4f19aff8f65c2dc150f7: DOCUMENT_DEPLOY_STARTED
+17:53:54.1746573Z. No declarar publicado hasta postflight y restauracion.
+Gates exactos a276: documental105, manifest72, financieros17 escenarios y
+retiros USER110 comprobaciones PASS; fakeExecutorCalls3, realIqPosts0.
+Pruebas IQ ambiguo24, wiring7sites/18consumers, autorizacion/efectos diferidos,
+instrument29, staging81 y dominio comisiones PASS. Emuladores cerrados.
+CPU agentes pausada hasta upload final; notifier conserva comportamiento previo.
+IQ6 aun sin despliegue; helper por grupos de entorno en preparacion estatica.
+Grantor Firestore sigue sin integrar: ultimo gate positivo excede1000 expresiones.
+Descargas legacy: lote generacion exacta en preparacion aislada, sin proxy nuevo.
+
+
 **Checkpoint 2026-10-10 17:42 UTC (prevalece): HUGO PUBLICADO.**
 Sesion26099exit0,4FunctionACTIVE/RunReady100 yPOSTsinAuth401: verified00003-zaw,
 experience00003-taj,draft00003-dah,outcome00003-bij. Artefacto5a4457e;
