@@ -272,7 +272,7 @@ async function main() {
   }
 }
 
-module.exports = { readDiscoveryManifest, availablePort, startProcess, stopProcess };
+module.exports = { readDiscoveryManifest, availablePort, startProcess, stopProcess, expectedEndpointCount, requiredEndpoints };
 if (require.main === module) {
   main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
 }

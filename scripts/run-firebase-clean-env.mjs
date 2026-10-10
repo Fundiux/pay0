@@ -15,6 +15,13 @@ const environment = { ...process.env };
 delete environment.DEBUG;
 const selectedOnlyIndex = args.indexOf("--only");
 const selectedOnly = selectedOnlyIndex >= 0 ? args[selectedOnlyIndex + 1] : args.find(arg => arg.startsWith("--only="))?.slice(7);
+const deploysFunctions = args[0] === "deploy" && (!selectedOnly || String(selectedOnly).split(",").some(scope => scope === "functions" || scope.startsWith("functions:")));
+if (deploysFunctions) {
+  // Use the installed CLI/SDK's fresh temporary-manifest transport. This flag
+  // belongs to the CLI process; it is not a deployed Function environment key.
+  environment.FIREBASE_FUNCTIONS_DISCOVERY_OUTPUT_PATH = "true";
+  delete environment.FUNCTIONS_DISCOVERY_TIMEOUT;
+}
 if (args[0] === "emulators:exec" && String(selectedOnly || "").split(",").includes("storage")) {
   const framingShim = fileURLToPath(new URL("./firebase-storage-rules-framing.cjs", import.meta.url)).replace(/\\/g, "/");
   environment.NODE_OPTIONS = `${environment.NODE_OPTIONS || ""} --require "${framingShim}"`.trim();
