@@ -11,7 +11,7 @@ const destination = pathToFileURL(directory + sep);
 const manifest = JSON.parse(await readFile(new URL('core-manifest.json', service), 'utf8'));
 const core = ['schema.ts', 'policy.ts', 'detector.ts', 'store.ts', 'transactionalStore.ts', 'ingress.ts'];
 const files = ['package.json', 'package-lock.json', 'core-manifest.json', 'Dockerfile', 'Dockerfile.dockerignore', 'scripts/build.mjs',
-  'src/signedVerifier.mjs', 'src/trusted-producers.json', 'src/config.mjs', 'src/transport.mjs', 'src/persistence.mjs', 'src/http.mjs', 'src/main.mjs'];
+  'src/strictJson.mjs', 'src/signedVerifier.mjs', 'src/trusted-producers.json', 'src/config.mjs', 'src/transport.mjs', 'src/persistence.mjs', 'src/http.mjs', 'src/main.mjs'];
 for (const name of core) {
   const path = `functions/src/modules/sentinel/${name}`;
   const value = (await readFile(new URL(path, root), 'utf8')).replace(/\r\n/g, '\n');

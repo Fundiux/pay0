@@ -1,3 +1,4 @@
+import { parseStrictJson } from './strictJson.mjs';
 import { createServer } from 'node:http';
 import { decodeEnvelope } from './transport.mjs';
 
@@ -19,7 +20,7 @@ async function readBody(req, maximum) {
     req.once('error', fail);
     req.once('end', () => {
       if (settled) return;
-      try { const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); settled = true; resolve(body); }
+      try { const body = parseStrictJson(Buffer.concat(chunks), { maxBytes: maximum }); settled = true; resolve(body); }
       catch { fail(); }
     });
   });

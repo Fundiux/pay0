@@ -1,3 +1,4 @@
+import { parseStrictJson } from './strictJson.mjs';
 const plain = value => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 const keys = (value, allowed, required = allowed) => plain(value) && Object.keys(value).every(key => allowed.includes(key)) && required.every(key => Object.hasOwn(value, key));
 const fixedError = () => { throw new Error('INVALID_ENVELOPE'); };
@@ -35,7 +36,7 @@ export function decodeEnvelope(body, config, now = () => Date.now()) {
   if (!Number.isFinite(publishTime) || publishTime > now() + 60000 || publishTime < now() - 86400000) fixedError();
   const data = Buffer.from(m.data, 'base64');
   if (data.length > config.maxLogBytes || data.toString('base64') !== m.data) fixedError();
-  const log = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data));
+  const log = parseStrictJson(data, { maxBytes: config.maxLogBytes });
   if (!keys(log, ['logName', 'resource', 'timestamp', 'receiveTimestamp', 'insertId', 'severity', 'labels', 'jsonPayload', 'trace', 'spanId', 'traceSampled'], ['logName', 'resource', 'timestamp', 'jsonPayload']) ||
       !plain(log.resource) || log.resource.type !== 'cloud_run_revision' || !plain(log.resource.labels)) fixedError();
   const labels = log.resource.labels;
