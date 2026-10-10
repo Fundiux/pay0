@@ -1,6 +1,6 @@
 # Selective IQ remaining-six environment helper
 
-Prepared only; no Preflight, StageDryRun or Execute against cloud has been run by this implementation. Baseline: RELEASE-IQ-REMAINING-PREFLIGHT.md /49ee665; runtime options:a5e0d9a, integrated1ebfcf2. The reviewed integration candidate at preparation is a276e0397bb2e7e7494ae9dd7588efa8a0537c93. Caller must supply the exact reviewed40-character ExpectedHead and exact original-dotenv ExpectedEnvHash; neither is inferred from the current checkout.
+Read-only Preflight subsequently passed; StageDryRun and Execute have not been run by this implementation. Baseline: RELEASE-IQ-REMAINING-PREFLIGHT.md /49ee665; runtime options:a5e0d9a, integrated1ebfcf2. The reviewed integration candidate at preparation is a276e0397bb2e7e7494ae9dd7588efa8a0537c93. Caller must supply the exact reviewed40-character ExpectedHead and exact original-dotenv ExpectedEnvHash; neither is inferred from the current checkout.
 
 Owned files: scripts/deploy-iq-remaining-preserving-env.ps1 and qa/scripts/remediation-iq-remaining-env.test.ps1. The helper imports reviewed local hash/map/CAS/native-output/backup/workspace utilities through the document helper's LibraryOnly path. It does not reuse any document or deposit selector, runtime snapshot or plan. Automatic deposit is excluded.
 
@@ -37,3 +37,7 @@ Replace Mode with StageDryRun only for local staging, or Execute only for the re
 ## Validation
 
 Fake suite PASS after the coordinator released the CPU window: 122 checks, network0, deploy0, realDotenvWrites0. Exact command: powershell -NoProfile -ExecutionPolicy Bypass -File qa/scripts/remediation-iq-remaining-env.test.ps1. Includes changed revision/generation, API-key and timing values between phases, plus wrong-group environment rejection. It exercises six endpoint configurations, selector groups, timing presence/value preservation, binding/latest-version rejection, job drift, native failure restoration and external-file-conflict retention using temporary synthetic files. No tests import production handlers or call cloud. Deployment/build tests are not part of this helper implementation.
+
+## Read-only preflight evidence
+
+Coordinator-authorized Preflight session21568 exited0 against exact integration a276e0397bb2e7e7494ae9dd7588efa8a0537c93. The original dotenv SHA256 was compared in memory against the completed document-release journal (COMPLETE_ENV_RESTORED), and independently checked unchanged afterward. Six pins/configurations and both exact environment groups passed, as did latest-secret metadata IQ2/Telegram1 and all five job configuration checks. Output: IQ_REMAINING_PREFLIGHT_PASS functions=6 groups=5+1 cloudWrites=0 dotenvWrites=0. No environment values, secret payloads or task payloads were emitted. No StageDryRun, Execute, build or provider action occurred. This observation is time-bound; Execute must recheck before every phase.
