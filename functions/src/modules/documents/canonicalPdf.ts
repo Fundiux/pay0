@@ -1,6 +1,12 @@
-import QRCode from "qrcode";
+import type QRCodeModule from "qrcode";
 import { existsSync } from "fs";
 import { loadCanonicalBundle } from "./canonicalBundle";
+
+let qrCode: typeof QRCodeModule | undefined;
+function getQrCode(): typeof QRCodeModule {
+  if (!qrCode) qrCode = require("qrcode") as typeof QRCodeModule;
+  return qrCode;
+}
 
 function text(value: unknown, max = 700): string {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
@@ -45,7 +51,7 @@ function dataUri(buffer: Buffer, mime: string): string {
 async function renderCanonicalQuoteHtmlPdf(input: QuotePdfInput): Promise<Buffer> {
   const bundle = input.canonicalBundle || loadCanonicalBundle(text(input.companyRfc, 13).toUpperCase(), "COTIZACION");
   const logo = dataUri(bundle.logo, "image/png");
-  const qr = dataUri(await QRCode.toBuffer(text(input.verificationUrl, 900), { type: "png", width: 220, margin: 1, errorCorrectionLevel: "M" }), "image/png");
+  const qr = dataUri(await getQrCode().toBuffer(text(input.verificationUrl, 900), { type: "png", width: 220, margin: 1, errorCorrectionLevel: "M" }), "image/png");
   const quoteItems = input.items?.length ? input.items.slice(0, 12) : [{ quantity: input.quantity, unit: input.unit, description: input.description, productCode: input.productCode }];
   const rows = quoteItems.map((item, index) => `<tr><td>${escapeHtml(item.quantity || 1)}</td><td>${escapeHtml(item.unit || input.unit || "SERVICIO")}</td><td>${escapeHtml(item.description || input.description)}</td><td>${escapeHtml(item.productCode || input.productCode || "-")}</td><td class="money">${index === 0 ? escapeHtml(mxn(input.unitPrice)) : ""}</td><td class="money">${index === 0 ? escapeHtml(mxn(input.subtotal)) : ""}</td></tr>`).join("");
   const values: Record<string, string> = {
@@ -99,7 +105,7 @@ export type ConstanciaPdfInput = {
 
 export async function renderCanonicalConstanciaPdf(input: ConstanciaPdfInput): Promise<Buffer> {
   const verificationUrl = text(input.verificationUrl || `https://pay-0-system.web.app/solicitudes?folio=${encodeURIComponent(input.solicitudFolio)}`, 900);
-  const qrPng = await QRCode.toBuffer(verificationUrl, { type: "png", width: 180, margin: 1, errorCorrectionLevel: "M" });
+  const qrPng = await getQrCode().toBuffer(verificationUrl, { type: "png", width: 180, margin: 1, errorCorrectionLevel: "M" });
   const bundle = input.canonicalBundle || loadCanonicalBundle(input.companyRfc.toUpperCase(), input.kind === "CONSTANCIA_ENTREGA_BIENES" ? "CONSTANCIA_ENTREGA_BIENES" : "CONSTANCIA_SERVICIO");
   const cell = (label: string, value: string) => `<div><b>${escapeHtml(label)}</b><br>${escapeHtml(value || "No disponible")}</div>`;
   const items = input.items?.length ? input.items : [{ description: input.description }];
