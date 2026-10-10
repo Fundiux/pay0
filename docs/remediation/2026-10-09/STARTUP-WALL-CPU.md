@@ -1,0 +1,23 @@
+# Discovery wall time and CPU attribution
+
+2026-10-10. Integrated source `26135597ce50f23818150a696218d17079e44596`, after deferred QRCode. No deployment, priority change, user-process mutation, handler invocation, or gate relaxation occurred. The previous download postflight remains inapplicable because that release stopped before upload.
+
+Measurement waited until architecture's 36/707 emulator batch closed. The private probe invokes the installed Firebase CLI Delegate and the existing ownership/cleanup wrapper with unchanged args/environment, 7-second gate and default CLI 10-second timeout. A separate monitor attaches read-only Windows process handles to the newly spawned shim and its Node descendant. It does not inspect unrelated process command lines or data. Initial sandbox CIM queries failed, so those runs have no valid child CPU evidence; subsequent scoped read-only runs succeeded. After the first measured run, child enumeration stops once Node is identified, reducing observer overhead.
+
+| Sample | Gate | Wall ms | SDK wall ms | SDK CPU user/kernel ms | Spawn ms | Post-child tail ms |
+|---|---|---:|---:|---:|---:|---:|
+| Initial monitor | STARTUP_LIMIT | 7497.46 | 5924.88 | 1890.62 / 2421.88 | 84.74 | 1473.96 |
+| Reduced monitor | PASS, 346 endpoints | 4447.74 | 3595.00 | 1468.75 / 1703.12 | 110.31 | 710.21 |
+| Attributed tail | STARTUP_LIMIT | 9543.00 | 8396.27 | 2578.12 / 4546.88 | 105.98 | 1009.33 |
+
+Last sample: manifest read 6.83 ms; YAML parse 956.46 ms (aggregate CPU 1187 ms); conversion to CLI build 45.41 ms (aggregate CPU 79 ms). Parent aggregate CPU during discovery was 1517 ms. CPU sums include all process threads and can exceed a measured subinterval's wall time; they are not single-thread occupancy measurements. First CLI module import, outside the discovery gate, also varied: 918–5522 ms wall across the valid samples. Do not attribute a remote/deployment delay to this excluded import.
+
+The SDK file contains 178724 bytes and 5825 recursively counted JSON values. SDK 7.3.2 writes `JSON.stringify(wireFormat, null, 2)` to its temporary `functions.yaml`; CLI parses that JSON-compatible text using `yaml.parse` and then `buildFromV1Alpha1`. The measured tail is primarily parsing, not file reading or conversion. Compact serialization of the same in-memory object is 123914 bytes; a subsequent exploratory parse took 378.75 ms / CPU813 ms. This is not a controlled compact-versus-pretty comparison because it ran after the first parse with a warm parser. No manifest content was printed or exported by the profiler.
+
+The SDK Node's aggregate CPU varied from 3172 to 7125 ms, including kernel CPU from 1703 to 4547 ms. This does not support attributing the failures solely to CPU descheduling. Wall-minus-CPU is not a reliable decomposition into disk waits versus run-queue waits, particularly with multiple threads; ETW or similarly scoped tracing would be needed for that attribution. No security scanner, storage device, or user application is identified as the cause.
+
+Do not implement AboveNormal based on these samples. It changes CPU scheduling, does not eliminate I/O or memory contention, and would make the performance evidence conditional on local priority. It also would not remove CLI parent-side YAML parse work if applied only inside the SDK process. Any later experiment must be explicitly limited to the owned local Windows discovery process with `FUNCTIONS_CONTROL_API=true`, preserving runtime behavior and both gates; this task makes no such change.
+
+A standard SDK alternative worth a separate controlled comparison is existing HTTP discovery: SDK emits compact JSON through `res.send`, and CLI's supported `detectFromPort` consumes it. This would retain the full generated manifest and standard CLI validation, without a static manifest, custom parser, SDK patch, or exported-function pruning. Its loopback listener, lifecycle/cleanup, complete manifest equality and actual CLI timing need verification before recommending a transport change. No transport change is implemented here.
+
+Primary references: [Windows GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes) describes user/kernel process time; [Windows SetPriorityClass](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setpriorityclass) distinguishes CPU scheduling from other resource effects; [Node22.23.2 os.setPriority](https://nodejs.org/download/release/v22.23.2/docs/api/os.html#ossetprioritypid-priority) documents platform-specific priority mapping. SDK/CLI emission and parsing statements above were checked against the installed source used by these probes.
