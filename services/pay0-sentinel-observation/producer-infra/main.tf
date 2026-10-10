@@ -35,10 +35,14 @@ resource "google_project_iam_custom_role" "reader" {
   role_id     = "pay0ListUsersReadOnly"
   title       = "PAY0 listUsers database reader"
   permissions = local.read_permissions
+  stage       = "GA"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_project_iam_member" "reader" {
-  count   = local.provision_count
+  count   = local.reader_count
   project = local.source_project
   role    = google_project_iam_custom_role.reader[0].name
   member  = "serviceAccount:${google_service_account.producer[0].email}"
@@ -54,10 +58,14 @@ resource "google_project_iam_custom_role" "logger" {
   role_id     = "pay0ListUsersObservationLogger"
   title       = "PAY0 listUsers observation log creator"
   permissions = local.log_permissions
+  stage       = "GA"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_project_iam_member" "logger" {
-  count   = local.provision_count
+  count   = local.logger_count
   project = local.source_project
   role    = google_project_iam_custom_role.logger[0].name
   member  = "serviceAccount:${google_service_account.producer[0].email}"
@@ -105,6 +113,10 @@ resource "google_project_iam_custom_role" "signer" {
   role_id     = "pay0ListUsersObservationSigner"
   title       = "PAY0 listUsers exact key signer"
   permissions = local.sign_permissions
+  stage       = "GA"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_kms_crypto_key_iam_member" "signer" {

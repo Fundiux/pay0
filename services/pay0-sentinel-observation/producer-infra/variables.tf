@@ -26,8 +26,23 @@ locals {
   database_resource   = "projects/pay-0-system/databases/(default)"
   producer_account_id = "pay0-listusers-observer"
   provision_count     = var.enable_provisioning ? 1 : 0
+  reader_count        = var.enable_provisioning && var.enable_read_grant ? 1 : 0
+  logger_count        = var.enable_provisioning && var.enable_logging_grant ? 1 : 0
   signer_count        = var.enable_provisioning && var.enable_signing_grant ? 1 : 0
   read_permissions    = ["datastore.entities.get", "datastore.entities.list"]
   log_permissions     = ["logging.logEntries.create"]
   sign_permissions    = ["cloudkms.cryptoKeyVersions.useToSign"]
+}
+
+variable "enable_read_grant" {
+  description = "Independent reviewed database read permission gate."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+variable "enable_logging_grant" {
+  description = "Independent reviewed log publishing permission gate."
+  type        = bool
+  default     = false
+  nullable    = false
 }

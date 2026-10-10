@@ -23,7 +23,7 @@ assert.deepEqual(resources.map(x=>x.type+'.'+x.name),[
  'google_kms_crypto_key_iam_member.signer',
 ]);checks++;
 for(const resource of resources){
- const expected=resource.type==='google_kms_crypto_key_iam_member'?'signer_count':'provision_count';
+ const expected=resource.type==='google_kms_crypto_key_iam_member'?'signer_count':resource.type==='google_project_iam_member'?resource.name+'_count':'provision_count';
  check(new RegExp('count\\s*= local\\.'+expected+'\\b').test(resource.body),'Every resource must be gated');
 }
 const resource=(type,name)=>resources.find(x=>x.type===type&&x.name===name).body;
@@ -58,15 +58,18 @@ Object.assign(env,{CHECKPOINT_DISABLE:'1',TF_IN_AUTOMATION:'1',TF_CLI_CONFIG_FIL
 function evaluate(input){
  fs.writeFileSync(path.join(fixture,'fixture.tfvars.json'),JSON.stringify(input));
  const result=spawnSync(terraform,['-chdir='+fixture,'console','-no-color','-var-file=fixture.tfvars.json'],{
-  input:'jsonencode({count=local.provision_count,signerCount=local.signer_count,disabled=var.service_account_disabled,source=local.source_project,observation=local.observation_project,region=local.region,db=local.database_resource,identity=local.producer_account_id,read=local.read_permissions,log=local.log_permissions,sign=local.sign_permissions})\n',
+  input:'jsonencode({count=local.provision_count,signerCount=local.signer_count,readerCount=local.reader_count,loggerCount=local.logger_count,disabled=var.service_account_disabled,source=local.source_project,observation=local.observation_project,region=local.region,db=local.database_resource,identity=local.producer_account_id,read=local.read_permissions,log=local.log_permissions,sign=local.sign_permissions})\n',
   encoding:'utf8',env,windowsHide:true,timeout:15000,maxBuffer:65536,
  });
  assert.equal(result.status,0,result.stderr);assert(!result.error);return JSON.parse(JSON.parse(result.stdout.trim()));
 }
 try{
  const empty=evaluate({});
- assert.deepEqual(empty,{count:0,signerCount:0,disabled:true,source:'pay-0-system',observation:'pay0-sentinel-observe',region:'us-central1',db:'projects/pay-0-system/databases/(default)',identity:'pay0-listusers-observer',read:['datastore.entities.get','datastore.entities.list'],log:['logging.logEntries.create'],sign:['cloudkms.cryptoKeyVersions.useToSign']});checks++;
+ assert.deepEqual(empty,{count:0,signerCount:0,readerCount:0,loggerCount:0,disabled:true,source:'pay-0-system',observation:'pay0-sentinel-observe',region:'us-central1',db:'projects/pay-0-system/databases/(default)',identity:'pay0-listusers-observer',read:['datastore.entities.get','datastore.entities.list'],log:['logging.logEntries.create'],sign:['cloudkms.cryptoKeyVersions.useToSign']});checks++;
  const provision=evaluate({enable_provisioning:true});check(provision.count===1&&provision.signerCount===0&&provision.disabled,'Provision does not enable identity or signing');
+ check(provision.readerCount===0&&provision.loggerCount===0,'Provision grants nothing');
+ for(const [flag,field] of [['enable_read_grant','readerCount'],['enable_logging_grant','loggerCount'],['enable_signing_grant','signerCount']]){const off=evaluate({[flag]:true});check(off[field]===0,'Flag alone does not create binding');const on=evaluate({enable_provisioning:true,[flag]:true});check(on[field]===1&&['readerCount','loggerCount','signerCount'].filter(k=>k!==field).every(k=>on[k]===0),'Grants independent');}
+ for(const name of ['reader','logger','signer']){const body=resource('google_project_iam_custom_role',name);check(/stage\s*= "GA"/.test(body)&&/prevent_destroy\s*= true/.test(body),'Roles GA and protected');}
  const isolatedFlag=evaluate({enable_signing_grant:true});check(isolatedFlag.count===0&&isolatedFlag.signerCount===0,'Signer alone cannot provision');
  const grant=evaluate({enable_provisioning:true,enable_signing_grant:true});check(grant.count===1&&grant.signerCount===1&&grant.disabled,'Grant does not enable SA/version');
  const enabledIdentity=evaluate({enable_provisioning:true,service_account_disabled:false});check(!enabledIdentity.disabled&&enabledIdentity.signerCount===0,'Identity enabling does not grant signing');
