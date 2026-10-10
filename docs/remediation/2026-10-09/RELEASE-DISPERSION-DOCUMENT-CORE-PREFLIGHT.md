@@ -118,3 +118,19 @@ open, and finalize still invokes it after READY replay. The preserved USER early
 return is compatibility evidence, not resolution of the pending recipient policy.
 This candidate does not certify immutable/idempotent Telegram delivery or claim
 end-to-end closure. No delivery-triggering smoke call belongs in this preflight.
+
+## Source-only runtime preservation follow-up
+
+After the read-only snapshot above, the three source callable option objects now
+set preserveExternalChanges:true, maxInstances20 and concurrency80 explicitly.
+Handlers, public API, cors, timeout60, memory256 and the finalize secret declaration
+are unchanged. This does not change integration or production by itself.
+
+`qa/scripts/remediation-dispersion-document-manifest.test.cjs` passed72 assertions
+using SDK7.3.2/CLI15.3.1 with network forbidden. It extracts actual option objects
+through TypeScript AST and exercises SDK onCall, CLI inference and update masks:
+explicit20/80/60s/256Mi/CPU1; omitted minimum/ingress/SA/VPC absent from update masks;
+only finalize declares TELEGRAM_BOT_TOKEN. A negative control confirms omission
+resets without preserveExternalChanges. The test does not resolve live latest
+secret version: exact project/name/version1 remains a deployment gate. No build,
+emulator, integration edit or deployment was performed for this follow-up.
