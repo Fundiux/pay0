@@ -1,5 +1,39 @@
 # Lote IQ: resultado incierto y bloqueo de repeticion
 
+## Estado efectivo 2026-10-10 00:14 UTC
+
+Integracion congelada a71a8b8; segundo intento Execute98895 publico grupo1 con
+CLIexit0, pero su postflight detecto maxInstanceCount automatic ausente ->20 y
+detuvo grupo2. Journal81afbf222ec64ef396eb76b4e1e17a98 confirma restauracion exacta
+dotenv SHA572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+
+| Funcion | Revision efectiva / source generation | Estado comprobado |
+| --- | --- | --- |
+| AutomaticTask | 00002-tud /1791590626272187 | ACTIVE, update00:03:58.147423399Z; RunReady00:03:57.862046Z, trafico100 |
+| CreateQueue | 00021-vuq /1791590513946575 | ACTIVE, update00:03:58.931454300Z; RunReady00:03:58.658946Z, trafico100 |
+| OnDemandTask | 00034-jot /1790638545672827 | Version anterior, ACTIVE, no publicacion nueva |
+
+Runtime actualizado sigue timeout540/memoria2Gi/CPU1/concurrency80/computeSA y
+secretos2/1; userenv conserva publickey y timing1 en grupo1. Automatic ahora
+max20 en servicio y revision; scheduler conserva20. No atribuir el cambio a un
+default CLI: 73gates de manifest y cuatro PATCH reales interceptados sin red
+demuestran omision del campo y de su updateMask. Debuglogreal no disponible
+porque CLI lo elimina al terminar exitosamente; cuatro registros Audit Run
+Create/Replace no contienen request/response. Falta snapshot anterior de scaling
+del servicio, por lo que causa y limite efectivo previo siguen sin demostrar.
+
+Postflight de colas/pausas PASS: ambas RUNNING, 1dispatch/s, 1concurrente, burst10;
+onDemand retry1/60..300 y automatic3/1800/300..900, maxDoublings16. Scheduler
+deposito ENABLED cada minuto; syncToday y REP permanecen PAUSED. No lecturas de
+payloads ni invocaciones. La recuperacion propuesta despliega solo onDemand con
+sus pins/configuracion exactos; no vuelve a publicar grupo1 ni declara resuelto
+el drift. Sin rollback inseguro ni liberacion de UNKNOWN.
+
+Predeploy grupo1 completo PASS, discovery2.608s/346 y gates normales. El intento
+anterior19308 fallo antes de upload; su stderr incompleto motivo fixaaf5be2.
+No hubo relajacion del guard de discovery ni de assertions. Historico inferior
+describe los estados anteriores y queda superado por esta matriz efectiva.
+
 2026-10-09. Preparacion de solo lectura; no desplegado por este trabajo. Cambios origen `36270fb` y `365e100`, ya integrados; inspeccion local final en integracion `9616055`. No se ejecutaron IQ, operaciones financieras, Tasks remotos ni schedulers. No se modifico codigo.
 
 ## Alcance exacto de ejecucion
