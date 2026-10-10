@@ -29,7 +29,7 @@ function allowedModules(policy, role, sort) {
 }
 export function renderRulesPolicyBlock(policy, { format = 'cached-selector' } = {}) {
   validatePolicy(policy);
-  assert.ok(['legacy', 'cached-selector'].includes(format));
+  assert.ok(['legacy', 'cached-selector', 'cached-selector-actor-only'].includes(format));
   const lines = [`    // AUTHORIZATION_POLICY_GENERATED_START ${policy.policyId}@${policy.schemaVersion}`,
     '    function roleDefaultAllows(moduleKey, actionKey) {'];
   if (format === 'legacy') {
@@ -57,7 +57,23 @@ export function renderRulesPolicyBlock(policy, { format = 'cached-selector' } = 
     }
     lines.push('      return role == "superadmin" || moduleKey in modules;');
   }
-  lines.push('    }', '    // AUTHORIZATION_POLICY_GENERATED_END');
+  lines.push('    }');
+  if (format === 'cached-selector') {
+    // Derive the explicit-role selector from the same canonical rendering.
+    // Preserve the existing actor function byte-for-byte for old callers.
+    const actor = lines.slice(1).join('\n');
+    lines.push(actor.replace('roleDefaultAllows(moduleKey, actionKey)', 'roleDefaultAllowsForRole(role, moduleKey, actionKey)')
+      .replace('      let role = myRole();\n', ''));
+    // Specialize only the fixed grantor module pair from canonical policy.
+    // Superadmin keeps the existing selector's unconditional policy bypass.
+    const delegationRoles = CANONICAL_ROLES.filter(role => role !== 'superadmin'
+      && policy.roleDefaults[role].usuarios?.view === true
+      && policy.roleDefaults[role].usuarios?.clientDelegations === true);
+    lines.push('    function roleAllowsClientDelegation(role) {',
+      `      return role == "superadmin" || role in [${delegationRoles.map(JSON.stringify).join(', ')}];`,
+      '    }');
+  }
+  lines.push('    // AUTHORIZATION_POLICY_GENERATED_END');
   return lines.join('\n');
 }
 export function extractRulesPolicyBlock(source) {
@@ -68,6 +84,7 @@ export function extractRulesPolicyBlock(source) {
 export function identifyRulesPolicyFormat(source, policy) {
   const block = extractRulesPolicyBlock(source).replace(/\r\n/g, '\n');
   for (const format of ['cached-selector', 'legacy']) if (block === renderRulesPolicyBlock(policy, { format })) return format;
+  if (block === renderRulesPolicyBlock(policy, { format: 'cached-selector-actor-only' })) return 'cached-selector';
   throw new Error('Rules policy block differs from its complete canonical rendering');
 }
 export function replaceRulesPolicyBlock(source, policy) {

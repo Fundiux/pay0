@@ -42,11 +42,13 @@ function evaluator(source, rawRole, profile) {
   const bindings = {
     myRole: () => role, isSuperadmin: () => role === 'superadmin',
     isAdmin: () => role === 'admin', isOperador: () => role === 'operador',
-    signedIn: () => true, me: () => 'synthetic-user', userDoc: () => map(profile),
+    signedIn: () => true, authenticated: () => true, userExists: () => true,
+    me: () => 'synthetic-user', userDoc: () => map({ ...profile, role: rawRole }),
   };
-  for (const name of ['roleDefaultAllows', 'individualAllows', 'individualAllowsViewAndAction', 'hasModuleAction']) {
+  for (const name of ['roleDefaultAllowsForRole', 'roleDefaultAllows', 'userLifecycleActive', 'individualAllows', 'individualAllowsViewAndAction', 'individualAllowsViewAndActionForUser', 'hasModuleAction']) {
     if (!source.includes(`function ${name}(`)) continue;
-    bindings[name] = new Function(...Object.keys(bindings), 'moduleKey', 'actionKey', body(source, name)).bind(null, ...Object.values(bindings));
+    const signature = source.slice(source.indexOf(`function ${name}(`) + `function ${name}(`.length).split(')')[0].split(',').map(value => value.trim());
+    bindings[name] = new Function(...Object.keys(bindings), ...signature, body(source, name)).bind(null, ...Object.values(bindings));
   }
   return (name, module, action) => { try { return bindings[name](module, action) === true; } catch { return false; } };
 }
@@ -85,7 +87,7 @@ for (const role of roles) {
       { modules: false }, { modules: { [module]: { [action]: true } } }];
     for (const [index, profile] of profiles.entries()) {
       const expected = reference(role, profile, module, action, true);
-      for (const [label, source] of [['legacy', original], ['candidate', candidate]])
+      for (const [label, source] of [['legacy', original], ['candidate', candidate], ['actual', actual]])
         assert.equal(evaluator(source, role, profile)('hasModuleAction', module, action), expected, JSON.stringify({label, role, module, action, index}));
       guardCases++;
     }
@@ -106,6 +108,7 @@ for (const rawRole of ['admin', 'operador']) for (const scalar of [1, 0, [], 'tr
   const profile = { modules: { solicitudes: { view: scalar, create: true } } };
   assert.equal(evaluator(original, rawRole, profile)('hasModuleAction', 'solicitudes', 'create'), false);
   assert.equal(evaluator(candidate, rawRole, profile)('hasModuleAction', 'solicitudes', 'create'), false);
+  assert.equal(evaluator(actual, rawRole, profile)('hasModuleAction', 'solicitudes', 'create'), false);
 }
 assert.throws(() => identifyRulesPolicyFormat(candidate.replace('|| moduleKey in modules;', '|| true || moduleKey in modules;'), policy));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pay0-policy-candidate-'));
