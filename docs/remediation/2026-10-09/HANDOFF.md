@@ -2,7 +2,35 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint posterior a 19:23 UTC (prevalece): tres intentos IQ6 sin publicacion.**
+**Checkpoint posterior a 19:59 UTC (prevalece): IQ6 sin upload tras cuatro intentos.**
+Integracion `71aacb959a7ab77a446bd4d5abc3740c4b0f80a1`, push confirmado.
+CLI temporal y diagnostico incorporados; reproduccion real del tercer fallo dio
+STARTUP_LIMIT7279ms. Cache local fuente13e11a7/integracion71aacb9 conserva manifest
+SHA213b001d69e9a4bb53aefea2728064aeee340918c09c7307b2d537c79dcee5c3/346exports.
+Build y tres tests PASS; CLI real2941ms/lifecycle4151ms y guard estricto2361ms PASS
+antes del cuarto intento. Fallo previo8324ms tambien conservado; no prueba global
+de estabilidad. Execute35607 exit1: warm6614ms/strict7687ms, limite7000ms intacto,
+antes de upload. Journal75e12aa6ee7348aab3080ef496092129 restauracion exacta
+19:59:32.8684793Z; dotenv SHA572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+Preflight posterior33434 PASS6funciones, grupos5+1, cloudWrites0/dotenvWrites0.
+No quinto intento identico: investigar importaciones y variabilidad sin relajar gates.
+
+Sentinel: apply-reviewed SHAa976950d85ae6502bbd51dfc0ca6e75b60f6d73ad95b027b9125950c9cf5cfda
+sesion26890 exit1 ANTES de aprobacion interna: APPROVAL_REJECTED, approvalSentfalse.
+Plan parseado0add/1update/0destroy, unico campo template.containers.image; rawplan
+SHA5600bb6de4bfb83cbdeab2502372fd55a129ef43f15ca781ffaafd5050adb333, no persistido.
+No es una denegacion de auto-review: la herramienta permitio el comando y el
+helper rechazo su comprobacion previa. Diagnostico redactado en investigacion;
+estado local conserva hash/serial91, lock presente pendiente de reconciliar.
+No retry/apply/force-unlock ni afirmar nueva revision. Sink/canary no activados.
+
+Rules candidatoef3e: politica/matrices de equivalencia PASS; compatibilidad36PASS
+sin budget. Suite completa aun excede1000expresiones en DIRECT managedByUserId
+sobre clientDispersions; no518 ni publicacion. Control publicado de36 detecto dos
+excesos preexistentes por delegacion vencida: el anterior518PASS no cubria esos casos.
+Notifier CLIENT candidato aislado desde71aac; pruebas sinteticas PASS, build/revision
+pendientes y gates fan-out/legacy/contentEncoding abiertos. USER no se redefine.
+**Checkpoint historico posterior a 19:23 UTC: tres intentos IQ6 sin publicacion.**
 Execute98579 exit1 antesupload: warmup discovery excedio60000ms; no se cambio
 ningun limite. Journal56e28e144a4a47eeb96ba0c8f5e87639 conserva fallo18:31:48
 /restauracion18:31:50.2983283Z. Preflight posterior5978 exit0 confirma los6pins,
