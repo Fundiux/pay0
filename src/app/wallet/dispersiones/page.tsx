@@ -1,6 +1,7 @@
 "use client";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+import { useDispersionNotes } from "@/lib/useDispersionNotes";
 
 import { formatDateTime24 } from "@/lib/dateTime";
 import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
@@ -338,7 +339,8 @@ export default function WalletDispersionesPage() {
   const [isDispersionImportDragging, setIsDispersionImportDragging] = useState(false);
   const [docsFor, setDocsFor] = useState<DispersionRow | null>(null);
   const [notesFor, setNotesFor] = useState<DispersionRow | null>(null);
-  const [notes, setNotes] = useState<any[]>([]);
+  const notesState = useDispersionNotes(uid, rootId, notesFor?.id);
+  const notes = notesState.notes;
   const [newNote, setNewNote] = useState("");
   const [balanceRow, setBalanceRow] = useState<BalanceAccountRow | null>(null);
   const [dispatchBalanceRows, setDispatchBalanceRows] =
@@ -1362,29 +1364,6 @@ export default function WalletDispersionesPage() {
 
 
 
-  useEffect(() => {
-    if (!notesFor?.id) {
-      setNotes([]);
-      return;
-    }
-
-    const qy = query(
-      collection(db, `clientDispersions/${notesFor.id}/notas`),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(
-      qy,
-      (snap) => {
-        setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      (err) => {
-        console.error("[Dispersiones] notas snapshot error:", err);
-        setNotes([]);
-      }
-    );
-  }, [notesFor]);
-
   async function sendDispersionNote() {
     if (!notesFor?.id || !newNote.trim()) return;
 
@@ -1394,6 +1373,7 @@ export default function WalletDispersionesPage() {
         text: newNote.trim(),
       });
       setNewNote("");
+      notesState.refresh();
     } catch (e: any) {
       setError(e?.message || "No se pudo guardar la nota.");
     }
@@ -3154,7 +3134,7 @@ export default function WalletDispersionesPage() {
                 type="button"
                 onClick={() => {
                   setNotesFor(null);
-                  setNotes([]);
+
                   setNewNote("");
                 }}
                 className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-900 hover:text-white"
@@ -3178,9 +3158,16 @@ export default function WalletDispersionesPage() {
               </div>
             ) : null}
 
+            <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+              <span>Actualización automática cada 5 s mientras esta ventana esté visible.</span>
+              <button type="button" onClick={notesState.refresh} disabled={notesState.loading} className="text-sky-300 disabled:opacity-40">Actualizar</button>
+            </div>
+            <button type="button" onClick={notesState.reloadFromStart} disabled={notesState.loading} className="mb-2 text-xs text-slate-300 disabled:opacity-40">Recargar historial desde el inicio</button>
+            {notesState.error ? <p role="alert" className="mb-2 text-sm text-amber-300">{notesState.error}</p> : null}
+            {notesState.hasMore ? <button type="button" onClick={notesState.loadOlder} disabled={notesState.loading} className="mb-2 text-sm text-sky-300 disabled:opacity-40">Cargar anteriores</button> : null}
             <div className="mb-3 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3">
               {notes.length === 0 ? (
-                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
+                <div className="text-sm text-slate-400">{notesState.loading ? "Cargando notas…" : notesState.error ? "Notas no disponibles." : "Sin mensajes todavía."}</div>
               ) : (
                 notes.map((note) => <NoteBubble key={note.id} note={note} />)
               )}

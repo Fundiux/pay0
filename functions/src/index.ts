@@ -2796,6 +2796,7 @@ export { addClientBeneficiaryMethod, createClientBeneficiary, deleteClientBenefi
 export { requestClientDispersionIncident } from "./modules/financing/callables";
 export { resolveClientDispersionIncident } from "./modules/financing/callables";
 export { addClientDispersionNota } from "./modules/financing/callables";
+export { listClientDispersionNotes } from "./modules/financing/noteReads";
 export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
 export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
 export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";

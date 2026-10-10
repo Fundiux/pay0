@@ -1,6 +1,14 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 
+export type DispersionNoteCursor = { version: 1; dispersionId: string; seconds: number; nanoseconds: number; id: string };
+export type DispersionNote = { id: string; createdAt: { seconds: number; nanoseconds: number }; text?: string; [key: string]: unknown };
+export type DispersionNotePage = { items: DispersionNote[]; nextCursor: DispersionNoteCursor | null };
+export async function listClientDispersionNotes(input: { dispersionId: string; limit?: number; cursor?: DispersionNoteCursor }): Promise<DispersionNotePage> {
+  const call = httpsCallable<typeof input, DispersionNotePage>(functions, "listClientDispersionNotes");
+  return (await call(input)).data;
+}
+
 function createClientIdempotencyKey(operation: string) {
   const cryptoObj = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
   const randomPart = cryptoObj?.randomUUID
