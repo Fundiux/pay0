@@ -1,5 +1,15 @@
 # Hugo: preflight de publicación acotada
 
+Actualizacion2026-10-10: la compatibilidad historica descrita abajo ya esta
+implementada en fuente dfbe7ae y probada en a751ec0:89sinteticos, phase4/5 y
+15checks historicos con cuatro consumidores y tres retriesSDKcontrolados PASS.
+BuildcentralFunctionsPASS. No reescribe historicos; exige fuente inequívoca en
+transaccion. Ver HUGO-HISTORICAL-EVIDENCE.md. Integracion siguea71a8b8 congelada
+por loteIQ y aun no incorpora ese helper; no publicar sus consumidores todavia.
+Los parrafos inferiores que dicen propuesta/noimplementada son historicos.
+Siguiente: integrar hunks preservando capacidades adicionales de conversacion
+del worktree, verificar artefacto exacto y configuracion de cuatro exports.
+
 Fecha: 2026-10-09. Revisión de fuente y metadatos; ninguna publicación, lectura de registros históricos, ejecución de modelos ni cambio de integración. Integración `c29260b` contiene `6de1af4` y `06e4527`; coordinación central informa build Functions, 57 pruebas sintéticas y emuladores fases 4/5 PASS. Esta revisión no repitió esos gates.
 
 ## Decisión
