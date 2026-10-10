@@ -420,3 +420,40 @@ Bundle activacion: root reviso dispatcher/instalador/packer y pidio corregir rec
 de symlinks colgantes antes del build instalado. NORMAL sigue default, BUNDLED_V1
 solo proceso. Packer real con fixture y contrato CLI15.3.1 PASS; gates de artefacto
 instalado todavia pendientes. No nuevo intento de deploy IQ6/download.
+
+## Hito: productor creado, contenido y reconciliado
+
+Diagnostico1107 con controller0534a67905458a7b28ac681a4bbf8679c87f1916900017a3cc197c77198a0a51
+PASS: mismo plan y7GET actuales, no-only, estado inicial identico/lock liberado.
+Root46fakesPASS. Artefactos77476 preservados en directorio privado
+attempt-77476-preserved; causa original no demostrada y controles no relajados.
+Intento manual55536 creo los7recursos; postflight rechazo SAfalse y version1
+PENDING_GENERATION. No reapply: contencion explicita gcloud de cuenta y version
+exactas PASS, seguida de GET/politicas remotas PASS. No firmar ni activar runtime.
+
+Causa de diferencia de creacion: providerGoogle7.46.1 SA Create omite disabled;
+KMS Create envia state pero hace Read sin esperar generacion/deshabilitar.
+Google documenta transicion PENDING_GENERATION a ENABLED. Nunca afirmar que estos
+recursos nacieron deshabilitados. Commit ee2c503 agrega postcondiciones observadas
+y dependencias de los3grants sobre SA/version;58checks+fmt/validate offlinePASS.
+No permisos nuevos concedidos durante creacion/contencion; observacion IAM final
+acotada a membresia directa en dos proyectos y clave, no certificacion heredada.
+
+Rootrefresh-helpera21b5713dabe351e81f9bf88a8271ffc5b0989dea18f7728dca30973a34babab
+y pins2f241bd5767b49c5fafaad48e32220e93697d47e169818da1aa9571bd0664e46 revisados;
+3checksargumentosPASS, planrefresh20750PASSexit2sin guardarstate. Execute97166
+refresh-onlyPASS (cero mutacionescloud), backupserial9/journalprivados conservados.
+Estado finalserial10 SHAa65d30861f6a727b60aa22a938874d2b9eb585fff4f3b3874ba4b58fd5225e69:
+8recursosactivos(API+7), SA disabledtrue, version1DISABLED, roles exactos,
+bindings0/directMemberBindings0; postflight remotoPASS. Helpers anteriores de
+import/apply/refresh tienen pins obsoletos: NO reutilizarlos. Runtime/trust y
+switches productores siguen sin activar; no grants futuros implicitos.
+
+Notas7b837ac limpio/probado aun sin integrar. Revision de compatibilidad descubrio
+que createdAt MAP con formaTimestamp y IDs de nota con espacios requerian contrato
+distinto; agente corrige con Timestamp real y cursorID exacto, sin migrar historia.
+Notifier efe4375 (dep54ac1e2/add1ac1) conecta AbortSignalporstage, build69201+64tests
+PASS; revisado por root, sinintegrar. Fanout10 sigue abierto y requiere paginado
+durable, no limite de negocio inventado. Bundleinstalado929archivos PASS con SHA
+308ad5c9...; runtime/WASM/maps/linaje/TelegramPASS; CLIreal3110ms346. Financiero y
+packer final aun en curso. No nuevo deploy de aplicacion ni cambio de main.
