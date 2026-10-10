@@ -2,7 +2,7 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint 2026-10-10 18:33 UTC (prevalece): IQ6 intento sin publicacion.**
+**Checkpoint posterior a 18:43 UTC (prevalece): dos intentos IQ6 sin publicacion.**
 Execute98579 exit1 antesupload: warmup discovery excedio60000ms; no se cambio
 ningun limite. Journal56e28e144a4a47eeb96ba0c8f5e87639 conserva fallo18:31:48
 /restauracion18:31:50.2983283Z. Preflight posterior5978 exit0 confirma los6pins,
@@ -12,6 +12,17 @@ Run baseline6 privado confirma max20servicio paraTODOS, distinto demaxrevision.
 Saltoswall de herramientas786s/453s y otros agente800s, sin causa probada;
 no atribuir necesariamente a CPU ni suspension. Siguiente intento exige nuevo
 gate estricto y rechecks, sin retry automatico. CPU agentes liberada temporal.
+Segundo Execute93805 tambien fallo ANTES de upload: gate HTTP estricto paso
+aproximadamente2.9s, discovery final CLI excedio su limite10s. Restauracion
+dotenv confirmada18:43:31UTC; no atribuir nuevas revisiones a ninguno de los
+dos intentos. Tooling7d6fe27 integrado como
+b341058f60073a20e3c324b57056ca5f13b2cf08 y pushoriginPASS, segun root:
+transporte temporal SDK/CLI existente, default10s y gate7s/346exports conservados.
+Cleanup del hijo propio e interrupciones corregidos; nueve testsPASS y gate
+CLI real final4908ms/346PASS. No afirmar que elimina la causa historica.
+Preflight del nuevo HEAD sesion16082 EN CURSO; no deploy IQ6 confirmado.
+Requiere Preflight y StageDryRun frescos, pins/config/jobs iguales y journal
+con hashplan nuevo; conservar los journals fallidos sin sobreescribirlos.
 Sentinel CloudBuild140322af-4c09-40f2-a315-c0f8eeb03f1c SUCCESS18:24:38.831877Z,
 imagen sha256:c4841dab1e20e3cd125d63adc22fac15d4414db7c44f084ccad881f0f6f98549
 (22archivos/99.9KiB stage x6s45T, builderdedicado). No deploy/activacion.
