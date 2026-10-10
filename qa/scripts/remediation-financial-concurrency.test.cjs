@@ -7,18 +7,30 @@ const projectId = 'demo-pay0-financial';
 assert.equal(process.env.GCLOUD_PROJECT, projectId);
 assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:18087');
 global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
-require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true} }).outputText, filename);
+const bundleArtifact = process.env.PAY0_QA_BUNDLE_ARTIFACT;
+if (!bundleArtifact) require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true} }).outputText, filename);
 const admin = functionsRequire('firebase-admin');
 const {FieldValue, Timestamp} = functionsRequire('firebase-admin/firestore');
 admin.initializeApp({projectId});
 const db = admin.firestore(), stamp = Timestamp;
-const api = require('../../functions/src/modules/paymentApplications/complementAutomation.ts');
-const {complementRequestId} = require('../../functions/src/modules/paymentApplications/complementFollowup.ts');
-const {claimIqComplementGate} = require('../../functions/src/modules/paymentApplications/complementGates.ts');
-const {SafetyRuntime, CONSERVATIVE_POLICY} = require('../../functions/src/modules/automationSafety/runtime.ts');
-const {onPaymentReadyForCommissionDistribution} = require('../../functions/src/modules/commissionDistributions/triggers.ts');
+const bundle = bundleArtifact ? require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:bundleArtifact,dependencyRoot:require('node:path').resolve('functions')}) : null;
+const internal = name => bundle ? bundle.loadInternal(`${name}.js`) : require(`../../functions/src/${name}.ts`);
+const api = internal('modules/paymentApplications/complementAutomation');
+const {complementRequestId} = internal('modules/paymentApplications/complementFollowup');
+const {claimIqComplementGate} = internal('modules/paymentApplications/complementGates');
+const {SafetyRuntime, CONSERVATIVE_POLICY} = internal('modules/automationSafety/runtime');
+const {onPaymentReadyForCommissionDistribution} = internal('modules/commissionDistributions/triggers');
 const uuid = '11111111-1111-4111-8111-111111111111';
 function load(file, dependencies = {}) {
+  if (bundle) {
+    assert.equal(file, 'functions/src/modules/iq/depositHttpCreateCore.ts');
+    // The real bundled IQ HTTP client and policy remain in the execution path.
+    // Only its external transport is synthetic; no internal factory is replaced.
+    process.env.PAY0_ENVIRONMENT = 'production';
+    delete process.env.PAY0_EXTERNAL_ACTIONS_MODE;
+    global.fetch = dependencies['./iqHttpClient'].fetchIq;
+    return internal('modules/iq/depositHttpCreateCore');
+  }
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -26,14 +38,14 @@ function load(file, dependencies = {}) {
   new Function('exports', 'require', code)(exports, name => { assert(name in dependencies, `Unexpected dependency: ${name}`); return dependencies[name]; });
   return exports;
 }
-const adapters = require('../../functions/src/modules/iq/depositHttpCreateFirebaseAdapters.ts');
+const adapters = internal('modules/iq/depositHttpCreateFirebaseAdapters');
 let posts = 0, transportMode = 'success';
 const iqRow = { id: 991, created_at: '2026-10-06T20:00:01Z', sum: 100, currency: 'mxn',
   partner: 'Partner', client: 'Client', company: 'Company', operation_type: 'Deposit', sale_type: 'standard',
   base_percentage: '0', sale_percentage: '0', operation_status: 'pending', conciliation_status: 'pending' };
 const core = load('functions/src/modules/iq/depositHttpCreateCore.ts', {
   'node:crypto': require('node:crypto'),
-  './iqDateTime': require('../../functions/src/modules/iq/iqDateTime.ts'),
+  './iqDateTime': internal('modules/iq/iqDateTime'),
   '../../utils/operationTiming': { operationTiming() {} },
   './iqHttpClient': { async fetchIq(url, options) {
     assert.equal(url.origin, 'http://127.0.0.1');
