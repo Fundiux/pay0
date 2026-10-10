@@ -2,7 +2,7 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint posterior a 18:43 UTC (prevalece): dos intentos IQ6 sin publicacion.**
+**Checkpoint posterior a 19:23 UTC (prevalece): tres intentos IQ6 sin publicacion.**
 Execute98579 exit1 antesupload: warmup discovery excedio60000ms; no se cambio
 ningun limite. Journal56e28e144a4a47eeb96ba0c8f5e87639 conserva fallo18:31:48
 /restauracion18:31:50.2983283Z. Preflight posterior5978 exit0 confirma los6pins,
@@ -20,7 +20,16 @@ b341058f60073a20e3c324b57056ca5f13b2cf08 y pushoriginPASS, segun root:
 transporte temporal SDK/CLI existente, default10s y gate7s/346exports conservados.
 Cleanup del hijo propio e interrupciones corregidos; nueve testsPASS y gate
 CLI real final4908ms/346PASS. No afirmar que elimina la causa historica.
-Preflight del nuevo HEAD sesion16082 EN CURSO; no deploy IQ6 confirmado.
+Preflight del nuevo HEAD sesion16082 PASS, seguido de StageDryRun y tercer
+Execute81695. Este tercero fallo19:23:47.567UTC ANTES de upload en el nuevo
+gate CLI final, tras138checks documentales96+42PASS. Dotenv restaurado
+19:23:47.626UTC; journal privadoa70846de41c44319bb93fc8acd4c685a preservado.
+Diagnostico actual generico: ENOENT de cross-spawn aparece despues de gateexit1
+y no demuestra causa raiz. Diagnostico redactado fuente4569a44 integrado como
+3a78bccfc11d2c3935abce3d6b4abacb20c7fe90, cincofocusedtestsPASS, sin push ni
+nuevo deploy. Falta reproducir categoria/tiempo del fallo. PostfailurePreflight
+95554 PASS: seis funciones, configs/jobs/envhash preservados.
+No nuevo Execute ni deploy IQ6 confirmado.
 Requiere Preflight y StageDryRun frescos, pins/config/jobs iguales y journal
 con hashplan nuevo; conservar los journals fallidos sin sobreescribirlos.
 Sentinel CloudBuild140322af-4c09-40f2-a315-c0f8eeb03f1c SUCCESS18:24:38.831877Z,
