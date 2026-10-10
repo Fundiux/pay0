@@ -8,7 +8,7 @@ function fixture(){let count=0,cleanup=false,time=p.startMs,sequence=0,lastJourn
  const charge=()=>{if(++count>(cleanup?120:80))throw Error('LIMIT');};
  const http={charge,beginCleanup(){cleanup=true;},async request(method,url,body,options={}){charge();calls.push({method,url,body:structuredClone(body),token:options.token});
  if(failStage&&url.includes(failStage)){const once=failStage;failStage=null;throw Error('PRIVATE_FAILURE_'+once);}
- if(url.endsWith(':getIamPolicy'))return{status:200,data:structuredClone(policies.get(url.slice(0,-13)))};
+ const policyUrl=url.split('?')[0];if(policyUrl.endsWith(':getIamPolicy')){const base=policyUrl.slice(0,-13);assert.equal(method,'POST');if(base===p.access.base){assert.equal(url,base+':getIamPolicy?options.requestedPolicyVersion=3');assert.equal(body,null);}else assert.deepEqual(body,{options:{requestedPolicyVersion:3}});return{status:200,data:structuredClone(policies.get(base))};}
  if(url.endsWith(':setIamPolicy')){const base=url.slice(0,-13);if(conflicts>0){conflicts--;const old=policies.get(base);old.etag='conflict'+sequence++;return{status:409};}policies.set(base,{...structuredClone(body.policy),etag:'e'+sequence++});return{status:200,data:{}};}
  if(url.includes('/oauth2/v2/userinfo?'))return{status:200,data:{email:p.operatorEmail,verified_email:true}};
  if(url.endsWith(':testIamPermissions'))return{status:200,data:{permissions:body.permissions}};
@@ -60,4 +60,12 @@ test('negative update and delete probes bind to the acknowledged seed version',a
  const version=f.journal.fixtureVersions[fixtureName(p.run)];assert.equal(typeof version,'string');
  assert.deepEqual(writes[1].currentDocument,{updateTime:version});
  assert.deepEqual(writes[2].currentDocument,{updateTime:version});
+});
+
+test('empty service account policy omits bindings but retains CAS etag',async()=>{
+ const f=fixture();f.policies.set(p.access.base,{etag:'empty-v1',version:1});
+ const result=await verify(p,f.dependencies);assert.equal(result.passed,true);
+ assert.deepEqual(f.policies.get(p.access.base).bindings,[]);
+ const first=f.calls.find(c=>c.url===p.access.base+':setIamPolicy');
+ assert.equal(first.body.policy.etag,'empty-v1');assert.equal(first.body.policy.version,3);
 });

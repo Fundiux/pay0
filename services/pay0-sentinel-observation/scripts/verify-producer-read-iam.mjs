@@ -37,7 +37,7 @@ export function createHttp({operatorToken,fetchImpl=fetch,now=Date.now}){
   const reader=response.body.getReader();let bytes=0;const chunks=[];try{for(;;){const r=await reader.read();if(r.done)break;bytes+=r.value.length;if(bytes>262144){await reader.cancel();fail();}chunks.push(Buffer.from(r.value));}return{status,data:JSON.parse(Buffer.concat(chunks).toString('utf8'))};}finally{reader.releaseLock();}
  }};
 }
-async function getPolicy(http,t){const r=await http.request('POST',t.base+':getIamPolicy',{options:{requestedPolicyVersion:3}});if(r.status!==200||!r.data?.etag||!Array.isArray(r.data.bindings))fail();return r.data;}
+async function getPolicy(http,t){const account=t.base===SA;const r=await http.request('POST',t.base+':getIamPolicy'+(account?'?options.requestedPolicyVersion=3':''),account?null:{options:{requestedPolicyVersion:3}});if(r.status!==200||!r.data?.etag||(r.data.bindings!==undefined&&!Array.isArray(r.data.bindings)))fail();return {...r.data,bindings:r.data.bindings||[]};}
 export async function setBinding(http,target,condition,remove){
  for(let i=0;i<3;i++){const current=await getPolicy(http,target),next=bindingPolicy(current,target,condition,remove);const r=await http.request('POST',target.base+':setIamPolicy',{policy:next});if([409,412].includes(r.status))continue;if(r.status!==200)fail();const actual=await getPolicy(http,target);if(remove?!ownTitle(actual,target,condition):present(actual,target,condition))return;fail();}fail();
 }

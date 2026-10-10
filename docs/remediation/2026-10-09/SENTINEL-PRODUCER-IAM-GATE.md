@@ -212,3 +212,26 @@ Suite final: 35/35 PASS (20 orquestador y 15 SDK), sin red. Incluye error transi
 14 en get y query con un solo intento, expiracion invalida, precondicion de version
 y respuesta parcial seguida de status 7/5. No cambia limites, grants ni politica
 productiva. La verificacion cloud y provision separada de roles siguen pendientes.
+
+## Roles creados; primer gate detenido antes de mutaciones
+
+Dos GET confirmaron roles ausentes (404). Plan sin archivo guardado: dos altas,
+cero cambios y cero bajas; SHA256 del texto de plan
+300fbf04ac99eef5e4d93f3c048952896ad50021019137fa1ace535c761b073b.
+La fuente main.tf fijada fue
+4e896a14646618fdbf9b730698105e27687cfca858f68c3a0ca14d016a52733c.
+Apply sesion52836 termino exit0: dos roles creados. GET posterior verifico nombre,
+stage GA y permisos exactos. No bindings ni cambios de runtime; state privado
+permanece en verification-infra ignorado por Git. No revertir flag a false.
+
+Primer Execute del helper termino NOT_VERIFIED con CLEANUP_VERIFIED: identidad
+SA fijada, seedAttempted=false, cero bindings intentados y cero fixtures. Lecturas
+posteriores comprobaron permisos del operador completos y una politica SA vacia
+que omite bindings (etag presente/version1). Esa representacion valida no estaba
+cubierta por el fixture local. Se normaliza exclusivamente bindings ausente a [].
+
+Tambien se corrigio el contrato REST de serviceAccounts.getIamPolicy: POST con
+options.requestedPolicyVersion=3 en query y cuerpo vacio; projects.getIamPolicy
+conserva options en body. [Referencia oficial IAM](https://docs.cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/getIamPolicy).
+La suite ahora comprueba ambos contratos, etag/version y politica sin bindings:
+36/36 PASS sin red. El gate real todavia no acredita lectura condicionada.
