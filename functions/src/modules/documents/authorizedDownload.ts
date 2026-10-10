@@ -68,6 +68,7 @@ export async function getAuthorizedDocumentDownloadUrlCore(
 }
 
 export const getAuthorizedDocumentDownloadUrl = onCall(
-  { cors: true, timeoutSeconds: 30, memory: "256MiB" },
+  { cors: true, preserveExternalChanges: true, maxInstances: 20, concurrency: 80,
+    timeoutSeconds: 30, memory: "256MiB" },
   async (request) => getAuthorizedDocumentDownloadUrlCore(request),
 );
