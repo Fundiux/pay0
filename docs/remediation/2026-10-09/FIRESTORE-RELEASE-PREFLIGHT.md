@@ -1,5 +1,31 @@
 # Firestore release preflight
 
+## Effective release, 2026-10-10 17:25 UTC
+
+Published only `firestore:rules` from integration `5a4457e` (remote matches).
+Candidate LF SHA256 `7863811b85a57ff7dde6e9d3c5925253a90371dfdf4c63fc3a60bebf5ed31876`
+passed 518 access checks with zero expression-budget exhaustion diagnostics,
+including captured SDK errors, plus the authorization-policy verifier.
+Helper `dc0f8f3` passed 50 fake checks and a real read-only preflight.
+
+Execute session34920 exited0. Effective ruleset
+`76fda1a0-4463-4106-80ff-1b4ea13d3a61`, release update
+`2026-10-10T17:24:21.300538Z`. Postflight and separate read-only recheck confirmed
+the exact candidate source hash. Storage ruleset, updateTime and hash stayed
+identical to the preserved baseline below. No indexes, Storage rules, document
+writes or production financial operations were included.
+
+Private backup, exact config, source, references and journal are retained under
+`.firebase/remediation-temp/firestore-release-c631e28b29b346cea169529b86e3fd94/`.
+The helper pins the former baseline and must not be rerun as a retry after success.
+Recovery should prefer a forward correction: restoring former rules would remove
+the new restrictions and immediate delegation checks. No rollback was performed.
+
+The 24 Storage restriction gaps, grantor lineage in direct Firestore delegation
+reads, and client transition remain open. This is not complete S01/S10 closure.
+The sections below retain the historical preflight and are superseded where they
+state that this Firestore-only release is pending.
+
 Review date: 2026-10-09. Integration reviewed at c29260b, then a71a8b8 with the
 same rules. No rule edits, deployment or remote project reads in this review.
 

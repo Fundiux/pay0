@@ -2,18 +2,34 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**En curso 2026-10-10 04:23 UTC (prevalece):** deploy Hugo4 session34858,
-helper060d40769fakePASS+preflightrealPASS, integrationec64a14d9fe469ee904620e5086cd55238b364c9
-publicada y congelada. Journal privado `.firebase/hugo-evidence-deploy/782d671bd71b45c7aa78fe49d326f630/`:
-PREPARED04:23:10, ENV_STAGED y HUGO_DEPLOY_STARTED04:23:27. Demora prolongada
-al devolver control de tool ocurrio antes de estos markers; no causa demostrada.
-No repetir Execute. Gates candidato exacto: FunctionsbuildPASS, policyPASS,
-90testsPASS(incl92assertmanifest), phase4/5+historico15/3retriesSDK PASS.
-Buildfuente1361 tambienPASS incluye Sentinel8b0adcd; nointegrado/deploySentinel.
-Firestore8258074 fuente probado518/budget0/policyPASS, NOintegrado ni publicado.
-CPU/tests/emuladores pausados durante predeployHugo; agentes preparan helper
-Firestore y receptorSentinel estricto sinactivar. Falta postflight Hugo y
-restauracion dotenv; usar journal/sesion. No revision nueva certificada aun.
+**Checkpoint 2026-10-10 17:25 UTC (prevalece): Firestore PUBLICADO.**
+Integration5a4457e remotoigual, trackedclean. Execute34920 exit0, helperdc0f8f3
+50fakesPASS+realpreflightPASS. Nuevo ruleset76fda1a0-4463-4106-80ff-1b4ea13d3a61,
+releaseupdated17:24:21.300538Z, hash7863811b85a57ff7dde6e9d3c5925253a90371dfdf4c63fc3a60bebf5ed31876
+igual518gates/budget0. Postflight yrecheckindependientePASS; Storageconserva
+rulesetd37e96b3/updateSept28/hash5876... Sinindices ni mutacionesdedatos.
+Backup/journalprivado firestore-release-c631e28b29b346cea169529b86e3fd94.
+No repetir helperExecute (pinbaselineyaantiguo). S01/S10soloavanceparcial:
+linajeotorgante/Storage24gaps/transicionclientes siguenpendientes.
+Hugo sigueSINDEPLOY nuevo; failure17:20antesupload/envrestored yremote4pinsPASS.
+Source82c2a50 pinAutomaticmax20 probado75manifestchecks;83548c2 receiverfirmado
+9+13tests/83checksPASS, ninguno integrado/deploy. VentanafinitawriterWIP.
+
+**Checkpoint 2026-10-10 17:23 UTC (prevalece):** Hugo session34858 terminoexit1
+antesupload. Predeploy normal PASS, pero discovery finalFirebaseCLI excedio10s.
+Toolcalls sufrieron demoras extraordinarias; no causa precisa demostrada.
+Journal782d671bd71b45c7aa78fe49d326f630 confirma ENV_RESTORED17:20:34.7175969Z,
+SHA original572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+Preflight remoto posterior15586PASS confirma4revisiones/configanteriores intactas.
+No autoretry ni nuevarevisionHugo. Artefactoec64a14 habia pasado90tests,
+Functionsbuild/policy/phase4+5/15historicos3retriesSDKcontrolados.
+Integracionahora5a4457ee63205aaf0f4bc6db54ff247b2b3cd193: cherry8258074
+Firestore, hash7863811b85a57ff7dde6e9d3c5925253a90371dfdf4c63fc3a60bebf5ed31876
+identicoal518PASS/budget0; policyverifierPASS. Preparando publicacion soloFirestore;
+helperagente aunpruebas, NOreglasremotasnuevas. Buildfuente1361PASS incluye
+Sentinel8b0adcd71fakePASS, nointegrado/deploy. Receiverfirmado WIPsinactivar.
+CPUliberadofakes Firestore/Sentinel/IQcap20. IQautomatic seproponeadoptarmax20
+explicitamente como decisionnueva; no explica limitehistorico. USERpolicy pendiente.
 
 **Checkpoint 2026-10-10 00:41 UTC (prevalece):** IQ on-demand publicado y
 verificado desde a71a8b8. Sesion13401 exit0; revision00035-kin,
