@@ -2,7 +2,22 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint posterior a 19:59 UTC (prevalece): IQ6 sin upload tras cuatro intentos.**
+**Checkpoint posterior: receptor Sentinel publicado; descarga exacta integrada.**
+Sentinel Execute23607 exit0, plan0add/1update/0destroy soloimagen; observer00006-spv
+Ready/trafico100%, controles/IAMiguales, canary00006-6wvDISABLED/sinkoff/trustvacio.
+Ver SENTINEL-RECEIVER-RELEASE-PREFLIGHT.md para planhash, lockWindows reconciliado,
+19+78pruebas y limitesCAS. No productorfirmado ni accionfinanciera activados.
+Integracion6e2894975f4c244e215b8fa4683d522de242436c limpia/subida: generationpin
+b77765a->c691095 y runtime3e03c67->6e28949. Functionsbuild60066 PASS,35descarga+
+24manifestPASS; primer manifest fallo rutaCLI y paso con PAY0_FIREBASE_TOOLS_ROOT
+instalado. DownloadPreflight PASS1/cloudWrites0/dotenvWrites0. No deploydownload.
+Rootdocs4423a9a conserva cuartoIQfallido/preflight6PASS. Notifier CLIENT aislado
+366f74a build y67testsPASS; no integrado/deploy, gatesfanout/legacy/encodingabiertos.
+Rules ef3e agregado689:658PASS/31FAIL y56budget; ninguno unexpectedALLOW.
+Nuevo candidato1b7fee reutiliza contexto/restricciones; equivalencia y emuladores
+pendientes, sin publicar ni cerrar linaje. InventarioCLIENT preparado28tests,
+sin cloud y pendiente de reviewroot. IQ startupQRCode bajo investigacion medida.
+**Checkpoint historico posterior a 19:59 UTC: IQ6 sin upload tras cuatro intentos.**
 Integracion `71aacb959a7ab77a446bd4d5abc3740c4b0f80a1`, push confirmado.
 CLI temporal y diagnostico incorporados; reproduccion real del tercer fallo dio
 STARTUP_LIMIT7279ms. Cache local fuente13e11a7/integracion71aacb9 conserva manifest

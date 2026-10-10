@@ -28,3 +28,35 @@ El target observer incluye dependencias de Terraform: revisar cambios efectivos,
 Primero plan revisado de SOLOimagen; cualquier drift funcional bloquea y requiere analisis. Apply sigue reservado al coordinador tras revision, sin reutilizar un plan inexistente. Una aprobacion del plan en memoria no crea un archivo inmutable aplicable: sera necesario otro mecanismo revisado que vuelva a comprobar exactamente el cambio antes de apply.
 
 Postflight previsto: revisionnueva Ready/trafico100, digest exacto, SA/env/recursos/limits/IAM invariantes; canarioDISABLED y sinkoff; trustausente/defaultvacio. Smoke publico no autenticado solo verifica rechazo del endpoint privado, sin publicar eventos, leer Firestore ni inventar E2E firmado. Recovery usa imagenanterior con la misma configuracion y nuevo plan revisado, nunca rollback automatico ni habilitar unsigned. No cerrar productores reales o contencion por desplegar receiver con confianza vacia.
+
+## Publicacion verificada del receptor — 2026-10-10
+
+El segundo apply del receptor termino exit0 (sesion23607). Unico cambio:
+`template.containers.image`, 0 altas/1 actualizacion/0 bajas, digest
+`sha256:c4841dab1e20e3cd125d63adc22fac15d4414db7c44f084ccad881f0f6f98549`.
+Plan en memoria SHA8730ce4d1b7dc9261e946fbb3b2145796f18257c764e7398adc25172592fd352;
+no archivo de plan, export de respuestas, variables o logs sensibles.
+
+Postflight PASS: observer `pay0-sentinel-observer-00006-spv`, generacion6,
+Ready y trafico100%, configuracion/IAM sin cambios. Canary `00006-6wv`
+continua DISABLED, sink apagado, trust vacio. No se activa productor firmado,
+no contencion, ni acciones financieras o mensajes de prueba reales.
+
+El primer apply26890 quedo antes de confirmar: error interno enmascarado como
+APPROVAL_REJECTED. Windows no permite reabrir state bajo el lock de Terraform;
+fixture reproduce EBUSY, sin atribuir ese errno al intento original. State
+serial91/hash3f37374d5f9c9f74b886ad32b43f92fb264b7912c126bf816af1d09a022b144d
+permanecio intacto. Reconciliador257de965 paso19pruebas: ningun procesoTerraform,
+handle exclusivo del state, pins de lock y cuarentena unica; ejecucion posterior
+QUARANTINED/stateUnchanged/lockBytesPreserved. No force-unlock ni borrado del state.
+
+Helper corregido986a1f38 paso78pruebas sinteticas y revision central completa.
+Valida bytes/serial/linaje antes de spawn; durante bloqueo valida identidad y
+metadatos del state, lock propio continuo, proceso vivo, fuentes y snapshot
+remoto. Declara atomicStateCas:false: no promete CAS atomico entre ultima lectura
+y adquisicion del lock. Plan cerrado y rechecks acotan la accion efectiva.
+Rechazo envia no y permite cierre limpio antes de señales al hijo propio.
+
+Este corte sustituye la afirmacion previa de imagen sin aplicar, conservando
+preflight e intentos como evidencia historica. La firma de productores requiere
+identidad exclusiva, KMS, trust, filtros y pruebas propias antes de activacion.
