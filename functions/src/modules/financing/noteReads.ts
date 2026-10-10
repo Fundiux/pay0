@@ -66,17 +66,23 @@ async function authorize(transaction: admin.firestore.Transaction, auth: any, di
     row.operadorId ?? null, row.createdBy ?? null, row.ownerUid ?? null, row.fundingSource ?? null]);
 }
 
+// Application budget, not a historical content limit. Entire notes are retained.
+export const NOTES_RESPONSE_BYTES = 8 * 1024 * 1024;
+export const NOTES_READ_BATCH_SIZE: 4 | 8 = 4;
+type NoteDto = { id: string; createdAt: { seconds: number; nanoseconds: number }; [key: string]: unknown };
 const noteStrings = ["text", "authorType", "origin", "source", "createdBy", "createdByRole", "authorId", "authorName", "createdByName", "createdByUsername"];
-function noteDto(doc: admin.firestore.QueryDocumentSnapshot) {
+function noteDto(doc: admin.firestore.QueryDocumentSnapshot): NoteDto {
   const row = doc.data();
   if (!timestamp(row.createdAt)) throw new HttpsError("failed-precondition", "Una nota requiere revisión de su fecha.");
-  const result: Record<string, unknown> = { id: doc.id, createdAt: { seconds: row.createdAt.seconds, nanoseconds: row.createdAt.nanoseconds } };
+  const result: NoteDto = { id: doc.id, createdAt: { seconds: row.createdAt.seconds, nanoseconds: row.createdAt.nanoseconds } };
   for (const key of noteStrings) if (typeof row[key] === "string") result[key] = row[key];
   if (typeof row.system === "boolean") result.system = row.system;
   return result;
 }
 
-export const listClientDispersionNotes = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
+// The batch argument is server-internal for the bounded 4-versus-8 SDK gate;
+// callable input cannot select it or raise the byte budget.
+export async function readClientDispersionNotes(request: any, readBatchSize: 4 | 8 = NOTES_READ_BATCH_SIZE) {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Debes iniciar sesión.");
   const { dispersionId, limit, cursor } = parseInput(request.data);
   const notes = db.collection(`clientDispersions/${dispersionId}/notas`);
@@ -91,19 +97,44 @@ export const listClientDispersionNotes = onCall({ cors: true, timeoutSeconds: 60
         throw new HttpsError("failed-precondition", "La página cambió. Actualiza las notas.");
       }
     }
-    let query = notes.orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(limit + 1);
-    if (cursor) query = query.startAfter(new Timestamp(cursor.seconds, cursor.nanoseconds), cursor.id);
-    const snapshot = await transaction.get(query);
-    const selected = snapshot.docs.slice(0, limit);
-    const items = selected.map(noteDto);
-    const last = selected[selected.length - 1];
-    const time = last?.data().createdAt;
-    const nextCursor: Cursor | null = snapshot.size > limit && last ? { version: 1, dispersionId, seconds: time.seconds, nanoseconds: time.nanoseconds, id: last.id } : null;
-    return { authority, items, nextCursor };
+    const items: NoteDto[] = [];
+    let itemBytes = 0, scanned = 0, more = false, finished = false;
+    let position = cursor, lastDelivered: Cursor | null = null;
+    // Each iteration retains only this small snapshot and the emitted DTO prefix.
+    // Never accumulate snapshots or decode all 100 potentially 1 MiB documents.
+    while (!finished && scanned < limit + 1) {
+      const batchLimit = Math.min(readBatchSize, limit + 1 - scanned);
+      let query = notes.orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(batchLimit);
+      if (position) query = query.startAfter(new Timestamp(position.seconds, position.nanoseconds), position.id);
+      const snapshot = await transaction.get(query);
+      scanned += snapshot.size;
+      if (!snapshot.size) break;
+      for (const doc of snapshot.docs) {
+        if (items.length === limit) { more = true; finished = true; break; }
+        const item = noteDto(doc);
+        const candidate: Cursor = { version: 1, dispersionId, ...item.createdAt, id: item.id };
+        const bytes = Buffer.byteLength(JSON.stringify(item), "utf8");
+        // SDK encode leaves this DTO's primitives unchanged. Include the real
+        // result envelope, commas and cursor; no repeated serialization of pages.
+        const envelope = Buffer.byteLength(JSON.stringify({ result: { items: [], nextCursor: candidate } }), "utf8");
+        if (itemBytes + bytes + items.length + envelope > NOTES_RESPONSE_BYTES) {
+          if (!items.length) throw new HttpsError("resource-exhausted", "La nota excede el transporte disponible. Contacta a soporte.");
+          more = true; finished = true; break;
+        }
+        items.push(item); itemBytes += bytes;
+        position = candidate; lastDelivered = candidate;
+      }
+      if (snapshot.size < batchLimit) finished = true;
+    }
+    // A byte cut resumes after the last emitted note, not the last fetched row.
+    // This is a complete prefix of the ordered range; no note is truncated/skipped.
+    return { authority, items, nextCursor: more ? lastDelivered : null };
   }, { maxAttempts: 3 });
   // Fresh authority immediately before delivery, including grantor lineage. This
   // cannot retroactively revoke information already delivered to the browser.
   const current = await db.runTransaction(transaction => authorize(transaction, request.auth, dispersionId), { maxAttempts: 3 });
   if (current !== page.authority) throw new HttpsError("permission-denied", "El alcance de las notas cambió. Actualiza la página.");
   return { items: page.items, nextCursor: page.nextCursor };
-});
+}
+
+export const listClientDispersionNotes = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB", concurrency: 1 }, request => readClientDispersionNotes(request));

@@ -1,5 +1,17 @@
+param([switch]$PrerequisitesOnly)
 $ErrorActionPreference='Stop'
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+# Dependencies are deliberately isolated and never downloaded by this gate.
+$taskFrameworkRoot=Join-Path $taskRoot '.firebase/remediation-temp/notes-http-framework'
+$taskPrerequisite='Prepare the isolated Functions Framework 5.0.5 dependency using the exact setup commands in docs/remediation/2026-10-09/FIRESTORE-SERVER-READ-TRANSITION.md (HTTP gate prerequisites); no product npm install is required.'
+# Node supports the empty packages[""] key that PowerShell 5 JSON parsing rejects.
+$taskPrerequisiteJs=@'
+const fs=require('node:fs'),path=require('node:path');try{const root=process.argv[1],pkg=JSON.parse(fs.readFileSync(path.join(root,'node_modules/@google-cloud/functions-framework/package.json'),'utf8')),lock=JSON.parse(fs.readFileSync(path.join(root,'package-lock.json'),'utf8')),pin=lock.packages['node_modules/@google-cloud/functions-framework'];if(pkg.name!=='@google-cloud/functions-framework'||pkg.version!=='5.0.5'||pin.version!=='5.0.5'||pin.resolved!=='https://registry.npmjs.org/@google-cloud/functions-framework/-/functions-framework-5.0.5.tgz'||pin.integrity!=='sha512-/w+OB1MxJux1uO9KRud4CRPLouaB7bZcy0v6STfFVh7yqafZ1L5coWIpseoKPLUgyNfawyoEfE2mEBDRZNGL2w==')process.exit(1);}catch{process.exit(1);}
+'@
+& node -e $taskPrerequisiteJs $taskFrameworkRoot
+if($LASTEXITCODE -ne 0){throw $taskPrerequisite}
+if(-not (Test-Path -LiteralPath (Join-Path $taskRoot 'functions/lib/modules/financing/noteReads.js'))){throw 'Run npm run build in functions before the real SDK/HTTP gate; compiled noteReads.js is required.'}
+if($PrerequisitesOnly){Write-Output 'NOTES_HTTP_PREREQUISITES_PASS'; exit 0}
 $taskProject='demo-pay0-dispersion-notes'
 foreach($key in @('GOOGLE_APPLICATION_CREDENTIALS','CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE','FIREBASE_TOKEN','GOOGLE_OAUTH_ACCESS_TOKEN','CLOUDSDK_AUTH_ACCESS_TOKEN')) {
  if([Environment]::GetEnvironmentVariable($key,'Process')){throw 'Credential environment forbidden for local notes gate'}
