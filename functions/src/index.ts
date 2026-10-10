@@ -1,3 +1,4 @@
+import "./discoveryCompileCache";
 import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
