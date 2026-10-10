@@ -2,17 +2,20 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**En curso 2026-10-10 17:28 UTC (prevalece):** segundoHugodeploy session26099,
-integration5a4457e frozen/remoteigual. Journal8af6e5c6351148ffaceb16b508975a3b
-ENV_STAGED/HUGO_DEPLOY_STARTED17:28:31. Guardestricto previo60394 PASS2.517s/346,
-warm3.266s/limite7sintacto. No autoretry; nuevointentotras gates/remoteintacto.
-FuncionesTSid?nticasaec64a14 validado;5a s?locambiaFirestoreya publicado.
-CPUagentespaused hasta sourceupload. RuntimeactualHugo no certificado nuevoa?n.
-Fuente b0cb9cb ventanaSentinelfija102fakePASS, buildcentralpendiente;83548c2
-receptorfirmado9+13+83PASS;82c2a50IQcap2075PASS. Ninguno deestos3integrado.
-Agentes: baselinepreflightreadonly6IQ(invoice3/dispersion2/commission1);
-arquitecturacandidato guardagrantorinmediato/terminal sincadena16completa,
-noemuladores; independent separalotefinalizedocumental denotifierUSERpendiente.
+**Checkpoint 2026-10-10 17:42 UTC (prevalece): HUGO PUBLICADO.**
+Sesion26099exit0,4FunctionACTIVE/RunReady100 yPOSTsinAuth401: verified00003-zaw,
+experience00003-taj,draft00003-dah,outcome00003-bij. Artefacto5a4457e;
+ver RELEASE-HUGO-EVIDENCE.md para generaciones/fechas/gates/recuperacion.
+Envrestaurado17:37:46.5710509Z/hashoriginal572... y recheckPASS. Helper060d407
+NOrepetirExecute porque4pinsanteriores obsoletos. Firestore76fda permanecepublicado.
+Integracionactuala276e03: core documental e05d2b8(105testsPASS, notifierbyteidentico
+SHA c8d05301e19f4b6e7613fcaf9961ae54855a62f5bab10ea7890d631a06a0ce25),
+IQcap209dba986 y6options1ebfcf2 (75+250manifestchecksPASS), build48500/policyPASS
+antesopcionesdoca276e03. Esas3options72checksfuentePASS; helperdocagenteWIP;
+NOdeploydocumental/IQ6. Integracion aunNOpush posterior5a. Sourcebuild74117PASS
+incluyeb0cb9cbwindowSentinel, puertoDISABLED; receiver83548c2sinactivacion.
+Agentegrantorfixture fallo1000expresiones yprepara dedupewallet +nuevasy518gates;
+NOintegrar/publicar esecandidato hastaPASS. USERrecipientpolicy pendiente.
 
 **Checkpoint 2026-10-10 17:25 UTC (prevalece): Firestore PUBLICADO.**
 Integration5a4457e remotoigual, trackedclean. Execute34920 exit0, helperdc0f8f3
