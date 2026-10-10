@@ -2,6 +2,25 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint posterior: reglas congeladas; alternativa de lectura en servidor.**
+Candidato Rules05436269, sesion54306 exit1: control36 PASS0budget, matriz707
+658PASS/49FAIL/68diagnosticos de presupuesto, ningun unexpectedALLOW. Los18
+casos nuevos de composicion legitima fallaron. No518 ni release; no otro ajuste
+a ciegas. Arquitectura prepara desde2613559 el primer lote notes(wallet), con
+callable paginado/autorizacion actual y polling visible5s; pendiente implementar,
+review y ambos builds. Listas existentes por callable no bastan: listeners porID
+siguen leyendo Firestore directamente. Candidato fallido se conserva aislado.
+Inventario root ampliado d7b8d10:1480uploads, ultima pagina80 agotada, mismo unico
+root observado/0ausentes/0invalidos;14consultas adicionales,0escrituras cloud.
+Originalbootstrap/hash conservado. No snapshot ni roots sinuploads cubiertos.
+Discovery medido sinprioridades: SDK3595..8396ms y tail710..1474ms; una muestra
+9543ms atribuye956ms al yaml.parse de manifestJSONpretty178724bytes. No prueba
+CPUcompetencia como causa dominante. Wrapperdeploy y gate usan ambos FILE;
+comparacion HTTPestandar pendiente, limites7s/SDK10s intactos,0nuevo deploy.
+IAMhelper local en revision: SDK/GAX5tests inicialesPASS sinADC/red. Orquestador
+requiere CAS fixtureupdateTime/journalrecuperacion/pruebascleanup;0recursos,
+grants o tokensfixture creados. Sentinel00006-spv y descargas00004-vat sin cambio.
+
 **Checkpoint 20:36 UTC: descarga detenida antes de upload; Sentinel sigue publicado.**
 Integracion `26135597ce50f23818150a696218d17079e44596` limpia/subida, QRCodeaad6eee
 integrado2613559. Build24034 PASS,15PNGchecks y guard3218/CLI3605/346PASS.
