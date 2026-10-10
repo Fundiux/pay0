@@ -21,6 +21,22 @@ repository broad deploy script or an unqualified deploy.
 
 ## Exact candidate and preserved reference
 
+Fresh read-only reconciliation during the IQ release window (2026-10-10 UTC):
+both active sources exactly match the earlier preserved reference after LF
+normalization. Firestore release points to ruleset
+`042bafab-3487-418e-8245-2416e19d1963`, updated 2026-09-28T08:07:43.649443Z,
+SHA256 `96257055c977d62b4afe30cec4443f65d2717c7a99386fe6578c14e7dd48f20c`.
+Storage points to ruleset `d37e96b3-5266-4a44-8ce6-c903a502a854`, updated
+2026-09-28T08:07:42.831469Z, SHA256
+`5876da2001a4c13f1a5947e9e0729a4a9d30f17eed2f890ef1f8f1ef4ccc6282`.
+Exact source and release metadata are retained privately under
+`.firebase/remediation-temp/rules-release-c1fe9c2cc97c42f39afa3dc6712e45ff/`.
+This refreshed the baseline gate only; query/listener tests and publication
+remain pending. Recheck release pointers immediately before any publication.
+Reads used the official [release GET](https://firebase.google.com/docs/reference/rules/rest/v1/projects.releases/get)
+and [ruleset GET](https://firebase.google.com/docs/reference/rules/rest/v1/projects.rulesets/get)
+APIs, without Firestore document reads or remote writes.
+
 Read-only comparison used the preserved production reference in the private
 TEMP/pay0-remediation-20261009-rules directory. No fresh remote rules fetch was
 performed: refresh/reconcile the active release before publication.
