@@ -8,6 +8,29 @@ Coordinator reports successful group 1 deploy: automatic revision 00002-tud and 
 
 Group 2 was stopped by postflight. Preserve that gate; do not normalize absent to 20 or restore an unproven default.
 
+## Actual audit request, subsequently recovered read-only
+
+Coordinator queried four Cloud Functions Admin Activity records covering initial
+creation and this update. The update request at
+2026-10-10T00:03:46.334347111Z uses protobuf snake_case: its
+service_config has concurrency, timeout, secret bindings, CPU and memory fields;
+max_instance_count is absent. Its explicit update_mask.paths includes those
+fields plus environment variables, build fields, name and labels. It contains
+neither service_config.max_instance_count nor the parent service_config.
+The completion response at00:03:58.168242800Z reports maxInstanceCount20.
+The original CreateFunction request at2026-10-07T10:50:38.125764711Z also omits
+max_instance_count. Only field names, the scaling scalar and mask were emitted;
+no environment/header/secret values or complete requests were logged.
+
+Four Run internal Create/Replace audit records in the same interval contain
+neither request nor response, so they do not establish prior service-level
+scaling. This corroborates the local PATCH test with the actual GCF request;
+the server-side reconciliation/default responsible for20 remains unexplained.
+It does not justify resetting the service to an assumed100 or unlimited value.
+The preserved masked request supports completing the independent on-demand
+endpoint with its explicitmax1 and named configuration checks, while retaining
+the automatic scaling discrepancy as a separate open item.
+
 ## Real CLI boundary test
 
 `node qa/scripts/remediation-iq-deploy-patch-boundary.test.cjs`: PASS, four synthetic cases (absent/null/1/20). Loads installed CLI functionFromEndpoint and updateFunction; intercepts Client.patch and prohibits HTTP/HTTPS/fetch. Does not load PAY0 handlers. Asserts both body presence/value and updateMask, including absence of a parent serviceConfig mask that could reset children.
