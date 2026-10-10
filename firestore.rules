@@ -31,7 +31,11 @@ service cloud.firestore {
         && row.expiresAtMs - row.issuedAtMs <= 86400000;
     }
     function restrictionAllowsRecord(row, rootId) {
-      return restrictionRecordValid(row, rootId) && (
+      // An unexpired ACTIVE record can never allow access, even if malformed.
+      // Avoid validating its entire schema only to deny an already denied state.
+      let unexpiredActive = row is map && row.get('state', null) == 'ACTIVE'
+        && row.get('expiresAtMs', null) is int && row.expiresAtMs > request.time.toMillis();
+      return unexpiredActive ? false : restrictionRecordValid(row, rootId) && (
         (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
         || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
           && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
@@ -268,16 +272,22 @@ service cloud.firestore {
     }
 
     function hasClientSolicitudAccessFromData(data) {
-      return data.get("rootId", myRootId()) == myRootId() && (
-        (("clientId" in data) && hasClientSolicitudAccess(data.clientId))
-        || (("clienteId" in data) && hasClientSolicitudAccess(data.clienteId))
+      let rootId = myRootId();
+      let clientId = data.get("clientId", null);
+      let legacyId = data.get("clienteId", null);
+      return data.get("rootId", rootId) == rootId && (
+        (("clientId" in data) && hasClientSolicitudAccess(clientId))
+        || (("clienteId" in data) && legacyId != clientId && hasClientSolicitudAccess(legacyId))
       );
     }
 
     function hasClientPagoAccessFromData(data) {
-      return data.get("rootId", myRootId()) == myRootId() && (
-        (("clientId" in data) && hasClientPagoAccess(data.clientId))
-        || (("clienteId" in data) && hasClientPagoAccess(data.clienteId))
+      let rootId = myRootId();
+      let clientId = data.get("clientId", null);
+      let legacyId = data.get("clienteId", null);
+      return data.get("rootId", rootId) == rootId && (
+        (("clientId" in data) && hasClientPagoAccess(clientId))
+        || (("clienteId" in data) && legacyId != clientId && hasClientPagoAccess(legacyId))
       );
     }
 
@@ -684,17 +694,17 @@ service cloud.firestore {
     }
 
     match /clientDispersions/{docId} {
-      allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
+      allow read: if accountAllowed() ? (hasModuleAction("wallet", "dispersiones") && userFundedDispersionScope(resource.data) && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
         || (("createdBy" in resource.data) && resource.data.createdBy == me())
         || (("clientId" in resource.data) && hasWalletClientReadAccess(resource.data.clientId))
         || (("clienteId" in resource.data) && hasWalletClientReadAccess(resource.data.clienteId))
-      ));
+      )) : false;
       allow create, update, delete: if false;
       match /notas/{notaId} {
-        allow read: if accountAllowed() && (hasModuleAction("wallet", "dispersiones")
+        allow read: if accountAllowed() ? (hasModuleAction("wallet", "dispersiones")
           && userFundedDispersionScope(get(/databases/$(database)/documents/clientDispersions/$(docId)).data) && (
           isSuperadmin()
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.adminId == me()
@@ -702,7 +712,7 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/clientDispersions/$(docId)).data.createdBy == me()
           || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clientId)
           || hasWalletClientReadAccess(get(/databases/$(database)/documents/clientDispersions/$(docId)).data.clienteId)
-        ));
+        )) : false;
 
         allow create, update, delete: if false;
       }
