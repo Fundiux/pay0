@@ -66,3 +66,15 @@ Docker CLI remains unavailable locally. This is not a container-build or remote
 release certification: no new image, trust keys, IAM changes or activation.
 The current Terraform sink still selects only the legacy envelope schema; a
 reviewed signed-lane filter and trust configuration are required before delivery.
+
+Cloud image gate subsequently passed: build
+`140322af-4c09-40f2-a315-c0f8eeb03f1c`, isolated project
+`pay0-sentinel-observe`, dedicated `pay0-sentinel-builder` identity. Only the
+reviewed stage22 files (99.9KiB) were uploaded. Build started
+2026-10-10T18:24:06.947214924Z and finished18:24:38.831877Z, SUCCESS. Immutable
+image: `us-central1-docker.pkg.dev/pay0-sentinel-observe/sentinel-images/observer@sha256:c4841dab1e20e3cd125d63adc22fac15d4414db7c44f084ccad881f0f6f98549`.
+No Cloud Run revision was deployed, no trust key/IAM change and no sink or
+producer activation. Local Docker absence is no longer a blocker for this
+image: Cloud Build executed its Dockerfile successfully. An initial status-read
+approval review timed out; the single allowed retry succeeded. That timeout was
+not evidence of unsafe code or a failed build.

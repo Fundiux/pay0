@@ -1,13 +1,29 @@
-﻿# PAY0 — Tracker de trabajo y continuidad
+# PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-10-08 (America/Mexico_City)
+Actualizado: 2026-10-10 (America/Mexico_City)
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
-## Corte vigente — 2026-10-08
+## Corte vigente — 2026-10-10
+
+La remediación integral sigue activa. Este corte prevalece sobre los anteriores; no certifica el cierre global ni Production Ready. Fuente de ejecución: rama `remediation/pay0-integral-20261009`; candidato publicado por lotes: `integration/pay0-remediation-20261009`, commit `a276e03`. `main` no se ha actualizado en esta remediación.
+
+| Frente | Estado comprobado | Pendiente para cierre |
+| --- | --- | --- |
+| Documentos de dispersiones | Tres callables publicados, ACTIVE/Ready100 y rechazo401 sin autenticación; 105 pruebas documentales, 72 comprobaciones de manifest y regresiones financieras PASS. [Evidencia](docs/remediation/2026-10-09/RELEASE-DISPERSION-DOCUMENT-CORE.md). | Claim, reintentos y descarga Telegram del notifier heredado; política de destinatario USER; no se certifica E2E autenticado. |
+| IQ y concurrencia | Tres consumidores de depósitos publicados. Seis consumidores restantes integrados y probados; intento del10/10 detenido antes de upload por timeout de discovery. Revisiones/configuración anteriores y dotenv restaurado verificados. [Evidencia](docs/remediation/2026-10-09/RELEASE-IQ-UNKNOWN.md). | Nuevo gate de discovery y despliegue selectivo de los seis; certificación controlada de latencia/reactividad todavía abierta. |
+| Firestore y delegaciones | Reglas76fda1a0 publicadas con518 pruebas y cero diagnósticos de presupuesto. [Evidencia](docs/remediation/2026-10-09/FIRESTORE-RELEASE-PREFLIGHT.md). | Candidato de otorgantes falla límite de expresiones y no se publica; linaje completo, grants antiguos sin procedencia y24 gaps Storage siguen abiertos. |
+| Hugo y evidencia | Cuatro consumidores publicados y verificados; pruebas transaccionales e históricas PASS. [Evidencia](docs/remediation/2026-10-09/RELEASE-HUGO-EVIDENCE.md). | No se recertifica toda memoria histórica ni productores no incluidos; evaluación de modelos conserva sus gates propios. |
+| Descargas privadas | Puente POST y callable compatible publicados. Corrección de generación exacta/V4 en rama aislada,35 pruebas y build PASS. | Integrar/publicar la corrección y conservar compatibilidad; las URL300s siguen siendo bearer y no se revocan en cada GET. |
+| Sentinel | Observador aislado y canario sintético probados; sink apagado. Receptor firmado compilado y nueva imagen construida, sin desplegar. | Identidad exclusiva, clave/IAM, trust y filtro firmado, ventana y activación gradual; sin contención automática. |
+| Continuidad | [Handoff](docs/remediation/2026-10-09/HANDOFF.md), [matriz de hallazgos](docs/remediation/2026-10-09/FINDINGS.csv) y [publicación/recuperación](docs/remediation/2026-10-09/RELEASE.md) conservan revisiones, hashes y límites por lote. | Mantener evidencia al terminar cada publicación; no propagar artefactos privados ni cerrar por inferencia. |
+
+Se usaron proveedores simulados en pruebas financieras:17 escenarios y110 comprobaciones USER del candidato exacto pasaron, con cero POST IQ reales. Las comprobaciones remotas de los callables publicados usaron solicitudes sin autenticación; no generaron pagos ni mensajes de prueba a destinatarios reales. Los registros posteriores del handoff prevalecen cuando avance el siguiente lote.
+
+## Corte anterior — 2026-10-08
 
 - Rama: `fix/iq-latency-reactivity`; base funcional inspeccionada: `f7dc2a6`. Actualización documental en la misma línea de trabajo; no requiere cambiar ni integrar ramas.
 - **P0 continúa abierto.** El [informe R6](docs/P0-IQ-LATENCY-REACTIVITY-2026-10-06.md) declaró su candidato listo para despliegue, sin desplegar ni certificar producción. Los commits posteriores y el trabajo sin commit requieren su propia validación.
-- Referencia de alcance y evidencia: [Estado maestro vigente](PAY0_ESTADO_MAESTRO.md#corte-vigente--2026-10-08). Este corte prevalece sobre las tablas y prioridades históricas de septiembre; ningún pendiente antiguo se cierra sin evidencia específica.
+- Referencia de alcance y evidencia: [Estado maestro vigente](PAY0_ESTADO_MAESTRO.md#corte-anterior--2026-10-08). Este corte prevalece sobre las tablas y prioridades históricas de septiembre; ningún pendiente antiguo se cierra sin evidencia específica.
 
 | ID | Estado | Prioridad | Avance comprobable | Siguiente acción / criterio de cierre |
 | --- | --- | --- | --- | --- |

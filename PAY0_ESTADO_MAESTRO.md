@@ -1,12 +1,24 @@
 # PAY0 — Estado maestro vivo
 
-Actualizado: 2026-10-08 (America/Mexico_City).
+Actualizado: 2026-10-10 (America/Mexico_City).
 
-## Corte vigente — 2026-10-08
+## Corte vigente — 2026-10-10
+
+**Estado: remediación integral en ejecución, con publicaciones parciales verificadas.** No se certifica PAY0 como Production Ready ni se cierra P0 por el avance de otros frentes. El [tracker vigente](PAY0-TRACKER.md#corte-vigente--2026-10-10) distingue lo publicado, los candidatos locales y los gates pendientes. Este corte sustituye las afirmaciones de estado actual de los cortes anteriores; sus evidencias históricas se conservan.
+
+La rama de trabajo es `remediation/pay0-integral-20261009`; la integración selectiva publicada está en `integration/pay0-remediation-20261009`, commit `a276e03`. No se ha integrado esta remediación en `main`. El [registro de publicación](docs/remediation/2026-10-09/RELEASE.md) y el [handoff](docs/remediation/2026-10-09/HANDOFF.md) identifican cada artefacto efectivo y su recuperación; estar en Git no equivale a estar desplegado.
+
+Ya se verificaron lotes de reportes, OCR, incidentes, descarga privada, Telegram/Hosting, depósitos IQ, reglas Firestore, cuatro consumidores de evidencia Hugo y tres callables documentales de dispersiones. El último lote documental preserva el notifier existente: no resuelve por sí solo entrega Telegram ni política USER. El intento de los seis consumidores IQ restantes falló antes de cargar código; el preflight posterior confirmó versiones anteriores intactas y restauración exacta del entorno. Sus regresiones sintéticas pasaron y el despliegue sigue pendiente.
+
+Persisten gaps de Storage y linaje de delegaciones, compatibilidad de clientes antiguos, revocación por GET, entrega idempotente, evaluaciones históricas y certificación de latencia/reactividad. El candidato Firestore de otorgantes excede el presupuesto en un caso legítimo y no se publica. Sentinel mantiene sink/productor apagados; la nueva imagen del receptor firmado está construida, sin despliegue ni activación. No se amplía autoridad financiera del detector.
+
+La ejecución cuenta con autorización técnica continua del encargo, sujeta a los controles obligatorios de herramientas. Las pruebas usan datos sintéticos/proveedores simulados y no autorizan pagos, dispersiones o mensajes reales de prueba. Para el estado más reciente, consultar el checkpoint fechado del handoff y la [matriz de hallazgos](docs/remediation/2026-10-09/FINDINGS.csv).
+
+## Corte anterior — 2026-10-08
 
 **Estado:** P0 de latencia/reactividad IQ abierto; implementación versionada y trabajo local adicional pendiente de validación. No se certifica PAY0 como Production Ready. Rama inspeccionada: `fix/iq-latency-reactivity`; último commit funcional: `f7dc2a6`. Esta actualización es documental, basada en Git, código e informes locales; no consulta ni modifica producción.
 
-Este corte y el [tracker vigente](PAY0-TRACKER.md#corte-vigente--2026-10-08) prevalecen sobre los estados históricos de septiembre. Las revisiones, despliegues y pruebas anteriores conservan su fecha y alcance: no acreditan el árbol de trabajo actual. Los pendientes antiguos sin evidencia nueva permanecen por confirmar, no se cierran por inferencia.
+Este corte y el [tracker vigente](PAY0-TRACKER.md#corte-anterior--2026-10-08) prevalecen sobre los estados históricos de septiembre. Las revisiones, despliegues y pruebas anteriores conservan su fecha y alcance: no acreditan el árbol de trabajo actual. Los pendientes antiguos sin evidencia nueva permanecen por confirmar, no se cierran por inferencia.
 
 ### Implementación versionada desde el corte anterior
 
