@@ -2,6 +2,23 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint 2026-10-10 00:41 UTC (prevalece):** IQ on-demand publicado y
+verificado desde a71a8b8. Sesion13401 exit0; revision00035-kin,
+source1791592724987856, FunctionACTIVE00:39:51.944719211Z,
+RunReady00:39:51.721087Z/trafico100. Helper postflightPASS compara runtime/env
+con baseline; dotenv restaurado00:39:59.8603379Z con SHA original572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+Journal privado resume-f3633997d2594c6189c8675acd3d643b.
+Postflight independiente PASS: ambas Tasks RUNNING1/s/concurrent1, retry1/3;
+Scheduler depositoENABLED; REP y syncTodayPAUSED. No jobs invocados ni payloads
+leidos. Drift automatic max20 sigue ABIERTO; requestGCF real omite max y mask,
+ver IQ-SCALING-PATCH-DIAGNOSTIC.md. No certificacion global de preservacion.
+Integracion ahora ec64a14: cherry-picks Hugo5754f19/0371334/ec64a14, sin conflictos,
+solo hunks revisados; capacidades GLOBAL/voice/historial preservadas. Gates del
+candidato exacto pendientes; NO despliegue Hugo. Fuente Sentinel8b0adcd71fakePASS
+sin activacion, Hugooptionsda29ee892checksPASS; buildcentral pendiente.
+Ventana emuladores liberada al agente arquitectura para Firestore193+325 con
+presupuesto estricto; reglas aun no publicadas. USERrecipientdecision pendiente.
+
 **Checkpoint 2026-10-10 00:14 UTC (prevalece): IQ group1 publicado, group2 NO iniciado.** Execute98895 exit1 tras CLIgroup1 exit0 y postflight CONFIG drift. Automatic ACTIVE00002-tud/gen1791590626272187 y scheduler ACTIVE00021-vuq/gen1791590513946575, ambos RunReady/trafico100. Automatic antes maxInstanceCount AUSENTE ahora20 (servicio y revision); demas runtime/env/secret bindings revisados coinciden. El helper detuvo correctamente y restauro dotenv SHA572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856; run81afbf222ec64ef396eb76b4e1e17a98. OnDemand sigue00034-jot/gen1790638545672827. No repetir Execute base: pin antiguo group1 ya no coincide. Preparando helper recovery SOLO onDemand con pins actuales y comparacion nombrada de configuracion; no cierra ni normaliza silenciosamente drift automatic20. Tasks1/s+concurrent1 y retries1/3 intactos, Scheduler depositoENABLED, REP/syncTodayPAUSED, postflightrootPASS sin invocartrabajos.
 
 CLI PATCH synthetic9bd7285 demuestra ausente no envia max ni maskpadre; debuglogreal se elimina tras exit0. CuatroauditRunCreate/Replace sinrequest/response no reconstruyen scaling anterior; causa20 sigue abierta, no asumir defaultdocumentado100 ni capservicioprevio20. Nuevaactualizacionantesdeployextra requiere gates independientes.

@@ -1,5 +1,32 @@
 # Lote IQ: resultado incierto y bloqueo de repeticion
 
+## Actualizacion 2026-10-10 00:41 UTC: deposito publicado
+
+Los tres consumidores de deposito ya ejecutan el candidato a71a8b8. OnDemand
+se completo mediante helper654278a+b6752fb, sesion13401 exit0, tras predeploy
+normal PASS y comparacion exacta posterior de runtime/variables/bindings.
+Revision `processiqpagodepositondemandtask-00035-kin`, source generation
+`1791592724987856`; ACTIVE `2026-10-10T00:39:51.944719211Z`, RunReady
+`00:39:51.721087Z`, trafico100%. Conserva max1/concurrency1/540s/2Gi/CPU1,
+cuenta de servicio y dos bindings anteriores. Grupo1 permanece en las revisiones
+de la tabla historica inferior. Restauracion dotenv verificada por hash original.
+
+Postflight independiente de solo lectura PASS: Tasks ambasRUNNING, 1/s,
+concurrent1/burst10, onDemand1intento/60..300s, automatic3/1800s/300..900s,
+maxDoublings16. Scheduler deposito ENABLED cada minuto; syncToday y REP PAUSED.
+No se invocaron tareas, proveedores ni efectos financieros de prueba.
+
+El cambio automatic maxInstanceCount ausente a20 sigue abierto. El request real
+de GCF Audit omite ese campo y su updateMask; ver IQ-SCALING-PATCH-DIAGNOSTIC.md.
+No se atribuye la causa al cliente ni se afirma conocer el limite efectivo previo.
+El primer intento onDemand89652 fallo antes de upload por discovery8.524s>7s;
+perfil y repeticion estricta posterior2.132s sustentaron un nuevo intento sin
+relajar limites. Journal del intento exitoso: directorio privado
+`.firebase/iq-deposit-deploy/resume-f3633997d2594c6189c8675acd3d643b/`.
+
+Esta verificacion certifica version/configuracion, no una operacion financiera
+real. Lotes solicitud/factura y dispersion descritos mas abajo siguen separados.
+
 ## Estado efectivo 2026-10-10 00:14 UTC
 
 Integracion congelada a71a8b8; segundo intento Execute98895 publico grupo1 con
