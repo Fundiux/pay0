@@ -959,6 +959,8 @@ function isSolicitudIqTerminalLockedForCreateH4D58H(
 // H4_D58H_B1_SOLICITUD_CREATE_GUARD_HELPER
 export const createSolicitudIq = onCall(
   {
+    preserveExternalChanges: true,
+    maxInstances: 20,
     cors: true,
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
     invoker: "public",

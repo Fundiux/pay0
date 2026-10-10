@@ -2113,6 +2113,7 @@ export async function runCreateClientDispersionIqCore(input: {
 export const createClientDispersionIq =
   onCall(
     {
+      preserveExternalChanges: true,
       cors: true,
       timeoutSeconds: 540,
       memory: "2GiB",
@@ -2225,6 +2226,7 @@ export const resolveCommissionInstrumentIq = onCall(
 export const processIqDispersionCreate =
   onSchedule(
     {
+      preserveExternalChanges: true,
       schedule: "every 5 minutes",
       region: "us-central1",
       timeZone: "America/Mexico_City",

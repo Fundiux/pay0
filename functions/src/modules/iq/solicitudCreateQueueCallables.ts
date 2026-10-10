@@ -1264,6 +1264,7 @@ export async function enqueueIqCreationForSolicitud(input: {
 
 export const processIqCreateOnDemandTask = onTaskDispatched(
   {
+    preserveExternalChanges: true,
     region: "us-central1",
     timeoutSeconds: 540,
     memory: "2GiB",
@@ -2065,6 +2066,9 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
 export const processIqCreateQueue = onSchedule(
   {
+    preserveExternalChanges: true,
+    maxInstances: 20,
+    concurrency: 80,
     schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,

@@ -1,0 +1,9 @@
+# Preserve runtime options for remaining IQ executors
+
+Prepared in isolated branch fix/iq-remaining-runtime-preservation from integration5a4457e. Baseline evidence is source commit49ee665, RELEASE-IQ-REMAINING-PREFLIGHT.md.
+
+Only deployment options change in four source files. All six endpoints explicitly preserve external changes. Current max/concurrency targets are solicitud manual20/1, Task1/1, scheduler20/80; dispersion manual1/1 and scheduler1/1; commission2/80. Existing schedules, queue retry/rate, timeout, memory, secret bindings, handlers and financial state transitions are unchanged. This encodes verified current capacity, not a new capacity increase.
+
+The new test extracts only option literals and exercises real installed SDK manifests and CLI inference/serialization through an intercepted updateFunction PATCH. Twelve scenarios cover omitted and populated external min/ingress/identity/VPC settings, explicit cap/concurrency source precedence over synthetic prior settings, CPU1 preservation, absent parent mask, secret names, schedules and Task retry/rate. Network is forbidden; no production handler is imported.
+
+Validation PASS after the coordinator released the CPU window: six Functions, twelve scenarios, 250 assertions with SDK7.3.2/CLI15.3.1 and network forbidden. NODE_PATH and PAY0_FIREBASE_TOOLS_ROOT were process-only; no dependency install or junction. The first test run exposed an expectation mismatch (CLI serializes memory as 2Gi, not 2048Mi); the expectation was corrected and the full test passed. No build, deployment or cloud mutation. Environment preservation remains a separate release gate: only solicitud Task currently has PAY0_OPERATION_TIMING. Run service-level maximum remains independently checked; Functions option preservation does not claim ownership of every Run setting.
