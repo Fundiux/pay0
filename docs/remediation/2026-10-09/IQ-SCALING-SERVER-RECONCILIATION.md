@@ -66,11 +66,11 @@ Moving traffic to the old revision would not establish or necessarily restore th
 
 Reviewed the retained diagnostic and current official API/protobuf documentation; performed only the two projected metadata GETs above. No new build, tests, emulators, support submission or cloud mutation. The coordinator reports all three IQ executors deployed with postflight passing; automatic maximum drift remains open. No claim is made about historical throughput, instance use, provider calls or financial outcomes.
 
-## Proposed deliberate target: automatic maximum 20
+## Accepted deliberate target: automatic maximum 20
 
-The coordinator proposes adopting the currently observed 20 as the new deliberate target, while preserving the automatic queue's maxConcurrentDispatches=1 and maxDispatchesPerSecond=1. This is a new limit decision, not proof of preservation or an explanation of history. No source option or remote setting was changed in this investigation.
+The coordinator accepted adopting the currently observed 20 as the new deliberate target, while preserving the automatic queue's maxConcurrentDispatches=1 and maxDispatchesPerSecond=1. This is a new limit decision, not proof of preservation or an explanation of history. The follow-up source change adds only maxInstances:20 to Automatic; no remote setting was changed by this subtask.
 
-A narrowly reviewed addition of maxInstances:20 to processIqPagoDepositAutomaticTask alongside its existing preserveExternalChanges:true would make the GCF/revision maximum explicit in the SDK manifest and masked PATCH. Explicit source settings take precedence; preservation applies to omitted settings. Existing synthetic CLI cases already cover explicit 20, but the exact future source manifest still needs its focused check. Do not change scheduler or on-demand options incidentally.
+The addition of maxInstances:20 to processIqPagoDepositAutomaticTask alongside its existing preserveExternalChanges:true makes the GCF/revision maximum explicit in the SDK manifest and masked PATCH. Explicit source settings take precedence; preservation applies to omitted settings. The focused manifest test now checks this exact source option and uses a synthetic previous maximum of 7 to verify source precedence. Scheduler and on-demand options remain unchanged. Test execution is recorded below after validation; this source change is not a deployment.
 
 That option alone does not declare the independent Run service-level cap. Auditability therefore also requires a recorded target of service20/template20/ready-revision20 and separate pre/postflight comparisons. A service-level drift must not be silently accepted just because the GCF option matches.
 
@@ -79,3 +79,5 @@ With the existing single-concurrent-dispatch queue, adopting 20 does not itself 
 Concrete residual risks remain. The instance cap does not impose single financial execution: current per-instance concurrency is 80, other authorized invocation paths are outside this queue's limit, and distributed task delivery can duplicate executions. A timeout also cannot be treated as proof that a provider effect failed. Keep IAM, generation checks, transactional claims/fencing and UNKNOWN protections unchanged. Cloud Tasks explicitly requires duplicate-tolerant handlers. [Cloud Tasks limitations](https://docs.cloud.google.com/tasks/docs/common-pitfalls).
 
 The proposal adds no capacity relative to the current observed 20. Its effect relative to the unknown historical limit cannot be quantified from available evidence. Maximum settings are not guaranteed hard financial or billing bounds, and should not be used instead of application idempotency. Operational closure can mean a deliberate documented target plus verified source/remote agreement; historical causality must remain marked UNKNOWN until separately established.
+
+Follow-up validation: remediation-iq-deploy-manifest.test.cjs PASS, 3 functions / 75 assertions, SDK 7.3.2 and CLI 15.3.1, network forbidden. PAY0_FIREBASE_TOOLS_ROOT was set only in the test process. No build or deployment was performed; central integration/build remains a separate gate.

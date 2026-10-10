@@ -42,7 +42,8 @@ for (const [index, name] of names.entries()) {
   const factory = index === 2 ? scheduler.onSchedule : tasks.onTaskDispatched;
   const endpoint = JSON.parse(JSON.stringify(factory(opts, () => {}).__endpoint));
   for (const key of ['minInstances', 'ingressSettings', 'serviceAccountEmail', 'vpc']) { assert(!Object.hasOwn(endpoint, key)); assertions++; }
-  if (index !== 0) { assert(!Object.hasOwn(endpoint, 'maxInstances')); assertions++; }
+  if (index === 2) { assert(!Object.hasOwn(endpoint, 'maxInstances')); assertions++; }
+  else { assert.equal(endpoint.maxInstances, index === 0 ? 1 : 20); assertions++; }
   assert.equal(endpoint.availableMemoryMb, 2048); assert.equal(endpoint.timeoutSeconds, 540); assertions += 2;
   assert.deepEqual(endpoint.secretEnvironmentVariables.map(x => x.key).sort(), ['IQ_CREDENTIALS_KEY', 'TELEGRAM_BOT_TOKEN']); assertions++;
   if (index === 2) {
@@ -59,16 +60,19 @@ for (const [index, name] of names.entries()) {
   }
   const e = { ...endpoint, id: name, project: 'demo-pay0-manifest', region: 'us-central1', runtime: 'nodejs22', entryPoint: name };
   const live = { ...e, cpu: 1, ingressSettings: 'ALLOW_ALL', concurrency: index === 0 ? 1 : 80 };
+  // Synthetic prior value proves the deliberate source cap wins over preservation.
+  if (index === 1) live.maxInstances = 7;
   if (index === 2) live.maxInstances = 20;
   const want = backend.of(e); prepare.inferDetailsFromExisting(want, backend.of(live), true); prepare.resolveCpuAndConcurrency(want);
   const wire = gcf.functionFromEndpoint(e); const mask = proto.fieldMasks(wire);
   assert.equal(wire.serviceConfig.availableCpu, '1'); assert.equal(wire.serviceConfig.maxInstanceRequestConcurrency, index === 0 ? 1 : 80); assertions += 2;
   for (const field of ['minInstanceCount', 'ingressSettings', 'serviceAccountEmail', 'vpcConnector', 'vpcConnectorEgressSettings']) { assert(!mask.includes('serviceConfig.' + field)); assertions++; }
-  assert.equal(mask.includes('serviceConfig.maxInstanceCount'), index === 0); assertions++;
-  if (index === 0) { assert.equal(wire.serviceConfig.maxInstanceCount, 1); assertions++; }
+  assert.equal(mask.includes('serviceConfig.maxInstanceCount'), index !== 2); assertions++;
+  if (index !== 2) { assert.equal(wire.serviceConfig.maxInstanceCount, index === 0 ? 1 : 20); assertions++; }
   // Regression: removal of preserveExternalChanges resets omitted limits explicitly.
   const unsafe = JSON.parse(JSON.stringify(factory({ ...opts, preserveExternalChanges: false }, () => {}).__endpoint));
   assert.equal(unsafe.minInstances, null); assertions++;
-  if (index !== 0) { assert.equal(unsafe.maxInstances, null); const reset = gcf.functionFromEndpoint({ ...e, maxInstances: null }); assert(proto.fieldMasks(reset).includes('serviceConfig.maxInstanceCount')); assertions += 2; }
+  if (index === 2) { assert.equal(unsafe.maxInstances, null); const reset = gcf.functionFromEndpoint({ ...e, maxInstances: null }); assert(proto.fieldMasks(reset).includes('serviceConfig.maxInstanceCount')); assertions += 2; }
+  else { assert.equal(unsafe.maxInstances, index === 0 ? 1 : 20); assertions++; }
 }
 console.log(`IQ_DEPLOY_MANIFEST_PASS functions=3 assertions=${assertions} SDK=${require(path.join(sdk, 'package.json')).version} CLI=${require(path.join(cli, 'package.json')).version} network=forbidden`);
