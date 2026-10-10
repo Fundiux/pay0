@@ -90,6 +90,18 @@ otros roots ni registros que cambiaron mientras se recorren páginas. Reanudaci�
 no equivale a una fotografía consistente. Ningún conteo cierra por sí solo el
 gate de migración/publicación.
 
+## Ejecucion remota de solo lectura, 2026-10-10 UTC
+
+Herramienta1616c2b ejecutada sobre bootstrap uploads/root index0, limite25.
+Tres READY/active/clientDispersions observados y pagina corta completa para ese
+filtro/root: uno EVENT_SENT_NO_REPLAY y dos EVENT_UNCERTAIN_NO_REPLAY.
+No se alcanzo lectura GCS porque los tres tienen evento de entrega previo;
+ninguna generacion quedo atestada. Cero mensajes, descargas o escrituras remotas.
+Checkpoint privado `.firebase/document-inventory/dispersion-notification-root0-v1.json`.
+No implica snapshot global, cobertura de otros roots ni autoridad actual
+certificada. No autoriza repetir ninguno de los tres eventos ni transforma
+la incertidumbre de entrega en error recuperable automaticamente.
+
 Una futura atestación requiere revisar todos los vínculos en transacción y
 registrar explícitamente observación actual/actor/hora, preservando historia,
 versión, finalizedBy y estado de entrega. No se implementa aquí.
