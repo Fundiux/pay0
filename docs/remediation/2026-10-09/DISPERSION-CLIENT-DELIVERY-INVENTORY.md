@@ -1,7 +1,7 @@
 # Inventario acotado previo a entrega CLIENT
 
 Herramienta local: `scripts/dispersion-client-delivery-inventory.mjs`.
-No ejecutada contra nube. Default DRY_RUN_NO_NETWORK, sin buscar credenciales.
+Ejecutada en modo remoto de solo lectura; evidencia al final. Default DRY_RUN_NO_NETWORK, sin buscar credenciales.
 34 pruebas sinteticas PASS, 0.95 s; no datos ni mensajes reales.
 
 ## Alcance de las lecturas
@@ -79,7 +79,7 @@ temporal/fsync/rename; valida scope, hash y claves/conteos al reanudar. Contiene
 root/cursor, nunca payloads/Storage paths/chatId/OAuth. Los permisos 0600 no
 sustituyen las ACL Windows. No subir ni versionar estos artefactos.
 
-Ejemplo de contrato futuro, NO ejecutado:
+Ejemplo de invocacion (ajustar nombres privados de checkpoint):
 
 ```powershell
 node scripts/dispersion-client-delivery-inventory.mjs --execute-read-only --bootstrap .firebase/document-inventory/bootstrap.json --root-index 0 --mode clients --checkpoint .firebase/document-inventory/client-links-root0.json --limit 25
@@ -126,3 +126,22 @@ continua abierto aunque la muestra de vinculos no haya superado diez.
 Checkpoints privados y sus hashes de evidencia permanecen bajo control de
 coordinacion; este cambio documental no los lee, modifica ni recalcula. No se
 versionan IDs, rutas de objetos, respuestas o hashes de identificadores.
+
+## Ampliacion del bootstrap, 2026-10-10
+
+Coordinacion copio el bootstrap original a un archivo privado nuevo y continuo
+la consulta proyectada exclusivamente a rootId, sin modificar el original ni
+los checkpoints anteriores. Tras 1.480 uploads acumulados, la ultima pagina
+contuvo 80 y agoto la consulta en esa lectura. Solo se observo el mismo root;
+ningun root ausente o invalido. Se realizaron 14 consultas adicionales desde
+los primeros 100 registros. Cero bytes de archivo, escrituras productivas o
+mensajes. Un primer comando de continuacion fallo por quoting de PowerShell
+antes de ejecutar JavaScript; se corrigio pasando el programa por stdin.
+
+La paginacion no es un snapshot: el total no debe compararse como una diferencia
+historica exacta con otros inventarios. Tampoco enumera roots sin uploads ni
+cubre documentos creados detras del cursor durante el recorrido. No acredita
+compatibilidad global del notifier ni convierte diez destinatarios en contrato.
+Los tres documentos legacy sin generacion siguen pendientes, sin backfill ni
+replay. El bootstrap original y su hash fijado por los checkpoints de entrega
+permanecieron intactos.
