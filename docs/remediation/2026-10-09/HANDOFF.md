@@ -365,3 +365,28 @@ Notas SDK14311 PASS26/26:25fakes y1SDKreal con125IDs, precision microsegundos,
 paginacion, cursorforjado/anclaeliminada y revocacion antes segunda transaccion.
 Puertos del emulador cerrados. UI15PASS, policyverifier y ambos builds PASS.
 No integracion hasta revision de tamano/compatibilidad y coste de lecturas.
+
+## Hito posterior: bundle reproducible y plan del productor revisado
+
+Bundle aislado final502db33842c7fc55b4ff42ba78661628df7590a9 en
+fix/functions-internal-bundle-candidate incluye30bc9c5 y Telegramec39b4a; fuente
+Functions igual a integrationc92f0b7. Dos builds completos616outputsidenticos;
+bundle308ad5c99d96990df327e08bb0272ea9f52931bf43fcc630b97fcad6842e980d.
+Runtime154, linaje/deferred14, WASMreal, Telegram23 y financiero17 PASS; CLIreal
+2298.02/1938.50ms,346exports/fullhashes iguales. Mapslinked y stackmappingPASS.
+Sin activar builddefault/integracion/deploy. CLI instalado fija GOOGLE_NODE_RUN_SCRIPTS
+vacio; diseno de activacion debe conservar bytes via packaging verificado.
+
+Productor: API adoptada/estadoverificado, helperparser3985f47df7934f98b735434c84194d43a707b0635499d9e4831fce3e20d5b783
+36testsPASS y planfinalPASS:7creates/0change/0destroy/bindings0. Camposcalculados y
+label deTerraform revisados; email/memberexactos verificadosporhash. Plan siempre
+solo enmemoria. approved-observed.json privado es transcripcionroot del resultadosafe,
+SHA7248eab254105e8c44a2d6ce0f44dc798f0659944eeeb7a662495b144a7ba66d.
+No apply: controller interactivo+postflight en preparacion/revision. Cuenta/roles/ring/key
+aun no creados. Fuente7a579e3 fija lock y evidenciaAPI; no reutilizarimport.
+
+Notas: base5d735a0, candidatobytes4docs/query y8MiBenvelope; SDK64443 PASS33,
+UI18, Functions67453 PASS. Batch8 descartado por mayorRSS sin mejora en expansion.
+RSSserialbatch4hasta196.77MiB no certifica concurrency80/256MiB: sigue gateabierto.
+Benchmarkindexcompleto347/handlerreal98831 PASS33/33 y puertoscerrados: baseline92.3-92.8MiB, highwater182.89MiB controlchars/156.58ASCII. Siguiente gateHTTP SDK/Framework antes concurrency1+256MiB; noLinuxlocal (Docker/WSLausentes).
+Sin integracion ni publicar nuevo callable. Preservar artefactos privados y WIP ajeno.
