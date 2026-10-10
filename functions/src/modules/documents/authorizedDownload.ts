@@ -21,11 +21,30 @@ export async function getAuthorizedDocumentDownloadUrlCore(
     try {
       let signer = signUrl;
       if (!signer) {
-        const file = admin.storage().bucket().file(storagePath);
-        const [exists] = await file.exists();
-        if (!exists) throw new HttpsError("not-found", "Archivo no encontrado.");
+        const bucket = admin.storage().bucket();
+        // Do not use File({generation}): the SDK coerces strings to Number.
+        // Its metadata request forwards these query options without coercion.
+        const file = bucket.file(storagePath);
+        const expectedGeneration = object.expectedGeneration;
+        const validGeneration = (value: unknown): value is string =>
+          typeof value === "string" && /^[1-9][0-9]{0,19}$/.test(value);
+        if (expectedGeneration !== null && !validGeneration(expectedGeneration)) {
+          throw new HttpsError("failed-precondition", "Generación de documento inválida.");
+        }
+        const metadataOptions: { userProject?: string; generation?: string } =
+          expectedGeneration === null ? {} : { generation: expectedGeneration };
+        const [metadata] = await file.getMetadata(metadataOptions);
+        const generation = metadata.generation;
+        if (metadata.name !== storagePath || metadata.bucket !== bucket.name ||
+            !validGeneration(generation) ||
+            (expectedGeneration !== null && generation !== expectedGeneration)) {
+          throw new HttpsError("failed-precondition", "Documento modificado.");
+        }
         signer = async () => {
-          const [signed] = await file.getSignedUrl({ action: "read", expires: Date.now() + 5 * 60 * 1000 });
+          // V4 signs the exact generation query. V2 does not bind this query.
+          // Legacy documents pin the observed generation, without backfilling it.
+          const [signed] = await file.getSignedUrl({ version: "v4", action: "read",
+            expires: Date.now() + 5 * 60 * 1000, queryParams: { generation } });
           return signed;
         };
       }
