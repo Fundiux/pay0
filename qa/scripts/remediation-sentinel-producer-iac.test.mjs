@@ -32,7 +32,7 @@ check(!/credentials\s*=|access_token\s*=|impersonate_service_account\s*=/.test(m
 for(const name of ['reader','logger']){
  const member=resource('google_project_iam_member',name);
  check(/project\s*= local\.source_project/.test(member),'Source grants only');
- check(member.includes('member  = "serviceAccount:${google_service_account.producer[0].email}"'),'Exclusive member');
+ check(/member\s*= "serviceAccount:\$\{google_service_account\.producer\[0\]\.email\}"/.test(member),'Exclusive member');
  check(member.includes(`google_project_iam_custom_role.${name}[0].name`),'Exact custom role');
 }
 check(resource('google_project_iam_member','reader').includes('expression = "resource.name == \'${local.database_resource}\'"'),'Database condition cannot broaden to prefix/collection fiction');
@@ -48,6 +48,16 @@ check(!/rotation_period\s*=/.test(main),'No asymmetric auto-rotation');
 for(const type of ['google_service_account','google_kms_key_ring','google_kms_crypto_key','google_kms_crypto_key_version'])check(/prevent_destroy\s*= true/.test(resource(type,'producer')),'Preserve identity/key history');
 check(/output "producer_deployment_managed" \{\s*value = false\s*\}/.test(outputs),'No deployment claimed');
 for(const [name,permission] of [['reader','read_permissions'],['logger','log_permissions'],['signer','sign_permissions']])check(new RegExp('permissions\\s*= local\\.'+permission).test(resource('google_project_iam_custom_role',name)),'Exact permission source');
+
+// Postconditions observe provider results; requested flags alone are not evidence.
+check(/postcondition\s*\{\s*condition\s*= self\.disabled == true\s*error_message\s*= "Disabled provisioning requires an observed disabled service account\. Stop and reconcile explicitly\."\s*\}/.test(resource('google_service_account','producer')),'SA postcondition is unconditional in disabled phase');
+check(/postcondition\s*\{\s*condition\s*= self\.state == "DISABLED"\s*error_message\s*= "Disabled provisioning requires an observed DISABLED key version\. Stop and reconcile explicitly\."\s*\}/.test(resource('google_kms_crypto_key_version','producer')),'Key version postcondition rejects pending/enabled states');
+for(const [kind,name] of [['google_project_iam_member','reader'],['google_project_iam_member','logger'],['google_kms_crypto_key_iam_member','signer']]){
+ const body=resource(kind,name),deps=body.match(/depends_on\s*=\s*\[([^\]]+)\]/);
+ assert.ok(deps,'Explicit dependency required for every grant');
+ assert.deepEqual(deps[1].split(',').map(x=>x.trim()).sort(),['google_kms_crypto_key_version.producer','google_service_account.producer']);checks++;
+}
+check(!/ignore_changes|local-exec|remote-exec/.test(main),'No ignored compliance or automatic containment/retry provisioner');
 
 assert(fs.existsSync(terraform),'Reviewed local Terraform required; no download');
 const fixture=fs.mkdtempSync(path.join(root,'.firebase/producer-iac-'));
@@ -66,13 +76,13 @@ function evaluate(input){
 try{
  const empty=evaluate({});
  assert.deepEqual(empty,{count:0,signerCount:0,readerCount:0,loggerCount:0,disabled:true,source:'pay-0-system',observation:'pay0-sentinel-observe',region:'us-central1',db:'projects/pay-0-system/databases/(default)',identity:'pay0-listusers-observer',read:['datastore.entities.get','datastore.entities.list'],log:['logging.logEntries.create'],sign:['cloudkms.cryptoKeyVersions.useToSign']});checks++;
- const provision=evaluate({enable_provisioning:true});check(provision.count===1&&provision.signerCount===0&&provision.disabled,'Provision does not enable identity or signing');
+ const provision=evaluate({enable_provisioning:true});check(provision.count===1&&provision.signerCount===0&&provision.disabled,'Provision requests disabled identity and no signing grant; observed state requires postcondition');
  check(provision.readerCount===0&&provision.loggerCount===0,'Provision grants nothing');
  for(const [flag,field] of [['enable_read_grant','readerCount'],['enable_logging_grant','loggerCount'],['enable_signing_grant','signerCount']]){const off=evaluate({[flag]:true});check(off[field]===0,'Flag alone does not create binding');const on=evaluate({enable_provisioning:true,[flag]:true});check(on[field]===1&&['readerCount','loggerCount','signerCount'].filter(k=>k!==field).every(k=>on[k]===0),'Grants independent');}
  for(const name of ['reader','logger','signer']){const body=resource('google_project_iam_custom_role',name);check(/stage\s*= "GA"/.test(body)&&/prevent_destroy\s*= true/.test(body),'Roles GA and protected');}
  const isolatedFlag=evaluate({enable_signing_grant:true});check(isolatedFlag.count===0&&isolatedFlag.signerCount===0,'Signer alone cannot provision');
- const grant=evaluate({enable_provisioning:true,enable_signing_grant:true});check(grant.count===1&&grant.signerCount===1&&grant.disabled,'Grant does not enable SA/version');
- const enabledIdentity=evaluate({enable_provisioning:true,service_account_disabled:false});check(!enabledIdentity.disabled&&enabledIdentity.signerCount===0,'Identity enabling does not grant signing');
+ const grant=evaluate({enable_provisioning:true,enable_signing_grant:true});check(grant.count===1&&grant.signerCount===1&&grant.disabled,'Grant flags retain disabled identity request; dependency postconditions gate actual state');
+ const enabledIdentity=evaluate({enable_provisioning:true,service_account_disabled:false});check(!enabledIdentity.disabled&&enabledIdentity.signerCount===0,'False disabled variable alone cannot grant signing and is rejected by unconditional SA postcondition');
  console.log(`SENTINEL_PRODUCER_IAC_PASS checks=${checks} providers=0 plan=0 apply=0 cloudCalls=0`);
 }finally{
  assert(fixture.startsWith(path.join(root,'.firebase')+path.sep));fs.rmSync(fixture,{recursive:true,force:true});

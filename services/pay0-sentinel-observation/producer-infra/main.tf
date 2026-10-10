@@ -26,6 +26,10 @@ resource "google_service_account" "producer" {
   disabled     = var.service_account_disabled
   lifecycle {
     prevent_destroy = true
+    postcondition {
+      condition     = self.disabled == true
+      error_message = "Disabled provisioning requires an observed disabled service account. Stop and reconcile explicitly."
+    }
   }
 }
 
@@ -42,10 +46,11 @@ resource "google_project_iam_custom_role" "reader" {
 }
 
 resource "google_project_iam_member" "reader" {
-  count   = local.reader_count
-  project = local.source_project
-  role    = google_project_iam_custom_role.reader[0].name
-  member  = "serviceAccount:${google_service_account.producer[0].email}"
+  depends_on = [google_service_account.producer, google_kms_crypto_key_version.producer]
+  count      = local.reader_count
+  project    = local.source_project
+  role       = google_project_iam_custom_role.reader[0].name
+  member     = "serviceAccount:${google_service_account.producer[0].email}"
   condition {
     title      = "OnlyPay0DefaultDatabase"
     expression = "resource.name == '${local.database_resource}'"
@@ -65,10 +70,11 @@ resource "google_project_iam_custom_role" "logger" {
 }
 
 resource "google_project_iam_member" "logger" {
-  count   = local.logger_count
-  project = local.source_project
-  role    = google_project_iam_custom_role.logger[0].name
-  member  = "serviceAccount:${google_service_account.producer[0].email}"
+  depends_on = [google_service_account.producer, google_kms_crypto_key_version.producer]
+  count      = local.logger_count
+  project    = local.source_project
+  role       = google_project_iam_custom_role.logger[0].name
+  member     = "serviceAccount:${google_service_account.producer[0].email}"
 }
 
 resource "google_kms_key_ring" "producer" {
@@ -97,13 +103,18 @@ resource "google_kms_crypto_key" "producer" {
   }
 }
 
-# Requested final state only; no claim about internal server transitions.
+# Asymmetric generation may pass through PENDING_GENERATION to ENABLED.
+# This postcondition detects noncompliance; it cannot prevent that transition.
 resource "google_kms_crypto_key_version" "producer" {
   count      = local.provision_count
   crypto_key = google_kms_crypto_key.producer[0].id
   state      = "DISABLED"
   lifecycle {
     prevent_destroy = true
+    postcondition {
+      condition     = self.state == "DISABLED"
+      error_message = "Disabled provisioning requires an observed DISABLED key version. Stop and reconcile explicitly."
+    }
   }
 }
 
@@ -120,6 +131,7 @@ resource "google_project_iam_custom_role" "signer" {
 }
 
 resource "google_kms_crypto_key_iam_member" "signer" {
+  depends_on    = [google_service_account.producer, google_kms_crypto_key_version.producer]
   count         = local.signer_count
   crypto_key_id = google_kms_crypto_key.producer[0].id
   role          = google_project_iam_custom_role.signer[0].name
