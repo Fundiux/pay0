@@ -61,3 +61,31 @@ Sandbox initially denied provider checksum read; narrow elevated local validatio
 passed. 52 local checks remain PASS. Central read-only preflight26245 was launched
 by root separately; this agent did not duplicate that call and makes no claim about
 its pending result. Commit excludes all private artifacts and root work in progress.
+
+## Central execution checkpoint
+
+2026-10-10: API-enable helper reviewed by root,15 synthetic checks PASS. Execute39508
+finished ENABLED_VERIFIED with exactly1POST to isolated project; source KMS API
+remained DISABLED. Independent read-only inventory confirmed SA/three roles and
+key ring absent. No keys, identity, bindings, signatures or runtime were created.
+The enable helper and journal remain private in .firebase/producer-kms-api-enable.
+
+Separate producer Terraform root initialized offline and validated with Google7.46.1;
+its committed lock matches verification-infra exactly. Neither observer nor
+verification state owns this API. Import adopted only the already-enabled API.
+The first post-validator incorrectly rejected three zero-instance IAM containers
+that Terraform includes in state. No import retry: corrected strict validation and
+21tests PASS confirmed one exact API instance, three known empty containers and zero
+active bindings. State serial1; SHA256
+fb4eab889b6cfe3af6dc26ca9c5af20bdfc2923fb653c6cf4cd11669fbe358a0.
+
+Plan-review42842: Terraform exit2, seven creates, zero updates/replacements/deletes.
+Output existed only in memory, SHA256
+c529b1694dd1ebe49bc721f5904c453dd51cc2217180169f57bd908101841642.
+Strict parser still rejects an unknown computed schema field; no acceptance or apply.
+Diagnostic schema review remains open. Empty resource containers do not grant IAM.
+
+Exact provider source v7.46.1 was reviewed: CryptoKeyVersionCreate includes configured
+state in its initial POST; configured DISABLED is not implemented as create-enabled
+then PATCH. This does not prove server-internal atomicity or binary/source lineage.
+SA disabled, grants absent and remote version state remain required verification.
