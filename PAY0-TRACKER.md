@@ -5,7 +5,7 @@ Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
 ## Corte vigente — 2026-10-10
 
-La remediación integral sigue activa. Este corte prevalece sobre los anteriores; no certifica el cierre global ni Production Ready. Fuente de ejecución: rama `remediation/pay0-integral-20261009`; candidato publicado por lotes: `integration/pay0-remediation-20261009`, commit `2613559`. `main` no se ha actualizado en esta remediación.
+La remediación integral sigue activa. Este corte prevalece sobre los anteriores; no certifica el cierre global ni Production Ready. Fuente de ejecución: rama `remediation/pay0-integral-20261009`; candidato publicado por lotes: `integration/pay0-remediation-20261009`, commit `c92f0b7`. `main` no se ha actualizado en esta remediación.
 
 | Frente | Estado comprobado | Pendiente para cierre |
 | --- | --- | --- |

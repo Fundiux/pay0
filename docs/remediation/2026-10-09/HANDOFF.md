@@ -15,10 +15,10 @@ persistidos ni activacion productora. Ver SENTINEL-PRODUCER-IAM-GATE.md.
 
 Notas: candidato aislado desde2613559, pruebas backend/UI y ambos builds en curso
 de cierre; aun sin integracion. Telegram: transporte con redaccion/AbortSignal
-opcional y CRLF corregido en add1ac1: 23 pruebas, build y revision root PASS; no integrado. Bundle
+opcional y CRLF corregido en add1ac1: 23 pruebas, build y revision root PASS; integrado y pushed en c92f0b7, sin deploy. Arbol exacto igual al candidato probado. Bundle
 interno: PoC2pares conserva346exports y mejora mediciones; candidato reproducible
 opt-in en implementacion, sin modificar build desplegable ni gates. Descarga e
-IQ6 siguen sin nuevo deploy. Integracion permanece2613559.
+IQ6 siguen sin nuevo deploy. Integracion vigente c92f0b7.
 
 **Checkpoint posterior: reglas congeladas; alternativa de lectura en servidor.**
 
@@ -334,3 +334,34 @@ Terraform local: `services/pay0-sentinel-observation/infra/.terraform/verified-c
 6. Continuar backlog financiero, delegaciones/migracion, workers/autorizacion, parsers restantes, App Check opt-in y recuperacion. AR-10 tiene revision individual en LEGACY-RESOLUTION.md; no confundir clasificacion estatica con retiro/reactivacion ni cierre productivo.
 
 No pagos, dispersiones, depositos, efectos fiscales ni mensajes de prueba reales. Mantener pausas REP y syncTodayIqInvoicesNow. Preservar worktrees y material historico.
+
+## Hito: transporte integrado y prerrequisito KMS
+
+Integration c92f0b7 limpio y publicado en origin. El primer push fue rechazado
+por automatic approval review por falta de evidencia del destino; la comprobacion
+read-only confirmo cuenta autenticada Fundiux, mismo propietario, permisos admin/push
+y clone URL exacta. Reintento con esa evidencia aprobado. No se modifico main.
+
+Producer IaC 1a9cdbd: provision separado de grants, SA deshabilitada y version
+DISABLED; 52 checks y fmt/validate offline PASS. Preflight cloud26245 terminado:
+SA y tres roles ausentes; KMS API DISABLED en ambos proyectos. Por tanto, ring/key
+siguen NO OBSERVADOS. Siguiente paso: habilitar solo cloudkms.googleapis.com del
+proyecto aislado mediante accion minima revisada y repetir inventario antes de
+crear claves. No IAM grants, runtime, trust, mensajes ni efectos financieros.
+
+Notas: buildFunctions final28506 PASS. SDK19625 fallo fixture a1ns porque Firestore
+persiste microsegundos; se conserva evidencia y se corrige fixture a1000ns con
+readback. No se modifica producto para pasar esa prueba. Bundle: build normal51518
+PASS; construccion privada1089 compilo315modulos pero esbuild fallo por sandbox; repetir solo esbuild con elevacion aprobada produjo278inputs. Artefacto y reproducibilidad siguen en validacion, sin relajar gates de7/10segundos.
+
+Actualizacion del hito: helper API a386be5b5b1e5129912a08e3cd39db79d553971be365ffb7a8b6254f9ab4e487
+revisado por root y15fakesPASS. Execute39508 PASS, ENABLED_VERIFIED y1POST.
+Preflight independiente posterior PASS: SOURCE_KMS_API DISABLED, ISOLATED_KMS_API
+ENABLED; SA/tresroles/KEY_RING ABSENT_AT_READ. Sin crear claves/grants/runtime.
+No se deshabilita la API como rollback ni se infiere ownership de recursos previos.
+Se preparara adopcion explicita de API en el state separado antes del plan restante.
+
+Notas SDK14311 PASS26/26:25fakes y1SDKreal con125IDs, precision microsegundos,
+paginacion, cursorforjado/anclaeliminada y revocacion antes segunda transaccion.
+Puertos del emulador cerrados. UI15PASS, policyverifier y ambos builds PASS.
+No integracion hasta revision de tamano/compatibilidad y coste de lecturas.
