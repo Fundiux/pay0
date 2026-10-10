@@ -3754,6 +3754,7 @@ export const dispatchQueuedPagoIqCreation = onDocumentWritten(
 export const processIqPagoDepositAutomaticTask = onTaskDispatched(
   {
     preserveExternalChanges: true,
+    maxInstances: 20,
     region: "us-central1", timeoutSeconds: 540, memory: "2GiB",
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
     retryConfig: { maxAttempts: 3, minBackoffSeconds: 300, maxBackoffSeconds: 900, maxRetrySeconds: 1800 },
