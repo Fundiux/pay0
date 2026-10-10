@@ -16,6 +16,11 @@ Check (!$plan.PreservationCertified -and $plan.Drift -ceq 'GROUP1_AUTOMATIC_MAX2
 Check (!$plan.Envs[$script:IqResumeName].ContainsKey('PAY0_OPERATION_TIMING')) 'timingAbsent'
 $config=Get-IqResumeConfig $rows[$script:IqResumeName]
 Check ($config.Contains('"vpcConnector":null') -and $config.Contains('"minInstanceCount":null')) 'namedNullPreserved'
+foreach($field in @('minInstanceCount','ingressSettings','vpcConnector','vpcConnectorEgressSettings')){
+ $r=Fixtures;$r[$script:IqResumeName].serviceConfig.$field='CHANGED';Reject {Get-IqResumePlan $r} 'MIN_NETWORK_BASELINE_CHANGED'
+}
+$r=Fixtures;$r[$script:IqResumeName].serviceConfig.minInstanceCount=0;Reject {Get-IqResumePlan $r} 'MIN_NETWORK_BASELINE_CHANGED'
+Check ($config.Contains('"vpcConnectorEgressSettings":null') -and $config.Contains('"ingressSettings":"ALLOW_ALL"')) 'namedNetworkFields'
 foreach($name in $script:IqNames){
  $r=Fixtures;$r[$name].serviceConfig.revision='wrong';Reject {Get-IqResumePlan $r} 'REMOTE_SOURCE_CHANGED'
  $r=Fixtures;$r[$name].state='DEPLOYING';Reject {Get-IqResumePlan $r} 'ENDPOINT_NOT_ACTIVE'

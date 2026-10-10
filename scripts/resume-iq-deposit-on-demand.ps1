@@ -32,6 +32,7 @@ function Get-IqResumePlan([hashtable]$Snapshots) {
   if($s.serviceConfig.revision -cne $script:IqResumePins[$name][0] -or [string]$s.buildConfig.source.storageSource.generation -cne $script:IqResumePins[$name][1]){throw 'REMOTE_SOURCE_CHANGED'}
   $configs[$name]=Get-IqResumeConfig $s;$envs[$name]=Get-IqUserEnv $s
   if([string]$s.serviceConfig.timeoutSeconds -cne '540' -or $s.serviceConfig.availableMemory -cne '2Gi' -or [string]$s.serviceConfig.availableCpu -cne '1' -or $s.serviceConfig.serviceAccountEmail -cne '751158244178-compute@developer.gserviceaccount.com'){throw 'CORE_CONFIG_CHANGED'}
+  if($null -ne $s.serviceConfig.minInstanceCount -or $s.serviceConfig.ingressSettings -cne 'ALLOW_ALL' -or $null -ne $s.serviceConfig.vpcConnector -or $null -ne $s.serviceConfig.vpcConnectorEgressSettings){throw 'MIN_NETWORK_BASELINE_CHANGED'}
   $expectedMax=if($ondemand){'1'}else{'20'};$expectedConcurrency=if($ondemand){'1'}else{'80'}
   if([string]$s.serviceConfig.maxInstanceCount -cne $expectedMax -or [string]$s.serviceConfig.maxInstanceRequestConcurrency -cne $expectedConcurrency){throw 'RUNTIME_LIMIT_CHANGED'}
   if($ondemand){if($envs[$name].ContainsKey('PAY0_OPERATION_TIMING')){throw 'ONDEMAND_TIMING_CHANGED'}}
