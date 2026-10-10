@@ -1,4 +1,4 @@
-# Hugo historical source evidence: proposed compatibility contract
+# Hugo historical source evidence: compatibility contract and validation
 
 2026-10-09. Design-only review of HUGO-RELEASE-PREFLIGHT (49446c7), 06e4527,
 current stores, observer, logActivity and paymentApplications producers. No source
@@ -139,3 +139,37 @@ Coordinator reports ROOT Functions build PASS with the frozen Hugo, notifier and
 signedContract candidates. This agent did not run a concurrent build. The89
 synthetic assertions and reviewed diff support committing the six owned files;
 phase4/5 and historical transaction emulator evidence remain pending.
+
+## Real-emulator gate (executed after IQ window)
+
+Existing phase4/phase5 emulator smokes use explicit sourceSystem observations;
+they do not prove recovery of missing historical fields or retry against source
+log changes. New remediation-hugo-historical-emulator-run.ps1 starts only a demo
+Firestore on18232/websocket19232/hub14432/logging14532, with isolated config and
+deny-all client rules. It does not build; it consumes the central-built lib.
+
+The new remediation-hugo-historical-emulator.test.cjs first runs the existing
+phase4 and phase5 smokes sequentially, then exercises all four stores against
+legacy observations and compares historical observations byte-for-field unchanged.
+Three controlled real-SDK transaction retries change/delete the outcome source or
+insert a duplicate in a previously absent candidate collection. Attempt1 is
+explicitly aborted to release pessimistic locks; the queued external emulator
+write completes before retry. This verifies actual SDK retry/revalidation and
+absence of a promoted document, not a claim of reproducing a naturally scheduled
+production race. Each attempt is bounded to ten source reads for two observations.
+
+Initial preparation passed Node and PowerShell syntax only. On 2026-10-10 UTC,
+the coordinator subsequently ran the runner after the reserved IQ window:
+session60115, ignored local log `.firebase/remediation-temp/hugo-history-gate.log`.
+Exit0; existing phase4 and phase5 both report ok:true; new historical gate reports
+15 checks, all four consumers, three controlled real-SDK retries, unchanged
+historical documents and externalEffects:false. Emulator shutdown completed.
+This supersedes the earlier pending emulator status, not the deployment gate.
+
+The PowerShell runner preserves native exit handling under PS5: Continue applies
+only during the native Firebase invocation, exit code is captured immediately,
+and the previous ErrorActionPreference is restored in finally. Expected SDK
+permission-denied stderr cannot abort before the exit code is inspected; nonzero
+native exit still fails. No test assertion was weakened. No production reads,
+model calls, historical rewrites, integration edit or deployment was performed
+by this validation.
