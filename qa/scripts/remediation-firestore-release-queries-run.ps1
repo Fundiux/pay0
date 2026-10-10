@@ -17,8 +17,17 @@ $taskSettings=@{firestore=@{rules=(Join-Path $taskSource 'firestore.rules')};emu
 [System.IO.File]::WriteAllText($taskConfig,($taskSettings|ConvertTo-Json -Depth 5),[System.Text.UTF8Encoding]::new($false))
 Push-Location $taskRoot
 try{
- & firebase.cmd emulators:exec --project demo-pay0-firestore-release --config $taskConfig --only firestore 'node qa/scripts/remediation-firestore-release-queries.test.mjs'
- if($LASTEXITCODE -ne 0){throw 'Firestore query release gate failed'}
+ $taskNativePreference=$ErrorActionPreference
+ $taskExit=$null
+ try {
+  # Expected permission-denied probes write native stderr in Windows PowerShell.
+  # Preserve diagnostics and use the actual process exit status for this gate.
+  $ErrorActionPreference='Continue'
+  $global:LASTEXITCODE=$null
+  & firebase.cmd emulators:exec --project demo-pay0-firestore-release --config $taskConfig --only firestore 'node qa/scripts/remediation-firestore-release-queries.test.mjs'
+  $taskExit=$LASTEXITCODE
+ } finally {$ErrorActionPreference=$taskNativePreference}
+ if($null -eq $taskExit -or $taskExit -ne 0){throw 'Firestore query release gate failed'}
 }finally{
  Pop-Location
  foreach($key in $taskSaved.Keys){[Environment]::SetEnvironmentVariable($key,$taskSaved[$key],'Process')}

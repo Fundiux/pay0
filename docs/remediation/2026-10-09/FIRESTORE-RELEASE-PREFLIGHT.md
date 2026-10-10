@@ -72,6 +72,19 @@ it does not prove future revocation enforcement in Firestore SDK reads.
 
 ## Evidence and remaining gates
 
+Execution update, 2026-10-10 UTC: **169/169 PASS**, exit0, against unchanged
+integration a71a8b8 hash shown above. Normal authorization-policy verifier PASS.
+Initial runner attempt stopped on expected native stderr because PowerShell
+ErrorActionPreference was Stop; corrected only the native-call wrapper to retain
+stderr and check its real exit status. Rerun completed and shut down its owned
+emulators. No assertions, query shapes, rules or limits were relaxed. Some denied
+note-write probes emit expression-budget diagnostics; all allowed probes passed.
+The result proves these listed cases, not universal budget headroom or grantor
+lineage enforcement. Private log:
+`.firebase/remediation-temp/firestore-release-query-gate-recheck.log`.
+The table's earlier NOT RUN state below is superseded by this execution evidence;
+publication and postrelease checks remain outstanding.
+
 | Gate | Evidence / next action |
 | --- | --- |
 | Candidate identity | Normalized hash matches RESTRICTION-BOUNDARIES recorded actual325/325; no candidate rule change during this review. |
