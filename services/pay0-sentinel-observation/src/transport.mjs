@@ -22,9 +22,9 @@ export function createOidcVerifier(authClient, config, now = () => Date.now()) {
   };
 }
 
-/** Only called after verified push identity. Log fields remain backend assertions,
- * not cryptographic proof of actor identity; allowlist bounds the canary scope. */
-export function decodeEnvelope(body, config, now = () => Date.now()) {
+/** Only called after verified push identity. Signed producers have no fallback
+ * to the legacy canary lane, whose labels remain unverified backend assertions. */
+export function decodeEnvelope(body, config, now = () => Date.now(), verifySigned = null) {
   if (!keys(body, ['message', 'subscription', 'deliveryAttempt'], ['message', 'subscription']) || body.subscription !== config.subscription) fixedError();
   const m = body.message;
   if (!keys(m, ['data', 'messageId', 'message_id', 'publishTime', 'publish_time', 'attributes', 'orderingKey'], ['data'])) fixedError();
@@ -43,6 +43,25 @@ export function decodeEnvelope(body, config, now = () => Date.now()) {
   const stamp = Date.parse(log.timestamp);
   if (!Number.isFinite(stamp) || stamp > now() + 60000 || stamp < now() - 86400000) fixedError();
   const payload = log.jsonPayload;
+  if (!plain(payload)) fixedError();
+  const signedProducer = typeof labels.service_name === 'string' &&
+    (labels.service_name.toLowerCase() === 'listusers' || config.signedTrust?.producers.some(p => p.serviceName.toLowerCase() === labels.service_name.toLowerCase()));
+  if (payload.schemaVersion === 'PAY0-SECURITY-SIGNED@1') {
+    if (typeof verifySigned !== 'function' || log.logName !== 'projects/pay-0-system/logs/pay0_security_observation' ||
+        !keys(log.resource, ['type', 'labels']) ||
+        !keys(labels, ['project_id', 'service_name', 'revision_name', 'configuration_name', 'location']) ||
+        labels.configuration_name !== labels.service_name) fixedError();
+    let decoded;
+    try {
+      decoded = verifySigned(payload, { projectId: labels.project_id, serviceName: labels.service_name,
+        revisionName: labels.revision_name, location: labels.location });
+    } catch { fixedError(); }
+    // Delivery metadata cannot replace signed event identity or occurrence time.
+    if (log.insertId !== decoded.event.eventId || stamp !== decoded.event.occurredAtMs) fixedError();
+    return decoded;
+  }
+  // A removed/unknown/bad signature is a permanent rejection, never a canary.
+  if (signedProducer || Object.hasOwn(payload, 'signedBytesB64') || Object.hasOwn(payload, 'signatureB64')) fixedError();
   if (!keys(payload, ['schemaVersion', 'context', 'event']) || payload.schemaVersion !== 'PAY0-SECURITY-ENVELOPE@1' ||
       !keys(payload.context, ['rootId', 'actorUid'])) fixedError();
   const origin = config.origins.find(row => row.logName === log.logName && row.projectId === labels.project_id && row.serviceName === labels.service_name && row.revisions.includes(labels.revision_name) && row.roots.includes(payload.context.rootId) && row.actors.includes(payload.context.actorUid));

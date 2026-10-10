@@ -26,7 +26,7 @@ async function readBody(req, maximum) {
   });
 }
 
-export function createObservationServer({ config, verify, detector, metric = () => {}, now = () => Date.now() }) {
+export function createObservationServer({ config, verify, verifySigned = null, detector, metric = () => {}, now = () => Date.now() }) {
   let inFlight = 0;
   let windowStart = now();
   let attempts = 0;
@@ -47,7 +47,7 @@ export function createObservationServer({ config, verify, detector, metric = () 
       try { await verify(req.headers.authorization); } catch { if (!expired) reply(401, 'UNAUTHENTICATED'); return; }
       if (expired) return;
       let decoded;
-      try { decoded = decodeEnvelope(await readBody(req, config.maxEnvelopeBytes), config, now); }
+      try { decoded = decodeEnvelope(await readBody(req, config.maxEnvelopeBytes), config, now, verifySigned); }
       catch { if (!expired) reply(204, 'INVALID_ENVELOPE'); return; }
       if (expired) return;
       const result = await detector.ingest(decoded.event, decoded.ingress);
