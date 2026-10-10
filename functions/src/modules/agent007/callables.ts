@@ -333,7 +333,7 @@ export const reviewAgent007MemoryCandidate = onCall(
 );
 
 export const linkAgent007VerifiedExperience = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, user, rootId } = await actor(request);
     const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
@@ -345,7 +345,7 @@ export const linkAgent007VerifiedExperience = onCall(
 );
 
 export const createAgent007LearningExperience = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -358,7 +358,7 @@ export const createAgent007LearningExperience = onCall(
 );
 
 export const createAgent007LearningDraft = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -371,7 +371,7 @@ export const createAgent007LearningDraft = onCall(
 );
 
 export const linkAgent007LearningOutcome = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const record = await hugoLearning.linkOutcome(rootId, clean(request.data?.experienceId, 160), clean(request.data?.outcomeId, 160), uid);
