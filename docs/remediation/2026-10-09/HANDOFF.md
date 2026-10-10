@@ -3,23 +3,41 @@
 Objetivo activo: remediacion integral. No hay cierre global.
 
 **Checkpoint posterior: reglas congeladas; alternativa de lectura en servidor.**
-Candidato Rules05436269, sesion54306 exit1: control36 PASS0budget, matriz707
-658PASS/49FAIL/68diagnosticos de presupuesto, ningun unexpectedALLOW. Los18
-casos nuevos de composicion legitima fallaron. No518 ni release; no otro ajuste
-a ciegas. Arquitectura prepara desde2613559 el primer lote notes(wallet), con
-callable paginado/autorizacion actual y polling visible5s; pendiente implementar,
-review y ambos builds. Listas existentes por callable no bastan: listeners porID
-siguen leyendo Firestore directamente. Candidato fallido se conserva aislado.
-Inventario root ampliado d7b8d10:1480uploads, ultima pagina80 agotada, mismo unico
-root observado/0ausentes/0invalidos;14consultas adicionales,0escrituras cloud.
-Originalbootstrap/hash conservado. No snapshot ni roots sinuploads cubiertos.
-Discovery medido sinprioridades: SDK3595..8396ms y tail710..1474ms; una muestra
-9543ms atribuye956ms al yaml.parse de manifestJSONpretty178724bytes. No prueba
-CPUcompetencia como causa dominante. Wrapperdeploy y gate usan ambos FILE;
-comparacion HTTPestandar pendiente, limites7s/SDK10s intactos,0nuevo deploy.
-IAMhelper local en revision: SDK/GAX5tests inicialesPASS sinADC/red. Orquestador
-requiere CAS fixtureupdateTime/journalrecuperacion/pruebascleanup;0recursos,
-grants o tokensfixture creados. Sentinel00006-spv y descargas00004-vat sin cambio.
+
+El candidato de reglas `05436269` terminó con 36 controles aprobados sin errores
+de presupuesto. La matriz ampliada tuvo 658 casos aprobados y 49 fallidos de
+707, con 68 diagnósticos de límite de evaluación y ninguna autorización
+inesperada. Fallaron los 18 casos nuevos de composición legítima. No se ejecutó
+la regresión de 518 casos ni se publicó este candidato. El commit `e3ea3dd`
+conserva el experimento en la rama fuente: **no integrar en release**.
+
+Arquitectura implementa desde `2613559` el primer lote de lectura de notas de
+dispersiones mediante servidor: autorización actual, paginación completa y
+actualización visible cada cinco segundos. Requiere revisión, pruebas y ambas
+compilaciones. Las listas existentes mediante callable no eliminan el problema:
+los listeners por ID todavía consultan Firestore directamente.
+
+El inventario ampliado `d7b8d10` recorrió 1.480 uploads; la última página de 80
+agotó la consulta. Solo observó el mismo root y ningún root ausente o inválido.
+Fueron 14 consultas adicionales, sin escrituras productivas. El bootstrap original
+y su hash se conservaron. No fue un snapshot ni cubre roots sin uploads.
+
+El diagnóstico de arranque, sin cambiar prioridades, midió entre 3.595 y 8.396 ms
+en el SDK y entre 710 y 1.474 ms posteriores. Una muestra total de 9.543 ms
+atribuyó 956 ms a `yaml.parse` sobre 178.724 bytes de JSON con formato. No demuestra
+que la competencia por CPU sea la causa dominante. El wrapper de despliegue y
+su prueba usan ambos el transporte FILE. La comparación con HTTP estándar falló
+el límite en ambos intentos (9.129 y 8.316 ms), aunque conservó el manifiesto y
+redujo el coste de parseo. Un FILE posterior agotó el plazo del SDK; sus procesos
+propios quedaron cerrados. No se recomienda cambiar de transporte. El siguiente
+experimento privado mide módulos internos; los límites de siete y diez segundos
+permanecen intactos.
+No hubo otro intento de despliegue.
+
+El helper IAM continúa en revisión local. Las primeras cinco pruebas del SDK/GAX
+pasaron sin ADC ni red. El orquestador requiere verificar la versión del fixture,
+recuperación desde journal y limpieza ante conflictos. No creó recursos, grants
+ni tokens de prueba. Sentinel conserva `00006-spv`; descargas, `00004-vat`.
 
 **Checkpoint 20:36 UTC: descarga detenida antes de upload; Sentinel sigue publicado.**
 Integracion `26135597ce50f23818150a696218d17079e44596` limpia/subida, QRCodeaad6eee
