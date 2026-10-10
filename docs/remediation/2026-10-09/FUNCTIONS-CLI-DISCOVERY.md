@@ -36,3 +36,18 @@ Recovery: revert the launcher transport change and final predeploy addition
 together if the installed CLI contract changes. Never increase timeouts or
 remove existing gates to force a release. Revalidate remote pins/configuration
 before a new IQ release; preserve both failed journals as operational evidence.
+
+## Follow-up: final predeploy failure
+
+The b341058 deployment attempt stopped before upload at the final CLI gate,
+2026-10-10T19:23:47Z, after the normal build, startup guard (3081 ms), 96 rules
+assertions and 42 document-download checks passed. Dotenv restoration matched
+the original hash. The subsequent cross-spawn ENOENT followed the gate's exit1;
+it does not establish a missing executable as the cause.
+
+The generic failure output was insufficient to distinguish the 7-second guard
+from the CLI timeout or a manifest/load error. Follow-up diagnostics emit only
+an allowlisted category and elapsed time, never SDK error text, configuration,
+manifest or environment values. Five focused tests pass, including redaction.
+No timeout, endpoint requirement or release gate is relaxed. A new deployment
+must wait for a concrete diagnosis and fresh preflight.

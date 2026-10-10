@@ -5,8 +5,17 @@ const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const { spawnSync, spawn } = require("node:child_process");
-const { validateCliBuild, discoverOwned } = require("./verify-functions-cli-discovery.cjs");
+const { validateCliBuild, discoverOwned, diagnosticCode } = require("./verify-functions-cli-discovery.cjs");
 const { expectedEndpointCount, requiredEndpoints } = require("./verify-functions-discovery-startup.cjs");
+
+test("failure diagnostics distinguish deadlines without exposing SDK details", () => {
+  assert.equal(diagnosticCode(Error("STARTUP_LIMIT")), "STARTUP_LIMIT");
+  assert.equal(diagnosticCode(Error("User code failed to load. Cannot determine backend specification. Timeout after 10000ms")), "CLI_TIMEOUT_10000");
+  assert.equal(diagnosticCode(Error("User code failed to load. Cannot determine backend specification.\nprivate SDK detail")), "CLI_SDK_LOAD");
+  assert.equal(diagnosticCode(Error("Failed to parse build specification")), "CLI_MANIFEST_PARSE");
+  assert.equal(diagnosticCode(Error("private SDK detail")), "CLI_OTHER_REDACTED");
+  assert.equal(diagnosticCode({ message: "private SDK detail" }), "CLI_OTHER_REDACTED");
+});
 
 test("actual CLI build contract rejects timing, malformed manifests and missing critical exports", () => {
   const names = [...requiredEndpoints];

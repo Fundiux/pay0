@@ -4,6 +4,16 @@ const { join, resolve } = require("node:path");
 const { performance } = require("node:perf_hooks");
 const { expectedEndpointCount, requiredEndpoints } = require("./verify-functions-discovery-startup.cjs");
 const limitMs = 7000;
+let discoveryStartedAt = null;
+
+function diagnosticCode(error) {
+  const code = error instanceof Error ? error.message : "";
+  if (["STARTUP_LIMIT", "INVALID_BUILD", "ENDPOINT_CONTRACT", "CLI_UNAVAILABLE", "STATIC_MANIFEST_FORBIDDEN", "INTERRUPTED", "CHILD_STOP_FAILED"].includes(code)) return code;
+  if (code === "User code failed to load. Cannot determine backend specification. Timeout after 10000ms") return "CLI_TIMEOUT_10000";
+  if (code === "Failed to parse build specification") return "CLI_MANIFEST_PARSE";
+  if (code.startsWith("User code failed to load. Cannot determine backend specification.")) return "CLI_SDK_LOAD";
+  return "CLI_OTHER_REDACTED";
+}
 
 async function discoverOwned(Delegate, constructorArgs, config, env) {
   const children = [];
@@ -69,6 +79,7 @@ async function main() {
   // Actual CLI spawn, environment whitelist and output parser, with its unchanged
   // default 10s timeout. No SDK cache is injected; no handlers are invoked.
   const startedAt = performance.now();
+  discoveryStartedAt = startedAt;
   const build = await discoverOwned(Delegate, ["demo-pay0-discovery", root, join(root, "functions"), "nodejs22"], {}, {
     GCLOUD_PROJECT: "demo-pay0-discovery",
     FIREBASE_CONFIG: JSON.stringify({ projectId: "demo-pay0-discovery", storageBucket: "demo-pay0-discovery.appspot.com" }),
@@ -78,5 +89,9 @@ async function main() {
   console.log(`FUNCTIONS_CLI_DISCOVERY_PASS elapsedMs=${elapsedMs} endpoints=${count} limitMs=${limitMs} transport=temporary-file remoteActions=0`);
 }
 
-module.exports = { validateCliBuild, discoverOwned };
-if (require.main === module) main().catch(() => { console.error("FUNCTIONS_CLI_DISCOVERY_FAIL: actual CLI startup or endpoint contract failed; no timeout extension or retry."); process.exitCode = 1; });
+module.exports = { validateCliBuild, discoverOwned, diagnosticCode };
+if (require.main === module) main().catch(error => {
+  const elapsedMs = discoveryStartedAt === null ? null : Math.round(performance.now() - discoveryStartedAt);
+  console.error(`FUNCTIONS_CLI_DISCOVERY_FAIL code=${diagnosticCode(error)} elapsedMs=${elapsedMs} limitMs=${limitMs} detailsRedacted=true`);
+  process.exitCode = 1;
+});
