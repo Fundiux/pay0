@@ -1,6 +1,6 @@
 # Internal Functions bundle: isolated candidate
 
-Status: experimental base 2613559 passes the gates below. No activation, integration, deployment or provider calls. Integration freshness remains pending.
+Status: final isolated candidate includes the current Telegram transport and passes the gates below. No activation, integration, deployment or provider calls. Production packaging/Cloud Build activation remains a separate reviewed step.
 
 The isolated branch starts at `26135597ce50f23818150a696218d17079e44596`. Integration subsequently added Telegram transport changes in `c92f0b7`; those must be incorporated and retested before any release decision. Earlier private PoC measurements covered two pairs only and do not establish stability.
 
@@ -49,4 +49,19 @@ Verified experimental artifact:
 
 The ignored artifact node_modules junction is a test-only dependency scaffold added **after** all output/provenance/reproducibility comparisons. It is outside the recorded deployable output set; it must not be shipped. Package install remains the dependency mechanism for a real release.
 
-Pending acceptance: commit the opt-in candidate, incorporate the exact Telegram transport change into this isolated branch, then rebuild and repeat the relevant functional/full-manifest gates against that final source. One cold and one repeat CLI observation provide only small-sample evidence, not a stability percentile. No candidate activation or deployment is authorized by these results alone.
+## Final candidate aligned with integration
+
+Opt-in implementation commit `30bc9c5`; authorized Telegram cherry-pick `ec39b4a` corresponds to `add1ac1`. Functions source tree is exactly `85d5a101f24aa3d4c5de9291496cec256830ff8a`, identical to integration `c92f0b7`.
+
+Final maps use esbuild `linked` rather than `external`: both create a separate map, but linked adds the relative sourceMappingURL comment that Node can discover. The map still excludes embedded sources and absolute paths. This distinction follows the [official esbuild source map contract](https://esbuild.github.io/api/#sourcemap). A native Node `--enable-source-maps` test registers the actual map and verifies an unauthenticated listUsers exception maps to the packaged compiled module; rejection occurs before the first DB read.
+
+Two complete, separate builder executions passed with TypeScript compile times of 23,931 and 32,922 ms. All 616 output files are byte-identical, including 298 assets; source map link and 278 relative map sources pass. Final hashes supersede the experimental a9f hash:
+
+- Bundle: `308ad5c99d96990df327e08bb0272ea9f52931bf43fcc630b97fcad6842e980d`.
+- Map: `50ad3a574af24719cc219ed717108e86ca53da5b0872ba14c2e839b90ddae67c`.
+
+Repeated against those final bytes: runtime154 PASS; complete delegation lineage and deferred14 PASS; real sql.js WASM PASS; existing Telegram transport23 PASS through bundled service with only HTTPS/fetch external mocks; financial emulator17 PASS/exit0 (final session98855), with emulator shutdown. Existing TypeScript test modes remain default; bundle mode never substitutes internal domain modules.
+
+Real installed CLI FILE discovery on the fresh artifact path passed at 2,298.02 ms and repeated at 1,938.50 ms. Both expose 346 endpoints, close their owned child and retain the full wire/build/env/config hashes listed above. The 7-second guard and 10-second SDK timeout are unchanged. These are two fresh SDK processes with shared machine/dependency caches, not an OS-cold benchmark or evidence of p95 stability.
+
+The default build, predeploy and package main remain unchanged. This candidate is ready for review of activation design, not direct deployment: local Firebase packaging and Google Node buildpack behavior must first guarantee that Cloud Build will verify and retain these bytes instead of recompiling them. No normal-build fallback or production switch was activated.

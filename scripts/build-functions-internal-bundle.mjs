@@ -63,7 +63,7 @@ export async function buildCandidate({ repositoryRoot = path.resolve(import.meta
       fs.writeFileSync(target, result.code.replaceAll("\r\n", "\n")); if (result.adjusted) adjusted.push(relative);
     } else fs.writeFileSync(target, bytes);
   }
-  const built = await esbuild.build({ absWorkingDir: compiled, entryPoints: ["index.js"], outfile: path.join(lib, "index.js"), bundle: true, packages: "external", platform: "node", format: "cjs", target: "node22", keepNames: true, minify: false, sourcemap: "external", sourcesContent: false, metafile: true, logLevel: "silent" });
+  const built = await esbuild.build({ absWorkingDir: compiled, entryPoints: ["index.js"], outfile: path.join(lib, "index.js"), bundle: true, packages: "external", platform: "node", format: "cjs", target: "node22", keepNames: true, minify: false, sourcemap: "linked", sourcesContent: false, metafile: true, logLevel: "silent" });
   if (Object.keys(built.metafile.inputs).some(name => path.isAbsolute(name) || name.split(/[\\/]/).includes(".."))) throw Error("BUNDLE_INPUT_SCOPE");
   const map = JSON.parse(fs.readFileSync(path.join(lib, "index.js.map"), "utf8"));
   if (map.sourcesContent || map.sourceRoot || map.sources.some(name => path.isAbsolute(name) || !name.startsWith("../.debug/compiled/"))) throw Error("SOURCE_MAP_SCOPE");

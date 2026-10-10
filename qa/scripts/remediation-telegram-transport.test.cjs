@@ -1,10 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),{EventEmitter}=require('node:events');
 const ts=require(require.resolve('typescript',{paths:[path.resolve(__dirname,'../../functions'),path.resolve(__dirname,'../../../../functions')]}));
-const source=fs.readFileSync(path.resolve(__dirname,'../../functions/src/modules/telegram/service.ts'),'utf8');
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const bundleArtifact=process.env.PAY0_QA_BUNDLE_ARTIFACT;
+const source=bundleArtifact?null:fs.readFileSync(path.resolve(__dirname,'../../functions/src/modules/telegram/service.ts'),'utf8');
+const compiled=bundleArtifact?null:ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+let bundle,activeTransport;
 const secret='SYNTHETIC_TOKEN_CHAT_BODY';
 function fixture(){let requestCount=0,fetchCount=0,req,res,callback,fetchOptions,fetchAction,payload;const https={request(_url,_opts,cb){requestCount++;callback=cb;req=new EventEmitter();req.destroyed=false;req.destroy=()=>{req.destroyed=true;};req.write=value=>{payload=value;};req.end=()=>{};return req;}};
- const module={exports:{}};vm.runInNewContext(compiled,{module,exports:module.exports,require:n=>{assert.equal(n,'https');return https;},Buffer,Error,Date,fetch:async(_url,opts)=>{fetchCount++;fetchOptions=opts;return fetchAction(opts);}});
+ const fakeFetch=async(_url,opts)=>{fetchCount++;fetchOptions=opts;return fetchAction(opts);};
+ const module={exports:{}};
+ if(bundleArtifact){activeTransport={https,fetch:fakeFetch};bundle||=require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:bundleArtifact,dependencyRoot:path.resolve(__dirname,'../../functions'),externalMocks:{https:{request:(...args)=>activeTransport.https.request(...args)}},fetch:(...args)=>activeTransport.fetch(...args)});module.exports=bundle.loadInternal('modules/telegram/service.js');}
+ else vm.runInNewContext(compiled,{module,exports:module.exports,require:n=>{assert.equal(n,'https');return https;},Buffer,Error,Date,fetch:fakeFetch});
  return{api:module.exports,get count(){return requestCount+fetchCount;},get req(){return req;},get res(){return res;},get fetchOptions(){return fetchOptions;},get payload(){return payload;},setFetch:f=>fetchAction=f,respond(status,body){res=new EventEmitter();res.statusCode=status;res.destroy=()=>{res.destroyed=true;};callback(res);if(body!==undefined){res.emit('data',Buffer.from(body));res.emit('end');}return res;}};}
 async function redacted(p){await assert.rejects(p,e=>{assert.equal(e.message,'TELEGRAM_DELIVERY_UNCONFIRMED');assert.equal(e.cause,undefined);assert.ok(!String(e.stack).includes(secret));return true;});}
 for(const kind of ['message','keyboard','document']){

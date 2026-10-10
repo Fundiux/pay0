@@ -16,6 +16,8 @@ const manifest=JSON.parse(fs.readFileSync(path.resolve(artifact,'../provenance.j
 assert.deepEqual(rows(artifact),manifest.outputs,'ARTIFACT_PROVENANCE_MISMATCH');
 assert.equal(manifest.esbuild,'0.28.2');assert.equal(manifest.candidateOnly,true);
 const map=JSON.parse(fs.readFileSync(path.join(artifact,'lib/index.js.map'),'utf8'));
+const code=fs.readFileSync(path.join(artifact,'lib/index.js'),'utf8');
+assert(code.endsWith('//# sourceMappingURL=index.js.map\n'),'RELATIVE_SOURCE_MAP_LINK_REQUIRED');
 assert.equal(map.sourceRoot,undefined);assert.equal(map.sourcesContent,undefined);
 for(const source of map.sources){assert(source.startsWith('../.debug/compiled/'));assert(!path.isAbsolute(source));assert(fs.existsSync(path.resolve(artifact,'lib',source)));}
 for(const row of manifest.outputs.filter(row=>/\.(?:js|map|json)$/.test(row.file))){
