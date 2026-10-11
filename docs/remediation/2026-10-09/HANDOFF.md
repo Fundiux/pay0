@@ -2,6 +2,19 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente: Hosting Execute37057 ACTIVO.** Root reviso input
+bf9e1911d45d93f2c8d3ee994b5ee93ddc35221b5effca786c4db81acb92139d
+(input-a52959b-reconciled-9062fed059a5.json), Preflight/Stage64981PASS.
+ZIP notas exacto1251/7c7da3c0... verificado cloud68631 y original local32483;
+revision00002-lah20/20/20/20 aceptada explicitamente tras fullmetadata4GET,
+root20bdf8/ad3b1a. Ver NOTES-UPDATE-RECONCILIATION.md para limites y evidencia.
+No repetir Execute; no cambiar a529/env/build mientras activo. Receipt nuevo
+hosting-a52959b-reconciled-9062fed059a5.jsonl; root controla sesion37057.
+Preparacion independiente posthosting offline, sin publicar desde agentes.
+Notifier HTTP f42834ecc92892ce280c89bddeb1aed953821a99 clean/root49PASS,
+build/policyPASS; nuevo deadline cooperativo aislado autorizado, no wiring.
+Solicitud initialnote tx17PASSroot/build40880/policy; commit3paths aprobado.
+
 **Checkpoint vigente: reconciliacion posterior a Execute33777.** La operacion
 cloud termino correctamente, pero el launcher termino exit1 a06:49:21Z por
 `API_MAX_OVERRIDE` en la comprobacion de respuesta. NO repetir update/create.

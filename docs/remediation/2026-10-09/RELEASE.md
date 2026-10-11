@@ -1,5 +1,11 @@
 # Publicación y recuperación
 
+Actualizacion vigente: ZIP de notas00002-lah verificado exacto1251 y hash
+identico al subido, cloud68631/local32483. Escala20/20/20/20 aceptada tras
+revision completa; ver NOTES-UPDATE-RECONCILIATION.md, sin ocultar launcherFAIL.
+Hosting inputbf9e1911... Preflight/Stage64981PASS; Execute37057 en curso.
+No nueva publicacion confirmada todavia; no repetir ni cambiar integrationa529.
+
 Estado vigente: integrationa52959b contiene fix de extensions vacias ff69fc6,
 root38 tests PASS. Execute33777 envio un solo UPDATE aceptado; operacion
 operation-1791701277259-65d8af62cb6f7-78339efc-00d901df confirmada done:true
