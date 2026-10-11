@@ -1,8 +1,20 @@
 # PAY0 — Estado maestro vivo
 
-Actualizado: 2026-10-10 (America/Mexico_City).
+Actualizado: 2026-10-11 (America/Mexico_City).
 
-## Corte vigente — 2026-10-10
+## Corte vigente - 2026-10-11
+
+**Estado: remediación integral abierta, con publicaciones parciales verificadas y Hosting en curso.** El [tracker vigente](PAY0-TRACKER.md#corte-vigente---2026-10-11) separa lo publicado, los candidatos aislados y los gates pendientes. Este checkpoint prevalece sobre el corte del 10 de octubre; se conserva íntegro su historial. Integración selectiva actual: integration/pay0-remediation-20261009, commit a52959b. No se ha actualizado main, y estar integrado no acredita despliegue de cada módulo.
+
+El backend de notas quedó publicado en listclientdispersionnotes-00002-lah, generación 1791701277897589, ACTIVE/Ready con tráfico 100%. La verificación independiente y el verifier original local comprobaron el ZIP completo de **1251 archivos**, CRC, rutas y hashes; el SHA 7c7da3c0d3358a714dfda8966436aa2a02f4924cf5713e0ba4714f4ff3c98183 coincide con los bytes subidos. Execute33777 falló localmente en API_MAX_OVERRIDE tras completar la operación remota: el receipt de siete estados permanece fallido. Se aceptó expresamente la nueva configuración GCF/servicio/template/revisión **20/20/20/20**; antes era ausente/20/ausente/ausente. No se afirma igualdad de esos campos ni un límite físico absoluto; el servicio histórico sólo tenía metadata parcial. [Evidencia y decisión](docs/remediation/2026-10-09/NOTES-UPDATE-RECONCILIATION.md).
+
+**Hosting Execute61813 está activo; todavía no hay nueva release confirmada en este checkpoint.** El guard f499aee, su revisión independiente y Preflight/Stage pasaron. El intento 37057 anterior se detuvo antes de crear versión, y cuatro GET confirmaron SSR 00588-guh, notas 00002-lah y release de6ff585fd68735d sin cambios. No atribuir al frontend la UI nueva hasta validar la operación, el receipt, SSR/release exactos y el smoke seguro. No repetir Execute ni modificar la integración durante esta ventana. [Continuidad operativa](docs/remediation/2026-10-09/HANDOFF.md).
+
+Los seis consumidores IQ restantes ya se publicaron mediante Execute82732 COMPLETE, desde 3f3c4c5: seis revisiones ACTIVE/Ready100, configuración y Jobs/colas comprobados, con REP y syncToday PAUSED. La descarga autorizada también está publicada en getauthorizeddocumentdownloadurl-00005-zur, generación 1791679264531843. En ambos frentes se recuperaron ZIP por generación exacta y se compararon **931 entradas seleccionadas** por archivo con la provenance aprobada; eso no acredita equivalencia del ZIP completo ni ejecución de todas las rutas. No se usaron efectos financieros reales para probarlos. [IQ6](docs/remediation/2026-10-09/RELEASE-IQ-SIX-BUNDLED.md) y [descarga](docs/remediation/2026-10-09/RELEASE.md#descarga-autorizada-bundle-integrado-y-fuente-desplegada-verificada).
+
+Notifier 1fe30fa y el replacement claim de Solicitud 3acdbbf siguen en worktrees aislados, con gates locales registrados y **pendientes de integración/publicación**. No cierran entrega idempotente ni autorización financiera completa por inferencia. Los otros frentes conservan sus estados y límites específicos: persisten los gates de delegaciones/Storage, Sentinel, compatibilidad histórica y certificación de latencia/reactividad. No se declara PAY0 Production Ready ni cierre global. Esta reconciliación sólo edita documentación; no ejecuta builds ni acciones cloud o de proveedores.
+
+## Corte anterior — 2026-10-10
 
 **Estado: remediación integral en ejecución, con publicaciones parciales verificadas.** No se certifica PAY0 como Production Ready ni se cierra P0 por el avance de otros frentes. El [tracker vigente](PAY0-TRACKER.md#corte-vigente--2026-10-10) distingue lo publicado, los candidatos locales y los gates pendientes. Este corte sustituye las afirmaciones de estado actual de los cortes anteriores; sus evidencias históricas se conservan.
 

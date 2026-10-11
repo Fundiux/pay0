@@ -1,9 +1,24 @@
 # PAY0 — Tracker de trabajo y continuidad
 
-Actualizado: 2026-10-10 (America/Mexico_City)
+Actualizado: 2026-10-11 (America/Mexico_City)
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
-## Corte vigente — 2026-10-10
+## Corte vigente - 2026-10-11
+
+La remediación integral continúa abierta. Este checkpoint sustituye el estado vigente del corte del 10 de octubre, cuyo historial se conserva debajo. Integración selectiva: rama integration/pay0-remediation-20261009, commit a52959b; no equivale a que todo su contenido esté publicado. Main no se ha actualizado por esta remediación. Fuente de continuidad: [HANDOFF](docs/remediation/2026-10-09/HANDOFF.md) y [RELEASE](docs/remediation/2026-10-09/RELEASE.md).
+
+| Frente | Evidencia vigente | Pendiente / límite |
+| --- | --- | --- |
+| Notas de dispersiones | listclientdispersionnotes-00002-lah, generación 1791701277897589, ACTIVE/Ready y tráfico 100%. ZIP completo de **1251 archivos**, sin extras/faltantes ni hashes distintos; SHA final igual al subido. Configuración maxInstanceCount GCF/servicio/template/revisión **20/20/20/20** aceptada expresamente. [Reconciliación](docs/remediation/2026-10-09/NOTES-UPDATE-RECONCILIATION.md). | Execute33777 terminó con error local API_MAX_OVERRIDE después del éxito remoto; receipt de siete estados preservado, sin fabricar PASS retrospectivo. Servicio anterior sólo tiene baseline parcial; el techo configurado no es una garantía física absoluta. Frontend pendiente del lote Hosting activo. |
+| Hosting | **Execute61813 activo**, candidato a52959b, guard corregido f499aee y Preflight/Stage PASS. A este checkpoint no hay nueva release confirmada. | Esperar operación, receipt y pins exactos SSR/release; postflight independiente y navegador seguro pendientes. Execute37057 falló antes de crear versión; reconciliación confirmó SSR 00588-guh y release de6ff585fd68735d sin cambios. No repetir despliegue mientras siga activo. |
+| IQ: seis consumidores restantes | Execute82732 COMPLETE; seis Functions ACTIVE/Ready100, configuraciones y colas/schedulers comparados. Cada ZIP remoto coincide en un **subconjunto de 931 entradas** con la provenance aprobada. REP y syncToday siguen PAUSED. [Release específica](docs/remediation/2026-10-09/RELEASE-IQ-SIX-BUNDLED.md). | No es equivalencia del ZIP completo ni prueba de ejecución de todas las ramas. Sin invocaciones financieras de prueba; igualdad de configuración no demuestra colas vacías ni certifica latencia/reactividad P0. |
+| Descarga autorizada | getauthorizeddocumentdownloadurl-00005-zur, generación 1791679264531843, ACTIVE/Ready100; postflight86060 preservó configuración/env y verificó **931 entradas seleccionadas** del ZIP exacto recuperado. [Evidencia](docs/remediation/2026-10-09/RELEASE.md#descarga-autorizada-bundle-integrado-y-fuente-desplegada-verificada). | No afirmar equivalencia de todo el ZIP ni ejecución funcional por el hash fuente. Continúan las limitaciones de bearer/revocación por GET y compatibilidad documentadas. |
+| Notifier y Solicitud | Candidatos aislados: notifier 1fe30fa y replacement claim de Solicitud 3acdbbf, con pruebas/builds documentados en el handoff. | **Pendientes de integración y publicación**; no atribuirles efectos en producción ni cierre E2E. |
+| Otros frentes | Sus evidencias conservan el alcance de sus releases específicas y los cortes anteriores. | Sin cierre nuevo por esta actualización: delegaciones/Storage, evaluaciones históricas, contención Sentinel, entrega idempotente y certificación P0 siguen con sus gates propios. |
+
+Notas acredita el conjunto completo de 1251 archivos y los bytes del ZIP; IQ6 y descarga sólo acreditan las 931 entradas seleccionadas, además de sus verificaciones de configuración. Ninguna de estas pruebas equivale a efectos IQ/financieros reales ni declara PAY0 Production Ready. Esta actualización es documental: no ejecuta builds, consultas cloud ni acciones de proveedores.
+
+## Corte anterior — 2026-10-10
 
 La remediación integral sigue activa. Este corte prevalece sobre los anteriores; no certifica el cierre global ni Production Ready. Fuente de ejecución: rama `remediation/pay0-integral-20261009`; candidato publicado por lotes: `integration/pay0-remediation-20261009`, commit `c92f0b7`. `main` no se ha actualizado en esta remediación.
 

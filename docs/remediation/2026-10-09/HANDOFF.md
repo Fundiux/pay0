@@ -2,6 +2,25 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente: Hosting Execute61813 ACTIVO.** Guard corregido en
+f499aee8ca1cfca4182fa7acc9f3aac944eba340, root22/22 e independiente PASS.
+Input input-a52959b-created-7fef3ab20a19.json SHA256
+b92026725d666fdc1a2ce3a461512ed94c7466266e5a3c20ffff6dd03f842292;
+Preflight e6a21a/Stage e730d0 PASS. Receipt nuevo exclusivo
+hosting-a52959b-created-7fef3ab20a19.jsonl: GUARD_ACTIVE/OVERLAY_APPLIED.
+No repetir Execute ni modificar integrationa529/helper/pins mientras activo.
+Postflight copia verify-created-a52959b-created-7fef3ab20a19.cjs SHA256
+bc6d82e2b28486513b364e4a33de07839aa5bcb36c03e43290429a1df137a369:
+root8eaff5 confirma unico cambio pin guard ff946532. Request DRAFT invalido
+hasta receipt completo y revision/generation/version exactas; no fetch aun.
+Solicitud caller WIP5paths sobre3acdbbf: root fullreview cfdd28/authGuard y
+35tests58a507 PASS; SDK17refs/5casos preparado, runner5dd18c/fixtureee0be7
+revisados. Build/Execute retenidos hasta liberar CPU Hosting; no commit aun.
+Notifier ENROLL HTTP WIP3paths sobre1fe30fa: fullreview9242b8/72b189,
+60rootPASSf2fcf2. Factory inerte, no authOIDC real ni wiring; ENROLLING y
+STALE_DISPATCH503 porque falta consumidor de outbox siguiente. SA propuesta
+previa33chars invalida; ajuste separado de nombre valido en preparacion.
+
 **Checkpoint vigente: Hosting Execute37057 FAIL antes de crear version.**
 Receipt conservado con GUARD_ACTIVE y OVERLAY_APPLIED solamente. Reconciliacion
 4GET privada reconcile-after37057-7e8dcf610ac8.json SHA256
