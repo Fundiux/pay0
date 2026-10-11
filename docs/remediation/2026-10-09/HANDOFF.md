@@ -2,6 +2,17 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Actualizacion en curso:** packaging exacto eb2580b integrado/pushed como
+f3f3bed051ee6919a9540792957ac4ef27df8163, clean. Root25tests+6packerPASS;
+strictpack82565/c526ec1251/1251 exact, cloud0; dotenvCASrestored572b76d...
+Root launcher eef4d18 PASS53, PreflightLOCAL577587 y StageCAS49347PASS.
+Execute61313 activo, inputprivado candidate-f3f3bed-crlf SHAba34d4a599028839dc7b03b51b4a4fbfe7b82a0e0a28dd46fcbfc04680eda0a6;
+run29231321bde54ffaba1a3cf532fb6a9a. NO repetir ni crear funcion existente.
+Primer input fallo local por CRLF en cherry-pick; normalizacion de ambos
+modulos demostro igualdad exacta; pines nuevos usan bytes instalados reales.
+Solicitud contador8ef6c37 oracle8PASSroot/93PASSagent, normalbuild+SDK8PASS,
+bundle17806c10.../manifest348PASS2105ms; full16 yHTTP esperan ventanaCPU.
+
 **Adenda vigente:**401 notas PASS74b0e6 (sin auth/IDs), fuente exacta aun
 pendiente. Rootcore update-only d4ba9f2 PASS10; runtimecomparador4fd0e89
 PASS3 +baselineprivada realofflinePASSc68c38. Scale20servicio preservada,
