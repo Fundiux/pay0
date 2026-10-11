@@ -1,7 +1,7 @@
 "use client";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
-import { useDispersionNotes } from "@/lib/useDispersionNotes";
+import { useDispersionNotes, dispersionNoteDisplayDate } from "@/lib/useDispersionNotes";
 
 import { formatDateTime24 } from "@/lib/dateTime";
 import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
@@ -259,7 +259,7 @@ function NoteBubble({ note }: any) {
         {noteAuthorLabel(note)}
       </div>
       <div className="whitespace-pre-wrap text-sm text-slate-100">{note?.text || "-"}</div>
-      <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(note?.createdAt)}</div>
+      <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(dispersionNoteDisplayDate(note.displayDate))}</div>
     </div>
   );
 }
@@ -3159,17 +3159,23 @@ export default function WalletDispersionesPage() {
             ) : null}
 
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
-              <span>Actualización automática cada 5 s mientras esta ventana esté visible.</span>
+              <span>Se actualiza mientras está visible, 5 s después de terminar cada consulta.</span>
               <button type="button" onClick={notesState.refresh} disabled={notesState.loading} className="text-sky-300 disabled:opacity-40">Actualizar</button>
             </div>
             <button type="button" onClick={notesState.reloadFromStart} disabled={notesState.loading} className="mb-2 text-xs text-slate-300 disabled:opacity-40">Recargar historial desde el inicio</button>
+            {notesState.refreshPending ? <p className="mb-2 text-xs text-slate-400">Actualizando historial… Las notas recientes pueden estar más actualizadas.</p> : null}
             {notesState.error ? <p role="alert" className="mb-2 text-sm text-amber-300">{notesState.error}</p> : null}
-            {notesState.hasMore ? <button type="button" onClick={notesState.loadOlder} disabled={notesState.loading} className="mb-2 text-sm text-sky-300 disabled:opacity-40">Cargar anteriores</button> : null}
+            {notesState.hasMore ? <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder} className="mb-2 text-sm text-sky-300 disabled:opacity-40">Cargar anteriores</button> : null}
             <div className="mb-3 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3">
               {notes.length === 0 ? (
                 <div className="text-sm text-slate-400">{notesState.loading ? "Cargando notas…" : notesState.error ? "Notas no disponibles." : "Sin mensajes todavía."}</div>
               ) : (
-                notes.map((note) => <NoteBubble key={note.id} note={note} />)
+                <>
+                  <p className="text-xs text-slate-400">Notas recientes (más recientes primero) · última actualización: {notesState.headObservedAt ? noteDateTimeText(new Date(notesState.headObservedAt)) : "pendiente"}</p>
+                  {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} />)}
+                  {notesState.retainedNotes.length ? <p className="pt-2 text-xs text-slate-400">Historial cargado · última actualización completa: {notesState.windowObservedAt ? noteDateTimeText(new Date(notesState.windowObservedAt)) : "pendiente"}</p> : null}
+                  {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} />)}
+                </>
               )}
             </div>
 

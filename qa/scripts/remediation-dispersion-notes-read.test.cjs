@@ -83,16 +83,16 @@ function clone(value){if(value instanceof Timestamp)return new Timestamp(value.s
 function setup(){
  const rows=new Map([['users/u',{role:'operador',rootId:'r',active:true}],['users/g',{role:'superadmin',rootId:'r',active:true}],['clients/c',{rootId:'r',active:true,adminId:'owner'}],['clientDispersions/d',{rootId:'r',clientId:'c'}],['userClientAccess/u/clients/c',{active:true,grantedBy:'g',permissions:{viewBasic:true}}]]);
  for(let i=0;i<125;i++) rows.set('clientDispersions/d/notas/n'+String(i).padStart(3,'0'),{text:'note'+i,createdAt:new Timestamp(100+Math.floor(i/3),0),authorName:'Author',financialPayload:'NEVER_RETURN'});
- let reads=0,queries=0,transactions=0,race=null;
- const snap=p=>({id:p.split('/').at(-1),exists:rows.has(p),ref:ref(p),data:()=>clone(rows.get(p))});
+ let reads=0,queries=0,transactions=0,race=null; const versions=new Map();
+ const snap=p=>({id:p.split('/').at(-1),exists:rows.has(p),ref:ref(p),updateTime:versions.get(p)||new Timestamp(1700000000,1000),data:()=>clone(rows.get(p))});
  function ref(p){return{path:p,id:p.split('/').at(-1)};}
- function query(name,limit=1000,after=null){return{name,limitCount:limit,after,doc:id=>ref(name+'/'+id),orderBy:()=>query(name,limit,after),limit:n=>query(name,n,after),startAfter:(time,id)=>query(name,limit,{...time,id})};}
- const cmp=(a,b)=>a.time.seconds-b.time.seconds||a.time.nanoseconds-b.time.nanoseconds||Buffer.compare(Buffer.from(a.id),Buffer.from(b.id));
+ function query(name,limit=1000,after=null){return{name,limitCount:limit,after,doc:id=>ref(name+'/'+id),orderBy:()=>query(name,limit,after),limit:n=>query(name,n,after),startAfter:anchor=>query(name,limit,{...anchor.data().createdAt,id:anchor.id})};}
+ const cmp=(a,b)=>(a.time?.seconds||0)-(b.time?.seconds||0)||(a.time?.nanoseconds||0)-(b.time?.nanoseconds||0)||Buffer.compare(Buffer.from(a.id),Buffer.from(b.id));
  const db={doc:ref,collection:query,runTransaction:async(fn,options)=>{assert.equal(options.maxAttempts,3);transactions++;if(transactions===2&&race)race();return fn({get:async q=>{if(q.path){reads++;return snap(q.path);}queries++;const docs=[...rows.keys()].filter(p=>p.startsWith(q.name+'/')&&p.split('/').length===q.name.split('/').length+1).map(p=>({p,id:p.split('/').at(-1),time:rows.get(p).createdAt})).filter(x=>x.time!==undefined&&(!q.after||cmp(x,{id:q.after.id,time:q.after})<0)).sort((a,b)=>-cmp(a,b)).slice(0,q.limitCount).map(x=>snap(x.p));reads+=docs.length;return{docs,size:docs.length};}});}};
  const admin={apps:[{}],firestore:()=>db},cache=new Map();
  function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const result={};cache.set(file,result);let code=compiled.get(file);if(!code){code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;compiled.set(file,code);}new Function('exports','require',code)(result,n=>{if(n==='firebase-admin')return admin;if(n==='firebase-admin/firestore')return{Timestamp,FieldPath:{documentId:()=> '__name__'}};if(n==='firebase-functions/v2/https')return{HttpsError,onCall:(_o,fn)=>fn};if(n==='firebase-functions')return{https:{HttpsError}};assert.ok(n.startsWith('.'),'unexpected dependency '+n);return load(path.resolve(path.dirname(file),n+'.ts'));});return result;}
  const api=load('functions/src/modules/financing/noteReads.ts');
- return{rows,call:(data={dispersionId:'d',limit:50})=>api.listClientDispersionNotes({auth:{uid:'u'},data}),race:fn=>race=fn,get reads(){return reads;},get queries(){return queries;},get transactions(){return transactions;},core:(data,batch)=>api.readClientDispersionNotes({auth:{uid:"u"},data:{dispersionId:"d",limit:50,...data}},batch)};
+ return{rows,versions,display:api.noteDisplayDate,call:(data={dispersionId:'d',limit:50})=>api.listClientDispersionNotes({auth:{uid:'u'},data}),race:fn=>race=fn,get reads(){return reads;},get queries(){return queries;},get transactions(){return transactions;},core:(data,batch)=>api.readClientDispersionNotes({auth:{uid:"u"},data:{dispersionId:"d",limit:50,...data}},batch)};
 }
 test('real canonical delegated authority, DTO and complete stable pagination',async()=>{const s=setup(),ids=[];let cursor;do{const page=await s.call({dispersionId:'d',limit:17,...(cursor?{cursor}:{})});for(const row of page.items){assert.equal(row.financialPayload,undefined);ids.push(row.id);}cursor=page.nextCursor;}while(cursor);assert.equal(ids.length,125);assert.equal(new Set(ids).size,125);assert.equal(ids[0],'n124');assert.equal(ids.at(-1),'n000');});
 for(const [name,change] of [['inactive actor',s=>s.rows.get('users/u').active=false],['restriction actor',s=>s.rows.get('users/u').trustedRestrictionV1={}],['root mismatch',s=>s.rows.get('clientDispersions/d').rootId='foreign'],['grantor revoked',s=>s.rows.get('users/g').active=false],['grantor restricted',s=>s.rows.get('users/g').trustedRestrictionV1={}],['grant inactive',s=>s.rows.get('userClientAccess/u/clients/c').active=false],['permission revoked',s=>s.rows.get('userClientAccess/u/clients/c').permissions.viewBasic=false]])test(name+' denies before reading notes',async()=>{const s=setup();change(s);await assert.rejects(s.call(),e=>e.code==='permission-denied');assert.equal(s.queries,0);});
@@ -100,7 +100,7 @@ for(const [name,change] of [['ancestor revocation',s=>s.rows.get('users/g').acti
 test('distinct aliases retain OR authorization',async()=>{const s=setup();s.rows.get('clientDispersions/d').clientId='unavailable';s.rows.get('clientDispersions/d').clienteId='c';assert.equal((await s.call()).items.length,50);});
 test('direct document owner does not require universal client grant',async()=>{const s=setup();s.rows.get('clientDispersions/d').createdBy='u';s.rows.delete('userClientAccess/u/clients/c');assert.equal((await s.call()).items.length,50);});
 test('USER funding preserves holder and root boundary',async()=>{const s=setup(),parent=s.rows.get('clientDispersions/d');Object.assign(parent,{ownerUid:'u',fundingSource:{holderType:'USER',ownerUid:'u',sourceClientId:'c'}});s.rows.delete('userClientAccess/u/clients/c');assert.equal((await s.call()).items.length,50);parent.ownerUid='other';await assert.rejects(s.call(),e=>e.code==='permission-denied');});
-test('forged and malformed cursors rejected',async()=>{for(const cursor of [null,{}, {version:1,dispersionId:'other',id:'n001',seconds:100,nanoseconds:0},{version:1,dispersionId:'d',id:'n001',seconds:100,nanoseconds:1e9},{version:1,dispersionId:'d',id:'../x',seconds:100,nanoseconds:0},{version:1,dispersionId:'d',id:'n001',seconds:101,nanoseconds:0}]){const s=setup();await assert.rejects(s.call({dispersionId:'d',cursor}),e=>['invalid-argument','failed-precondition'].includes(e.code));assert.equal(s.queries,0);}});
+test('forged and malformed cursors rejected',async()=>{for(const cursor of [null,{}, {version:2,dispersionId:'other',id:'n001',updateSeconds:100,updateNanoseconds:0},{version:2,dispersionId:'d',id:'n001',updateSeconds:100,updateNanoseconds:1e9},{version:2,dispersionId:'d',id:'../x',updateSeconds:100,updateNanoseconds:0},{version:2,dispersionId:'d',id:'n001',updateSeconds:101,updateNanoseconds:0}]){const s=setup();await assert.rejects(s.call({dispersionId:'d',cursor}),e=>['invalid-argument','failed-precondition'].includes(e.code));assert.equal(s.queries,0);}});
 test('canonical sixteen-ancestor limit remains bounded',async()=>{const s=setup();for(let i=0;i<17;i++){const uid=i?'a'+i:'u',next='a'+(i+1);s.rows.set('users/'+uid,{role:'admin',rootId:'r',active:true,modules:{usuarios:{view:true,clientDelegations:true},wallet:{view:true,dispersiones:true}}});s.rows.set('userClientAccess/'+uid+'/clients/c',{active:true,grantedBy:next});}await assert.rejects(s.call(),e=>e.code==='permission-denied');assert.equal(s.queries,0);assert.ok(s.reads<70);});
 test('sixteen delegated hops to an actual superadmin terminal remain legitimate',async()=>{const s=setup();for(let i=0;i<16;i++){const uid=i?'a'+i:'u',next=i===15?'g':'a'+(i+1);s.rows.set('users/'+uid,{role:'admin',rootId:'r',active:true,modules:{usuarios:{view:true,clientDelegations:true},wallet:{view:true,dispersiones:true}}});s.rows.set('userClientAccess/'+uid+'/clients/c',{active:true,grantedBy:next});}assert.equal((await s.call()).items.length,50);assert.ok(s.reads>=100&&s.reads<160,'bounded full lineage must really be traversed twice');});
 test('expiry equality denied and future timestamp allowed with fixed clock',async()=>{const s=setup(),grant=s.rows.get('userClientAccess/u/clients/c');grant.expiresAt=Date.now();await assert.rejects(s.call(),e=>e.code==='permission-denied');grant.expiresAt=Date.now()+1;assert.equal((await s.call()).items.length,50);});
@@ -139,7 +139,7 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   const expected=Array.from({length:125},(_,i)=>({i,seconds:100+Math.floor(i/3),nanos:(i%2)*1000})).sort((a,b)=>b.seconds-a.seconds||b.nanos-a.nanos||b.i-a.i).map(x=>'n'+String(x.i).padStart(3,'0'));
   assert.deepEqual(ids,expected);
   await assert.rejects(call({cursor:{...first.nextCursor,dispersionId:'foreign'}}),e=>e.code==='invalid-argument');
-  await assert.rejects(call({cursor:{...first.nextCursor,nanoseconds:999}}),e=>e.code==='failed-precondition');
+  await assert.rejects(call({cursor:{...first.nextCursor,updateNanoseconds:999}}),e=>e.code==='failed-precondition');
   await db.doc('clientDispersions/d/notas/'+first.nextCursor.id).delete();
   await assert.rejects(call({cursor:first.nextCursor}),e=>e.code==='failed-precondition');
   const readsBeforeTypes=reads;
@@ -152,21 +152,29 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   const typedSeen=[];let typedCursor,typedAnchor;
   do{const page=await call({dispersionId:'typed',limit:1,...(typedCursor?{cursor:typedCursor}:{})});typedSeen.push(...page.items.map(x=>x.id));typedAnchor ||= page.nextCursor;typedCursor=page.nextCursor;}while(typedCursor);
   assert.deepEqual(typedSeen,typedIds.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));
-  await db.doc('clientDispersions/typed/notas/'+typedAnchor.id).update({createdAt:{seconds:typedAnchor.seconds,nanoseconds:typedAnchor.nanoseconds}});
+  await db.doc('clientDispersions/typed/notas/'+typedAnchor.id).update({createdAt:{seconds:700,nanoseconds:0}});
   const beforeMapAnchor=queries;await assert.rejects(call({dispersionId:'typed',cursor:typedAnchor}),e=>e.code==='failed-precondition');assert.equal(queries,beforeMapAnchor);
-  for(const [suffix,value] of [['map',{seconds:700,nanoseconds:0}],['string','2026-10-10'],['null',null],['number',700]]){
-   const id='invalid-'+suffix;await db.doc('clientDispersions/'+id).set({rootId:'r',clientId:'c'});
-   await db.doc('clientDispersions/'+id+'/notas/bad').set({text:'invalid date',createdAt:value});
-   if(suffix==='map'){
-    await db.doc('clientDispersions/'+id+'/notas/second-map').set({text:'must not skip',createdAt:value});await db.doc('clientDispersions/'+id+'/notas/native').set({text:'native',createdAt:new firestore.Timestamp(600,0)});
-    const ordered=db.collection('clientDispersions/'+id+'/notas').orderBy('createdAt','desc').orderBy(firestore.FieldPath.documentId(),'desc');
-    const firstMap=(await ordered.limit(1).get()).docs[0];assert.equal(firstMap.id,'second-map');assert.equal(firstMap.get('createdAt') instanceof firestore.Timestamp,false);
-    const wrongTypeRemainder=await ordered.startAfter(new firestore.Timestamp(value.seconds,value.nanoseconds),firstMap.id).get();assert.deepEqual(wrongTypeRemainder.docs.map(row=>row.id),['native'],'old structural-map cursor silently skipped the other map');
-   }
-   await assert.rejects(call({dispersionId:id,limit:1}),e=>e.code==='failed-precondition');
-  }
-  const typeReads=reads-readsBeforeTypes;assert.equal(typeReads,80,'bounded authority reads in isolated stored-type/ID cases');
-  console.log('NOTES_STORED_TYPES_PASS timestampAndDate=allowed mapStringNullNumber=denied mapAnchor=denied whitespaceIds=3 missingDate=excludedByOrderBy');
+  // Compare native Firestore ordering itself, never a client-side mixed-type comparator.
+  await db.doc('clientDispersions/mixed').set({rootId:'r',clientId:'c'});
+  const mixed=[['map',{seconds:700,nanoseconds:0,privateField:'DO_NOT_EXPOSE'}],['second-map',{seconds:700,nanoseconds:0}],['string','2026-10-10T13:45:00'],['null',null],['number',700],['bool',true],['false',false],['array',['2026-10-10']],['date',new Date(700000)],['native',new firestore.Timestamp(600,0)]];
+  for(const [id,value]of mixed)await db.doc('clientDispersions/mixed/notas/'+id).set({text:'synthetic',createdAt:value});
+  const ordered=db.collection('clientDispersions/mixed/notas').orderBy('createdAt','desc').orderBy(firestore.FieldPath.documentId(),'desc');
+  const nativeDocs=(await ordered.get()).docs;
+  const maps=nativeDocs.filter(x=>x.get('createdAt')?.seconds===700&&!(x.get('createdAt') instanceof firestore.Timestamp));
+  assert.equal(maps.length,2);
+  const wrongTypeRemainder=await ordered.startAfter(new firestore.Timestamp(700,0),maps[0].id).get();
+  assert.ok(!wrongTypeRemainder.docs.some(x=>x.id===maps[1].id),'negative control: fabricated Timestamp skips another map');
+  const seenMixed=[];let mixedCursor;let mixedCalls=0;
+  do{const page=await call({dispersionId:'mixed',limit:1,...(mixedCursor?{cursor:mixedCursor}:{})});mixedCalls++;
+   for(const row of page.items){seenMixed.push(row.id);assert.equal(row.createdAt,undefined);assert.ok(!JSON.stringify(row).includes('DO_NOT_EXPOSE'));}
+   mixedCursor=page.nextCursor;
+  }while(mixedCursor);
+  assert.deepEqual(seenMixed,nativeDocs.map(x=>x.id));assert.equal(mixedCalls,10);
+  const typeReads=reads-readsBeforeTypes;
+  // Three whitespace pages:42 authority +2 anchors; changed anchor:7+1;
+  // ten mixed pages:140 authority +9 anchors. Queries counted separately.
+  assert.equal(typeReads,201,'explicit authority/anchor reads for stored-type/ID cases');
+  console.log('NOTES_STORED_TYPES_PASS mixedNativeOrder=10 whitespaceIds=3 changedAnchor=denied missingDate=excludedByOrderBy');
   count=0;race=()=>db.doc('users/g').update({active:false});
   await assert.rejects(call({}),e=>e.code==='permission-denied');
   assert.equal(count,2,'fresh authority transaction executed');
@@ -215,10 +223,20 @@ for(const batch of [4,8])test('byte cut retains exact UTF8 extreme ID cursor at 
  const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);
  const ids=['a'.repeat(1500),'z'.repeat(1500),'\u00e9'.repeat(750),'\ud83d\ude00'.repeat(375)];
  for(const id of ids){assert.equal(Buffer.byteLength(id),1500);s.rows.set('clientDispersions/d/notas/'+id,{text:'\u0001'.repeat(1040000),createdAt:new Timestamp(200,999999000)});}
- const seen=[];let cursor;do{const page=await s.core(cursor?{cursor}:{},batch);assert.equal(page.items.length,1);assert.ok(Buffer.byteLength(JSON.stringify({result:page}))<=8388608);seen.push(page.items[0].id);if(page.nextCursor){assert.equal(page.nextCursor.id,page.items[0].id);assert.equal(page.nextCursor.nanoseconds,999999000);}cursor=page.nextCursor;}while(cursor);
+ const seen=[];let cursor;do{const page=await s.core(cursor?{cursor}:{},batch);assert.equal(page.items.length,1);assert.ok(Buffer.byteLength(JSON.stringify({result:page}))<=8388608);seen.push(page.items[0].id);if(page.nextCursor){assert.equal(page.nextCursor.id,page.items[0].id);assert.equal(page.nextCursor.updateNanoseconds,1000);}cursor=page.nextCursor;}while(cursor);
  assert.deepEqual(seen,ids.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));
 });
-for(const value of [null,{seconds:200,nanoseconds:0},'2026-10-10',123])test('stored createdAt requires actual Timestamp: '+JSON.stringify(value),async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/')&&!key.endsWith('/n124'))s.rows.delete(key);s.rows.get('clientDispersions/d/notas/n124').createdAt=value;await assert.rejects(s.call(),e=>e.code==='failed-precondition');});
-test('cursor note ID preserves whitespace but parent ID stays strict',async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);const ids=[' leading','trailing ','  '];for(const id of ids)s.rows.set('clientDispersions/d/notas/'+id,{text:'whole',createdAt:new Timestamp(200,0)});const seen=[];let cursor;do{const page=await s.call({dispersionId:'d',limit:1,...(cursor?{cursor}:{})});seen.push(...page.items.map(x=>x.id));cursor=page.nextCursor;}while(cursor);assert.deepEqual(seen,ids.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));await assert.rejects(s.call({dispersionId:' d'}),e=>e.code==='invalid-argument');for(const id of ['.','..','a/b','a'.repeat(1501)])await assert.rejects(s.call({dispersionId:'d',cursor:{version:1,dispersionId:'d',id,seconds:200,nanoseconds:0}}),e=>e.code==='invalid-argument');});
-test('map cursor anchor is not accepted as a stored Timestamp',async()=>{const s=setup(),first=await s.call();s.rows.get('clientDispersions/d/notas/'+first.nextCursor.id).createdAt={seconds:first.nextCursor.seconds,nanoseconds:first.nextCursor.nanoseconds};await assert.rejects(s.call({dispersionId:'d',cursor:first.nextCursor}),e=>e.code==='failed-precondition');});
+for(const value of [null,{seconds:200,nanoseconds:0},'2026-10-10',123])test('stored display type is preserved without enforcing business schema: '+JSON.stringify(value),async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/')&&!key.endsWith('/n124'))s.rows.delete(key);s.rows.get('clientDispersions/d/notas/n124').createdAt=value;const result=await s.call();assert.equal(result.items.length,1);assert.deepEqual(result.items[0].displayDate,s.display(value));assert.equal(result.items[0].createdAt,undefined);});
+test('cursor note ID preserves whitespace but parent ID stays strict',async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);const ids=[' leading','trailing ','  '];for(const id of ids)s.rows.set('clientDispersions/d/notas/'+id,{text:'whole',createdAt:new Timestamp(200,0)});const seen=[];let cursor;do{const page=await s.call({dispersionId:'d',limit:1,...(cursor?{cursor}:{})});seen.push(...page.items.map(x=>x.id));cursor=page.nextCursor;}while(cursor);assert.deepEqual(seen,ids.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));await assert.rejects(s.call({dispersionId:' d'}),e=>e.code==='invalid-argument');for(const id of ['.','..','a/b','a'.repeat(1501)])await assert.rejects(s.call({dispersionId:'d',cursor:{version:2,dispersionId:'d',id,updateSeconds:1700000000,updateNanoseconds:1000}}),e=>e.code==='invalid-argument');});
+test('changed cursor updateTime rejects before querying even when createdAt is unchanged',async()=>{const s=setup(),first=await s.call();s.versions.set('clientDispersions/d/notas/'+first.nextCursor.id,new Timestamp(1700000001,1000));const before=s.queries;await assert.rejects(s.call({dispersionId:'d',cursor:first.nextCursor}),e=>e.code==='failed-precondition');assert.equal(s.queries,before);});
+// Pure display contract compared to the old browser conversion, no native-order claim.
+test('display descriptors preserve browser Date operands, including maps arrays booleans',()=>{
+ const s=setup();
+ const fixtures=[null,false,0,true,1,-1,Infinity,NaN,'','2026-10-10','2026-10-10T13:45:00','not a date',{seconds:700,extra:'private'},{_seconds:700},{seconds:NaN,_seconds:700},{arbitrary:'private'},['2026-10-10'],[2026,10,10],[],[null],[['2026-10-10']],new Timestamp(700,1000),new Timestamp(-1,1000)];
+ const old=value=>{if(!value)return null;if(value instanceof Timestamp)return new Date(value.seconds*1000+value.nanoseconds/1e6).getTime();const operand=typeof value?.seconds==='number'?value.seconds*1000:typeof value?._seconds==='number'?value._seconds*1000:value;const time=new Date(operand).getTime();return Number.isFinite(time)?time:null;};
+ const display=value=>{const d=s.display(value);const operand=d.kind==='NONE'?null:d.kind==='TIMESTAMP'?d.seconds*1000+d.nanoseconds/1e6:d.kind==='SECONDS'?d.value*1000:d.value;return operand===null?null:Number.isFinite(new Date(operand).getTime())?new Date(operand).getTime():null;};
+ for(const value of fixtures)assert.equal(display(value),old(value));
+ assert.deepEqual(s.display({seconds:700,extra:'private'}),{kind:'SECONDS',value:700});
+});
+
 }

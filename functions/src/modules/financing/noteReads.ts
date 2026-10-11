@@ -8,7 +8,7 @@ import { assertDispersionFundingOwner } from "./dispersionFunding";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-type Cursor = { version: 1; dispersionId: string; seconds: number; nanoseconds: number; id: string };
+type Cursor = { version: 2; dispersionId: string; updateSeconds: number; updateNanoseconds: number; id: string };
 function documentId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && Buffer.byteLength(value, "utf8") <= 1500
     && value === value.trim() && !value.includes("/") && value !== "." && value !== "..";
@@ -29,7 +29,8 @@ function parseInput(data: any) {
   const limit = data.limit === undefined ? 50 : data.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HttpsError("invalid-argument", "Límite inválido.");
   const cursor = data.cursor as Cursor | undefined;
-  if (cursor !== undefined && (!cursor || cursor.version !== 1 || cursor.dispersionId !== data.dispersionId || !noteDocumentId(cursor.id) || !timestamp(cursor))) {
+  if (cursor !== undefined && (!cursor || cursor.version !== 2 || cursor.dispersionId !== data.dispersionId || !noteDocumentId(cursor.id)
+    || !timestamp({ seconds: cursor.updateSeconds, nanoseconds: cursor.updateNanoseconds }))) {
     throw new HttpsError("invalid-argument", "Página de notas inválida.");
   }
   return { dispersionId: data.dispersionId as string, limit: limit as number, cursor };
@@ -76,12 +77,52 @@ async function authorize(transaction: admin.firestore.Transaction, auth: any, di
 // Application budget, not a historical content limit. Entire notes are retained.
 export const NOTES_RESPONSE_BYTES = 8 * 1024 * 1024;
 export const NOTES_READ_BATCH_SIZE: 4 | 8 = 4;
-type NoteDto = { id: string; createdAt: { seconds: number; nanoseconds: number }; [key: string]: unknown };
+export type NoteDisplayDate = { kind: "NONE" } | { kind: "STRING"; value: string }
+  | { kind: "MILLISECONDS" | "SECONDS"; value: number }
+  | { kind: "TIMESTAMP"; seconds: number; nanoseconds: number };
+// Preserve browser interpretation of strings. Never parse historical strings in the
+// server timezone, expose arbitrary map fields, or use the display value for ordering.
+export function noteDisplayDate(value: unknown): NoteDisplayDate {
+  const none: NoteDisplayDate = { kind: "NONE" };
+  if (!value) return none;
+  if (storedTimestamp(value)) return { kind: "TIMESTAMP", seconds: value.seconds, nanoseconds: value.nanoseconds };
+  if (typeof value === "string") return { kind: "STRING", value };
+  if (typeof value === "number") return Number.isFinite(new Date(value).getTime()) ? { kind: "MILLISECONDS", value } : none;
+  if (value === true) return { kind: "MILLISECONDS", value: 1 };
+  if (Array.isArray(value)) {
+    // The old browser Date(array) converted primitive arrays to their comma string.
+    // Do not call data-provided methods or serialize objects contained in arrays.
+    const operand = (items: unknown[], depth: number): string | null => {
+      if (depth > 20) return null;
+      const parts: string[] = [];
+      for (const item of items) {
+        if (item == null) parts.push("");
+        else if (["string", "number", "boolean"].includes(typeof item)) parts.push(String(item));
+        else if (Array.isArray(item)) { const nested = operand(item, depth + 1); if (nested === null) return null; parts.push(nested); }
+        else return null;
+      }
+      return parts.join(",");
+    };
+    const text = operand(value, 0);
+    return text ? { kind: "STRING", value: text } : none;
+  }
+  if (typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    const seconds = typeof row.seconds === "number" ? row.seconds : typeof row._seconds === "number" ? row._seconds : undefined;
+    if (seconds !== undefined && Number.isFinite(new Date(seconds * 1000).getTime())) return { kind: "SECONDS", value: seconds };
+  }
+  return none;
+}
+type NoteDto = { id: string; displayDate: NoteDisplayDate; updateSeconds: number; updateNanoseconds: number; [key: string]: unknown };
+function cursorFor(doc: admin.firestore.DocumentSnapshot, dispersionId: string): Cursor {
+  if (!storedTimestamp(doc.updateTime)) throw new HttpsError("failed-precondition", "La versión de una nota cambió. Actualiza las notas.");
+  return { version: 2, dispersionId, id: doc.id, updateSeconds: doc.updateTime.seconds, updateNanoseconds: doc.updateTime.nanoseconds };
+}
 const noteStrings = ["text", "authorType", "origin", "source", "createdBy", "createdByRole", "authorId", "authorName", "createdByName", "createdByUsername"];
 function noteDto(doc: admin.firestore.QueryDocumentSnapshot): NoteDto {
   const row = doc.data();
-  if (!storedTimestamp(row.createdAt)) throw new HttpsError("failed-precondition", "Una nota requiere revisión de su fecha.");
-  const result: NoteDto = { id: doc.id, createdAt: { seconds: row.createdAt.seconds, nanoseconds: row.createdAt.nanoseconds } };
+  if (!Object.prototype.hasOwnProperty.call(row, "createdAt") || !storedTimestamp(doc.updateTime)) throw new HttpsError("failed-precondition", "La página de notas cambió. Actualiza las notas.");
+  const result: NoteDto = { id: doc.id, displayDate: noteDisplayDate(row.createdAt), updateSeconds: doc.updateTime.seconds, updateNanoseconds: doc.updateTime.nanoseconds };
   for (const key of noteStrings) if (typeof row[key] === "string") result[key] = row[key];
   if (typeof row.system === "boolean") result.system = row.system;
   return result;
@@ -97,29 +138,32 @@ export async function readClientDispersionNotes(request: any, readBatchSize: 4 |
     const authority = await authorize(transaction, request.auth, dispersionId);
     // A cursor is a position, never an authorization token. Bind it to an actual
     // note under the already-authorized parent and reject modified/deleted anchors.
+    let position: admin.firestore.DocumentSnapshot | undefined;
     if (cursor) {
       const anchor = await transaction.get(notes.doc(cursor.id));
-      const time = anchor.data()?.createdAt;
-      if (!anchor.exists || !storedTimestamp(time) || time.seconds !== cursor.seconds || time.nanoseconds !== cursor.nanoseconds) {
+      const time = anchor.updateTime;
+      if (!anchor.exists || !Object.prototype.hasOwnProperty.call(anchor.data() || {}, "createdAt") || !storedTimestamp(time)
+        || time.seconds !== cursor.updateSeconds || time.nanoseconds !== cursor.updateNanoseconds) {
         throw new HttpsError("failed-precondition", "La página cambió. Actualiza las notas.");
       }
+      position = anchor;
     }
     const items: NoteDto[] = [];
     let itemBytes = 0, scanned = 0, more = false, finished = false;
-    let position = cursor, lastDelivered: Cursor | null = null;
+    let lastDelivered: Cursor | null = null;
     // Each iteration retains only this small snapshot and the emitted DTO prefix.
     // Never accumulate snapshots or decode all 100 potentially 1 MiB documents.
     while (!finished && scanned < limit + 1) {
       const batchLimit = Math.min(readBatchSize, limit + 1 - scanned);
       let query = notes.orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(batchLimit);
-      if (position) query = query.startAfter(new Timestamp(position.seconds, position.nanoseconds), position.id);
+      if (position) query = query.startAfter(position);
       const snapshot = await transaction.get(query);
       scanned += snapshot.size;
       if (!snapshot.size) break;
       for (const doc of snapshot.docs) {
         if (items.length === limit) { more = true; finished = true; break; }
         const item = noteDto(doc);
-        const candidate: Cursor = { version: 1, dispersionId, ...item.createdAt, id: item.id };
+        const candidate = cursorFor(doc, dispersionId);
         const bytes = Buffer.byteLength(JSON.stringify(item), "utf8");
         // SDK encode leaves this DTO's primitives unchanged. Include the real
         // result envelope, commas and cursor; no repeated serialization of pages.
@@ -129,7 +173,7 @@ export async function readClientDispersionNotes(request: any, readBatchSize: 4 |
           more = true; finished = true; break;
         }
         items.push(item); itemBytes += bytes;
-        position = candidate; lastDelivered = candidate;
+        position = doc; lastDelivered = candidate;
       }
       if (snapshot.size < batchLimit) finished = true;
     }
