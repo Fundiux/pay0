@@ -10,13 +10,24 @@ Execute61313 FAIL antesupload/plan/update, entorno restaurado: decoderJSZip
 se buscaba en CLI sin dependencia. Corregido a paqueteFunctions;41testsPASS
 y45447offlinefull1251+streamPASS, cloud0. Nuevoinput candidate-f3f3bed-jszip
 SHAec39ca4a896a216226ba16ab7a273521b4163d4bb42a5a65cae8d33f3512c475.
-NO repetir inputsfallidos ni crear funcion existente; nuevoExecute pendiente.
+NO repetir inputsfallidos ni crear funcion existente. Fixroot6c323dc; nuevo
+StageCAS60547PASS, Execute93350 ACTIVO run82c429301f5e444d996fd02b0ad2def9
+con candidate-f3f3bed-jszip, mismoinputSHA anterior. Root controla esta sesion.
 Primer input fallo local por CRLF en cherry-pick; normalizacion de ambos
 modulos demostro igualdad exacta; pines nuevos usan bytes instalados reales.
 Solicitud contador8ef6c37 oracle8PASSroot/93PASSagent, normalbuild+SDK8PASS,
 bundle17806c10.../manifest348PASS2105ms; full16PASS40/49324 max253180KiB,
 HTTP1012PASS7/131972KiB/cleanup74+puertosclosed. Doc1f7e585 clean,
-nointegrado; UI solicitudes en investigacion readonly.
+nointegrado; UI solicitudes implementada en4sourcepaths aislados sinwriters.
+Root reviso controlador compartido/adaptador/pagina:37testsPASS c3038e;
+agent Next47paginas/policyPASS. Textos ajustados despues del build, unitPASS.
+RSS/browser pendientes de ventana93350; sin commit/integracion UI todavia.
+Notifierauthority bd4d35179b6bce0dd5357fd08fb1d6dcd08c594e clean:
+40fakesrootPASS+56regresiones+Functionsbuild/policyPASS. Extraccion legacy y
+verificadorv3 inerte. Wiring tx Jobs/Dispatch ahora WIP en4TS del agente:
+marker separado sticky, ausencia distinta de null/malformed, receipts intactos.
+Root primera revision diff realizada; pruebas canonicas/adapters aun pendientes.
+No worker/proveedor/admission writer activado ni despliegue de este frente.
 
 **Adenda vigente:**401 notas PASS74b0e6 (sin auth/IDs), fuente exacta aun
 pendiente. Rootcore update-only d4ba9f2 PASS10; runtimecomparador4fd0e89
