@@ -2,6 +2,47 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente 2026-10-11: notas creadas, verificacion ZIP en curso.**
+
+Execute93477 termino exit0: revision listclientdispersionnotes-00001-mug,
+sourcegeneration1791691748273508. Receipt completo hasta INVOKER_CREATED;
+dotenv restaurado SHA572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856.
+Integracion9a729e3 limpia. NO repetir create. El fetch independiente85522e
+completo las seis lecturas y conservo metadata/ZIP privados, pero fallo su
+comparacion local posterior:1251 archivos esperados coinciden, faltantes0,
+hashes distintos0;327 extras (315 bajo lib y12 otros) bajo clasificacion.
+El packer local previo comprobaba pertenencia/hash, NO igualdad del fileset;
+su filesVerified1251 no acredita un ZIP de solo1251 archivos. No hay todavia
+proof PASS ni Hosting autorizado. Run observa max servicio20, demas niveles
+sin max explicito; falta registrar revision central de escala y artefacto.
+Los327 adicionales se clasificaron offline:315 mapas normales .js.map y12
+auxiliares locales (provenance, lint/ignore,5scripts y3tests); todos coinciden
+con archivos locales. Sin dotenv extra ni JS runtime adicional bajo lib.
+La configuracion Functions no tenia ignore y CLI no lee .gcloudignore.
+Correccion aislada en pay0-functions-upload-fileset-20261010: ignore explicito
+sin borrar nada local y gate de igualdad, packer real6escenarios y9fakes PASS.
+Revision root realizada; falta gate completo y commit/integracion. Verifiers
+historicos IQ/download tambien comprobaron subconjuntos; sus hashes runtime
+siguen validos, pero NO hay prueba historica de exclusion global del ZIP.
+
+Dispatcher inerte f675c6ee43a8a008a763a2c7cdf2ea7f048395fa:69/69 fakes
+PASS (repetidos por root), build31151 PASS; sin Tasks/proveedor/wiring.
+Adaptador Firestore nuevo en implementacion aislada, no integrado.
+Solicitud notes5c1fa99: SDK79755 PASS8 comprobaciones/74fixtures sinteticos;
+cleanup CAS+ausencia y puertos cerrados. HTTP/bundle/recursos pendientes.
+Hosting helper nuevo root revisado:19/19 PASSd17f1b, incluido release/pinTag
+CLI real con transporte falso. Sin Preflight/Stage/Execute aun. Los siguientes
+checkpoints conservan cronologia; el estado vigente es este bloque.
+Helper Hosting commitROOTe222bdf. Core nuevo update-only notas WIProot:
+9/9 PASS553d1f incluyendo planner/converter/FabricatorCLI real. No launcher ni
+activacion aun. Callable update NO llama setInvokerUpdate en CLI15.3.1;
+core hace GET binding previo y prohibe todos los settersIAM/GCFcreate-delete.
+Solicitud normal348 matriz20591 PASS40/40 con16 escenarios de recursos,
+misma memoria256MiB y tiempos7s/10s; baseline completo347+1 PASS4320ms.
+SDK notifier60167 FALLOcleanupUNKNOWN; diagnostico23965 FALLO en fixture
+COMMIT_ROLLBACK con cleanupVERIFIED y puertos cerrados. Correccion fixture
+autorizada (create de otro doc existente en mismo commit), rerun pendiente.
+
 **Checkpoint: validacion SDK de notas y admision inerte.**
 
 Los runs SDK73958 y diagnostico55683 fallaron el gate de memoria; no autorizan

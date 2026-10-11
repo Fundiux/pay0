@@ -1,5 +1,12 @@
 # Publicación y recuperación
 
+Notas2026-10-11: Execute93477 creo listclientdispersionnotes-00001-mug,
+sourcegeneration1791691748273508, entorno restaurado. ZIP independiente
+rechazado por327extras pese a1251hashes esperados coincidentes. Hosting aun
+sin publicar; correccion packaging aislada en revision. Los checks historicos
+IQ/download acreditan subconjuntos de archivos/hashes runtime, no igualdad
+global del ZIP. Mantener esta distincion al leer checkpoints anteriores.
+
 Gate cloud de cohorte sintetica PASS a48min, misma ancla y limpieza verificada;
 no activa el notificador. Ver [NOTIFICATION-CLOUD-READTIME-EVIDENCE.md](NOTIFICATION-CLOUD-READTIME-EVIDENCE.md).
 

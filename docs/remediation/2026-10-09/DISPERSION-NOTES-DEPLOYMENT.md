@@ -1,6 +1,6 @@
 # Despliegue selectivo de notas: verificacion y ejecucion
 
-Estado vigente: helper ROOT revisado y commit7392bf5. StageDryRun99418 y Preflight76946 PASS. Execute91921 fallo en el ultimo predeploy antes de plan/create; entorno restaurado. Retry93477 en curso con HEAD9a729e3 y mismos pines de producto. No afirmar despliegue ni Hosting aprobado. Endpoint unico listClientDispersionNotes, pay-0-system/us-central1.
+Estado vigente: helper ROOT revisado y commit7392bf5. StageDryRun99418 y Preflight76946 PASS. Execute91921 fallo en el ultimo predeploy antes de plan/create; entorno restaurado. Retry93477 termino exit0 con HEAD9a729e3: revision listclientdispersionnotes-00001-mug, sourcegeneration1791691748273508, receipt hasta INVOKER_CREATED y entorno restaurado exacto. Fetch independiente85522e completo seis lecturas y guardo ZIP/metadata, pero comparacion local fallo: diagnostico offline pendiente, sin proof PASS ni Hosting aprobado. No repetir create. Endpoint unico listClientDispersionNotes, pay-0-system/us-central1.
 
 ## Contrato y pines
 
