@@ -8,10 +8,11 @@ async function verifyNotesExecutionMode(){
  }
  return mode;
 }
+let measuredFactoryBinding;
 function loadInstalledNotes(externalMocks={}){
  const assert=require('node:assert/strict'),path=require('node:path');
  const saved={log:console.log,warn:console.warn,error:console.error};let bundle;
- try{console.log=console.warn=console.error=()=>{};bundle=require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:path.resolve('functions'),dependencyRoot:path.resolve('functions'),externalMocks});}finally{Object.assign(console,saved);}
+ try{console.log=console.warn=console.error=()=>{};bundle=require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:path.resolve('functions'),dependencyRoot:path.resolve('functions'),externalMocks,...(measuredFactoryBinding||{}),measured:process.argv.includes('--notes-byte-child')});}finally{Object.assign(console,saved);}
  const api=bundle.loadInternal('modules/financing/noteReads.js');
  assert.equal(api.listClientDispersionNotes,bundle.api.listClientDispersionNotes,'NOTES_FACTORY_MUST_BE_EXPORTED_CALLABLE');
  assert.equal(api.NOTES_RESPONSE_BYTES,8388608);assert.equal(typeof api.readClientDispersionNotes,'function');
@@ -44,6 +45,7 @@ if(process.argv.includes('--notes-byte-child')){
  for(const key of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','GCP_PROJECT','GOOGLE_CLOUD_QUOTA_PROJECT','FIREBASE_PROJECT_ID'])if(process.env[key])assert.equal(process.env[key],project);
  if(process.env.FIREBASE_CONFIG)assert.equal(JSON.parse(process.env.FIREBASE_CONFIG).projectId,project);
  const fullIndex=process.argv.includes('--full-index'),executionMode=await verifyNotesExecutionMode();
+ if(executionMode==='BUNDLED_V1'&&!fullIndex){const marker=process.argv.indexOf('--factory-manifest-digest');assert.ok(marker>=0);measuredFactoryBinding=require('./helpers/functions-bundle-harness.cjs').readManifestStdin(process.argv[marker+1]);}
  const batch=Number(process.argv.at(-2)),scenario=process.argv.at(-1);assert.ok([4,8].includes(batch));assert.ok(['typical','large','wide','lineage'].includes(scenario));
  // Fail closed before transport, including metadata/credential discovery. No cloud.
  const net=require('node:net'),dns=require('node:dns');const connect=net.Socket.prototype.connect,lookup=dns.lookup;
@@ -88,10 +90,10 @@ if(process.argv.includes('--notes-byte-child')){
  if(['large','wide'].includes(scenario))assert.deepEqual(ids,Array.from({length:9},(_,i)=>'b'+(8-i))); if(scenario==='wide')assert.equal(pages,2);
  const elapsedMs=performance.now()-started;sample();const maxRssKiB=process.resourceUsage().maxRSS;
  // A local single-request/process gate, not a claim about deployed concurrency.
- if(!fullIndex){assert.ok(peakRss<256*1024*1024,'sampled RSS exceeds declared Function memory');assert.ok(maxRssKiB<256*1024,'high-water RSS exceeds declared Function memory');}
  console.log(JSON.stringify({executionMode,instrumentedBundleHarness:executionMode==='BUNDLED_V1'&&!fullIndex,fullIndex,startupLogCount,batch,scenario,pages,queries,documents,maxBytes,elapsedMs:Math.round(elapsedMs),baselineRss:baseline.rss,peakRss,baselineHeap:baseline.heapUsed,peakHeap,maxRssKiB}));
+ assert.ok(peakRss<256*1024*1024,'sampled RSS exceeds declared Function memory');assert.ok(maxRssKiB<256*1024,'high-water RSS exceeds declared Function memory');
  }finally{clearInterval(timer);await db.terminate();await app.delete();}
- })().catch(()=>{console.error('NOTES_BYTE_CHILD_FAILED');process.exitCode=1;});
+ })().catch(error=>{const known=['sampled RSS exceeds declared Function memory','high-water RSS exceeds declared Function memory','HTTP sampled RSS exceeds256MiB','HTTP high-water RSS exceeds256MiB'];console.error(JSON.stringify({result:'NOTES_BYTE_CHILD_FAILED',reason:known.includes(error?.message)?error.message:'REDACTED'}));process.exitCode=1;});
 }else{
 // Execute the real callable and canonical authorization/lineage modules. No network.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
@@ -218,21 +220,36 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   await fixtures.commit();
   for(let i=0;i<9;i++)await db.doc('clientDispersions/bytes/notas/b'+i).set({text:'\u0001'.repeat(1048400),createdAt:new firestore.Timestamp(600,0)});
   for(let i=0;i<9;i++)await db.doc('clientDispersions/wide/notas/b'+i).set({text:'x'.repeat(1048400),createdAt:new firestore.Timestamp(600,0)});
-  const {execFileSync}=require('node:child_process');const measurements=[];
+  const {execFileSync}=require('node:child_process');const measurements=[],resourceFailures=[];
+  const factoryBinding=executionMode==='BUNDLED_V1'?require('./helpers/functions-bundle-harness.cjs').prepareManifest(path.resolve('functions')):null;
+  function measuredChild(args,timeout){
+   const instrumented=factoryBinding&&!args.includes('--full-index');
+   const childArgs=instrumented?['--factory-manifest-digest',factoryBinding.manifestDigest,...args]:args;
+   try{return execFileSync(process.execPath,[__filename,...childArgs],{input:instrumented?JSON.stringify(factoryBinding.manifest):undefined,cwd:process.cwd(),env:process.env,encoding:'utf8',timeout,windowsHide:true});}
+   catch(error){
+    // Continue only a diagnosed memory assertion with complete numeric metrics,
+    // so the uninstrumented HTTP comparison still runs. The gate remains failed.
+    let failure,metrics;try{failure=JSON.parse(String(error.stderr).trim());metrics=JSON.parse(String(error.stdout).trim());}catch{throw error;}
+    if(failure.result!=='NOTES_BYTE_CHILD_FAILED'||!['sampled RSS exceeds declared Function memory','high-water RSS exceeds declared Function memory','HTTP sampled RSS exceeds256MiB','HTTP high-water RSS exceeds256MiB'].includes(failure.reason)||!Number.isFinite(metrics.peakRss)||!Number.isFinite(metrics.maxRssKiB))throw error;
+    resourceFailures.push({batch:metrics.batch,scenario:metrics.scenario,fullIndex:metrics.fullIndex,http:metrics.http===true,reason:failure.reason});
+    return String(error.stdout);
+   }
+  }
   for(const scenario of ['typical','large','wide','lineage'])for(const size of [4,8]){
-   const raw=execFileSync(process.execPath,[__filename,'--notes-byte-child',String(size),scenario],{cwd:process.cwd(),env:process.env,encoding:'utf8',timeout:120000,windowsHide:true});
+   const raw=measuredChild(['--notes-byte-child',String(size),scenario],120000);
    const result=JSON.parse(raw.trim());assert.equal(result.batch,size);assert.equal(result.scenario,scenario);measurements.push(result);
    if(['typical','lineage'].includes(scenario))assert.equal(result.queries,size===4?13:7);
   }
   for(const scenario of ['typical','large','wide','lineage']){
-   const raw=execFileSync(process.execPath,[__filename,'--notes-byte-child','--full-index','4',scenario],{cwd:process.cwd(),env:process.env,encoding:'utf8',timeout:120000,windowsHide:true});
+   const raw=measuredChild(['--notes-byte-child','--full-index','4',scenario],120000);
    const result=JSON.parse(raw.trim());assert.equal(result.fullIndex,true);assert.equal(result.scenario,scenario);measurements.push(result);
   }
   for(const scenario of ['typical','large','wide','lineage']){
-   const raw=execFileSync(process.execPath,[__filename,'--notes-byte-child','--full-index','--http-server','4',scenario],{cwd:process.cwd(),env:process.env,encoding:'utf8',timeout:150000,windowsHide:true});
+   const raw=measuredChild(['--notes-byte-child','--full-index','--http-server','4',scenario],150000);
    const result=JSON.parse(raw.trim());assert.equal(result.http,true);assert.equal(result.scenario,scenario);measurements.push(result);
   }
   for(const row of measurements)console.log('NOTES_BYTE_MEASUREMENT '+JSON.stringify(row));
+  assert.deepEqual(resourceFailures,[],'NOTES_RESOURCE_GATES_FAILED');
   }else console.log('NOTES_RESOURCE_BENCHMARKS_SKIPPED explicitNarrowRun=true');
   await verifyNotesExecutionMode();
   console.log('NOTES_REAL_SDK_PASS mode='+executionMode+' notes=125 distinct=125 authorityRace=denied cloud=0 rulesVerdict=NOT_TESTED');
