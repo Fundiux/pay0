@@ -2,7 +2,26 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint vigente: Hosting Execute37057 ACTIVO.** Root reviso input
+**Checkpoint vigente: Hosting Execute37057 FAIL antes de crear version.**
+Receipt conservado con GUARD_ACTIVE y OVERLAY_APPLIED solamente. Reconciliacion
+4GET privada reconcile-after37057-7e8dcf610ac8.json SHA256
+63b0285a22b5076106a87b45061ace06ca56b9c3ff4f3535238fd033f17cc36f:
+SSR00588-guh, notas00002-lah y release de6ff585fd68735d sin cambios.
+CLI solo registro error generico: causa exacta productiva no capturada.
+Root reprodujo incompatibilidad VERSION_INPUT en hosting/prepare.js real
+(RED a2645d): CLI envia status CREATED, guard anterior rechazaba status.
+Fix acepta exclusivamente CREATED y etiquetas Next SSR exactas; diagnostico
+PUBLICATION_PHASE_FAILED limitado a fase/codigo cerrado, sin cuerpos privados.
+22/22 PASS root c2f503. Nuevo input/receipt y revision independiente pendientes;
+NO reutilizar bf9e1911 ni alterar integrationa529 antes del nuevo gate.
+Solicitud replacementclaim 3acdbbf763c220dfa40ea678269fd146ee67c414 limpio:
+29 tests, build31462, SDK85279 PASS2/14refs CAScleanup/4puertos cerrados/cloud0.
+Notifier deadline 1fe30fa7973f5a42e5b1e54f9dbdadfb707be2a3 limpio:
+27 root/243 agente PASS, build38667/policy PASS; sin handler ni infraestructura.
+PostHosting verifier d6c86822 debe refijar guardSha en copia revisada antes
+de uso. Integracion de ambos frentes sigue pendiente, no desplegados.
+
+**Historia: inicio Hosting Execute37057.** Root reviso input
 bf9e1911d45d93f2c8d3ee994b5ee93ddc35221b5effca786c4db81acb92139d
 (input-a52959b-reconciled-9062fed059a5.json), Preflight/Stage64981PASS.
 ZIP notas exacto1251/7c7da3c0... verificado cloud68631 y original local32483;

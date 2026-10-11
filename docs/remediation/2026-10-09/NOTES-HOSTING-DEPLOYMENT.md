@@ -1,6 +1,14 @@
 # Hosting de notas: launcher SSR para revision
 
-Estado 2026-10-11: implementacion local revisada por root, NO ejecutada contra Hosting. 19/19 pruebas sinteticas PASS, repetidas por root d17f1b. Syntax Node y carga PowerShell LibraryOnly PASS. Sin builds ni cloud writes en este lote. El segundo deploy del callable de notas termino exit0, pero el ZIP remoto contiene327 archivos adicionales a los1251 esperados (todos estos coinciden); no existe aun proof independiente PASS. Hosting permanece pendiente de resolver esa diferencia, sin relajar el verificador.
+Estado vigente 2026-10-11: Execute37057 FAIL antes del dispatch de creacion de version. Receipt solo GUARD_ACTIVE/OVERLAY_APPLIED; reconciliacion 4GET posterior confirma SSR00588-guh, notas00002-lah y release de6ff585fd68735d sin cambios. Captura privada reconcile-after37057-7e8dcf610ac8.json SHA256 63b0285a22b5076106a87b45061ace06ca56b9c3ff4f3535238fd033f17cc36f. No reutilizar input bf9e1911 ni receipt fallido.
+
+La prueba contra hosting/prepare.js instalado reprodujo VERSION_INPUT (RED a2645d): CLI15.3.1 envia status CREATED y el guard rechazaba cualquier status. No se atribuye retrospectivamente esta excepcion al log productivo, que solo registro un error generico. El fix exige objeto plano, campos status/labels propios de datos, CREATED y etiquetas exactas deployment-tool=cli-firebase/firebase-web-framework=next_ssr. Rechaza estados, campos, etiquetas, accesores y prototipos ajenos. La prueba usa prepare real con transportes simulados y red bloqueada. Suite actual root22/22 PASSc2f503.
+
+PUBLICATION_PHASE_FAILED registra solo fase de las cuatro operaciones y codigo de una lista cerrada (UNCLASSIFIED para los demas). No serializa excepcion, stack, tokens ni cuerpos; conserva el error original aunque falle la escritura diagnostica. Las reservas de dispatch y el rechazo de otras mutaciones siguen vigentes. Nuevo input con guardSha actualizado y nuevo receipt pendiente de revision/Preflight/Stage antes de Execute.
+
+El callable notas00002-lah ya tiene ZIP independiente exacto1251 (cloud68631/local32483) y escala20/20/20/20 revisada explicitamente; ver NOTES-UPDATE-RECONCILIATION.md. El verifier independiente SSR preparado necesita actualizar su pin del guard en copia revisada. ZIP SSR y smoke posterior siguen pendientes.
+
+Historia del primer gate local: 19/19 pruebas sinteticas PASS root d17f1b, Syntax Node y carga PowerShell LibraryOnly PASS, sin builds/cloud writes en aquel gate. El ZIP previo de notas tenia327 extras y fue rechazado; no borrar ni reinterpretar esa evidencia como PASS.
 
 ## Baseline nueva, solo lectura
 
