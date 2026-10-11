@@ -2,6 +2,39 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint 2026-10-11: IQ6 en ejecucion; notas y notificador aislados.**
+
+IQ6 Execute82732 sigue activo, run `6d17febf78674f49906a6dbd05e3a3de`,
+HEAD integrado3f3c4c5 y modo BUNDLED_V1. Preflight9956 y StageDryRun93030 PASS.
+No duplicar Execute: primer grupo de cinco funciones en predeploy; Task es el
+segundo grupo. Baseline privado de seis GCF/Run capturado antes del deploy,
+SHA256 `a4e0d206c879f9c6301640f6c87c4ac9a4994403a93d00a013bc2c10fa9139bc`.
+Verifier de fuentes IQ6 revisado y47fakes PASS; ejecutar solo tras COMPLETE,
+restauracion dotenv y revision independiente de nuevas revisiones/generaciones.
+No se invocaron handlers ni proveedores financieros para estas comprobaciones.
+
+Notificador inerte0e38d5e: prueba SDK/emulador a65segundos PASS, limpieza
+REMOVED_VERIFIED (19 llamadas SDK/11 RunQuery); esto no demuestra retencion
+cloud. Fase1 cloud ejecutada tras7fakes/coordinador revisado332b37f7: detenida en
+DATABASE_METADATA,0llamadas SDK,uncertain=false. Receipt PREPARED/ancla null,
+0records y sin lock; conservar SHA256
+`bdb7d3e4223d9739f4745621cad92bbcf1460adccc9d0e24ee91826986ac6943`.
+GET independiente de los mismos metadatos PASS200: diagnosticar transporte
+restringido antes de recuperar; no repetir fase1 ni borrar recibo. Base aislada
+`pay0-sentinel-observe/sentinel-observation`; ventana futura de45 a50min aun
+no iniciada. Nunca dirigirlo a la base financiera predeterminada.
+
+Notas: backend/service cursorv2 y displayDate en WIP, sin commit ni integracion.
+Cursor conserva Snapshot nativo y updateTime; la representacion visual de fecha
+no determina orden. Prototipo de barrido de ventana cargada12/12 PASS y revisado:
+ciclo head, una pagina secuencial y espera5s; cargar anteriores invalida staging
+viejo y preserva profundidad ampliada. Implementacion hook/renderer autorizada
+en worktree aislado; pendientes SDK mixto, UI, memoria y builds. Diseno previo
+de refresco por membresia B no se implementa. No publicar candidato347 aun.
+
+Los checkpoints siguientes son historia; sus pendientes anteriores no reemplazan
+este estado ni la verificacion de descarga ya completada.
+
 **Checkpoint actual: descarga desplegada con bundle y fuente remota verificada.**
 
 Execute95455 PASS, run `2817b3ed3e504dd4bc621d1649a29580`, fuente integrada
