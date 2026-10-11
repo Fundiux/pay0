@@ -79,15 +79,16 @@ const realDateNow=Date.now; Date.now=()=>1790000000000;
 const compiled=new Map();
 class HttpsError extends Error{constructor(code,message){super(message);this.code=code;}}
 class Timestamp{constructor(seconds,nanoseconds){this.seconds=seconds;this.nanoseconds=nanoseconds;}}
+function clone(value){if(value instanceof Timestamp)return new Timestamp(value.seconds,value.nanoseconds);if(Array.isArray(value))return value.map(clone);if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,clone(v)]));return value;}
 function setup(){
  const rows=new Map([['users/u',{role:'operador',rootId:'r',active:true}],['users/g',{role:'superadmin',rootId:'r',active:true}],['clients/c',{rootId:'r',active:true,adminId:'owner'}],['clientDispersions/d',{rootId:'r',clientId:'c'}],['userClientAccess/u/clients/c',{active:true,grantedBy:'g',permissions:{viewBasic:true}}]]);
- for(let i=0;i<125;i++) rows.set('clientDispersions/d/notas/n'+String(i).padStart(3,'0'),{text:'note'+i,createdAt:{seconds:100+Math.floor(i/3),nanoseconds:0},authorName:'Author',financialPayload:'NEVER_RETURN'});
+ for(let i=0;i<125;i++) rows.set('clientDispersions/d/notas/n'+String(i).padStart(3,'0'),{text:'note'+i,createdAt:new Timestamp(100+Math.floor(i/3),0),authorName:'Author',financialPayload:'NEVER_RETURN'});
  let reads=0,queries=0,transactions=0,race=null;
- const snap=p=>({id:p.split('/').at(-1),exists:rows.has(p),ref:ref(p),data:()=>structuredClone(rows.get(p))});
+ const snap=p=>({id:p.split('/').at(-1),exists:rows.has(p),ref:ref(p),data:()=>clone(rows.get(p))});
  function ref(p){return{path:p,id:p.split('/').at(-1)};}
  function query(name,limit=1000,after=null){return{name,limitCount:limit,after,doc:id=>ref(name+'/'+id),orderBy:()=>query(name,limit,after),limit:n=>query(name,n,after),startAfter:(time,id)=>query(name,limit,{...time,id})};}
  const cmp=(a,b)=>a.time.seconds-b.time.seconds||a.time.nanoseconds-b.time.nanoseconds||Buffer.compare(Buffer.from(a.id),Buffer.from(b.id));
- const db={doc:ref,collection:query,runTransaction:async(fn,options)=>{assert.equal(options.maxAttempts,3);transactions++;if(transactions===2&&race)race();return fn({get:async q=>{if(q.path){reads++;return snap(q.path);}queries++;const docs=[...rows.keys()].filter(p=>p.startsWith(q.name+'/')&&p.split('/').length===q.name.split('/').length+1).map(p=>({p,id:p.split('/').at(-1),time:rows.get(p).createdAt})).filter(x=>x.time&&(!q.after||cmp(x,{id:q.after.id,time:q.after})<0)).sort((a,b)=>-cmp(a,b)).slice(0,q.limitCount).map(x=>snap(x.p));reads+=docs.length;return{docs,size:docs.length};}});}};
+ const db={doc:ref,collection:query,runTransaction:async(fn,options)=>{assert.equal(options.maxAttempts,3);transactions++;if(transactions===2&&race)race();return fn({get:async q=>{if(q.path){reads++;return snap(q.path);}queries++;const docs=[...rows.keys()].filter(p=>p.startsWith(q.name+'/')&&p.split('/').length===q.name.split('/').length+1).map(p=>({p,id:p.split('/').at(-1),time:rows.get(p).createdAt})).filter(x=>x.time!==undefined&&(!q.after||cmp(x,{id:q.after.id,time:q.after})<0)).sort((a,b)=>-cmp(a,b)).slice(0,q.limitCount).map(x=>snap(x.p));reads+=docs.length;return{docs,size:docs.length};}});}};
  const admin={apps:[{}],firestore:()=>db},cache=new Map();
  function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const result={};cache.set(file,result);let code=compiled.get(file);if(!code){code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;compiled.set(file,code);}new Function('exports','require',code)(result,n=>{if(n==='firebase-admin')return admin;if(n==='firebase-admin/firestore')return{Timestamp,FieldPath:{documentId:()=> '__name__'}};if(n==='firebase-functions/v2/https')return{HttpsError,onCall:(_o,fn)=>fn};if(n==='firebase-functions')return{https:{HttpsError}};assert.ok(n.startsWith('.'),'unexpected dependency '+n);return load(path.resolve(path.dirname(file),n+'.ts'));});return result;}
  const api=load('functions/src/modules/financing/noteReads.ts');
@@ -141,14 +142,40 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   await assert.rejects(call({cursor:{...first.nextCursor,nanoseconds:999}}),e=>e.code==='failed-precondition');
   await db.doc('clientDispersions/d/notas/'+first.nextCursor.id).delete();
   await assert.rejects(call({cursor:first.nextCursor}),e=>e.code==='failed-precondition');
+  const readsBeforeTypes=reads;
+  // Real stored types and exact IDs: structural DTO timestamps are not stored timestamps.
+  await db.doc('clientDispersions/typed').set({rootId:'r',clientId:'c'});
+  const typedIds=[' leading','trailing ','  '];
+  for(let i=0;i<typedIds.length;i++)await db.doc('clientDispersions/typed/notas/'+typedIds[i]).set({text:'typed',createdAt:i===1?new Date(700000):new firestore.Timestamp(700,0)});
+  await db.doc('clientDispersions/typed/notas/missing').set({text:'missing date remains excluded by orderBy'});
+  assert.ok((await db.doc('clientDispersions/typed/notas/trailing ').get()).get('createdAt') instanceof firestore.Timestamp,'Date write is persisted as Timestamp');
+  const typedSeen=[];let typedCursor,typedAnchor;
+  do{const page=await call({dispersionId:'typed',limit:1,...(typedCursor?{cursor:typedCursor}:{})});typedSeen.push(...page.items.map(x=>x.id));typedAnchor ||= page.nextCursor;typedCursor=page.nextCursor;}while(typedCursor);
+  assert.deepEqual(typedSeen,typedIds.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));
+  await db.doc('clientDispersions/typed/notas/'+typedAnchor.id).update({createdAt:{seconds:typedAnchor.seconds,nanoseconds:typedAnchor.nanoseconds}});
+  const beforeMapAnchor=queries;await assert.rejects(call({dispersionId:'typed',cursor:typedAnchor}),e=>e.code==='failed-precondition');assert.equal(queries,beforeMapAnchor);
+  for(const [suffix,value] of [['map',{seconds:700,nanoseconds:0}],['string','2026-10-10'],['null',null],['number',700]]){
+   const id='invalid-'+suffix;await db.doc('clientDispersions/'+id).set({rootId:'r',clientId:'c'});
+   await db.doc('clientDispersions/'+id+'/notas/bad').set({text:'invalid date',createdAt:value});
+   if(suffix==='map'){
+    await db.doc('clientDispersions/'+id+'/notas/second-map').set({text:'must not skip',createdAt:value});await db.doc('clientDispersions/'+id+'/notas/native').set({text:'native',createdAt:new firestore.Timestamp(600,0)});
+    const ordered=db.collection('clientDispersions/'+id+'/notas').orderBy('createdAt','desc').orderBy(firestore.FieldPath.documentId(),'desc');
+    const firstMap=(await ordered.limit(1).get()).docs[0];assert.equal(firstMap.id,'second-map');assert.equal(firstMap.get('createdAt') instanceof firestore.Timestamp,false);
+    const wrongTypeRemainder=await ordered.startAfter(new firestore.Timestamp(value.seconds,value.nanoseconds),firstMap.id).get();assert.deepEqual(wrongTypeRemainder.docs.map(row=>row.id),['native'],'old structural-map cursor silently skipped the other map');
+   }
+   await assert.rejects(call({dispersionId:id,limit:1}),e=>e.code==='failed-precondition');
+  }
+  const typeReads=reads-readsBeforeTypes;assert.equal(typeReads,80,'bounded authority reads in isolated stored-type/ID cases');
+  console.log('NOTES_STORED_TYPES_PASS timestampAndDate=allowed mapStringNullNumber=denied mapAnchor=denied whitespaceIds=3 missingDate=excludedByOrderBy');
   count=0;race=()=>db.doc('users/g').update({active:false});
   await assert.rejects(call({}),e=>e.code==='permission-denied');
   assert.equal(count,2,'fresh authority transaction executed');
   const before=queries;race=null;
   await assert.rejects(call({}),e=>e.code==='permission-denied');
   assert.equal(queries,before,'revoked grantor blocks query');
-  assert.ok(reads<200,'bounded real SDK authority reads');
+  assert.ok(reads-typeReads<200,'bounded original real SDK authority reads');
 
+  if(process.env.PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS!=='1'){
   // Legal near-limit documents: persist first, then measure fresh compiled workers.
   await db.doc('users/g').update({active:true});
   const fixtures=db.batch();
@@ -173,6 +200,7 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
    const result=JSON.parse(raw.trim());assert.equal(result.http,true);assert.equal(result.scenario,scenario);measurements.push(result);
   }
   for(const row of measurements)console.log('NOTES_BYTE_MEASUREMENT '+JSON.stringify(row));
+  }else console.log('NOTES_RESOURCE_BENCHMARKS_SKIPPED explicitNarrowRun=true');
   console.log('NOTES_REAL_SDK_PASS notes=125 distinct=125 authorityRace=denied cloud=0 rulesVerdict=NOT_TESTED');
  }finally{await db.terminate();await app.delete();}
 });
@@ -180,14 +208,17 @@ test('string aliases follow canonical trimming without object coercion',async()=
 test('deleted cursor anchor is rejected, not silently skipped',async()=>{const s=setup(),first=await s.call();s.rows.delete('clientDispersions/d/notas/'+first.nextCursor.id);const previous=s.queries;await assert.rejects(s.call({dispersionId:'d',cursor:first.nextCursor}),e=>e.code==='failed-precondition');assert.equal(s.queries,previous);});
 test('primitive aliases match canonical cleanId for123/true and reject empty0/false',async()=>{for(const value of [123,true]){const s=setup(),id=String(value||'').trim();s.rows.set('clients/'+id,{...s.rows.get('clients/c')});s.rows.set('userClientAccess/u/clients/'+id,{...s.rows.get('userClientAccess/u/clients/c')});s.rows.get('clientDispersions/d').clientId=value;assert.equal((await s.call()).items.length,50);}for(const value of [0,false]){const s=setup();s.rows.get('clientDispersions/d').clientId=value;await assert.rejects(s.call(),e=>e.code==='permission-denied');s.rows.get('clientDispersions/d').clienteId='c';assert.equal((await s.call()).items.length,50);}const s=setup();s.rows.get('clientDispersions/d').clientId=123;s.rows.get('clientDispersions/d').clienteId=' c ';assert.equal((await s.call()).items.length,50);});
 test('wallet action revocation applies before direct-owner bypass and after query',async()=>{const s=setup();s.rows.get('clientDispersions/d').createdBy='u';s.rows.get('users/u').modules={wallet:{view:true,dispersiones:false}};await assert.rejects(s.call(),e=>e.code==='permission-denied');assert.equal(s.queries,0);const raced=setup();raced.race(()=>raced.rows.get('users/u').modules={wallet:{view:true,dispersiones:false}});await assert.rejects(raced.call(),e=>e.code==='permission-denied');assert.equal(raced.queries,13);});
-for(const batch of [4,8])test('bounded byte pages preserve whole near-limit notes and cursor, batch'+batch,async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);const text='\u0001'.repeat(1048400);for(let i=0;i<5;i++)s.rows.set('clientDispersions/d/notas/b'+i,{text,authorName:'😀Author',createdAt:{seconds:200,nanoseconds:0}});const ids=[];let cursor;do{const page=await s.core(cursor?{cursor}:{},batch);assert.equal(page.items.length,1);assert.equal(page.items[0].text,text);assert.equal(page.items[0].authorName,'😀Author');assert.ok(Buffer.byteLength(JSON.stringify({result:page}),'utf8')<=8*1024*1024);ids.push(page.items[0].id);if(page.nextCursor)assert.equal(page.nextCursor.id,page.items.at(-1).id);cursor=page.nextCursor;}while(cursor);assert.deepEqual(ids,['b4','b3','b2','b1','b0']);});
+for(const batch of [4,8])test('bounded byte pages preserve whole near-limit notes and cursor, batch'+batch,async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);const text='\u0001'.repeat(1048400);for(let i=0;i<5;i++)s.rows.set('clientDispersions/d/notas/b'+i,{text,authorName:'😀Author',createdAt:new Timestamp(200,0)});const ids=[];let cursor;do{const page=await s.core(cursor?{cursor}:{},batch);assert.equal(page.items.length,1);assert.equal(page.items[0].text,text);assert.equal(page.items[0].authorName,'😀Author');assert.ok(Buffer.byteLength(JSON.stringify({result:page}),'utf8')<=8*1024*1024);ids.push(page.items[0].id);if(page.nextCursor)assert.equal(page.nextCursor.id,page.items.at(-1).id);cursor=page.nextCursor;}while(cursor);assert.deepEqual(ids,['b4','b3','b2','b1','b0']);});
 for(const batch of [4,8])test('normal50 rows count same documents with explicit query tradeoff batch'+batch,async()=>{const s=setup();const page=await s.core({},batch);assert.equal(page.items.length,50);assert.equal(s.reads,65);assert.equal(s.queries,batch===4?13:7);});
 test('single non-storable oversized synthetic note fails explicitly instead of truncating or skipping',async()=>{const s=setup();s.rows.get('clientDispersions/d/notas/n124').text='\u0001'.repeat(1500000);await assert.rejects(s.call(),e=>e.code==='resource-exhausted');});
 for(const batch of [4,8])test('byte cut retains exact UTF8 extreme ID cursor at equal timestamps batch'+batch,async()=>{
  const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);
  const ids=['a'.repeat(1500),'z'.repeat(1500),'\u00e9'.repeat(750),'\ud83d\ude00'.repeat(375)];
- for(const id of ids){assert.equal(Buffer.byteLength(id),1500);s.rows.set('clientDispersions/d/notas/'+id,{text:'\u0001'.repeat(1040000),createdAt:{seconds:200,nanoseconds:999999000}});}
+ for(const id of ids){assert.equal(Buffer.byteLength(id),1500);s.rows.set('clientDispersions/d/notas/'+id,{text:'\u0001'.repeat(1040000),createdAt:new Timestamp(200,999999000)});}
  const seen=[];let cursor;do{const page=await s.core(cursor?{cursor}:{},batch);assert.equal(page.items.length,1);assert.ok(Buffer.byteLength(JSON.stringify({result:page}))<=8388608);seen.push(page.items[0].id);if(page.nextCursor){assert.equal(page.nextCursor.id,page.items[0].id);assert.equal(page.nextCursor.nanoseconds,999999000);}cursor=page.nextCursor;}while(cursor);
  assert.deepEqual(seen,ids.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));
 });
+for(const value of [null,{seconds:200,nanoseconds:0},'2026-10-10',123])test('stored createdAt requires actual Timestamp: '+JSON.stringify(value),async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/')&&!key.endsWith('/n124'))s.rows.delete(key);s.rows.get('clientDispersions/d/notas/n124').createdAt=value;await assert.rejects(s.call(),e=>e.code==='failed-precondition');});
+test('cursor note ID preserves whitespace but parent ID stays strict',async()=>{const s=setup();for(const key of [...s.rows.keys()])if(key.includes('/notas/'))s.rows.delete(key);const ids=[' leading','trailing ','  '];for(const id of ids)s.rows.set('clientDispersions/d/notas/'+id,{text:'whole',createdAt:new Timestamp(200,0)});const seen=[];let cursor;do{const page=await s.call({dispersionId:'d',limit:1,...(cursor?{cursor}:{})});seen.push(...page.items.map(x=>x.id));cursor=page.nextCursor;}while(cursor);assert.deepEqual(seen,ids.sort((a,b)=>-Buffer.compare(Buffer.from(a),Buffer.from(b))));await assert.rejects(s.call({dispersionId:' d'}),e=>e.code==='invalid-argument');for(const id of ['.','..','a/b','a'.repeat(1501)])await assert.rejects(s.call({dispersionId:'d',cursor:{version:1,dispersionId:'d',id,seconds:200,nanoseconds:0}}),e=>e.code==='invalid-argument');});
+test('map cursor anchor is not accepted as a stored Timestamp',async()=>{const s=setup(),first=await s.call();s.rows.get('clientDispersions/d/notas/'+first.nextCursor.id).createdAt={seconds:first.nextCursor.seconds,nanoseconds:first.nextCursor.nanoseconds};await assert.rejects(s.call({dispersionId:'d',cursor:first.nextCursor}),e=>e.code==='failed-precondition');});
 }

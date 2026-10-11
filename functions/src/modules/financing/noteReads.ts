@@ -13,16 +13,23 @@ function documentId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && Buffer.byteLength(value, "utf8") <= 1500
     && value === value.trim() && !value.includes("/") && value !== "." && value !== "..";
 }
+function noteDocumentId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && Buffer.byteLength(value, "utf8") <= 1500
+    && !value.includes("/") && value !== "." && value !== "..";
+}
 function timestamp(value: any): value is { seconds: number; nanoseconds: number } {
   return value && Number.isInteger(value.seconds) && value.seconds >= -62135596800 && value.seconds <= 253402300799
     && Number.isInteger(value.nanoseconds) && value.nanoseconds >= 0 && value.nanoseconds < 1000000000;
+}
+function storedTimestamp(value: any): value is Timestamp {
+  return value instanceof Timestamp && timestamp(value);
 }
 function parseInput(data: any) {
   if (!data || !documentId(data.dispersionId)) throw new HttpsError("invalid-argument", "Dispersión inválida.");
   const limit = data.limit === undefined ? 50 : data.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HttpsError("invalid-argument", "Límite inválido.");
   const cursor = data.cursor as Cursor | undefined;
-  if (cursor !== undefined && (!cursor || cursor.version !== 1 || cursor.dispersionId !== data.dispersionId || !documentId(cursor.id) || !timestamp(cursor))) {
+  if (cursor !== undefined && (!cursor || cursor.version !== 1 || cursor.dispersionId !== data.dispersionId || !noteDocumentId(cursor.id) || !timestamp(cursor))) {
     throw new HttpsError("invalid-argument", "Página de notas inválida.");
   }
   return { dispersionId: data.dispersionId as string, limit: limit as number, cursor };
@@ -73,7 +80,7 @@ type NoteDto = { id: string; createdAt: { seconds: number; nanoseconds: number }
 const noteStrings = ["text", "authorType", "origin", "source", "createdBy", "createdByRole", "authorId", "authorName", "createdByName", "createdByUsername"];
 function noteDto(doc: admin.firestore.QueryDocumentSnapshot): NoteDto {
   const row = doc.data();
-  if (!timestamp(row.createdAt)) throw new HttpsError("failed-precondition", "Una nota requiere revisión de su fecha.");
+  if (!storedTimestamp(row.createdAt)) throw new HttpsError("failed-precondition", "Una nota requiere revisión de su fecha.");
   const result: NoteDto = { id: doc.id, createdAt: { seconds: row.createdAt.seconds, nanoseconds: row.createdAt.nanoseconds } };
   for (const key of noteStrings) if (typeof row[key] === "string") result[key] = row[key];
   if (typeof row.system === "boolean") result.system = row.system;
@@ -93,7 +100,7 @@ export async function readClientDispersionNotes(request: any, readBatchSize: 4 |
     if (cursor) {
       const anchor = await transaction.get(notes.doc(cursor.id));
       const time = anchor.data()?.createdAt;
-      if (!anchor.exists || !timestamp(time) || time.seconds !== cursor.seconds || time.nanoseconds !== cursor.nanoseconds) {
+      if (!anchor.exists || !storedTimestamp(time) || time.seconds !== cursor.seconds || time.nanoseconds !== cursor.nanoseconds) {
         throw new HttpsError("failed-precondition", "La página cambió. Actualiza las notas.");
       }
     }

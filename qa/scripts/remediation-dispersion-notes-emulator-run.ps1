@@ -1,4 +1,4 @@
-param([switch]$PrerequisitesOnly)
+param([switch]$PrerequisitesOnly, [switch]$SkipResourceBenchmarks)
 $ErrorActionPreference='Stop'
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 # Dependencies are deliberately isolated and never downloaded by this gate.
@@ -32,9 +32,10 @@ $taskRules=Join-Path $taskRuntime 'firestore.rules'
 $taskSettings=@{firestore=@{rules=$taskRules};emulators=@{firestore=@{host='127.0.0.1';port=18246;websocketPort=19246};ui=@{enabled=$false};hub=@{host='127.0.0.1';port=14446};logging=@{host='127.0.0.1';port=14546};singleProjectMode=$true}}
 [IO.File]::WriteAllText($taskConfig,($taskSettings|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
 $taskSaved=@{}
-foreach($key in @('TEMP','TMP','XDG_CONFIG_HOME','DEBUG','FIREBASE_CLI_DISABLE_USAGE','PAY0_NOTES_REAL_SDK','GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIRESTORE_EMULATOR_HOST')){$taskSaved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
+foreach($key in @('TEMP','TMP','XDG_CONFIG_HOME','DEBUG','FIREBASE_CLI_DISABLE_USAGE','PAY0_NOTES_REAL_SDK','PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS','GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIRESTORE_EMULATOR_HOST')){$taskSaved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
 Push-Location $taskRoot
 try {
+ $env:PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS=if($SkipResourceBenchmarks){'1'}else{'0'}
  $env:TEMP=$taskRuntime;$env:TMP=$taskRuntime;$env:XDG_CONFIG_HOME=Join-Path $taskRuntime 'cli';$env:DEBUG='';$env:FIREBASE_CLI_DISABLE_USAGE='true';$env:PAY0_NOTES_REAL_SDK='1';$env:GCLOUD_PROJECT=$taskProject;$env:GOOGLE_CLOUD_PROJECT=$taskProject;$env:FIRESTORE_EMULATOR_HOST='127.0.0.1:18246'
  $taskPreference=$ErrorActionPreference;$taskExit=$null
  try {

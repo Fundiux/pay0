@@ -1,0 +1,67 @@
+# Publicación compatible de notas de dispersión
+
+Estado: plan local, sin integración, despliegue ni inventario remoto. Fuente revisada: rama `feature/dispersion-notes-read-20261010`, commits `5d735a0` + `7b837ac` y corrección local de tipos/IDs con gates PASS y revisión central aprobada, pendiente de commit. El release bundle independiente de 346 endpoints queda fuera de este lote.
+
+## Consumidores y convivencia
+
+| Consumidor | Contrato comprobado en código | Consecuencia de publicación |
+|---|---|---|
+| Bundle anterior `2613559`, modal `/wallet/dispersiones` | `onSnapshot(collection(clientDispersions/{id}/notas), orderBy(createdAt, asc))`, sin limit; error vacía notas y escribe console.error | Una pestaña ya abierta conserva este listener. Hosting nuevo no la actualiza; no hay recuperación/reload por versión o por permission-denied en este flujo. |
+| Nuevo modal | Wrapper `listClientDispersionNotes`, hook por UID/root/padre, página50/máximoAPI100 y8MiB, historial explícito | Requiere endpoint publicado antes de recibir el bundle. No hace fallback Firestore. |
+| Clientes alternos | No se localizaron otros consumidores de esta subcolección en el código frontend inspeccionado | No prueba que no existan scripts, aplicaciones externas, versiones antiguas o sesiones persistentes. No se afirma su retiro. |
+| Writers Admin | Callable manual encontrado en financing; otros writers de notas de pagos/solicitudes son otras familias | Admin no depende de Rules cliente. No se cambian writers ni se presume que toda historia venga del writer actual. |
+
+El nuevo hook hace polling a partir de5s después de completar una petición, sólo visible; foco, reaparición y envío propio refrescan. Una petición a la vez y backoff hasta60s. «Cargar anteriores» mantiene todas las páginas cargadas, rellena huecos y deduplica. «Recargar historial desde el inicio» es consciente; no descarga automáticamente todo. Sólo se reconcilian borrados del rango realmente leído: fuera de esa ventana pueden permanecer notas cargadas hasta recarga. Denegación actual vacía todo y detiene polling. Son diferencias funcionales explícitas respecto del listener global, no realtime equivalente.
+
+## Rules preservadas y autoridad
+
+El archivo local de este worktree tiene SHA-256 LF `7863811b85a57ff7dde6e9d3c5925253a90371dfdf4c63fc3a60bebf5ed31876`. Coincide con la evidencia publicada de `FIRESTORE-RELEASE-PREFLIGHT.md` en fuente principal: ruleset `76fda1a0-4463-4106-80ff-1b4ea13d3a61`, actualización2026-10-10T17:24:21.300538Z. No se volvió a consultar producción en esta tarea; antes del release se debe repetir el preflight de metadata autorizado para detectar cambios posteriores.
+
+Las reglas conservan lectura directa de padre/notas por accountAllowed, módulo wallet.dispersiones, funding USER y ramas existentes de propiedad/delegación. Las escrituras cliente de notas siguen prohibidas. Este release no retira ninguna rama ni incluye el experimento Rules fallido. Mantener estas reglas permite convivir a bundles antiguos; también mantiene sus brechas conocidas de linaje. Publicar la UI nueva no cierra S10 global.
+
+El backend nuevo exige perfil/restricción actuales, root exacto del padre, guard USER y propietario actual o permiso viewBasic del resolver transaccional con linaje hasta16 ancestros. Revalida antes de devolver. No se usa rol del navegador. No todo permiso anteriormente admitido por una rama directa es autoridad válida bajo el resolver nuevo: pérdidas de permiso/otorgante deben denegarse. Tampoco debe fabricarse root para un padre histórico ausente. El writer actual tolera root vacío antes de escribir; eso no demuestra que existan tales padres ni autoriza aflojar el nuevo lector. Registrar/diagnosticar una incompatibilidad de datos si aparece, sin migración implícita.
+
+## Writers, fechas e IDs: condiciones concretas
+
+`functions/src/modules/financing/callables.ts:addClientDispersionNota` escribe auto-ID, text recortado/no vacío y<=2000 caracteres, autor vía `manualNoteAuthor`, createdAt mediante `FieldValue.serverTimestamp`. Después actualiza hasUnreadMsg/updatedAt del padre en otra escritura; no es watermark atómico. Campos de autor no tienen un máximo demostrado por este writer. El presupuesto de bytes preserva la nota entera y no aplica un supuesto límite histórico.
+
+Búsqueda estática en `functions/src`: otros `.collection("notas")` pertenecen a solicitudes (`index.ts`, notes/callables, paymentApplications, solicitudStatusMonitorCallables) o pagos (`index.ts`, notes/callables, pagoDocuments, pagoDepositCallables). No se halló otro writer actual de notas de dispersión. Esto no acredita emisores retirados ni herramientas Admin externas.
+
+Dos defectos del candidato fueron identificados y están corregidos localmente, verificados con SDK real en emulador demo, con revisión central aprobada antes de commit:
+
+1. Se aceptaba un mapa almacenado `{seconds,nanoseconds}` como si fuera Timestamp y luego se construía un cursor Timestamp. Firestore distingue y ordena por tipo; podía saltarse el resto de mapas. La corrección exige `instanceof Timestamp` además de rangos para la fecha almacenada y ancla. El cursor de transporte sigue siendo una estructura validada. No se convierte una fecha histórica por defecto ni se devuelve cursor aceptado para un tipo distinto. [Orden por tipos de Firestore](https://firebase.google.com/docs/firestore/manage-data/data-types).
+2. Un ID de nota válido con espacios se devolvía intacto pero el parser rechazaba su cursor por trim. La corrección preserva exactamente el ID de nota, validando longitud UTF-8<=1500, no vacío, sin slash ni '.'/'..'. Padre y alias de cliente conservan su validación estricta. No se renombra ninguna nota.
+
+Una escritura SDK de Date se almacena como Timestamp y debe ser positiva. Mapas, strings, números o null presentes en createdAt producen failed-precondition cuando la consulta los encuentra. Un campo createdAt ausente ya queda excluido por orderBy en ambos clientes; no se declara que el lector detecta esas filas ni que lee literalmente todos los documentos de la subcolección. El viejo render `dateTime.ts:toDateFromAny` tolera mapas/strings/números; el nuevo cursor no puede heredar esa permisividad sin violar orden/paginación.
+
+Un error de fecha inválida requiere diagnóstico autorizado, no sólo pulsar refresh: la UI muestra error fijo y backoff; la misma fila seguirá fallando hasta una decisión explícita sobre datos. No se ha encontrado ni contado ninguna fila real inválida. Antes de ampliar rollout, preparar una ruta operativa de diagnóstico privado por padre autorizado (conteos/tipo, sin texto/autor ni IDs en logs) y decidir si hace falta inventario read-only acotado. No ejecutar ese inventario ni reescribir fechas bajo este plan. No usar su ausencia como excusa para dejar sin corregir los dos defectos deterministas.
+
+## Orden propuesto y gates
+
+1. Terminar corrección Timestamp/ID y revisión central. Builds del artefacto integrado Functions/frontend, política canónica, manifest exacto347 con los346 nombres previos conservados, QA notes50+ y SDK/HTTP pertinentes. Preservar el contrato local lote4/8MiB/concurrency1/256MiB; las mediciones Windows no son observación de CloudRun/Linux. No mezclar este manifest con el release bundle346 en curso.
+2. Preparar preflight remoto autorizado: snapshot de baseline del endpoint si existiera, runtime/SA/env/secretos sólo fingerprints, IAM, región, recursos y reglas/Hosting/rewrite actuales. Confirmar que el endpoint es realmente nuevo antes de elegir rollback. No leer tokens ni payloads operativos para esta verificación.
+3. Despliegue selectivo único del callable `functions:listClientDispersionNotes`, us-central1, desde commit/artefacto pineado con hooks completos. No `functions` global, firestore, indexes ni storage. El selector es contrato de alcance, no una autorización para ejecutar ahora.
+4. Postflight backend: ACTIVE/Ready/revisión exacta, recursos concurrency1/256MiB/timeout60 y política IAM esperada; verificar que los346 endpoints previos y Rules no cambiaron. Gates autenticados con datos sintéticos controlados en entorno aprobado: positivo owner/USER/delegado y negativo root/restricción/revocación; no crear notas financieras reales para probar. Validar índice creadoAt desc+ID desc del proyecto autorizado: emuladorPASS no prueba la configuración productiva.
+5. Sólo tras backendPASS, publicar Hosting del mismo candidato integrado. firebase.json usa `hosting.source: .` y frameworksBackend: el scope puede incluir SSR/rewrite, no sólo archivos estáticos. Preservar release/tag/revisión previos y revisar los nombres generados antes de Execute. Mantener documentos/Telegram/restriction UI ya publicados; no regresar a un bundle antiguo por conveniencia.
+6. Gate UI: apertura y paginación, envío por writer existente seguido de refresh (prueba falsa/local o entorno expresamente autorizado), hide/focus, cambio de cuenta, revocación, error genérico, recarga consciente, sesiones viejas aún abiertas. Observar errores/latencia/memoria/coste sin registrar texto, tokens ni IDs. El intervalo5s es provisional y puede ser menor frecuencia efectiva por tiempo de respuesta.
+7. Retirada de lectura directa sólo como lote separado: evidencia de consumidores/versiones, estrategia de recuperación de sesiones antiguas y clientes alternos, Rules/cobertura/presupuesto con positivos. Ningún tiempo fijo ni HostingPASS demuestra extinción de bundles antiguos. Mientras tanto persiste el riesgo residual directo documentado.
+
+## Rollback sin ampliar autorización
+
+Antes de Hosting, si falla el backend nuevo, abortar rollout y conservar UI/reglas existentes; no declarar que se cerró su brecha. Después de Hosting, conservar endpoint compatible y una revisión ya validada de su misma autorización/contrato. No borrar el endpoint ni sustituirlo por consultas Admin sin guardas; dejar error recuperable es preferible a un fallback directo que omita la revocación actual.
+
+Preparar un artefacto de rollback frontend que conserve todos los cambios de seguridad previos, la funcionalidad de notas y su transporte autorizado, con el mismo contrato de errores y un hotfix revisado. Una contención de emergencia requiere un incidente real y una justificación explícita independiente; no es la estrategia de rollback de este lote. Restaurar el bundle pre-notas devuelve a más usuarios al listener directo más débil y no cumple «sin regresión de autorización». Si fuese necesario un rollback global de Hosting por otro incidente, debe revisarse expresamente ese tradeoff y la compatibilidad de SSR/Telegram/documentos; no se aprueba aquí. No revertir Rules, writers financieros ni datos históricos para reparar un fallo de la nueva lectura.
+## Evidencia local del parche de fechas/IDs
+
+2026-10-10, sin llamadas cloud ni inventario histórico: suite backend/UI 56 PASS y 1 SDK skip; build Functions sesión28527 PASS; gate Admin SDK sesión44296 39/39 PASS, salida interna y wrapper0. El SDK prueba125 notas, timestamps empatados, ancla borrada/forjada, cambio de autoridad antes de entrega y tres IDs exactos con espacios. La reproducción de la lógica anterior consulta mapas almacenados y muestra que convertir el ancla a Timestamp omite el segundo mapa; el candidato devuelve failed-precondition sin emitir ese cursor. Date nativo persiste como Timestamp y es positivo; mapa/string/null/número y ancla mapa son negativos. Los casos nuevos consumen exactamente80 lecturas de autoridad/ancla, separadas del límite previo conservado. Los datos de fixture y sus lecturas directas de comprobación no están incluidos en ese contador.
+
+Comandos reproducibles desde este worktree:
+
+```powershell
+node --test qa/scripts/remediation-dispersion-notes-read.test.cjs qa/scripts/remediation-dispersion-notes-ui.test.mjs
+# En functions/: npm run build
+powershell -NoProfile -ExecutionPolicy Bypass -File qa/scripts/remediation-dispersion-notes-emulator-run.ps1 -SkipResourceBenchmarks
+```
+
+El switch omite explícitamente los benchmarks de recursos ya aprobados en7b837ac; el comportamiento por defecto sigue ejecutándolos. No se volvieron a medir HTTP/RSS ni a compilar frontend porque este parche sólo cambia validación backend y fixtures; los gates completos y Next47 páginas previos se conservan como evidencia de su candidato, y la integración final exige sus propios builds. Prerrequisito Framework privado pineado y guardas demo/loopback siguen siendo los del runner y FIRESTORE-SERVER-READ-TRANSITION.md. Log privado ignorado `.firebase/remediation-temp/notes-sdk-stored-types.log`. Puertos18246/19246/14446/14546 sin listeners al terminar. Admin SDK evade Rules por diseño: este PASS no es prueba de Rules ni de configuración productiva.
+Gate de compatibilidad histórica ABIERTO: mapas o strings pueden haber sido fechas de negocio legítimas para el render anterior, aunque no sirvan como Timestamp para este cursor. Los negativos sintéticos prueban el contrato técnico y evitan omisiones silenciosas; no clasifican toda esa historia como datos de negocio inválidos. Antes de declarar el lote publicable se necesita evidencia acotada de tipos históricos y una resolución revisada de las incompatibilidades que efectivamente aparezcan. No se ejecuta inventario ahora ni se afirma release completo.
