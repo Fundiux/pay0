@@ -12,7 +12,7 @@ The existing private baseline metadata-00001-mug.json has shape function/service
 
 privateTemp is separately constrained to the integration worktree's ignored .firebase/notes-update-upload subtree, because Firebase's generated archive must stay inside the source project's private temp. Input, baseline, outputs and path ancestors reject symlinks. Receipts, postflight metadata, backup, journal and CLI logs remain ignored and private; output is only status/counters/hash pins. The synthetic test files never use real dotenv bytes.
 
-## Execute sequence, still unexecuted
+## Execute sequence
 
 1. Local pin/candidate check; exclusive operation lock. Three bounded GETs of fixed GCF, Run service and baseline exact revision before any dotenv staging. Tokens come from fixed gcloud arguments into process memory, never token argv or token environment variables.
 2. Verified private backup, journal before CAS staging; staged dotenv is exactly one public web-key line. No Telegram mode or build selector goes into runtime dotenv.
@@ -32,3 +32,19 @@ Central review completed after this candidate: all four files read; combined lau
 Execute61313 failed after all real predeploy hooks passed, including the exact1251-file gate, but before ZIP_VERIFIED/upload/plan/update. Receipt contains only GUARD_ACTIVE; journal records failure and ENV_RESTORED, independently hashed to original572b76d.... The launcher incorrectly resolved JSZip from Firebase CLI15.3.1; local resolution8c2d70 demonstrated MODULE_NOT_FOUND there and availability under candidate Functions. Decoder now uses createRequire(candidate/functions/package.json), matching the standalone gate; verifyPackedBytes is the shared actual launcher callback.
 
 Corrective validation:41 launcher tests PASSbc7076, including a real tiny ZIP through the candidate decoder/shared verifier and rejection of an extra executable. Offline45447/8c83ee exercised the actual installed CLI packer, guard and exact launch verifyPackedBytes callback against all1251 candidate files, then consumed the protected upload stream and matched its SHA. PASS, archiveSHAa35536323686e4e2d528f46c09341726c2fad36abb1d6e33f2d8d2b3700e2f4d, network ports blocked/cloud0/upload0, original dotenv restored. This is local proof, not a second cloud attempt. New input candidate-f3f3bed-jszip uses new helper pins; prior failed inputs remain preserved.
+
+Execute93350 reached ZIP_VERIFIED1251 then failed before ZIP_UPLOADED or UPDATE.
+Original dotenv hash and clean integration were checked; fresh75310 passed three
+GETs against the original revision/configuration. The CLI empty dynamic extension
+payload reproduces UPLOAD_EXTENSIONS offline. Packaging fix ff69fc6, integrated
+as a52959b, permits only absent/exact empty plain extension envelopes and requires
+nonInteractive, with38 real-CLI-path tests. No extension changes are authorized.
+
+The launcher now pins eight helpers and30 CLI files, including extension handling.
+A separate private phase-diagnostics.jsonl records ENTER/RETURN/FAILED for fixed
+PREPARE/DEPLOY/RELEASE/STREAM/UPLOAD_URL/UPLOAD_PUT stages. Error codes must match
+an explicit allowlist; unknown errors become UNCLASSIFIED. No arguments, payloads,
+stack, provider body or arbitrary exception text are recorded. Wrappers preserve
+the original return/error and synchronous stream contract. Getter-only CLI barrel
+exports are preserved by wrapping their concrete owner modules. This file does not
+alter the nine-state deployment receipt. New helper/input pins are required.

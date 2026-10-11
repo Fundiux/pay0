@@ -6,8 +6,8 @@ const {createRequire}=require('node:module');
 const ROOT=path.resolve(__dirname,'../..'),PRIVATE=path.join(ROOT,'.firebase/notes-update'),WORKTREE=path.join(ROOT,'.worktrees/pay0-remediation-integration-20261009');
 const ORIGINAL_ENV_SHA='572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856';
 const BASELINE_FILE=path.join(ROOT,'.firebase/notes-independent-postflight/metadata-00001-mug.json'),BASELINE_SHA='1dd47091fdee398337ef1b6b74778ebda714dd749b6f3dad93bea1901e58ad40';
-const HELPERS=['scripts/deploy-dispersion-notes-update.ps1','scripts/lib/dispersion-notes-update-launch.cjs','scripts/lib/dispersion-notes-update-only.cjs','scripts/lib/dispersion-notes-runtime-check.cjs','scripts/lib/dispersion-notes-create-only.cjs','scripts/deploy-dispersion-notes.ps1','scripts/deploy-iq-deposit-preserving-env.ps1'];
-const CLI_FILES=['package.json','lib/bin/firebase.js','lib/deploy/index.js','lib/deploy/functions/index.js','lib/deploy/functions/release/fabricator.js','lib/deploy/functions/release/planner.js','lib/deploy/functions/build.js','lib/deploy/functions/prepare.js','lib/deploy/functions/params.js','lib/functions/env.js','lib/deploy/functions/prepareFunctionsUpload.js','lib/deploy/functions/deploy.js','lib/gcp/storage.js','lib/apiv2.js','lib/operation-poller.js','lib/gcp/cloudfunctionsv2.js','lib/gcp/cloudfunctions.js','lib/gcp/run.js'];
+const HELPERS=['scripts/lib/notes-update-phase-diagnostics.cjs','scripts/deploy-dispersion-notes-update.ps1','scripts/lib/dispersion-notes-update-launch.cjs','scripts/lib/dispersion-notes-update-only.cjs','scripts/lib/dispersion-notes-runtime-check.cjs','scripts/lib/dispersion-notes-create-only.cjs','scripts/deploy-dispersion-notes.ps1','scripts/deploy-iq-deposit-preserving-env.ps1'];
+const CLI_FILES=['lib/deploy/functions/functionsDeployHelper.js','lib/deploy/functions/release/index.js','lib/deploy/extensions/index.js','lib/deploy/extensions/prepare.js','lib/deploy/extensions/deploy.js','lib/deploy/extensions/release.js','lib/deploy/extensions/validate.js','lib/extensions/provisioningHelper.js','lib/gcp/cloudbilling.js','lib/extensions/checkProjectBilling.js','lib/extensions/runtimes/common.js','lib/functions/projectConfig.js','package.json','lib/bin/firebase.js','lib/deploy/index.js','lib/deploy/functions/index.js','lib/deploy/functions/release/fabricator.js','lib/deploy/functions/release/planner.js','lib/deploy/functions/build.js','lib/deploy/functions/prepare.js','lib/deploy/functions/params.js','lib/functions/env.js','lib/deploy/functions/prepareFunctionsUpload.js','lib/deploy/functions/deploy.js','lib/gcp/storage.js','lib/apiv2.js','lib/operation-poller.js','lib/gcp/cloudfunctionsv2.js','lib/gcp/cloudfunctions.js','lib/gcp/run.js'];
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function closed(value,keys){assert.ok(value&&typeof value==='object'&&!Array.isArray(value),'SCHEMA_OBJECT');assert.deepEqual(Reflect.ownKeys(value).sort(),[...keys].sort(),'SCHEMA_KEYS');}
 function hash(value){assert.match(value||'',/^[a-f0-9]{64}$/,'PIN_REQUIRED');}
@@ -79,6 +79,16 @@ function activate(){
   verifyBytes:bytes=>verifyPackedBytes(bytes,input,file,inputSha),emit});
  guard=require('./dispersion-notes-update-only.cjs').installGuard({Fabricator:require(path.join(cli,'lib/deploy/functions/release/fabricator.js')).Fabricator,v1:require(path.join(cli,'lib/gcp/cloudfunctions.js')),v2,run:require(path.join(cli,'lib/gcp/run.js')),poller:require(path.join(cli,'lib/operation-poller.js')),baseline:checked.baseline.function,emit,
   beforeUpdate:async()=>{getInput(file,inputSha);await fresh(input,true);},assertUploadSource:async source=>assert.deepEqual(source,upload.receipt().storageSource,'UPDATE_UPLOAD_SOURCE')});
+ const diagnosticFile=privateFile(path.join(path.dirname(input.receiptFile),'phase-diagnostics.jsonl'));
+ assert.ok(!fs.existsSync(diagnosticFile),'DIAGNOSTIC_EXISTS');const diagnosticFd=fs.openSync(diagnosticFile,'wx');process.once('exit',()=>fs.closeSync(diagnosticFd));
+ const diagnostic=row=>fs.writeSync(diagnosticFd,JSON.stringify(row)+'\n');
+ const {instrument}=require('./notes-update-phase-diagnostics.cjs');
+ // index.js exposes getter-only forwarding exports: instrument their owners.
+ for(const [module,key,stage] of [['prepare.js','prepare','PREPARE'],['deploy.js','deploy','DEPLOY'],['release/index.js','release','RELEASE']])instrument(require(path.join(cli,'lib/deploy/functions',module)),key,stage,diagnostic);
+ instrument(require(path.join(cli,'lib/deploy/functions/deploy.js')),'createReadStream','STREAM',diagnostic,{sync:true});
+ instrument(v2,'generateUploadUrl','UPLOAD_URL',diagnostic);
+ instrument(require(path.join(cli,'lib/gcp/storage.js')),'upload','UPLOAD_PUT',diagnostic);
+
 }
 async function launch(input,file,inputSha){
  await fresh(input,true);const checked=syncChecks(input,true);assert.ok(!fs.existsSync(privateFile(input.receiptFile))&&!fs.existsSync(privateFile(input.postflightFile)),'OUTPUT_EXISTS');
