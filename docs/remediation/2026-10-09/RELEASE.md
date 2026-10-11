@@ -1,5 +1,8 @@
 # Publicación y recuperación
 
+Gate cloud de cohorte sintetica PASS a48min, misma ancla y limpieza verificada;
+no activa el notificador. Ver [NOTIFICATION-CLOUD-READTIME-EVIDENCE.md](NOTIFICATION-CLOUD-READTIME-EVIDENCE.md).
+
 Actualizacion2026-10-11: seis entradas IQ desplegadas desde3f3c4c5 y verificadas
 por revision, configuracion y ZIP exacto. Ver [RELEASE-IQ-SIX-BUNDLED.md](RELEASE-IQ-SIX-BUNDLED.md).
 Descarga autorizada tambien publicada con bundle; checkpoints al final conservan

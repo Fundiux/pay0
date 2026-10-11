@@ -2,6 +2,24 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente: fase2 cloud PASS, misma ancla, limpieza verificada.**
+
+Ejecucion88600 exit0: `CLOUD_FIXED_READTIME_45MIN_VERIFIED`, edad local y servidor
+48min,10 llamadas SDK/5RunQuery, `REMOVED_VERIFIED`, uncertain=false/grpcCode=null.
+Ancla original2026-10-11T01:16:09.846Z, sin reseed ni renovacion. Base aislada
+pay0-sentinel-observe/sentinel-observation; historial y cohorte actual comparados
+antes del borrado condicional de los cinco fixtures, seis nombres ausentes
+verificados. Receipt final CLEANED SHA256
+`fc7eb4767d5603474305d61ed5ce3753b5fc9ae409ce0d39f115d2c6bb2f6247`.
+Invocacion phase2 y salida agregada acreditan retencion; CLEANED por si solo no
+la acredita. El recibo WAITING previo438c6b93 queda preservado. Esto no prueba
+el limite exacto50min, trafico real ni activa el notificador.
+
+Antes del build integrado347 se detecto otro gate con hash fijo del manifiesto
+346. Se preparan comparacion completa normal347/bundle347 y cobertura SDK sobre
+el bundle instalado. No sustituir simplemente el hash ni reducir limites7s/10s.
+Integracion sigue33e7a98 mas WIP exclusivo de esos gates, sin push/deploy nuevo.
+
 **Checkpoint 2026-10-11 01:56 UTC: notas integradas localmente; fase2 cloud pendiente.**
 
 Integracion `integration/pay0-remediation-20261009` HEAD `33e7a98`: cuatro
