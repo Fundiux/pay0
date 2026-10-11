@@ -1,5 +1,16 @@
 # Dependencias y problemas abiertos
 
+Actualizacion2026-10-11: el prerrequisito de lectura historica para la cohorte
+del notificador paso en Firestore cloud aislado a48min, misma ancla y limpieza
+verificada (NOTIFICATION-CLOUD-READTIME-EVIDENCE.md). Sigue pendiente conectar
+admision, dispatcher y entrega con autoridad actual/fences; el adaptador y la
+admision permanecen inertes. Esto no cierra DOC-DISPERSION-REPLAY.
+
+Notas de dispersion integradas localmente hasta d5eae7e: Functions normal y
+Next47paginas PASS; manifiesto normal347 capturado4197ms. Bundle integrado,
+equivalencia completa, SDK del bundle y rollout siguen pendientes. Experimento
+Rules e3ea3dd fallido permanece excluido; S10 no queda cerrado por migrar UI.
+
 | Punto | Evidencia / causa | Trabajo que continúa | Condición de publicación/cierre |
 |---|---|---|---|
 | Integración Git | 108/13 commits divergentes; merge aislado conserva ambas historias. Se detectaron y corrigieron duplicados TypeScript y un helper de reglas. | Builds y pruebas del candidato integrado. | Release guards, emuladores y frontend build del commit exacto. |
