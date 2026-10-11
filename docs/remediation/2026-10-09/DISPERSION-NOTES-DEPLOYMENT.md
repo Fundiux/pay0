@@ -1,6 +1,6 @@
-# Despliegue selectivo de notas: candidato local, no ejecutado
+# Despliegue selectivo de notas: verificacion y ejecucion
 
-Estado vigente: herramienta ROOT preparada para revisión; ningún Preflight remoto, StageDryRun ni Execute ejecutado. Endpoint único: listClientDispersionNotes, proyecto pay-0-system, región us-central1. No modifica producto, reglas, integración ni writers. Hosting sigue bloqueado hasta gates independientes.
+Estado vigente: helper ROOT revisado y commit7392bf5. StageDryRun99418 y Preflight76946 PASS. Execute91921 fallo en el ultimo predeploy antes de plan/create; entorno restaurado. Retry93477 en curso con HEAD9a729e3 y mismos pines de producto. No afirmar despliegue ni Hosting aprobado. Endpoint unico listClientDispersionNotes, pay-0-system/us-central1.
 
 ## Contrato y pines
 
@@ -34,7 +34,7 @@ Después, GET sólo lectura del ZIP exacto de buildConfig.source.storageSource c
 
 ## Pruebas locales y límites
 
-Resultado local vigente:11/11 suites PASS. Parser PowerShell y sintaxis Node PASS. Hubo un primer fallo de fixture postflight por construir hashtable en lugar del PSCustomObject de Invoke-RestMethod; se corrigió sólo la representación sintética y se repitió PASS. No se modificó el criterio de entorno. Comando: node --test qa/scripts/remediation-dispersion-notes-deploy.test.cjs: fakes de plan/guard/API/IAM/entorno/recibo y PowerShell LibraryOnly con CAS éxito/fallo/conflicto. Sin red, deploy, IQ, mensajes ni endpoint real. Faltan ejecución StageDryRun revisada, preflight real, despliegue y postflight independiente; ninguna evidencia local los reemplaza.
+Resultado local vigente:11/11 suites PASS. Parser PowerShell y sintaxis Node PASS. Hubo un primer fallo de fixture postflight por construir hashtable en lugar del PSCustomObject de Invoke-RestMethod; se corrigió sólo la representación sintética y se repitió PASS. No se modificó el criterio de entorno. Comando: node --test qa/scripts/remediation-dispersion-notes-deploy.test.cjs: fakes de plan/guard/API/IAM/entorno/recibo y PowerShell LibraryOnly con CAS éxito/fallo/conflicto. Sin red, deploy, IQ, mensajes ni endpoint real. Estado original de preparacion: faltaban StageDryRun, preflight, despliegue y postflight. La cronologia vigente consta arriba y en HANDOFF; los tests locales no sustituyen verificaciones remotas.
 
 La guardia no promete una transacción global sobre APIs de Firebase. El CLI conserva sus validaciones/aseguramiento de infraestructura y lecturas de metadata; la exclusividad aquí cubre mutaciones de Functions y Run inspeccionadas en CLI15.3.1. Cualquier versión/hash nuevo requiere revisión. Rollback no debe restaurar reglas o lectores que eludan autorización; no hay endpoint anterior que restaurar. Ante fallo, conservar el consumidor publicado actual hasta hotfix compatible, sin eliminar funcionalidad ni borrar datos.
 

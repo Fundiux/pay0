@@ -33,9 +33,21 @@ autoriza backfill o inferencia de root para registros ausentes.
 Helper create-only notas commit ROOT7392bf5: root repitio11/11 suites PASS,
 incluida conversion real CLI15.3.1/planner/fabricator con transporte simulado.
 StageDryRun99418 PASS/restauracion exacta; Preflight76946 PASS/ausencia404.
-Execute91921 EN CURSO: no duplicar ni reutilizar helpers historicos. Pines en
-`.firebase/notes-deploy/approved-plan-ed5e6f3.json`. Postflight independiente
-Run/ZIP sigue requerido; verificador privado revisado y4fakes PASS, sin fetch.
+Execute91921 FALLO antes de plan/create: ultimo hook UPLOAD_WORKER_FAILED;
+ENOENT fue traduccion secundaria cross-spawn. Receipt solo GUARD_ACTIVE,
+dotenv restaurado572b. Run privado d9e2eb7bdff84c1a89569d93bbf1486e.
+Tres builds previos reprodujeron bundle758d; discovery347 PASS2073ms;
+regresiones documentales PASS. ZIP residual incompleto4,422,647bytes, sin
+EOCD; causa no demostrada. Repro worker7.5s y parent staged53494 PASS1251
+archivos/cloud0/restauracion exacta. No repetir despliegue sin diagnostico.
+Pines anteriores en `.firebase/notes-deploy/approved-plan-ed5e6f3.json`;
+nuevo HEAD QA 9a729e3c9eba88190f0df5595ef829fc1ad395b7 integrado/pushed.
+Diagnosticos6fakes PASS; packer instrumentado93196 PASS1251/cloud0. Registro
+auxiliar best-effort probado; conserva120s y no imprime stderr/rutas/env.
+Retry Execute93477 EN CURSO, run41436c0c59334785a3aa9ddbd07d92f3, plan
+`.firebase/notes-deploy/approved-plan-9a729e3.json`; mismos pines de producto.
+No duplicar ejecucion. Postflight
+independiente Run/ZIP sigue requerido; verificador4fakes PASS, sin fetch.
 
 **Checkpoint de integracion: bundle347 instalado y manifiesto equivalente.**
 
