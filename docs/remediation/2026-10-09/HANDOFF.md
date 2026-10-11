@@ -2,6 +2,30 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint de integracion: bundle347 instalado y manifiesto equivalente.**
+
+HEAD integrado `d5eae7efb4529692108220a05e9f9ada31c11061`, limpio, aun sin push.
+Normal Functions30964 PASS; Next63431 PASS47paginas. Captura normal89793 PASS
+4197ms (primer intento15406 fallo generico, causa no demostrada). Referencia
+privada `.firebase/internal-bundle-manifests/notes347-normal-33e7a98.json`, SHA
+`9569510897877e74c33312123518af575c73c2a59566b2d8e6ed498f8989f9a5`.
+
+Build bundle44906 fallo antes del bundle:316modulos compilados. Reproduccion
+sin escritura confirmo2errores de permisos/resolucion; build elevado70992 PASS,
+931archivos instalados. SHA bundle
+`758d7397d7e2761928fd9bb9e32a45123c47acaea1150a17d892e23b8c237a8f`.
+Compare74465 PASS2385ms:347endpoints y manifiesto completo igual al normal,
+SHA `e4c0f5e0ec14a4c7ef2fae0495ccc7e3ae4b3850545aec283255fc12e346e63b`.
+Runtime25860 PASS155checks/63assets; WASM PASS, sinproviders. Packer77971 PASS
+1251archivos, ZIP local4d028f0bf20990729e850d23578dc6521c76d78a9c773053ac3c53f4f4f16bde;
+no prueba de subida cloud. SDK/HTTP del bundle73958 EN CURSO, log privado
+`.firebase/remediation-temp/notes-integrated-bundle-sdk.log`; no duplicar.
+
+Framework de prueba copiado localmente:2057archivos/9,911,229B verificados
+byte-a-byte; errores de Copy-Item afectaron cache npm excluida, no esos archivos.
+Create-only deploy helper en preparacion separada; no ejecutar helper historico
+de descarga/IQ, cuyos HEAD/pins son obsoletos. Nuevo callable antes de Hosting.
+
 **Checkpoint vigente: fase2 cloud PASS, misma ancla, limpieza verificada.**
 
 Ejecucion88600 exit0: `CLOUD_FIXED_READTIME_45MIN_VERIFIED`, edad local y servidor
