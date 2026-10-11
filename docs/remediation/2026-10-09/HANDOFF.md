@@ -2,6 +2,33 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint 2026-10-11 01:56 UTC: notas integradas localmente; fase2 cloud pendiente.**
+
+Integracion `integration/pay0-remediation-20261009` HEAD `33e7a98`: cuatro
+commits de notas integrados selectivamente hasta `f124f71`, mas contrato de
+descubrimiento347/listClientDispersionNotes. Cinco pruebas CLI PASS y diffcheck
+PASS. Sin push ni despliegue de este lote; faltan builds y gates del artefacto
+integrado BUNDLED_V1. No incorporar Rules e3ea3dd del branch raiz.
+
+Candidato notas `7f07bc66` limpio: Functions96999, SDK/HTTP25061 (40/40),
+Next71743 (47 paginas), politica, UI27/27 y memoria del controlador3 casos PASS.
+Chromium70240: tres casos reales del hook/burbujas con fetch simulado, incluyendo
+150 notas de1,048,000B; heap JS max180.44MiB, DOM1067 a13 tras revocacion y11
+tras desmontar; solicitudes externas0 y procesos cerrados. No es RSS total
+del navegador ni prueba cloud. Profundidad cargada refrescada por barridos,
+cursor Snapshot nativo, tipos historicos y IDs con espacios conservados.
+
+Notificador candidato inerte `8f8566fd` limpio: adaptador Firestore revisado,
+44 pruebas PASS, Functions98704 PASS y SDK65395 PASS. Fixture aislado de52
+links grandes,14 consultas con mismo readTime, paginas2290/87ms; RSS pico
+181,022,720B;54 referencias limpiadas y puertos cerrados. No integracion,
+export, wiring, mensaje ni activacion. La retencion cloud45min depende aun de
+la fase2 descrita abajo; no confundirla con el gate de emulador.
+
+Durante02:00-02:07UTC evitar builds pesados para preservar la ventana cloud.
+Los checkpoints siguientes son historia salvo los pins y la ventana vigente
+de fase2, y no sustituyen este estado de integracion.
+
 **Vigente: IQ6 desplegado y fuentes verificadas; retencion cloud en espera real.**
 
 Execute82732 COMPLETE/PASS y postflight98100 PASS:6 revisiones Ready100,6 ZIP
