@@ -2,6 +2,19 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Adenda vigente:**401 notas PASS74b0e6 (sin auth/IDs), fuente exacta aun
+pendiente. Rootcore update-only d4ba9f2 PASS10; runtimecomparador4fd0e89
+PASS3 +baselineprivada realofflinePASSc68c38. Scale20servicio preservada,
+nooverride ni Hosting. LauncherROOT nuevo en implementacion por baseline.
+Notifieradapterf6dfc598 SDK12090 PASS7/cleanup3/puertosclosed; transporte
+inerte470e6fe79bb22d20ce133313fdb2e70cd3c31b51 PASS56/build19074, sinwiring.
+SolicitudQA7a913c37995f5b05a4f44758992ac1c1ff524e90: HTTP85903 PASS7/
+cleanup74/132208KiB; bundlematriz24330 FAIL1/40, stressbatch8large267832KiB,
+fullindexmax243132/HTTP184188KiB. Probe31827 old267544/current266928KiB:
+ambos FAIL, cleanup14/puertosclosed; no evidencia de regresion por extraccion.
+Contador exacto JSON para DTO cerrado aprobado en worktree, oracle y matriz
+completa pendientes; no integrar348 hasta PASS. Empaquetado347 independiente.
+
 **Checkpoint vigente 2026-10-11: notas creadas, verificacion ZIP en curso.**
 
 Execute93477 termino exit0: revision listclientdispersionnotes-00001-mug,
