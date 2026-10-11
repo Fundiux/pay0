@@ -2,6 +2,22 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente06:33Z:** ROOTe29a92d agrega diagnostico enum privado por
+etapa sinpayloads, 48testsPASS34268e;8helpers/30CLI pins. Fixextensionsff69fc6
+revisado/root38PASS, integrado/pusheda52959baf145eba15b6dadb32b0bc71e4a864dbd.
+Nuevo input candidate-a52959b-empty-extensions/input.json
+SHAcc040f331a26261b89b6981705208aa446ed1f5de1ae1ef44601bac170301526.
+Preflightf60cbc/Stage2d09f9PASS; envoriginal572b76d verificado antesExecute.
+Execute33777 ACTIVO runf0b3e0ea62954ffd9fab8cff215aeaa6 desde06:32:51Z.
+Root controla sesion: no repetir ni tocar dotenv/integracion mientras activo.
+Postflight independiente yHosting NO ejecutados; esperar nueva revision/gen.
+Solicitud UIde1db04c826aab621df60bbcd4e8b7101a67cf3c clean/probada37unit+
+Next47+policy/controller3/browser3/miniUI8; aun nointegrada. Marcadorunread
+global requierecancel hoy; ningunwriter nuevo implementado por UI.
+Notificadortx1563a3072836e4b9b34c3d098c1f7f89e8e799d8 clean:69+282+
+SDK8/38refsCAScleanup/4puertosclosed/build/policyPASS. SDKABORTED inyectado,
+no conflicto natural atribuido. Nointegrado; handoffprePOST en diseno readonly.
+
 **Actualizacion en curso:** packaging exacto eb2580b integrado/pushed como
 f3f3bed051ee6919a9540792957ac4ef27df8163, clean. Root25tests+6packerPASS;
 strictpack82565/c526ec1251/1251 exact, cloud0; dotenvCASrestored572b76d...
