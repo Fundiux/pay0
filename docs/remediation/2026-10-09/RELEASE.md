@@ -1,6 +1,18 @@
 # Publicación y recuperación
 
-Packagingf3f3bed integrado/pushed: strict local1251/1251PASS82565, cloud0;
+Estado vigente: integrationa52959b contiene fix de extensions vacias ff69fc6,
+root38 tests PASS. Execute33777 envio un solo UPDATE aceptado; operacion
+operation-1791701277259-65d8af62cb6f7-78339efc-00d901df confirmada done:true
+sin error por GET independiente c35bfa. Revision00002-lah ACTIVE/Ready100%,
+sourcegeneration1791701277897589. Launcher exit1 en comprobacion final
+API_MAX_OVERRIDE: max antes null/20/null/null, ahora GCF/servicio/template20;
+lectura de nueva revision y evaluacion explicita pendientes. Receipt queda
+en UPDATE_ACCEPTED, siete estados; no atribuirle finalizacion exitosa.
+Entorno restaurado/working tree limpio c6af5a. No repetir actualizacion.
+ZIP subido1251 SHA7c7da3c0d3358a714dfda8966436aa2a02f4924cf5713e0ba4714f4ff3c98183;
+verificacion independiente del ZIP final en curso. Hosting no publicado.
+
+Historia anterior: Packagingf3f3bed integrado/pushed: strict local1251/1251PASS82565, cloud0;
 root25tests+6packerPASS. Launcher eef4d18 PASS53/defaultlocal+StageCASPASS.
 Update-only61313 fallo antesupload/update por resolucionJSZip errada enCLI;
 guardGUARD_ACTIVE solamente, entorno restaurado. Correccion decoderFunctions

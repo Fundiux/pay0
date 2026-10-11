@@ -2,7 +2,34 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
-**Checkpoint vigente06:33Z:** ROOTe29a92d agrega diagnostico enum privado por
+**Checkpoint vigente: reconciliacion posterior a Execute33777.** La operacion
+cloud termino correctamente, pero el launcher termino exit1 a06:49:21Z por
+`API_MAX_OVERRIDE` en la comprobacion de respuesta. NO repetir update/create.
+Operacion `operation-1791701277259-65d8af62cb6f7-78339efc-00d901df`:
+GET independiente c35bfa confirma done:true, sin error, ACTIVE00002-lah;
+sourcegeneration1791701277897589. Readonly21fdb9 confirma Ready/latest100%.
+Receipt conserva siete estados hasta UPDATE_ACCEPTED; no agregar estados
+de exito retrospectivos. ENV_RESTORED y trackedclean verificados c6af5a.
+Cambio observado: max GCF/servicio/template20; antes null/20/null. Revision
+nueva pendiente de lectura independiente; no afirmar igualdad de configuracion.
+ZIP subido SHA7c7da3c0d3358a714dfda8966436aa2a02f4924cf5713e0ba4714f4ff3c98183,
+1251 archivos. Fetch31583 fallo sin metadata/ZIP guardados. expectedInputs
+completo offline PASS1251; hipotesis de escapes descartada. Copia diagnostica
+privada e0af07b2d276a31575befb0d0048b60dd13dd9d4d22fb9a4d4897fbdae6564aa
+revisada rootfe1488; mismos checks/seis GET, solo enums/fase, reintento readonly
+autorizado con request SHA14cf7c99f02701fe2836ef980c6c7fd7d2fb707f2df237b4acb79076df41b785.
+Hosting sigue pendiente de ZIP y revision explicita de escala. Integracion
+a52959b permanece congelada. Guard historico no relajado.
+Notifier handoff e1c6843327209005eb8e680925090bb58aaf24f7 limpio, root109
+tests/agent279/build/policy PASS; adaptador HTTP aislado autorizado en tres
+paths sin wiring ni llamadas reales. Solicitud writer atomico c0fe4c2e6a3a6a5535e43b0471eb712438e239f2
+limpio, root37PASSd4e776; SDK44726 PASS seis escenarios/siete referencias,
+cleanup CAS/puertosclosed/cloud0. Runner SHAa9227ba83c785804767ab8ef0dc100b38af49abae11a6e68c0fe428515b0f383.
+No integrado. Siguiente cambio aislado autorizado: nota inicial+flag dentro
+tx createSolicitud, conservando permisoCREATE, folio y sideeffects postcommit.
+No confundir con cierre de autorizacion financiera pretx/idempotenciaHTTP.
+
+**Checkpoint historico06:33Z (superado):** ROOTe29a92d agrega diagnostico enum privado por
 etapa sinpayloads, 48testsPASS34268e;8helpers/30CLI pins. Fixextensionsff69fc6
 revisado/root38PASS, integrado/pusheda52959baf145eba15b6dadb32b0bc71e4a864dbd.
 Nuevo input candidate-a52959b-empty-extensions/input.json
