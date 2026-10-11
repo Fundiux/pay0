@@ -2,7 +2,9 @@
 
 Packagingf3f3bed integrado/pushed: strict local1251/1251PASS82565, cloud0;
 root25tests+6packerPASS. Launcher eef4d18 PASS53/defaultlocal+StageCASPASS.
-Update-only61313 en curso; no reintentar hasta observar resultado/receipt.
+Update-only61313 fallo antesupload/update por resolucionJSZip errada enCLI;
+guardGUARD_ACTIVE solamente, entorno restaurado. Correccion decoderFunctions
+PASS41+offline1251/stream45447; nuevoinput/pins preparados, Execute pendiente.
 Solo despues de nuevo ZIP independiente exacto y configuracion preservada
 se puede preparar Hosting. No implica cierre de solicitud348 ni S10.
 

@@ -37,3 +37,13 @@ Write-Output 'LIBRARY_CAS_PASS'
 
 test('activation remains synchronous and source verification uses pinned ESM import boundary',()=>{const s=fs.readFileSync(modulePath,'utf8');assert.ok(s.includes('function activate(){'));assert.ok(!s.includes('async function activate'));assert.ok(s.includes('const uploadModule=require(path.join(WORKTREE,input.upload.guardFile))'));assert.ok(s.includes('await import(pathToFileURL(path.join(WORKTREE,input.upload.verifierFile)).href)'));assert.ok(s.includes('assert.deepEqual(source,upload.receipt().storageSource'));assert.ok(s.includes("approvedUploadHost:'storage.googleapis.com'"));assert.ok(!s.includes('--auto-approve'));});
 test('PowerShell default is local preflight and retains reviewed dotenv CAS helper',()=>{const s=fs.readFileSync(path.join(root,'scripts/deploy-dispersion-notes-update.ps1'),'utf8');assert.ok(s.includes("$Mode='PreflightLOCAL'"));assert.ok(s.includes('Invoke-NotesPhase $target $original $userEnv $action $journal'));assert.ok(s.includes("if($Mode -eq 'Execute')"));assert.ok(s.includes('UPDATE_FAILED_NO_RETRY'));});
+
+test('archive decoder resolves from candidate Functions and verifies real ZIP bytes',async()=>{
+ const JSZip=api.loadArchiveZip(),zip=new JSZip();zip.file('synthetic.txt','fixture');
+ const bytes=await zip.generateAsync({type:'nodebuffer'});
+ const verifier=await import(require('node:url').pathToFileURL(path.join(api.WORKTREE,'qa/scripts/verify-functions-upload-artifact.mjs')).href);
+ const expected=[{file:'synthetic.txt',sha256:api.sha(Buffer.from('fixture'))}];
+ const proof=await verifier.verifyArchiveBytes({bytes,expected,JSZip});
+ assert.equal(proof.exactFileSet,true);assert.equal(proof.archiveFiles,1);assert.equal(proof.archiveSha256,api.sha(bytes));
+ zip.file('unexpected.js','fixture');await assert.rejects(verifier.verifyArchiveBytes({bytes:await zip.generateAsync({type:'nodebuffer'}),expected,JSZip}),/ZIP_FILESET_MISMATCH/);
+});

@@ -2,6 +2,7 @@
 // Default entry points are local-only. Activation is synchronous in the CLI process.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),https=require('node:https');
 const {spawnSync}=require('node:child_process'),{pathToFileURL}=require('node:url');
+const {createRequire}=require('node:module');
 const ROOT=path.resolve(__dirname,'../..'),PRIVATE=path.join(ROOT,'.firebase/notes-update'),WORKTREE=path.join(ROOT,'.worktrees/pay0-remediation-integration-20261009');
 const ORIGINAL_ENV_SHA='572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856';
 const BASELINE_FILE=path.join(ROOT,'.firebase/notes-independent-postflight/metadata-00001-mug.json'),BASELINE_SHA='1dd47091fdee398337ef1b6b74778ebda714dd749b6f3dad93bea1901e58ad40';
@@ -48,6 +49,15 @@ async function archiveExpected(input){
  const dotenv=fs.readFileSync(path.join(WORKTREE,'functions/.env.pay-0-system'));expected.push({file:'.env.pay-0-system',sha256:sha(dotenv)});
  return expected;
 }
+// Use the same candidate dependency boundary as the standalone archive gate.
+// Firebase CLI15.3.1 does not provide jszip as a resolvable dependency.
+function loadArchiveZip(){return createRequire(path.join(WORKTREE,'functions/package.json'))('jszip');}
+async function verifyPackedBytes(bytes,input,file,inputSha){
+ getInput(file,inputSha);const expected=await archiveExpected(input);
+ const verifier=await import(pathToFileURL(path.join(WORKTREE,input.upload.verifierFile)).href);
+ const result=await verifier.verifyArchiveBytes({bytes,expected,JSZip:loadArchiveZip()});
+ await checkLocal(input,true);return result;
+}
 async function fresh(input,stage=false,completed=null){const checked=await checkLocal(input,stage),runtime=require('./dispersion-notes-runtime-check.cjs');const meta=await readLive(completed?.revision||checked.baseline.function.serviceConfig.revision);runtime.assertPreserved(meta,checked.baseline,completed);return meta;}
 function activate(){
  assert.equal(process.versions.node.split('.')[0],'22','NODE22_REQUIRED');
@@ -66,7 +76,7 @@ function activate(){
  const v2=require(path.join(cli,'lib/gcp/cloudfunctionsv2.js'));
  const upload=uploadModule.installVerifiedUpload({packer:require(path.join(cli,'lib/deploy/functions/prepareFunctionsUpload.js')),deploy:require(path.join(cli,'lib/deploy/functions/deploy.js')),storage:require(path.join(cli,'lib/gcp/storage.js')),v2,
   sourceRoot:path.join(WORKTREE,'functions'),privateTemp:fs.realpathSync(candidateTemp(input.privateTemp)),project:'pay-0-system',region:'us-central1',endpoint:'listClientDispersionNotes',approvedEndpointIds:Object.keys(manifest.canonicalBuild.endpoints),approvedUploadHost:'storage.googleapis.com',ignore:JSON.parse(fs.readFileSync(path.join(WORKTREE,'firebase.json'))).functions.ignore,
-  verifyBytes:async bytes=>{getInput(file,inputSha);const expected=await archiveExpected(input);const verifier=await import(pathToFileURL(path.join(WORKTREE,input.upload.verifierFile)).href);const JSZip=require(require.resolve('jszip',{paths:[cli]}));const result=await verifier.verifyArchiveBytes({bytes,expected,JSZip});await checkLocal(input,true);return result;},emit});
+  verifyBytes:bytes=>verifyPackedBytes(bytes,input,file,inputSha),emit});
  guard=require('./dispersion-notes-update-only.cjs').installGuard({Fabricator:require(path.join(cli,'lib/deploy/functions/release/fabricator.js')).Fabricator,v1:require(path.join(cli,'lib/gcp/cloudfunctions.js')),v2,run:require(path.join(cli,'lib/gcp/run.js')),poller:require(path.join(cli,'lib/operation-poller.js')),baseline:checked.baseline.function,emit,
   beforeUpdate:async()=>{getInput(file,inputSha);await fresh(input,true);},assertUploadSource:async source=>assert.deepEqual(source,upload.receipt().storageSource,'UPDATE_UPLOAD_SOURCE')});
 }
@@ -81,6 +91,6 @@ async function launch(input,file,inputSha){
  fs.writeFileSync(privateFile(input.postflightFile),JSON.stringify(meta),{flag:'wx'});fs.appendFileSync(input.receiptFile,JSON.stringify({state:'POSTFLIGHT_VERIFIED'})+'\n');
  console.log(JSON.stringify({result:'NOTES_UPDATE_PRESERVED',functions:1,hostingApproved:false,independentSourceZipReviewPending:true}));
 }
-Object.assign(module.exports,{candidateTemp,validateReceipt,archiveExpected,fresh,activate,launch});
+Object.assign(module.exports,{candidateTemp,validateReceipt,archiveExpected,loadArchiveZip,verifyPackedBytes,fresh,activate,launch});
 if(require.main===module){(async()=>{const mode=process.argv[2];assert.ok(['--check','--stage','--fresh','--launch'].includes(mode),'MODE');assert.equal(process.argv.length,5,'ARGUMENTS');const input=getInput(process.argv[3],process.argv[4]);if(mode==='--launch')await launch(input,process.argv[3],process.argv[4]);else if(mode==='--fresh'){await fresh(input);console.log(JSON.stringify({result:'NOTES_UPDATE_FRESH_PASS',cloudReads:3,cloudWrites:0}));}else{await checkLocal(input,mode==='--stage');console.log(JSON.stringify({result:'NOTES_UPDATE_LOCAL_PASS',cloudReads:0,cloudWrites:0,executionAttempted:false}));}})().catch(()=>{console.error('NOTES_UPDATE_GUARD_FAILED detailsRedacted=true');process.exitCode=1;});}
 else if(process.env.PAY0_NOTES_UPDATE_INPUT||process.env.PAY0_NOTES_UPDATE_INPUT_SHA){activate();}
