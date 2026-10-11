@@ -2,6 +2,27 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Vigente: IQ6 desplegado y fuentes verificadas; retencion cloud en espera real.**
+
+Execute82732 COMPLETE/PASS y postflight98100 PASS:6 revisiones Ready100,6 ZIP
+exactos,931 entradas coincidentes por archivo. Jobs independiente59582 PASS.
+Ver RELEASE-IQ-SIX-BUNDLED.md para pins, hashes y limites de evidencia. No
+invocaciones financieras de prueba. Integracion3f3c4c5 no cambia.
+
+Resume sintetico0928f9 PASS:13 llamadas SDK/8RunQuery, mismo ancla original,
+sin lock/.new; receipt WAITING_PHASE2 SHA256
+`438c6b932678164057f181d4df7a720992294f77ed597f8e12a934f7b68f916f`.
+Ejecutar fase2 con coordinatorb9200a1d/helpered51b084 entre
+2026-10-11T02:01:09.846Z y02:06:09.846Z; no renovar cohorte ni saltar ventana.
+La comprobacion45min aun NO esta hecha. Recibos anteriores preservados y
+conciliados; causa de fallo local de persistencia sigue no demostrada.
+
+Notas WIP: Functions build96999 PASS y SDK/HTTP25061 PASS40/40 (tipos mixtos10,
+IDsespacio3, autoridad y sobre8MiB); max batch4 fullindex209.07MiB en Windows,
+no garantia Linux. Next71743 y gates memoria/DOM pendientes. Adapter notificador
+inerte nuevo revisado:44fakes/serializer PASS; fixture SDK/memoria preparado,
+sin ejecutar. No integrar ni desplegar estos candidatos antes de sus gates.
+
 **Checkpoint 2026-10-11: IQ6 en ejecucion; notas y notificador aislados.**
 
 IQ6 Execute82732 sigue activo, run `6d17febf78674f49906a6dbd05e3a3de`,

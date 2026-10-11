@@ -1,5 +1,10 @@
 # Publicación y recuperación
 
+Actualizacion2026-10-11: seis entradas IQ desplegadas desde3f3c4c5 y verificadas
+por revision, configuracion y ZIP exacto. Ver [RELEASE-IQ-SIX-BUNDLED.md](RELEASE-IQ-SIX-BUNDLED.md).
+Descarga autorizada tambien publicada con bundle; checkpoints al final conservan
+su detalle. Las menciones de IQ6 pendiente debajo son historia, no estado vigente.
+
 Estado mas reciente: Firestore ruleset76fda1a0 y los cuatro consumidores Hugo
 00003 fueron publicados desde5a4457e y verificados el2026-10-10. Ver
 [FIRESTORE-RELEASE-PREFLIGHT.md](FIRESTORE-RELEASE-PREFLIGHT.md) y
