@@ -35,6 +35,24 @@ de refresco por membresia B no se implementa. No publicar candidato347 aun.
 Los checkpoints siguientes son historia; sus pendientes anteriores no reemplazan
 este estado ni la verificacion de descarga ya completada.
 
+Actualizacion del checkpoint: IQ grupo1 POSTFLIGHT_PASS/ENV_RESTORED; grupo2
+Task DEPLOY_STARTED, mismo Execute82732. Cloud diagnostico GET-only reprodujo
+SOCKET_PATH_NULL; ajuste TCP null (sin cambiar destino/TLS) verificado HTTP200.
+Recibo previo bdb7d3e preservado como cloud-receipt-metadata-refused-bdb7d3e.json.
+Segundo intento creo cinco fixtures sinteticos, pero fallo al persistir ANCHOR:
+receipt SEEDED a571a67e8b8a85a5387b1d3631c6128185b2e66c9beff7d1e0f30f4db7459f30;
+.new SEEDED con ancla ec8ce72c3fb242e8eb2f6af3d71b1fcddec622529c2c1493e191dc9c7b11b21c.
+Sin lock, cuatro llamadas SDK y cero RunQuery; no repetir seed. Reconciliacion
+GET-only exacta en preparacion, misma ancla2026-10-11T01:16:09.846Z. Ventana
+45-50min:02:01:09.846Z a02:06:09.846Z; NO renovar ancla. Causa del fallo de
+persistencia no demostrada: reproduccion local8 reemplazos PASS. No atribuirlo
+a antivirus ni afirmar que la ventana cloud ya paso. No borrar fixtures/recibos.
+Conciliacion68336 PASS:6 lecturas,5 documentos exactos y sexto ausente;
+createTime y todos los writeTimes coinciden con recibos; edad servidor8min.
+Sin escrituras. Primer intento readonly rechazado por DEBUG heredado; repetido
+con DEBUG desactivado en su proceso y restaurado. Reanudador SEEDED separado
+en preparacion: debe usar esta misma ancla sin volver a crear documentos.
+
 **Checkpoint actual: descarga desplegada con bundle y fuente remota verificada.**
 
 Execute95455 PASS, run `2817b3ed3e504dd4bc621d1649a29580`, fuente integrada
