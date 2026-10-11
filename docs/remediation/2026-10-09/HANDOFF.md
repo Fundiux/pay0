@@ -2,6 +2,41 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint: validacion SDK de notas y admision inerte.**
+
+Los runs SDK73958 y diagnostico55683 fallaron el gate de memoria; no autorizan
+Hosting. El diagnostico aislo TypeScript/AST en los hijos instrumentados
+(baseline ~249-251MB). Full-index puro pico235.33MiB y HTTP puro217.42MiB
+permanecieron bajo256MiB. El arnes ahora prepara el mapa de factories en el
+padre, verifica hash/rangos en el hijo y prohibe cargar TypeScript durante la
+medicion; no descuenta baseline ni eleva limites. Root verifico6/6 fakes PASS.
+Run39008 PASS40/40 en208s, log privado notes-integrated-bundle-sdk-no-ast.log;
+16 escenarios instrumentados/full-index/HTTP bajo256MiB. High-water HTTP
+217.71MiB/full-index203.14MiB; stress instrumentado batch8:251.47MiB. Producto
+permanece batch4. Runtime11308 PASS155/63assets y WASM PASS; bundle sin cambios.
+Commit integrado ed5e6f3dd80d05e4ede95dbac8e8c65593235bfe, limpio y pushed.
+
+Admision notifier commit449736d2036b40765e2845f56baa60f22cb2b048:48fakes,
+Functions10608 y SDK13865 PASS6casos;25refs sinteticas borradas y ausencia
+verificada, puertos cerrados. Sin exports, wiring, integracion ni activacion.
+Contexto fisico commit1bbc077498647a3fc3e5f0e1a616c9b97b3c316c:181fakes,
+build97204 y SDK24856 PASS8casos, cleanup25/puertos cerrados; root repitio39
+casos nuevos PASS. Valida generacion/fence/lease dentro de claim/commit/error
+y ACK, sin wiring. Dispatcher, seed ACK y mantenimiento siguen pendientes.
+
+Inventario readonly52166 PASS:4queries/400documentos/209196bytes. rootId,
+clientId y clienteId validos400/400; ambos aliases iguales400. Muestra no
+agotada ni snapshot consistente, sin prueba de procedencia historica ni
+certificacion de ausencia. Cero escrituras productivas. No cierra S10 ni
+autoriza backfill o inferencia de root para registros ausentes.
+
+Helper create-only notas commit ROOT7392bf5: root repitio11/11 suites PASS,
+incluida conversion real CLI15.3.1/planner/fabricator con transporte simulado.
+StageDryRun99418 PASS/restauracion exacta; Preflight76946 PASS/ausencia404.
+Execute91921 EN CURSO: no duplicar ni reutilizar helpers historicos. Pines en
+`.firebase/notes-deploy/approved-plan-ed5e6f3.json`. Postflight independiente
+Run/ZIP sigue requerido; verificador privado revisado y4fakes PASS, sin fetch.
+
 **Checkpoint de integracion: bundle347 instalado y manifiesto equivalente.**
 
 HEAD integrado `d5eae7efb4529692108220a05e9f9ada31c11061`, limpio, aun sin push.
@@ -18,8 +53,8 @@ Compare74465 PASS2385ms:347endpoints y manifiesto completo igual al normal,
 SHA `e4c0f5e0ec14a4c7ef2fae0495ccc7e3ae4b3850545aec283255fc12e346e63b`.
 Runtime25860 PASS155checks/63assets; WASM PASS, sinproviders. Packer77971 PASS
 1251archivos, ZIP local4d028f0bf20990729e850d23578dc6521c76d78a9c773053ac3c53f4f4f16bde;
-no prueba de subida cloud. SDK/HTTP del bundle73958 EN CURSO, log privado
-`.firebase/remediation-temp/notes-integrated-bundle-sdk.log`; no duplicar.
+no prueba de subida cloud. SDK73958 fallo; ver checkpoint superior para
+diagnostico55683 y correccion validada39008. Logs privados conservados.
 
 Framework de prueba copiado localmente:2057archivos/9,911,229B verificados
 byte-a-byte; errores de Copy-Item afectaron cache npm excluida, no esos archivos.
