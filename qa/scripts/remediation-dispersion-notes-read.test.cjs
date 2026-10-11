@@ -1,3 +1,22 @@
+// Bundle mode is explicit; reject stale installed source/output provenance.
+async function verifyNotesExecutionMode(){
+ const assert=require('node:assert/strict'),path=require('node:path');
+ const mode=process.env.PAY0_NOTES_EXECUTION_MODE||'SOURCE';assert.ok(['SOURCE','BUNDLED_V1'].includes(mode),'NOTES_EXECUTION_MODE');
+ if(mode==='BUNDLED_V1'){
+  const installer=await import(require('node:url').pathToFileURL(path.resolve('scripts/install-functions-internal-bundle.mjs')).href);
+  installer.verifyInstalled(process.cwd());
+ }
+ return mode;
+}
+function loadInstalledNotes(externalMocks={}){
+ const assert=require('node:assert/strict'),path=require('node:path');
+ const saved={log:console.log,warn:console.warn,error:console.error};let bundle;
+ try{console.log=console.warn=console.error=()=>{};bundle=require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:path.resolve('functions'),dependencyRoot:path.resolve('functions'),externalMocks});}finally{Object.assign(console,saved);}
+ const api=bundle.loadInternal('modules/financing/noteReads.js');
+ assert.equal(api.listClientDispersionNotes,bundle.api.listClientDispersionNotes,'NOTES_FACTORY_MUST_BE_EXPORTED_CALLABLE');
+ assert.equal(api.NOTES_RESPONSE_BYTES,8388608);assert.equal(typeof api.readClientDispersionNotes,'function');
+ return api;
+}
 // Separate HTTP client: its response buffers never enter the measured server heap.
 if(process.argv.includes('--notes-http-client')){
  (async()=>{
@@ -15,7 +34,8 @@ if(process.argv.includes('--notes-http-client')){
  console.log(JSON.stringify({pages,maxBytes,items:ids.length}));
  })().catch(()=>{console.error('NOTES_HTTP_CLIENT_FAILED');process.exitCode=1;});
 }else
-// Fresh process: compiled product only, no TypeScript transpiler/fake fixture heap.
+// Full-index/HTTP use the unmodified installed entry, never the AST harness.
+// Bundled internal probes are instrumented harness measurements, labelled separately.
 if(process.argv.includes('--notes-byte-child')){
  (async()=>{
  const assert=require('node:assert/strict'),path=require('node:path');
@@ -23,7 +43,7 @@ if(process.argv.includes('--notes-byte-child')){
  for(const key of ['GOOGLE_APPLICATION_CREDENTIALS','CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE','FIREBASE_TOKEN','GOOGLE_OAUTH_ACCESS_TOKEN','CLOUDSDK_AUTH_ACCESS_TOKEN'])assert.ok(!process.env[key]);
  for(const key of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','GCP_PROJECT','GOOGLE_CLOUD_QUOTA_PROJECT','FIREBASE_PROJECT_ID'])if(process.env[key])assert.equal(process.env[key],project);
  if(process.env.FIREBASE_CONFIG)assert.equal(JSON.parse(process.env.FIREBASE_CONFIG).projectId,project);
- const fullIndex=process.argv.includes('--full-index');
+ const fullIndex=process.argv.includes('--full-index'),executionMode=await verifyNotesExecutionMode();
  const batch=Number(process.argv.at(-2)),scenario=process.argv.at(-1);assert.ok([4,8].includes(batch));assert.ok(['typical','large','wide','lineage'].includes(scenario));
  // Fail closed before transport, including metadata/credential discovery. No cloud.
  const net=require('node:net'),dns=require('node:dns');const connect=net.Socket.prototype.connect,lookup=dns.lookup;
@@ -33,7 +53,8 @@ if(process.argv.includes('--notes-byte-child')){
  const req=require('node:module').createRequire(path.resolve('functions/package.json')),admin=req('firebase-admin');const app=admin.initializeApp({projectId:project});const db=admin.firestore();
  let queries=0,documents=0,peakRss=0,peakHeap=0;const sample=()=>{const m=process.memoryUsage();peakRss=Math.max(peakRss,m.rss);peakHeap=Math.max(peakHeap,m.heapUsed);};
  const original=db.runTransaction.bind(db);db.runTransaction=(fn,opts)=>original(tx=>fn({get:async ref=>{const result=await tx.get(ref);if(ref.path)documents++;else{queries++;documents+=result.size;}sample();return result;}}),opts);
- const api=require(path.resolve('functions/lib/modules/financing/noteReads.js'));assert.equal(api.NOTES_RESPONSE_BYTES,8388608);assert.equal(typeof api.readClientDispersionNotes,'function');
+ let api=null;const responseBudget=8388608;
+ if(!fullIndex){api=executionMode==='BUNDLED_V1'?loadInstalledNotes():require(path.resolve('functions/lib/modules/financing/noteReads.js'));assert.equal(api.NOTES_RESPONSE_BYTES,responseBudget);assert.equal(typeof api.readClientDispersionNotes,'function');}
  let callable=null,startupLogCount=0;
  if(fullIndex){assert.equal(batch,4);const saved={log:console.log,warn:console.warn,error:console.error};try{console.log=console.warn=console.error=()=>startupLogCount++;const entry=require(path.resolve('functions/lib/index.js'));assert.equal(Object.keys(entry).filter(k=>entry[k]?.__endpoint).length,347);callable=entry.listClientDispersionNotes;assert.equal(typeof callable.run,'function');}finally{Object.assign(console,saved);}}
  if(process.argv.includes('--http-server')){
@@ -48,7 +69,7 @@ if(process.argv.includes('--notes-byte-child')){
  try{
  result=await new Promise((resolve,reject)=>require('node:child_process').execFile(process.execPath,[__filename,'--notes-http-client',String(server.address().port),scenario],{cwd:process.cwd(),env:{...process.env,PAY0_NOTES_HTTP_NONCE:nonce},encoding:'utf8',timeout:120000,windowsHide:true},(error,stdout)=>{if(error)reject(Error('HTTP_CLIENT_EXIT'));else{try{resolve(JSON.parse(stdout.trim()));}catch{reject(Error('HTTP_CLIENT_FORMAT'));}}}));
  sample();assert.equal(verified,result.pages);const maxRssKiB=process.resourceUsage().maxRSS;
- const metrics={fullIndex:true,http:true,frameworkVersion:'5.0.5',batch,scenario,pages:result.pages,queries,documents,maxBytes:result.maxBytes,elapsedMs:Math.round(performance.now()-started),baselineRss:baseline.rss,peakRss,baselineHeap:baseline.heapUsed,peakHeap,maxRssKiB,verified,suppressedLogs};
+ const metrics={executionMode,instrumentedBundleHarness:false,fullIndex:true,http:true,frameworkVersion:'5.0.5',batch,scenario,pages:result.pages,queries,documents,maxBytes:result.maxBytes,elapsedMs:Math.round(performance.now()-started),baselineRss:baseline.rss,peakRss,baselineHeap:baseline.heapUsed,peakHeap,maxRssKiB,verified,suppressedLogs};
  stdoutWrite.call(process.stdout,JSON.stringify(metrics)+'\n');assert.ok(peakRss<256*1024*1024,'HTTP sampled RSS exceeds256MiB');assert.ok(maxRssKiB<256*1024,'HTTP high-water RSS exceeds256MiB');
  }finally{process.stdout.write=stdoutWrite;process.stderr.write=stderrWrite;clearInterval(timer);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await db.terminate();await app.delete();}
  return;
@@ -58,7 +79,7 @@ if(process.argv.includes('--notes-byte-child')){
  do{
  const request={auth:{uid:scenario==='lineage'?'chain':'u'},data:{dispersionId:scenario==='large'?'bytes':scenario==='wide'?'wide':'typical',limit:50,...(cursor?{cursor}:{})}};
  const page=await (callable?callable.run(request):api.readClientDispersionNotes(request,batch));
- const encoded=JSON.stringify({result:page});sample();const bytes=Buffer.byteLength(encoded);assert.ok(bytes<=api.NOTES_RESPONSE_BYTES);maxBytes=Math.max(maxBytes,bytes);pages++;
+ const encoded=JSON.stringify({result:page});sample();const bytes=Buffer.byteLength(encoded);assert.ok(bytes<=responseBudget);maxBytes=Math.max(maxBytes,bytes);pages++;
  if(scenario==='large'){assert.equal(page.items.length,1);assert.equal(page.items[0].text.length,1048400);assert.ok(/^\u0001+$/.test(page.items[0].text));}
  if(scenario==='wide')for(const row of page.items){assert.equal(row.text.length,1048400);assert.ok(/^x+$/.test(row.text));}
  ids.push(...page.items.map(x=>x.id));if(page.nextCursor)assert.equal(page.nextCursor.id,page.items.at(-1).id);cursor=['large','wide'].includes(scenario)?page.nextCursor:null;
@@ -68,7 +89,7 @@ if(process.argv.includes('--notes-byte-child')){
  const elapsedMs=performance.now()-started;sample();const maxRssKiB=process.resourceUsage().maxRSS;
  // A local single-request/process gate, not a claim about deployed concurrency.
  if(!fullIndex){assert.ok(peakRss<256*1024*1024,'sampled RSS exceeds declared Function memory');assert.ok(maxRssKiB<256*1024,'high-water RSS exceeds declared Function memory');}
- console.log(JSON.stringify({fullIndex,startupLogCount,batch,scenario,pages,queries,documents,maxBytes,elapsedMs:Math.round(elapsedMs),baselineRss:baseline.rss,peakRss,baselineHeap:baseline.heapUsed,peakHeap,maxRssKiB}));
+ console.log(JSON.stringify({executionMode,instrumentedBundleHarness:executionMode==='BUNDLED_V1'&&!fullIndex,fullIndex,startupLogCount,batch,scenario,pages,queries,documents,maxBytes,elapsedMs:Math.round(elapsedMs),baselineRss:baseline.rss,peakRss,baselineHeap:baseline.heapUsed,peakHeap,maxRssKiB}));
  }finally{clearInterval(timer);await db.terminate();await app.delete();}
  })().catch(()=>{console.error('NOTES_BYTE_CHILD_FAILED');process.exitCode=1;});
 }else{
@@ -117,11 +138,14 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
  if(process.env.FIREBASE_CONFIG){const config=JSON.parse(process.env.FIREBASE_CONFIG);assert.equal(config.projectId,project);}
  const req=require('node:module').createRequire(path.resolve('functions/package.json'));
  const realAdmin=req('firebase-admin'),firestore=req('firebase-admin/firestore');
- const app=realAdmin.initializeApp({projectId:project},'notes-gate');
+ const executionMode=await verifyNotesExecutionMode();
+ const app=executionMode==='BUNDLED_V1'?realAdmin.initializeApp({projectId:project}):realAdmin.initializeApp({projectId:project},'notes-gate');
  const db=realAdmin.firestore(app);
  let count=0,race=null,reads=0,queries=0;
  const wrapped={doc:p=>db.doc(p),collection:p=>db.collection(p),runTransaction:async(fn,options)=>{count++;if(count===2&&race)await race();return db.runTransaction(tx=>fn({get:async ref=>{if(ref.path)reads++;else queries++;return tx.get(ref);}}),options);}};
- const admin={apps:[app],firestore:()=>wrapped};
+ // Preserve real SDK singleton/static classes. Only intercept real emulator DB
+ // transactions to count reads and inject the second-transaction race. No auth mocks.
+ const admin={...realAdmin,firestore:Object.assign(()=>wrapped,realAdmin.firestore)};Object.defineProperty(admin,'apps',{enumerable:true,get:()=>realAdmin.apps});
  const cache=new Map();
  function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const result={};cache.set(file,result);const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('exports','require',code)(result,n=>{if(n==='firebase-admin')return admin;if(n==='firebase-admin/firestore')return firestore;if(n==='firebase-functions/v2/https')return{HttpsError,onCall:(_o,fn)=>fn};if(n==='firebase-functions')return{https:{HttpsError}};assert.ok(n.startsWith('.'));return load(path.resolve(path.dirname(file),n+'.ts'));});return result;}
  try{
@@ -131,8 +155,9 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   for(let i=0;i<125;i++)batch.set(db.doc('clientDispersions/d/notas/n'+String(i).padStart(3,'0')),{text:'synthetic',createdAt:new firestore.Timestamp(100+Math.floor(i/3),(i%2)*1000)});
   await batch.commit();
   assert.equal((await db.doc("clientDispersions/d/notas/n001").get()).get("createdAt").nanoseconds,1000,"stored microsecond precision must match the fixture");
-  const api=load('functions/src/modules/financing/noteReads.ts');
-  const call=data=>api.listClientDispersionNotes({auth:{uid:'u'},data:{dispersionId:'d',limit:17,...data}});
+  const api=executionMode==='BUNDLED_V1'?loadInstalledNotes({'firebase-admin':admin,'firebase-admin/firestore':{...firestore,getFirestore:()=>wrapped}}):load('functions/src/modules/financing/noteReads.ts');
+  const invoke=executionMode==='BUNDLED_V1'?api.listClientDispersionNotes.run:api.listClientDispersionNotes;assert.equal(typeof invoke,'function');
+  const call=data=>invoke({auth:{uid:'u'},data:{dispersionId:'d',limit:17,...data}});
   const ids=[];let cursor,first;
   do{const page=await call(cursor?{cursor}:{});first ||= page;ids.push(...page.items.map(row=>row.id));cursor=page.nextCursor;}while(cursor);
   assert.equal(ids.length,125);assert.equal(new Set(ids).size,125);
@@ -209,7 +234,8 @@ test('real Admin SDK/demo emulator:125 notes, tie cursors and authority race',{s
   }
   for(const row of measurements)console.log('NOTES_BYTE_MEASUREMENT '+JSON.stringify(row));
   }else console.log('NOTES_RESOURCE_BENCHMARKS_SKIPPED explicitNarrowRun=true');
-  console.log('NOTES_REAL_SDK_PASS notes=125 distinct=125 authorityRace=denied cloud=0 rulesVerdict=NOT_TESTED');
+  await verifyNotesExecutionMode();
+  console.log('NOTES_REAL_SDK_PASS mode='+executionMode+' notes=125 distinct=125 authorityRace=denied cloud=0 rulesVerdict=NOT_TESTED');
  }finally{await db.terminate();await app.delete();}
 });
 test('string aliases follow canonical trimming without object coercion',async()=>{const s=setup();s.rows.get('clientDispersions/d').clientId=' c ';assert.equal((await s.call()).items.length,50);for(const value of [0,false,{id:'c'},['c']]){const other=setup();other.rows.get('clientDispersions/d').clientId=value;await assert.rejects(other.call(),e=>e.code==='permission-denied');assert.equal(other.queries,0);}});

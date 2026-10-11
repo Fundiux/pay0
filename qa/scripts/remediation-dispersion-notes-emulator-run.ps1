@@ -1,4 +1,4 @@
-param([switch]$PrerequisitesOnly, [switch]$SkipResourceBenchmarks)
+param([switch]$PrerequisitesOnly, [switch]$SkipResourceBenchmarks, [switch]$InstalledBundle)
 $ErrorActionPreference='Stop'
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 # Dependencies are deliberately isolated and never downloaded by this gate.
@@ -10,7 +10,16 @@ const fs=require('node:fs'),path=require('node:path');try{const root=process.arg
 '@
 & node -e $taskPrerequisiteJs $taskFrameworkRoot
 if($LASTEXITCODE -ne 0){throw $taskPrerequisite}
-if(-not (Test-Path -LiteralPath (Join-Path $taskRoot 'functions/lib/modules/financing/noteReads.js'))){throw 'Run npm run build in functions before the real SDK/HTTP gate; compiled noteReads.js is required.'}
+if($InstalledBundle){
+ $taskVerifyBundleJs=@'
+const {pathToFileURL}=require('node:url'),path=require('node:path');const root=process.argv[1];import(pathToFileURL(path.join(root,'scripts/install-functions-internal-bundle.mjs')).href).then(m=>{m.verifyInstalled(root);}).catch(()=>{console.error('NOTES_INSTALLED_BUNDLE_PROVENANCE_REQUIRED');process.exitCode=1;});
+'@
+ & node -e $taskVerifyBundleJs $taskRoot
+ if($LASTEXITCODE -ne 0){throw 'Install and verify the exact BUNDLED_V1 candidate before -InstalledBundle; do not rebuild NORMAL between installation and this gate.'}
+}else{
+ if(-not (Test-Path -LiteralPath (Join-Path $taskRoot 'functions/lib/modules/financing/noteReads.js'))){throw 'Run npm run build:normal in functions before the source/normal SDK gate; compiled noteReads.js is required.'}
+ if(Test-Path -LiteralPath (Join-Path $taskRoot 'functions/.bundle-provenance.json')){throw 'Installed bundle detected: use -InstalledBundle explicitly, never mix source fixtures with a bundled entry.'}
+}
 if($PrerequisitesOnly){Write-Output 'NOTES_HTTP_PREREQUISITES_PASS'; exit 0}
 $taskProject='demo-pay0-dispersion-notes'
 foreach($key in @('GOOGLE_APPLICATION_CREDENTIALS','CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE','FIREBASE_TOKEN','GOOGLE_OAUTH_ACCESS_TOKEN','CLOUDSDK_AUTH_ACCESS_TOKEN')) {
@@ -32,9 +41,10 @@ $taskRules=Join-Path $taskRuntime 'firestore.rules'
 $taskSettings=@{firestore=@{rules=$taskRules};emulators=@{firestore=@{host='127.0.0.1';port=18246;websocketPort=19246};ui=@{enabled=$false};hub=@{host='127.0.0.1';port=14446};logging=@{host='127.0.0.1';port=14546};singleProjectMode=$true}}
 [IO.File]::WriteAllText($taskConfig,($taskSettings|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
 $taskSaved=@{}
-foreach($key in @('TEMP','TMP','XDG_CONFIG_HOME','DEBUG','FIREBASE_CLI_DISABLE_USAGE','PAY0_NOTES_REAL_SDK','PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS','GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIRESTORE_EMULATOR_HOST')){$taskSaved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
+foreach($key in @('TEMP','TMP','XDG_CONFIG_HOME','DEBUG','FIREBASE_CLI_DISABLE_USAGE','PAY0_NOTES_REAL_SDK','PAY0_NOTES_EXECUTION_MODE','PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS','GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','FIRESTORE_EMULATOR_HOST')){$taskSaved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
 Push-Location $taskRoot
 try {
+ $env:PAY0_NOTES_EXECUTION_MODE=if($InstalledBundle){'BUNDLED_V1'}else{'SOURCE'}
  $env:PAY0_NOTES_SKIP_RESOURCE_BENCHMARKS=if($SkipResourceBenchmarks){'1'}else{'0'}
  $env:TEMP=$taskRuntime;$env:TMP=$taskRuntime;$env:XDG_CONFIG_HOME=Join-Path $taskRuntime 'cli';$env:DEBUG='';$env:FIREBASE_CLI_DISABLE_USAGE='true';$env:PAY0_NOTES_REAL_SDK='1';$env:GCLOUD_PROJECT=$taskProject;$env:GOOGLE_CLOUD_PROJECT=$taskProject;$env:FIRESTORE_EMULATOR_HOST='127.0.0.1:18246'
  $taskPreference=$ErrorActionPreference;$taskExit=$null
