@@ -13,7 +13,15 @@ hosting-a52959b-reconciled-9062fed059a5.jsonl; root controla sesion37057.
 Preparacion independiente posthosting offline, sin publicar desde agentes.
 Notifier HTTP f42834ecc92892ce280c89bddeb1aed953821a99 clean/root49PASS,
 build/policyPASS; nuevo deadline cooperativo aislado autorizado, no wiring.
-Solicitud initialnote tx17PASSroot/build40880/policy; commit3paths aprobado.
+Solicitud initialnote a6a7a5c211513ad27256cfe34478640925eae2ae limpio,
+tx17PASSroot/build40880/policy. Nuevo replacementclaim WIP5paths revisado
+root9d09d4,29PASS38016d; original se relee dentro cada TX antes secuencia.
+SDK2checks/14refs preparado, fullreview61768c/075971: fixtureec0f570b...
+runnerf29e2483...; Prepare permitido, build+Execute retenidos porHosting.
+Notifier deadline WIP4paths fullreview37e3e3/8bf433, root27PASSdaae3e,
+agent243PASS; sin handler ni infra. Build final pendiente liberar CPU.
+PostHosting helperprivado d6c86822... fullreview6863e9/root4fakesPASSe0dfe5;
+request DRAFT invalido, onceGETmax/ZIPinventariofull+subsetexplicit, sinfetch.
 
 **Checkpoint vigente: reconciliacion posterior a Execute33777.** La operacion
 cloud termino correctamente, pero el launcher termino exit1 a06:49:21Z por
