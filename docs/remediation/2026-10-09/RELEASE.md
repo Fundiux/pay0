@@ -4,7 +4,11 @@ Packagingf3f3bed integrado/pushed: strict local1251/1251PASS82565, cloud0;
 root25tests+6packerPASS. Launcher eef4d18 PASS53/defaultlocal+StageCASPASS.
 Update-only61313 fallo antesupload/update por resolucionJSZip errada enCLI;
 guardGUARD_ACTIVE solamente, entorno restaurado. Correccion decoderFunctions
-PASS41+offline1251/stream45447; nuevoinput/pins preparados, Execute pendiente.
+PASS41+offline1251/stream45447. Execute93350 fallo despues ZIP_VERIFIED1251,
+sin ZIP_UPLOADED/plan/update. Entorno restaurado SHA572b76d y trackedclean;
+fresh75310PASS3GET confirma revision/config originales. Causa reproducida
+offline: guard rechaza payload.extensions={} producido por CLI real; correccion
+aislada en curso y nuevo intento pendiente. Preservar ambos intentos fallidos.
 Solo despues de nuevo ZIP independiente exacto y configuracion preservada
 se puede preparar Hosting. No implica cierre de solicitud348 ni S10.
 

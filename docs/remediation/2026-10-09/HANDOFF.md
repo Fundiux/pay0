@@ -11,8 +11,15 @@ se buscaba en CLI sin dependencia. Corregido a paqueteFunctions;41testsPASS
 y45447offlinefull1251+streamPASS, cloud0. Nuevoinput candidate-f3f3bed-jszip
 SHAec39ca4a896a216226ba16ab7a273521b4163d4bb42a5a65cae8d33f3512c475.
 NO repetir inputsfallidos ni crear funcion existente. Fixroot6c323dc; nuevo
-StageCAS60547PASS, Execute93350 ACTIVO run82c429301f5e444d996fd02b0ad2def9
-con candidate-f3f3bed-jszip, mismoinputSHA anterior. Root controla esta sesion.
+StageCAS60547PASS, Execute93350 FAIL06:14:40Z run82c429301f5e444d996fd02b0ad2def9.
+Receipt GUARD_ACTIVE+ZIP_VERIFIED1251 SHAe7001f55eeb473e1f77bb8e0d67e75b3262ab32b09875a00f7e5805c7d0f8cc8;
+sin ZIP_UPLOADED/plan/update. ENV_RESTORED y rootSHA572b76d comprobado;
+integracion trackedclean. No repetir input.
+Reconciliacion3GET fresh75310 PASS06c7dc: revision/config previas preservadas.
+Causa reproducida offline: prepareDynamicExtensions real produce payload.extensions={};
+guard UPLOAD_EXTENSIONS rechazaba truthy vacio antes dispatch/upload. Agentbaseline
+corrige guard/test/doc en worktree packagingeb2580b, aun sin commit/integracion.
+No Hosting ni nuevo deploy hasta gates/pins nuevos.
 Primer input fallo local por CRLF en cherry-pick; normalizacion de ambos
 modulos demostro igualdad exacta; pines nuevos usan bytes instalados reales.
 Solicitud contador8ef6c37 oracle8PASSroot/93PASSagent, normalbuild+SDK8PASS,
@@ -21,12 +28,14 @@ HTTP1012PASS7/131972KiB/cleanup74+puertosclosed. Doc1f7e585 clean,
 nointegrado; UI solicitudes implementada en4sourcepaths aislados sinwriters.
 Root reviso controlador compartido/adaptador/pagina:37testsPASS c3038e;
 agent Next47paginas/policyPASS. Textos ajustados despues del build, unitPASS.
-RSS/browser pendientes de ventana93350; sin commit/integracion UI todavia.
+RSScontroller3/browserdispersion3/miniUISolicitud8PASS; closed/cloud0/writers0.
+Root reviso10paths y aprobo commit aislado UI; integracion aun pendiente.
 Notifierauthority bd4d35179b6bce0dd5357fd08fb1d6dcd08c594e clean:
 40fakesrootPASS+56regresiones+Functionsbuild/policyPASS. Extraccion legacy y
 verificadorv3 inerte. Wiring tx Jobs/Dispatch ahora WIP en4TS del agente:
 marker separado sticky, ausencia distinta de null/malformed, receipts intactos.
-Root primera revision diff realizada; pruebas canonicas/adapters aun pendientes.
+Root revision4TS+suite69PASS d0277e; agent282regresiones/build/policyPASS.
+Gate SDK real autoridad en preparacion aislada, todavia no ejecutado.
 No worker/proveedor/admission writer activado ni despliegue de este frente.
 
 **Adenda vigente:**401 notas PASS74b0e6 (sin auth/IDs), fuente exacta aun
