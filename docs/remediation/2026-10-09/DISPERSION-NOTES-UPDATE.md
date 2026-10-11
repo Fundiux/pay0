@@ -39,3 +39,20 @@ Pendiente: launcher con dotenv CAS/restauracion, baseline/pines completos,
 guard del stream del ZIP realmente subido, pruebas del launcher y ejecucion
 gradual update-only. Conservar originales y evidencia; no borrar maps
 historicos locales para satisfacer el conjunto del ZIP.
+
+## Revision de escala y comparador de runtime
+
+La captura remota guardada observa maxGCF=null, maxRunServicio=20,
+maxTemplate=null, maxRevision=null, una revision Ready con trafico100 y sin
+tags alternos. La decision central es preservar ese limite de servicio20,
+sin inventar un max GCF ni desplegar un override. No es una prueba de carga
+ni de coste. Cloud Run aplica el maximo del servicio al autoscaling y puede
+superarlo temporalmente; por tanto no se afirma un techo fisico estricto.
+Referencia: [documentacion oficial de maximos de Cloud Run](https://docs.cloud.google.com/run/docs/configuring/max-instances).
+
+Comparador puro scripts/lib/dispersion-notes-runtime-check.cjs:3/3 fakes
+PASS37f980 y comparacion offline de la captura real consigo misma PASSc68c38.
+Rechaza cambios en escala, configuracion/env, Ready, trafico, identidad,
+secretos o red; el postflight exige la revision/source exactos del poller.
+Conserva comparacion estricta de arrays env, incluso su orden. Esto no
+sustituye una lectura fresca, igualdad de ZIP ni el launcher completo.
