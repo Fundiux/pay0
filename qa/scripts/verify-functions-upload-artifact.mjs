@@ -21,7 +21,7 @@ export function createUploadProgressWriter(file, write = fs.writeFileSync, now =
 export function uploadWorkerDiagnostic(child, elapsedMs, progress) {
   const knownErrors = ['ETIMEDOUT', 'ENOENT', 'EACCES', 'EPERM', 'ENOBUFS'];
   const knownCodes = ['REDACTED', 'CLI_VERSION_UNREVIEWED', 'CLI_CODE_UNREVIEWED',
-    'ZIP_PRIVATE_SCOPE', 'ZIP_ENTRY_SCOPE', 'ZIP_CONTENT_MISMATCH', 'UPLOAD_ARGUMENTS'];
+    'ZIP_PRIVATE_SCOPE', 'ZIP_ENTRY_SCOPE', 'ZIP_CONTENT_MISMATCH', 'ZIP_FILESET_MISMATCH', 'UPLOAD_ARGUMENTS'];
   let workerCode = null;
   const stderr = typeof child.stderr === 'string' ? child.stderr : '';
   if (Buffer.byteLength(stderr) <= 512) {
@@ -38,6 +38,25 @@ export function uploadWorkerDiagnostic(child, elapsedMs, progress) {
     ...(workerStages.includes(progress?.stage) && Number.isSafeInteger(progress.elapsedMs) && progress.elapsedMs >= 0
       ? { stage: progress.stage, stageElapsedMs: progress.elapsedMs } : {}),
   };
+}
+
+export async function verifyArchiveBytes({ bytes, expected, JSZip, onProgress = () => {} }) {
+    const zip = await JSZip.loadAsync(bytes, { checkCRC32: true });
+    onProgress('CRC_OK');
+    const names = Object.keys(zip.files);
+    if (names.some(name => name.includes('\\') || name.split('/').includes('..') || name.startsWith('/') || name.split('/').includes('node_modules'))) throw Error('ZIP_ENTRY_SCOPE');
+    // A matching subset is insufficient: unowned files must never reach upload.
+    const actualFiles = names.filter(name => !zip.files[name].dir);
+    if (expected.some(row => typeof row.file !== 'string' || !row.file || row.file.includes('\\') || row.file.includes(':') || row.file.split('/').some(part => !part || part === '.' || part === '..'))) throw Error('ZIP_ENTRY_SCOPE');
+    const expectedNames = new Set(expected.map(row => row.file));
+    if (expectedNames.size !== expected.length || actualFiles.length !== expected.length ||
+        actualFiles.some(name => !expectedNames.has(name))) throw Error('ZIP_FILESET_MISMATCH');
+    for (const row of expected) {
+      const entry = zip.file(row.file);
+      if (!entry || sha256(await entry.async('nodebuffer')) !== row.sha256) throw Error('ZIP_CONTENT_MISMATCH');
+    }
+    onProgress('ROWS_OK');
+    return { result: 'UPLOAD_ARTIFACT_VERIFIED', filesVerified: expected.length, archiveFiles: actualFiles.length, exactFileSet: true, archiveSha256: sha256(bytes), cloudCalls: 0, actualUploadVerified: false };
 }
 
 export async function verifyArchive({ repositoryRoot, expected, config = {}, toolsRoot = cliRoot(), onProgress = () => {} }) {
@@ -59,17 +78,8 @@ export async function verifyArchive({ repositoryRoot, expected, config = {}, too
   try {
     const bytes = fs.readFileSync(archivePath);
     onProgress('ZIP_READ');
-    const zip = await JSZip.loadAsync(bytes, { checkCRC32: true });
-    onProgress('CRC_OK');
-    const names = Object.keys(zip.files);
-    if (names.some(name => name.includes('\\') || name.split('/').includes('..') || name.startsWith('/') || name.split('/').includes('node_modules'))) throw Error('ZIP_ENTRY_SCOPE');
-    for (const row of expected) {
-      checkedPath(source, row.file);
-      const entry = zip.file(row.file);
-      if (!entry || sha256(await entry.async('nodebuffer')) !== row.sha256) throw Error('ZIP_CONTENT_MISMATCH');
-    }
-    onProgress('ROWS_OK');
-    return { result: 'UPLOAD_ARTIFACT_VERIFIED', filesVerified: expected.length, archiveSha256: sha256(bytes), cloudCalls: 0, actualUploadVerified: false };
+    for (const row of expected) checkedPath(source, row.file);
+    return await verifyArchiveBytes({ bytes, expected, JSZip, onProgress });
   } finally { fs.unlinkSync(archivePath); onProgress('ZIP_REMOVED'); }
 }
 export function verifyUploadGate({ repositoryRoot = path.resolve(import.meta.dirname, '../..'), environment = process.env } = {}) {
@@ -107,7 +117,7 @@ export function verifyUploadGate({ repositoryRoot = path.resolve(import.meta.dir
     throw Object.assign(Error('UPLOAD_WORKER_FAILED'), { worker: uploadWorkerDiagnostic(child, Date.now() - started, progress) });
   }
   let result; try { result = JSON.parse(child.stdout); } catch { throw Error('UPLOAD_WORKER_OUTPUT'); }
-  if (result.result !== 'UPLOAD_ARTIFACT_VERIFIED') throw Error('UPLOAD_WORKER_OUTPUT');
+  if (result.result !== 'UPLOAD_ARTIFACT_VERIFIED' || result.exactFileSet !== true || result.archiveFiles !== expected.length || result.filesVerified !== expected.length) throw Error('UPLOAD_WORKER_OUTPUT');
   assertSnapshot(root, report.sourceInputs); verifyInstalled(root);
   if (currentHash(path.join(root, 'firebase.json')) !== sha256(firebaseBytes)) throw Error('PACK_CONFIG_DRIFT');
   for (const row of expected) if (currentHash(checkedPath(path.join(root, 'functions'), row.file)) !== row.sha256) throw Error('PACK_INPUT_DRIFT');

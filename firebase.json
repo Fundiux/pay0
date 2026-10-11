@@ -2,6 +2,7 @@
     "functions":  {
                       "source":  "functions",
                       "runtime":  "nodejs22",
+                      "ignore": ["node_modules", ".git", ".bundle-provenance.json", ".eslintrc.cjs", ".gcloudignore", ".gitignore", "scripts", "test", "**/lib/!(index).js.map", "**/lib/*/**/*.js.map"],
                       "predeploy":  [
                                         "node qa/scripts/verify-release-baseline.mjs",
                                         "npm --prefix functions run build",

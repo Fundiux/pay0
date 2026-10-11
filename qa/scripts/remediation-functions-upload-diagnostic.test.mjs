@@ -36,3 +36,9 @@ test('optional journal failure cannot replace success or the original error', ()
   const original = Error('ZIP_CONTENT_MISMATCH');
   assert.throws(() => { try { throw original; } finally { progress('ZIP_REMOVED'); } }, error => error === original);
 });
+
+test('exact fileset rejection remains a bounded diagnostic', () => {
+  const row = uploadWorkerDiagnostic({ status: 1, stderr: JSON.stringify({ result: 'UPLOAD_VERIFICATION_FAILED', code: 'ZIP_FILESET_MISMATCH', files: ['PRIVATE'] }) }, 1);
+  assert.equal(row.workerCode, 'ZIP_FILESET_MISMATCH');
+  assert.ok(!JSON.stringify(row).includes('PRIVATE'));
+});
