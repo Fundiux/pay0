@@ -2,6 +2,34 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint actual: bundle integrado y verificado localmente; deploy pendiente.**
+
+Integracion `integration/pay0-remediation-20261009` HEAD `3f3c4c5` pushed;
+arbol `483a607e87dfeea9630fa97d83e828f48c4bb0b9` igual al candidato
+`c49024c`. Main no cambia; el experimento de reglas e3ea3dd queda excluido.
+Build integrado67504 PASS:929 archivos, bundle SHA256
+`308ad5c99d96990df327e08bb0272ea9f52931bf43fcc630b97fcad6842e980d`.
+Provenance instalada SHA256
+`0bfdf35d9f1366a6093bd9d5ad87ab94426aca0542a50c7a073e8854057f6818`.
+Discovery12215 PASS: warm4507ms/strict3352ms/CLI6691ms,346 endpoints;
+limites originales7s/10s conservados. Manifiesto completo PASS3294ms,
+SHA256 `9d9bf27f15d47a695fee37d14959d89f0b57af6692ea49534d838dc426967cdb`.
+El primer packer sin selector no comprobo bundle (NORMAL_BUILD_NO_BUNDLE_CLAIM).
+Ejecucion corregida22974 con BUNDLED_V1 PASS:1248 archivos, ZIP local
+`8ad3691ec77042aa7f5e16e0cf16eaba223d66ebdaa10c7a0293b7643062734a`.
+Esto no prueba upload real; el predeploy mantiene ambos controles.
+
+Preflight5359 de descarga PASS en HEAD3f3; sin cambios cloud. Helper privado de
+postflight GET-only en revision para comprobar fuente exacta por generacion,
+configuracion y Ready100; aun faltan runID/revision/generacion del deploy.
+IQ6 permanece pendiente. No pruebas financieras ni mensajes reales.
+Notas HEAD1e22b897 permanece aislado:39 SDK/56 fakes PASS, pero compatibilidad
+historica pendiente de inventario acotado revisado. Notificador v3 inerte en
+revision:50 fakes PASS; ID160 rechazaba eventos existentes180 y fue corregido
+al limite tecnico Firestore, chats numericos conservan normalizacion vigente.
+Sin wiring ni deploy de estos dos candidatos. Checkpoints anteriores siguen
+como historia; no describen el HEAD vigente.
+
 **Checkpoint vigente: gate IAM sintetico aprobado y limpiado.**
 
 Fuente fbf6909, contrato REST corregido c9586d7: 36 pruebas locales PASS.
