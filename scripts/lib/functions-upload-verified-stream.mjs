@@ -74,8 +74,16 @@ export function installVerifiedUpload({ packer, deploy, storage, v2, sourceRoot,
   const direct=deploy.uploadSourceV2, dispatch=deploy.deploy;
   assert.equal(typeof direct,'function','UPLOAD_CONTRACT');assert.equal(typeof dispatch,'function','UPLOAD_CONTRACT');
   deploy.uploadSourceV2=async function(p,n,source,backend){assertBackend(backend);return direct.call(this,p,n,source,backend);};
+  function assertEmptyExtensions(owner){
+    if (!('extensions' in owner)) return;
+    const descriptor=Object.getOwnPropertyDescriptor(owner,'extensions');
+    assert.ok(descriptor&&Object.hasOwn(descriptor,'value'),'UPLOAD_EXTENSIONS');
+    const value=descriptor.value;
+    assert.ok(value!==null&&typeof value==='object'&&Object.getPrototypeOf(value)===Object.prototype&&Reflect.ownKeys(value).length===0,'UPLOAD_EXTENSIONS');
+  }
   deploy.deploy=async function(context,options,payload){
-    assert.ok(!payload.extensions,'UPLOAD_EXTENSIONS');
+    assertEmptyExtensions(payload);assertEmptyExtensions(context);
+    assert.equal(options.nonInteractive,true,'UPLOAD_NONINTERACTIVE');
     assert.equal(context.projectId,project,'UPLOAD_PROJECT');
     assert.deepEqual(context.filters,[{codebase:'default',idChunks:[endpoint]}],'UPLOAD_FILTERS');
     const entries=Object.entries(payload.functions||{});assert.equal(entries.length,1,'UPLOAD_CODEBASE_COUNT');

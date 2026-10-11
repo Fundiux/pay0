@@ -40,7 +40,7 @@ async function fixture(action,{omitGeneration=false,conflictGeneration=false,gen
   const guard=installVerifiedUpload({packer,deploy,storage,v2,sourceRoot:source,privateTemp:temp,project:'demo-upload',region:'us-central1',endpoint:'notes',approvedEndpointIds:ids,approvedUploadHost:'storage.googleapis.com',ignore:['node_modules','.git'],verifyBytes:bytes=>verifyArchiveBytes({bytes,expected,JSZip})});
   const pack=()=>packer.prepareFunctionsUpload(dir,source,{ignore:['node_modules','.git']},[]);
   const send=packed=>deploy.uploadSourceV2('demo-upload','123',{functionsSourceV2:packed.pathToSource},backend);
-  const sendFull=(packed,selectedFilters=filters,want=backend)=>deploy.deploy({projectId:'demo-upload',filters:selectedFilters,config:[{codebase:'default',source:'functions'}],sources:{default:{functionsSourceV2:packed.pathToSource}}},{projectNumber:'123'},{functions:{default:{wantBackend:want,haveBackend:backendApi.empty()}}});
+  const sendFull=(packed,selectedFilters=filters,want=backend)=>deploy.deploy({projectId:'demo-upload',filters:selectedFilters,config:[{codebase:'default',source:'functions'}],sources:{default:{functionsSourceV2:packed.pathToSource}}},{projectNumber:'123',nonInteractive:true},{functions:{default:{wantBackend:want,haveBackend:backendApi.empty()}}});
   await action({pack,send,sendFull,guard,source,expected,setFail:()=>{fail=true;},counts:()=>({uploads,body})});
  }finally{
   for(const [owner,props]of saved)Object.defineProperties(owner,props);
@@ -116,3 +116,55 @@ test('full backend filters and targeted flags cannot authorize another endpoint'
 test('documented zero generation placeholders are replaced by immutable PUT generation',async()=>{
  for(const generationPlaceholder of [0,'0'])await fixture(async f=>{const result=await f.send(await f.pack());assert.equal(result.generation,'1');assert.equal(f.guard.receipt().uploadedGeneration,'1');},{generationPlaceholder});
 });
+
+test('real dynamic prepare empty payload follows real deploy/release without extension mutations',async()=>fixture(async f=>{
+ const extensionPrepare=require('./lib/deploy/extensions/prepare'),extensionRelease=require('./lib/deploy/extensions/release');
+ const extensionHelper=require('./lib/extensions/extensionsHelper'),permissions=require('./lib/requirePermissions'),planner=require('./lib/deploy/extensions/planner');
+ const billing=require('./lib/gcp/cloudbilling'),billingSetup=require('./lib/extensions/checkProjectBilling'),tasks=require('./lib/deploy/extensions/tasks'),etags=require('./lib/extensions/etags');
+ const saved=[extensionHelper,permissions,planner,billing,billingSetup,tasks,etags].map(owner=>[owner,Object.getOwnPropertyDescriptors(owner)]);
+ let billingReads=0,mutations=0;const deny=()=>{mutations++;throw Error('EXTENSION_MUTATION_FORBIDDEN');};
+ try{
+  extensionHelper.ensureExtensionsApiEnabled=async()=>{};
+  permissions.requirePermissions=async()=>{};
+  planner.haveDynamic=async()=>[];
+  const context={},payload={},options={project:'demo-upload',projectNumber:'123',only:'functions:notes',nonInteractive:true,config:{src:{functions:{source:'functions'}}}};
+  await extensionPrepare.prepareDynamicExtensions(context,options,payload,{default:{extensions:{}}});
+  assert.deepEqual(context,{});assert.deepEqual(payload,{});
+  billing.checkBillingEnabled=async()=>{billingReads++;return true;};billingSetup.enableBilling=deny;
+  for(const key of ['createExtensionInstanceTask','updateExtensionInstanceTask','configureExtensionInstanceTask','deleteExtensionInstanceTask'])tasks[key]=deny;
+  planner.have=deny;planner.haveDynamic=deny;planner.getExtensionSpec=deny;etags.saveEtags=deny;
+  const packed=await f.pack();
+  const fullContext={projectId:'demo-upload',filters,config:[{codebase:'default',source:'functions'}],sources:{default:{functionsSourceV2:packed.pathToSource}},extensions:context};
+  const fullPayload={functions:{default:{wantBackend:backend,haveBackend:backendApi.empty()}},extensions:payload};
+  await deploy.deploy(fullContext,options,fullPayload);
+  await extensionRelease.release(context,options,payload);
+  assert.equal(billingReads,1);assert.equal(mutations,0);assert.equal(f.counts().uploads,1);
+  assert.equal(fullContext.extensions,context);assert.equal(fullPayload.extensions,payload);
+  assert.deepEqual(context,{});assert.deepEqual(payload,{});
+ }finally{for(const [owner,props]of saved)Object.defineProperties(owner,props);}
+}));
+const invalidExtensionCases=[
+ ['null',()=>null],['array',()=>[]],['undefined-own',()=>undefined],
+ ['nonempty',()=>({instancesToCreate:[]})],['symbol-key',()=>({[Symbol('blocked')]:true})],
+ ['custom-prototype',()=>Object.create({inherited:true})],['null-prototype',()=>Object.create(null)],
+ ['nonenumerable',()=>Object.defineProperty({},'hidden',{value:true})],
+];
+for(const [label,make]of invalidExtensionCases)for(const target of ['context','payload']){
+ test('reject '+target+' extension '+label+' before CLI dispatch',async()=>fixture(async f=>{
+  const context={},payload={};(target==='context'?context:payload).extensions=make();
+  await assert.rejects(deploy.deploy(context,{nonInteractive:true},payload),/UPLOAD_EXTENSIONS/);
+  assert.equal(f.counts().uploads,0);
+ }));
+}
+for(const target of ['context','payload'])for(const descriptorKind of ['inherited','accessor']){
+ test('reject '+target+' extension '+descriptorKind+' without reading getter',async()=>fixture(async f=>{
+  let getterCalls=0;
+  const invalid=descriptorKind==='inherited'?Object.create({extensions:{}}):Object.defineProperty({},'extensions',{get(){getterCalls++;return{};}});
+  await assert.rejects(deploy.deploy(target==='context'?invalid:{},{nonInteractive:true},target==='payload'?invalid:{}),/UPLOAD_EXTENSIONS/);
+  assert.equal(getterCalls,0);assert.equal(f.counts().uploads,0);
+ }));
+}
+test('nonInteractive is mandatory even with empty extension envelopes',async()=>fixture(async f=>{
+ for(const nonInteractive of [undefined,false,'true'])await assert.rejects(deploy.deploy({extensions:{}},{nonInteractive},{extensions:{}}),/UPLOAD_NONINTERACTIVE/);
+ assert.equal(f.counts().uploads,0);
+}));

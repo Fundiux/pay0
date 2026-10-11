@@ -50,3 +50,25 @@ After PUT, the actual uploaded generation is inserted into the same storageSourc
 The approved host policy is storage.googleapis.com, not an assertion about previously observed signed URLs. Official GCF generateUploadUrl documentation describes a Cloud Storage signed URL: https://docs.cloud.google.com/functions/docs/reference/rest/v2/projects.locations.functions/generateUploadUrl . Official Storage XML endpoint documentation includes storage.googleapis.com: https://docs.cloud.google.com/storage/docs/request-endpoints . A different returned host fails before PUT and requires a separate review of a safe projection; no fallback is automatic. URL is bound exactly to the authenticated fixed-project/region GCF response and must use HTTPS, no userinfo/fragment/port and signed query fields. No equality is invented between the upload staging bucket and storageSource bucket.
 
 The GCF reference documents generation default 0. Both numeric 0 and string '0' are treated solely as unspecified placeholders, then overwritten on the same source object after the PUT header is verified. The two placeholder variants are covered by the sixteenth test. No placeholder is accepted in the final receipt or ensuing GCF source binding.
+
+
+## Empty dynamic extensions contract (2026-10-11)
+
+CLI 15.3.1 prepareDynamicExtensions returns empty payload/context when no extensions
+are desired or present; Functions prepare still attaches both objects. The upload
+guard previously rejected the truthy empty payload before upload. An offline
+reproduction using real prepare reproduced UPLOAD_EXTENSIONS; this matches the
+failure interval without proving an unrecorded production exception.
+
+The guard permits only an absent extensions property or an own data property
+containing an exact empty plain object, on both context and payload. It rejects
+null, own undefined, arrays, symbols, extra/nonenumerable keys, inherited properties,
+accessors and custom/null prototypes. It requires nonInteractive === true.
+It does not remove objects or skip the real CLI deploy/release paths.
+
+Real CLI empty extensions deploy still performs a billing read. In noninteractive
+mode disabled billing aborts rather than enabling billing. Empty provisioning has
+no products; no extension tasks are created. Empty release returns immediately.
+The synthetic integration test uses real prepare/deploy/release, fake billing and
+network denial, checking unchanged empty inputs and zero extension mutations.
+No launcher, cloud or integration worktree changes were made.
