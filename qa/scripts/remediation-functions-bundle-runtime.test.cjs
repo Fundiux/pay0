@@ -2,6 +2,7 @@ const assert=require('node:assert/strict');
 const path=require('node:path');
 const {createRequire}=require('node:module');
 const {loadBundle}=require('./helpers/functions-bundle-harness.cjs');
+const {expectedEndpointCount}=require('./verify-functions-discovery-startup.cjs');
 const artifact=process.argv[2]; if(!artifact) throw Error('ARTIFACT_REQUIRED');
 const dependencyRoot=path.resolve(__dirname,'../../functions');
 const native=createRequire(path.join(dependencyRoot,'package.json'));
@@ -21,7 +22,8 @@ const mocks={
 Object.defineProperty(mocks,'qrcode',{enumerable:true,get(){qrLoads++;return qr;}});
 async function run(){
  const bundle=loadBundle({artifact,dependencyRoot,externalMocks:mocks,fetch:fakeFetch});
- assert.equal(Object.keys(bundle.api).length,346);checks++;
+ assert.equal(Object.keys(bundle.api).length,expectedEndpointCount);checks++;
+ assert.equal(typeof bundle.api.listClientDispersionNotes,'function');checks++;
  assert.equal(qrLoads,0);checks++;
  const guard=bundle.loadInternal('utils/authGuard.js');
  const valid=()=>({rootId:'root',role:'operador',active:true,modules:{pagos:{create:true,conciliate:true}}});

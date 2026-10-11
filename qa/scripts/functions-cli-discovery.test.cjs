@@ -21,7 +21,14 @@ test("actual CLI build contract rejects timing, malformed manifests and missing 
   const names = [...requiredEndpoints];
   while (names.length < expectedEndpointCount) names.push(`fixture${names.length}`);
   const endpoints = Object.fromEntries(names.map(name => [name, {}]));
-  assert.equal(validateCliBuild({ endpoints }, 7000), 346);
+  assert.equal(expectedEndpointCount, 347);
+  assert.ok(requiredEndpoints.includes("listClientDispersionNotes"));
+  assert.equal(validateCliBuild({ endpoints }, 7000), expectedEndpointCount);
+  const withoutNotes = { ...endpoints };
+  delete withoutNotes.listClientDispersionNotes;
+  assert.throws(() => validateCliBuild({ endpoints: withoutNotes }, 1), /ENDPOINT_CONTRACT/);
+  withoutNotes.unrelatedReplacement = {};
+  assert.throws(() => validateCliBuild({ endpoints: withoutNotes }, 1), /ENDPOINT_CONTRACT/);
   for (const time of [-1, 7001, Infinity, NaN]) assert.throws(() => validateCliBuild({ endpoints }, time), /STARTUP_LIMIT/);
   for (const build of [null, {}, { endpoints: [] }, { endpoints: "invalid" }]) assert.throws(() => validateCliBuild(build, 1), /INVALID_BUILD/);
   assert.throws(() => validateCliBuild({ endpoints: { ...endpoints, extra: {} } }, 1), /ENDPOINT_CONTRACT/);

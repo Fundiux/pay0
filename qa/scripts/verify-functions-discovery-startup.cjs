@@ -25,14 +25,15 @@ const warmupTimeoutMs = 60_000;
 // 1 scoped voice-activity reader to the certified 309-endpoint baseline.
 // Integration restores two deposit automation endpoints and published receipt correction.
 // Read-only trusted recovery status and authenticated private document streaming.
-const expectedEndpointCount = 346;
+// Native paginated dispersion notes add one explicitly authorized reader.
+const expectedEndpointCount = 347;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf", "correctPagoReceiptSemanticField",
   "dispatchQueuedPagoIqCreation", "processIqPagoDepositAutomaticTask",
   "getAuthorizedDocumentDownloadUrl", "streamPrivateDocument", "getMyRestrictionStatus",
-  "createClientDispersionIq",
+  "createClientDispersionIq", "listClientDispersionNotes",
   "processIqDispersionCreate",
   "previewPaymentCommissionDistribution",
   "authorizeHugoVoiceGatewaySession",
