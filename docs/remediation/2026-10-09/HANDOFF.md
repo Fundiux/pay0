@@ -2,6 +2,30 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint actual: descarga desplegada con bundle y fuente remota verificada.**
+
+Execute95455 PASS, run `2817b3ed3e504dd4bc621d1649a29580`, fuente integrada
+`3f3c4c5`. Nueva revision `getauthorizeddocumentdownloadurl-00005-zur`,
+generacion `1791679264531843`. Tres builds BUNDLED_V1 durante predeploy,
+discovery CLI final6199ms/346 endpoints, gates de documentos/reglas y ZIP PASS.
+Dotenv original restaurado; provenance0bfdf35d permanece igual. Arbol integrado limpio.
+Postflight86060 PASS: ACTIVE/Ready100, configuracion y env iguales, build scripts
+vacio,931 entradas remotas coinciden con provenance. Bundle308ad5c9;
+ZIP remoto SHA256 `efc10a0728c646f6cafe9d31bc3cfa0a84a967c6580f54dee8c198e7d368dcc4`.
+Fuente exacta conservada privadamente por generacion. No invocacion de handler;
+no afirmar prueba de todas las rutas runtime. La igualdad historica de scaling
+service-level Run no estaba capturada; se verifico contrato actual, no se inventa.
+El selector de claves de mapa build devolvio400; lectura corregida del mapa
+solo en memoria PASS200 (vacio y sin selector), sin valores en logs. Helper
+privado revisado ce1ade4d y31fakes PASS. No rollback automatico ni cambio de Rules.
+
+Notas: lectura historica68561 PASS,21requests/61slots/10padres/0notas;
+parentLimitReached=true, sampleOnly=true: no resuelve compatibilidad. No cursor
+persistido; no repetirla como censo. Se disena cursor nativo y reconciliacion por
+bloques, sin producto editado ni347 publicado. Notificador inerte0e38d5e,
+50fakes/build PASS; probe de snapshot historico SDK/emulador preparado, sin
+conclusion cloud. IQ6 postflight/baseline GET-only en preparacion; aun no deploy.
+
 **Checkpoint actual: bundle integrado y verificado localmente; deploy pendiente.**
 
 Integracion `integration/pay0-remediation-20261009` HEAD `3f3c4c5` pushed;

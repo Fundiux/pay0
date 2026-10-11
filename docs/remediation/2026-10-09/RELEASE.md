@@ -54,3 +54,18 @@ Esta tabla conserva el candidato inicial. Para estado posterior a las 20:00 UTC,
 - Integracion publicada a su rama remota en `3fa5957`; cambio frontend posterior `d08acda` con build en progreso al registrar este hito. Estado temporal: `pendingFrontendHashFix/browser`. No atribuir a ese candidato un build final ni browser PASS hasta recibir evidencia. No hubo deploy Hosting ni Telegram de este lote y no se declara completada la remediacion.
 
 Preflight offline del ZIP SSR productivo frente a integracion `7b56c4c`: 56 rutas app existentes conservadas y 57 en candidato, unica adicion `/descarga/documento`; rutas estaticas 44->45 y dinamicas 12->12. Configuracion de rutas equivalente; Next.js 15.5.25->15.5.27, Node22 en ambos. Sin metadata suficiente para atribuir commit fuente productivo. No se detecto perdida de rutas, pero esta comparacion no prueba equivalencia funcional completa ni sustituye los gates del frontend posterior. Preflight Telegram comunicado por integracion: ocho modulos comparados, iguales salvo `actionTokens`; no implica despliegue ni ejercicio de Telegram real. Orden, entorno y recuperacion en [RELEASE-FRONTEND-TELEGRAM.md](RELEASE-FRONTEND-TELEGRAM.md).
+
+## Descarga autorizada: bundle integrado y fuente desplegada verificada
+
+- Integracion3f3c4c5, deploy selectivo95455 PASS; run2817b3ed3e504dd4bc621d1649a29580.
+- Revision getauthorizeddocumentdownloadurl-00005-zur, source generation1791679264531843.
+- Predeploy completo PASS; CLI6199ms/346 endpoints; tres builds producen la misma provenance.
+- Postflight86060 GET-only PASS: ACTIVE, RunReady/100%, configuracion/env preservados,
+  GOOGLE_NODE_RUN_SCRIPTS vacio;931 entradas de ZIP real iguales a manifest aprobado.
+- ZIP remoto SHA256 efc10a0728c646f6cafe9d31bc3cfa0a84a967c6580f54dee8c198e7d368dcc4;
+  bundle308ad5c99d96990df327e08bb0272ea9f52931bf43fcc630b97fcad6842e980d.
+- Dotenv original restaurado. Evidencia privada conserva generacion exacta y checkpoint;
+  no provider payloads/env en Git. Sin invocar handlers ni probar efectos financieros.
+- Verificacion de artefacto/configuracion, no afirmacion de ejecucion de cada ruta.
+  No rollback automatico: preservar generation-pinning al preparar correccion compatible.
+  Main y reglas publicadas permanecen sin cambio; IQ6 y notas347 siguen pendientes.
