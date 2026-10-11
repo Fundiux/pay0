@@ -15,7 +15,8 @@
                                         "npm run qa:client-csf-create",
                                         "npm run qa:document-ui",
                                         "npm run qa:document-access",
-                                        "node qa/scripts/verify-functions-cli-discovery.cjs"
+                                        "node qa/scripts/verify-functions-cli-discovery.cjs",
+                                        "node qa/scripts/verify-functions-upload-artifact.mjs"
                                     ]
                   },
     "firestore":  {

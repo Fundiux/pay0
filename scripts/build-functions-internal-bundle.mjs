@@ -6,13 +6,15 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { copyCanonicalAssets } from "./copy-canonical-assets.mjs";
 import { preserveModuleContext } from "./lib/functions-bundle-context.mjs";
+import { sourceSnapshot, assertSnapshot } from "./lib/functions-bundle-integrity.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const inside = (root, target) => target.startsWith(root + path.sep);
 function assertNoLinks(root, target) {
   if (!inside(root, target)) throw Error("OUTPUT_SCOPE");
   for (let current = target; inside(root, current); current = path.dirname(current)) {
-    if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) throw Error("OUTPUT_LINK");
+    try { if (fs.lstatSync(current).isSymbolicLink()) throw Error("OUTPUT_LINK"); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
   }
 }
 function files(root) {
@@ -38,6 +40,7 @@ export async function buildCandidate({ repositoryRoot = path.resolve(import.meta
   const ignored = spawnSync("git", ["-C", root, "check-ignore", "--quiet", destination + "/probe"], { windowsHide: true, stdio: "ignore" });
   if (ignored.status !== 0) throw Error("OUTPUT_NOT_IGNORED");
   const require = createRequire(path.join(functionsRoot, "package.json"));
+  const sourceInputs = sourceSnapshot(root);
   const pkg = JSON.parse(fs.readFileSync(path.join(functionsRoot, "package.json"), "utf8"));
   const lock = JSON.parse(fs.readFileSync(path.join(functionsRoot, "package-lock.json"), "utf8"));
   const esbuild = require("esbuild"), ts = require("typescript");
@@ -70,7 +73,8 @@ export async function buildCandidate({ repositoryRoot = path.resolve(import.meta
   await copyCanonicalAssets({ repositoryRoot: root, functionsLibRoot: lib, includePublicBrand: false });
   fs.writeFileSync(path.join(artifact, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
   const outputHashes = files(artifact).map(file => ({ file: path.relative(artifact, file).replaceAll("\\", "/"), sha256: digest(fs.readFileSync(file)) }));
-  const report = { schema: "PAY0-INTERNAL-BUNDLE-CANDIDATE@1", candidateOnly: true, esbuild: esbuild.version, typescript: ts.version, inputs, adjusted, outputs: outputHashes };
+  assertSnapshot(root, sourceInputs);
+  const report = { schema: "PAY0-INTERNAL-BUNDLE-CANDIDATE@1", candidateOnly: true, esbuild: esbuild.version, typescript: ts.version, sourceInputs, inputs, adjusted, outputs: outputHashes };
   fs.writeFileSync(path.join(destination, "provenance.json"), JSON.stringify(report, null, 2) + "\n");
   return { artifact: path.relative(root, artifact).replaceAll("\\", "/"), compileWallMs, internalInputs: Object.keys(built.metafile.inputs).length, adjusted, bundleSha256: digest(fs.readFileSync(path.join(lib, "index.js"))), sourceMapSha256: digest(fs.readFileSync(path.join(lib, "index.js.map"))), mainUnchanged: true, normalBuildUnchanged: true, candidateOnly: true };
 }

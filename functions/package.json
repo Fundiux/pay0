@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "build": "tsc && node ../scripts/copy-canonical-assets.mjs",
+    "build": "node ../scripts/build-functions.mjs",
     "lint": "eslint --ext .js,.ts .",
     "seed:perf": "node scripts/seed-performance-fixtures.mjs",
     "verify:operation-roles": "node scripts/verify-operation-role-access.mjs",
@@ -12,7 +12,8 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "build:bundle:candidate": "node ../scripts/build-functions-internal-bundle.mjs"
+    "build:bundle:candidate": "node ../scripts/build-functions-internal-bundle.mjs",
+    "build:normal": "node ../scripts/build-functions.mjs --normal"
   },
   "engines": {
     "node": "22"

@@ -4,13 +4,20 @@ const crypto = require('node:crypto');
 const {createRequire} = require('node:module');
 const ts = require('typescript');
 
+function bundleHash(artifact) {
+  const installed=path.resolve(artifact,'.bundle-provenance.json');
+  const isInstalled=fs.existsSync(installed);
+  const report=JSON.parse(fs.readFileSync(isInstalled?installed:path.resolve(artifact,'../provenance.json'),'utf8'));
+  if(report.schema!==(isInstalled?'PAY0-INTERNAL-BUNDLE-INSTALLED@1':'PAY0-INTERNAL-BUNDLE-CANDIDATE@1'))throw Error('BUNDLE_PROVENANCE_SCHEMA');
+  return report.outputs.find(row=>row.file===(isInstalled?'functions/lib/index.js':'lib/index.js'))?.sha256;
+}
+
 // Execute the exact candidate bytes. The in-memory suffix only exposes existing
 // CommonJS factories to QA; it never changes their bodies or persists a hook.
 function loadBundle({artifact, dependencyRoot, externalMocks = {}, fetch = async () => {throw Error('EXTERNAL_NETWORK_FORBIDDEN');}}) {
   const filename = path.resolve(artifact, 'lib/index.js');
   const bytes = fs.readFileSync(filename), code = bytes.toString('utf8');
-  const provenance = JSON.parse(fs.readFileSync(path.resolve(artifact, '../provenance.json'), 'utf8'));
-  const expected = provenance.outputs.find(x => x.file === 'lib/index.js')?.sha256;
+  const expected = bundleHash(artifact);
   const actual = crypto.createHash('sha256').update(bytes).digest('hex');
   if (!expected || actual !== expected) throw Error('BUNDLE_HASH_MISMATCH');
   const ast = ts.createSourceFile('index.js', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
@@ -52,4 +59,4 @@ function loadBundle({artifact, dependencyRoot, externalMocks = {}, fetch = async
     },
   };
 }
-module.exports = {loadBundle};
+module.exports = {loadBundle,bundleHash};

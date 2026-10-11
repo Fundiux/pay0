@@ -1,0 +1,75 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { buildMode } from '../../scripts/build-functions.mjs';
+import { verifyInstalled } from '../../scripts/install-functions-internal-bundle.mjs';
+import { sha256, treeRows, checkedPath, assertSnapshot, currentHash } from '../../scripts/lib/functions-bundle-integrity.mjs';
+import { cliRoot, verifyCloudBuildContract } from './helpers/functions-upload-contract.mjs';
+
+export async function verifyArchive({ repositoryRoot, expected, config = {}, toolsRoot = cliRoot() }) {
+  const root = fs.realpathSync(repositoryRoot), source = path.join(root, 'functions');
+  await verifyCloudBuildContract(toolsRoot);
+  const require = createRequire(path.join(toolsRoot, 'package.json'));
+  // This process is isolated by the caller. No file logger is installed and
+  // ordinary packer path/size messages are disabled, not forwarded to stdout.
+  require('./lib/logger').logger.silent = true;
+  const pack = require('./lib/deploy/functions/prepareFunctionsUpload').prepareFunctionsUpload;
+  const JSZip = createRequire(path.join(root, 'functions/package.json'))('jszip');
+  const packed = await pack(root, source, structuredClone(config), [], undefined);
+  const privateTemp = fs.realpathSync(process.env.TMPDIR || process.env.TEMP || '');
+  const archivePath = fs.realpathSync(packed.pathToSource);
+  if (!archivePath.startsWith(privateTemp + path.sep) || !privateTemp.startsWith(root + path.sep)) throw Error('ZIP_PRIVATE_SCOPE');
+  try {
+    const bytes = fs.readFileSync(archivePath), zip = await JSZip.loadAsync(bytes, { checkCRC32: true });
+    const names = Object.keys(zip.files);
+    if (names.some(name => name.includes('\\') || name.split('/').includes('..') || name.startsWith('/') || name.split('/').includes('node_modules'))) throw Error('ZIP_ENTRY_SCOPE');
+    for (const row of expected) {
+      checkedPath(source, row.file);
+      const entry = zip.file(row.file);
+      if (!entry || sha256(await entry.async('nodebuffer')) !== row.sha256) throw Error('ZIP_CONTENT_MISMATCH');
+    }
+    return { result: 'UPLOAD_ARTIFACT_VERIFIED', filesVerified: expected.length, archiveSha256: sha256(bytes), cloudCalls: 0, actualUploadVerified: false };
+  } finally { fs.unlinkSync(archivePath); }
+}
+export function verifyUploadGate({ repositoryRoot = path.resolve(import.meta.dirname, '../..'), environment = process.env } = {}) {
+  if (buildMode(environment) === 'NORMAL') return { result: 'NORMAL_BUILD_NO_BUNDLE_CLAIM' };
+  const root = fs.realpathSync(repositoryRoot), report = verifyInstalled(root);
+  const expected = report.outputs.map(row => ({ ...row, file: row.file.slice('functions/'.length) }));
+  for (const relative of ['functions/src', 'functions/package.json', 'functions/package-lock.json', 'functions/tsconfig.json']) {
+    expected.push(...treeRows(root, relative).map(row => ({ ...row, file: row.file.slice('functions/'.length) })));
+  }
+  // Preserve existing dotenv bytes without emitting values or per-file hashes.
+  // The selector is a build-process control, never a Functions runtime key.
+  for (const name of fs.readdirSync(path.join(root, 'functions')).filter(name => /^\.env(?:\.|$)/.test(name))) {
+    const file = checkedPath(root, `functions/${name}`), bytes = fs.readFileSync(file);
+    if (/^\s*(?:export\s+)?PAY0_FUNCTIONS_BUILD_MODE\s*=/m.test(bytes.toString('utf8'))) throw Error('SELECTOR_IN_DOTENV');
+    expected.push({ file: name, sha256: sha256(bytes) });
+  }
+  const firebaseBytes = fs.readFileSync(path.join(root, 'firebase.json'));
+  const config = JSON.parse(firebaseBytes.toString('utf8')).functions;
+  if (Array.isArray(config) || config.source !== 'functions') throw Error('FUNCTIONS_CONFIG_SCOPE');
+  const privateRelative = `.firebase/internal-bundle-upload/${randomUUID()}`, privateRoot = checkedPath(root, privateRelative);
+  fs.mkdirSync(privateRoot, { recursive: true });
+  const request = path.join(privateRoot, 'request.json');
+  fs.writeFileSync(request, JSON.stringify({ repositoryRoot: root, expected, config: config.ignore ? { ignore: config.ignore } : {}, toolsRoot: cliRoot(environment) }));
+  const child = spawnSync(process.execPath, [path.resolve(import.meta.dirname, 'verify-functions-upload-artifact.mjs'), '--worker', request], { cwd: privateRoot, env: { ...environment, DEBUG: '', TEMP: privateRoot, TMP: privateRoot, TMPDIR: privateRoot }, encoding: 'utf8', maxBuffer: 65536, timeout: 120000, windowsHide: true });
+  if (child.status !== 0) throw Error('UPLOAD_WORKER_FAILED');
+  let result; try { result = JSON.parse(child.stdout); } catch { throw Error('UPLOAD_WORKER_OUTPUT'); }
+  if (result.result !== 'UPLOAD_ARTIFACT_VERIFIED') throw Error('UPLOAD_WORKER_OUTPUT');
+  assertSnapshot(root, report.sourceInputs); verifyInstalled(root);
+  if (currentHash(path.join(root, 'firebase.json')) !== sha256(firebaseBytes)) throw Error('PACK_CONFIG_DRIFT');
+  for (const row of expected) if (currentHash(checkedPath(path.join(root, 'functions'), row.file)) !== row.sha256) throw Error('PACK_INPUT_DRIFT');
+  return result;
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  try {
+    let result;
+    if (process.argv.length === 4 && process.argv[2] === '--worker') result = await verifyArchive(JSON.parse(fs.readFileSync(process.argv[3], 'utf8')));
+    else if (process.argv.length === 2) result = verifyUploadGate();
+    else throw Error('UPLOAD_ARGUMENTS');
+    console.log(JSON.stringify(result));
+  } catch (error) { console.error(JSON.stringify({ result: 'UPLOAD_VERIFICATION_FAILED', code: /^[A-Z_]+$/.test(error.message) ? error.message : 'REDACTED' })); process.exitCode = 1; }
+}
