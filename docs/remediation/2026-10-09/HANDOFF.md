@@ -1,5 +1,9 @@
 # Continuidad de ejecucion
 
+Actualizacion 2026-10-13: reconciliacion SSR completo11GET pero verificacion de ZIP FAIL por caches Webpack mayores a64MiB y total declarado551373077 bytes. ZIP privado preservado SHA b44220d46a5960bbb9564fe7775b7cd67a33d25b0211e791f5885d962d3ac98a; no redespliegue ni PASS retrospectivo. Prueba offline de subconjunto5 en preparacion; assets/navegador pendientes. Detalle: docs/remediation/2026-10-09/HOSTING-61879-RECONCILIATION.md.
+
+Aplicaciones SDK9388 PASS55c23e,4casos/14refs/CAS/puertos cerrados, commit9b1f9f6. Integracion selectiva ffa8d3c incluye contexto financiero y aplicaciones:415PASS+1SDKskip, politica, NORMAL, frontend47paginas y manifest7/7(348endpoints) PASS; sin BUNDLED ni deploy. A1 reparado en candidato QA-only, root45+13PASS7a13ec, commiteab2743; A7B sigue pendiente. OIDC7f82cd8 confirmado con134tests/build/policy; SDK DELIVERY en revision, no ejecutado.
+
 Checkpoint vigente 2026-10-13: Hosting Execute61879 termino con error local NOTES_HOSTING_GUARD_FAILED (37649f), despues de RELEASE_ACCEPTED. El recibo original conserva sus 15 estados, sin POSTFLIGHT_VERIFIED; no se modifica ni se convierte en PASS. La causa exacta del fallo final no esta reproducida. No hay deploy activo y no corresponde redesplegar para verificarlo.
 
 Reconciliacion independiente 9a6023: cinco GET y cero escrituras; SSR ssrpay0system-00590-gik, generacion 1791920820865879, Ready y trafico100%; Hosting sites/pay-0-system/versions/4cfd958c9a8694ae FINALIZED. Notas sin cambios. Evidencia privada SHA256 981fdb7977ef04351dbae9e556851688b7359329d569965ef4cc01514ce3d6ad. Probe local fa3312: seis comprobaciones de configuracion/operacion/release pasan; el validador del recibo falla por el marcador ausente. Esto no identifica la causa original. Fuente ZIP, subconjunto local, assets y navegador siguen pendientes de una prueba de reconciliacion separada; no fabricar eventos de finalizacion.
