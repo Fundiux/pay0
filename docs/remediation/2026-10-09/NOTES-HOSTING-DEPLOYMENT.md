@@ -1,5 +1,16 @@
 # Hosting de notas: launcher SSR para revision
 
+## Checkpoint 2026-10-13: diagnostico de subida y reconciliacion
+
+Execute68333 termino FAIL al subir a Storage el paquete de88,25MB; receipt de cuatro estados, hasta VERSION_CREATED, sin SSR_UPDATE ni release. No se observo codigo HTTP ni errno: el log privado contiene URL firmada y no debe imprimirse. Su vigencia restante segun reloj local no respalda expiracion como causa. Se preservan input, receipt, log y versiones.
+
+Reconciliacion b346f5: cinco GET, cero escrituras; SSR00588-guh, notas00002-lah, servicio y release de6ff585fd68735d iguales, Ready100. Captura privada reconcile-after68333-20261013-4bc3eee923f9-five-get-evidence.json SHA256fb2a3927ce3802e49178728d7628abc15f665428f9e259185178abf2f45479b8. Lista parcial:30c61b0ada41fe90 CREATED,3423b4eb75ac869f ABANDONED,de6ff585fd68735d FINALIZED; no equivale a inventario exhaustivo.
+
+Guard diagnostico revisado: solo storage.upload, una llamada original, mismos argumentos/retorno/error, sin consumir stream ni anadir retries. Metadatos de error limitados a enums propios y numeros; nunca URL, mensaje, stack, ruta, headers ni body. Root59/59PASS5d78fe. Guard SHA25603e20ead5f1cd95a3cd2bad4a894fb844004d17c11d155627389910e46ec51f1; CLI fingerprint e26ccb22a24cc8b3a74afd5d3680fa2b65e359ef52ac082c499b93eee90154fc incluye los tres callsites de subida. No requiere rebuild del producto: herramienta local probada con API CLI real y transporte simulado. Proximo intento requiere input/receipt nuevos y Preflight/Stage; postflight SSR, assets y navegador siguen pendientes.
+
+Historia conservada de checkpoints anteriores:
+
+
 Estado 2026-10-13: correccion local del contrato de nombres en revision; Hosting sigue pendiente. Execute61813 termino FAIL VERSION_RESPONSE el 11 de octubre despues de VERSION_CREATE_DISPATCHED. Su receipt y la version creada se conservan. Cinco GET de reconciliacion ca19dc confirmaron SSR00588-guh, notas00002-lah, servicio y release de6ff585fd68735d sin cambios, Ready100. La captura privada reconcile-after61813-five-get-evidence.json tiene SHA256 a7a2b4334773ad445c78566396bde456a06b287dedc2e4311b4486f573dc2f00. Es evidencia del 11 de octubre, no una comprobacion actual perpetua.
 
 La version observada fue projects/751158244178/sites/pay-0-system/versions/3423b4eb75ac869f, CREATED a2026-10-11T08:08:52.119885Z. La API instalada del CLI crea, finaliza y publica mediante projects/-/sites; los GET en ese namespace devuelven nombres con prefijo numerico, mientras el GET de release via sites/ devuelve nombre corto. El recurso [Version documenta la forma corta](https://firebase.google.com/docs/reference/hosting/rest/v1beta1/sites.versions); el prefijo numerico adicional esta acreditado por la captura privada. No se capturo el cuerpo original del POST: la incompatibilidad se reproduce con la API instalada y el nombre remoto observado.

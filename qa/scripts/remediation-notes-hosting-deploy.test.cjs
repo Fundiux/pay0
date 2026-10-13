@@ -213,3 +213,51 @@ for(const responseStage of ['FINALIZE','RELEASE'])for(const [label,responseName]
  ['wrong allocated identity','projects/751158244178/sites/pay-0-system/versions/abcdef1234567891'],
  ['missing name',undefined]
 ])test('installed API '+responseStage+' rejects '+label+' and prevents further dispatch',()=>installedVersionFlow('projects/751158244178/sites/pay-0-system/versions/abcdef1234567890',{responseStage,responseName}));
+
+test('upload diagnostics preserve receiver, every argument and success identity without emitting',async()=>{
+ const result={generation:'synthetic'},source={stream:{bytesRead:7}},args=[source,'PRIVATE_URL',{private:'HEADER'},true],events=[];let calls=0;
+ const storage={async upload(...got){calls++;assert.equal(this,storage);assert.deepEqual(got,args);assert.equal(got[0],source);return result;}};
+ g.installStorageUploadDiagnostics(storage,(...x)=>events.push(x));assert.equal(await storage.upload(...args),result);assert.equal(calls,1);assert.deepEqual(events,[]);
+});
+test('upload diagnostics emit only own closed enums and numeric metadata, preserving exact failure',async()=>{
+ const original=Object.assign(new Error('PRIVATE_SIGNED_URL'),{name:'FetchError',code:'ECONNRESET',syscall:'read',statusCode:503,cause:{name:'Error',code:'EPIPE',syscall:'write'}});
+ const error=Object.assign(new Error('PRIVATE_BODY'),{name:'FirebaseError',original,token:'PRIVATE_TOKEN'}),events=[];let calls=0;
+ const storage={async upload(){calls++;throw error;}};g.installStorageUploadDiagnostics(storage,(...x)=>events.push(x));
+ await assert.rejects(storage.upload({file:'PRIVATE_PATH',stream:{bytesRead:123}},'PRIVATE_URL'),e=>e===error);
+ assert.equal(calls,1);assert.deepEqual(events,[['SOURCE_UPLOAD_FAILED',{stage:'STORAGE_UPLOAD',error:{code:'UNKNOWN',name:'FirebaseError',syscall:'UNKNOWN',status:null},original:{code:'ECONNRESET',name:'FetchError',syscall:'read',status:503},cause:{code:'EPIPE',name:'Error',syscall:'write',status:null},bytesRead:123}]]);
+ assert.ok(!JSON.stringify(events).includes('PRIVATE'));
+});
+test('upload diagnostic sink failure cannot replace error or cause resend',async()=>{const error={original:{code:'ENOENT'}};let calls=0;const storage={async upload(){calls++;throw error;}};g.installStorageUploadDiagnostics(storage,()=>{throw Error('SINK_FAILED');});await assert.rejects(storage.upload({}),e=>e===error);assert.equal(calls,1);});
+test('upload diagnostics never evaluate getters, inherited fields or stream methods',async()=>{
+ let getters=0,streamCalls=0;const error=Object.create({code:'ECONNRESET',name:'FetchError',status:403});
+ for(const key of ['code','name','syscall','status','statusCode','original','cause','message','stack'])Object.defineProperty(error,key,{get(){getters++;throw Error('GETTER');}});
+ const stream={on(){streamCalls++;},read(){streamCalls++;},pipe(){streamCalls++;}};Object.defineProperty(stream,'bytesRead',{get(){getters++;return 1;}});
+ const events=[],storage={async upload(){throw error;}};g.installStorageUploadDiagnostics(storage,(s,m)=>events.push(m));await assert.rejects(storage.upload({stream}),e=>e===error);
+ assert.equal(getters,0);assert.equal(streamCalls,0);assert.equal(events[0].bytesRead,null);assert.deepEqual(events[0].error,{code:'UNKNOWN',name:'UNKNOWN',syscall:'UNKNOWN',status:null});
+});
+test('hostile proxy descriptors and primitive throws are contained without identity changes',async()=>{
+ for(const error of [new Proxy({},{getOwnPropertyDescriptor(){throw Error('TRAP_PRIVATE');}}),'PRIVATE_STRING',null,42]){const storage={async upload(){throw error;}},events=[];g.installStorageUploadDiagnostics(storage,(...x)=>events.push(x));let caught=false;try{await storage.upload({});}catch(e){caught=true;assert.equal(e,error);}assert.equal(caught,true);assert.equal(events.length,1);assert.ok(!JSON.stringify(events).includes('PRIVATE'));}
+});
+test('unlisted values, invalid status and invalid bytesRead remain redacted',async()=>{
+ for(const bytes of [-1,NaN,Infinity,'123',Number.MAX_SAFE_INTEGER+1]){const storage={async upload(){throw{code:'PRIVATE',name:'PRIVATE',syscall:'PRIVATE',status:999};}},events=[];g.installStorageUploadDiagnostics(storage,(s,m)=>events.push(m));await assert.rejects(storage.upload({stream:{bytesRead:bytes}}));assert.equal(events[0].bytesRead,null);assert.deepEqual(events[0].error,{code:'UNKNOWN',name:'UNKNOWN',syscall:'UNKNOWN',status:null});}
+});
+for(const failed of [false,true])test('installed uploadSourceV2 to real storage.upload keeps one mocked transport call: '+(failed?'failure':'success'),async()=>{
+ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'pay0-upload-diagnostic-fake-'));
+ const oldXdg=process.env.XDG_CONFIG_HOME;process.env.XDG_CONFIG_HOME=temp;const transport=[],saved=[];let logger,oldSilent;
+ try{
+  for(const[owner,key]of [[require('node:net').Socket.prototype,'connect'],[require('node:http'),'request'],[require('node:https'),'request'],[global,'fetch']]){transport.push([owner,key,owner[key]]);owner[key]=()=>{throw Error('NETWORK_FORBIDDEN');};}
+  const cli=require('../../scripts/lib/dispersion-notes-create-only.cjs').cliInfo().root;
+  const deploy=require(path.join(cli,'lib/deploy/functions/deploy.js')),storage=require(path.join(cli,'lib/gcp/storage.js')),v2=require(path.join(cli,'lib/gcp/cloudfunctionsv2.js')),apiv2=require(path.join(cli,'lib/apiv2.js')),experiments=require(path.join(cli,'lib/experiments.js')),backend=require(path.join(cli,'lib/deploy/functions/backend.js'));
+  for(const owner of [deploy,storage,v2,apiv2.Client.prototype,experiments])saved.push([owner,Object.getOwnPropertyDescriptors(owner)]);
+  logger=require(path.join(cli,'lib/logger.js')).logger;oldSilent=logger.silent;logger.silent=true;
+  const source={bucket:'synthetic',object:'synthetic.zip',generation:'1'},stream={bytesRead:9,on(){throw Error('NO_LISTEN');},read(){throw Error('NO_READ');},pipe(){throw Error('NO_PIPE');}};
+  const error=Object.assign(new Error('PRIVATE_REQUEST_URL'),{name:'FirebaseError',original:{name:'FetchError',code:'ECONNRESET'}});let requests=0,allocations=0;const events=[];
+  experiments.isEnabled=()=>false;deploy.createReadStream=()=>stream;
+  v2.generateUploadUrl=async(project,region)=>{allocations++;assert.deepEqual([project,region],[g.PROJECT,g.REGION]);return{uploadUrl:'https://storage.googleapis.com/synthetic?GoogleAccessId=synthetic&Expires=1&Signature=synthetic',storageSource:source};};
+  apiv2.Client.prototype.request=async function(options){requests++;assert.equal(options.method,'PUT');assert.equal(options.path,'/synthetic');assert.equal(options.body,stream);assert.equal(options.ignoreQuotaProject,true);assert.equal(options.responseType,'xml');if(failed)throw error;return{response:{headers:{get:key=>{assert.equal(key,'x-goog-generation');return'1';}}}};};
+  g.installStorageUploadDiagnostics(storage,(state,data)=>events.push({state,...data}));
+  const action=()=>deploy.uploadSourceV2(g.PROJECT,g.NUMBER,{functionsSourceV2:'synthetic.zip'},backend.of(endpoint()));
+  if(failed){await assert.rejects(action(),e=>e===error);assert.equal(events.length,1);assert.equal(events[0].original.code,'ECONNRESET');assert.equal(events[0].bytesRead,9);}else{assert.equal(await action(),source);assert.deepEqual(events,[]);}
+  assert.equal(requests,1);assert.equal(allocations,1);assert.ok(!JSON.stringify(events).includes('PRIVATE'));
+ }finally{for(const[owner,descriptors]of saved)Object.defineProperties(owner,descriptors);if(logger)logger.silent=oldSilent;for(const[o,k,v]of transport)o[k]=v;if(oldXdg===undefined)delete process.env.XDG_CONFIG_HOME;else process.env.XDG_CONFIG_HOME=oldXdg;fs.rmSync(temp,{recursive:true,force:true});}
+});

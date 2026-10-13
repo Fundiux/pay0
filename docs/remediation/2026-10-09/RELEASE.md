@@ -1,5 +1,16 @@
 # Publicación y recuperación
 
+## Checkpoint 2026-10-13: diagnostico de subida y reconciliacion
+
+Execute68333 termino FAIL al subir a Storage el paquete de88,25MB; receipt de cuatro estados, hasta VERSION_CREATED, sin SSR_UPDATE ni release. No se observo codigo HTTP ni errno: el log privado contiene URL firmada y no debe imprimirse. Su vigencia restante segun reloj local no respalda expiracion como causa. Se preservan input, receipt, log y versiones.
+
+Reconciliacion b346f5: cinco GET, cero escrituras; SSR00588-guh, notas00002-lah, servicio y release de6ff585fd68735d iguales, Ready100. Captura privada reconcile-after68333-20261013-4bc3eee923f9-five-get-evidence.json SHA256fb2a3927ce3802e49178728d7628abc15f665428f9e259185178abf2f45479b8. Lista parcial:30c61b0ada41fe90 CREATED,3423b4eb75ac869f ABANDONED,de6ff585fd68735d FINALIZED; no equivale a inventario exhaustivo.
+
+Guard diagnostico revisado: solo storage.upload, una llamada original, mismos argumentos/retorno/error, sin consumir stream ni anadir retries. Metadatos de error limitados a enums propios y numeros; nunca URL, mensaje, stack, ruta, headers ni body. Root59/59PASS5d78fe. Guard SHA25603e20ead5f1cd95a3cd2bad4a894fb844004d17c11d155627389910e46ec51f1; CLI fingerprint e26ccb22a24cc8b3a74afd5d3680fa2b65e359ef52ac082c499b93eee90154fc incluye los tres callsites de subida. No requiere rebuild del producto: herramienta local probada con API CLI real y transporte simulado. Proximo intento requiere input/receipt nuevos y Preflight/Stage; postflight SSR, assets y navegador siguen pendientes.
+
+Historia conservada de checkpoints anteriores:
+
+
 Estado 2026-10-13: comparador Hosting corregido, revision independiente y
 root51/51 PASSfa6ee6. Nuevo despliegue pendiente de input/receipt propios y
 metadata remota fresca. La captura ca19dc corresponde al 11 de octubre.
