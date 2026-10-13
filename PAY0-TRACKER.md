@@ -1,5 +1,13 @@
 # PAY0 — Tracker de trabajo y continuidad
 
+Checkpoint vigente 2026-10-13: Execute85272 termino FAIL antes del upload, con FUNCTIONS_CLI_DISCOVERY_FAIL / CHILD_STOP_FAILED (16888 ms, limite 7000 ms). Receipt conservado con GUARD_ACTIVE y OVERLAY_APPLIED; no VERSION_CREATE, SSR_UPDATE ni release. La comprobacion aislada posterior paso: 347 endpoints en 2686 ms, sin relajar limites ni ejecutar acciones remotas. Competencia por recursos es una hipotesis compatible, no una causa exclusiva demostrada.
+
+Reconciliacion posterior 780726: cinco GET y cero escrituras. SSR00588-guh, notas00002-lah, servicio y release de6ff585fd68735d sin cambios; servicio Ready. Evidencia privada reconcile-after85272-20261013-9b9efcd09555-five-get-evidence.json SHA256 37d2347d77521cc8497cddc3372f075b2b0ca791ff2c175c2d0531bd1e73ba85. Lista parcial de versiones sin cambios: 30c61b0ada41fe90 CREATED, 3423b4eb75ac869f ABANDONED y de6ff585fd68735d FINALIZED. No hay deploy activo; siguiente intento requiere input y receipt nuevos y compilaciones concurrentes detenidas.
+
+Integracion aislada Solicitud/Pago 9b622f8: dependencias offline, 318 pruebas PASS y una SDK omitida, politica y builds Functions NORMAL/frontend PASS (47 paginas). Manifest SDK 7/7 y transicion completa 347 a 348 PASS. Primera captura CLI fallo por timeout10849 ms; unico reintento aislado PASS4700 ms. BUNDLED, nuevo artefacto y despliegue pendientes. Notifier f737e97 incorpora supervision inerte revisada, 115/115 pruebas y NORMAL PASS; todavia sin activacion ni entregas a proveedores. No hay cierre global.
+
+Historial de checkpoints anteriores (los estados activos de abajo corresponden a su momento):
+
 Actualizado: 2026-10-13 (America/Mexico_City)
 Propósito: fuente viva de pendientes, bugs, decisiones y cierres verificables.
 
