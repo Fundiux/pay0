@@ -2,6 +2,18 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente: Hosting Execute68333 FAIL (fb91b3), 2026-10-13.**
+El guard acepto la creacion: receipt conserva GUARD_ACTIVE/OVERLAY_APPLIED/
+VERSION_CREATE_DISPATCHED/VERSION_CREATED. No milestone SSR_UPDATE ni release.
+Inputf0f066 y log657509... (83090bytes) quedan preservados; no reutilizar
+input ni borrar la version. Causa y reconciliacion remota en investigacion.
+Verifier/assetproof siguen sin ejecutar; no atribuir nueva UI publicada.
+Solicitud8364d9f (contexto financiero) y Notifier194ccb (prueba transaccional
+de continuacion,553tests/build/politica) son candidatos aislados confirmados.
+AUTH01 Solicitud: root109tests37f27c, build14932 y SDK65534 trescasos/18refs
+CAScleanup/puertos cerrados; evidencia root4dd936 revisada, commit535316e limpio.
+No cerrar AUTH01 global/Pago ni entrega/liveness del notifier por esos gates.
+
 **Checkpoint 2026-10-13: Hosting Execute68333 activo.** Guard commit808cd92;
 Preflight ad7c29 y Stage e1a8e0 PASS. Input
 input-a52959b-qualified-20261013-6301e7b31451.json SHA256
