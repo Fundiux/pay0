@@ -1,5 +1,7 @@
 # Publicación y recuperación
 
+Corte posterior a d17ddba: captura oficial NORMAL de integracion4d20b12 PASS (sesion45936/3fcbc0), 2981ms frente limite7000, 348endpoints y build completo d21e5d0b16393156ffe815b5f81ef2fd8465f1300acb90f6b618bc40285dbe45. Baseline privada5704770997b7a6c59dee758f7efdba5bc8b9dc54bb4712ff674f248d4f9f3f11. Root verifico hash/arbol limpio a054ab. Esto acepta el nuevo candidato; conserva los fallos historicos8501/62464. Bundle a8fd anterior no cubre4d20: nuevo artefacto pendiente, sin deploy.
+
 Corte posterior a 8c50686 (2026-10-13): despacho IQ corregido en 5e29f9d0e1958c67d76baaf7c28433efdb21abb0, rama remediation/solicitud-notes-read-20261011. Cinco carreras reproducidas antes; transiciones ahora verifican generation/hash/requester/root y resultado canonico dentroTX. Root115 tests PASS052b87, NORMAL29df4d/policy89ed75, SDKbc5644:3 casos/1ref/CAS cleanup/puertos cerrados/cloud0, ABORTED inyectado. Integrado selectivamente como 4d20b12a83fedc8a13c27e3bd68371df77e4cb18 tras doc c70e552; 115/115 PASS20d5e3 y politica PASS05b9e7; NORMAL24805 PASSd05376, arbol limpio c770bf. Sin deploy.
 
 DELIVERY vigencia condicionada: root129 PASS0b2f03, build12654 PASS14a211 y politica7fe164. SDK55971 PASS715021:12checks/185refs/cleanup/puertos/cero cloud y proveedor; prueba recibos tras lease y revocacion con contexto exacto. Sello ENROLL sigue limitado50min; DELIVERY no inventa TTL de negocio. Commit 764d3a617693c7e0a95e37b7603b157f64831c55 en fix/dispersion-client-notifier-20261010, limpio. Sin dispatcher/HTTP/productor activados.
