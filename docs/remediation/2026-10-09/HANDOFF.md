@@ -1,5 +1,9 @@
 # Continuidad de ejecucion
 
+Checkpoint activo: Execute85272 iniciado 2026-10-13 tras Preflight903b42 y Stage0677c9 PASS. Commit35ddbf8, input-a52959b-upload-diag-20261013-4fc422adbcb0.json SHA256259c2cdca1425a9f883e2553c5b603f94cef645fd6e0da0832e8facd26a18092; receipt propio hosting-a52959b-upload-diag-20261013-4fc422adbcb0.jsonl. Log privado hosting-Execute-ab9af1d3bf0b4a219f00fecdfb818541.log, no imprimir por posibles URLs firmadas. Resultado pendiente: conservar candidato a52959b congelado; no lanzar intentos concurrentes. Copias revisadas5d2acd: SSR verifier069077a443f404e879660b67f2d668d6ad6899604de53cd72d6404cccd09688a y assetsd51fe289f5e8ecfa49d65b7cbaaf307b891db63000ccacd18fc8325b7b6eeed7. No ejecutar DRAFT como final.
+
+Notifier aislado c3922a1708e09ace59105cf47a1e96e30004e4e6, rama fix/dispersion-client-notifier-20261010 limpia: composicion ENROLL con prueba de continuacion, root169/169PASS91d686, build NORMAL89099PASS122dd4 y politica/diff66a878. Sin wiring/cloud; fuente durable inicial/recuperacion en diseno. AUTH01 Pago en implementacion aislada sobre535316e, pendiente revision.
+
 ## Checkpoint 2026-10-13: diagnostico de subida y reconciliacion
 
 Execute68333 termino FAIL al subir a Storage el paquete de88,25MB; receipt de cuatro estados, hasta VERSION_CREATED, sin SSR_UPDATE ni release. No se observo codigo HTTP ni errno: el log privado contiene URL firmada y no debe imprimirse. Su vigencia restante segun reloj local no respalda expiracion como causa. Se preservan input, receipt, log y versiones.
