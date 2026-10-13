@@ -42,3 +42,9 @@ no convierte la matriz completa en PASS ni autoriza integrar este candidato.
 | Respaldo | Firestore PITR y delete protection deshabilitados; restauración no demostrada. | Cambios de código/reglas no destructivos. | Sin migración destructiva hasta respaldo y recuperación probados. |
 
 Ninguno de estos puntos detiene los frentes independientes. No se han ejecutado efectos financieros reales ni mensajes de prueba a destinatarios.
+
+## 2026-10-13: arranque CLI e integracion IQ
+
+Capturas NORMAL35761 (8501 ms) y85598 (62464 ms) fallan STARTUP_LIMIT de7000, sin baseline. Diagnostico instrumentado3371 ms no sustituye gate. Timestamps del segundo manifiesto apuntan a un tramo posterior de59,5 s; no distinguen parsing, scheduling u otra causa. Comparacion funcional offline e8b35f5 PASS347->348 exacto (b2b06c), schema distinto con normalStartupPassed:false. No repetir capturas a ciegas ni relajar limites. Siguiente: candidato empaquetado sin instalar y diagnostico separado si hace falta; publicacion dependiente sigue pendiente.
+
+IQ retorno canonico corregido d5bafca, integrado c21a2b7, unit30 y SDK4 casos PASS; no despliegue. Binding DELIVERY99 pruebas/build PASS, SDK adaptado pendiente y productor inactivo. A7B conserva entradas historicas ausentes; no fabricar cierre ni equivalencia de snapshots.
