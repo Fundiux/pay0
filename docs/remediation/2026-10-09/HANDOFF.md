@@ -1,5 +1,9 @@
 # Continuidad de ejecucion
 
+Corte posterior a0bdf5e3: baseline remoto15 leido (75metadata requests,14ACTIVE, nuevo listSolicitudNotes404 corroborado noatomico; cero escrituras/handlers). Roota8649e verifica evidenciaedaaa65; colaRUNNING1/s/concurrent1/attempt1 y schedulerENABLEDcada5min confirmados0e68c1. Comparacion CLI updateMask/configuracion y guards de despliegue pendientes; sin publicacion. ZIP local1256exactos PASS4ae75f SHA83dea136, actualUploadVerifiedfalse; stagingenvfinal exige nueva prueba de bytes.
+
+DELIVERY sourcebinding commit63c3fa84aafadf1ca3b3e99945b72acca41f5ca2: root127PASS4bcc7c, NORMALabc8c3/policy220037, SDK65045/805f34 PASS13casos194refs/cleanup/puertos/cloud0/provider0. Source nativo capturado desdecreate y proofCOMPLETE exacto; no cambia ACK del supervisor ni activa transporte. Release IQ commit44956943debe49a88940846b02fa47172842e51a: regresion staleA borra leaseB reproducida51ac1d; ahora binding privado+token/expiry en cada TXretry. Root106tests+policy94e8d0, NORMAL43106b, SDK19990/929f2d PASS4casos1ref/CAS/puertos/cloud0. No integrados; journal de resultados externos sigue diseño ca9b165, sin nueva coleccion/Rules.
+
 Corte posterior a d317008 (2026-10-13): bundle4d20b12 instalado y CLI348 PASS2413ms (52558/0e3dfd; root0d73ef), build completo identico a baseline570477. QA runtime155/financiero17 PASS; instalador38 PASS,935outputs verificados y respaldo NORMAL preservado. Fuente de producto4d20b12, HEAD documental0b50559; no deploy. Alcance propuesto15 entradas en SOLICITUD-PAGO-RELEASE-SCOPE.md; baseline remoto pendiente.
 
 Guard manual IQ commit0eee4cf: rootSDK26589/d00f47 PASS3casos/3refs/CAS/puertos/cloud0, ABORTED inyectado, sin invocar transports reales. Nuevo guard reset documental sigue separado: root92/92 PASS86c7c0, NORMAL86903/2996aa y politicaeb72c5 PASS; SDK1091/5dba98 PASS3casos/5refs/cleanupCAS/puertos/cloud0, ABORTED inyectado; commit0f4b1d3, rama limpia. No afirma proteccion global de escritores IQ.
