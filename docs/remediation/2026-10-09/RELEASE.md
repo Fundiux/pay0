@@ -1,6 +1,20 @@
 # Publicación y recuperación
 
-Actualizacion vigente: Execute61813 Hosting en curso con inputb92026725d...
+Estado 2026-10-13: comparador Hosting corregido, revision independiente y
+root51/51 PASSfa6ee6. Nuevo despliegue pendiente de input/receipt propios y
+metadata remota fresca. La captura ca19dc corresponde al 11 de octubre.
+Los checkpoints siguientes conservan la historia del intento fallido.
+
+Actualizacion vigente: Execute61813 FAIL en VERSION_RESPONSE tras dispatch
+createVersion, sin milestone SSR_UPDATE/release. Puede existir version creada
+no publicada; reconciliacion remota pendiente, no repetir ni borrar.
+Reconciliacion posterior ca19dc PASS: SSR/notes/release/service sin cambios y
+Ready100. Version3423b4eb75ac869f CREATED, aun no publicada. El namespace
+projects/- devuelve projects/751158244178/sites/...; guard esperaba sites/...
+solamente. Evidencia privada a7a2b4334773ad445c78566396bde456a06b287dedc2e4311b4486f573dc2f00.
+Correccion y prueba integral del API instalado pendientes antes de nuevo intento.
+
+Checkpoint anterior: Execute61813 Hosting en curso con inputb92026725d...
 y guardf499aee/ff946532, Preflight e6a21a/Stage e730d0 PASS. Receipt separado
 created-7fef3ab20a19: GUARD_ACTIVE/OVERLAY_APPLIED. No nueva release confirmada.
 Integrationa529/helper/pins congelados mientras activo; no repetir Execute.

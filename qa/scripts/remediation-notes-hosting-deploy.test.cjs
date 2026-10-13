@@ -116,3 +116,100 @@ test('postflight binds exact operation revision AND source generation from priva
 test('receipt requires exact milestones and rejects missing operation completion and reversed publication order',()=>{const states=['GUARD_ACTIVE','OVERLAY_APPLIED','VERSION_CREATE_DISPATCHED','VERSION_CREATED','PLAN_UPDATE_ONLY','SSR_UPDATE_DISPATCHED','SSR_UPDATE_ACCEPTED','SSR_OPERATION_COMPLETED','SSR_TAG_DISPATCHED','VERSION_FINALIZE_DISPATCHED','VERSION_FINALIZED','RELEASE_DISPATCHED','RELEASE_ACCEPTED','POSTFLIGHT_VERIFIED'];const rows=states.map(state=>({state}));g.validateReceipt(rows);assert.throws(()=>g.validateReceipt(rows.filter(x=>x.state!=='SSR_OPERATION_COMPLETED')));const reversed=rows.slice();[reversed[10],reversed[11]]=[reversed[11],reversed[10]];assert.throws(()=>g.validateReceipt(reversed));assert.throws(()=>g.validateReceipt(rows.concat({state:'MUTATION_BLOCKED'})));});
 
 test('Ready gate accepts exact short/full traffic revision and rejects scaling/bindings/env order drift',()=>{const b=snapshot();b.service={scaling:{maxInstanceCount:20},ingress:'INGRESS_TRAFFIC_ALL',template:{scaling:{maxInstanceCount:20},timeout:'60s',maxInstanceRequestConcurrency:80,serviceAccount:'synthetic@invalid.test',containers:[{resources:{limits:{cpu:'1',memory:'256Mi'}},env:[{name:'A',value:'synthetic'},{name:'B',value:'synthetic'}]}]}};const fn={...api(b),state:'ACTIVE'};fn.serviceConfig.revision='ssrpay0system-00003-new';fn.buildConfig.source.storageSource.generation='2';const name='projects/pay-0-system/locations/us-central1/services/ssrpay0system',revision=name+'/revisions/'+fn.serviceConfig.revision;const service={...structuredClone(b.service),name,terminalCondition:{state:'CONDITION_SUCCEEDED'},latestCreatedRevision:revision,latestReadyRevision:revision,trafficStatuses:[{percent:100,revision:fn.serviceConfig.revision}]};g.assertReady({function:fn,service},b);service.trafficStatuses[0].revision=revision;g.assertReady({function:fn,service},b);for(const mutate of [x=>x.scaling.minInstanceCount=1,x=>x.template.scaling.minInstanceCount=1,x=>x.ingress='INGRESS_TRAFFIC_INTERNAL_ONLY',x=>x.invokerIamDisabled=true,x=>x.template.containers[0].env.reverse(),x=>x.template.serviceAccount='other',x=>x.trafficStatuses[0].revision+='other',x=>x.template.containers[0].resources.limits.memory='512Mi']){const changed=structuredClone(service);mutate(changed);assert.throws(()=>g.assertReady({function:fn,service:changed},b));}});
+
+// Exercise the installed API methods too: createVersion returns res.body.name
+// unchanged, while createRelease sends that same name in versionName.
+async function installedVersionFlow(version,{reject=false,responseStage,responseName}={}){
+ const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'pay0-hosting-qualified-fake-'));
+ const oldXdg=process.env.XDG_CONFIG_HOME,oldAgent=process.env.FIREBASE_DEPLOY_AGENT;
+ process.env.XDG_CONFIG_HOME=temp;delete process.env.FIREBASE_DEPLOY_AGENT;
+ const transport=[],saved=[];let logger,oldSilent;
+ try{
+  for(const[owner,key]of [[require('node:net').Socket.prototype,'connect'],[require('node:http'),'request'],[require('node:https'),'request'],[global,'fetch']]){transport.push([owner,key,owner[key]]);owner[key]=()=>{throw Error('NETWORK_FORBIDDEN');};}
+  const cli=require('../../scripts/lib/dispersion-notes-create-only.cjs').cliInfo().root;
+  const hosting=require(path.join(cli,'lib/hosting/api.js')),config=require(path.join(cli,'lib/hosting/config.js')),track=require(path.join(cli,'lib/track.js')),apiv2=require(path.join(cli,'lib/apiv2.js'));
+  const run=require(path.join(cli,'lib/gcp/run.js')),experiments=require(path.join(cli,'lib/experiments.js'));
+  for(const owner of [hosting,config,track,apiv2.Client.prototype,run,experiments])saved.push([owner,Object.getOwnPropertyDescriptors(owner)]);
+  logger=require(path.join(cli,'lib/logger.js')).logger;oldSilent=logger.silent;logger.silent=true;
+  const id='abcdef1234567890',calls=[];let finalizedBody,releaseBody;
+  experiments.isEnabled=name=>name==='pintags';
+  run.getService=async()=>({metadata:{name:g.NAME,namespace:g.NUMBER,labels:{'cloud.googleapis.com/location':g.REGION},resourceVersion:'one',generation:1},spec:{traffic:[{revisionName:'new-revision',tag:'fh-'+id,percent:100}]},status:{latestReadyRevisionName:'new-revision',observedGeneration:1,conditions:[{type:'Ready',status:'True'}]}});
+  run.replaceService=async()=>{throw Error('UNEXPECTED_RUN_WRITE');};
+  apiv2.Client.prototype.post=async function(url,body,opts){
+   calls.push({method:'POST',url,body:structuredClone(body),opts:structuredClone(opts)});
+   if(url==='projects/-/sites/pay-0-system/versions'){assert.deepEqual(body,createdVersion());return{body:{name:version,status:'CREATED'}};}
+   assert.equal(url,'/projects/-/sites/pay-0-system/channels/live/releases');assert.deepEqual(body,{});assert.deepEqual(opts,{queryParams:{versionName:version}});
+   releaseBody={name:'sites/pay-0-system/releases/synthetic',version:responseStage==='RELEASE'?{...finalizedBody,name:responseName}:finalizedBody};return{body:releaseBody};
+  };
+  apiv2.Client.prototype.patch=async function(url,body,opts){
+   calls.push({method:'PATCH',url,body:structuredClone(body),opts:structuredClone(opts)});
+   assert.equal(url,'projects/-/sites/pay-0-system/versions/'+id);assert.equal(body.status,'FINALIZED');assert.ok(opts.queryParams.updateMask.split(',').includes('status'));
+   finalizedBody={name:responseStage==='FINALIZE'?responseName:version,status:'FINALIZED',config:structuredClone(body.config)};return{body:finalizedBody};
+  };
+  apiv2.Client.prototype.get=async()=>{throw Error('UNEXPECTED_API_GET');};
+  apiv2.Client.prototype.delete=async()=>{throw Error('UNEXPECTED_API_DELETE');};
+  config.hostingConfig=()=>[{site:g.PROJECT,webFramework:'next_ssr',rewrites:[{source:'**',run:{serviceId:g.NAME,region:g.REGION,pinTag:true}}]}];track.trackGA4=async()=>{};
+  const frameworks={prepareFrameworks:async()=>{}};let accepted=false,completed=null;
+  g.installPublicationGuard({frameworks,hosting,guardState:()=>({accepted,completed}),baseline:snapshot(),beforeLocal:async()=>{},readBefore:async()=>{},readReady:async()=>{}});
+  let conf={site:g.PROJECT,source:'.',frameworksBackend:{region:g.REGION}};
+  const options={project:g.PROJECT,only:'hosting',config:{get:()=>conf,set:(_,v)=>conf=v}};
+  await frameworks.prepareFrameworks('deploy',[],{},options);
+  const context={projectId:g.PROJECT,hostingChannel:'live'};
+  const prepare=require(path.join(cli,'lib/deploy/hosting/prepare.js')).prepare;
+  if(reject){await assert.rejects(prepare(context,options));assert.equal(calls.length,1);assert.equal(calls[0].method,'POST');return;}
+  await prepare(context,options);assert.equal(context.hosting.deploys[0].version,version,'RAW_CREATE_RETURN_PRESERVED');
+  accepted=true;completed=api();
+  // Observe wrapper returns without replacing the installed API implementations.
+  const guardedUpdate=hosting.updateVersion,guardedRelease=hosting.createRelease;let returnedFinal,returnedRelease;
+  hosting.updateVersion=async(...args)=>(returnedFinal=await guardedUpdate(...args));
+  hosting.createRelease=async(...args)=>(returnedRelease=await guardedRelease(...args));
+  const release=require(path.join(cli,'lib/deploy/hosting/release.js')).release;
+  if(responseStage){
+   await assert.rejects(release(context,options,{}),responseStage==='FINALIZE'?/FINALIZE_RESPONSE/:/RELEASE_RESPONSE/);
+   const expected=responseStage==='FINALIZE'?['POST','PATCH']:['POST','PATCH','POST'];
+   assert.deepEqual(calls.map(c=>c.method),expected);
+   // A failed finalize cannot publish; an uncertain release cannot be dispatched again.
+   await assert.rejects(hosting.createRelease(g.PROJECT,'live',version,{}),/RELEASE_ORDER/);
+   await assert.rejects(hosting.updateVersion(g.PROJECT,id,{status:'FINALIZED',config:finalizedBody.config}),/FINALIZE_ORDER/);
+   assert.deepEqual(calls.map(c=>c.method),expected,'NO_SECOND_DISPATCH');return;
+  }
+  await release(context,options,{});
+  assert.equal(returnedFinal,finalizedBody,'RAW_FINALIZE_RETURN_PRESERVED');assert.equal(returnedRelease,releaseBody,'RAW_RELEASE_RETURN_PRESERVED');
+  assert.deepEqual(calls.map(c=>c.method),['POST','PATCH','POST']);assert.equal(context.hosting.deploys[0].version,version);
+ }finally{
+  for(const[owner,descriptors]of saved)Object.defineProperties(owner,descriptors);
+  if(logger)logger.silent=oldSilent;for(const[o,k,v]of transport)o[k]=v;
+  if(oldXdg===undefined)delete process.env.XDG_CONFIG_HOME;else process.env.XDG_CONFIG_HOME=oldXdg;
+  if(oldAgent===undefined)delete process.env.FIREBASE_DEPLOY_AGENT;else process.env.FIREBASE_DEPLOY_AGENT=oldAgent;
+  fs.rmSync(temp,{recursive:true,force:true});
+ }
+}
+for(const prefix of ['sites/pay-0-system','projects/751158244178/sites/pay-0-system']){
+ test('installed real Hosting API prepare/finalize/release preserves own version '+prefix,()=>installedVersionFlow(prefix+'/versions/abcdef1234567890'));
+}
+for(const version of [
+ 'projects/pay-0-system/sites/pay-0-system/versions/abcdef1234567890',
+ 'projects/999999999999/sites/pay-0-system/versions/abcdef1234567890',
+ 'projects/another-project/sites/pay-0-system/versions/abcdef1234567890',
+ 'projects/751158244178/sites/another-site/versions/abcdef1234567890',
+ 'sites/another-site/versions/abcdef1234567890',
+ 'projects/-/sites/pay-0-system/versions/abcdef1234567890',
+ '/projects/751158244178/sites/pay-0-system/versions/abcdef1234567890',
+ 'projects/751158244178/sites/pay-0-system/versions/abcdef1234567890/extra',
+ 'projects/751158244178/sites/pay-0-system/versions/abcdef1234567890?x=1',
+ 'projects/751158244178/sites/pay-0-system/versions/%61bcdef1234567890',
+ 'projects/751158244178/sites/pay-0-system/versions/../abcdef1234567890',
+ 'prefix/sites/pay-0-system/versions/abcdef1234567890',
+ 'sites/pay-0-system/versions/not-hex'
+])test('installed API rejects foreign or malformed created version '+version,()=>installedVersionFlow(version,{reject:true}));
+
+for(const responseStage of ['FINALIZE','RELEASE'])for(const [label,responseName]of [
+ ['foreign project','projects/999999999999/sites/pay-0-system/versions/abcdef1234567890'],
+ ['foreign site','projects/751158244178/sites/another-site/versions/abcdef1234567890'],
+ ['wildcard project','projects/-/sites/pay-0-system/versions/abcdef1234567890'],
+ ['malformed suffix','projects/751158244178/sites/pay-0-system/versions/abcdef1234567890/extra'],
+ ['trailing newline','sites/pay-0-system/versions/abcdef1234567890\n'],
+ ['wrong allocated identity','projects/751158244178/sites/pay-0-system/versions/abcdef1234567891'],
+ ['missing name',undefined]
+])test('installed API '+responseStage+' rejects '+label+' and prevents further dispatch',()=>installedVersionFlow('projects/751158244178/sites/pay-0-system/versions/abcdef1234567890',{responseStage,responseName}));

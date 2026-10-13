@@ -2,6 +2,43 @@
 
 Objetivo activo: remediacion integral. No hay cierre global.
 
+**Checkpoint vigente 2026-10-13: guard Hosting corregido y revisado.**
+Root51/51 PASSfa6ee6 y revision independiente sin hallazgos: nombres cortos
+y prefijo numerico exacto, respuestas invalidas finalize/release sin reenvio.
+Guard SHA2567bae909c6ed71296c60b96b185f09b46c4637608c67abe98beb1389e58b0adde.
+Hosting sigue pendiente: preparar input/receipt nuevos y renovar metadata
+remota antes de ejecutar; la reconciliacion ca19dc es del 11 de octubre.
+Notifier bff36cd agrega reconcileOne inerte, root30/30, Functions NORMAL y
+politica PASS; sigue aislado sin integracion/publicacion. Solicitud d0dafa2
+confirmado; contexto financiero transaccional aun en revision local.
+
+Historia de checkpoints anteriores (no estados actuales):
+
+**Checkpoint vigente: Hosting Execute61813 FAIL (1d5dd5).** Receipt conserva
+GUARD_ACTIVE/OVERLAY_APPLIED/VERSION_CREATE_DISPATCHED y diagnostico
+PUBLICATION_PHASE_FAILED phase VERSION_CREATE code VERSION_RESPONSE.
+Puede existir version creada sin publicar: NO repetir ni borrar. Sin milestones
+SSR_UPDATE/release; reconciliacion remota de cinco GET en preparacion.
+CLI15.3.1 createVersion devuelve res.body.name y usa projects/-/sites; root
+5d89de confirma contrato local. No atribuir aun una forma concreta al nombre
+de respuesta ni cambiar regex sin evidencia. Log privado Execute34aa6d47...
+80562bytes; CPU liberada tras terminar. Inputb920/receipt quedan historicos.
+Caller build72620 y SDK19132 PASS5/17refs/CAScleanup/portsClosed/cloud0,
+root pendiente revisar evidencia final antes commit. Notifier build17360 y
+root218ae374d PASS; commit9paths autorizado tras fullreview7683bc.
+Reconciliacion ca19dc PASS cinco GET, evidencia SHA256
+a7a2b4334773ad445c78566396bde456a06b287dedc2e4311b4486f573dc2f00:
+SSR/notes/release/serviceSame true y Ready100; version CREATED sin publicar
+projects/751158244178/sites/pay-0-system/versions/3423b4eb75ac869f,
+createTime2026-10-11T08:08:52.119885Z. No borrar ni reutilizar input fallido.
+CLI devuelve nombres desde projects/-; GET en ese namespace devuelve prefijo
+projects/751158244178, rechazado por regex corta. Root553302 confirma release
+leida via sites/ conserva nombre corto. Preparando pruebas API reales simuladas
+para comparar ambas formas SOLO proyecto/sitio exactos, sin relajar alcance.
+Caller commit d0dafa2fb32ac72be285751634f97fd3c777dce3 clean; root7c39e0
+verifico SDK19132/17refs/CAScleanup/cloud0. Notifier commit62ed98433a94cba9f371d081e48f5edab78f4c2f
+clean; siguiente reconcileOne3paths WIP30tests, pendiente revision root.
+
 **Checkpoint vigente: Hosting Execute61813 ACTIVO.** Guard corregido en
 f499aee8ca1cfca4182fa7acc9f3aac944eba340, root22/22 e independiente PASS.
 Input input-a52959b-created-7fef3ab20a19.json SHA256
