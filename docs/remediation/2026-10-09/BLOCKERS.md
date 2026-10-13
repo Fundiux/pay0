@@ -1,5 +1,11 @@
 # Dependencias y problemas abiertos
 
+Actualizacion2026-10-13: Hosting ya tiene release4cfd958c9a8694ae/SSR00590-gik Ready100 y pruebas parciales fuente5/assets15/browser publico PASS. Siguen distintos dos problemas: launcher61879 fallo tras RELEASE_ACCEPTED (causa final no reproducida) e inventario completo rechaza caches Webpack grandes (causa demostrada). No redesplegar para verificar; conservar ZIP/recibos y preparar exclusion especifica para el proximo artefacto. La validacion parcial no cierra equivalencia completa ni flujos autenticados. Ver HOSTING-61879-RECONCILIATION.md.
+
+SDK DELIVERY8casos PASS, pero dispatch/transport/continuation/supervision/HTTP y configuracion de vida DELIVERY no estan conectados. No activar admision hasta cerrar continuidad y agregacion/auditoria sin doble envio legacy. A1 esta reparado e integrado; A7B necesita contrato actual para snapshots/lifecycle/evidencia de release, no restaurar archivos ausentes arbitrariamente. Estos frentes tienen trabajo local ejecutable y no son bloqueo global.
+
+Historico conservado debajo; las afirmaciones de estado anteriores corresponden a sus cortes.
+
 Actualizacion2026-10-11: el prerrequisito de lectura historica para la cohorte
 del notificador paso en Firestore cloud aislado a48min, misma ancla y limpieza
 verificada (NOTIFICATION-CLOUD-READTIME-EVIDENCE.md). Sigue pendiente conectar

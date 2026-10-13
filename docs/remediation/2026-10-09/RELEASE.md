@@ -1,5 +1,9 @@
 # Publicación y recuperación
 
+Corte posterior 2026-10-13: Hosting con reconciliacion parcial aprobada. Subconjunto fuente5/581 entradas PASS eb640a (230116bytes descomprimidos; no ZIP completo);15assets remotos PASS214208; navegador publico REMOTE_READONLY PASSd6e760, tres POST sinteticos interceptados y cero POST remotos. El lanzamiento61879 y el inventario completo conservan FAIL. Evidencia y limites en docs/remediation/2026-10-09/HOSTING-61879-RECONCILIATION.md.
+
+DELIVERY SDK25255 PASS200fa8:8casos/164refs, CAS cleanup/puertos cerrados, cero cloud/proveedor; no contencion natural, reglas ni enrollment real certificados. Fuente inerte sin activar. Integracion Solicitud/Pago incluye A1eab2743 como881692f y doc1908cac;415tests/product builds/policy/manifest y45+13A1 PASS, A7B sigue pendiente. Herramienta para excluir exclusivamente cache Webpack de futuros paquetes en implementacion sin wiring. No cierre global.
+
 Actualizacion 2026-10-13: reconciliacion SSR completo11GET pero verificacion de ZIP FAIL por caches Webpack mayores a64MiB y total declarado551373077 bytes. ZIP privado preservado SHA b44220d46a5960bbb9564fe7775b7cd67a33d25b0211e791f5885d962d3ac98a; no redespliegue ni PASS retrospectivo. Prueba offline de subconjunto5 en preparacion; assets/navegador pendientes. Detalle: docs/remediation/2026-10-09/HOSTING-61879-RECONCILIATION.md.
 
 Aplicaciones SDK9388 PASS55c23e,4casos/14refs/CAS/puertos cerrados, commit9b1f9f6. Integracion selectiva ffa8d3c incluye contexto financiero y aplicaciones:415PASS+1SDKskip, politica, NORMAL, frontend47paginas y manifest7/7(348endpoints) PASS; sin BUNDLED ni deploy. A1 reparado en candidato QA-only, root45+13PASS7a13ec, commiteab2743; A7B sigue pendiente. OIDC7f82cd8 confirmado con134tests/build/policy; SDK DELIVERY en revision, no ejecutado.
