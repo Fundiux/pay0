@@ -2,13 +2,46 @@
 // Own-process lifecycle adapter. Imported inertly; installation is explicit.
 const assert=require('node:assert/strict');
 const {CREATE,UPDATE,PARENT}=require('./solicitud-notes-release-contract.cjs');
-function install({endpointId,Fabricator,v1,v2,run,poller,Client,storage,makeContract,beforeMutation,uploadReceipt,emit}){
+function install({endpointId,Fabricator,v1,v2,run,poller,Client,storage,makeContract,beforeMutation,uploadReceipt,emit,oauth}){
  assert([CREATE,UPDATE].includes(endpointId),'ENDPOINT_SCOPE');for(const fn of [makeContract,beforeMutation,uploadReceipt,emit])assert.equal(typeof fn,'function','REQUIRED_PORT');
  const originals={apply:Fabricator.prototype.applyPlan,convert:v2.functionFromEndpoint,create:v2.createFunction,update:v2.updateFunction,poll:poller.pollOperation,invoke:run.setInvokerCreate,post:Client.prototype.post,patch:Client.prototype.patch,delete:Client.prototype.delete,request:Client.prototype.request,upload:storage.upload};
  for(const fn of Object.values(originals))assert.equal(typeof fn,'function','CLI_CONTRACT');
  const resource=`${PARENT}/functions/${endpointId}`,service=`${PARENT}/services/${endpointId.toLowerCase()}`;
  let planned=false,converted=false,reserved=false,sent=false,operation=null,completed=null,iamSent=false,contract=null;
  const fail=()=>{throw Error('READERS_MUTATION_SCOPE_BLOCKED');};
+ const oauthPorts=oauth?{FormData:oauth.FormData,clientId:oauth.clientId,clientSecret:oauth.clientSecret}:null;
+ if(oauthPorts)assert(typeof oauthPorts.FormData==='function'&&typeof oauthPorts.clientId==='string'&&typeof oauthPorts.clientSecret==='string','OAUTH_PORTS');
+ const oauthRefresh=(self,options)=>{
+  // Native auth.refreshTokens only. All comparisons use fixed errors: never
+  // include multipart content, credentials or assertion operands in an error.
+  try{
+   const check=value=>{if(!value)throw Error('OAUTH_REFRESH_CONTRACT');};
+   check(self.opts?.urlPrefix==='https://www.googleapis.com'&&self.opts.apiVersion===undefined&&self.opts.auth===false);
+   const keys=Object.keys(options).sort();check(keys.join('|')==='body|headers|method|path|resolveOnHTTPError|skipLog');
+   check(options.method==='POST'&&options.path==='/oauth2/v3/token'&&options.resolveOnHTTPError===true);
+   check(Object.keys(options.skipLog).sort().join('|')==='body|queryParams|resBody'&&Object.values(options.skipLog).every(v=>v===true));
+   check(Object.keys(options.headers).join('|')==='content-type');
+   const body=options.body,F=oauthPorts.FormData;check(Object.getPrototypeOf(body)===F.prototype);
+   for(const name of ['getBuffer','getBoundary','getHeaders'])check(!Object.hasOwn(body,name)&&body[name]===F.prototype[name]);
+   // Bound native getBuffer before it allocates. Native five string appends
+   // contain ten strings and five end callbacks; no streams/files are allowed.
+   check(Array.isArray(body._streams)&&body._streams.length===15);let bytes=0,strings=0,callbacks=0;
+   for(const part of body._streams){if(typeof part==='string'){strings++;bytes+=Buffer.byteLength(part);}else if(typeof part==='function')callbacks++;else check(false);check(bytes<=16384);}
+   check(strings===10&&callbacks===5);const boundary=body.getBoundary();check(typeof boundary==='string'&&/^[A-Za-z0-9-]{20,100}$/.test(boundary));
+   check(options.headers['content-type']==='multipart/form-data; boundary='+boundary);
+   const buffer=body.getBuffer();check(buffer.length<=16384);const wire=new TextDecoder('utf8',{fatal:true}).decode(buffer),fields=['refresh_token','client_id','client_secret','grant_type','scope'];
+   let rest=wire;const values=[];
+   for(const field of fields){const prefix='--'+boundary+'\r\nContent-Disposition: form-data; name="'+field+'"\r\n\r\n';check(rest.startsWith(prefix));rest=rest.slice(prefix.length);const end=rest.indexOf('\r\n');check(end>=0);values.push(rest.slice(0,end));rest=rest.slice(end+2);}
+   check(rest==='--'+boundary+'--\r\n');check(/^[\x21-\x7e]{20,8192}$/.test(values[0]));
+   check(values[1]===oauthPorts.clientId&&values[2]===oauthPorts.clientSecret&&values[3]==='refresh_token'&&values[4]==='');
+   check(Buffer.from(wire,'utf8').equals(buffer));
+   // apiv2 accepts Readable but JSON-encodes Buffer. Its failure logger also
+   // serializes fetch options despite skipLog, so own this immutable byte copy
+   // and expose only a fixed serialization marker, never the original FormData.
+   const owned=require('node:stream').Readable.from([Buffer.from(buffer)]);
+   Object.defineProperty(owned,'toJSON',{value:()=> '[REDACTED_OAUTH_BODY]',writable:false,configurable:false});return owned;
+  }catch{throw Error('OAUTH_REFRESH_CONTRACT');}
+ };
  let permit=null,uploadPermit=null,pollReserved=false;
  const client=(value,origin,version,auth=true)=>{assert.equal(value.opts?.urlPrefix,origin,'CLIENT_ORIGIN');assert.equal(value.opts?.apiVersion,version,'CLIENT_VERSION');assert.equal(value.opts?.auth,auth,'CLIENT_AUTH');};
  const dispatch=(self,method,target,body,options)=>{
@@ -22,6 +55,10 @@ function install({endpointId,Fabricator,v1,v2,run,poller,Client,storage,makeCont
   if(options?.method==='GET')return originals.request.call(this,options);
   if(permit){const ticket=permit;permit=null;assert.equal(this,ticket.self,'TRANSPORT_CLIENT');assert.deepEqual(options,ticket.expected,'TRANSPORT_REQUEST');ticket.used=true;}
   else if(uploadPermit){const ticket=uploadPermit;uploadPermit=null;client(this,'https://storage.googleapis.com',undefined,false);assert.deepEqual({...options,body:undefined,queryParams:undefined},ticket.expected,'UPLOAD_REQUEST');assert.equal(options.body,ticket.stream,'UPLOAD_BODY');assert(options.queryParams instanceof URLSearchParams,'UPLOAD_QUERY_TYPE');assert.equal(options.queryParams.toString(),ticket.query,'UPLOAD_QUERY');ticket.used=true;}
+  else if(oauthPorts&&options?.method==='POST'&&options.path==='/oauth2/v3/token'){
+   const body=oauthRefresh(this,options);
+   options={method:'POST',path:'/oauth2/v3/token',body,headers:{'content-type':options.headers['content-type']},skipLog:{body:true,queryParams:true,resBody:true},resolveOnHTTPError:true};
+  }
   else return fail();
   return originals.request.call(this,{...options,redirect:'manual',retries:0});
  };
