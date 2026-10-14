@@ -1,23 +1,32 @@
 # Continuidad de ejecucion
 
-Estado vigente (2026-10-14): lectores productivos conciliados; no repetir sus
-despliegues/helpers con pins historicos. Launcher c19f816:94PASS. ScanTick SDK
-67106:6/11refs PASS, QA0a8dfed. Admission SDK28598:8/48refs PASS y commitdf19dd1,
-default OFF. Consumers inerte:22tests/NORMAL/politica PASS; SDK30260 fallo en
-DELIVERY_TEXT antes provider por wrapper getAll que rechaza fieldMask. Cleanup
-verificado; correccion QA pendiente, producto intacto.
+Estado vigente (2026-10-14): integration/notifier-inert-20261014 HEAD
+3e4a1bc4afa3b60b7eafb44a5f0db59cd1936eff, limpio y congelado para artefactos.
+Incluye notifier39commits, predeploy bb79 como23fb50d y Consumers e18c1aa
+como3e4a1bc. Root Execute86223 termino PASS1587tests/40files; Consumers
+integrado22PASS9e621e. Cuatro SDK Prepare7ab8ab PASS tras restaurar bytes
+EOL originales con identidad Git y normalizacion comprobadas; no repinning.
+SDK Execute integrado, NORMAL, manifest348 nuevo y BUNDLE siguen pendientes.
 
-Predeploy: full51894 y targeted58972 conservados FAIL; tras corregir guards
-locales, pack-only33279/66e8f2 PASS1256files exactos. Evidencia14comandos entre
-intentos, full14SameInvocationPass=false. Commitb6a2909 conserva13helpers/QA/docs
-historicos; solo bb79e27 (6paths producto) candidato a integrar, no b6a2909.
+Consumers SDK fuente83084 PASS6/12refs, reads212/writes25, provider simulado2,
+cloud/proveedor real0, cleanup/puertos PASS. Fallos30260 y57599 preservados;
+correcciones QA fieldMask y presupuesto por fases, sin ampliar reintentos.
+Admission SDK28598 y ScanTick67106 PASS. Todo notifier default OFF.
 
-Integracion aislada integration/notifier-inert-20261014:39commits desde0b50559,
-producto b9e16c6, docc81981b, preserve notes/financieros/348exports por estructura.
-Root40suites seriales Execute86223 activo; no repetir. Build/NORMAL/manifest/SDK
-integrados pendientes. Junctions deps aldonor0b, noinstall ni mutacion donor.
-Capacidad local ~200MiB; presupuestos se revisan antes de builds. Sin push/deploy.
-Detalle actualizado al final EXECUTION-LOG. Cortes inferiores son historia.
+Capacidad local ~190MiB: prueba707assets/43,168,680bytes reproducibles exactos
+con Git filters del viejo predeploy completa; sparse reversible pendiente
+confirmacion de consumidores y ejecucion. No tocar assets candidato actual.
+NORMAL runner privado pendiente pins finales y comparacion baseline postflight.
+No install ni cambios a donor node_modules. No push/deploy nuevo.
+
+Helper puro notificationDeliveryPayload revisado:27tests root80b425 PASS,
+3paths nuevos en rama fuente; commit pendiente. No incluido en candidato.
+Payload transaccional, transporte acotado e infraestructura siguen pendientes.
+Lectores productivos ya conciliados: no repetir despliegues historicos.
+Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
+full51894/targeted58972 FAIL preservados, pack-only33279 PASS.
+
+Los cortes inferiores son historia; no instrucciones vigentes de ejecucion.
 Corte vigente: UPDATE37296 TERMINAL FAIL METADATA/TRANSPORT tras CLIexit0 y
 FUNCTION_COMPLETED. NO repetir: conciliacion read-only posterior0d2848/fcca1c
 PASS runtime/IAM/config y1257archivos; smoke3a134b401PASS. Revision

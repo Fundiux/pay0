@@ -369,3 +369,37 @@ no cambio producto ni segundo Execute aun.
 Predeploy13paths comprometidos b6a2909376b5aa92133a853dd68ac5a728868ffc.
 Integracion docc81981badbc83c09e283a7d1ec42e83284929243 y deps898versiones
 compatibles verificadas. RootExecute86223:40suites seriales actualmente activo.
+
+Integracion rootExecute86223/2f339f PASS40files/1587tests/0skip,67068ms;
+log7e47300f9de7ff580607d33f0938e8082e677e1c131e30579bd139c19bcbdcfb.
+Predeploybb79 integrado como23fb50d,6paths,23focused9ced3e/policy322adaPASS.
+Doc50cc7b39dcdb6443561f831e149b4494e69885ea,134blobsnotifier preservados.
+NORMAL pendiente con presupuesto medido y runner local en preparacion.
+
+ConsumersSDK retry57599/b1b9d9 FAIL runtimeconsumers-a5161afbbe4c4d1fa8e268a8f00e0e2a:
+fieldMaskfix valido permite TEXT/DOCUMENTsimulados; se detuvo en COMPLETE por
+lectura reservada201>cap200 antesIO, HTTP503RETRY_REQUIRED. Cleanuptrue,case4,
+blocked0,writes23,queries4,httpCalls6,provider2simulados/document1. Se calcula
+presupuesto por fase antes ajustar fixture. Sin producto modificado ni cierre.
+
+Consumers212 cap derivado porfase42/62/63/41/4, no retriesnaturales; rootreview
+regresionbeforeIO y Execute83084/6b02e7 PASS6/12refs. Runtime
+notification-consumers-58fde3a6c21f4ab1ab67f281c0112f5e:reads212,writes25,
+queries5,http7,certs2,provider2simulados/document1/tasks0, cleanup/puertosPASS,
+cloud/providerreales0. Se autoriza integrar su futurocommit6paths inerte antes
+primerNORMAL integrado para evitar repetir builds y regenerar provenance.
+
+PrepareSDKintegrados inicial81d6c0 falla rawpins porcore.autocrlf Windows:
+12paths (10TS/2fixtures), proofba189d0 compara normalizedEqual/gitBlobEqual y
+rawnotifier==historicalpin. Rootreviewlistfull y autorizacion copiar bytesexactos,
+no repin. After7dfffc statusclean/stagedempty/HEAD50cc7b3 igual;3Preparecb337bPASS.
+NORMALtodavia sin ejecutar, freezeHEAD/sourcefinal esperaConsumerscommit.
+
+Consumers e18c1aa integrado como3e4a1bc4afa3b60b7eafb44a5f0db59cd1936eff;
+22tests9e621e y cuatroPrepareSDK7ab8ab PASS. Tres TS adicionales restaurados
+por identidad Git/normalizacion/rawpin, sin modificar expectativas.
+Helper puro payload trespaths revisado completo; root27PASS80b425 confirma
+formato legado/coerciones/captura inmutable. No integrado al candidato congelado.
+Proof sparse viejo predeploy:707files43,168,680bytes exactos via Git filters,
+manifestb77058abddd3d67dc78555a0258ca3235fcf9db2b1b357ed6bccb471a115e615;
+mutacion pendiente confirmacion consumidores, preservacion y recibo posterior.
