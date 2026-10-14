@@ -8,7 +8,7 @@ integrado22PASS9e621e. Cuatro SDK Prepare7ab8ab PASS tras restaurar bytes
 EOL originales con identidad Git y normalizacion comprobadas; no repinning.
 NORMAL47495/b2d404 PASS1010files/15016754bytes; fuentes/deps intactas, treeempty.
 Captura60138/56facb PASS348/4013ms, manifestSHA35f008540a77d0e177989210c96408036d1d09d3aa5c63de18dd186204c91a13.
-SDK Execute integrado y BUNDLE/compare siguen pendientes.
+BUNDLE/compare78627PASS; cuatro SDK Execute integrados PASS; predeploy/pack pendientes.
 
 Consumers SDK fuente83084 PASS6/12refs, reads212/writes25, provider simulado2,
 cloud/proveedor real0, cleanup/puertos PASS. Fallos30260 y57599 preservados;
@@ -21,14 +21,26 @@ filters exacta,2763retenidos/4junctions intactos; receipt b764a496. No tocar
 assets candidato actual. NORMAL47495 y captura60138 PASS; primer intento47877
 FAIL preservado (Git DUBIOUS_OWNERSHIP), corregido safe.directory proceso exacto.
 Dependencias donor intactas, no push/deploy nuevo. BUNDLE59873 FAIL prebuild CAPACITY_REQUIRED preservado; retry70729 FAIL REDACTED.
-Raw y compiled356 completos, artifactlib vacio; diagnostico esbuild write:false pendiente.
+Raw y compiled356 completos; diagnostico elevatedwrite:false9b72caPASS frente defaultACCESS.
+Execute78627/a9fc6e elevado PASS1011outputs/348manifest2956ms; provenance61862b13/indexed7969f9.
+SDKConsumers integrado11731/90c422 PASS6/12refs (212slots), Admission93402/6244ec PASS8/48.
+DELIVERY integrado15362/c55798 PASS25/206refs; Scan80942/281e88 PASS6/11refs.
+Cuatro SDK con cleanup/puertos y cero cloud/proveedor real. No duplicar.
 Donor0b tambien sparse707assets, retained24667/deps intactos; restaurar707SHA antes cualquier build historico.
 
 Helper puro notificationDeliveryPayload revisado:27tests root80b425 PASS,
 3paths nuevos en rama fuente commit4e2e2b1. No incluido en candidato.
 Payload transaccional d3a21e9:132offlinePASS/noEmitPASS; SDK6QA+doc16d8baa:
 Consumers216slots6/12, DELIVERY25/206, Scan6/11 PASS; NORMAL e integracion pendientes.
-Sender aislado28offlinePASS75374f; no conectado al core. Infraestructura pendiente.
+Sender source11a396e:28offlinePASS75374f/noEmit6ca519PASS.
+Slice prepare-before-claim commitc7c0ee8 (7paths) revisado root:169offlinePASS71ff30;
+noEmit36858/05a02b PASS. Precision posterior startedMono unica:16tests rootc92ab2
+PASS y noEmit agente73636/a607d0 PASS; SDKpins anteriores obsoletos, no integrado ni activado.
+Scoped13 runner revisado root bb4614/550563:12testsPASS; baseline QA hash y
+postcheck fuente/locks/puertos antes de cada PASS. Prepare/Execute pendientes
+de capacidad, sin bajar reserva320MiB/floor128MiB. Cinco sparse adicionales
+siguen en prueba readonly; no autorizados hasta revisar manifests.
+Cancelacion conocida no permite IN_FLIGHT->READY generico; contrato durable pendiente. Infraestructura pendiente.
 Lectores productivos ya conciliados: no repetir despliegues historicos.
 Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
 full51894/targeted58972 FAIL preservados, pack-only33279 PASS.
