@@ -403,3 +403,24 @@ formato legado/coerciones/captura inmutable. No integrado al candidato congelado
 Proof sparse viejo predeploy:707files43,168,680bytes exactos via Git filters,
 manifestb77058abddd3d67dc78555a0258ca3235fcf9db2b1b357ed6bccb471a115e615;
 mutacion pendiente confirmacion consumidores, preservacion y recibo posterior.
+Sparse reversible2bb83c/33aa9c completado exclusivamente oldpredeploy:
+707assets excluidos,2763archivos retenidos hashes iguales y4junctions intactas;
+HEADb6a2909/statusclean, free235724800. ReceiptSHA
+b764a496b5789328619276e156ebf12fd3971f37f02f40bb8437d16bab847c13.
+Restore git -c core.autocrlf=true sparse-checkout disable y verificar707SHA;
+Git conserva contenido, no borra historial. Currentintegration assets intactos.
+NORMAL runner rootreview2231e9 SHA3ee3159c663eee6a8b40776fc8d93a55c2d3399dac6d4cc410dca9b606540383;
+HEAD3e4a1bc/source8769d5358ef9cd40750ef57e5ba28989cdbdcb5c10596e75c0ab72612e0daef6.
+Postflight compara baseline incluso fallo; ausencia rechaza. Prepare42fe9bPASS,
+Execute47495 iniciado, sin resultado final aun. Presupuesto192MiB/floor128,
+Job10min/loopback/log1MiB; no cambio donor ni install.
+Helper puro payload commit4e2e2b1 fuente, no integrado; siguiente TXpayload en
+implementacion aislada, pinesSDK futuros pendientes revisiones.
+NORMAL47495/b2d404 PASS, runtime7b7d836d08b54fcebfe3123ee710f55e;1010files/15016754bytes, free213241856, donorunchanged/treeempty/cloud0. CompleteSHA bb2e4de8a0067a52b8c516341b3a8606c460cb2da8b9d00b4aaeaa43f13e913c. Captura manifest y BUNDLE pendientes.
+
+CapturePrepareee539b PASS; Execute47877/18dfd3 FAIL. Runtime664651135b0a48dd8cf10b3fa0ef4ab2, stagePRIVATE_PATH BASELINE_MUST_BE_IGNORED elapsednull7s/10s preservados, antesdiscovery. Postflightcompletefalse/donorunchanged/free187322368. Diagnostico filteredenv Git pendiente, sin reintento ni relajargate.
+
+Causa capture1d21fe: childEnvironmentperfilprivado git128 DUBIOUS_OWNERSHIP frenteparent0. Proof6849e7 confiansafe.directory sóloROOTexacto mediante GIT_CONFIG_COUNT1: ignorepath0, tracked1, otroworktree128. Correccion procesoaislado aprobada, sin global/wildcard ni relajargate, retry pendiente.
+
+Rootreviewd7c78b +test/Prepare1e919d PASS correccion Git exactroot. Capture60138/56facb PASS runtime740e193eaf4241038a47b66b5f03c2a8:348exports/4013ms<7000, manifestSHA35f008540a77d0e177989210c96408036d1d09d3aa5c63de18dd186204c91a13, canonicalSHA d21e5d0b16393156ffe815b5f81ef2fd8465f1300acb90f6b618bc40285dbe45. CLI15.3.1, sourceHEAD3e4a1bc/tree10e2d44, postflightcomplete/donorunchanged/treeempty/cloud0. Free189083648. BUNDLE/compare pendiente;47877FAIL preservado.
+PayloadTX source rootreviewa057cd y132offlinePASS; commit5paths en preparacion, SDK/build fuente pendientes, no integrado.

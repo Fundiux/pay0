@@ -6,22 +6,26 @@ Incluye notifier39commits, predeploy bb79 como23fb50d y Consumers e18c1aa
 como3e4a1bc. Root Execute86223 termino PASS1587tests/40files; Consumers
 integrado22PASS9e621e. Cuatro SDK Prepare7ab8ab PASS tras restaurar bytes
 EOL originales con identidad Git y normalizacion comprobadas; no repinning.
-SDK Execute integrado, NORMAL, manifest348 nuevo y BUNDLE siguen pendientes.
+NORMAL47495/b2d404 PASS1010files/15016754bytes; fuentes/deps intactas, treeempty.
+Captura60138/56facb PASS348/4013ms, manifestSHA35f008540a77d0e177989210c96408036d1d09d3aa5c63de18dd186204c91a13.
+SDK Execute integrado y BUNDLE/compare siguen pendientes.
 
 Consumers SDK fuente83084 PASS6/12refs, reads212/writes25, provider simulado2,
 cloud/proveedor real0, cleanup/puertos PASS. Fallos30260 y57599 preservados;
 correcciones QA fieldMask y presupuesto por fases, sin ampliar reintentos.
 Admission SDK28598 y ScanTick67106 PASS. Todo notifier default OFF.
 
-Capacidad local ~190MiB: prueba707assets/43,168,680bytes reproducibles exactos
-con Git filters del viejo predeploy completa; sparse reversible pendiente
-confirmacion de consumidores y ejecucion. No tocar assets candidato actual.
-NORMAL runner privado pendiente pins finales y comparacion baseline postflight.
-No install ni cambios a donor node_modules. No push/deploy nuevo.
+Capacidad trasNORMAL ~203MiB, luego captura ~178MiB (variacion observada, causa no atribuida).
+Sparse viejo predeploy completado:707assets/43,168,680bytes, recuperacion Git
+filters exacta,2763retenidos/4junctions intactos; receipt b764a496. No tocar
+assets candidato actual. NORMAL47495 y captura60138 PASS; primer intento47877
+FAIL preservado (Git DUBIOUS_OWNERSHIP), corregido safe.directory proceso exacto.
+Sin mutacion donor, no push/deploy nuevo. Free189083648; BUNDLE necesita margen.
 
 Helper puro notificationDeliveryPayload revisado:27tests root80b425 PASS,
-3paths nuevos en rama fuente; commit pendiente. No incluido en candidato.
-Payload transaccional, transporte acotado e infraestructura siguen pendientes.
+3paths nuevos en rama fuente commit4e2e2b1. No incluido en candidato.
+Payload transaccional fuente d3a21e9:132offlinePASS; build/SDK e integracion pendientes.
+Transporte acotado e infraestructura siguen pendientes.
 Lectores productivos ya conciliados: no repetir despliegues historicos.
 Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
 full51894/targeted58972 FAIL preservados, pack-only33279 PASS.
