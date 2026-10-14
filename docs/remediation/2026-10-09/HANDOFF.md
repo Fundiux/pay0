@@ -20,12 +20,15 @@ Sparse viejo predeploy completado:707assets/43,168,680bytes, recuperacion Git
 filters exacta,2763retenidos/4junctions intactos; receipt b764a496. No tocar
 assets candidato actual. NORMAL47495 y captura60138 PASS; primer intento47877
 FAIL preservado (Git DUBIOUS_OWNERSHIP), corregido safe.directory proceso exacto.
-Sin mutacion donor, no push/deploy nuevo. Free189083648; BUNDLE necesita margen.
+Dependencias donor intactas, no push/deploy nuevo. BUNDLE59873 FAIL prebuild CAPACITY_REQUIRED preservado; retry70729 FAIL REDACTED.
+Raw y compiled356 completos, artifactlib vacio; diagnostico esbuild write:false pendiente.
+Donor0b tambien sparse707assets, retained24667/deps intactos; restaurar707SHA antes cualquier build historico.
 
 Helper puro notificationDeliveryPayload revisado:27tests root80b425 PASS,
 3paths nuevos en rama fuente commit4e2e2b1. No incluido en candidato.
-Payload transaccional fuente d3a21e9:132offlinePASS; build/SDK e integracion pendientes.
-Transporte acotado e infraestructura siguen pendientes.
+Payload transaccional d3a21e9:132offlinePASS/noEmitPASS; SDK6QA+doc16d8baa:
+Consumers216slots6/12, DELIVERY25/206, Scan6/11 PASS; NORMAL e integracion pendientes.
+Sender aislado28offlinePASS75374f; no conectado al core. Infraestructura pendiente.
 Lectores productivos ya conciliados: no repetir despliegues historicos.
 Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
 full51894/targeted58972 FAIL preservados, pack-only33279 PASS.

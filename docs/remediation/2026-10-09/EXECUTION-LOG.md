@@ -424,3 +424,36 @@ Causa capture1d21fe: childEnvironmentperfilprivado git128 DUBIOUS_OWNERSHIP fren
 
 Rootreviewd7c78b +test/Prepare1e919d PASS correccion Git exactroot. Capture60138/56facb PASS runtime740e193eaf4241038a47b66b5f03c2a8:348exports/4013ms<7000, manifestSHA35f008540a77d0e177989210c96408036d1d09d3aa5c63de18dd186204c91a13, canonicalSHA d21e5d0b16393156ffe815b5f81ef2fd8465f1300acb90f6b618bc40285dbe45. CLI15.3.1, sourceHEAD3e4a1bc/tree10e2d44, postflightcomplete/donorunchanged/treeempty/cloud0. Free189083648. BUNDLE/compare pendiente;47877FAIL preservado.
 PayloadTX source rootreviewa057cd y132offlinePASS; commit5paths en preparacion, SDK/build fuente pendientes, no integrado.
+
+PayloadTX fuente commitd3a21e9c3be9724a66ebdd4deea12bf0a23c15e1,
+root132PASSa057cd y tsc--noEmit1defa3PASS (no sustituye NORMAL).
+Extension QA6paths revisada86d816/cf918c, Prepare3SDK6a3628PASS; Consumers216
+slots derivados42/64/65/41/4, closures33/32/31, no SDKExecute nuevo aun.
+
+Donor0b sparse reversible e35b2a/e8dfd2:707assets43,168,680bytes excluidos;
+24,667retenidos+1link+2depsidentidades+22siblings iguales, HEAD/statusclean.
+Manifest7ce7e98d94fc63a41f069ac94531f4aa2deb3e13cb9926d279b62dc6082b8872,
+receiptb91042d90240d98abc65220d6aa11ffac51d73e965dca48f8400d79a0bc12880.
+Donor sourceSnapshot/build/deploy historico requiere restaurar sparse y707SHA
+antesusar; currentintegrationrunner usa sólo dependenciasdonor, noassets.
+BUNDLErunner fullreview9efc88/61d55c, Prepare730013PASS219226112libres frente
+216343346requeridos(192MiB+15016754NORMALbackup), no lowering. Execute59873
+iniciado; resultado pendiente. No otros builds/SDK ni cambiosintegration.
+BUNDLE59873/387da6 FAIL antesbuild: runtimea4e256cec77c49cca814dec16b682597, supervisorCAPACITY_REQUIRED, bundle.logausente. Postflightcompletefalse/installednull/donorunchanged/free220790784; no instalacion. Preservar intento, obtener margenadicional antesretry; no bajar216343346 ni floor128MiB.
+
+Fuente payload SDKConsumers42002/a12720 PASS6/12refs, runtime3634c7c98967410db7b434088e0f4d2c;
+reads216vector42/64/65/41/4,writes25,queries5,http7,cert2,simulated2/doc1,
+cleanup/ports/cloud0provider0. DELIVERY83932/eaf881 PASS25/206refs,
+runtimea26927b813aa4a899aa1675b0d66292c, cleanup/ports/cloud0provider0.
+ScanTick52634 iniciado, resultado pendiente; QA6paths sigue frozen sincommit.
+
+Tercer sparse reversible sólo solicitud-notes-read/fbafb2d d4e015/1facb8:
+707assets43,168,680bytes,6813retenidos+1link+2deps exactos, HEADstatusclean.
+Receipt a13801be93374180a6255e51364845d7e4f75b072dcd957163809c70a389e750.
+Restore autocrlftrue sparse-checkoutdisable+707rawSHA antes historic sourceSnapshot/
+build/deploy; currentintegration/rootassets intactos. Free241467392 medido,
+BUNDLE retry espera terminalScan; sin rebajar presupuesto.
+ScanTickfuente52634/f31097 PASS6/11refs cleanup/ports/cloud0provider0. TresSDKextension aprobados; agent prepara commit7QA/doc separados delsendernuevo. BUNDLEretryPrepare39568/7c89c4PASS237854720free; Execute70729activo runtimee8edabcd5ce04cd7b4e70a34b081b50e, sin resultadofinal aún. Intento59873FAIL queda preservado.
+
+BUNDLE70729/54a081 FAIL BUILD_FAILED REDACTED, runtimee8edabcd5ce04cd7b4e70a34b081b50e. Candidatebuild-379476b2-30c3-4d8d-bb92-b847598982aa rawemit presente, artifactlibvacío/no provenance; postflightcompletefalse/installednull/donorunchanged/free223211520. Conservarintermedios y diagnosticartransform/esbuild sinrebuild. No cierre BUNDLE ni deploy.
+FuenteSDKextension commit16d8baad9eedd465fc867047f5b5f4e556e68334:6QA+doc,3SDKPASS/noEmit. Sender3newpaths independiente enrevisión; sinintegrar.
