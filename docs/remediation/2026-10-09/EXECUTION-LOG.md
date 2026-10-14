@@ -137,3 +137,11 @@ Nuevo recovery core autorizado para implementacion inerte en eventos existentes,
 sin activar scheduler ni migrar eventos historicos. Launcher39PASSb6b9ae y
 PreflightLOCAL agente bcb30b sin cloud/dotenvwrites; hash/EVENTARC y reutilizacion
 de identidades existentes aun en implementacion. No despliegue de este corte.
+
+## Corte 2026-10-14: recovery probado y preparacion de lectores
+
+Recovery DELIVERY commit71131fb3fd517dce37a5739999e78f496e7c425d: ocho archivos, root120 tests/policy y NORMAL PASS, SDK18casos/194refs PASSa4a752, cleanup/puertos/cero proveedor y cloud. Inerte, no scheduler/export. Adaptador Firestore siguiente revisado7bd444: root65PASS68e3a8 y NORMAL8210c2; SDK con adaptador real pendiente, sin commit ni activacion.
+
+Lectores: contrato55/launcher48 PASS y StageDryRun6e17eb restauran ausencia original del dotenv. Pack privado fallo2f619f por parametro PowerShell sobrescrito; corregido c9975864. Retry93337 fallo EXPECTED_COUNT; evidencia2fd493 demuestra935outputs+318src+3manifests=1256, MAS dotenv temporal=1257. Journal444ff9 confirma ENV_ABSENCE_RESTORED. Corregir cardinalidad coherente y repetir con input nuevo; no omitir archivos. Cierre de descendientes CLI requiere Job Object antes de restaurar dotenv; implementacion en curso. Consulta identidades94905 fallo local sandbox/TOKEN_FORMAT; retry37461 fallo IDENTITY_STATUS, sin status preservado por helperv1. GET directo de serviceagent no constituye requisito fundamentado; alternativa de evidencia read-only en revision. Ningun deploy nuevo.
+
+Writer6: subsetv1 CALLABLE_SOURCE_REQUIRED conservado439039; createSolicitud/createPago publicados solo JS. Verificadorv2 fd9c8b15 con contrato por artefacto pasa20tests418668 y seis subsets5c68e8. Revisiond464f7 no encuentra guards adicionales retirados en handlers inspeccionados; conserva guard Facturama y distingue artefactos por endpoint. CRC/SHA solo seleccionados; no ejecucion archivada ni prueba global de equivalencia. Bundle4d20 sigue congelado y no incluye correccionhistorica884e ni guards posteriores.
