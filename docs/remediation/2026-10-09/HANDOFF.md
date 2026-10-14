@@ -1,18 +1,19 @@
 # Continuidad de ejecucion
 
-Estado vigente (2026-10-14, posterior a los cortes historicos inferiores): ambos
-lectores desplegados estan conciliados; no repetir sus despliegues ni los helpers
-con pines historicos. Launcher c19f816 tiene 94 pruebas PASS. Predeploy local
-51894 paso hooks 1-9 y fallo en 10 por un guard DNS que sustituyo Resolver;
-correccion revisada y 13 pruebas PASS. Se prepara validacion fija 10-14 sobre
-el bundle ya instalado, sin declarar PASS de una invocacion completa.
-Notifier admission sigue OFF: 73 pruebas, NORMAL y politica PASS; gate SDK
-pendiente. ScanTick SDK compuesto fallo 8279 y 22025; este ultimo confirma
-Owner retornado sin excepcion, cero tareas preparadas/enviadas, assertion QA
-historica y cleanup no verificado en esos intentos. Tras corregir precision del reloj, Execute67106/fd6d97 PASS6/11refs y cleanup verificado; emulador detenido y puertos
-cerrados. No activar productor/worker ni integrar cambios dependientes del gate.
-Los textos siguientes se conservan como historial, no como instrucciones activas.
+Estado vigente (2026-10-14): ambos lectores productivos conciliados; no repetir
+sus despliegues ni helpers con pins historicos. Launcher c19f816:94PASS.
+ScanTick compuesto SDK67106:6casos/11refs PASS, commit QA0a8dfed. Admission
+wiring:73tests/NORMAL/politica ySDK28598:8casos/48refs PASS, commitdf19dd1,
+sigue OFF. Consumers nuevo inerte:root22PASS/NORMAL/politica PASS; SDKpositivo
+pendiente, sin endpoints ni activacion. No se han integrado estos lotes.
 
+Predeploy full51894:hooks1-9PASS,10FAILguardDNS; guard corregido13PASS.
+Targeted58972:10-13PASS,14FAILantesworker por CLI no encontrado bajoAPPDATA
+privado. PostflightPASS/puertos cerrados/donorunchanged. Correccion explicita
+PAY0_FIREBASE_TOOLS_ROOT en preparacion con gate exclusivo14, sin repetir
+build ni afirmar14PASS en una invocacion. Ambos intentos fallidos preservados.
+Rootdce0850 conserva corte anterior; detalle actualizado al final EXECUTION-LOG.
+Los textos siguientes se conservan como historial, no instrucciones activas.
 Corte vigente: UPDATE37296 TERMINAL FAIL METADATA/TRANSPORT tras CLIexit0 y
 FUNCTION_COMPLETED. NO repetir: conciliacion read-only posterior0d2848/fcca1c
 PASS runtime/IAM/config y1257archivos; smoke3a134b401PASS. Revision

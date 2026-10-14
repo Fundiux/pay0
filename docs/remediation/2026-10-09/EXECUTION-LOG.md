@@ -318,3 +318,23 @@ fd6d97 PASS6casos/11refs, cleanup verificado, puertos cerrados y cloud/provider0
 El CLOCK_UNTRUSTED historico es inferencia, no reason observado de los fallos.
 Predeploy targeted rootPrepare39796/2f64f9 PASS; Execute58972 iniciado sobre
 los cinco hooks10-14 fijos. Aun sin resultado terminal; no repetir en paralelo.
+
+## 2026-10-14: admission SDK PASS y packer local pendiente
+
+ScanTick QA comprometido por architecture_review en0a8dfed5ca4ac55ae48714ca03633cc5a9f1a9ec,
+solo3paths. Admission wiring SDK: rootPrepare673776 PASS; Execute28598/4c1f20
+PASS8casos/48refs, callbackAttempts12/retryCallbacks2, closure15, cleanuptrue,
+puertos cerrados, cloud/provider0. Incluye concurrencia, preservacion legacy,
+colision, revocacion, USER, callbackrollback, precondicion nativa y retry inyectado.
+No prueba reintento natural ni activa admision. Commit df19dd114f41116b08d784234c0a5f088c46a071: ocho paths propios.
+
+Targeted58972 termino FAILda82f8: hooks10-13PASS,14UPLOAD_VERIFICATION_FAILED
+REDACTED. Runtime6e2ba493a7374e89876bb674e1fe97b4 preservado; postflightPASS,
+completefalse, donorunchanged, portsclosed. Discovery real348/1941ms<7000.
+Diagnostico: APPDATA privado sin PAY0_FIREBASE_TOOLS_ROOT provoca ENOENT antes
+request/worker; CLI real15.3.1 validado existe y directorio request queda vacio.
+Correccion de entorno propuesta; no fallo demostrado del ZIP ni PASS14.
+
+Consumers factory inerte nueva revisada por root:22/22PASS c6d9d8, composicion
+instrumentada y rechazos HTTP/OIDC reales negativos, sin DB/effects. NORMAL8a1729 y
+policya901bf PASS; no prueba positiva crypto ni SDK, no endpoint/activation.
