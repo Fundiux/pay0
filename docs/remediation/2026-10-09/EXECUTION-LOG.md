@@ -207,3 +207,29 @@ Diagnosticos commit300d468: root93testsPASS159b8f; nuevo UPDATEinput0f3d47d49fad
 Worktree separado predeployreuse desde0b50559 implementa6paths y23testsPASSa9af1c, revisionindependiente sinbloqueante; validacionreal pendiente. Functions npmci PASS441paquetes; rootnpmci falloENOSPCd13913. Dos execposteriores no iniciaronproceso. Limpieza acotada autorizada: solo node_modulesraiz parcial reciencreado depredeploy-bundle-reuse-20261014, rutaresuelta verificada,256920431bytes. Cleanup300dfc PASS y255762432byteslibres; funciones/codigo/evidencia preservados. No builds/despliegues mientras margen insuficiente; inventario read-only deartefactos regenerables en curso. No borradohistorico autorizado porinferir espacio.
 
 HTTP DELIVERY inerte commit9c869e681bbf29a01a5f9811b75bf026e385d616: root114testsPASS143db5/b6ff6a, NORMAL45119/bea381 ypolicy0d7396 PASS. Extraccionmecanica ENROLL preserva80assertions;34DELIVERY prueban proofCOMPLETEonly204 y noreplayconpuertossinteticos. Seispathsrevisados, sinexports/activacion/SDKnuevo. Starvation sigue abierto; se investiga cursor durable separado ysemantica dequery antesimplementar.
+
+## 2026-10-14: UPDATE activo y revision de gates independientes
+
+UPDATE37296 conserva input0f3d47d y launcher1596a99. Observacion ce5773:
+20:28:30Z, tres builds y gate documental iniciado; receipt GUARD_ACTIVE.
+No resultado terminal ni redeploy. Observacion fa4ba7:459624448 bytes libres;
+no iniciar instalaciones, builds o emuladores paralelos. Consulta CIM f5076f
+rechazada por permisos; statfs de Node obtuvo capacidad sin escalacion.
+
+RecoveryScan: root leyo core, adapter, tests y doc (ab153e/71bdc8); repitio
+42/42 offline PASS fa4ba7. Guard unsafeintegerNumber conserva precision a costa
+de no recorrer doubles enteros fuera del rango seguro; config BIGINT no prueba
+SDK. Prefix declara trabajo consumido, no demuestra entrega. SDK nuevo listo
+para revision, NORMAL pendiente; sin wiring/exports/activacion.
+
+Compatibilidad uploads: fuente historica ae21267, fixture y helper actual
+revisados f5db07/0a2d08; root9/9PASS. Commit fed288d en rama aislada
+ test/storage-upload-compat-20261014. Demuestra orden URL antes de finalize en
+historico y ausencia de esa dependencia en helper integrado, no backend real.
+Recuperar PENDING mediante finalize puede alcanzar Telegram; siguiente gate
+sintetico revisara wrapper y recibos. Storage24gaps y Firestorebudget siguen
+abiertos; ninguna regla experimental publicada.
+
+Predeploy reuse bb79e27:23tests previosPASS, runner local en preparacion; falta
+full gate y medicion. Donor junctions no autorizan npm install/rebuild. Smoke
+UPDATE revisado f5db07, aun no ejecutado: exige primero prueba final del deploy.
