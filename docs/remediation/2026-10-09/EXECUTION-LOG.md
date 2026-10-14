@@ -338,3 +338,34 @@ Correccion de entorno propuesta; no fallo demostrado del ZIP ni PASS14.
 Consumers factory inerte nueva revisada por root:22/22PASS c6d9d8, composicion
 instrumentada y rechazos HTTP/OIDC reales negativos, sin DB/effects. NORMAL8a1729 y
 policya901bf PASS; no prueba positiva crypto ni SDK, no endpoint/activation.
+
+## 2026-10-14: pack-only PASS e integracion aislada del notificador
+
+Prepare256MiB54592a rechazo por capacidad antes worker. Presupuesto especifico
+pack-only192MiB aceptado tras medir1256files/24684013bytes/74156namebytes y
+confirmar unZIPstreaming sin staging/build/JVM. Preflight limita25MiB/1256files/
+128KiBnames; floor128MiB100ms/Job/log1MiB siguen. No cuota atomica; no historia
+borrada. RootPreparee6c9fb PASS, Execute33279/66e8f2 PASS, runtime
+0ec45f489ee441038b16591c60eb1acd. ZIPexact1256 SHA
+ e9a7298879d7c4e6c57c5daa685ccb19c155014e5ed278a9b307a2c111e30f58.
+Worker RESULT_READY10561ms, postflightcomplete/donorunchanged/portsclosed PASS.
+14commandsValidatedAcrossAttempts, full14SameInvocationPass=false; los dos
+intentos anteriores permanecenFAIL. CloudCalls0, actualUploadVerifiedfalse.
+Root25regresiones63ed64PASS. Se prepara commit13helpers/QA/docs historicos.
+
+Integracion aislada integration/notifier-inert-20261014 HEADb9e16c6f431e03cc65d6f40c9429bad899cb71ae:
+39cherry-picks sin conflictos desde0b50559,134paths exactos.132blobs iguales
+notifierdf19; manifiestos solo agregan google-auth-library9.15.1direct, transitivos
+sin cambios. index/firebase/Telegram/notes/financieros previos preservados.
+Root reviso mapping/manifests; gates integrados pendientes, sin push/deploy.
+Junctions deps aldonor0b verificadas, sin install. No integrar ConsumersWIP aun.
+SDKConsumers rootPrepare63e850PASS; Execute30260 en curso, sin resultado final.
+
+ConsumersSDK30260/782954 FAIL: runtime notification-consumers-8cbc23ab8a9440b4a582b6ac76c6920e,
+DELIVERY_TEXT ASSERTION, cleanuptrue, case2, blocked0, reads78/writes9/queries3,
+httpCalls3/provider0/document0. ENROLL signed/native seal paso. Wrapper getAll
+QA confundio opcionesfieldMask conrefs; correccion y repro offline en curso,
+no cambio producto ni segundo Execute aun.
+Predeploy13paths comprometidos b6a2909376b5aa92133a853dd68ac5a728868ffc.
+Integracion docc81981badbc83c09e283a7d1ec42e83284929243 y deps898versiones
+compatibles verificadas. RootExecute86223:40suites seriales actualmente activo.

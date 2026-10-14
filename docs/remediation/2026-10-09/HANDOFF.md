@@ -1,19 +1,23 @@
 # Continuidad de ejecucion
 
-Estado vigente (2026-10-14): ambos lectores productivos conciliados; no repetir
-sus despliegues ni helpers con pins historicos. Launcher c19f816:94PASS.
-ScanTick compuesto SDK67106:6casos/11refs PASS, commit QA0a8dfed. Admission
-wiring:73tests/NORMAL/politica ySDK28598:8casos/48refs PASS, commitdf19dd1,
-sigue OFF. Consumers nuevo inerte:root22PASS/NORMAL/politica PASS; SDKpositivo
-pendiente, sin endpoints ni activacion. No se han integrado estos lotes.
+Estado vigente (2026-10-14): lectores productivos conciliados; no repetir sus
+despliegues/helpers con pins historicos. Launcher c19f816:94PASS. ScanTick SDK
+67106:6/11refs PASS, QA0a8dfed. Admission SDK28598:8/48refs PASS y commitdf19dd1,
+default OFF. Consumers inerte:22tests/NORMAL/politica PASS; SDK30260 fallo en
+DELIVERY_TEXT antes provider por wrapper getAll que rechaza fieldMask. Cleanup
+verificado; correccion QA pendiente, producto intacto.
 
-Predeploy full51894:hooks1-9PASS,10FAILguardDNS; guard corregido13PASS.
-Targeted58972:10-13PASS,14FAILantesworker por CLI no encontrado bajoAPPDATA
-privado. PostflightPASS/puertos cerrados/donorunchanged. Correccion explicita
-PAY0_FIREBASE_TOOLS_ROOT en preparacion con gate exclusivo14, sin repetir
-build ni afirmar14PASS en una invocacion. Ambos intentos fallidos preservados.
-Rootdce0850 conserva corte anterior; detalle actualizado al final EXECUTION-LOG.
-Los textos siguientes se conservan como historial, no instrucciones activas.
+Predeploy: full51894 y targeted58972 conservados FAIL; tras corregir guards
+locales, pack-only33279/66e8f2 PASS1256files exactos. Evidencia14comandos entre
+intentos, full14SameInvocationPass=false. Commitb6a2909 conserva13helpers/QA/docs
+historicos; solo bb79e27 (6paths producto) candidato a integrar, no b6a2909.
+
+Integracion aislada integration/notifier-inert-20261014:39commits desde0b50559,
+producto b9e16c6, docc81981b, preserve notes/financieros/348exports por estructura.
+Root40suites seriales Execute86223 activo; no repetir. Build/NORMAL/manifest/SDK
+integrados pendientes. Junctions deps aldonor0b, noinstall ni mutacion donor.
+Capacidad local ~200MiB; presupuestos se revisan antes de builds. Sin push/deploy.
+Detalle actualizado al final EXECUTION-LOG. Cortes inferiores son historia.
 Corte vigente: UPDATE37296 TERMINAL FAIL METADATA/TRANSPORT tras CLIexit0 y
 FUNCTION_COMPLETED. NO repetir: conciliacion read-only posterior0d2848/fcca1c
 PASS runtime/IAM/config y1257archivos; smoke3a134b401PASS. Revision
