@@ -75,3 +75,36 @@ Corte posterior a0bdf5e3: baseline remoto15 leido (75metadata requests,14ACTIVE,
 DELIVERY sourcebinding commit63c3fa84aafadf1ca3b3e99945b72acca41f5ca2: root127PASS4bcc7c, NORMALabc8c3/policy220037, SDK65045/805f34 PASS13casos194refs/cleanup/puertos/cloud0/provider0. Source nativo capturado desdecreate y proofCOMPLETE exacto; no cambia ACK del supervisor ni activa transporte. Release IQ commit44956943debe49a88940846b02fa47172842e51a: regresion staleA borra leaseB reproducida51ac1d; ahora binding privado+token/expiry en cada TXretry. Root106tests+policy94e8d0, NORMAL43106b, SDK19990/929f2d PASS4casos1ref/CAS/puertos/cloud0. No integrados; journal de resultados externos sigue diseño ca9b165, sin nueva coleccion/Rules.
 
 Contrato de lectores commit652e0c7888bc990576ddb0d74555651a9a7ac028: root41PASS299da3 usando conversor CLI real y transporte interceptado; review independiente confirma env cerrado y runtime exacto. Recolector fuentes dc2f09b05a4f99642824134503c1ef09501e9560d4c35aa6191b1fd3fdd6d08a root17PASS299da3; Execute43509/91771e PASS21GET/42515312bytes/7archivos/ceroescrituras. Root08ae53 verifica siete SHA/size contra resumen privado b8f13169ba386719a638b5e051d610408da9a7c8c62546dc738029ce67d78b25. ZIP no abierto aun, compatibilidad pendiente, sin deploy. Cursor dc2150 PASS12paresvalidos/6invalidos alcanceASTserializacion/input solamente. Proximo: launcher lector y verificador ZIP financiero offline.
+
+## 2026-10-13: respuestas tardias durante convivencia de versiones
+
+Root reviso el arnes privado `rolling-dispatch-cross-version.cjs` completo
+(00b576) y los segmentos AST antiguos/nuevos efectivos (79c6cd/78a55e).
+SHA256 del arnes: 026c0cb0eb632763b98ae06f247e9d751160f5645906f76762b2600c2ea67207.
+Ejecucion 1aa0fc PASS: cuatro escenarios ACK/ERROR sobre terminal/generacion
+nueva. En todos, productor antiguo hace una escritura directa tardia y el nuevo
+la rechaza (cero escrituras directas). ACK antiguo cambia COMPLETED a QUEUED;
+ERROR antiguo cambia COMPLETED a ENQUEUE_ERROR. Ante generacion nueva, ACK
+antiguo puede conservar QUEUED pero reemplaza su taskId.
+
+Fuente antigua ac914859e8dd39378ceb2898ed9f97dca031d93cc552239a128f202239e8a181,
+generacion publicada 1790855697419364; fuente nueva 52b978233d7e2563b1439e832d5d1c4ec059c92b37616dffabb0ce808421e1b5
+del candidato 4d20b12. Ambos productores se combinaron con el consumidor/helper
+nuevo. Solo AST seleccionado ejecutado, ningun modulo archivado cargado; puertos
+Firestore/cola/ejecutor simulados, cero cloud/proveedor. La generacion siguiente
+se introduce mediante mutacion sintetica: esto no prueba que exista una
+transicion de negocio legitima desde SUCCEEDED ni concurrencia natural.
+El resultado demuestra que actualizar solo el consumidor no protege contra
+escrituras de productores antiguos aun en curso. Retirada de ejecuciones y
+secuencia de transicion siguen pendientes; cola/scheduler no fueron pausados.
+
+DELIVERY SDK Execute75860/30a298 PASS: 14 casos, 194 referencias, limpieza y
+puertos cerrados, cero cloud/proveedor. Handoff/reconciliacion reales con Task
+simulada conservan recibo y no repiten envio. Sigue inerte; no demuestra
+recuperacion durable del responsable del evento fuente.
+
+Launcher lectores aun no ejecutable: inspeccion CLI detecto que prepare agrega
+EVENTARC_CLOUD_EVENT_SOURCE y endpoint.hash antes del conversor. Contrato652e0c7
+no modela esas adiciones y rechazaria el despliegue; pruebas y ajuste acotado
+pendientes. Dotenv de proyecto ausente en candidato de integracion; no crear ni
+restaurar archivos asumiendo una existencia anterior. Sin despliegue nuevo.
