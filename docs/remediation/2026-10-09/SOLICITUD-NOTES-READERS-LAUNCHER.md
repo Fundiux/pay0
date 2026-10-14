@@ -1,8 +1,11 @@
 # Singleton reader release launcher - review candidate
 
-This is local deployment tooling, not evidence of a deployment. It has not been
-executed against production. The frozen integration and its installed bundle are
-unchanged. The pure preservation contract remains separately reviewed and pinned.
+Current checkpoint: CREATE listSolicitudNotes is independently reconciled through
+seven read-only GETs, exact uploaded/source ZIP equality with 1257 files, and an
+unauthenticated 401 smoke. Original Execute 99696 remains FAILED with an unknown
+exact cause; its receipt is preserved unchanged. UPDATE listClientDispersionNotes
+is pending. The frozen integration and installed bundle are unchanged. Earlier
+prepared-only checkpoints below describe their historical state, not this result.
 
 ## Scope and ownership
 
@@ -160,3 +163,13 @@ The allowance is limited to the pinned native CLI multipart refresh contract: PO
 The validator copies the exact validated bytes into a fresh owned Readable. The original FormData and its callbacks are never consumed. The owned stream has a nonwritable, nonconfigurable redacted toJSON because the installed apiv2 failure logger serializes fetchOptions even when skipLog is set. Fresh header and skipLog objects prevent later caller mutation. Direct Buffer forwarding is incompatible with this CLI (it JSON-encodes Buffer); a plain string would expose credentials through that failure logger.
 
 Focused tests 602f5b passed 25/25: native auth refresh with synthetic credentials; real apiv2 to fake fetch on success and network failure; exact bytes despite original form/header/logging mutation and custom callbacks; captured logs without synthetic secrets; seventeen malformed refresh contracts; and five direct mutation denials. No real network, live refresh, credential edits, new input or deployment was performed. The first real-fetch fixture failed because the mock retained node-fetch's original default export; that fixture was corrected and the evidence preserved (fe663a, then e58466 and 602f5b PASS).
+
+### Execute 99696 reconciliation and phase diagnostics
+
+Execute 99696 remains a failed launcher execution. Its original receipt has ten states through FUNCTION_COMPLETED and IAM_CREATED, with no POSTFLIGHT_VERIFIED or SOURCE_VERIFIED. The CLI printed Deploy complete, but the original exact failure stage remains unknown. Journal observation was 1902.933108 seconds between OWNED_TREE_STARTING and OWNED_TREE_EMPTY_VERIFIED, below the unchanged 2100-second supervisor deadline; this is not evidence of a deadline failure or a particular credential/permission cause. Root confirmed the original absent dotenv state was restored.
+
+Root subsequently reconciled the existing operation and runtime using six read-only requests (85969/7c02a3): the original postflight assertions passed. Separate exact-generation source proof (77175/8c1633) verified the uploaded ZIP hash and all 1257 expected files. The unauthenticated smoke returned 401 (150468). These later proofs do not rewrite the failed receipt or convert the original launcher result into success; CREATE must not be repeated.
+
+The launcher now emits separate PAY0-READERS-PHASE@1 diagnostic records for PREPARE, CHILD_CLI, LOCAL_AFTER_CLI, RECEIPT, TOKEN, METADATA, POSTFLIGHT, SOURCE_READ, SOURCE_VERIFY and LOCAL_FINAL. Each has fixed ENTER/DONE/FAILED states; failures copy only an allowlisted first-line code from an own data descriptor. No assertion operands, arbitrary provider text, paths, credentials or stack are emitted. CHILD_CLI additionally reports only a bounded numeric exit or fixed unknown/no-exit marker and an allowlisted signal. The diagnostic sink is best effort: its failure cannot replace an original error or change a successful return. No retry, lifecycle budget, provider action, semantic receipt order or postflight assertion changed.
+
+Focused tests 503eef passed 19/19, covering refusal and error identity in every phase, sink failure, accessor/arbitrary-error redaction, child-result bounds, unchanged incomplete-receipt behavior and direct-mutation rejection. Previous input and helper hashes remain historical evidence and are no longer executable against changed helper bytes. A future UPDATE requires a newly reviewed input; no new input or cloud operation was performed for this change.

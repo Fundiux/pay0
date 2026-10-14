@@ -3,6 +3,16 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {install}=require('../../scripts/lib/solicitud-notes-readers-guard.cjs');
 const {CREATE,PARENT}=require('../../scripts/lib/solicitud-notes-release-contract.cjs');
 const launcher=require('../../scripts/lib/solicitud-notes-readers-launch.cjs');
+for(const phase of launcher.DIAGNOSTIC_PHASES)test('phase diagnostic preserves refusal and redacts '+phase,async()=>{
+ const records=[],secret='SYNTHETIC_PRIVATE_OPERAND',error=Error('POST_CONFIG\n'+secret);let calls=0;
+ await assert.rejects(launcher.diagnosticPhase(phase,()=>{calls++;throw error},r=>records.push(r)),e=>e===error);
+ assert.equal(calls,1);assert.deepEqual(records.map(r=>[r.phase,r.state,r.code]),[[phase,'ENTER',undefined],[phase,'FAILED','POST_CONFIG']]);assert(!JSON.stringify(records).includes(secret));
+ const original={};assert.equal(await launcher.diagnosticPhase(phase,()=>original,()=>{throw Error('SINK_FAILED')}),original);
+ await assert.rejects(launcher.diagnosticPhase(phase,()=>Promise.reject(error),()=>{throw Error('SINK_FAILED')}),e=>e===error);
+});
+test('phase diagnostic rejects unknown phase without calling work or sink',async()=>{let calls=0;await assert.rejects(launcher.diagnosticPhase('foreign',()=>calls++,()=>calls++),/DIAGNOSTIC_PHASE/);assert.equal(calls,0);});
+test('phase diagnostic does not invoke error getters or expose arbitrary text',async()=>{let getters=0;for(const error of [Error('PRIVATE_PROVIDER_TEXT'),Object.defineProperty({},'message',{get(){getters++;throw Error('PRIVATE')}})]){const records=[];await assert.rejects(launcher.diagnosticPhase('TOKEN',()=>{throw error},r=>records.push(r)),e=>e===error);assert.equal(records[1].code,'UNCLASSIFIED');assert(!JSON.stringify(records).includes('PRIVATE'));}assert.equal(getters,0);});
+test('child diagnostic copies only bounded exit and known signals',()=>{const records=[];launcher.diagnosticChild({status:0,signal:null,stdout:'PRIVATE',error:Error('PRIVATE')},r=>records.push(r));launcher.diagnosticChild({status:Infinity,signal:'PRIVATE'},r=>records.push(r));assert.deepEqual(records.map(r=>[r.exit,r.signal]),[[0,'NONE'],['UNKNOWN','UNKNOWN']]);assert(!JSON.stringify(records).includes('PRIVATE'));assert.doesNotThrow(()=>launcher.diagnosticChild({},()=>{throw Error('sink')}));});
 test('native CLI OAuth refresh passes only bounded credential exchange through actual guard',()=>{
  const {spawnSync}=require('node:child_process'),path=require('node:path'),cli=path.join(process.env.APPDATA,'npm/node_modules/firebase-tools/lib');
  const code=`const assert=require('node:assert/strict'),path=require('node:path'),cli=process.argv[1],guard=require(process.argv[2]);let network=0;require('node:https').request=require('node:http').request=()=>{network++;throw Error('NETWORK_FORBIDDEN');};const store=require(path.join(cli,'configstore.js')).configstore;store.get=()=>undefined;store.set=store.delete=()=>{throw Error('CONFIG_WRITE_FORBIDDEN');};const logger=require(path.join(cli,'logger.js')).logger;for(const key of ['debug','info','warn','error'])logger[key]=()=>{};
