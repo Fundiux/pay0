@@ -1,5 +1,7 @@
 # Continuidad de ejecucion
 
+Ultimo corte 2026-10-14: lectores puref48a5db/launcherb478e45 comprometidos, pack1257PASS81361/c24deb y root59launcherPASS8bc6fa. Fresh38340/3615dd y Stage98589/7565e8 PASS. Execute2263 FAILce8d74 SOURCE_TOKEN_EXPERIMENT antesreceipt: CLI15.3.1 defaulttrue; jobempty/envabsence/lockremoved comprobados0866d0, candidateclean y receipt/postflight/sourceausentes ea8070. No publicacion verificada. Correccion setEnabled(false) solo memoria en implementacion; no flushglobal ni reintento automatico. DELIVERY adapter57e46a2 comprometido con SDK21/197PASSd591b9; binding nuevo root93/buildPASS, SDK72428 en curso. Evidencia detallada nueva al final de EXECUTION-LOG.md.
+
 ## Corte 2026-10-14: recovery probado y preparacion de lectores
 
 Recovery DELIVERY commit71131fb3fd517dce37a5739999e78f496e7c425d: ocho archivos, root120 tests/policy y NORMAL PASS, SDK18casos/194refs PASSa4a752, cleanup/puertos/cero proveedor y cloud. Inerte, no scheduler/export. Adaptador Firestore siguiente revisado7bd444: root65PASS68e3a8 y NORMAL8210c2; SDK con adaptador real pendiente, sin commit ni activacion.
