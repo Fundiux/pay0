@@ -35,11 +35,17 @@ Consumers216slots6/12, DELIVERY25/206, Scan6/11 PASS; NORMAL e integracion pendi
 Sender source11a396e:28offlinePASS75374f/noEmit6ca519PASS.
 Slice prepare-before-claim commitc7c0ee8 (7paths) revisado root:169offlinePASS71ff30;
 noEmit36858/05a02b PASS. Precision posterior startedMono unica:16tests rootc92ab2
-PASS y noEmit agente73636/a607d0 PASS; SDKpins anteriores obsoletos, no integrado ni activado.
-Scoped13 runner revisado root bb4614/550563:12testsPASS; baseline QA hash y
-postcheck fuente/locks/puertos antes de cada PASS. Prepare/Execute pendientes
-de capacidad, sin bajar reserva320MiB/floor128MiB. Cinco sparse adicionales
-siguen en prueba readonly; no autorizados hasta revisar manifests.
+PASS y noEmit agente73636/a607d0 PASS. SDK extension commitfbdf5f0:
+Consumers89198/25e0486/12, DELIVERY1272/47fb5e25/206, Scan31007/7a952e6/11
+PASS cleanup/ports/cloud0/provider0. Todavia no integrado ni activado.
+Scoped13 runner root12testsPASS;5sparse COMPLETE45486/e224dc, receiptD45E5503
+con3535assets reversible y18205retenidos intactos. Restore Git+707SHA porworktree
+antes cualquier build/sourceSnapshot/deploy historico. Prepare74862/297e02PASS
+357355520free/335544320required; Execute1297 activo, no duplicar. Reserva320MiB
+yfloor128MiB intactos. Candidato6 proof readonly40336, no sparseautorizado.
+Cancellation puro commitebcffcc:35tests/noEmitPASS tras corregir3errores de
+narrowing; fallo58682/68a359 preservado. Adapter dedicado en implementacion
+separada, sin wiring/activacion; no atribuir SDKprevio a futura fuente modificada.
 Cancelacion conocida no permite IN_FLIGHT->READY generico; contrato durable pendiente. Infraestructura pendiente.
 Lectores productivos ya conciliados: no repetir despliegues historicos.
 Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
