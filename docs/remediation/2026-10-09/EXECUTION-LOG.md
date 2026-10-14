@@ -284,3 +284,37 @@ fallo1cbccf antesbuild enhook1: NODE_OPTIONS perdio backslashes de rutaWindows,
 MODULE_NOT_FOUND35dad0. Runtime8348956d308149bca50914c54b6ad899 preservado.
 PostflightPASS: donor sin cambios, puertos cerrados, ownedtreeempty. Sin cloud.
 Se prepara correccion deescape conpruebaNode real; no repetir sinreview.
+
+## 2026-10-14: gates locales y diagnostico compuesto
+
+El escape NODE_OPTIONS se corrigio y paso la prueba en Node real. Segundo
+predeploy Execute51894: hooks 1-9 PASS, build instalado935outputs/index
+ae84134de00971f5d5ec6174f78f32c23fb21e7648406b95ed6b99202d9b7547.
+Fallo hook10: dns.promises.Resolver is not a constructor, causado por el
+guard local, no por producto. Runtime60f774721dcd40038906f401aa8d0098
+preservado; postflight donor/puertos/ownedtree PASS. Correccion preserva
+constructores y bloquea consultas DNS externas en modulos y prototypes.
+Root reviso fuente y repitio13/13PASS, incluido cliente gRPC real sin sockets.
+No hay capacidad para otro build completo: se prepara gate fijo10-14 ligado
+a hashes del intento y bundle instalado; no equivaldra a full14SameInvocation.
+
+Admission wiring: agente73/73PASS c1d40a, NORMAL60e7c3 y politicab7df80.
+Root reviso delta de retry transaccional y mock factory LEGACY sin relajar
+assertions; seis paths sincommit, defaultOFF y SDK nativo pendiente.
+
+ScanTick compuesto: intento8279 FAIL en OWNER_ENROLL con cleanup no verificado.
+Se corrigio solo diagnostico para separar error primario de cleanup, sin ampliar
+guards ni cambiar producto. RootPrepare PASS; Execute22025/df5b15 FAIL.
+Runtime notification-scan-owner-7f7dac18aefc4931a1c60bec93ff32ed preservado:
+ASSERTION, ownerErrorDetail null, ownerCalls1, taskPrepares0, taskSends0,
+txReads9, txWrites4, blockedNetwork0, caseCount1, cleanup no verificado.
+Owner retorno sin throw; se investiga su resultado antes de modificar fixture.
+Puertos cerrados, sin requests productivos ni proveedor. No cierre del gate.
+
+ScanTick posterior: reproduccion local confirma truncamiento submilisegundo
+Timestamp.toMillis. Fixture usa ahora ceil(seconds*1000+nanoseconds/1e6), con
+cuatro regresiones locales; controles producto sin cambios. RootExecute67106
+fd6d97 PASS6casos/11refs, cleanup verificado, puertos cerrados y cloud/provider0.
+El CLOCK_UNTRUSTED historico es inferencia, no reason observado de los fallos.
+Predeploy targeted rootPrepare39796/2f64f9 PASS; Execute58972 iniciado sobre
+los cinco hooks10-14 fijos. Aun sin resultado terminal; no repetir en paralelo.
