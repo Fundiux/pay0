@@ -141,3 +141,12 @@ Historical synthetic IAM account-GET tests are superseded, not evidence of produ
 
 
 Final launcher regression: 59/59 passed without network (`4cca39`), independently repeated by root (`45165/8bc6fa`). Root full-source review (`580970`), test-delta review (`63ade4`) and independent final review found no remaining blocker in this bounded launcher scope. This authorizes packaging the reviewed tooling, not a claim that any new reader was deployed. Final execution requires freshly pinned input, fresh remote baseline checks and the normal guarded release flow.
+
+
+### Scoped source-token experiment correction
+
+Execute `2263` stopped at SOURCE_TOKEN_EXPERIMENT before a guard receipt or function operation was accepted. Root verified the owned job was empty, the original absent dotenv state was restored and the operation lock was removed (`0866d0`). This failure remains part of the release history; it is not a successful deployment.
+
+The launcher now calls the pinned CLI native `experiments.setEnabled('functionsv2deployoptimizations', false)` in its own process before retaining the false-predicate assertion. This changes the CLI in-memory preference cache only; it never calls `flushToDisk`. The cleaned child environment excludes FIREBASE_CLI_EXPERIMENTS, preventing CLI startup from enabling the flag again. Other experiment values remain unchanged.
+
+The installed-CLI test (`4867a7`) forbids configstore writes and real network, verifies unchanged other flags, then executes the real Fabricator createV2Function and updateV2Function with fake provider/poller ports. Both outgoing bodies preserve the exact storageSource and have no own sourceToken property; the scraper getToken port is never called. Later onPoll/debug handling is unchanged and remains in private logs: this is not a claim that all future provider metadata or logs are token-free. No automatic retry is introduced.
