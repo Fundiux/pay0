@@ -199,3 +199,11 @@ PASS09f86a. FalloTS18048 anterior conservado; arreglo solo estrechamiento de tip
 Sin activacion: faltan HTTP DELIVERY privado y tratamiento durable de starvation.
 A7B QA commitfbafb2dea9a57a1b2d9165cf53f8e4c807aa0e90,29tests y gateactualPASS,
 no cierre historico. Ambos commits siguen sin integrar en main.
+
+## 2026-10-14: segundo lector preparado; capacidad local agotada
+
+Diagnosticos commit300d468: root93testsPASS159b8f; nuevo UPDATEinput0f3d47d49fadfe62f4fe330c9d28f217111e8276c11f52f8a9552c82a13355a9 enlocal-1aceafe4-3375-439d-85e1-da7b677c91b7. Rootprojection7f5099 confirma candidato/baseline/config iguales youtputs nuevos. PreflightLOCAL1901d1 yfresh1560/81ccee PASS. StageDryRunCASa4ed6c FAIL sinExecute; inventario1a42d5 solo encuentra preflightlog100bytes READERS_CHECK_PASS, sinjournal/backup/receipt, dotenv ylock ausentes. No causaexacta demostrada; no asumirStagePASS ni repetirdeploy.
+
+Worktree separado predeployreuse desde0b50559 implementa6paths y23testsPASSa9af1c, revisionindependiente sinbloqueante; validacionreal pendiente. Functions npmci PASS441paquetes; rootnpmci falloENOSPCd13913. Dos execposteriores no iniciaronproceso. Limpieza acotada autorizada: solo node_modulesraiz parcial reciencreado depredeploy-bundle-reuse-20261014, rutaresuelta verificada,256920431bytes. Cleanup300dfc PASS y255762432byteslibres; funciones/codigo/evidencia preservados. No builds/despliegues mientras margen insuficiente; inventario read-only deartefactos regenerables en curso. No borradohistorico autorizado porinferir espacio.
+
+HTTP DELIVERY inerte commit9c869e681bbf29a01a5f9811b75bf026e385d616: root114testsPASS143db5/b6ff6a, NORMAL45119/bea381 ypolicy0d7396 PASS. Extraccionmecanica ENROLL preserva80assertions;34DELIVERY prueban proofCOMPLETEonly204 y noreplayconpuertossinteticos. Seispathsrevisados, sinexports/activacion/SDKnuevo. Starvation sigue abierto; se investiga cursor durable separado ysemantica dequery antesimplementar.

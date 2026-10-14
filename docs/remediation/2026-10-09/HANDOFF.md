@@ -1,5 +1,12 @@
 # Continuidad de ejecucion
 
+Corte capacidadlocal: ENOSPC en npmci de nuevo worktree predeployreuse; solo su
+node_modulesraiz parcial retirado, ~244MiB recuperados. No iniciarbuild/deploy
+hasta capacidadsuficiente. UPDATEinput0f3d47d enlocal-1aceafe4-3375-439d-85e1-da7b677c91b7
+pasaLOCAL1901d1/fresh81ccee, pero StageDryRunCASa4ed6c falloantesstagingobservable:
+journal/backup/receipt/env/lock ausentes1a42d5. NoExecute. Diagnosticos300d468
+root93PASS; HTTPDELIVERY9c869e6 root114/NORMAL/policyPASS inerte. Detallealfinallog.
+
 Corte vigente: listSolicitudNotes reconciliado7GET PASS7c02a3/8c1633, revision
 listsolicitudnotes-00001-hos y1257archivos exactos del ZIP subido. Smoke150468
 HTTP401/UNAUTHENTICATED PASS sin credenciales. Intento original99696 permanece
