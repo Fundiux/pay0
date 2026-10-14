@@ -261,3 +261,26 @@ provider0. Root revision836b04/d9a3fc; Prepare fallosdae06b/03f116 eran syntaxQA
 llave Proxy corregida, Prepare agentdc368c PASS. NORMAL/policy en curso separado,
 sin activacion. QA recoveryhistorico root22/22e21ef5 PASS caracteriza lostACK
 FAILED que reenvia en notifier0b; no autoriza recovery ni declara correccion.
+
+## 2026-10-14: transporte corregido y predeploy local en validacion
+
+Launcher commitc19f816c62c0e930546fc57634b0a6c9576aba75: agent:false evita
+reutilizar sockets tras spawnSync; TLS/limites/politica/no-retry sin cambios.
+Repro local881a08/68be88:3/3 defaultECONNRESET vs3/3 noReusePASS, causa del
+TRANSPORThistorico no probada. Rootfull94/94PASS88145/7e2a8d; launcherhash
+c54cfce794e7a4a86644c77c334ac5f71f7b97a1090b42c652b27ccb8e14282a.
+Inputs y reconciliadores anteriores quedan historicos por pin cambiado; no
+repetir lectores ya conciliados. FINDINGS refleja ZIPexacto y lectores actuales.
+
+Notifier Scan8dae8d2: NORMAL48f127/policy9c8128 yrootSDK8/9refsPASS7dbaa8;
+ScanTick95567ff: root20/20PASS5bfb82, NORMALc1ad48/policyf9d8ff. Ambos inertes;
+SDK compuesto en preparacion. QA historical recovery31b1155: root22PASS,
+no promocion automatica ni cierre de incertidumbre legacy.
+
+Predeploy runner6paths sincommit sobrebb79e27: rootrevision17d4a8/26e9fe,
+11tests yPrepare8df3c5PASS. Reserva320MiB+backupobservado, piso128MiB/100ms,
+1MiBporlog, no cuota atomica; presupuesto revisado conmediciones. Execute8402
+fallo1cbccf antesbuild enhook1: NODE_OPTIONS perdio backslashes de rutaWindows,
+MODULE_NOT_FOUND35dad0. Runtime8348956d308149bca50914c54b6ad899 preservado.
+PostflightPASS: donor sin cambios, puertos cerrados, ownedtreeempty. Sin cloud.
+Se prepara correccion deescape conpruebaNode real; no repetir sinreview.
