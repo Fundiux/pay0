@@ -199,3 +199,31 @@ Preflight offline del ZIP SSR productivo frente a integracion `7b56c4c`: 56 ruta
 - Verificacion de artefacto/configuracion, no afirmacion de ejecucion de cada ruta.
   No rollback automatico: preservar generation-pinning al preparar correccion compatible.
   Main y reglas publicadas permanecen sin cambio; IQ6 y notas347 siguen pendientes.
+
+## 2026-10-14: lectores desplegados y conciliados
+
+UPDATE listClientDispersionNotes termino37296/c37f9b FAIL en METADATA/TRANSPORT,
+con CLIexit0 y FUNCTION_COMPLETED. No se repitio despliegue. Journal6c2d0b
+confirma arbol vacio y ausencia dotenv restaurada a20:33:02Z. Receipt original
+2d1c39e9b1eec194ffb82311c4b9bcc43d621320f8c3b0aaa993fd86d0ab3a9e preservado.
+Revision listclientdispersionnotes-00003-fac, source generation1792009849291422.
+Reconciliador privado b01a514d57a3297a80afffab7aabe948bbeb36910f78016ad5250d75aa61476b:
+9tests/Prepare63347a, diff solo endpoint/pins6b5490;6GETmetadata0d2848 PASS con
+postflight original intacto,1GETsourcefcca1c PASS1257archivos exactos.
+ZIP c86e63cc5e31dbab379df4c57ff08c72b53cf6aecb618bf954e5416fec68cd98.
+Smoke3a134b una sola peticion vacia sin credenciales:401UNAUTHENTICATED,
+73bytes/hash104b88cb96f0bf52a09c926946e4d1c0890d348cfea45c9c4aa4085fd6031c53.
+Evidencia privada reconciliation-37296-v1; originalLaunchPassedfalse y
+originalReceiptCompletedfalse se mantienen. Runtime/config/IAM/source comprobados;
+comportamiento autenticado productivo no ejercitado. Ninguna mutacion financiera.
+
+CREATE listSolicitudNotes ya conciliado7c02a3/8c1633, smoke150468 PASS; se
+conserva su fallo original99696. Ambos lectores pertenecen al candidato congelado
+0b50559/producto4d20b12, no despliegan los otros trece endpoints financieros.
+Las reglas experimentales, Hosting incompletamente conciliado y S10 siguen abiertos.
+
+RecoveryScan SDK67817/7dbaa8 PASS8casos9refs, cleanup/puertos cerrados ycloud0,
+provider0. Root revision836b04/d9a3fc; Prepare fallosdae06b/03f116 eran syntaxQA,
+llave Proxy corregida, Prepare agentdc368c PASS. NORMAL/policy en curso separado,
+sin activacion. QA recoveryhistorico root22/22e21ef5 PASS caracteriza lostACK
+FAILED que reenvia en notifier0b; no autoriza recovery ni declara correccion.

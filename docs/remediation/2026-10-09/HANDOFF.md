@@ -1,5 +1,14 @@
 # Continuidad de ejecucion
 
+Corte vigente: UPDATE37296 TERMINAL FAIL METADATA/TRANSPORT tras CLIexit0 y
+FUNCTION_COMPLETED. NO repetir: conciliacion read-only posterior0d2848/fcca1c
+PASS runtime/IAM/config y1257archivos; smoke3a134b401PASS. Revision
+listclientdispersionnotes-00003-fac. CREATE lector anterior tambien conciliado.
+Detalle al final RELEASE/EXECUTION-LOG; historial inferior no es estado activo.
+SDK RecoveryScan67817/7dbaa8 PASS8/9refs cleanup/puertos/cero cloudproveedor;
+NORMAL/policy ahora en curso por architecture_review. Predeploy runner pendiente
+revision/capacidad, no Ejecutar aun. Root8474ba9 conserva gates previos.
+
 Estado actualizado: UPDATE37296 sigue activo; observacion ce5773 a las
 20:28:30Z muestra tres builds, gate documental iniciado y receipt solamente
 GUARD_ACTIVE. No hay confirmacion final ni motivo para repetir el despliegue.
