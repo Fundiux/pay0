@@ -1,5 +1,7 @@
 # Continuidad de ejecucion
 
+Corte vigente 2026-10-14 posterior a5f27a75: segundo Execute lectores14565 termina FAILa8a45d. Input1394203c/launcher ae80f7ef: receipt solo GUARD_ACTIVE, sin subida/operacion aceptada registrada, postflight/sourceZIP ausentes. Journala50895 confirma OWNED_TREE_EMPTY_VERIFIED y ENV_ABSENCE_RESTORED; root737973 confirma dotenv ausente y candidato limpio. Tres avisos de credenciales no prueban revocacion: inspeccion CLI identifica refresh OAuth bloqueado por firewall; reproduccion offline pendiente antes de modificar allowance. No reintento automatico. RecoveryBinding ec8a050 verificado SDK21/197PASSc0b2f0; Owner nuevo root38PASSf8a67f/revision independiente sin bloqueo y NORMALagente a8ef0e PASS. SDK Owner en preparacion, aun inerte. Detalles al final de EXECUTION-LOG.md.
+
 Ultimo corte 2026-10-14: lectores puref48a5db/launcherb478e45 comprometidos, pack1257PASS81361/c24deb y root59launcherPASS8bc6fa. Fresh38340/3615dd y Stage98589/7565e8 PASS. Execute2263 FAILce8d74 SOURCE_TOKEN_EXPERIMENT antesreceipt: CLI15.3.1 defaulttrue; jobempty/envabsence/lockremoved comprobados0866d0, candidateclean y receipt/postflight/sourceausentes ea8070. No publicacion verificada. Correccion setEnabled(false) solo memoria en implementacion; no flushglobal ni reintento automatico. DELIVERY adapter57e46a2 comprometido con SDK21/197PASSd591b9; binding nuevo root93/buildPASS, SDK72428 en curso. Evidencia detallada nueva al final de EXECUTION-LOG.md.
 
 ## Corte 2026-10-14: recovery probado y preparacion de lectores
