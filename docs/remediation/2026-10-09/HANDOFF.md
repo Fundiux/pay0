@@ -1049,3 +1049,26 @@ packer final aun en curso. No nuevo deploy de aplicacion ni cambio de main.
 Corte posterior652e0c7: contrato puro de lectores root41PASS299da3 y revision independiente aprobado; launcher singleton sigue en implementacion, sin ejecutar. Guard348root a0fa430 debe cargarse explicitamente: no usar guard347 del candidato congelado. Cursor dc2150 PASS12validos/6invalidos solo serializacion/inputAST. Fuentes financieras prioritarias7 recuperadas por21GET/42515312bytes/cloudWrites0 (Execute43509/91771e); root08ae53 confirma siete SHA/size, resumenprivado b8f13169ba386719a638b5e051d610408da9a7c8c62546dc738029ce67d78b25. Aun SOURCE_BYTES_RECOVERED_NOT_ZIP_VERIFIED; siguiente paso verificador ZIP offline y compatibilidad de productores/consumidor. No confundir recuperacion de bytes con compatibilidad ni con despliegue. Sourceowner DELIVERY permanece inerte y requiere responsabilidad durable hasta COMPLETE/parking verificado.
 
 Corte posterior1b7c42f: subset7ZIP root74bf29 PASS14miembros/archivo; ampliacion exacta6rutas root63ce50 PASS19/20miembros y predicadohistorico igual en3fuentes trasnormalizarCRLF. CRCglobalfalse; dotenvnoinflado. Matriz root919dbb muestra escriturasACK/result de versiones antiguas sinfence; rollingpendiente. Regresion de supresionhistorica root1aaff6 cuatroFAIL, fix884e4b253210f0f938c2c41540d9d7993ce677a2 en rama solicitud-notes:19PASS9157d6, NORMAL96034/23f26c, policy4cc0da; arbol limpio. DELIVERY transporte36ce0402ecbe1cd517257a351ad746d28079a1fd rootfullreview192e95/bce2cd/bcabed y261PASS36b69b; agente461/NORMAL/policyPASS, inerte. SDKnuevo en preparacion por importclosure cambiado. Launcherlectores WIP: rootrepro5ce47a demostro requestdirectobypass, guardcorregido449e99; rootreviewb9cbf4 encontro pathCLI/temp incompatibles yreceipt/env pendientes de correccion. Ninguna publicacion nueva.
+
+Corte posterior41c9e29: cuatro casos entre versiones PASS1aa0fc prueban escritura
+tardia antigua sobre dispatch; seis casos adicionales con claimExecution antiguo
+real PASS514e58 prueban reutilizacion SUCCEEDED y rechazo IN_PROGRESS/UNKNOWN
+del mismo plan, con cero writes/proveedor. No demuestran duplicacion externa ni
+seguridad de todos los productores. No exigir hold universal para guards aditivos;
+secuencia de convivencia del protocolo aun requiere revision. Seis fuentes de
+writers restantes recuperadas (10482/82bfc5):18GET/39651602bytes/cloudWrites0;
+rootb96830 seis SHA/size verificados, resumen08e3bf755eae30023f2767bd82b092864fc054b02db07b2e74366c4183df4ddb.
+Subset ZIP de esas seis pendiente; no ejecutar modulos archivados ni inflar dotenv.
+
+DELIVERY SDK commit986885b3e83c1ecdd81a62b81cf0efdf59e96f9c, root26f1d4:
+14casos/194refs PASS30a298, inerte. Recovery core en implementacion separada en
+misma rama notifier: metadata en evento existente, anchor createTime/hash, lease
+90s/fence, backoff de infraestructura; ningun scheduler/export activado.
+Launcher lectores sigue WIP; root39PASSb6b9ae. PreflightLOCAL agente bcb30b pasa
+con originalEnv ABSENT; Stage/Execute no realizados. Patch hash/EVENTARC revisado
+b1090c y autorizado para implementacion, con sourceHash ligado al packer; wrapper
+de identidades debe comprobar existencia sin crearlas. Guard upload actual root
+08f06c80de5a6af2274f2dc9c8b32b83a3cea779687b6a2f198a63a72980e5ae revisado94ef7d,
+41PASS3625cf; normalizacionLF coincide con blob a0fa430 (57e11409...). Pin def4
+del corte anterior no coincide y no debe reutilizarse. Fallo local GUARD_348_PIN
+preservado; nuevo input requiere todos los helpers finales fijados. Sin deploy.

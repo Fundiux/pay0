@@ -108,3 +108,32 @@ EVENTARC_CLOUD_EVENT_SOURCE y endpoint.hash antes del conversor. Contrato652e0c7
 no modela esas adiciones y rechazaria el despliegue; pruebas y ajuste acotado
 pendientes. Dotenv de proyecto ausente en candidato de integracion; no crear ni
 restaurar archivos asumiendo una existencia anterior. Sin despliegue nuevo.
+
+## 2026-10-13: barrera canonica y recuperacion de seis fuentes restantes
+
+Root reviso arnes `rolling-canonical-barrier.cjs` (effefb) y ocho funciones AST
+seleccionadas del ejecutor antiguo (0a5a37). SHA del arnes
+4c59ac48d5283ddada864bc121238be9a71bcd5e49686ed247d255e1761c4f98;
+fuente antigua 1a7673233ab206492f2d8b5690d06179d80a775d20f0c4cbeaa9159c9f589934.
+Ejecucion514e58 PASS6: ACK/error tardios corrompen dispatch, pero claimExecution
+reutiliza SUCCEEDED y rechaza IN_PROGRESS/UNKNOWN_REVIEW_REQUIRED. Cada caso
+realiza una lectura transaccional, cero writes y cero llamadas al puerto proveedor.
+Acceso IQ simulado; mismo plan con estados canonicos existentes; no cubre nuevo
+claim, concurrencia natural ni otros transports. No inferir duplicacion financiera
+de las cuatro pruebas anteriores ni seguridad global de estas seis.
+
+Collector separado writer6, SHA56b75703391737f3c269a2ee4fd28fdb5072a105e11c00599ca6f60081047f37,
+revision root16cb19/e8ffc6 y17tests PASS49a1a7. Execute10482/82bfc5 PASS18GET,
+39651602bytes, seis archivos, cero escrituras cloud. Rootb96830 confirma seis
+SHA/size; resumen privado08e3bf755eae30023f2767bd82b092864fc054b02db07b2e74366c4183df4ddb.
+Fuentes addSolicitudNota/createSolicitud/createPago/reservePagoApplicationBatch/
+applyPagoToSolicitudesAtomic/applyPagoToSolicitud. Archivos aun no abiertos:
+SOURCE_BYTES_RECOVERED_NOT_ZIP_VERIFIED. Verificacion de subset y compatibilidad
+sigue pendiente, sin extraer configuracion privada ni ejecutar codigo archivado.
+
+SDK DELIVERY registrado en986885b3e83c1ecdd81a62b81cf0efdf59e96f9c y revisado
+root26f1d4: exactamente fixture/runner/doc; resultado14/194 ya indicado arriba.
+Nuevo recovery core autorizado para implementacion inerte en eventos existentes,
+sin activar scheduler ni migrar eventos historicos. Launcher39PASSb6b9ae y
+PreflightLOCAL agente bcb30b sin cloud/dotenvwrites; hash/EVENTARC y reutilizacion
+de identidades existentes aun en implementacion. No despliegue de este corte.
