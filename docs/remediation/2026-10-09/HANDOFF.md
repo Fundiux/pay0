@@ -1,5 +1,25 @@
 # Continuidad de ejecucion
 
+Corte vigente: listSolicitudNotes reconciliado7GET PASS7c02a3/8c1633, revision
+listsolicitudnotes-00001-hos y1257archivos exactos del ZIP subido. Smoke150468
+HTTP401/UNAUTHENTICATED PASS sin credenciales. Intento original99696 permanece
+FAIL, receipt inmutable; no duplicar CREATE. UPDATE listClientDispersionNotes
+pendiente con input nuevo. Tick comprometido0dbbadb, SDK25/206PASS; aun inerte.
+Detalle y limites en ultimo hito de EXECUTION-LOG.md.
+
+Corte posterior d0bcf4b: Execute lector99696 termino FAIL098a7e despues de crear
+listSolicitudNotes. Receipt original de diez estados llega a FUNCTION_COMPLETED
+(listsolicitudnotes-00001-hos) e IAM_CREATED; no POSTFLIGHT_VERIFIED ni SOURCE_VERIFIED.
+No repetir CREATE. Conciliar recurso existente con GET de operacion/runtime/IAM
+y ZIP de generacion1792004057956047; preservar receipt fallido sin completarlo
+retroactivamente. Journal confirma OWNED_TREE_EMPTY_VERIFIED y ENV_ABSENCE_RESTORED
+a18:55:38Z. Checks offline agente586cfd/ca5774: local restaurado y receipt PASS.
+Tick NORMAL14999 fallo TS18048; correccion minima de estrechamiento aplicada,
+32tests PASS09f86a y NORMAL69792/1f1136 PASS. Root SDK63838/d8a084 PASS25/206,
+cleanup/puertos cerrados y cero cloud/proveedor; commit Tick en preparacion.
+A7B gate actual commitfbafb2dea9a57a1b2d9165cf53f8e4c807aa0e90, 29tests y oraculos
+PASS74108b; cierre historico UNVERIFIED, sin cambios de producto ni integracion.
+
 Corte posterior8561d0b: OAuth acotado corregido y root80tests PASSf249c9; revision independiente1c994a conforme. Tercer Execute lector99696/15485d ACTIVO, inputbecfd297 en local-a8e6c8fe-c0e3-4904-8bb0-1a703a36c79b; fresh56207/c0fff2 y Stage19398/41ee2f PASS. No duplicar ni cambiar helpers/source durante ejecucion. Snapshot018e93: GUARD_ACTIVE, build previo, cero avisosauth, aun sin publicacion. Owner notifier comprometido1f82c93: rootSDK93175/f93eb3 PASS24casos206refs cleanup/puertos/cero cloud/proveedor; dos fallos anteriores documentados, causa fixtureclock corregida sin cambiar producto. Tick inerte en implementacion, sin activar scheduler/export.
 
 Corte vigente 2026-10-14 posterior a5f27a75: segundo Execute lectores14565 termina FAILa8a45d. Input1394203c/launcher ae80f7ef: receipt solo GUARD_ACTIVE, sin subida/operacion aceptada registrada, postflight/sourceZIP ausentes. Journala50895 confirma OWNED_TREE_EMPTY_VERIFIED y ENV_ABSENCE_RESTORED; root737973 confirma dotenv ausente y candidato limpio. Tres avisos de credenciales no prueban revocacion: inspeccion CLI identifica refresh OAuth bloqueado por firewall; reproduccion offline pendiente antes de modificar allowance. No reintento automatico. RecoveryBinding ec8a050 verificado SDK21/197PASSc0b2f0; Owner nuevo root38PASSf8a67f/revision independiente sin bloqueo y NORMALagente a8ef0e PASS. SDK Owner en preparacion, aun inerte. Detalles al final de EXECUTION-LOG.md.

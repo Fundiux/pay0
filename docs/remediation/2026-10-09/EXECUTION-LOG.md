@@ -169,3 +169,33 @@ Correccion5f27a75 usa setEnabled(false) nativo solo en memoria; root52ec3e y age
 Inspeccion CLI auth.js por agente identifica refreshTokens POST/oauth2/v3/token bloqueado por firewall y convertido en advertencia generica de credenciales; aun pendiente reproduccionoffline. No inferir revocacion OAuth ni reloguear por ese texto; preparar allowance estricta solo tras demostrar causa. Evidencia y temporal anteriores conservados.
 
 RecoveryBinding ec8a050ca2df0784109dae7c2452a758b3e2b939 revisado5ec211: root93PASS1efb0d/NORMAL5f1038, SDK72428/c0b2f0 PASS21casos197refs, cleanup/puertos/cero cloud y proveedor. Owner nuevo trespaths revisados f2e36f/803fba, root38PASSf8a67f, revision independiente sin bloqueante; NORMALagente15128/a8ef0e PASS. SDK composicion en preparacion. Recibos se intentan tras envio pero ENROLL puede STALE_RECEIPT al vencer lease fisico; no garantia incondicional. Puertos requieren mismo Firestore y autoridad real; no Tick/export/scheduler/activacion.
+
+## 2026-10-14: lector creado y reconciliado sin repetir despliegue
+
+Execute99696 termino FAIL098a7e despues de FUNCTION_COMPLETED/IAM_CREATED.
+Revision exacta
+listsolicitudnotes-00001-hos, source generation1792004057956047.
+Receipt original SHA f3a8f6b207813ce09bf002ddea8c0293104bce5ae54df3664dd57bcfacd247af
+se conserva sin POSTFLIGHT_VERIFIED/SOURCE_VERIFIED retroactivos. Journal confirma
+job vacio y dotenv ausente a18:55:38Z. Causa exacta original aun desconocida.
+
+Reconciliador privado3b927db65d7dc218da95581b19bb0cd22d55ce610157bcb1b15385b12b6d01dc,
+rootreview736993 y9tests PASS. Primer intento4de386 fallo por permiso local de
+logs gcloud antes de lecturas; ejecucion con escalacion85969/7c02a3 PASS6GET:
+operacion, Function, Run, revision y dos IAM. Postflight original pasa sin relajar.
+Source77175/8c1633 PASS1GET generacion exacta y1257archivos byte-exactos;
+ZIP SHA2afce0f5af3c303b3f2d181e116f3651798ed792ea7769288b8927b1cb487582,
+igual al ZIP_UPLOADED. Evidencia nueva separada reconciliation-99696-v1,
+originalLaunchPassed:false/originalReceiptCompleted:false. Cero escrituras cloud.
+
+Smoke150468 PASS una peticion vacia sin credenciales: HTTP401/UNAUTHENTICATED,
+73bytes SHA104b88cb96f0bf52a09c926946e4d1c0890d348cfea45c9c4aa4085fd6031c53.
+No acceso autenticado probado ni invocacion financiera. listClientDispersionNotes
+UPDATE sigue pendiente y requiere input/baseline nuevos; nunca repetir CREATE.
+
+Notifier Tick commit0dbbadb7caeb7d172d72205584f1d66b2b241832, rootSDK63838/d8a084
+PASS25casos206refs, limpieza/puertos/cero cloudproveedor; NORMAL69792/1f1136 y32tests
+PASS09f86a. FalloTS18048 anterior conservado; arreglo solo estrechamiento de tipo.
+Sin activacion: faltan HTTP DELIVERY privado y tratamiento durable de starvation.
+A7B QA commitfbafb2dea9a57a1b2d9165cf53f8e4c807aa0e90,29tests y gateactualPASS,
+no cierre historico. Ambos commits siguen sin integrar en main.
