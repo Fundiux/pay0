@@ -4,7 +4,7 @@ Current checkpoint: CREATE listSolicitudNotes is independently reconciled throug
 seven read-only GETs, exact uploaded/source ZIP equality with 1257 files, and an
 unauthenticated 401 smoke. Original Execute 99696 remains FAILED with an unknown
 exact cause; its receipt is preserved unchanged. UPDATE listClientDispersionNotes
-is pending. The frozen integration and installed bundle are unchanged. Earlier
+Execute 37296 subsequently returned CLI exit 0 but failed at METADATA with TRANSPORT; a separate-process reconciler passed the same HTTPS metadata GETs. Root subsequently verified the UPDATE source artifact and unauthenticated smoke (0d2848/fcca1c/3a134b). This does not convert the failed launcher receipt into a successful one. The frozen integration and installed bundle are unchanged. Earlier
 prepared-only checkpoints below describe their historical state, not this result.
 
 ## Scope and ownership
@@ -173,3 +173,13 @@ Root subsequently reconciled the existing operation and runtime using six read-o
 The launcher now emits separate PAY0-READERS-PHASE@1 diagnostic records for PREPARE, CHILD_CLI, LOCAL_AFTER_CLI, RECEIPT, TOKEN, METADATA, POSTFLIGHT, SOURCE_READ, SOURCE_VERIFY and LOCAL_FINAL. Each has fixed ENTER/DONE/FAILED states; failures copy only an allowlisted first-line code from an own data descriptor. No assertion operands, arbitrary provider text, paths, credentials or stack are emitted. CHILD_CLI additionally reports only a bounded numeric exit or fixed unknown/no-exit marker and an allowlisted signal. The diagnostic sink is best effort: its failure cannot replace an original error or change a successful return. No retry, lifecycle budget, provider action, semantic receipt order or postflight assertion changed.
 
 Focused tests 503eef passed 19/19, covering refusal and error identity in every phase, sink failure, accessor/arbitrary-error redaction, child-result bounds, unchanged incomplete-receipt behavior and direct-mutation rejection. Previous input and helper hashes remain historical evidence and are no longer executable against changed helper bytes. A future UPDATE requires a newly reviewed input; no new input or cloud operation was performed for this change.
+
+## Isolated HTTPS request lifecycle correction (review candidate)
+
+UPDATE 37296 exposed a post-CLI TRANSPORT failure after a long synchronous CLI child. Historical diagnostics discarded the native error code; its exact cause remains unknown. Local reproduction 68be88 on Node v22.23.2 demonstrated a compatible mechanism: the default HTTPS global agent has keepAlive=true and timeout=5000ms. A loopback TLS server in a worker closed an idle socket after 100ms while the requesting process blocked in spawnSync for 500ms. Three default-agent attempts reused that socket and failed ECONNRESET; all three agent:false requests succeeded without reuse. This proves the local mechanism, not exclusive causality for the historical deployment.
+
+The minimal correction sets agent:false on the launcher's request() only, including its already-scoped read-only policy POST. Each request obtains its own connection. No retry, TLS verification override, redirect following, deadline relaxation or mutation scope was added. Fixed error enums still discard raw provider errors. Independent historical reconciler/input hashes intentionally remain unchanged: never rerun old inputs against the changed launcher; any future invocation requires reviewed fresh pins and an appropriate current baseline, not a retry of already-completed CREATE/UPDATE.
+
+The existing launcher suite now exercises exported request() as a local test seam, with synthetic HTTPS events and no sockets. Focused run d05dba passed: agent disabled, default TLS controls untouched, one transport call per request, redirect rejection, body limit, read-error/transport redaction, deadline, rejection of foreign policy POST, and exact allowed policy body. Local TLS reproduction separately retained redirect/body/deadline behavior in both modes. Its private result SHA256 is 30673ffa4d321eeb67f92542f31c24823e2ffe2ca997fe6b4b02b75fe54e47a5. No cloud call, credential action, build or emulator was used for this correction.
+
+Root full diff review 0d837f accepted the minimal request-lifecycle correction. The complete existing launcher suite passed 94/94 (session 88145, result 7e2a8d, approximately 59 seconds), including the new real-request regression. No new deployment or input was generated for this correction.

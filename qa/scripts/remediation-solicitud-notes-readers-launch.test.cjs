@@ -159,3 +159,35 @@ for(const action of ['create','update'])test('installed CLI '+action+', poll and
  const result=spawnSync(process.execPath,['-e',code,cli,path.resolve(__dirname,'../../scripts/lib/solicitud-notes-readers-guard.cjs'),action],{encoding:'utf8',timeout:20000,windowsHide:true});
  assert.equal(result.status,0,'INSTALLED_CLI_OFFLINE_FAILED');assert.equal(result.stdout,'PASS');
 });
+
+test('real metadata transport disables agent reuse and preserves TLS, bounds, redaction and exact policy POST without retries',async()=>{
+ const https=require('node:https'),{EventEmitter}=require('node:events');const original=https.request;
+ let calls=0,mode='ok',lastOptions,lastBody,destroyed=0;
+ const secret='SYNTHETIC_TRANSPORT_PRIVATE';
+ https.request=(url,options,callback)=>{
+  calls++;lastOptions=options;const req=new EventEmitter();req.destroy=()=>{destroyed++;};
+  req.end=body=>{lastBody=body;setImmediate(()=>{
+   if(mode==='error'){req.emit('error',Object.assign(Error(secret),{code:'ECONNRESET'}));return;}
+   if(mode==='wait')return;
+   const res=new EventEmitter();res.statusCode=mode==='redirect'?302:200;res.destroy=()=>{destroyed++;};callback(res);
+   if(mode==='redirect')return;
+   if(mode==='readerror'){res.emit('error',Error(secret));return;}
+   res.emit('data',Buffer.from(mode==='large'?'12345':'ok'));res.emit('end');
+  });};return req;
+ };
+ try{
+  const url='https://cloudfunctions.googleapis.com/synthetic';
+  for(const [next,expected] of [['ok',null],['error','TRANSPORT'],['redirect','REDIRECT'],['large','BODY_LIMIT'],['readerror','BODY_READ'],['wait','DEADLINE']]){
+   mode=next;const before=calls;let failure;try{const r=await launcher.request(url,secret,4,false,Date.now()+(mode==='wait'?10:1000));assert.equal(r.status,200);assert.equal(r.bytes.toString(),'ok');}catch(e){failure=e;}
+   assert.equal(failure?.message,expected||undefined);if(failure)assert(!failure.stack.includes(secret));
+   assert.equal(calls,before+1,'NO_RETRY_OR_REDIRECT_FOLLOW');assert.equal(lastOptions.agent,false);
+   assert.deepEqual(Object.keys(lastOptions).sort(),['agent','headers','method']);assert.equal(lastOptions.method,'GET');
+   assert.equal(Object.hasOwn(lastOptions,'rejectUnauthorized'),false);assert.equal(Object.hasOwn(lastOptions,'checkServerIdentity'),false);assert.equal(lastBody,undefined);
+  }
+  assert(destroyed>=3);const before=calls;
+  await assert.rejects(async()=>launcher.request('https://example.invalid/',secret,4,true),/POLICY_ROUTE/);assert.equal(calls,before);
+  mode='ok';const policy=launcher.PREREQUISITE_ROUTES.find(r=>r.method==='POST');
+  await launcher.request(policy.url,secret,4,true);assert.equal(calls,before+1);assert.equal(lastOptions.agent,false);assert.equal(lastOptions.method,'POST');
+  assert.equal(lastOptions.headers['content-type'],'application/json');assert.deepEqual(JSON.parse(lastBody),policy.body);
+ }finally{https.request=original;}
+});
