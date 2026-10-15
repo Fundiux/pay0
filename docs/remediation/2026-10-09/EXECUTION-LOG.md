@@ -1194,3 +1194,12 @@ no deployment. Storage regression hash9ad56 is local historical input, not remot
 Fresh22 metadata window expired10:53:56Z; Terraform specific approval remains pending.
 Continue offline durable journal, prerequisite wrapper, postflight transport and selective
 Rules publisher with LIVE=false. No production mutation or real recipient invocation.
+
+2026-10-15 exact164 OFF startup: Prepareb5b515/bdfbb4 PASS; ONE Executecb7dde,
+session32627 ->775a6c PASS. Runec1692a3984648dc8a92d9e9e75cd546, completee6311c65,
+rootreceiptbe6793:503/503/204,351exports,1051/1060/1136ms imports, network/process/
+credentialFetch0; Jobempty/noTimeout/noDesc, source/donorunchanged. Local-only; no ADC
+or production runtime proof. Postflight108 PASS7b3530; upload+actualjournal11 PASS5e9fc7.
+Read-only integrationcheck firstfailedc376eb because prior summary omitted one character
+of origin/main SHA; exactref1a23d9 thenf6e7e1 proves localmain/originmain Rules96257055,
+not published786381. No Git history changed by this check. Terraform still not applied.

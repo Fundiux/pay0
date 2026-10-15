@@ -1724,3 +1724,31 @@ checks only. Prerequisite live wrapper and postflight collector remain in prepar
 No upload or Function CREATE has occurred. Terraform APPLY was rejected before process
 creation; specific approval remains pending. The22 read receipts observed10:43:56Z
 expired10:53:56Z and cannot authorize a later mutation without renewed observations.
+
+### 2026-10-15 — Exact bundle OFF startup verified locally
+
+Smoke run ec1692a3984648dc8a92d9e9e75cd546 passed with the installed164d066 bundle,
+minimal FIREBASE_CONFIG projectId and exact ten configured application environment keys.
+Three fresh Node22 processes imported351 endpoints and invoked the real SDK-wrapped
+handlers using synthetic request/response objects: enroll503 DISABLED, delivery503
+DISABLED, recovery204. Import times1051/1060/1136ms. Counted network/process/credential-fetch
+attempts were zero. Admin application initialization is allowed; this is not proof of
+production ADC or OS-level network isolation. Supervisor exit0/no timeout/no descendants,
+Job empty, source/donor unchanged. Root reviewed receipts be6793; complete SHA
+ e6311c652ffab2918509622370748119c29e32e34722b8d5dfc9c8d3b1e68aa9.
+Controller c85f0b0108a03690af81d09fa94ea2f53a051dccc86e5fe50580e9447335ace9,
+launcher3a67b9f2556e1706fcd7d29fb075d8d2c7fbfe6cde5163e89261a41aab823de6.
+
+Pure postflight/projector/collector108 tests PASS7b3530; failures preserve safe hashes,
+statuses and counts. Private prerequisite wrapper Prepare PASSd3b3b9 (auth0/network0),
+after preserving its DEBUG-environment refusal1e02f2 and clearing only DEBUG for the child.
+Root upload coordinator plus real-filesystem journal11 tests PASS5e9fc7. Exact retained
+ZIP upload/readback is simulated only; signed URLs never enter receipts. Upload transport
+and selective Rules wrapper remain under review. No upload, CREATE, Terraform APPLY or
+Rules publication occurred. Specific APPLY approval remains pending; expired22-read
+receipts cannot be reused as fresh evidence.
+
+Local Git ref verification1a23d9 corrects the abbreviated checkpoint transcription:
+origin/main is7dfcd8aa039aafbe7345a17155d3db2c2fc3fd8a (local tracking ref, not fresh remote).
+Both it and localmainccaf71e have Rules LF96257055, distinct from publishedbaseline786381.
+Keep the tested eafd candidate isolated; do not merge root experimental Rules wholesale.
