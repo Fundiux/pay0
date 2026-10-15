@@ -13,7 +13,7 @@ Etapa cerrada por instrucción del usuario. La remediación integral no se decla
 
 ## Lista finita pendiente para finalizar este alcance
 
-1. Obtener la versión y el código publicados de addPagoNota, preparar el cambio selectivo y validar únicamente el artefacto resultante y sus diferencias. Avance posterior al cierre: metadatos obtenidos el 15 de octubre a las 16:14:50 UTC; revisión activa addpagonota-00032-vin, generación 1790583721270714. Recuperación y comparación del código todavía pendientes.
+1. Obtener la versión y el código publicados de addPagoNota, preparar el cambio selectivo y validar únicamente el artefacto resultante y sus diferencias. Avance posterior al cierre: revisión activa addpagonota-00032-vin, generación 1790583721270714; ZIP recuperado y comparado. Candidato selectivo preparado con diez módulos de dependencia iguales al candidato probado; falta validación del artefacto con sus dependencias publicadas y configuración de build antes de desplegar.
 2. Integrar los commits de notas revisados en una base estable, desplegar los componentes afectados y verificar lectura/escritura autorizadas sin efectos financieros reales. No integrar en bloque la rama experimental de Rules.
 3. Activar exclusivamente el ruleset ya probado y verificar la versión activa y que Storage no cambió.
 4. Completar el lote de infraestructura del notificador: enlazar la evidencia remota al postflight, aplicar el plan revisado de 19 altas, verificar recursos, subir el artefacto y crear/verificar las tres Functions previstas con colas pausadas. Entregarlo apagado; activación y envíos quedan fuera de esta etapa.
