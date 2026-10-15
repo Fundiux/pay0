@@ -1,0 +1,16 @@
+--- a/src/modules/paymentApplications/automaticApplication.ts
++++ b/src/modules/paymentApplications/automaticApplication.ts
+@@ -5,3 +5,4 @@
+ import { db, getActivityAdminId, getRootId } from "../sharedCallables/helpers";
+ import { applyPaymentApplicationBatchAtomic, type PaymentApplicationActor } from "./service";
+ import { AUTOMATIC_CANDIDATE_LIMIT, automaticPaymentSourceDigest, decideAutomaticPayment, isAutomaticPaymentReady } from "./automaticDomain";
++import { isIqHistoricalImport } from "../iq/historicalImportGuard";
+@@ -74,7 +75,7 @@
+     const created = Date.parse(event.time);
+     if (!Number.isFinite(created) || Date.now() - created > 20 * 60_000) return;
+     const pago = (await db.doc(`pagos/${after.pagoId}`).get()).data();
+-    if (!pago || pago.rootId !== after.rootId) return;
++    if (!pago || isIqHistoricalImport(pago) || pago.rootId !== after.rootId) return;
+     await applyAutomaticPayment(after.pagoId, { retryReview: true });
+   },
+ );
