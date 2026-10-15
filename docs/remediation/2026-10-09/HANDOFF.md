@@ -1437,3 +1437,33 @@ Consulta cloudreadonly5154d7 exit0: tasksqueues us-central1 filtradas name:pay0-
 serviceaccounts filtradas email:pay0-client-doc=[]. No colas/cuentas coincidentes observadas.
 Primeras consultas df7df4/d25530/c7ac96 fallaron permisos cachegcloud; sus resultados no son inventario.
 No recursos creados, permisos cambiados ni datos financieros consultados/modificados.
+
+### 2026-10-15 — Diagnóstico de arranque y oráculo SDK
+Diagnóstico privado c739adb46e7742739cb8efcf45d35547 terminó exit0 (03e9a7),
+postflight PASS/cloudCalls=0/treeEmpty=true. Esto acredita ejecución del diagnóstico,
+no aceptación del manifiesto: observation OBSERVED_FAILURE/STARTUP_LIMIT (e8d1e4),
+elapsed11445 frente límite7000. Entrada compilada871→8907ms; wire8917→8934;
+escritura8936→8940; child EXIT9465/CLOSE9466. No baseline aceptado. Se investiga
+carga de módulos sin relajar umbrales ni atribuir retrospectivamente causas históricas.
+
+SDK diagnóstico outer2713cfb6d1e94785a9fca144b5860fe8/innerdebf7221abc14dbca12e2dc0516f89e9
+FAIL1f4bdd; resumen985d47 identifica COMMIT_CAPTURE_EVENT/COMMIT_PROJECTION:
+sólo timestamps distintos, millisecondFloorOnly=false. Cleanup AUDIT/UNEXPECTED_DOCUMENT;
+0HTTP/0credencial, blockedNetwork0/stderr0, puertos cerrados y postflight sin cambios.
+METADATA_SERVER_DETECTION=none sólo entorno demo evitó lookup, sin relajar guard.
+La fixture confundía transformResults REQUEST_TIME con updateTime del documento.
+Corrección QA en revisión captura respuesta Commit sin modificar Promise/request/response;
+no adoptar timestamps leídos ni afirmar cleanup de los intentos fallidos.
+
+Candidato integration/notifier-functions-20261015 base32f +runtime0a61f4e/1853040:
+once paths declaran tres endpoints privados OFF, identidad Scheduler separada,
+secreto sólo DELIVERY y un índice compuesto. Root67c55f/73a5b6/c5e4ba revisan
+código/pruebas; HTTP142/142 PASS, auth/CLI/new97 PASS, noEmit23ed60 PASS,
+policy83378c PASS. Commit autorizado; sin build351, SDK nuevo, despliegue ni activación.
+Discovery351 necesita baseline nuevo; 348 no sustituye esa prueba.
+
+NORMAL del candidato a5dc868 termin? PASS ff1357/26aa2c: run33b1a7e5067c4f5396f3c8d442dd69b2,
+1026 archivos/15140113 bytes, cloudCalls0 y Job vac?o; donor sin cambios.
+Helperd1defec1/launcher04ab6bca; source1078 SHA0d4263548f85d0169cf56d031978e6e51dbbfddc12e56d584f74c5f053b36e4f.
+Commit declaraciones a5dc868a2931767c6988acdec5bac6dce38ec73e confirmado limpio.
+No acredita todav?a captura351 ni BUNDLE. Infraestructura se prepara en worktree separado, sin apply.
