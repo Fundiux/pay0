@@ -1752,3 +1752,13 @@ Local Git ref verification1a23d9 corrects the abbreviated checkpoint transcripti
 origin/main is7dfcd8aa039aafbe7345a17155d3db2c2fc3fd8a (local tracking ref, not fresh remote).
 Both it and localmainccaf71e have Rules LF96257055, distinct from publishedbaseline786381.
 Keep the tested eafd candidate isolated; do not merge root experimental Rules wholesale.
+
+Smoke evidence precision (root105dd2): donor stability means package-lock files,
+installed lock metadata, all package.json hashes and junction targets remained equal.
+It is not a full byte inventory of dependency implementations. Candidate source and
+installed bundle retain their separate exact snapshots; no production rebuild proof.
+
+2026-10-15 Rules read-only preflight root91cbd2 PASS: run8de3927476894b7fa74601a48edc1ab2, attemptd606e878ee5d4dacb99cd42933b88ce2. Six GETs only; receipt cb3273be0d71e60e0780e0734d61b2c9ec55693f90f8ad53689eaddee0e980b8. Firestore baseline786381/ruleset76fda1a0/update2026-10-10T17:24:21.300538Z and Storage5876da20/rulesetd37e96b3 remain unchanged. Owned Job completed, operation lock released, stable owner retained. No Rules mutation. Terraform approval still pending; this Rules metadata read does not renew its expired22 prerequisites.
+
+2026-10-15 Rules CREATE rootb00fa9/b3559e PASS: immutable ruleset c026f71f-0542-4a23-a170-99b012b1e835 independently GET-verified hash eafd6075ac1ad41bc5f3235ee03c41e14c5d208996f9aa2ec3515ec80f118735. Publish tool auto-review rejected BEFORE process: authorization interpreted as reads only, activation changes persistent production access. No PATCH/retry/bypass; specific async authorization pending. Existing release remains last observed baseline786381; new ruleset is NOT active. Stable owner/run and receipts preserved; no publish intent created by rejected tool.
+2026-10-15 notes ancestor native SDK: Prepare1fc148 PASS, ONE Executed3577c/session61910 ->fc1bd0 PASS. Exact164 compiled resolver/domain callbacks, 24 cases across solicitud and dispersion notes,40 owned refs,cleanup verified, ports closed, Jobempty/noTimeout/noDesc, source and dependency metadata unchanged. Includes chain16ALLOW/17DENY, legacy compatibility, ancestor revocation/expiry/granular restrictions and controlled revocation between page transaction and final reauthorization. No natural-contention claim, no Rules ancestry closure or direct SDK migration claim. No cloud/provider calls.
