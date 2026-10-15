@@ -19,6 +19,8 @@ Etapa cerrada por instrucción del usuario. La remediación integral no se decla
 4. Completar el lote de infraestructura del notificador: enlazar la evidencia remota al postflight, aplicar el plan revisado de 19 altas, verificar recursos, subir el artefacto y crear/verificar las tres Functions previstas con colas pausadas. Entregarlo apagado; activación y envíos quedan fuera de esta etapa.
 5. Publicar la rama de artefacto IQ revisada en el remoto confirmado y consolidar commits, recibos y estado final de estos cinco puntos.
 
+Avance del punto 2: lote selectivo de tres lectores preparado, validado (341 exports conservados y tres añadidos; seis rechazos seguros) y subido sin activar Functions. El primer PATCH fue rechazado por revisión automática porque la autorización específica cubría addPagoNota. La autorización para actualizar los dos lectores existentes, crear listPagoNotes y configurar/verificar su invocación HTTP está pendiente. Detalle: NOTES-READERS-SELECTIVE-RELEASE.md. No repetir las validaciones aprobadas del mismo ZIP.
+
 Cada punto termina con evidencia de aceptación o con un bloqueo explícito. No se añaden puntos por hallazgos adicionales. Los metadatos caducados se renuevan solamente cuando una acción concreta necesite evidencia vigente; no mediante sondeo recurrente.
 
 ## Bloqueos por autorización
