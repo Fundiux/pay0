@@ -1,6 +1,6 @@
 # PAY0 — Tracker de trabajo y continuidad
 
-Actualizacion de alcance cerrado: addPagoNota desplegada con autorizacion especifica; revision addpagonota-00033-zup Ready/100%, configuracion e IAM preservados, ZIP exacto verificado y HTTP401 sin autenticacion. No se desplegaron los lectores nuevos. Ver docs/remediation/2026-10-09/PAGO-NOTE-SELECTIVE-ARTIFACT.md y CIERRE-ETAPA-2026-10-15.md. No repetir suites aprobadas salvo cambios o evidencia nueva.
+Actualizacion de alcance cerrado: addPagoNota desplegada con autorizacion especifica; revision addpagonota-00033-zup Ready/100%, configuracion e IAM preservados, ZIP exacto verificado y HTTP401 sin autenticacion. Codigo de notas integrado en main ee2a7d0 con pruebas, politica y ambos builds aprobados; sin push. No se desplegaron los lectores nuevos ni su UI. Ver docs/remediation/2026-10-09/PAGO-NOTE-SELECTIVE-ARTIFACT.md y CIERRE-ETAPA-2026-10-15.md. No repetir suites aprobadas salvo cambios o evidencia nueva.
 
 ## Estado vigente — 15 de octubre de 2026
 
