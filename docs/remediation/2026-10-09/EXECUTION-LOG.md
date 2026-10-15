@@ -783,3 +783,46 @@ cuatro paths QA/doc, conserva códigos primario/cleanup por separado sin alterar
 ConsumersRuntime siguiente corte de trespaths autorizado, OFF y sin exports/activación;
 source deberá quedar congelado durante SDK. Índice de recuperación ausente en repositorio (7909e5),
 estado remoto no inferido. No repetir deploy IQ ya verificado ni push GitHub rechazado.
+
+### 2026-10-14 — Consumers inertes y diagnóstico que conserva causa primaria
+ConsumersRuntime commit84ddc3a7d02c6610a338aac352f0211515a164d6 en sourcefix:
+28/28 PASS08be77, noEmitf5a0b3; root2c58b0 y6536f7 revisan implementación y pruebas.
+Resolver secreto lazy/capturado, transporte cacheado por instancia; no exports ni activación.
+Diagnóstico commit aisladoa2e82ea936a332c04774911f2a2f0fc8d21ba181,15focused+6contractsPASS;
+root6b652d pidió reparar stopmultihijo y getters; revisión8aafd0 aprobó corrección.
+Integrado sóloQA/doc como32f6833e18c757d0665da94828fe4906e591e1fb, parenta1b.
+NORMAL originala1b preservado; fuentes7ce9 ylibtreeff98 idénticos, cuatroblobs==a2e.
+Captura nueva .firebase/notifier-diagnostic-normal-capture helper20af7210/launcherd7bd7219,
+rootdiffc71021; Prepare6e47df PASS. Execute190632/session81772 runtime84cfbcaee2c54b2390ebe0824c3d03a8
+FAILc506bb; postflightPASS source/donor sin cambios, complete=false.
+Log0a639b ahora distingue primaryCLI_TIMEOUT_10000, cleanupNONE,elapsed10994:
+spawn184ms,exit10199ms,close10992ms,killAttempted/Returnedtrue. No capturamanifest aceptada ni BUNDLE.
+Esto demuestra causa de este intento; el primario perdido del intento anterior sigue desconocido.
+Siguiente diagnóstico readonly evalúa tiempos de cargaSDK/módulos/manifiesto sin cambiar10s/7s.
+
+SDKRecovery primer outerExecute c2efbc/session71163 FAILb2ec60 antesbaseline/SDK:
+own(run) consultaba gitcheckignore desde sourceworktree para pathworkspace. Repro2d5c62
+exit128outside-repo vsworkspace0; runtimef0c8a822796e4947b77ead06c61c5eb9 sólo supervisor54B,
+lockliberado. Fix único own->workspace, backuporiginal3e6a..., rootdiff85d976 revisado,
+controller511b6ec827a7840440f869700221803dfa46cbc8a48e9c1c74af5b2b56f63830;
+Prepare7b30f2PASS. SegundoExecute2ba3d7/session90333 encurso sobre84dd congelado,
+fixture02acd435/runner22c7ca0d yclosure36 intactos. Sin casosPASS acreditados todavía.
+Declarations3endpoints privados +índice siguen diseño; invocadorScheduler separado de runtimeSA,
+periodicidad5min propuesta frente Tick240s, no creación/activación ni IAM inferido.
+
+### 2026-10-14 — SDK composición falla antes de POST; infraestructura consultada
+SegundoSDKRecovery terminaldc61eb FAIL, outere5aaf44b23c44916ab72dffe47fa9c15,
+inner notification-recovery-runtime-54189aed0dd34cca80b025dd342a00e5.
+PostflightPASS fuente/QA/deps/donor iguales, puertos cerrados y lockliberado.
+Resumen2d338f: phaseENROLL ASSERTION, cleanupASSERTION, sóloOFFPASS,
+7refs/19reads/7writes/1query/5slots/1callback,0HTTP/0credencial,queryClosed1,
+cleanupVerified=false,blockedNetwork2. stderr MetadataLookupWarning NETWORK_DENIED.
+No afirmar cleanupdocumental ni éxito; emulador ya cerrado. Independent investiga
+proyecciónTX/oráculo y metadatos SDK por separado; no relajar guard ni modificar producto.
+Arquitectura continúa declaraciones en worktree nuevo integration/notifier-functions-20261015
+base32f6833 +únicos commitsruntimebf9d1e4/84ddc3a; fuenteSDK84dd permanece congelada.
+
+Consulta cloudreadonly5154d7 exit0: tasksqueues us-central1 filtradas name:pay0-client-document=[];
+serviceaccounts filtradas email:pay0-client-doc=[]. No colas/cuentas coincidentes observadas.
+Primeras consultas df7df4/d25530/c7ac96 fallaron permisos cachegcloud; sus resultados no son inventario.
+No recursos creados, permisos cambiados ni datos financieros consultados/modificados.
