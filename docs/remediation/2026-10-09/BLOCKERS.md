@@ -204,3 +204,30 @@ is distinct from last recorded production5876; preserve fresh production Storage
 any Firestore-only release. Ancestor access and24Storage gaps remain open. Terraform
 metadata proof10:43:56Z expired10:53:56Z while specific APPLY approval remains pending;
 renew authorized observations after approval, never alter evidence timestamps.
+
+2026-10-15 current release dependency checkpoint: Rules candidate was CREATED as
+c026f71f-0542-4a23-a170-99b012b1e835 and independently verified eafd6075, but activation
+PATCH was rejected by automatic approval review before process. Specific approval
+remains pending; no publish intent, no retry. Readonly manifest7136842c disables mutation.
+
+Notifier CREATE transport/owned composition are locally tested, but native wiring
+remains intentionally PENDING. Missing external evidence is successful authorized
+Terraform APPLY (19 exact resources), real state and remote16 postflight, fresh paused
+empty queues, fresh producer metadata plus reviewed exact source, real upload proof,
+and fresh runtime identity/actAs/absence collection. BOOTSTRAP capture14e8 only observed
+resources ABSENT; it cannot prove readiness. Source legacy finalizer remains ACTIVE.
+Internal remaining binder work must validate state/config/complete/remote hashes and
+Job/owner, bind service-account uniqueId hashes, and attach actual capture start/end
+freshness (postflight.capture currently has no observedAt). File mtime or synthetic
+fixtures cannot supply those facts. Missing/partial/stale evidence must fail closed.
+Apply helper currently LIVE=true with stale pins, despite older OFF prose; do not infer
+authorization or execute from that flag. No Terraform apply process has started.
+
+Notes reader5a9fa95 and atomic writer68c3972 remain isolated. Reader58realSDK PASS;
+writer nativeSDK still in preparation. Historical rootless compatibility and authenticated
+UI verification remain before reader rollout. The writer deliberately rejects malformed
+simple IDs; no historical inventory establishes whitespace-edge compatibility. Neither
+change closes direct Rules ancestry gaps, crossHTTP note duplication or global unread
+clear concurrency.
+
+Later checkpoint: atomic writer68c3972 nativeSDK11 nowPASS fef1b8, cleanup/Job/portsverified. Native validation is no longer pending; deployment baseline and isolated release remain unverified.
