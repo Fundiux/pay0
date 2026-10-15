@@ -476,3 +476,27 @@ Capacity5 proofsummary24db01e10c6d62d0276293abc3debd83d041dd0ed7dec4f17633373c50
 SDK source commitfbdf5f0634ab96c7db1d8c7dae5106e39bb471e8 rootshow8423d1 confirma7QA/doc. Cancellation narrowing root8423d1 aprobado; agente35PASSa1b752/noEmit78256/46c4e9PASS (fallo anterior preservado), commit3paths pendiente. Arquitectura prepara3newpaths compositionTelegram con proyeccion explicita de campos, sin cambiar core/Consumers/index ni activar. Sparse5 Execute45486 cincoTARGET_VERIFIED, barrido final pendiente; libre335618048, margen minimo, no lanzarScoped13 aun.
 
 Sparse5 COMPLETE45486/e224dc; root9d28b2 verifica receiptSHA d45e5503bf0b459c5270eb95ca012b1e7f2448d6bab1dce6de28e07e5e416f95.3535assets excluidos/reversibles,18205retenidos+3links+10depidentities exactos. Final347840512libres; PrepareScoped74862/297e02PASS357355520frente335544320. Execute1297 elevado iniciado0d92bc, sin resultado aun. No deploy;13hooks excludebuild2 ya contrastado, nofull14SingleInvocation. Cancellation commitebcffcc49a469416418a1d493c037c1e72139b20 exact3paths;35/noEmitPASS, adapter siguiente autorizado aislado sin core/Consumers/index/SDK/rules.
+
+Scoped13 Execute1297/5a1f01 FAILhook12: TIMEOUT Port8080 notactive within60000ms. Runtime33f07651ee494db685727e5597e699d0; rootebfab2/36e6a9 confirma hooks1,3-11PASS (10hooks),12criticals22PASS antesJavaemulatorstartup;13/14noejecutados. Postflightcompletefalse/donorUnchanged/installedUnchanged/portsClosed/free349536256, ownedtreevacio validado porlauncher; no retry. Architecture diagnostica JVMlog631bytes preservandolo. Capacidad transitoria57,651,200bytes reportada porbaseline, luego3pares DriveInfo/statfs=361443328; runtime8files7981B e integration.firebase sinrecentwrites noexplican304MB, causanoatribuida.
+Source adapterrootfullreview51fc85/527fcf y155tests68359/e335c9PASS; jointnoEmit36151/55b0aaPASS. TelegramPorts3newpaths root70d6b4 y11tests15dca5PASS; commitsaislados autorizados. Adapter5s solo cooperativo, sinRPCcancel ni wireddeadline; ambos inertes.
+IQ originalemission rootreview36e6a9: ZIPc50f0d7.../TS5.9.3, createProgramVFS reproduce JS62b3c958... ymap09d76e5e... exactos, result06033a6c4fd6845c573b11c26d3c02f1c8f856ad0f6b426b4de1352eb7844b4c. TranspileModule mapdistinto preservado; nofulltypecheck/runtime/deployclaim. Overlay6entries+testscompiledfake autorizado para preparacion/review, sin ejecutarindex/repack/cloud.
+
+Gates finales privados rootreview8b70be/c30e4b,12testsPASS e independiente architecture:
+controllerSHAc725d2d1c07fe92b3ad9c9b6df25e8a43d38407c803e720cd6478708615aeea6,
+PS660ad6a29085bdca8a9c71bb6c3c94569b162bd9c41d48babc859433cf668151.
+Prepare7632/d72567PASS; Execute98439/2f64e4PASS con PowerShell nuevo-NoProfile.
+Runtime1cd5093a85444e0fb1923f06f4cdc7bb: hook13 discovery348/4564ms;
+hook14 paquete1370exactos SHAaa1d3bc8bbb69cbb789944a847f2b34521f4c72d08b47d192ff0798df4d88849.
+Receipt6dc9158c595ab46dad1131d3125fa8ca68bc5647b1917c2d802ed81fd812150e.
+Postflightcomplete/installed+donorunchanged/portsclosed/treeempty, cloud0,
+actualUploadVerifiedfalse; fullFourteenSameInvocationfalse. Hook12 sigue fallido.
+Su CLI reemplaza todo rechazo socket por TIMEOUT; no demuestra60s transcurridos.
+JVM631bytes/logs preservados; preloaddiagnostico rootb18b20/97a9fb7testsPASS,
+sin cambiar timeout ni ejecutar emulador. Runner instrumentado en preparacion.
+Source TelegramPorts4ba2b5c y cancellationadapterc519a5e confirmados; respectivamente
+11 y155offlinePASS/noEmitconjunto55b0aaPASS; sin integracion/runtimeactivacion.
+IQ overlay rootfullreviewa920d5/pins verificados: compiled2274/6e48f8PASS25,
+original+patchedVM solo mocks, historicalzeroapply/ordinaryequivalence/ASTnegativos.
+Manifest6bbd10854607cba69e64f13f24e07ab139d5623701bcacc87bdf14f2db264e2b
+permanece evidencia PREPARED_ONLY; resultado tests separado, sin reescribirhistoria.
+Repacker minimo en preparacion; noZIPnuevo, indexload, secretos ni produccion.

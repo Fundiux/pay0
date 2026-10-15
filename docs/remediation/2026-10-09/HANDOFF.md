@@ -41,12 +41,25 @@ PASS cleanup/ports/cloud0/provider0. Todavia no integrado ni activado.
 Scoped13 runner root12testsPASS;5sparse COMPLETE45486/e224dc, receiptD45E5503
 con3535assets reversible y18205retenidos intactos. Restore Git+707SHA porworktree
 antes cualquier build/sourceSnapshot/deploy historico. Prepare74862/297e02PASS
-357355520free/335544320required; Execute1297 activo, no duplicar. Reserva320MiB
-yfloor128MiB intactos. Candidato6 proof readonly40336, no sparseautorizado.
+357355520free/335544320required; Execute1297/5a1f01 FAILhook12 timeout8080
+segun mensaje CLI. Hooks1,3-11PASS (10);12 static22PASS antesstartupfail.
+El CLI sustituye cualquier rechazo socket por TIMEOUT: no demuestra duracion real.
+Logs originales preservados en .firebase/notifier-hook12-diagnostic; JVM registra
+inicio pero no prueba readiness dentro del plazo. Diagnostico instrumentado pendiente.
+Gates13/14 separados: helper privado revisado,12tests c30e4b PASS y Prepare7632/
+d72567 PASS354967552bytes. Execute98439/2f64e4 PASS13+14 y postflight limpio.
+Discovery348/4564ms; paquete1370files exactos SHAaa1d3bc8, no upload real.
+Receipt6dc9158c, runtime1cd5093a85444e0fb1923f06f4cdc7bb. Hook12 sigue abierto.
+IQ overlay6entries rootreviewa920d5 y25tests2274/6e48f8PASS, sin repack/deploy.
+Postflight del intento1297: completefalse/donor+installedunchanged/portsclosed/free349536256.
+Runtime33f07651ee494db685727e5597e699d0 preservado; no retry. Reserva320MiB
+yfloor128MiB intactos. Candidato6 proof40336PASS, no sparseautorizado.
 Cancellation puro commitebcffcc:35tests/noEmitPASS tras corregir3errores de
-narrowing; fallo58682/68a359 preservado. Adapter dedicado en implementacion
-separada, sin wiring/activacion; no atribuir SDKprevio a futura fuente modificada.
-Cancelacion conocida no permite IN_FLIGHT->READY generico; contrato durable pendiente. Infraestructura pendiente.
+narrowing; fallo58682/68a359 preservado. Adapter dedicado commitc519a5e:
+155offlinePASS y noEmit55b0aaPASS, sin wiring/activacion. TelegramPorts4ba2b5c:
+11testsPASS. SDK nativo de cancelacion en preparacion; solo Delivery/Consumers
+requieren nuevo cierre/pins, Scan permanece intacto. No atribuir SDKprevio a
+fuente modificada. Cancelacion durable implementada aislada; integracion pendiente.
 Lectores productivos ya conciliados: no repetir despliegues historicos.
 Predeploy14comandos validados entre intentos, no full14SameInvocation PASS;
 full51894/targeted58972 FAIL preservados, pack-only33279 PASS.
