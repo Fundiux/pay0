@@ -1,5 +1,18 @@
 # PAY0 — Tracker de trabajo y continuidad
 
+## Estado vigente — 15 de octubre de 2026
+
+La remediación integral sigue abierta. Este corte sustituye los estados vigentes de las entradas históricas que siguen; conserva sus fallos y evidencias.
+
+- **Reglas Firestore:** corrección aislada `6cca517`, con 96 y 518 pruebas aprobadas. Se creó y verificó el ruleset `c026f71f-0542-4a23-a170-99b012b1e835`, pero **no está activo**. La revisión automática rechazó el PATCH antes de ejecutarlo; la autorización específica está pendiente. Última versión activa observada: `76fda1a0-4463-4106-80ff-1b4ea13d3a61`. Storage se verificó sin cambios.
+- **Lectura de notas:** 24 casos adicionales con SDK real y emulador aprobados: antecesores revocados o vencidos, permisos granulares, cadenas de 16/17 niveles y revocación entre consulta y autorización final. Limpieza y cierre de procesos verificados. Esto no cierra la exposición de consumidores que todavía consultan Firestore directamente.
+- **Notificador documental:** candidato aislado `164d066`, paquete exacto conservado y arranque local con flags desactivados aprobado para sus tres endpoints. Sin subida, creación de Functions ni mensajes reales. Los controles de despliegue y verificación siguen en preparación.
+- **Infraestructura del notificador:** las 22 lecturas autorizadas pasaron; su ventana de vigencia venció a las 10:53:56 UTC. Terraform no se aplicó. La revisión automática rechazó la aplicación antes de iniciarla; quedan pendientes la autorización específica de las 19 creaciones y la renovación de sus prerrequisitos.
+- **Integración:** evidencia local registrada en `857d6e8`, rama `remediation/pay0-integral-20261009`. No se ha publicado esta rama ni debe integrarse completa: contiene experimentos de reglas que no superaron sus pruebas.
+
+Detalle y límites: [continuidad técnica](docs/remediation/2026-10-09/HANDOFF.md) y [registro de ejecución](docs/remediation/2026-10-09/EXECUTION-LOG.md). Las publicaciones parciales anteriores no acreditan el cierre global del sistema.
+
+
 Corte posterior a0bdf5e3: baseline remoto15 leido (75metadata requests,14ACTIVE, nuevo listSolicitudNotes404 corroborado noatomico; cero escrituras/handlers). Roota8649e verifica evidenciaedaaa65; colaRUNNING1/s/concurrent1/attempt1 y schedulerENABLEDcada5min confirmados0e68c1. Comparacion CLI updateMask/configuracion y guards de despliegue pendientes; sin publicacion. ZIP local1256exactos PASS4ae75f SHA83dea136, actualUploadVerifiedfalse; stagingenvfinal exige nueva prueba de bytes.
 
 DELIVERY sourcebinding commit63c3fa84aafadf1ca3b3e99945b72acca41f5ca2: root127PASS4bcc7c, NORMALabc8c3/policy220037, SDK65045/805f34 PASS13casos194refs/cleanup/puertos/cloud0/provider0. Source nativo capturado desdecreate y proofCOMPLETE exacto; no cambia ACK del supervisor ni activa transporte. Release IQ commit44956943debe49a88940846b02fa47172842e51a: regresion staleA borra leaseB reproducida51ac1d; ahora binding privado+token/expiry en cada TXretry. Root106tests+policy94e8d0, NORMAL43106b, SDK19990/929f2d PASS4casos1ref/CAS/puertos/cloud0. No integrados; journal de resultados externos sigue diseño ca9b165, sin nueva coleccion/Rules.
