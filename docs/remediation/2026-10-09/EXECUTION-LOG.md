@@ -698,3 +698,27 @@ Admission-wiringPrepare ce5460PASS tras EOL-only probado; no repin.
 NORMALa1a se conserva; nuevoNORMAL657 se prepara antes de captura/bundle.
 Publicacion Git continua pendiente de confirmacion del destino tras rechazo
 automatico de confianza; no nuevo intento push ni cambio a remote main.
+
+## 2026-10-14: regresiones notifier cerradas y guardas antes del bundle
+
+HEAD657cde7 limpio:44suites1663/1663PASS54fa06, sin skips; seisSDKPreparePASS
+41db51/9a06d7 y policy previoPASS sin cambios relevantes. Source7174 intacto,
+QA cfba64025b42772a247080e6ef04e0236d1eea0a8e012e62ae44df31dc85f3c4.
+SummarySHA99aa5cd7aae84285cbd02c5ab2cf600481a7ba396f60b709600d5d95887d7cfa.
+SDK Execute secuencial en curso, HEAD congelado; lifecycle primer stage307adb
+PASS2casos/18refs/cleanup/puertos/cero proveedor. No inferir PASS de los restantes.
+
+Preservacion lib NORMALa1a: helper33e9e9a0 revisado ce6b0f, checkbb3633PASS,
+Execute ca08af/1fc93d PRESERVED. Rootd224ea confirma1018files/15099533B y
+arbol18628bad... antes/despues; recibo7dfc818283a50a4faf3ed0bd9f2a1f4e02cd79e7bc6a03f97312bf15b102be81.
+Destino privado normal-a1a-preserved/lib, sin borrar ni cambiar dependencias.
+NORMAL657 no ejecutado: audit posterior encontro guard884e4b2 ausente.
+
+Root0723b9/7de56a revisa4paths completos de884e4b2 (2TS/test19casos/doc).
+Arquitectura8432b7/e4710e demuestra preimagenes automaticApplication/callables
+identicas a884^, predicado canonico ya presente; faltan4guards historicos.
+Integrar exclusivamente884 tras cerrarSDKfreeze, luego19tests/policy/NORMAL
+con nuevoHEAD/sourceSHA antescaptura/bundle. Un selector exacto notifier no
+actualizaria esos4endpoints financieros; un redeploy amplio o posterior si
+podria quitar sus guardas. El plan de release debe excluirlos explicitamente.
+No mezclar rama financiera completa ni contar bundle3e4/a1a como finalnuevo.
