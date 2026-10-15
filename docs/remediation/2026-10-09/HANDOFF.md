@@ -1222,3 +1222,28 @@ de identidades debe comprobar existencia sin crearlas. Guard upload actual root
 41PASS3625cf; normalizacionLF coincide con blob a0fa430 (57e11409...). Pin def4
 del corte anterior no coincide y no debe reutilizarse. Fallo local GUARD_348_PIN
 preservado; nuevo input requiere todos los helpers finales fijados. Sin deploy.
+
+## Corte 2026-10-14: preflight IQ y publicacion aislada
+
+Launcher privado revisado: 11/11 pruebas root80c031 PASS; check e8c6eb
+verifica b858cb5 y seis blobs. DEBUG se retira solamente del entorno del
+proceso de ejecucion; no se relaja el guard. Intento de check893a14 fallo
+por quoting PowerShell antes de cualquier IO y queda conservado.
+Preflight remoto5330e0, run701e10f4e73f4fd080c4973b2b4bdaf8, se detuvo
+tras GET Function HTTP200. Sin upload/PATCH ni escrituras cloud. Causa
+reproducida offline4a048b: JOURNAL_KEY rechaza RUN_SERVICE por underscore;
+fix y regresion con diario real en preparacion. No repetir ese run ni
+borrar sus tres archivos. Las pruebas previas con diario falso no cubrian
+esa incompatibilidad.
+
+Remote main comprobado por ls-remote2afd66:7dfcd8a. Main localccaf71e
+incluye dos cambios anteriores361aaf8/094472f no cubiertos por este lote.
+Rama aislada publication/iq-receipt-artifact-20261014 HEAD
+428138075890b321876b60dc2b69015220e8282e, parent remoto7dfcd8a,
+seis blobs identicos a b858cb5,38/38 pruebas7063c6 PASS. Root7e7b10
+confirma parent/scope/blobs/status. Push NO ejecutado: automatic approval
+review rechazo salida de codigo privado a origin github.com/Fundiux/pay0.git
+por titularidad/confianza no verificada. Confirmacion de destino y aprobacion
+solicitadas al usuario; no workaround ni segundo intento. Trabajo local y
+preflight IQ independientes continuan. Esta restriccion no equivale a fallo
+Git ni a rechazo remoto de proteccion de rama.
