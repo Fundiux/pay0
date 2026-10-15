@@ -1467,3 +1467,28 @@ NORMAL del candidato a5dc868 termin? PASS ff1357/26aa2c: run33b1a7e5067c4f5396f3
 Helperd1defec1/launcher04ab6bca; source1078 SHA0d4263548f85d0169cf56d031978e6e51dbbfddc12e56d584f74c5f053b36e4f.
 Commit declaraciones a5dc868a2931767c6988acdec5bac6dce38ec73e confirmado limpio.
 No acredita todav?a captura351 ni BUNDLE. Infraestructura se prepara en worktree separado, sin apply.
+
+### 2026-10-15 ? Manifiesto NORMAL351 aceptado; SDK a?n en correcci?n QA
+Primera captura351 e5fdf5/session44755 FAIL6a13e5, runb064b13a43344421a25d719c8f4aa6d5:
+CLI_TIMEOUT_10000/cleanupNONE,elapsed10891 (9e1db4), postflight sin cambios.
+Profiler privado20tests PASS, revisi?nroot1ff62f; Execute dfe0d5/session2234 termin?c9e0d6.
+Runa2086b56427a4fbdbba691432a67dfc1 diagnosticOnly:348elapsed4967, entry3503ms,
+3005calls/366agregados/0fallos; sin baseline aceptado. Costes exclusivos401/347/155ms
+no justifican parche de imports. Caches/estadoSO no controlados; no atribuir causa ?nica.
+Un control oficial351 aislado autorizado por esa variaci?n, sin warming ni cambios de l?mites:
+853d97/session54745 PASS76c897, runc0b26fb6f50148a7bc872cef4283fcea.
+Root388219 verifica351elapsed3894ms,fullBuildSHAf4b6368f70535fe72ea1d0550b770424e2ee3be54faaf43b1be1689e1c553492;
+manifest0da11a9e98efb5de4bb11572c4cd6403e374c72c61cef03f973a2f0a884cda6e.
+HEADa5dc868, sourceTree9ab4f8de993363828dc68631ac8bc8ff0c8f20cb; cloud0/donor unchanged/Job vac?o.
+No afirmar latencia sostenida o p95. Siguiente BUNDLE351 debe preservar NORMAL y demostrar igualdad completa.
+
+SDK oracle completo protobuf/token revisado25db43/4422a7. Execute0d4e54/session99793
+FAIL983b19, outer524e0e8d52c94ecfadf775305353278a/innere7bee49958cd436ca04e4b46b398cb4c:
+COMMIT_TRANSFORM_VALUE,cleanupAUDITunexpected,0HTTP/network. Reproducci?noffline realcodec
+confirma discriminador valueType; fixestricto28checks+PreparePASS, rootdb7e23/5bf1bc revisado.
+Execute0f0281/session5632 FAILb5a6f1, outer5de3bb7acaaa449d8a43538cdb0329d2/
+inner7669f0ff50c340d5bcf23adf6d6ae250: ENROLL ASSERTION,7callbacks,0HTTP/cred/network,
+cleanupVerified=true ypostflightunchanged/portsclosed. ?ltimo stepCOMMIT_CAPTURE_CONTROL no localiza
+assert exterior; no error de proyecci?n/observador. Lectura agente muestra fixture permite s?lo
+maxAttempts3 pero DispatchFirestore can?nico usa5. Correcci?n QA3/5 exactos +diagn?sticos acotados
+en revisi?n; producto y expectativas no se relajan. Fallos anteriores permanecen evidencia.
