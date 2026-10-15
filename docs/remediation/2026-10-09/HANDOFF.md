@@ -1276,3 +1276,36 @@ probado sin cambios Git. Fuente final7174b413b6e10704fc0971eb01f5b8033d260f3f62a
 QA0bc8de7870d3e8d7d4474fafd18faff2e97e625b4919c187cf624a44ea7844d6.
 NORMAL nuevo helper874dce44/launcher0bbbb507; Prepare409590PASS y Execute47f9dd
 en curso. Offline44/policy/SDKPrepare en paralelo, sin actividad financiera.
+
+## 2026-10-14: hotfix IQ desplegado y postflight verificado
+
+applyPaymentAutomaticallyOnReceipt revision00002-lok ACTIVE/Ready/100%,
+source gen1792030833580705. Un solo PATCH aceptado; los fallos anteriores
+fueron previos al envio o verificaciones posteriores, sin retry de mutacion.
+Reconcile c766e4/cc34f3 PASS, mismo run a407f6af08a44de88ca1d1642d6d216b,
+observacion2c431fe73045404486e9380953962d03. Root413751 confirma ZIPGET200,
+6054892bytes, SHA1069019437327e8bf38c848721132a91f8721ae48c4ec75e772ad9e0bd32c643.
+Recibo POSTFLIGHT_PASS SHA8855f9972b3b2fffb296236562e6ac5aaf40a97a76e1dc31b657e47af830a563:
+config/IAM preservados, fuente exacta, readiness ytrafico verificados.
+
+Revision de metadatos root ee7267 y6tests f035a1 PASS; suite61/61 f7dc10.
+Excepciones por valor exacto: nuevas labels goog-drz-cloudfunctions-location
+us-central1 y goog-drz-cloudfunctions-id applypaymentautomaticallyonreceipt,
+annotation singleton cloudfunctions.googleapis.com/function-id con targetcanonico.
+BuildInfo output-only loginWithUsername pasa a applyPaymentAutomaticallyOnReceipt;
+selector configurado GCFentryPoint/Runbuildtarget y unicoFUNCTION_TARGET antes/despues
+ya era correcto. No se infiere comportamiento erroneo anterior ni causa historica.
+Checks adicionales atan esos valores al recurso fijo; resto de campos sigue protegido.
+Contrato df72eda6/run287d2caa/launchfb7a4046 congelados; versiones/fallos preservados.
+No se invoco handler financiero ni proveedores reales. Igualdad ZIP no acredita
+identidad de dependencias del contenedor, drenado de invocaciones antiguas ni cierre
+de todos los riesgos IQ; el alcance verificado es este guard historico de receipt.
+
+Notifier QA fix fuente40051ffe2e7dc9d8136f44d0caae73f0fa559b3f revisado rootce28b1:
+db expuesto explicitamente por fixture y eliminacion de reemplazo textual fragil,
+sin modificar assertions. Focused118/118PASS990e74. Cherry-pick ff7cac produce
+integrationHEAD657cde7f18e3d5b2bdf8ba24eef52a6503cbd67d; rerun44 en curso.
+Admission-wiringPrepare ce5460PASS tras EOL-only probado; no repin.
+NORMALa1a se conserva; nuevoNORMAL657 se prepara antes de captura/bundle.
+Publicacion Git continua pendiente de confirmacion del destino tras rechazo
+automatico de confianza; no nuevo intento push ni cambio a remote main.

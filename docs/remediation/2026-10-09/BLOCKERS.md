@@ -82,3 +82,23 @@ Wiring notifier1c01538 aprobado root/independiente:266offline/noEmit y cinco
 SDK posteriores PASS (lifecycle2/18,DELIVERY25/206,Consumers6/12,cancel4/24,
 Scan6/11). La integracion y sus builds/gates nuevos permanecen pendientes;
 no atribuirle los artefactos historicos del candidato3e4a1bc.
+
+## 2026-10-14: NORMAL a1a aprobado; regresion ampliada pendiente
+
+NORMAL47f9dd/728993 PASS para a1a295e:1018archivos/15099533bytes,
+postflight fuente/deps intactos, treeEmpty=true/cloudCalls0. Runtimefdf9b217e8da4a78b787d1e63dde6b75;
+complete SHA d7096774c5a81589071a0b35d232704a89fac77d634513f45344a03b07c98659.
+Rootd057d6 confirma recibo y status limpio. No BUNDLE ni captura definitiva.
+
+Gate ampliado5d2268:44suites/1663tests,1660PASS/3FAIL. Fallan fixtures
+remediation-dispersion-notification-delivery-dispatch.test.cjs casos49-51 por db.runTransaction
+undefined tras cambio interfaz; investigacion y fixQA en rama fuente, sin
+eliminar oraculos. Policy PASS; cincoSDKPreparePASS; admission-wiringPrepare
+FIXTURE_PIN_MISMATCH antesred en investigacion separada, no repin automatico.
+Snapshots source/QA/donor iguales before/after. Evidencia privada en nuevo
+worktree .firebase/effect-lifecycle-integration/offline-ba1f435d-6558-4b5d-af0e-23469d530fa8,
+summarySHA bc8766e97063e6ca96ea632242220e2ff02de058fce0ffd793b40eced5f1bd6a.
+Captura/bundle pausados especificamente hasta correccion de estos gates;
+NORMALa1a conservado como evidencia del candidato probado, no de futuroHEAD.
+
+IQ receipt: postflight413751 PASS descrito en RELEASE.md; ese despliegue ya no depende del launcher. Permanecen los riesgos IQ globales y publicacion Git pendiente de confirmacion del destino. Notifier QA40051ff integrado657cde7; rerun44/NORMALnuevo pendientes, fallos previos conservados.
