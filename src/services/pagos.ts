@@ -176,3 +176,14 @@ export async function resumePagoApplicationIqPlan(params: {
   const res: any = await fn(params);
   return res?.data ?? res;
 }
+
+export type PagoNoteCursor = { version: 2; pagoId: string; updateSeconds: number; updateNanoseconds: number; id: string };
+export type PagoNoteDisplayDate = { kind: "NONE" } | { kind: "STRING"; value: string }
+  | { kind: "MILLISECONDS" | "SECONDS"; value: number }
+  | { kind: "TIMESTAMP"; seconds: number; nanoseconds: number };
+export type PagoNote = { id: string; displayDate: PagoNoteDisplayDate; updateSeconds: number; updateNanoseconds: number; text?: string; [key: string]: unknown };
+export type PagoNotePage = { items: PagoNote[]; nextCursor: PagoNoteCursor | null };
+export async function listPagoNotes(input: { pagoId: string; limit?: number; cursor?: PagoNoteCursor }): Promise<PagoNotePage> {
+  const call = httpsCallable<typeof input, PagoNotePage>(functions, "listPagoNotes");
+  return (await call(input)).data;
+}
