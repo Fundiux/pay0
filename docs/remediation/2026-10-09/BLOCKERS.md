@@ -73,3 +73,12 @@ IQ receipt dispone de un ZIP minimo local verificado: seis entradas cambiadas,
 La publicacion requiere comparar configuracion actual, preservar el valor vacio
 GOOGLE_NODE_RUN_SCRIPTS e invalidar de forma explicita el hash Firebase obsoleto.
 Todavia no hay upload/PATCH ni prueba de coexistencia de invocaciones antiguas.
+
+Actualizacion posterior: captura IQ6GET b4d0e7 PASS confirma configuracion/IAM,
+fuente exacta y Ready100%; no mutaciones. Artefacto portable b858cb5 reproduce
+ZIP10690194 con26fuente+12ZIP PASS. Publicacion sigue pendiente del launcher
+revisado y su postflight, no de aquella comparacion ya completada.
+Wiring notifier1c01538 aprobado root/independiente:266offline/noEmit y cinco
+SDK posteriores PASS (lifecycle2/18,DELIVERY25/206,Consumers6/12,cancel4/24,
+Scan6/11). La integracion y sus builds/gates nuevos permanecen pendientes;
+no atribuirle los artefactos historicos del candidato3e4a1bc.

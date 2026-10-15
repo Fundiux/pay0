@@ -1,5 +1,12 @@
 # Continuidad de ejecucion
 
+Checkpoint posterior: main actualizado por FF3146ff a ccaf71e (solo6paths
+portableIQ sobre094472f),38testsPASS04c475, limpio/sinpush. Fuente artifactb858cb5.
+Notificador source1c01538+QA38d0f6d: cinco SDK nuevos PASS lifecycle2/18,
+DELIVERY25/206,Consumers6/12,cancel4/24,Scan6/11, todos cleanup/puertos/cloud0.
+Nueva integracion desde3e4 y sus builds pendientes. IQ publicacion no ejecutada;
+review final launcher con journal/pins/exclusion en curso. No reintentarlectores.
+
 Ultimo checkpoint IQ2026-10-14: captura remota6GET b4d0e7 PASS, summary
 0a8e2a369b6329cb5ef957de60d409a9c0e4111e87217b61dfa937a0dd50fd3b.
 Configuracion/IAM/revision completos iguales, fuente GCS coincide con ZIP,

@@ -227,3 +227,13 @@ provider0. Root revision836b04/d9a3fc; Prepare fallosdae06b/03f116 eran syntaxQA
 llave Proxy corregida, Prepare agentdc368c PASS. NORMAL/policy en curso separado,
 sin activacion. QA recoveryhistorico root22/22e21ef5 PASS caracteriza lostACK
 FAILED que reenvia en notifier0b; no autoriza recovery ni declara correccion.
+
+## 2026-10-14: integracion del artefacto IQ, sin nuevo despliegue
+
+Main ccaf71e262174c773a5829fbc7dd25523e501326 incorpora exclusivamente seis
+archivos del artefacto portable b858cb5, sobre main094472f. FF3146ff y
+38pruebas04c475 PASS; emision/repack en memoria reproduce ZIP10690194 exacto.
+No se integra la rama financiera0b completa ni las reglas experimentales root.
+Snapshot fresco6GET b4d0e7 PASS: config/IAM/source/Ready100 sin mutaciones.
+Upload/PATCH y verificacion posterior siguen pendientes del launcher revisado.
+No push realizado; los dos commits anteriores de main no publicados se conservan.

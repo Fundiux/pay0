@@ -547,3 +547,23 @@ Root356c6d/0a27bd/8853b5 reviso core, Consumers, transporte y fixtures;
 incluye fence recipientId actual y captura unica prepareEffect.
 No SDK nuevo: los cierres delivery/Consumers/cancellation/ScanTick requieren
 actualizacion revisada. Los resultados f8969a8 son historicos frente al WIP.
+
+Wiring aprobado root e independiente0a40f3/ebadda, commit1c01538 exact9paths.
+Cinco SDK Prepare root1a0a04/11a2b4/24f151/74201a/b0162b PASS.
+Lifecycle Execute67981/7afbea PASS2/18, runtimef9237d6066c6420cb93e79c9d3e843f5:
+162reads45writes7callbacks2senders simulados,1ABORTED inyectado; no contencion
+natural atribuida. Root03388e verifico resumen y cleanup/puertos/cero proveedor.
+DELIVERY35763/24ddef PASS25/206; Consumers94685/05e5dc PASS6/12;
+cancel62132/ffcd87 PASS4/24; Scan3337/dbc72d PASS6/11. Todos cleanup/puertos,
+cloud0/provider0. QA11paths commit38d0f6d8746a9ef71814929cb107dd6a6b182b50;
+NORMAL/BUNDLE e integracion de este lote pendientes, candidato3e4 intacto.
+
+IQ artefacto portable b858cb572c9362f769cdf45e4f606fb0c413688a,6paths,
+26source609881 y12ZIP74539b PASS; repack real en memoria reproduce SHA10690194.
+Root reviso helper/fixtures/tests/doc20f0f8/3602e8/863b88/f1046a/a70b6a.
+Integracion exclusiva desde main094472f: ccaf71e262174c773a5829fbc7dd25523e501326,
+38tests04c475PASS. Rootdc69b1 confirma seis blobs exactos y main limpio;
+FF3146ff completado, main ahora ccaf71e. No merge de rama0b ni rootremediation.
+Dos commits previos de main no publicados siguen presentes; no push efectuado.
+Launcher selectivo privado en revision,34offline agentePASS97447e;
+ningun upload/PATCH/handlercall nuevo. La integracion Git no equivale a despliegue.
