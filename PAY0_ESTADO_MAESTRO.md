@@ -1,5 +1,7 @@
 # PAY0 — Estado maestro vivo
 
+Actualizacion de alcance cerrado: addPagoNota desplegada con autorizacion especifica; revision addpagonota-00033-zup Ready/100%, configuracion e IAM preservados, ZIP exacto verificado y HTTP401 sin autenticacion. No se desplegaron los lectores nuevos. Ver docs/remediation/2026-10-09/PAGO-NOTE-SELECTIVE-ARTIFACT.md y CIERRE-ETAPA-2026-10-15.md. No repetir suites aprobadas salvo cambios o evidencia nueva.
+
 ## Estado vigente — 15 de octubre de 2026
 
 La remediación integral sigue abierta. Este corte sustituye los estados vigentes de las entradas históricas que siguen; conserva sus fallos y evidencias.

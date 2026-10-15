@@ -1,6 +1,6 @@
 # Artefacto selectivo de addPagoNota
 
-Estado: integridad, instalación aislada y carga del artefacto verificadas; pendiente de preparar y ejecutar la actualización selectiva y su verificación remota. No desplegado. Pertenece al pendiente 1 de la lista finita del cierre; no abre otro frente.
+Estado: desplegado con autorización específica del usuario y verificado. Revisión addpagonota-00033-zup Ready con 100% del tráfico; ZIP publicado idéntico al candidato. Pertenece al pendiente 1 de la lista finita del cierre; no abre otro frente. No se ejecutó una transacción autenticada en producción.
 
 ## Código publicado recuperado
 
@@ -28,3 +28,13 @@ Preparación b15a57: ZIP candidato de 5.615.016 bytes, SHA-256 007789611f1f70aaa
 Cero escrituras en producción durante recuperación y preparación. La comparación inicial de TypeScript falló al imprimir un carácter BOM con la codificación de consola; la lectura corregida 81c756 usó UTF-8 y no repitió consultas remotas. No se afirma equivalencia del contenedor ni autorización IAM efectiva.
 
 La validación 8f91a5 también volvió a comparar los 1.086 archivos extraídos con el recibo del ZIP después de instalar dependencias, los diez módulos compilados con los pins de la prueba SDK11 aprobada y cinco archivos del SDK de Firestore (incluido transaction.js). Todos coinciden. No se repitió SDK11: se conserva como evidencia del código probado, sin presentarla como una ejecución del nuevo paquete. Recibo privado artifact-validation-receipt.json SHA-256 bce9b5d986dce7f6877646f0c140c0278336bc3aa9b6e952668429d5acebb8e9. La instalación local está fuera del ZIP candidato y no debe incorporarse al despliegue.
+
+## Despliegue autorizado y resultado
+
+Preflight 86c4b8: cuatro lecturas de Function, servicio e IAM; configuración de Function idéntica a la capturada. Upload 7d1a4f creó un objeto nuevo con precondición generationMatch=0; metadatos 496331 confirmaron 5.615.016 bytes, MD5 RddkL5tZOVvPbZ3HU7aJaA== y generación 1792081523589429. La primera solicitud de PATCH fue rechazada por revisión automática antes de ejecutar proceso porque interpretó la autorización como lecturas. No hubo intención ni PATCH de ese intento. El usuario autorizó después explícitamente el despliegue de addPagoNota y su verificación.
+
+Un único PATCH autorizado 300961, máscara buildConfig.source.storageSource,labels; generación exacta de upload y eliminación exclusiva de firebase-functions-hash de las etiquetas capturadas. Sin serviceConfig, IAM ni otros endpoints en el PATCH. Operación operation-1792081734910-65de38b37c24c-c4532813-50cb5b5f registrada antes de observarla; cinco GET de observación, terminal OPERATION_DONE (85286c/c42879). No reintento de mutación.
+
+Postflight 5acaba/b80307: addpagonota-00033-zup ACTIVE/Ready y 100% de tráfico. Configuración de Function de ejecución y build conservada salvo fuente/build/revisión generados; ambas políticas IAM exactamente iguales. Configuración de contenedor, recursos, variables y plantilla preservada salvo imagen; comparación completa de rutas cambiadas guardada privadamente. Los cambios restantes son hashes eliminados y metadatos de build, revisión, generación, recurso, operación y transiciones de estado.
+
+Código publicado: generación 1792081735884112 del objeto addPagoNota/function-source.zip. Descarga f841a6 comprobó SHA-256 007789611f1f70aaa73845779428840fd08bf0e405605b2d52dd636b0c2906a3, idéntico al ZIP validado. Prueba a46fd0: una petición sin autenticación y sin IDs ni datos financieros devolvió HTTP401/UNAUTHENTICATED. No prueba transacciones autenticadas, retiro instantáneo de invocaciones anteriores ni equivalencia binaria del contenedor. No se repitieron suites aprobadas. La integración Git del código permanece separada; no se desplegaron los lectores nuevos ni otros endpoints contenidos en el paquete.
