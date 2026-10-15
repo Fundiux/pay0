@@ -1492,3 +1492,38 @@ cleanupVerified=true ypostflightunchanged/portsclosed. ?ltimo stepCOMMIT_CAPTURE
 assert exterior; no error de proyecci?n/observador. Lectura agente muestra fixture permite s?lo
 maxAttempts3 pero DispatchFirestore can?nico usa5. Correcci?n QA3/5 exactos +diagn?sticos acotados
 en revisi?n; producto y expectativas no se relajan. Fallos anteriores permanecen evidencia.
+
+### 2026-10-15 ? Recovery SDK4 casos PASS; BUNDLE detenido antes de instalar
+SDK opciones3/5 corregidas:36checks/PreparePASS, rootb55df7 revisado. Executea6b489/session45003
+FAIL723a2a, outer5a3a4d8c65904bbcad97ba3b94fac262/innerd47a97d4f3c746538d24fc7214ea4cff:
+OFF+ENROLL/revisit PASS, DELIVERY OWNER_ERROR,cleanuptrue,1fakeHTTP/0provider. Reproofflineaeae34
+confirma que SEALED sint?tico con recovery.source:null viola NOTIFICATION_SOURCE_NOT_CREATION.
+Fixture agrega claim+finishRETRY reales antes del sellado, verifica fuente/serial1/lease null/dueAt,
+sin Tasks ni nuevos l?mites. Root6b5c1a+a89fea revisa632fb999/runner6a61dcf4/controllerbd171a34.
+Execute47dd71/session12919 PASS366699; root052890 verifica outer173d0f78f63949748eb690f386229dff,
+inner8be4616d51504ecebbeb09c0fd74e118:4casos22refs250reads72writes7queries35slots46callbacks,
+2HTTP simulados/3credenciales simuladas/queryClosed1,cleanupVerifiedtrue,blockedNetwork0/stderr0,
+providerRequests0/productionRequests0. Postflight fuente/QA/deps/donor iguales, puertos cerrados/Job vac?o.
+36fuentesSHA4d0b9f50b28bae5bf6994e9a100f45bf4c3d0c5a93ef54dc8f187bcf28e0fc6f ensource84dd.
+No prueba ADC/IAM ni Consumer E2E: DELIVERY parte de SEALED sint?tico expl?cito. CommitQA pendiente.
+
+BUNDLE helper8fbbeb47/PS8a160770 revisado ?ntegro3e1e4f, Prepare92ea30PASS.
+Execute959bed/session96302 FAIL378cc1, run51c01918214c42b88ca6e2c737d1e461.
+NORMAL preservado por rename en candidate/.firebase/normal-a5dc868-preserved-51c01918214c42b88ca6e2c737d1e461/lib:
+1026files15140113B/treebef0daa2/entry3f8d5d09 iguales antes/despu?s;
+receipt4aa083da3b404677f0b4730bbf7ac73089d1df1e9cce15c9ed3fbb81a0d31ceb.
+PostflightPASS installednull/completefalse/donorunchanged, installlockfalse.
+Logs supervisor/bundle vac?os; r.TimedOut no fue persistido: no certificar causa por excepci?n gen?rica.
+Intermedio build-7f295d5f-20f4-4288-98ba-731a233f014a conserva364raw y347compiled,
+lib vac?o/package/provenance ausentes. Evidencia89e6cd/c68efd sit?a interrupci?n en transformaci?n
+antes de esbuild; cercan?a a600s es inferencia. No restore ni retry ciego. Investigaci?n aislada
+filtra nombres antes de resolver s?mbolos TypeScript, conservando todos controles/igualdad de salida.
+
+Infraestructura separada496fcba7016bf246e01d143ec6f12e36997ec609, cinco paths,
+45tests+Terraform offline validate2fasesPASS; sinplan/apply. Rootdetect? ciclo secretoDelivery:
+permiso secretAccessor debe existir antesCREATE aunOFF. Fix3paths49testsPASS revisado3c6b52,
+BOOTSTRAP19/POST25 ymetadataexacta del secreto, commit separado autorizado. Reader/cloudplan a?n pendientes.
+
+SDK QA commit efd77d7bc6fee5eed0112d0c22036075ccdc17be confirmado limpio, exact3paths.
+Infra fixsecret commit15987aa11488e3f529454a0a3de72bc71c67ad59 confirmado limpio, exact3paths.
+Ninguno cambia producto a5dc ni acredita integraci?n de QA/infra al candidato de release.
