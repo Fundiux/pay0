@@ -1095,3 +1095,62 @@ root9a7609 revisa diff completo. Config congelada068324 permanece evidencia hist
 PLAN_ONLY privado revisado root751911 antes de ejecutar: corregir marca OAuth durable
 para interrupcion sin catch, pins de launcher antes de spawn y after_unknown de seguridad.
 Sin auth/Terraform ni cambios remotos; evidencia caducada no habilita plan.
+
+PLAN_ONLY corregido: controllerd731dc3da03c0fac68aa5e9e153af4f0e4f60bea6a3718efb34aeca41a624407,
+PS808efff16ee157779e3a22b6317e5ddfa2752e88ccbef4334cb4a536da2f9dde;33testsPASS,
+root11623e/0415d4 revisa testigoOAuth durable/pinsantesJob/unknowns calculados cerrados.
+Refresh3GET+bootstrap19 solicitado bajo autorizacion continua, auto-review rechazo antes
+de proceso por autorizacion no acreditada. No auth/red/recibos nuevos. Confirmacion usuario
+solicitada especificamente; no bypass/retry. LIVE_EVIDENCE_READYfalse y evidencia caducada.
+Native details run5d8ce167c44f40cbbe5da529619b37c8 root2e28a5: READ_DIRECTORY_ACCESS_DENIED
+parentlevels10 y RESOLVE_PATH_FAILED ./index.js. Observationbea7061196e65d4b0d03db8c706fc44ce2cd5133239d44ed22ab87893503285c.
+Jobempty/inputsintactos/no artefacto. Fuente oficial revisada turn238view0:
+https://raw.githubusercontent.com/evanw/esbuild/v0.28.2/internal/resolver/resolver.go
+dirInfoUncached recurre al padre antes de tsconfig; no aplicar tsconfigRaw como supuesto fix.
+Control local exacto escalado en revision separada, sin ACL/instalaciones/config changes.
+Rules frente independiente: architecture identifica duplicacion de alias clientId=clienteId
+en baseline publicado como hipotesis para2budgetfail; prepara fix aislado desde164d066.
+No integra e3ea3dd ni afirma reparar validacion de ancestros.
+
+Control local write:false via exec_command require_escalated aprobado d05e87:
+runa4d6e2824de34c878d8ba112558f5dc2 PASS643ms/root7689f9, mismos inputs/opciones.
+index4297330B SHA cc8421b7c7482a79ab92dd8563229bfa6cdd62e612a516ec39944f173e621ca8;
+map2516644B SHA b5a6bd355cfa26512157c0ace389d412b008bc2ab41550c96e0ca5d63b19afd6,
+324metafileinputs; outputs solo memoria. Jobempty/sourceDonorInputsUnchangedtrue.
+Observation f231ffded677954b5721f6b1b28c21cdc32659c3f4550a81469c3c5d31a0990e.
+La diferencia ambiental explica el fallo observado; no atribuir todos los fallos historicos
+ni aceptar BUNDLE hasta freshbuild+compare. Agente prepara controlador nuevo con NORMAL
+ya preservado, sin restore/copy ni reutilizar transformaciones como build aceptado.
+Root e776d0 revisa4paths Rulesalias;3offlinePASS/1800comparaciones/policyPASS.
+Se prepara runnerprivado baseline36/candidate96, sin nativeExecute todavia.
+
+FULL BUNDLE164 freshbuild e instalado PASS9cb9fb/root994b04:
+run9573cf6eb36644bdaacd5a8be1e0cb8a, build8b9d4034-9db2-4c0c-a335-43db2f1b1c79.
+CompleteSHAd6854e56a8fc432db5e7f825638f2058e85a4c4baa0d4f37d94bc16e71bc544d;
+provenance33f14e204b8af93aaf1c125ec43fab712d7deb297acf4555ac742f985b9c4c05.
+1027outputs:lib663/18225338B ydebug364/4290185B. indexcc8421b7... coincidecontroldiagnostico.
+Compare351 PASS2429ms/canonicalf4b636.../baseline675a075..., limit7s sinrelajar.
+Supervisor ae89ef8ec53f3d34c7b9163a1ed20c2973ed29fb3b5437ecbe3ce81f2d70f3ee,
+Exit0/TimedOutfalse/EmptyVerifiedtrue/Failurevacio. Source/donor intactos, NORMAL674da611
+preservado1026/15140113/treebef0. cloud0/policyRunfalse; sin deploy.
+Scoped13predeploy se prepara con pines reales de este resultado, aun sin ejecutar.
+Rootc94131 revisa runnerRules7250fb/PS832e0f y autoriza unico baseline36/candidate96;
+laneemulator reservado para esa prueba antes del scoped13, no carreras de emuladores.
+
+Infra commit b697b74a4c6e841341c4239582d694fc282d1109,58testsPASS,3paths revisados cfa6da:
+POSTFUNCTIONS admite membresia vacia solo preapply; config19bootstrap byteidentica068324.
+Tras confirmacion explicita usuario, refresh3+bootstrap19PASS,0mutaciones:
+observed10:01:49.758Z/captured10:01:52.415Z, proofc6616b08..., metadata2009bd28...,
+renderb925046a7cd853b0aa1924486465a595. Rootc8a3fd/8b2b4a revisa recibos reales.
+PLAN_ONLY controller03e18320/PS808eff,33offline+PreparePASS. Un Execute elevado3331d2:
+run9ad679e8cc6e4ecfa2ade54fc6e972f5, init0/validate0/plan2, SHOW validationFAIL
+PLAN_UNKNOWN_PATH. Root e281e9 verifica authUncertainfalse/Jobempty/stateunchanged/
+lockreleased/completefalse. Planbinario+JSON privados preservados; no apply/retry.
+Se inspeccionan solo paths desconocidos para distinguir metadatos calculados de seguridad.
+Rules run4e148664803a4839b2332d4f5de5feed:baseline36 reproduce2budget; candidate96
+95PASS/legacy-only:note budgetFAIL. Fuente/donorintactos/puertoscerrados/Jobempty/lockreleased.
+Candidato no publicable; no commit.4paths fallidos preservados manifest296cc1b6...,
+se prepara caracterizacion8readsbaseline/candidato sin repetir suites aun.
+Scoped13 repins98454c/PS6f4eb0/10fakes revisados f22dcb. PrimerPrepareEXISTING_LOCK
+con Rulesactivo, conservado; despues60c096PreparePASS y unicoExecute364b3c/session40955.
+Hooks1,3-14 intactos,fullFourteenSameInvocationfalse; hook14 usa JSZiphistorico, no5bc bounded.

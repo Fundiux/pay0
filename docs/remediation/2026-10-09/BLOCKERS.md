@@ -149,3 +149,33 @@ Transform esbuild sinteticoPASS y build observado e6437588e1e4435cbe4c55efee1a87
 confirma servicio nativo iniciado/cerrado0, pero ACCESS_DENIED153ms persiste.
 La operacion denegada sigue sin identificar. errorCount0 del proyector antiguo no prueba
 lista vacia: esbuild expone errors por getter que ese proyector no lee. Sin cambioACL/retryglobal.
+
+Diagnostico estructurado5d8ce167c44f40cbbe5da529619b37c8/root2e28a5 identifica
+READ_DIRECTORY_ACCESS_DENIED diez padres por encima de compiled (perfil fuera workspace),
+seguido de RESOLVE_PATH_FAILED ./index.js existente. Esbuild0.28.2 recorre ancestros antes
+de tsconfig; cambiar tsconfigRaw no evita esa recursion. Control local escalado en revision.
+Renovacion remota3GET+19reads rechazada por auto-review antes de crear proceso: autorizacion
+de acceso/captura no acreditada para reviewer. Confirmacion especifica asincrona pendiente;
+sin auth/red/recibos nuevos y sin reintento por otra via. PLAN_ONLY permanece deshabilitado.
+
+Control LOCAL escalado aprobado por herramienta: a4d6e2824de34c878d8ba112558f5dc2
+PASS643ms con mismos inputs/opciones; source/donor/inputsintactos y Jobempty.
+Confirma diferencia ambiental compatible con restriccion de lectura de ancestros del sandbox.
+Sin cambiosACL/tsconfig ni outputs instalados; falta repetir fullBUNDLE+compare con esa
+condicion de ejecucion. El rechazo cloud sigue independiente y no fue eludido.
+
+Usuario confirmo expresamente las3+19lecturas y recibos locales. La siguiente solicitud a la
+herramienta puede usar esa autorizacion nueva; no convierte plan/apply/CREATE en ejecutados.
+Se corrige primero la admision privada vacia POSTFUNCTIONS para evitar que IAM deba existir
+antes de que su unicoownerTerraform pueda crearlo. Bootstrap19config no cambia.
+
+FULL BUNDLE164 resuelto en entorno local aprobado:9573cf6eb36644bdaacd5a8be1e0cb8a
+PASS root994b04; install1027outputs y compare351/2429ms dentro del limiteoriginal.
+Jobempty/source+donorintactos/NORMALarchivadointacto. Los fallos previos se conservan.
+Pendientes:13predeploy restantes sobre este instalado, paqueteexacto, infraestructura y releaseOFF.
+
+Estado actual: plan19CREATE generado en9ad679... pero validador rechazo computed
+customrole.deleted; tambien requiere prueba exacta de defaultdeletion_policy SA/customrole.
+Noapply; estado/ownerintactos/lockreleased/Jobempty. Solo analisisoffline del plan preservado.
+Rulesalias candidato96 corrige2budgetoriginales pero falla legacy-only:note por presupuesto;
+no publicable ni commit. Caracterizacion8reads pendiente lane de scoped13 activa.

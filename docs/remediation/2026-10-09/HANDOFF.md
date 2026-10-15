@@ -1640,3 +1640,37 @@ errorCount0 no prueba errors vacio (getter no leido). Agente prepara proyeccion 
 Infra d4cecaf55testsPASS/root9a7609. PLAN_ONLY privado en revision: root751911 requiere
 testigo OAuth durable y pinslauncher previos; architecture requiere after_unknown cerrado.
 SinTerraform/auth/planapply. No renovar evidencia historica alterando timestamps.
+
+PLAN_ONLY33testsPASS y fixes revisados11623e/0415d4; refreshcloud rechazado auto-review
+antesdeproceso por autorizacion no acreditada. Preguntaasincrona especifica pendiente; no retry.
+Native details root2e28a5 localiza denegacion directorio10padres/entradaexistente. Control
+local escalado exacto en revision; cambiar tsconfigRaw no corta ancestorwalk oficial.
+Rules aliasduplicado: agente architecture prepara patch/testsoffline aislados desde164d066,
+sin cloud ni ejecutar emulator antes de review. Root docs checkpoint18e7fba, FINDINGS WIP.
+
+Native escaladoPASSa4d6e2824de34c878d8ba112558f5dc2/root7689f9:643ms/sameoptionsinputs,
+Jobempty/no artefacto instalado. baseline_remote prepara fullbundle nuevo (normalarchivado
+run296227... intacto) para review antesExecute elevado. Cloudread sigue pendienteconfirmacion.
+Rules4paths revisados e776d0; architecture prepara runner acotado baseline36/candidate96.
+independent_review inspecciona offlinecontrato release3Functions; sinauth/CREATE.
+
+Usuario respondio explicitamente 'Autorizar las lecturas y recibos' a3GET+19readsGoogle/local
+sin secretos; ya no falta esa confirmacion. Reintento debe pasar herramienta con nuevaautoridad.
+Antes se corrige offline circularidadPOSTFUNCTIONS: permitirIAM privado vacio al crearOFF,
+Terraform unicoowner de invokersposteriores. Sin CREATE/aplicarTerraform autorizado por esta respuesta.
+Fullbuild nuevo controller92d0bf/PSb7ca033 revisado440cf5,6admissionPASS/PreparePASS;
+un Execute elevado aprobado16aae4/session38471 activo, Job600s+10. Aun sin resultado.
+
+FULL9573cf6... terminalPASS/root994b04:installed1027/provenance33f14e.../compare3512429ms,
+completed6854e56a8fc432db5e7f825638f2058e85a4c4baa0d4f37d94bc16e71bc544d,
+Jobempty/NORMAL/source/donorintactos/cloud0. baseline prepara scoped13repins sinExecute.
+Rulesrunner7250fb/PS832e0f revisado c94131, unicaejecucion baseline36→candidate96 autorizada;
+architecture reserva lane. Mantener baselineFAIL2budget separado de resultado candidato.
+
+Infra b697b74 commit limpio; metadatafresh22PASS rootc8a3fd/8b2b4a, usuarioautorizo.
+PLAN_ONLY run9ad679e8cc6e4ecfa2ade54fc6e972f5 falloSHOW PLAN_UNKNOWN_PATH trasplan2.
+Root e281e9 Jobempty/stateunchanged/lockreleased; planprivado guardado, sin apply/retry.
+independent inspecciona pathsunknown antes proponer correccion cerrada.
+Rules candidato96 fallo solo legacy-only:note budget; baseline36 con2budget reproducido.
+architecture prepara8read caracterizacion y conserva failed4paths; no native nuevo anteslane.
+Scoped13 session40955 activo, PreparePASS y pins98454c/6f4eb0 revisados; lane reservado.
