@@ -937,3 +937,69 @@ caches/overhead no controlados. No prueba que el build completo pase ni causa un
 Autorizado commit de los dos archivos revisados y nuevo candidato desde a5dc con esa optimizacion;
 NORMAL/captura/BUNDLE requieren nuevos pins y validacion. Wrapper v2 revisado6c15bf preserva
 resultado cerrado supervisor antes de postflight, conserva600s/10s; original y fallo intactos.
+
+2026-10-15: optimizacion cf41cb3 integrada aisladamente como164d0660f05c9858b9475424ea07424507d5ea91.
+Seis diferencias CRLF/LF del checkout se preservaron desde a5dc con hashes/blobs comparados;
+receipt final726cdaede83df3e56e63f611c1df517eff0feffb98a1d8b264241348b4ad4deb.
+SOURCE1078 e6f61e3cc745644850fd9f21cfae916c72774f10120844c14171106691a64da4.
+NORMAL PASS86fa41/root817c8f, run ecc9f401b1d94287a5ca4b60c85c3d0a,1026files15140113B,
+completefff33bf8a018850cc1649ff6890ae0f067b807e1fb22273397c0fe7a162b8b1f; donor intacto/Job vacio.
+Treebef0daa2 yentry3f8d5d09 son identicos al NORMAL anterior; no cambio de producto TS.
+Captura FAIL46fedc/12af45, run81d099639d4243bc8abcec208d55d638: CLI_TIMEOUT_10000,
+elapsed12233ms, spawn207/exit10228/sinclose observado; cleanup CHILD_STOP_FAILED.
+Postflight exterior PASS completo=false/donor intacto tras comprobar Job vacio. No manifiesto aceptado,
+sin retry; baseline_remote investiga cache/arranque y prepara recibo explicito del supervisor.
+
+ZIP5bc3052: cambio aislado en fix/bounded-functions-zip-20261015, cuatro archivos revisados.
+Verificacion incremental con limites100MiB comprimidos/512MiB expandidos; CRC/SHA/tamano exactos,
+cabeceras coherentes y nombres canonicos. Revisor encontro BOM/flagUTF8/atributoDOS/getters;
+corregidos antes del commit. 22tests nuevos16a2cf +45existentes70ae27 +6packs reales locales5e3982 PASS,
+2API simuladas/cloud0. Fixtures resolvieron JSZip3.10.2 del workspace; verificador nuevo usa zlib/crypto.
+No integrado en164d066 ni desplegado; fuente del candidato permanece congelada.
+
+Infra metadata privada: root841f4c/c4a78f/23dcba/134061 reviso transporte/estado/wrapper y tests.
+51offline PASS35676c, cierre request+response observado o bloqueo conservado por incertidumbre;
+pins e33bf6b9cf6a52ccdf0160ee64837b4799d02ef209ac7b29db96263f3713d284.
+No auth/cloud/estado real/plan/apply. Se prepara collector separado para evidencia publicada del
+productor: metadata no demuestra OFF; el snapshot historico00016-vab no sustituye finalizer00017-jaz.
+
+SDK ConsumersRuntime root reviso fixture39fuentes/runner/envelope (eb24e2/f2ea61/a68869/2fa389).
+42checks offline y Prepare PASS; diagnosticos cerrados, proxy encadenado y rechazo delete agregados.
+Execute unico dec799/session69468 en curso, limite20refs560reads120writes90callbacks10queries40slots;
+producto efd77 intacto, certificados/Storage/Telegram/Tasks simulados. No inferir PASS antes del recibo.
+
+SDK Consumers primer Execute FAIL4c4a22, root06ee4c: outerebc328667bb2497f9640da87d19865ac,
+inner91e44a516f8c47cbba9b9ba79ce33415. Tres casos PASS (OFF, ENROLL, ACK-loss UNKNOWN/no replay);
+REVOCATION falla ASSERTION sin error de callback/observer. Cleanup verificado,20refs323reads54writes,
+39callbacks5queries17slots7HTTP,2Telegramfake/2Storagefake/1secretfake,0credentials/tasks/blocked/provider/production.
+Supervisor Exit1/TimedOutfalse/DescendantsStoppedfalse/EmptyVerifiedtrue; postflight sin cambios/puertos cerrados.
+independent_review investiga asercion de revocacion, sin retry ni cambio de producto.
+
+Diagnostico posterior b19e80/b66fd8: el core reservado registra delivery NEEDS_REVIEW/AUTHORITY_DENIED;
+el fixture esperaba authorityReview, marcador del despacho. Reproduccion offline PASS sin envio/recibo.
+Autorizada correccion exclusiva del oracle, preservando freeze y fallo; nuevo Prepare/revision antes SDK.
+Root reviso diagnostico stage/cache bb9895/bb065d: 15tests y Prepare PASS; una ejecucion autorizada,
+solo observacion, limites7s/10s intactos y no baseline aceptado. No calentamiento ni borrado de cache.
+Collector productor revisado9f71f4/f562b2/cccfee,25tests offlinePASS; manifest5156fa070ab2930404e3a5818c6903b923dadf46ecc7abea910db198837933df.
+Autorizada una captura GET acotada con OAuth en memoria/locks y generacion inmutable. Sin mutaciones
+ni invocaciones; producerOffVerified permanece false hasta revisar el cierre ejecutable publicado.
+
+Stage/cache terminal PASS c28bf0/root05f1f8, run1f30d0d0e0a24c7d9c4310b8c3414dc9:
+351exports/2196ms, entry1405ms/WIRE4ms/write4ms, cacheENABLED sin evidencia de hit.
+SupervisorExit0/TimedOutfalse/DescStoppedfalse/Emptytrue; fuente/donor sin cambios.
+No reproduce timeout ni demuestra causa; no baseline aceptado. Nuevo control sin instrumentacion
+preparado en notifier-context-normal-control, controllerc5579c44 y PS6eaf7914; root931fa1 revisado.
+SDK oracle corregido revisado416357/52437c; una ejecucion autorizada, sin build concurrente.
+Captura publicada PASS77932c/root05f1f8, run4f0dbbfe7bd099af8fc85bb23227039f:
+finalize00017-jaz Ready100, source1791655261723468/9367613B,
+SHAcdffc5dab3546908e3a23efa036437193d1c0c138d83c4004e0ae60b4a00460d.
+SieteGETs, hashes Function/Run iniciales=finales, locks liberados; no mutaciones/invocaciones.
+Receipt75b194fb201f188ade9efb85766392f38ab0f2c2dad87e06faf17b82a0b7b1f7;
+producerOffVerified=false: sigue pendiente inspeccion acotada offline de fuente/cierre ejecutable.
+
+Consumers SDK corregido PASS1c80df/rootceeeab: outer63f5f6983a4041ca90d4c6ad60133ad8,
+inner942f112f3e2c4879b4bff4be7d07e23f,4casos/20refs/324reads54writes39callbacks5queries17slots7HTTP.
+2certificados/2Telegram/2Storage/1secret simulados; credentials/Tasks/networkblocked/provider/production0.
+Cleanuptrue/Jobempty/Exit0/sourceQAdepsdonorintactos/puertos cerrados;
+completeSHAda2c3be8ae1b4b2272d435088d35a94b73088161d0f2dcd8522df0a598be861d.
+Pendiente relacion39fuentesefd77 contra164, no asumir mismo codigo ni gate final del candidato.

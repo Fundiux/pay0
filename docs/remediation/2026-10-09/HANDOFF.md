@@ -1546,3 +1546,52 @@ Session87274 finalizo PASS e936e3. Run2550c87883284c4fab2d4854e326ef02:364 salid
 baseline_remote autorizado a commit helper/test y preparar nuevo candidato desdea5dc; sinExecutebuild.
 Wrapper supervisorv2 revisado6c15bf, SHA4dc3bb942d1708cd50211e26d7aa3d9a860acd4bd57fec79343d9ffb1a375ae0,
 necesita vinculo explicito al proximo controlador; no ejecutar contra original fallido.
+
+Estado nuevo: root checkpoint81e85b3; helpercf41cb3 integrado como164d066 en
+.worktrees/notifier-bundle-context-20261015. NORMAL PASS86fa41 run ecc9f401b1d94287a5ca4b60c85c3d0a,
+completefff33bf8a018850cc1649ff6890ae0f067b807e1fb22273397c0fe7a162b8b1f, tree/entry identicosa5dc.
+Captura81d099639d4243bc8abcec208d55d638 FAIL CLI_TIMEOUT_10000/CHILD_STOP_FAILED (12af45),
+elapsed12233; outerpostflightPASS/Jobvacio/donorintacto. No retry ni BUNDLE; baseline_remote investiga.
+SOURCE e6f61e3cc745644850fd9f21cfae916c72774f10120844c14171106691a64da4.
+
+ZIP separado commit5bc3052,4paths,22+45tests y6packs locales PASS, no cloud. No integrar ahora al
+candidato congelado; releasehelper futuro puede fijar ese verificador externo por SHA.
+Infra wrapper51offlinePASS/rootreview23dcba; pins e33bf6b9cf6a52ccdf0160ee64837b4799d02ef209ac7b29db96263f3713d284.
+architecture_review prepara collector productor publicado en .firebase/notifier-producer-off-evidence-20261015,
+sin livecalls: finalizer conocido00017-jaz, no usar snapshot00016-vab como prueba vigente.
+
+SDK ConsumersRuntime en ejecucion root-owned session69468 (dec799), sin procesos build paralelos.
+Fixture63da7262f8b7c95c198f64f60a304927e546ca63c0b57d7c7e75bbf3afb1eb56;
+runner32f5067635f8733cc427c8adad71f4c8844e47881a1a2856bd32eb2db137c922;
+controller eb3826cfba9171c5ab8e256e186d60d6e312e259e18980dae282836e15d54758;
+PS915c6388df6d1d80f6d52886743fc6acbea89e3834b893b716bc3e1249d7bde4.
+No commit de sus3QA/doc hasta resolver resultado y conservar evidencia. Producto efd77 intacto.
+
+SDK session69468 terminalFAIL4c4a22. Root06ee4c: outerebc328667bb2497f9640da87d19865ac,
+inner91e44a516f8c47cbba9b9ba79ce33415;3casosPASS/REVOCATION ASSERTION;cleanuptrue,
+20refs323reads54writes39callbacks5queries17slots7HTTP;2Telegramfake/2Storagefake,0realprovider/cloud.
+JobEmptytrue/TimedOutfalse/DescStoppedfalse/sourceQaDepsDonorintactos/puertos cerrados.
+independent_review diagnostica readonly; no retry. Root revisa nuevo collector productor privado,
+manifest8848210951d0f076687b65a097cbfd3bcd0070fff83b8e5e84758e145b0b71a5,12tests offlinePASS,
+sin auth/livecall; aun requiere wrapperOAuth y prueba del cierre publicado.
+
+Actualizacion: oracle SDK revocacion identificado como incorrecto (b19e80/b66fd8); core escribe
+delivery NEEDS_REVIEW/AUTHORITY_DENIED. Agente corrige solo QA con freeze previo y Prepare;
+no repetir SDK antes de revisar nuevos pins. Diagnostico stage/cache revisado y una ejecucion
+autorizada en paralelo; no sustituye captura normal ni modifica limites. Collector con ownerOAuth
+ya revisado,25testsPASS, manifest5156fa070ab2930404e3a5818c6903b923dadf46ecc7abea910db198837933df;
+una captura GET autorizada, aun sin resultado. No inferir OFF de metadatos ni aplicar infraestructura.
+
+Resultados: stage/cache run1f30d0d0e0a24c7d9c4310b8c3414dc9 PASS351/2196ms,
+Jobvacio/donorintacto; diagnostico solamente. Control oficial sin instrumentacion preparado,
+root931fa1 aprobado, Execute pendiente de terminar SDK session13942.
+Collector run4f0dbbfe7bd099af8fc85bb23227039f PASS7GETs/0mutations, fuente finalizer00017-jaz
+gen1791655261723468 ZIP9367613B SHAcdffc5dab3546908e3a23efa036437193d1c0c138d83c4004e0ae60b4a00460d.
+Amboslocks liberados, fuente OFF aun no demostrada. Agente prepara inspector ZIP acotado separado
+para leer cierre publicado; no inventar inventory esperado desde ZIP como prueba de equivalencia.
+
+ConsumersSDK terminalPASS4casos/20refs/324reads54writes39callbacks,cleanuptrue/Jobempty,
+outer63f5f6983a4041ca90d4c6ad60133ad8,completeSHAda2c3be8ae1b4b2272d435088d35a94b73088161d0f2dcd8522df0a598be861d.
+Agente compara39fuentesefd77 contra164 antes de definir validacion candidato. Rootceeeab reviso
+recibos y aprobo inspector ZIP privadoc658e9ab,27testsPASS; solo lectura acotada sin ejecutar fuentes.
+Control oficial capture164 autorizado una vez tras SDK terminal; session64732 en curso.
