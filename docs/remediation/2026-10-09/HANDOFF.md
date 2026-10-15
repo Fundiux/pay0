@@ -1,5 +1,13 @@
 # Continuidad de ejecucion
 
+Ultimo checkpoint IQ2026-10-14: captura remota6GET b4d0e7 PASS, summary
+0a8e2a369b6329cb5ef957de60d409a9c0e4111e87217b61dfa937a0dd50fd3b.
+Configuracion/IAM/revision completos iguales, fuente GCS coincide con ZIP,
+Ready100%/buildscripts vacios. V1 AUTH_PROCESS1fbc23 preservado; v2 corrige
+quoting cmd y6testsPASS. No upload/PATCH; artefacto Git portable y launcher
+selectivo en preparacion. Notifier wiring fuente9paths266PASS/noEmitPASS,
+revision final en curso; los SDK f8969a8 no certifican el nuevo wiring.
+
 Estado vigente (2026-10-14): integration/notifier-inert-20261014 HEAD
 3e4a1bc4afa3b60b7eafb44a5f0db59cd1936eff, limpio y congelado para artefactos.
 Incluye notifier39commits, predeploy bb79 como23fb50d y Consumers e18c1aa

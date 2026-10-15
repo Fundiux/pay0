@@ -525,3 +525,25 @@ Consumers90613 iniciado; no commitQA hasta resultado. Ambos resultados anteriore
 sourcefbdf quedan historicos; no fullNORMAL/integracion ni activacion atribuidos.
 
 Consumers90613/65426dPASS6/12refs cleanup/ports/cloud0provider0; QA7paths listo para commit aislado. IQ repackreceiptSHA93de53adb32d0bd215f3ea21b63fe103f65187aad9bed58adf16098349723a6b; source-only deployment requiere preservar GOOGLE_NODE_RUN_SCRIPTS vacio y resolver label hashhistorico, pendiente review/no cloudmutation.
+
+### 2026-10-14: comparacion remota IQ y capability de cancelacion
+
+Launcher de metadatos v1 fallo AUTH_PROCESS (1fbc23), antes de captura.
+Reproduccion cmd sintetica398596 demostro defecto de quoting Node/Windows;
+v2 agrega solamente windowsVerbatimArguments:true al subprocess cmd.
+Root verifico delta exacto y6testsPASS b3251e; v1 y fallo se conservan.
+Launcher v2 SHA716993b9560324e4c588520837e25b6310ce05ef3e99248ce30362f4b58058a9.
+Execute b4d0e7 PASS: seis GET,14458bytes, cero escrituras o handler calls.
+Root523c9b verifico summary SHA0a8e2a369b6329cb5ef957de60d409a9c0e4111e87217b61dfa937a0dd50fd3b:
+Function/RunService/Revision/ambosIAM iguales completos al baseline;
+GCS generacion/size/MD5/CRC32C coinciden con ZIP original; Ready100% y
+GOOGLE_NODE_RUN_SCRIPTS vacio. Observacion no atomica, no CAS ni deploy.
+Preparacion de artefacto Git portable y launcher de publicacion sigue pendiente.
+
+Wiring notifier fuente: nueve archivos congelados,266offlinePASS f706f4 y
+Functions noEmitPASS c47ea8. Primer noEmit39cb1f fallo por narrowing de
+descriptores, corregido con typeof explicito sin casts/relecturas.
+Root356c6d/0a27bd/8853b5 reviso core, Consumers, transporte y fixtures;
+incluye fence recipientId actual y captura unica prepareEffect.
+No SDK nuevo: los cierres delivery/Consumers/cancellation/ScanTick requieren
+actualizacion revisada. Los resultados f8969a8 son historicos frente al WIP.
