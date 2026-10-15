@@ -500,3 +500,28 @@ original+patchedVM solo mocks, historicalzeroapply/ordinaryequivalence/ASTnegati
 Manifest6bbd10854607cba69e64f13f24e07ab139d5623701bcacc87bdf14f2db264e2b
 permanece evidencia PREPARED_ONLY; resultado tests separado, sin reescribirhistoria.
 Repacker minimo en preparacion; noZIPnuevo, indexload, secretos ni produccion.
+
+Hook12 rootreview672a15/14testsPASS; preload7root97a9fbPASS. Execute19832/
+9caed1PASS, runtime362763af0c834127ab1d846178519b82, receiptSHA
+21bc7c6f203dcbc826ed5dec4da0b8f89dfc8eea4733f8e3bea4434464c11fc4.
+Readiness2564msRESOLVED; reglas/documentos PASS, activity96assertions,
+download42+8denied/zeroexternal. Postflightcomplete/installed+donorunchanged/
+portsclosed/treeempty. Original1297FAIL preservado; causa historica no atribuida.
+Con gates13/14 independientes, todos controles cuentan con evidencia del candidato,
+pero fullFourteenSameInvocation=false; no deploy ni nueva build.
+IQ repacker root8c529d/5def7e y12synthetic82e240PASS; runner finalaabe5d/checkPASS,
+SHAce7fe23409600ddfc581b768506b594a2d32169c803775623c7dfcc280dc6d7e.
+Execute33404/ec51a5PASS:1084entries,1078 registros locales crudos identicos y
+centrales identicos salvo offsets;6cambios26633bytes,ZIP6054892bytes SHA
+1069019437327e8bf38c848721132a91f8721ae48c4ec75e772ad9e0bd32c643.
+OriginalZIP intacto, dotenv no inflado, index no ejecutado, no fullCRCclaim de
+retenidos. Sin deploy; ruta de build/despliegue minimo en revision readonly.
+Nuevo SDKcancel rootfullreviewd6638f/c1861d/bcf53d/c292ca, tresPrepare97496/
+94f7a1PASS. Execute51888 elevado iniciado, resultado pendiente; no otros SDK.
+SDKcancel51888/c6a843 PASS4/24refs; runtimebadf7214ca034f558bd7ff954eddcc7b,
+root68e38f:136reads58writes7callbacks4sendersmock/2ABORTEDinjected, cero bloqueos,
+cleanup/ports/cloud0provider0. Delivery45045/3c61b0PASS25/206refs con cierre nuevo.
+Consumers90613 iniciado; no commitQA hasta resultado. Ambos resultados anteriores
+sourcefbdf quedan historicos; no fullNORMAL/integracion ni activacion atribuidos.
+
+Consumers90613/65426dPASS6/12refs cleanup/ports/cloud0provider0; QA7paths listo para commit aislado. IQ repackreceiptSHA93de53adb32d0bd215f3ea21b63fe103f65187aad9bed58adf16098349723a6b; source-only deployment requiere preservar GOOGLE_NODE_RUN_SCRIPTS vacio y resolver label hashhistorico, pendiente review/no cloudmutation.

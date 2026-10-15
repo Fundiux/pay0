@@ -8,7 +8,7 @@ integrado22PASS9e621e. Cuatro SDK Prepare7ab8ab PASS tras restaurar bytes
 EOL originales con identidad Git y normalizacion comprobadas; no repinning.
 NORMAL47495/b2d404 PASS1010files/15016754bytes; fuentes/deps intactas, treeempty.
 Captura60138/56facb PASS348/4013ms, manifestSHA35f008540a77d0e177989210c96408036d1d09d3aa5c63de18dd186204c91a13.
-BUNDLE/compare78627PASS; cuatro SDK Execute integrados PASS; predeploy/pack pendientes.
+BUNDLE/compare78627PASS; cuatro SDK integradosPASS y gates predeploy/packPASS entre intentos; no full14SameInvocation.
 
 Consumers SDK fuente83084 PASS6/12refs, reads212/writes25, provider simulado2,
 cloud/proveedor real0, cleanup/puertos PASS. Fallos30260 y57599 preservados;
@@ -45,12 +45,19 @@ antes cualquier build/sourceSnapshot/deploy historico. Prepare74862/297e02PASS
 segun mensaje CLI. Hooks1,3-11PASS (10);12 static22PASS antesstartupfail.
 El CLI sustituye cualquier rechazo socket por TIMEOUT: no demuestra duracion real.
 Logs originales preservados en .firebase/notifier-hook12-diagnostic; JVM registra
-inicio pero no prueba readiness dentro del plazo. Diagnostico instrumentado pendiente.
+inicio pero no prueba readiness dentro del plazo. Retry instrumentado PASS descrito abajo.
 Gates13/14 separados: helper privado revisado,12tests c30e4b PASS y Prepare7632/
 d72567 PASS354967552bytes. Execute98439/2f64e4 PASS13+14 y postflight limpio.
 Discovery348/4564ms; paquete1370files exactos SHAaa1d3bc8, no upload real.
-Receipt6dc9158c, runtime1cd5093a85444e0fb1923f06f4cdc7bb. Hook12 sigue abierto.
-IQ overlay6entries rootreviewa920d5 y25tests2274/6e48f8PASS, sin repack/deploy.
+Receipt6dc9158c, runtime1cd5093a85444e0fb1923f06f4cdc7bb.
+Hook12 instrumentado19832/9caed1 PASS+postflight: readiness2564ms, suites reglas/
+descargas PASS; runtime362763af0c834127ab1d846178519b82, receipt21bc7c6f.
+Fallo anterior preservado/causa no atribuida; no full14SameInvocation.
+IQ overlay6entries rootreviewa920d5 y25tests2274/6e48f8PASS. Repack33404/
+ec51a5PASS1084entries,1078rawretain,ZIP1069019437327e8bf38c848721132a91f8721ae48c4ec75e772ad9e0bd32c643.
+Sin deploy; SDKcancel51888/c6a843PASS4/24refs, Delivery45045/3c61b0PASS25/206.
+Consumers90613/65426dPASS6/12refs; los tres cleanup/ports/cloud0provider0.
+QA7paths commit en preparacion; core cancellation siguiente, no activado.
 Postflight del intento1297: completefalse/donor+installedunchanged/portsclosed/free349536256.
 Runtime33f07651ee494db685727e5597e699d0 preservado; no retry. Reserva320MiB
 yfloor128MiB intactos. Candidato6 proof40336PASS, no sparseautorizado.
