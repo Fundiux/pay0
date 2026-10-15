@@ -1374,3 +1374,23 @@ baseline_remote investiga causa y limpieza de procesos; no repetir ni relajar l�
 Runtime de recuperación sigue en source separado: corrección App/getFirestore público pasa noEmit;
 revisión exige capturar relojes y método de credenciales una vez, más cleanup del query client ante fallo de construcción.
 Sin activación, exports ni mensajes reales. Publicación GitHub continúa pendiente de confirmación del destino tras rechazo automático.
+
+### 2026-10-14 — Runtime inerte revisado y commit de composición
+Source branch fix/dispersion-client-notifier-20261010: bf9d1e42850d1c570bc8985a5346757bb5dddf68,
+exactamente TS runtime + prueba offline + documento (root ae13a2 confirma tres paths).
+Root 2ded2a revisó código/pruebas completos; a59cc4 documento. Suite22/22 PASS c6aef4,
+noEmit64fd9e PASS. App/getFirestore públicos, captura única relojes/credential,
+router cerrado ENROLL/DELIVERY y cleanup del query client propio ante error de construcción.
+No exports, activación, integración, build, SDK ni cambios cloud acreditados por este commit.
+SDK composición preparado por separado:36fuentes fijadas, cuatrocasos/22refs, finalizer
+READY real y SEALED sintético explícito. Root62f8b0+ae13a2 revisiones parciales; todavía sin Execute.
+Se exige envoltura Job/lock y entorno saneado antes ejecución. El guard canónico limita sockets Node a loopback;
+no constituye aislamiento de red Java/native. No atribuir Job al lote seisSDK anterior sin recibo correspondiente.
+Diagnóstico discovery: el finally/stop sustituye error primario cuando falla close2s.
+Log histórico no permite recuperar la causa original. Evidencia de controlflow PS acredita
+Job EmptyVerified al llegar postflight; no demuestra DescendantsStopped=false.
+Corrección diagnóstica aislada en fix/notifier-discovery-diagnostics-20261015 desdea1b:
+cuatro paths QA/doc, conserva códigos primario/cleanup por separado sin alterar 7s/10s/2s.
+ConsumersRuntime siguiente corte de trespaths autorizado, OFF y sin exports/activación;
+source deberá quedar congelado durante SDK. Índice de recuperación ausente en repositorio (7909e5),
+estado remoto no inferido. No repetir deploy IQ ya verificado ni push GitHub rechazado.
