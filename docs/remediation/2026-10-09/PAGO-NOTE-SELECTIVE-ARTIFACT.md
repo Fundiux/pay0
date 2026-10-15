@@ -1,6 +1,6 @@
 # Artefacto selectivo de addPagoNota
 
-Estado: preparado, pendiente de validación del artefacto. No desplegado. Pertenece al pendiente 1 de la lista finita del cierre; no abre otro frente.
+Estado: integridad, instalación aislada y carga del artefacto verificadas; pendiente de preparar y ejecutar la actualización selectiva y su verificación remota. No desplegado. Pertenece al pendiente 1 de la lista finita del cierre; no abre otro frente.
 
 ## Código publicado recuperado
 
@@ -22,7 +22,9 @@ Preparación b15a57: ZIP candidato de 5.615.016 bytes, SHA-256 007789611f1f70aaa
 ## Condiciones pendientes antes de desplegar
 
 1. Validar el artefacto con el lockfile publicado y el modo de build real. Revisión local 471e85 de los metadatos capturados: GOOGLE_NODE_RUN_SCRIPTS está presente y vacío; preservar esa configuración explícitamente. El package publicado tiene script de build que referencia ../scripts/copy-canonical-assets.mjs. Los lockfiles publicado y candidato coinciden en versión e integridad de firebase-admin 13.10.0, firebase-functions 7.3.2 y @google-cloud/firestore 7.11.6; esto no acredita la instalación completa. Las pruebas del worktree no certifican este paquete híbrido.
-2. Verificar el manejador y su carga con el entorno de dependencias publicado. Esta validación responde a evidencia nueva; no requiere repetir suites ajenas ni las pruebas del worktree sin cambios.
+2. Verificación local completada en 8f91a5: npm ci --offline --ignore-scripts --no-audit --no-fund instaló 446 paquetes desde la caché usando el lockfile publicado (051d39, sesión30447, terminal f9f551). Sin scripts de instalación ni descargas. El index del artefacto cargó 341 exports en 3.817ms; addPagoNota rechazó una petición sin autenticación y otra con ID inválido. Se bloquearon las APIs de red y creación de procesos antes de cargar código; hubo cero intentos de IO. Esto no simula el contenedor de Cloud Build ni prueba una transacción nueva.
 3. Preparar actualización exclusiva de addPagoNota, preservando configuración activa, variables y secretos, y verificar la versión y el código resultantes. No desplegar el index completo ni hacer pruebas con efectos financieros reales.
 
 Cero escrituras en producción durante recuperación y preparación. La comparación inicial de TypeScript falló al imprimir un carácter BOM con la codificación de consola; la lectura corregida 81c756 usó UTF-8 y no repitió consultas remotas. No se afirma equivalencia del contenedor ni autorización IAM efectiva.
+
+La validación 8f91a5 también volvió a comparar los 1.086 archivos extraídos con el recibo del ZIP después de instalar dependencias, los diez módulos compilados con los pins de la prueba SDK11 aprobada y cinco archivos del SDK de Firestore (incluido transaction.js). Todos coinciden. No se repitió SDK11: se conserva como evidencia del código probado, sin presentarla como una ejecución del nuevo paquete. Recibo privado artifact-validation-receipt.json SHA-256 bce9b5d986dce7f6877646f0c140c0278336bc3aa9b6e952668429d5acebb8e9. La instalación local está fuera del ZIP candidato y no debe incorporarse al despliegue.
