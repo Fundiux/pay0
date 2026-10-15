@@ -1247,3 +1247,32 @@ por titularidad/confianza no verificada. Confirmacion de destino y aprobacion
 solicitadas al usuario; no workaround ni segundo intento. Trabajo local y
 preflight IQ independientes continuan. Esta restriccion no equivale a fallo
 Git ni a rechazo remoto de proteccion de rama.
+
+## 2026-10-14: operacion IQ aceptada; postflight parcial
+
+Comparacion de filtros limitada a lista FUNCTION.eventTrigger.eventFilters,
+con elementos completos/multiplicidad y resto de arrays estrictos. Rootd7afd1
+revisa delta y rootd26feb PASS8 regresiones mascheck; agente55PASS429cf6.
+Controller45c6d01d/runfe95363f/launchbbbbfa79, anteriores preservados.
+Continuacion fija before-patch-v2 mantiene mismo run/subida, bloquea evidencia
+previa de PATCH. PATCH2e946c/ad3aca HTTP200; operation registrado:
+projects/pay-0-system/locations/us-central1/operations/operation-1792030832256-65dd7b12ee508-86734620-d3f21c7c.
+
+Reconcile ec9050/6d1f43 observation d33078a2ff0a48a7b533dc6a856e606a:
+5polls, LRO done sinerror,6GET finales200, CONFIG_DRIFT antes de ZIPGET.
+Root96a374 verifica nueva revision applypaymentautomaticallyonreceipt-00002-lok,
+ACTIVE y100%trafico, fuente publicada gen1792030833580705. Function configPASS.
+Run muestra nuevas labels goog-drz-cloudfunctions-location/id y annotation
+cloudfunctions.googleapis.com/function-id; revision buildInfo.functionTarget
+cambia loginWithUsername por applyPaymentAutomaticallyOnReceipt, que coincide
+con entryPointGCF inalterado. Pendiente revision exacta de esos metadatos y
+SHA del ZIP publicado. No afirmar postflight completo, no repetir PATCH ni
+revertir al guard ausente; continuar exclusivamente lecturas.
+
+Notifier integrado separado a1a295e5637a8d4383a73e1d38f7d71d27cea323:
+12cherry-picks/40paths, rootaf0d8a/4f9ffa/888b15 confirma scope,55raw/blobs.
+Dos junctions directas donor0b, metadata intacta; EOL service.ts adicional
+probado sin cambios Git. Fuente final7174b413b6e10704fc0971eb01f5b8033d260f3f62a035b0fd03d76592b5b517.
+QA0bc8de7870d3e8d7d4474fafd18faff2e97e625b4919c187cf624a44ea7844d6.
+NORMAL nuevo helper874dce44/launcher0bbbb507; Prepare409590PASS y Execute47f9dd
+en curso. Offline44/policy/SDKPrepare en paralelo, sin actividad financiera.
