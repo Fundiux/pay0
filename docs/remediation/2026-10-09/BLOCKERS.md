@@ -191,3 +191,16 @@ Actualizacion: helper Rules ya supera focused4 y candidate96budget0, regresion51
 ZIP nuevo bounded conservado/verificado1394 SHA f949c06d...; ya no falta paquete local.
 APPLY sigue pendiente de revisar fixes de postflight/estado y renovar evidencia real;
 CREATE/OFF no ejecutado. Versiones de secretos/actAs/privacidad heredada siguen siendo gates.
+
+APPLY auto-review rechazo antes de proceso: interpreto ultima autorizacion como solo22lecturas
+y excluyoTerraform. Root no ejecuto/reintento/bypass; nueva preguntaasincrona especifica
+19creaciones (5SA/2roles/2colasPAUSED/10IAM) pendiente. Freshread22 yaPASS10:43:56Z,
+proof3d5e61.../metadata3c3493.../controller9b4bb1... rootreview4f8857. Estado ausente
+y lock libre tras lecturas; no apply ni auth de apply iniciados. Continuar frentes locales.
+
+2026-10-15: Rules budget candidate now passes96+518 assertions and is committed
+(aeab8bf, doc correction6cca517), but is not deployed. Historical Storage fixture9ad56
+is distinct from last recorded production5876; preserve fresh production Storage before
+any Firestore-only release. Ancestor access and24Storage gaps remain open. Terraform
+metadata proof10:43:56Z expired10:53:56Z while specific APPLY approval remains pending;
+renew authorized observations after approval, never alter evidence timestamps.

@@ -1700,3 +1700,27 @@ Verifierbounded5bc, dotenvABSENT, supervisorhashesprefinaliguales/Jobempty/sourc
 CREATE once5fakesPASSdab0a7 intentdurable/ACKlostnoreplay; postflightpuro en implementacion.
 APPLY rootc9514e/9f7540 requiere16reads con2Tasksempty, grantsextra5SA, stateIDbindings
 y offlineFrozenCheck antesLIVE; agente corrige, sin cloud/auth/apply.
+
+APPLY auto-review rechazo antes de proceso: interpreto ultima autorizacion como solo22lecturas
+y excluyoTerraform. Root no ejecuto/reintento/bypass; nueva preguntaasincrona especifica
+19creaciones (5SA/2roles/2colasPAUSED/10IAM) pendiente. Freshread22 yaPASS10:43:56Z,
+proof3d5e61.../metadata3c3493.../controller9b4bb1... rootreview4f8857. Estado ausente
+y lock libre tras lecturas; no apply ni auth de apply iniciados. Continuar frentes locales.
+
+### 2026-10-15 — Rules regression verified; notifier CREATE remains offline
+
+The isolated Rules correction is committed as aeab8bf154bfaedbb6d771c951dad498ac35f7d6,
+followed by documentation-only 6cca5176525362808a8f640a5aba5046bcea0b61 on
+fix/firestore-same-client-alias-20261015. Candidate LF eafd6075 passed focused4,
+native96 and historical518 assertions with zero evaluation-budget errors. Original
+baseline failures remain preserved. This does not close ancestor-delegation gaps,
+24 known delegated Storage gaps, or current-UI validation. Storage9ad56 is the local
+historical regression input; last recorded remote Storage5876 remains distinct and
+requires fresh preservation before selective Firestore publication. No Rules deployment.
+
+Root independently read the prerequisite collector/transport and CREATE coordinator;
+combined contract/coordinator/collector tests:40/40 PASS, tool5a0392. Those are synthetic
+checks only. Prerequisite live wrapper and postflight collector remain in preparation.
+No upload or Function CREATE has occurred. Terraform APPLY was rejected before process
+creation; specific approval remains pending. The22 read receipts observed10:43:56Z
+expired10:53:56Z and cannot authorize a later mutation without renewed observations.
