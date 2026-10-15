@@ -237,3 +237,29 @@ No se integra la rama financiera0b completa ni las reglas experimentales root.
 Snapshot fresco6GET b4d0e7 PASS: config/IAM/source/Ready100 sin mutaciones.
 Upload/PATCH y verificacion posterior siguen pendientes del launcher revisado.
 No push realizado; los dos commits anteriores de main no publicados se conservan.
+
+## 2026-10-14: IQ subido; PATCH retenido antes de envio
+
+Fix del diario revisado root185895: permitir underscore sin ampliar rutas,
+JOURNAL_KEY explicito en error enum y pines actualizados. Root81a93c PASS
+2 regresiones con diario real mas check; agente28PASSf04dab. Run anterior
+701e10f4... permanece intacto. Nuevo run a407f6af08a44de88ca1d1642d6d216b:
+preflight1c7d87 PASS6GET/14archivos; upload e4eb61 PASS. Root012714 verifica
+PUT200/metadata200,6054892bytes,gen1792030260249981,MD5m9dEYQm5A3bClDj8mimX0g==,
+CRC32CT/dm4A== y ZIP SHA1069019437327e8bf38c848721132a91f8721ae48c4ec75e772ad9e0bd32c643.
+Esto es subida de fuente temporal; aun NO despliegue de Function.
+
+Intento f2e7d0 termina FRESH_DRIFT antes de patch-intent. Seis GET previos
+completos200, sin PATCH ni operation. Rootdf5572/b87cc0 y agente3dc5ef prueban
+que cambia exclusivamente el orden de los mismos3 elementos completos de
+FUNCTION.eventTrigger.eventFilters. Recuento y multiplicidad identicos.
+Se prepara normalizacion exclusiva de esa lista (filtros AND), sin permitir
+cambios de campos ni otras listas; continuacion fija before-patch-v2 sobre
+mismo uploaded-source requiere ausencia de toda evidencia PATCH y conserva
+las observaciones anteriores. No reupload ni retry de efecto incierto.
+
+Capacidad: .NET425171 y Node statfs2f93e8 observan aproximadamente123.6GB
+libres, frente a331MB anteriores; no se atribuye causa. Sparse-six NO aplicado.
+Historico4569 intacto, prueba y helper732b81f9 conservados sin ejecucion.
+Nuevo candidato notifier desde3e4 con12cherry-picks en preparacion separada;
+no reutilizar certificacion del bundle anterior para el nuevo codigo.
