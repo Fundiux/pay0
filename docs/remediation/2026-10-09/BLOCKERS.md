@@ -179,3 +179,15 @@ customrole.deleted; tambien requiere prueba exacta de defaultdeletion_policy SA/
 Noapply; estado/ownerintactos/lockreleased/Jobempty. Solo analisisoffline del plan preservado.
 Rulesalias candidato96 corrige2budgetoriginales pero falla legacy-only:note por presupuesto;
 no publicable ni commit. Caracterizacion8reads pendiente lane de scoped13 activa.
+
+Actualizacion: scoped13PASS y lane liberado. Caracterizacion8reads confirma BUDGET
+legacy-only:note preexistente en ambos; nuevo helper nota revisado offline pendiente native.
+Plan19CREATE ahora revisable offline bajo validator7e5cff4, evidenciaoriginal vencida y
+sinapply. No repetir plan por fallo de representacion ya resuelto; aplicar solo savedplan
+exacto con nueva evidencia y controlador revisado. ZIPhook14 no persistio por contrato
+del test; preparar ZIPnuevo bounded con inventario independiente antes de release.
+
+Actualizacion: helper Rules ya supera focused4 y candidate96budget0, regresion518pendiente.
+ZIP nuevo bounded conservado/verificado1394 SHA f949c06d...; ya no falta paquete local.
+APPLY sigue pendiente de revisar fixes de postflight/estado y renovar evidencia real;
+CREATE/OFF no ejecutado. Versiones de secretos/actAs/privacidad heredada siguen siendo gates.

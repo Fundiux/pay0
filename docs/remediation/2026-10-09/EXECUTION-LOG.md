@@ -1154,3 +1154,30 @@ se prepara caracterizacion8readsbaseline/candidato sin repetir suites aun.
 Scoped13 repins98454c/PS6f4eb0/10fakes revisados f22dcb. PrimerPrepareEXISTING_LOCK
 con Rulesactivo, conservado; despues60c096PreparePASS y unicoExecute364b3c/session40955.
 Hooks1,3-14 intactos,fullFourteenSameInvocationfalse; hook14 usa JSZiphistorico, no5bc bounded.
+
+2026-10-15 — Scoped13 PASS y plan revisado sin aplicacion
+Rootbb7478/1e871a confirma complete d4af10d... y Jobempty; hooks1,3..14 PASS,
+CLI3512319ms. Bundle/install separado d6854e... sigue exacto. No deploymenthooks modificados.
+Hook14 ZIP1394 fue eliminado por su finally; SHA historico f949... no es un artefacto
+conservado. Se implementa pack privado nuevo dotenvABSENT/1394expected y bounded5bc externo,
+sin editar164. Root417fa4 revisa pack y pide pines supervisor anteriores/posteriores.
+Infra commit7e5cff4/67renderer+33wrapperPASS acepta solamente defaults omitidos documentados.
+Savedplan e2531722... y JSON2274bf5... sin cambios:19CREATE revisables offline,
+recibo44c816f7... explicita evidencia vencida/noapply. Root27557d verifica recibo/commit.
+APPLY separado se prepara con fresh22preflight, lock persistente tras apply-intent y
+postflight remoto acotado; no ejecucion cloud/auth/apply en esta fase.
+Rulesfocused444246... caracteriza mismo BUDGETlegacy-only:note en baseline y candidato;
+no regresion atribuible pero permanece gateFAIL. Nuevohelper solo notas recibe padreuna vez,
+4offlinePASS/1800diferenciales/reversehashpublicado exacto; root2b1487 acepta para nativefocused.
+Contrato CREATE puro root11PASS61aab0 limita3HTTP/OFF/max1/concurrency1/Node22/buildEMPTY,
+secretoDELIVERYversionnumerica futura, ausencia404+inventoryfresh y IAMinicialvacio.
+No demuestra privacidad heredada ni permisos efectivos, tampoco ejecuta CREATE.
+
+Resultados posteriores: focusedcandidate4/4budget0 y gate96candidate96/96budget0; baseline
+historico permaneceFAIL. Run95c550... sin source/donordrift/Jobempty/puertoscerrados.
+Pack4c3357... PASS/rootf94146 conserva ZIP11674089B SHA f949c06db3b27f9d93286db472201a700864df7ac3864e1901acec020e83ed1a,
+1394files exactos/26647027expanded, externo5bc acotado, no dotenv/cloud/upload.
+Contratocreate-once5testsPASSdab0a7 prueba intentantesefecto y no replayanteACKperdido.
+APPLY rootreview requiere dos lecturas adicionales Tasks vacias, grants inesperados de5SA
+en todaspoliciescapturadas, estado realprovider/IDs, checks offlinepines y supervisor estricto.
+Versionanterior preservada antes de cambios. No apply/auth/cloud.
