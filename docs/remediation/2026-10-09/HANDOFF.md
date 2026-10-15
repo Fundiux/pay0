@@ -1527,3 +1527,22 @@ BOOTSTRAP19/POST25 ymetadataexacta del secreto, commit separado autorizado. Read
 SDK QA commit efd77d7bc6fee5eed0112d0c22036075ccdc17be confirmado limpio, exact3paths.
 Infra fixsecret commit15987aa11488e3f529454a0a3de72bc71c67ad59 confirmado limpio, exact3paths.
 Ninguno cambia producto a5dc ni acredita integraci?n de QA/infra al candidato de release.
+
+Root 572aa0/5fcbbd compara 36 fuentes RecoverySDK contra a5dc: 11 diferencias de bytes solo por CRLF/LF,
+0 diferencias normalizadas y blobs Git identicos. Receipt privado recovery-sdk-source-relation.json
+SHA b470cb2212089c22435df47699a335aa74f9d1b29450e1cfcbb468963597a171 (4ee296).
+No equivale a ejecutar el gate sobre el candidato: la integracion QA debe fijar los hashes de bytes verificados y validar.
+
+Comparador aislado de contexto en ejecucion: session87274, Execute5ac6ca; root owns polling.
+Helper optimizado y test siguen sin commit en fix/bundle-context-name-filter-20261015.
+Comparador b92b8cbff0001b9cbc404209e7c1f3ed71c2a785df0212eac2e696cdc5c51b9e,
+launcher4566248857450e805ea042b3316128f2de8d5d667059f9c46442dc5245c1f892,
+corpus364/4289856B; deadline diagnostico1200s, cleanup10s; no aceptacion ni retry bundle.
+Infra reader revisado48d209/98238a; agente prepara transporte y lock offline, sin cloud.
+SDK ConsumersRuntime en implementacion aislada; no Execute autorizado aun.
+
+Session87274 finalizo PASS e936e3. Run2550c87883284c4fab2d4854e326ef02:364 salidas exactas,
+14 errores exactos, entradas intactas, Job vacio; completeSHA1798e937c9b7ffc6055d6f0785f8972a51ead6d1d949f666f82c55cad12a5113.
+baseline_remote autorizado a commit helper/test y preparar nuevo candidato desdea5dc; sinExecutebuild.
+Wrapper supervisorv2 revisado6c15bf, SHA4dc3bb942d1708cd50211e26d7aa3d9a860acd4bd57fec79343d9ffb1a375ae0,
+necesita vinculo explicito al proximo controlador; no ejecutar contra original fallido.

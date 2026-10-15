@@ -916,3 +916,24 @@ BOOTSTRAP19/POST25 ymetadataexacta del secreto, commit separado autorizado. Read
 SDK QA commit efd77d7bc6fee5eed0112d0c22036075ccdc17be confirmado limpio, exact3paths.
 Infra fixsecret commit15987aa11488e3f529454a0a3de72bc71c67ad59 confirmado limpio, exact3paths.
 Ninguno cambia producto a5dc ni acredita integraci?n de QA/infra al candidato de release.
+
+Root 572aa0/5fcbbd compara 36 fuentes RecoverySDK contra a5dc: 11 diferencias de bytes solo por CRLF/LF,
+0 diferencias normalizadas y blobs Git identicos. Receipt privado recovery-sdk-source-relation.json
+SHA b470cb2212089c22435df47699a335aa74f9d1b29450e1cfcbb468963597a171 (4ee296).
+No equivale a ejecutar el gate sobre el candidato: la integracion QA debe fijar los hashes de bytes verificados y validar.
+
+Root reviso el lector inerte de metadatos de infraestructura y sus 16 pruebas (48d209/98238a).
+La evidencia de productor OFF desplegado sigue pendiente; se prepara transporte acotado y ownership/lock,
+sin consultas cloud ni plan/apply. Root reviso la optimizacion aislada del transformador y seis checks nuevos
+(cce859/1974ed), con 29 checks PASS previos. Comparador de 364 modulos y 14 rechazos revisado
+(326be5/90b73d); Execute 5ac6ca/session87274 en curso, limite diagnostico 1200s, sin baseline aceptado.
+No cambia el limite de descubrimiento 7s/10s ni se repite el bundle fallido.
+
+Comparador PASS e936e3, root recibos6c15bf: run2550c87883284c4fab2d4854e326ef02,
+complete SHA1798e937c9b7ffc6055d6f0785f8972a51ead6d1d949f666f82c55cad12a5113.
+364 salidas exactas y 14 errores exactos; entradas sin cambios; Job vacio, sin timeout ni cloud.
+Tiempo acumulado old88489.7ms/new65981.7ms, CPU98788000/58886000us; orden alternado,
+caches/overhead no controlados. No prueba que el build completo pase ni causa unica del fallo anterior.
+Autorizado commit de los dos archivos revisados y nuevo candidato desde a5dc con esa optimizacion;
+NORMAL/captura/BUNDLE requieren nuevos pins y validacion. Wrapper v2 revisado6c15bf preserva
+resultado cerrado supervisor antes de postflight, conserva600s/10s; original y fallo intactos.
