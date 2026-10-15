@@ -54,3 +54,22 @@ IQ retorno canonico corregido d5bafca, integrado c21a2b7, unit30 y SDK4 casos PA
 Las siete fuentes recuperadas y verificadas parcialmente (74bf29/63ce50) permiten comparar código publicado. La matriz leída por root919dbb confirma que el formato de Tasks conserva generación, hash y solicitante, pero los productores antiguos escriben ACK/error sin el nuevo fence y las Tasks antiguas escriben resultados después de una comprobación inicial. Una invocación antigua en curso puede sobrescribir estado posterior. Actualizar primero el consumidor no demuestra seguridad de esa coexistencia. Falta probar la transición y establecer una ventana operativa con evidencia de retiro de productores y ejecuciones anteriores; no se ha pausado ni drenado la cola.
 
 También se detectó pérdida de la exclusión de importaciones históricas. Se restauró en884e4b2 (rama fuente), con19 pruebas, compilación NORMAL y política PASS. Debe integrarse en un nuevo candidato financiero; el artefacto congelado para los dos lectores permanece intacto. Este frente no impide terminar el launcher y verificar los lectores por separado.
+
+## 2026-10-14: gates locales recuperados y limites restantes
+
+El candidato notifier3e4a1bc tiene NORMAL/BUNDLE y cuatro SDK aprobados.
+Los controles predeploy restantes pasaron entre intentos: 13/14 en98439 y
+acceso documental12 en19832, ambos con postflight completo. El fallo inicial
+1297 permanece; el diagnostico demuestra que la CLI oculta cualquier rechazo
+socket tras TIMEOUT, pero no identifica su causa historica. No se amplia el
+plazo ni se acredita una ejecucion unica de los14 comandos.
+
+La fuente f8969a8 prueba cancelacion durable aislada con SDK4casos/24refs y
+regresiones DELIVERY25/206 yConsumers6/12. Su conexion al core sigue pendiente;
+no activar productor, endpoints o recuperacion por estos resultados aislados.
+
+IQ receipt dispone de un ZIP minimo local verificado: seis entradas cambiadas,
+1078 registros preservados crudos,25pruebas compiladas y12de empaquetado PASS.
+La publicacion requiere comparar configuracion actual, preservar el valor vacio
+GOOGLE_NODE_RUN_SCRIPTS e invalidar de forma explicita el hash Firebase obsoleto.
+Todavia no hay upload/PATCH ni prueba de coexistencia de invocaciones antiguas.
