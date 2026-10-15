@@ -1003,3 +1003,63 @@ inner942f112f3e2c4879b4bff4be7d07e23f,4casos/20refs/324reads54writes39callbacks5
 Cleanuptrue/Jobempty/Exit0/sourceQAdepsdonorintactos/puertos cerrados;
 completeSHAda2c3be8ae1b4b2272d435088d35a94b73088161d0f2dcd8522df0a598be861d.
 Pendiente relacion39fuentesefd77 contra164, no asumir mismo codigo ni gate final del candidato.
+
+Consumers QA commit9d1f19e5fb5a954c98dac580bfd169de108314e1,3archivos/509lineas y arbol limpio.
+ModuleAnalysisCache8246B preservado por movimiento exacto/hash638cc1e1, sin borrado.
+Relacion39fuentes:37identicas y2deltas reales; rootbec3e7 confirma separacion Tasks/Scheduler
+en notificationPlatformAuth y export platformHeaders sin cambio de cuerpo. Gateprivado164
+preparado sin tocar candidato; root2ea005 reviso cuatro deltas y donor exacto0b50559.
+
+Control oficial164 PASS32778b/rootbe39bb: run133faef3743a46debf638cbb4c3823bd,
+351exports/2462ms, manifest675a07567fcdf4bb3cd11451e4f1708bd4e0030a430b75d22374f9c1f40390c7,
+completee98791d7f184e29e4dfada70be3f08de91aa492fb24852ec49f4d0f5990314a4.
+Fuente/donorintactos/Jobempty, sin instrumentacion ni cache ops; limite7s/10s conservado.
+Bundle164 nuevo revisado bec510/d845ff, run2962276f79df435baa36de3ededd0943 FAIL723970:
+Exit1/TimedOutfalse/DescStoppedfalse/Emptytrue; postflightPASS sin instalado ni compare.
+364modulos raw/compiled completos; BUILD_FAILED/REDACTED126ms despues de ultimo compiled.
+No demuestra causa; investigar frontera esbuild sin repetir build completo.
+NORMAL1026files15140113B conservado, receipt674da6112e289caa27f971dc3bc19120d1f82c6e195d409b81d8af1b9a685937.
+
+Fuente publicada root3f4ff0/dcc3fb:26modulos/31aristas locales, callable finaliza y llama legacy;
+no ruta admisionV3 en ese cierre. No demuestra OFF global ni identidad de contenedor.
+ZIP1255files17942541B expandidos verificadosCRC/tamano; TSprincipal normalizado=a276e03.
+Se prepara refresh3GET de mismos hashes/gen/rev para proyectar modo build y frescura;
+root268f39 reviso10tests/wrapper y autoriza uno, sinZIP nuevo/mutaciones/invocacion.
+
+Gate privado sobre164 PASS96b4d3/rootf8fd8b: outerb805d1af23994a52a7affd3974a268f5,
+4casos/20refs/324reads54writes39callbacks5queries17slots7HTTP; cleanuptrue/Jobempty,
+fuenteQAdepsdonorintactos y puertos cerrados,0providersreales. 75tests auth/RecoveryHTTP601d6e PASS.
+CompleteSHA3bff465a8e7b942fa5c09e4677512877c7ae75d02d171c94ff488adfe447172d;
+raw39inventory8615b4025827e9998fcee87e56175e51b4b7d1de0c7cb201b4d1e0fc0f6c26d7.
+No ADC/IAM/fullE2E inferidos; candidato sin cambios, tool separado de su snapshot.
+
+Refresh publicado d5a84c/root6b3c09 PASS3GET/0ZIP/mutations; mismos3hashes/gen/rev,
+buildGOOGLE_NODE_RUN_SCRIPTS EMPTY, entryPoint y nodejs22 exactos. observedAt08:58:31.221Z
+separado de sourceCapturedAt08:44:51.401Z. Proof5c246dd0ed8f11b10886e4dabc28f60afec1d0c55d53ca9409d03986c19dd0db
+significa solo ausencia ruta productorV3; legacy activo, sin equivalencia binaria contenedor.
+Root detecto wrapper terminal=true ante throw sincrono spawn: corregido/preservado previo,
+52tests PASS16add4 y delta0253a0 aprobado. Manifest52cc7b460676ca08099d3ba2b1f3d5cf67f18c77185db4b483534fb7b4fd721b.
+Owner local inicializado sin Terraform/cloud, SHAd8efdbbef49bbc130771f940e6c99a5c91e03d2882eeb856b58043e518970fae.
+Una lectura bootstrap21routes autorizada con frescura estricta; no plan/apply ni cambio IAM.
+Diagnostico esbuild write:false root07dc42 revisado, una ejecucion autorizada sin artefacto aceptado.
+
+Esbuild diagnostico5e5b2e/root11512e: runed75a3310a024598918bcd3150a29628,
+OBSERVED_FAILURE ACCESS_DENIED/130ms/errorCount0, no outputs aceptados. SupervisorExit0,
+TimedOutfalse/DescStoppedfalse/Emptytrue, postflightfuente/donor/inputsintactos.
+Se investiga origen de denegacion, sin cambiar permisos ni repetir build completo.
+Bootstrap841210 STOPPED BOOTSTRAP_HTTP/lockRetainedfalse/cleanupnull/cloudMutations0;
+failure capture-01e08ec6429187c9e580499ce00fdf65.json conservado. Ruta/status historicos
+no recuperables porque reader no adjuntaba trail. Nuevo trailcerrado+WeakMap preserva error
+y hashes/status/bytes sin bodies/URLs/policy;56testsPASSab4cb4/root26c035 aprobado.
+Manifest5714b76951220f3031a29045ec5595e32f86f3012fffa565d356ec5130b2624e.
+Nueva secuencia autorizada refresh3GET por expiracion y un bootstrap con diagnostico; sinmutaciones.
+
+Secuencia a39f76: refresh3f4c0afb6d53d1ff5e52fcaa85d13bd3 PASS, observed09:13:18.752Z,
+proof19eb4cf73933a28209319297dacd47c2346d0a571e3a172264edebdca3c3cb28.
+Bootstrap falla AGENT_0 HTTP403 tras PROJECT/7APIs200 y5SAs/2colas/2roles404validados;
+locks liberados/0mutaciones, AGENT_1/IAM/secret sin leer. No403=ausencia.
+Root consulto documentacion oficial IAM: https://docs.cloud.google.com/iam/docs/service-account-types
+indica que serviceagents no pertenecen al proyecto cliente ni se acceden directamente.
+Se corrige ese prerrequisito invalido hacia19lecturas y bindings canonicos incondicionales
+de ambos serviceAgent en politica del proyecto; sin grants automaticos ni claim saludoperativa.
+Preparacion offline autorizada; nuevo Execute pendiente de revision.

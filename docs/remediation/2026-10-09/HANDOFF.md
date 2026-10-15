@@ -1595,3 +1595,31 @@ outer63f5f6983a4041ca90d4c6ad60133ad8,completeSHAda2c3be8ae1b4b2272d435088d35a94
 Agente compara39fuentesefd77 contra164 antes de definir validacion candidato. Rootceeeab reviso
 recibos y aprobo inspector ZIP privadoc658e9ab,27testsPASS; solo lectura acotada sin ejecutar fuentes.
 Control oficial capture164 autorizado una vez tras SDK terminal; session64732 en curso.
+
+Control164 terminalPASS32778b351/2462ms, run133faef3743a46debf638cbb4c3823bd,
+manifest675a07567fcdf4bb3cd11451e4f1708bd4e0030a430b75d22374f9c1f40390c7.
+Bundle164 run2962276f79df435baa36de3ededd0943 FAIL723970/Exit1/no timeout/Jobempty,
+source+donorintactos/NORMALpreservado/installednull. Completa364transformados y falla
+antes de artefacto conBUILD_FAILED/REDACTED. Agente diagnostica fronteraesbuild; no retry.
+SDKcommit9d1f19e3QA limpio; gateprivado164 root2ea005 revisado y autorizado una vez tras
+Prepare/offlinePlatformAuth/RecoveryHTTP. Ningun cambio al candidato ni funciones/lib.
+Inspector publicado root3f4ff0 confirma recorrido legacy sin V3; refresh3GET root268f39
+autorizado para probar modo build (EMPTY requerido) y frescura sin reescribir timestamphistorico.
+
+SDK164 terminalPASS96b4d3/rootf8fd8b4casos/20refs/cleanuptrue/Jobempty, complete3bff465a...
+y75tests auth/RecoveryHTTPPASS. No candidatewrites. Agente revisa14predeploy pendientes readonly.
+Refresh3GETPASS d5a84c, buildEMPTY/mismos3hashes; proof5c246dd... vence09:08:31.221Z.
+Root0253a0 aprobo fixwrapper spawnincierto y ownerlocald8efdbbe...; una captura bootstrap21routes
+autorizada con strictfreshness, sinTerraform/IAMmutations. Diagnostico esbuild write:false aprobado
+root07dc42, resultados pendientes; no repetir build completo.
+
+Esbuild diagnosticruned75a3310a024598918bcd3150a29628 fallo observado ACCESS_DENIED130ms
+sin outputs; root11512e,Jobempty/postflightintacto. Agente investiga denegacion/nativelaunch.
+Bootstrap841210 fallo HTTPsinfasestatus historicos, lockreleased/0mutations. Reader/wrapper
+trailcerrado56tests aprobado26c035, nuevo manifest5714b769...; agente autorizado una secuencia
+refresh3GET exactsame y un bootstrap diagnosticado, frescura vigente y sinplanapply.
+
+Bootstrap diagnosticado a39f76 falla AGENT_0 HTTP403 (otros17reads validan project/APIs y
+ausencia5SAs/2colas/2roles), no IAM/secretread. Rootweb oficial confirma directdescribe inaplicable
+a Google-managed serviceagents. Agente prepara19reads con IAMbindings exactos incondicionales,
+sin inferir403ausencia ni runtimehealth. Latestproof19eb4cf... observed09:13:18.752Z, expires09:23:18.752Z.

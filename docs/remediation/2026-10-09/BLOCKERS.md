@@ -102,3 +102,39 @@ Captura/bundle pausados especificamente hasta correccion de estos gates;
 NORMALa1a conservado como evidencia del candidato probado, no de futuroHEAD.
 
 IQ receipt: postflight413751 PASS descrito en RELEASE.md; ese despliegue ya no depende del launcher. Permanecen los riesgos IQ globales y publicacion Git pendiente de confirmacion del destino. Notifier QA40051ff integrado657cde7; rerun44/NORMALnuevo pendientes, fallos previos conservados.
+
+## 2026-10-15: estado vigente del candidato notifier
+
+Los gates posteriores reemplazan las dependencias locales anteriores: foundation32f6833
+paso44suites/1663tests y seisSDK/51casos. Candidato164d066 integra tres endpoints privados
+OFF y optimizacioncf41cb3. NORMAL1026files PASS; control oficial351exports/2462ms PASS
+32778b conserva el limite7s/10s y el fallo CLI_TIMEOUT anterior. Bundle164 sigue en validacion;
+no inferir resultado por completar la transformacion de archivos.
+
+SDK ConsumersRuntime fuenteefd77 paso4casos/20refs tras corregir un oracle de revocacion;
+primer fallo conservado. QA/documentacion commit9d1f19e. Dos archivos de su cierre difieren
+realmente de164 (verificador OIDC compartido para Recovery y export de platformHeaders):
+el gate privado sobre fuentes exactas164 paso4casos/20refs96b4d3 y75tests auth/RecoveryHTTP.
+No hace falta modificar el artefacto congelado para ejecutar ese gate.
+
+Infra15987aa y wrapper metadata tienen pruebas offline, pero aun no plan/apply ni recursos.
+Fuente publicada del finalizador00017-jaz capturada por generacion1791655261723468:
+su recorrido local sigue siendo legacy y no tiene admision V3. No equivale a notificaciones
+globalmente apagadas. La inspeccion es estatica; refreshd5a84c confirmo mismos3hashes y
+GOOGLE_NODE_RUN_SCRIPTS EMPTY. Evidencia V3 revisada con frescura acotada para bootstrap.
+El ZIP contiene package build que referencia un script fuera del archivo; no suponer que se
+ejecuto ni que el contenedor coincide byte por byte. No se invocaron handlers ni proveedores.
+
+El verificador ZIP incremental5bc3052 esta probado aisladamente (22+45tests y6packslocales),
+sin integrar en164. Puede fijarse como herramienta externa para verificar el paquete de release.
+Siguen pendientes el gate completo aplicable, fuente exacta empaquetada, infraestructura/IAM,
+indice listo y despliegue selectivo OFF. Productor/consumidores no se activan por estos avances.
+
+Resultado bundle164: FAIL723970 sin timeout, Exit1/Jobempty y postflightPASS. Los364archivos
+transformados terminaron antes del fallo BUILD_FAILED/REDACTED, sin artefacto instalado.
+NORMAL preservado, sin retry; se investiga la invocacion esbuild con intermedios existentes.
+Diagnostico aislado write:false (root11512e) reproduce ACCESS_DENIED en130ms sin outputs,
+Jobempty y entradas intactas. Falta localizar la denegacion; no cambiar ACL ni controles a ciegas.
+Bootstrap metadata841210 fallo BOOTSTRAP_HTTP, lockliberado/sin mutaciones. El lector anterior
+perdio fase/status al propagar el error; diagnostico cerrado agregado y probado56tests antes
+de un nuevo intento acotado. No hay plan/apply ni nueva infraestructura remota.
