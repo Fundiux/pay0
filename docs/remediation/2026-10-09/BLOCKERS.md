@@ -138,3 +138,14 @@ Jobempty y entradas intactas. Falta localizar la denegacion; no cambiar ACL ni c
 Bootstrap metadata841210 fallo BOOTSTRAP_HTTP, lockliberado/sin mutaciones. El lector anterior
 perdio fase/status al propagar el error; diagnostico cerrado agregado y probado56tests antes
 de un nuevo intento acotado. No hay plan/apply ni nueva infraestructura remota.
+
+Actualizacion posterior: bootstrap corregido a19lecturas paso773ad5; el403 correspondia
+al describe directo inaplicable a serviceagents. Sus bindings IAM se verificaron sin grants.
+Render local19recursos PASS; evidencia historica ya requiere refresco antes de plan.
+Infra d4cecaf restringe max_burst_size a queue.rate_limits,55testsPASS/revisionroot9a7609.
+PLAN_ONLY aun offline: revisar persistencia de incertidumbre OAuth y campos after_unknown
+no configurados antes de autenticar o ejecutar Terraform.
+Transform esbuild sinteticoPASS y build observado e6437588e1e4435cbe4c55efee1a8754
+confirma servicio nativo iniciado/cerrado0, pero ACCESS_DENIED153ms persiste.
+La operacion denegada sigue sin identificar. errorCount0 del proyector antiguo no prueba
+lista vacia: esbuild expone errors por getter que ese proyector no lee. Sin cambioACL/retryglobal.

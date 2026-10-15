@@ -1063,3 +1063,35 @@ indica que serviceagents no pertenecen al proyecto cliente ni se acceden directa
 Se corrige ese prerrequisito invalido hacia19lecturas y bindings canonicos incondicionales
 de ambos serviceAgent en politica del proyecto; sin grants automaticos ni claim saludoperativa.
 Preparacion offline autorizada; nuevo Execute pendiente de revision.
+
+Contrato corregido19reads rootffbf86,62offlinePASS895b9e. Captura773ad5/root48d4ed PASS:
+receipt11e0b25c1d980cb77434093e68850722c30fff7d1c9a7f89069ea8a91e79c8c8,
+capture-e85520e760b38685cf7b0eee8af2102e.json en estado local;09:18:02.160Z.
+5SAs/2colas/2rolesABSENT,7APIsenabled,agentRoles[true,true],secretmetadataexacta;
+19reads422880bytes/0mutations/lockreleased/stateTerraformausente. Solo politica IAM probada,
+operationalIdentityHealthUnproven/workerActivationReadyfalse; no ampliar alcance V3absence.
+Renderlocal d652de09:21:09.758Z produce19resources/allprevent_destroy/2colasPAUSED,
+folder .firebase/notifier-infra-render-20261015/a40f1188d59c794dfd03d63ac40b3516;
+configSHA068324abc6b32f7b180587b0df233d0a59321a2162b4dc841814b08332a1d9ff,
+inputd0744bb17b78aced29a5127b3535206240a16b096b4cb246183d201b52cbf7db.
+Provider7.46.1/lockc54ab941101d2950122f5c899613c535b1418334182d16783c7951280112a341.
+SinTerraform/network; wrapper PLAN_ONLY en preparacion offline con owner/estado persistente.
+
+Native esbuild --version probe8a7680/root48d4ed PASS167ms/version0.28.2/stderr0,
+rune7d65821c3f84ee7ab7f8f9fc21206e0/Jobempty/postflightintacto. No demuestra servicioIPC.
+Transform sintetico sin archivos preparado4testsPASS; root9133f0 aprueba una ejecucion con
+observador spawn pasivo/stdiosin cambios/cierre observado, aun sinresultado.
+Scoped13predeploy privado164 preparado10testsPASS, root552e25 revisado; evidencia build
+PENDING rechazaPrepare/Execute. No transferir PASS348 ni afirmar14hooks misma invocacion.
+
+Transform nativo sintetico run dc0edfe00e78487eadba42c360e6be40 PASS165ms, Jobempty.
+Build real observado write:false run e6437588e1e4435cbe4c55efee1a8754 conserva opciones:
+ACCESS_DENIED153ms, servicio inicia108ms y exit/close133ms code0. Rootf09009 verifica
+observation35c6ae1cc21e0b2c824e928d0070f97d8f9b38c272f7efb905e92bf216dede2f;
+entradas/donor intactos, sin artefacto aceptado. La denegacion no es fallo de spawn en este run.
+Revision main.js confirma errors getter; errorCount0 previo significa no leido, no lista vacia.
+Infra commitd4cecaf restringe excepcion max_burst_size a queue.rate_limits,55testsPASS;
+root9a7609 revisa diff completo. Config congelada068324 permanece evidencia historica.
+PLAN_ONLY privado revisado root751911 antes de ejecutar: corregir marca OAuth durable
+para interrupcion sin catch, pins de launcher antes de spawn y after_unknown de seguridad.
+Sin auth/Terraform ni cambios remotos; evidencia caducada no habilita plan.
