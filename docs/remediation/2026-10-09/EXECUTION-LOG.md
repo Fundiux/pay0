@@ -722,3 +722,44 @@ con nuevoHEAD/sourceSHA antescaptura/bundle. Un selector exacto notifier no
 actualizaria esos4endpoints financieros; un redeploy amplio o posterior si
 podria quitar sus guardas. El plan de release debe excluirlos explicitamente.
 No mezclar rama financiera completa ni contar bundle3e4/a1a como finalnuevo.
+
+## 2026-10-14: seis SDK y preservacion IQ integrados
+
+SeisSDK del HEAD657 cerrados PASS47c6c3; root902592 revisa resumen:
+lifecycle2/18,Delivery25/206,Consumers6/12,cancel4/24,Scan6/11,Admission8/48.
+Total51casos/319refs; todos cleanup/puertos/CLI0/cloud0/provider0,stderr0.
+SummarySHA d4590be1a68c06e569491b105efbd04dae8f97afdd31e028757c3084ed13349b,
+source/QA/donor before==after. ABORTED inyectado no acredita contencion natural.
+
+Root bbc533 integra exclusivamente884e4b2 despues de liberar el freeze SDK:
+HEAD a1b9b46c7e8f1207460ac7578a1a467de3798d4d en integration/notifier-effect-lifecycle-20261014.
+Root c90c63 verifica4paths/blobs exactos; e1b889 PASS19guardas+policy ystatuslimpio.
+Fuentes SDK y susfixtures siguen identicos57rawrecords, manifests/locks/index/donor
+preservados. Fuente nueva7ce9a88e432abea9355d690c991a676fe2d1c98598798eb9869f46aead21622f,
+QA116382144dfee70ecb9c979d5c07044ee96f7c0c248a3e5dde68e2ed6759ce69.
+Proof de preparacion6458c48254f205adfc033ba04c9b16aaa2d0477d7b743fe3164dace3525a84e5.
+NORMAL guardhelper42b568aa,launcher0bbbb507; rootdiff2b3bfe soloHEAD/SOURCE,
+Preparec39908 PASS. Execute0e928c/session48856 en curso, runtimec89ef86f9e5742b8868ad22eec200b1c.
+No capturar/reutilizar recibos a1a/657 como correspondientes a a1b9b46.
+
+Frente posterior separado: arquitectura implementa notificationRecoveryRuntime
+inerte en sourcebranch40051ff (TS+testoffline+doc); independent prepara SDK propio
+4casos/22refs/480reads160writes12queries60slots. Trespaths por agente, commits
+acotados/secuenciados. Sin exports/scheduler/producer habilitados ni nube.
+CaseDELIVERY usa SEALED sintetico explicito; no afirmar E2E Consumer/enrollment.
+Mapeo de constructor productivo a Firestore demo se declara; no pruebaADC.
+Current integrationa1b permanece congelada durante NORMAL; nueva fuente no integrada.
+
+### 2026-10-14 — NORMAL a1b PASS; captura pendiente por fallo de discovery
+NORMAL de a1b9b46 terminó PASS (295b44), runtime c89ef86f9e5742b8868ad22eec200b1c:
+1018 archivos, 15100274 bytes; complete SHA256 38776a7f0c302a579a8739fc8dad6aaa097ea7f6c18c0c13640743626b3484cd.
+Root 4c9d48 verificó recibo; árbol NORMAL ff98f8b48d6273aa962232a31f3c1c8c42619cf222184f96708171ac15ea7232.
+Captura nueva revisada íntegramente 84b533, helper e07dbef7f78d49a04da4a6a431ae2b9aed8fdb280d4ffe645d56bf17f8dac8e3;
+launcher d7bd7219caf3a1fbdf4e536807086c36426ace677477cf5ab6d1ed72e8a393d3.
+Execute b97834/session38780 terminó FAIL 3a95d2; runtime b981477b315e43e295b076484ba3e88c conservado.
+Discovery reportó CHILD_STOP_FAILED elapsed12172/limit7000/CLI10000 (465e88).
+Postflight PASS, complete=false, donor/source sin cambios. No manifest aceptado, BUNDLE aún no ejecutado.
+baseline_remote investiga causa y limpieza de procesos; no repetir ni relajar límites sin nueva evidencia.
+Runtime de recuperación sigue en source separado: corrección App/getFirestore público pasa noEmit;
+revisión exige capturar relojes y método de credenciales una vez, más cleanup del query client ante fallo de construcción.
+Sin activación, exports ni mensajes reales. Publicación GitHub continúa pendiente de confirmación del destino tras rechazo automático.
