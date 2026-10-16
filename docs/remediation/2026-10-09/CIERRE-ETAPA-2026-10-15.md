@@ -2,6 +2,8 @@
 
 Etapa cerrada por instrucción del usuario. La remediación integral no se declara terminada. Este documento fija el alcance pendiente y prevalece sobre notas históricas de trabajo en curso.
 
+Instrucción posterior de cierre: la publicación de notas terminó en Hosting d7d8084792e16fb6, main 4b6fc71, con verificación funcional parcial. NOTAS-QA-01 (refresco continuo incorrecto) y DISPERSIONES-QA-01 (registros no visibles, sin presumir borrado) permanecen abiertas y diferidas. Se cerró QA y se detiene todo trabajo adicional, incluidos los puntos pendientes inferiores. Ver [cierre de esta publicación](CIERRE-PUBLICACION-NOTAS-2026-10-16.md), que prevalece sobre la lista histórica siguiente. No se declara UI plenamente validada ni remediación integral terminada.
+
 ## Terminado
 
 - Lectores de notas y autorización previa a leer padres: commit 5a9fa95, 165 pruebas focalizadas aprobadas (1 omisión histórica), 58 casos SDK aprobados, política y build Functions aprobados; descubrimiento de 352 endpoints aprobado. Integrados en main ee2a7d0 y posteriormente desplegados con autorización específica. Los tres están Ready/100%, ZIP exacto verificado y rechazo HTTP401 sin autenticación. Falta UI autenticada; detalle en NOTES-READERS-SELECTIVE-RELEASE.md.

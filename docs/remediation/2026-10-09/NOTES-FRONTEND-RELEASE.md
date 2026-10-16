@@ -1,5 +1,7 @@
 # Publicación del frontend de notas
 
+Estado final: publicada la versión d7d8084792e16fb6 desde main 4b6fc71. Verificación funcional parcial, con refresco continuo incorrecto y registros no visibles en Dispersiones como incidencias abiertas. Ver [cierre de publicación](CIERRE-PUBLICACION-NOTAS-2026-10-16.md). Por instrucción del usuario se detiene el trabajo adicional; el cierre prevalece sobre los pendientes y estados históricos de este documento.
+
 Este lote pertenece al punto 2 del cierre finito. No modifica Rules, notificador ni funciones de negocio adicionales. Conserva configuración e IAM del SSR y no ejecuta operaciones financieras ni envíos de prueba.
 
 ## Código y build
