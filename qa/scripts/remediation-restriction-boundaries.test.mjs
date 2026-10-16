@@ -16,7 +16,7 @@ const baseline=Object.fromEntries(['firestore','storage'].map(name=>[name,fs.rea
 const rules=mode==='candidate'?require('./remediation-restriction-rules-candidate.cjs').candidateRules(baseline):mode==='baseline'?baseline:{firestore:fs.readFileSync('firestore.rules','utf8'),storage:fs.readFileSync('storage.rules','utf8')};
 if(mode==='candidate')rules.firestore=replaceRulesPolicyBlock(rules.firestore,JSON.parse(fs.readFileSync('config/authorization-policy.json','utf8')));
 const env=await initializeTestEnvironment({projectId,firestore:{rules:rules.firestore},storage:{rules:rules.storage}});
-const rootId='r1';let checks=0;let knownDelegatedGaps=0;let currentCase='setup';const failures=[];
+const rootId='r1';let checks=0;let knownDelegatedGaps=0;let blockedDelegatedReads=0;let currentCase='setup';const failures=[];
 const families=[['solicitudes','solicitudes'],['pagos','pagos'],['clientDispersions','dispersiones']];
 const objectPath=kind=>`roots/${rootId}/${kind}/op/docs/PDF/file.pdf`;
 const check=async(p,allowed)=>{checks++;try{await(allowed?assertSucceeds(p):assertFails(p));}catch(error){failures.push({case:currentCase,check:checks,expectedAllowed:allowed,code:error.code||'ASSERTION_FAILED',expressionLimit:String(error.message||'').includes('maximum of 1000')});}};
@@ -47,10 +47,12 @@ try {
    const context=env.authenticatedContext(uid);
    for(const [collection,kind] of families){
     await check(getDoc(doc(context.firestore(),collection,'op')),candidate?allowed:true);
-    // Explicit pending boundary: delegated direct Storage still lacks user check.
-    const storageAllowed=candidate&&uid!=='delegate'?allowed:true;
+    // Current rules route delegated downloads through the authorized callable.
+    // Historical baseline/candidate fixtures preserve their former gap as controls.
+    const storageAllowed=mode==='actual'&&uid==='delegate'?false:candidate&&uid!=='delegate'?allowed:true;
     await check(getBytes(ref(context.storage(),objectPath(kind))),storageAllowed);
-    if(candidate&&uid==='delegate'&&!allowed)knownDelegatedGaps++;
+    if(mode==='actual'&&uid==='delegate')blockedDelegatedReads++;
+    if(candidate&&mode!=='actual'&&uid==='delegate'&&!allowed)knownDelegatedGaps++;
    }
    // Recovery bootstrap stays self-only and read-only.
    await check(getDoc(doc(context.firestore(),'users',uid)),true);
@@ -85,6 +87,6 @@ try {
  currentCase='inactive own profile';
  await seed('users/owner',{rootId,role:'admin',active:false});
  await check(getDoc(doc(env.authenticatedContext('owner').firestore(),'users','owner')),false);
- console.log(JSON.stringify({mode:mode==='candidate'?'ISOLATED_CANDIDATE':mode==='actual'?'ACTUAL_LOCAL_ENFORCEMENT':'BASELINE_EXPECTED_BYPASS',checks,knownDelegatedGaps,failures,deployableRulesChanged:false,securityClosure:false}));
+ console.log(JSON.stringify({mode:mode==='candidate'?'ISOLATED_CANDIDATE':mode==='actual'?'ACTUAL_LOCAL_ENFORCEMENT':'BASELINE_EXPECTED_BYPASS',checks,knownDelegatedGaps,blockedDelegatedReads,failures,deployableRulesChanged:false,securityClosure:false}));
  if(failures.length)throw Error(`${failures.length} candidate boundary assertions failed; no rules application permitted`);
 } finally {await env.cleanup();}

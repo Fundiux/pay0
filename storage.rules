@@ -146,9 +146,9 @@ service firebase.storage {
       );
     }
 
-    // Cada evaluacion de Storage puede consultar como maximo dos documentos
-    // de Firestore. El documento de la operacion cuenta como uno y el acceso
-    // delegado como el segundo; por eso aqui no se vuelve a leer users/{uid}.
+    // Storage admite dos consultas: operacion y perfil actual del actor.
+    // Las descargas delegadas usan getAuthorizedDocumentDownloadUrl, que valida
+    // tambien la delegacion y sus otorgantes antes de emitir una URL efimera.
     function canAccessSolicitudDocument(rootId, data) {
       return signedIn()
         && ("rootId" in data)
@@ -156,7 +156,7 @@ service firebase.storage {
         && (
           (request.auth.uid == rootId || ownsDocument(data))
             ? currentUserAllowed(rootId)
-            : solicitudAccessFromData(data)
+            : false
         );
     }
 
@@ -167,7 +167,7 @@ service firebase.storage {
         && (
           (request.auth.uid == rootId || ownsDocument(data))
             ? currentUserAllowed(rootId)
-            : pagoAccessFromData(data)
+            : false
         );
     }
 
@@ -201,7 +201,7 @@ service firebase.storage {
           : (
           (request.auth.uid == rootId || ownsDocument(data))
             ? currentUserAllowed(rootId)
-            : dispersionAccessFromData(data)
+            : false
           )
         );
     }
