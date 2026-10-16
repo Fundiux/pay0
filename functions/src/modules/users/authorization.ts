@@ -1,6 +1,7 @@
-﻿import { getDefaultModules } from "./defaultModules";
+import { getDefaultModules } from "./defaultModules";
 
 import { evaluateTrustedRestriction } from "./restrictions";
+
 
 export type CanonicalUserRole = "superadmin" | "admin" | "operador";
 export type CanonicalModuleMap = Record<string, Record<string, boolean>>;

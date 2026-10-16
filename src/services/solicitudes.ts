@@ -3,6 +3,17 @@ import { functions } from "@/lib/firebaseClient";
 import type { SolicitudStatus, SatMotivoCancelacion } from "@/lib/solicitudStatus";
 import type { RecordCreatorOption } from "@/lib/recordCreator";
 
+export type SolicitudNoteCursor = { version: 2; solicitudId: string; updateSeconds: number; updateNanoseconds: number; id: string };
+export type SolicitudNoteDisplayDate = { kind: "NONE" } | { kind: "STRING"; value: string }
+  | { kind: "MILLISECONDS" | "SECONDS"; value: number }
+  | { kind: "TIMESTAMP"; seconds: number; nanoseconds: number };
+export type SolicitudNote = { id: string; displayDate: SolicitudNoteDisplayDate; updateSeconds: number; updateNanoseconds: number; text?: string; [key: string]: unknown };
+export type SolicitudNotePage = { items: SolicitudNote[]; nextCursor: SolicitudNoteCursor | null };
+export async function listSolicitudNotes(input: { solicitudId: string; limit?: number; cursor?: SolicitudNoteCursor }): Promise<SolicitudNotePage> {
+  const call = httpsCallable<typeof input, SolicitudNotePage>(functions, "listSolicitudNotes");
+  return (await call(input)).data;
+}
+
 export type CreateSolicitudInput = {
   clienteId: string;
   companyId: string;

@@ -1,4 +1,5 @@
 // H4_D85_A10_A43_CANONICAL_IQ_CLIENT_SYNC
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -49,6 +50,11 @@ export type IqClientSyncResult = {
 
 function cleanText(value: unknown): string {
   return String(value ?? "").replace(/\s+/g," ").trim();
+}
+
+function asRecord(value: unknown): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, any>;
 }
 
 function normalizeRfc(value: unknown): string {
@@ -185,6 +191,8 @@ async function persistLinked(params: {
   clientRef: FirebaseFirestore.DocumentReference;
   clientId: string;
   actor: PaymentApplicationActor;
+  profileId: string;
+  profileAlias: string;
   partner: {id:string;name:string};
   resolved: {id:string;name:string;method:string;score?:number};
 }) {
@@ -204,12 +212,37 @@ async function persistLinked(params: {
         linkedAt: now,
         linkedBy: params.actor.uid,
         linkedByName: params.actor.displayName,
+        profileId: params.profileId,
+        profileAlias: params.profileAlias || null,
         updatedAt: now,
         reviewReason: FieldValue.delete(),
         candidates: FieldValue.delete(),
       },
+      iqLinksByProfile: {
+        [params.profileId]: {
+          status: "LINKED",
+          clientId: params.resolved.id,
+          clientName: params.resolved.name,
+          partnerId: params.partner.id,
+          partnerName: params.partner.name,
+          profileId: params.profileId,
+          profileAlias: params.profileAlias || null,
+          source: params.resolved.method,
+          score: Number(params.resolved.score || 0),
+          active: true,
+          linkedAt: now,
+          linkedBy: params.actor.uid,
+          linkedByName: params.actor.displayName,
+          updatedAt: now,
+        },
+      },
       iqClientId: params.resolved.id,
       iqClientName: params.resolved.name,
+      originClientIqLink: {
+        profileId: params.profileId,
+        clientIqId: params.resolved.id,
+        clientIqName: params.resolved.name,
+      },
       updatedAt: now,
       updatedBy: params.actor.uid,
       updatedByName: params.actor.displayName,
@@ -297,23 +330,51 @@ export async function syncIqClientById(params: {
     );
   }
 
+  const access = await resolveIqAccess(params.actor, {
+    capability:"CLIENTS",
+    movement: client,
+  });
+  const profileLinks = asRecord(client.iqLinksByProfile);
+  const profileLink = asRecord(profileLinks[access.profileId]);
+  const legacyLink = asRecord(client.iqLink);
+  const expectedPartnerNames = [
+    access.associatedName,
+    access.profileAlias,
+  ].map(normalizeIqEntityName).filter(Boolean);
+  const legacyMatchesProfile = expectedPartnerNames.includes(
+    normalizeIqEntityName(legacyLink.partnerName),
+  );
   const existingIqId = cleanText(
-    client?.iqLink?.clientId ||
-    client?.iqClientId,
+    profileLink.clientId ||
+    (legacyMatchesProfile ? legacyLink.clientId || client.iqClientId : ""),
   );
 
   if(existingIqId){
+    if(!cleanText(profileLink.clientId)){
+      await clientRef.set({
+        iqLinksByProfile:{
+          [access.profileId]:{
+            ...legacyLink,
+            profileId:access.profileId,
+            profileAlias:access.profileAlias || null,
+            active:true,
+            updatedAt:FieldValue.serverTimestamp(),
+          },
+        },
+      },{merge:true});
+    }
     return {
       ok:true,
       status:"LINKED",
       clientId,
       iqClientId:existingIqId,
       iqClientName:cleanText(
-        client?.iqLink?.clientName ||
+        profileLink.clientName ||
+        legacyLink.clientName ||
         client?.iqClientName,
       ),
-      method:"EXISTING_LINK",
-      message:"Cliente ya vinculado con IQ.",
+      method:"EXISTING_PROFILE_LINK",
+      message:"Cliente ya vinculado con esta cuenta IQ.",
     };
   }
 
@@ -345,11 +406,6 @@ export async function syncIqClientById(params: {
         "Cliente guardado en PAY0; falta RFC para sincronizarlo con IQ.",
     };
   }
-
-  const access = await resolveIqAccess(
-    params.actor,
-    {capability:"CLIENTS"},
-  );
 
   const session = await loginIqHttpDirect({
     apiOrigin:access.apiOrigin,
@@ -384,10 +440,35 @@ export async function syncIqClientById(params: {
     (partnerPayload as any).partners,
   );
 
-  const partner = resolveUniqueIqEntity(
-    partnerRows,
-    access.username,
-  );
+  const exactPartner = (name: string) => {
+    const wanted = normalizeIqEntityName(name);
+    if (!wanted) return null;
+    const matches = partnerRows.filter(
+      row => normalizeIqEntityName(row.name ?? row.value) === wanted,
+    );
+    if (matches.length !== 1) return null;
+    const selected = matches[0];
+    const id = cleanText(selected.id ?? selected.value);
+    return id ? { id, name: cleanText(selected.name ?? selected.value) } : null;
+  };
+
+  const partner = exactPartner(access.associatedName);
+  if (!partner) {
+    await persistReview({
+      clientRef,
+      actor:params.actor,
+      reason:"IQ_PARTNER_NOT_FOUND",
+    });
+    return {
+      ok:false,
+      status:"REVIEW_REQUIRED",
+      clientId,
+      iqClientId:"",
+      iqClientName:"",
+      method:"IQ_PARTNER_NOT_FOUND",
+      message:"No se encontro un despacho IQ que coincida exactamente con el Asociado IQ configurado. Revisa la cuenta asignada.",
+    };
+  }
 
   let clients = await listIqClients({
     apiOrigin:auth.apiOrigin,
@@ -406,6 +487,8 @@ export async function syncIqClientById(params: {
       clientRef,
       clientId,
       actor:params.actor,
+      profileId:access.profileId,
+      profileAlias:access.profileAlias,
       partner,
       resolved:{
         id:cleanText(row.id),
@@ -437,6 +520,8 @@ export async function syncIqClientById(params: {
         clientRef,
         clientId,
         actor:params.actor,
+        profileId:access.profileId,
+        profileAlias:access.profileAlias,
         partner,
         resolved:{
           ...resolved,
@@ -487,6 +572,8 @@ export async function syncIqClientById(params: {
         clientRef,
         clientId,
         actor:params.actor,
+        profileId:access.profileId,
+        profileAlias:access.profileAlias,
         partner,
         resolved:byName,
       });
@@ -642,6 +729,8 @@ export async function syncIqClientById(params: {
     clientRef,
     clientId,
     actor:params.actor,
+    profileId:access.profileId,
+    profileAlias:access.profileAlias,
     partner,
     resolved:{
       id:cleanText(created.id),

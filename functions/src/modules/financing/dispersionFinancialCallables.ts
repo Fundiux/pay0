@@ -22,6 +22,7 @@ import {
   resolveCanonicalDispersionPricing,
   resolveDispersionOperationTypeKey,
 } from "./dispersionFinancial";
+import { resolveDispersionDespachoId } from "./dispersionDispatchResolver";
 
 import { readForwardOnlyDerivedBalanceTx } from "../dispatchBalances/forwardOnly";
 if (!getApps().length) {
@@ -58,7 +59,7 @@ export const previewClientDispersionPricing =
       const methodId = String(
         data.methodId || "",
       ).trim();
-      const despachoId = String(
+      const requestedDespachoId = String(
         data.despachoId || "",
       ).trim();
       const amount = Number(
@@ -67,12 +68,11 @@ export const previewClientDispersionPricing =
 
       if (
         !clientId ||
-        !methodId ||
-        !despachoId
+        !methodId
       ) {
         throw new HttpsError(
           "invalid-argument",
-          "clienteId, methodId y despachoId son requeridos.",
+          "clienteId y methodId son requeridos.",
         );
       }
 
@@ -124,6 +124,12 @@ export const previewClientDispersionPricing =
       const rootId = String(
         profile.rootId || uid,
       ).trim();
+      const despachoId = await resolveDispersionDespachoId({
+        db,
+        rootId,
+        role,
+        requestedDespachoId,
+      });
 
       const access =
         await requireClientOperationalAccess({

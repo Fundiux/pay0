@@ -1,12 +1,14 @@
 "use client";
+import { useSolicitudNotes, solicitudNoteDisplayDate } from "@/lib/useSolicitudNotes";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
 import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
-import { collection, query, where, onSnapshot, orderBy, doc, getDoc} from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc} from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -17,7 +19,7 @@ import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellatio
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
 import { canAutomaticallyRefreshCancellation } from "@/lib/solicitudCancellationFollowup";
-import { formatDateOnly } from "@/lib/dateTime";
+import { formatDateOnly, formatDateTime24 } from "@/lib/dateTime";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
   Plus,
@@ -71,10 +73,7 @@ function matchPagoWithSolicitud(p: any, s: any) {
 }
 
 function noteDateTimeText(value: any) {
-  if (value?.seconds) {
-    return new Date(value.seconds * 1000).toLocaleString();
-  }
-  return "Ahora";
+  return formatDateTime24(solicitudNoteDisplayDate(value), "Fecha no disponible");
 }
 
 function NoteBubble({ note, myUid }: any) {
@@ -92,7 +91,7 @@ function NoteBubble({ note, myUid }: any) {
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
-          {noteDateTimeText(note?.createdAt)}
+          {noteDateTimeText(note?.displayDate)}
         </div>
       </div>
     </div>
@@ -643,7 +642,6 @@ export default function SolicitudesPage() {
 
   const [docsFor, setDocsFor] = useState<any>(null);
   const [commentFor, setCommentFor] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
   const [newMsg, setNewMsg] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -745,6 +743,7 @@ export default function SolicitudesPage() {
   const canCreateSolicitud = !!modules?.solicitudes?.create;
   const canCommentSolicitud = !!modules?.solicitudes?.comment;
   const canCancelSolicitud = !!modules?.solicitudes?.cancel;
+  const notesState = useSolicitudNotes(uid || "", rootId || "", commentFor?.id, canViewSolicitudes);
   const canUploadDocsSolicitud = !!modules?.solicitudes?.uploadDocs;
   const canReadPaymentApplications = !!modules?.pagos?.create;
 
@@ -971,28 +970,12 @@ export default function SolicitudesPage() {
     setPagos([]);
   }, [uid, rootId, role, canViewSolicitudes]);
 
+  // One best-effort unread mutation per opening/actor scope; independent of reader polling.
   useEffect(() => {
-    if (commentFor) {
-      const q = query(collection(db, `solicitudes/${commentFor.id}/notas`), orderBy("createdAt", "asc"));
-
-      (async () => {
-        try {
-          await changeSolicitudStatus({ solicitudId: commentFor.id, hasUnreadMsg: false });
-        } catch (e) {
-          console.warn("changeSolicitudStatus(hasUnreadMsg:false) fallo", e);
-        }
-      })();
-
-      return onSnapshot(
-        q,
-        (snap) => setMessages(snap.docs.map(d => d.data())),
-        (err) => {
-          setPageMsg("No se pudieron cargar notas.");
-          setMessages([]);
-        }
-      );
-    }
-  }, [commentFor]);
+    if (!uid || !rootId || !commentFor?.id) return;
+    void changeSolicitudStatus({ solicitudId: commentFor.id, hasUnreadMsg: false })
+      .catch(() => { /* Existing cancel permission may deny this optional marker. */ });
+  }, [uid, rootId, commentFor?.id]);
 
   useEffect(() => {
     if (!uid || !rootId || !canReadPaymentApplications) {
@@ -1411,6 +1394,7 @@ export default function SolicitudesPage() {
     try {
       await addSolicitudNota({ solicitudId: commentFor.id, text });
       setNewMsg("");
+      notesState.refresh();
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo completar la accion.");
     } finally {
@@ -1835,7 +1819,6 @@ export default function SolicitudesPage() {
               <button
                 onClick={() => {
                   setCommentFor(null);
-                  setMessages([]);
                   setNewMsg("");
                 }}
                 className="text-slate-400 hover:text-white"
@@ -1845,17 +1828,20 @@ export default function SolicitudesPage() {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {messages.length === 0 ? (
-                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
-              ) : (
-                messages.map((note, i) => (
-                  <NoteBubble
-                    key={note?.id || i}
-                    note={note}
-                    myUid={uid}
-                  />
-                ))
-              )}
+              <div className="text-xs text-slate-400">Actualizaciones más recientes primero</div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <button type="button" onClick={notesState.refresh} disabled={notesState.loading}>Actualizar</button>
+                <button type="button" onClick={notesState.reloadFromStart}>Reiniciar lectura</button>
+                <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder}>Cargar anteriores</button>
+              </div>
+              {notesState.error && <div role="alert" className="text-sm text-amber-300">{notesState.error}</div>}
+              {notesState.loading && <div role="status" className="text-xs text-slate-400">Cargando notas...</div>}
+              {!notesState.loading && !notesState.error && notesState.notes.length === 0 && <div className="text-sm text-slate-400">Sin mensajes todavía.</div>}
+              <div className="text-xs text-slate-500">Última actualización: {formatDateTime24(notesState.headObservedAt, "Pendiente")}</div>
+              {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} myUid={uid} />)}
+              {notesState.retainedNotes.length > 0 && <div className="text-xs text-slate-400">Notas anteriores conservadas. {notesState.refreshPending ? "Actualizando historial..." : "Historial actualizado."}</div>}
+              {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} myUid={uid} />)}
+              <div className="text-xs text-slate-500">Historial actualizado: {formatDateTime24(notesState.windowObservedAt, "Pendiente")}</div>
             </div>
 
             <div className="border-t border-white/10 p-4">

@@ -1,21 +1,33 @@
-import { Firestore } from "firebase-admin/firestore";
+import { FieldPath, Firestore } from "firebase-admin/firestore";
+import { isIqRepRequestHardEnabled } from "../paymentApplications/complementGates";
 
 export type Pay0Identity = { uid: string; rootId: string; role: "superadmin" };
 export type Completeness = "COMPLETE" | "PARTIAL" | "UNKNOWN";
 export type Pay0Evidence = { sourceSystem: "PAY0"; sourceType: "FIRESTORE"; entityType: string; entityId: string; retrievedAt: string; effectiveAt: string | null; scope: { rootId: string }; completeness: Completeness; kind: "FACT" };
 export type Pay0Trace = { traceId: string; actorUid: string; rootId: string; tool: string; sourceSystem: "PAY0"; requestedAt: string; completedAt: string; latencyMs: number; evidenceIds: string[]; completeness: Completeness; result: "OK" | "UNKNOWN" | "ERROR"; error?: string };
 export type Pay0ToolResult<T> = { sourceSystem: "PAY0"; tool: string; retrievedAt: string; scope: { rootId: string }; completeness: Completeness; evidence: Pay0Evidence[]; data: T; trace: Pay0Trace };
+export type ReceivedPaymentQuery = { limit?: number; beforePaymentId?: string };
 
 const date = (value: any): string | null => value?.toDate?.()?.toISOString?.() || (value instanceof Date ? value.toISOString() : null);
 const safeId = (value: string) => Boolean(value && value.length <= 160 && !value.includes("/"));
 const solicitudView = (row: any) => ({ id: row.id, rootId: row.rootId, folio: row.folio || null, folioIq: row.folioIq || null,
   cliente: row.clientName || row.clienteNombre || row.cliente || null, empresa: row.companyName || row.empresaNombre || row.empresa || null,
   monto: Number(row.amount || row.monto || row.total || 0), estado: row.status || row.estatus || null, status: row.status || row.estatus || null,
-  factura: row.factura || row.invoiceNumber || null, facturamaStatus: row.facturamaStatus || null,
+  factura: row.factura || row.invoiceNumber || null, facturamaStatus: row.facturamaStatus || null, createdAt: date(row.createdAt),
   claveSat: row.satProductCode || row.ocFiscalMetadata?.productCode || null, unidadSat: row.satUnitCode || row.ocFiscalMetadata?.unitCode || null });
-const pagoView = (row: any) => ({ id: row.id, rootId: row.rootId, folio: row.folio || null, folioIq: row.folioIq || null,
-  cliente: row.clientName || row.clienteNombre || row.cliente || null, monto: Number(row.amount || row.monto || row.total || 0),
-  estado: row.status || row.estatus || null, status: row.status || row.estatus || null });
+const pagoView = (row: any) => {
+  const receivedAt = date(row.reportDateAt || row.fechaPago || row.createdAt);
+  const registeredAt = date(row.createdAt);
+  const reconciled = ["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"].includes(String(row.status || row.estatus || "").toUpperCase());
+  const payerName = row.payerName || row.receiptLearningSignals?.detectedSenderName || null;
+  return { id: row.id, rootId: row.rootId, folio: row.folio || null, folioIq: row.folioIq || null,
+    cliente: row.clientName || row.clienteNombre || row.cliente || null, pagador: payerName,
+    pagadorFuente: row.payerName ? "CONFIRMED" : payerName ? "RECEIPT_DETECTED" : "NOT_RECORDED",
+    monto: Number(row.montoTotal ?? row.amount ?? row.monto ?? row.total ?? 0), moneda: row.moneda || "MXN",
+    estado: row.status || row.estatus || null, status: row.status || row.estatus || null, conciliado: reconciled,
+    recibidoAt: receivedAt, registradoAt: registeredAt,
+    fechaSemantica: "reportDateAt (fechaPago; createdAt solo como respaldo al registrar)" };
+};
 const complementView = (row: any) => ({ id: row.id, rootId: row.rootId, solicitudFolio: row.solicitudFolio || null, pagoFolio: row.pagoFolio || null,
   status: row.status || null, automationStatus: row.automationStatus || null, automationError: row.automationError || null,
   provider: row.provider || null, externalRequestSent: row.externalRequestSent === true });
@@ -64,6 +76,11 @@ export class Pay0Connector {
     const rows = await this.recent("solicitudes", limit);
     return { rows, data: rows.map(solicitudView), completeness: "PARTIAL" as const };
   }); }
+  getLatestSolicitud() { return this.query("getLatestSolicitud", "solicitud", async () => {
+    const snap = await this.db.collection("solicitudes").where("rootId", "==", this.identity.rootId).orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(1).get();
+    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Record<string, any> & { id: string }));
+    return { rows, data: { item: rows[0] ? solicitudView(rows[0]) : null, order: { field: "createdAt", direction: "desc", semantic: "SOLICITUD_CREATED_AT" }, statusPolicy: "ALL_CANONICAL_STATUSES" }, completeness: "COMPLETE" as const };
+  }); }
   getPago(folio: string) { return this.query("getPago", "pago", async () => {
     const rows = await this.byFolio("pagos", folio);
     return { rows, data: rows.length === 1 ? pagoView(rows[0]) : null, completeness: rows.length === 1 ? "COMPLETE" as const : "UNKNOWN" as const };
@@ -71,6 +88,32 @@ export class Pay0Connector {
   searchPagos(limit = 30) { return this.query("searchPagos", "pago", async () => {
     const rows = await this.recent("pagos", limit);
     return { rows, data: rows.map(pagoView), completeness: "PARTIAL" as const };
+  }); }
+  searchReceivedPagos(input: ReceivedPaymentQuery = {}) { return this.query("searchReceivedPagos", "pago", async () => {
+    const limit = Math.min(Math.max(Number(input.limit) || 1, 1), 5);
+    let query = this.db.collection("pagos").where("rootId", "==", this.identity.rootId).orderBy("reportDateAt", "desc");
+    if (input.beforePaymentId) {
+      if (!safeId(input.beforePaymentId)) throw Error("PAY0_CONNECTOR_INVALID_PAYMENT_REFERENCE");
+      const anchor = await this.db.collection("pagos").doc(input.beforePaymentId).get();
+      if (!anchor.exists || anchor.data()?.rootId !== this.identity.rootId || !anchor.get("reportDateAt")) throw Error("PAY0_PAYMENT_REFERENCE_NOT_FOUND");
+      query = query.startAfter(anchor);
+    }
+    const snap = await query.limit(limit).get();
+    const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Record<string, any> & { id: string }));
+    return { rows, data: { items: rows.map(pagoView), order: { field: "reportDateAt", direction: "desc", semantic: "PAYMENT_RECEIVED_AT" }, requestedLimit: limit }, completeness: "COMPLETE" as const };
+  }); }
+  getPagoById(paymentId: string) { return this.query("getPagoById", "pago", async () => {
+    if (!safeId(paymentId)) throw Error("PAY0_CONNECTOR_INVALID_PAYMENT_REFERENCE");
+    const snap = await this.db.collection("pagos").doc(paymentId).get();
+    const direct = snap.exists && snap.data()?.rootId === this.identity.rootId ? { id: snap.id, ...snap.data() } : null;
+    if (direct) return { rows: [direct], data: pagoView(direct), completeness: "COMPLETE" as const };
+    const [folio, folioIq] = await Promise.all([
+      this.db.collection("pagos").where("rootId", "==", this.identity.rootId).where("folio", "==", paymentId).limit(3).get(),
+      this.db.collection("pagos").where("rootId", "==", this.identity.rootId).where("folioIq", "==", paymentId).limit(3).get(),
+    ]);
+    const unique = new Map([...folio.docs, ...folioIq.docs].map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
+    const rows = [...unique.values()];
+    return { rows, data: rows.length === 1 ? pagoView(rows[0]) : null, completeness: rows.length === 1 ? "COMPLETE" as const : "UNKNOWN" as const };
   }); }
   getPaymentComplementStatus(folio?: string) { return this.query("getPaymentComplementStatus", "paymentComplementRequest", async () => {
     const rows = (await this.recent("paymentComplementRequests", 30)).filter(row => !folio || row.solicitudFolio === folio || row.pagoFolio === folio);
@@ -87,7 +130,7 @@ export class Pay0Connector {
     ]);
     const complementConfig = complementConfigSnap.data(), master = masterSnap.data();
     const iqLookupAllowed = master?.enabled === true && !!complementConfig && complementConfig.iqLookupEnabled !== false;
-    const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && complementConfig?.iqRequestEnabled !== false;
+    const iqRequestAllowed = iqLookupAllowed && master?.automation?.aplicacionPagos === true && complementConfig?.iqEnabled === true && isIqRepRequestHardEnabled(complementConfig);
     const data = { altaBeneficiario: "NO_CONECTADA", consultaComplemento: iqLookupAllowed ? "HABILITADA_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
       solicitudComplemento: iqRequestAllowed ? "HABILITADA_SOLO_PPD_NUEVAS_CONFIRMADAS_SUJETA_A_PERFIL_PERMISOS_Y_CUOTA" : "PAUSADA_POR_CONFIGURACION_O_MASTER",
       complementoFacturama: complementConfig?.facturamaEnabled === true ? "AUTOMATICO_CON_VALIDACION_FISCAL" : "PAUSADO", dispersion: "TRANSFERENCIA_Y_TDC_CON_VALIDACIONES" };

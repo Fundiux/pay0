@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export const CANDIDATE_GATES = [
-  ['frontend-dependencies', 'npm', ['ci']],
-  ['functions-dependencies', 'npm', ['ci', '--prefix', 'functions']],
+  ['frontend-dependencies', 'npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']],
+  ['functions-dependencies', 'npm', ['ci', '--prefix', 'functions', '--prefer-offline', '--no-audit', '--no-fund']],
   ['authorization-policy', 'node', ['scripts/verify-authorization-policy.mjs']],
   ['candidate-contract', 'node', ['--test', 'qa/scripts/release-candidate.test.mjs']],
   ['engineering-contract', 'node', ['--test', 'qa/scripts/engineering-catalog.test.cjs']],
@@ -66,6 +66,9 @@ export function prepareCandidate({ cwd = process.cwd(), mainRef = 'main', execut
     nodeVersion: process.version, status: 'checking', checks: [],
     scope: 'committed-source-and-local-gates', deploymentAuthorized: false,
     productionExercised: false,
+    blockingFindings: fs.existsSync(path.join(cwd, 'config/engineering-receipts-release.json'))
+      ? JSON.parse(fs.readFileSync(path.join(cwd, 'config/engineering-receipts-release.json'), 'utf8')).blockingFindings || [] : [],
+    productionCertified: false,
     limitations: ['No production, IQ, Telegram or WhatsApp validation', 'No emulator or browser validation in this gate', 'Source archive is not a deployment bundle'],
   };
   const reportPath = path.join(directory, 'evidence.json');

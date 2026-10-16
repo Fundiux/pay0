@@ -1,6 +1,7 @@
 "use client";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
+import { useDispersionNotes, dispersionNoteDisplayDate } from "@/lib/useDispersionNotes";
 
 import { formatDateTime24 } from "@/lib/dateTime";
 import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
@@ -258,7 +259,7 @@ function NoteBubble({ note }: any) {
         {noteAuthorLabel(note)}
       </div>
       <div className="whitespace-pre-wrap text-sm text-slate-100">{note?.text || "-"}</div>
-      <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(note?.createdAt)}</div>
+      <div className="mt-1 text-right text-[11px] text-slate-500">{noteDateTimeText(dispersionNoteDisplayDate(note.displayDate))}</div>
     </div>
   );
 }
@@ -338,7 +339,8 @@ export default function WalletDispersionesPage() {
   const [isDispersionImportDragging, setIsDispersionImportDragging] = useState(false);
   const [docsFor, setDocsFor] = useState<DispersionRow | null>(null);
   const [notesFor, setNotesFor] = useState<DispersionRow | null>(null);
-  const [notes, setNotes] = useState<any[]>([]);
+  const notesState = useDispersionNotes(uid, rootId, notesFor?.id);
+  const notes = notesState.notes;
   const [newNote, setNewNote] = useState("");
   const [balanceRow, setBalanceRow] = useState<BalanceAccountRow | null>(null);
   const [dispatchBalanceRows, setDispatchBalanceRows] =
@@ -1362,29 +1364,6 @@ export default function WalletDispersionesPage() {
 
 
 
-  useEffect(() => {
-    if (!notesFor?.id) {
-      setNotes([]);
-      return;
-    }
-
-    const qy = query(
-      collection(db, `clientDispersions/${notesFor.id}/notas`),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(
-      qy,
-      (snap) => {
-        setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      (err) => {
-        console.error("[Dispersiones] notas snapshot error:", err);
-        setNotes([]);
-      }
-    );
-  }, [notesFor]);
-
   async function sendDispersionNote() {
     if (!notesFor?.id || !newNote.trim()) return;
 
@@ -1394,6 +1373,7 @@ export default function WalletDispersionesPage() {
         text: newNote.trim(),
       });
       setNewNote("");
+      notesState.refresh();
     } catch (e: any) {
       setError(e?.message || "No se pudo guardar la nota.");
     }
@@ -3154,7 +3134,7 @@ export default function WalletDispersionesPage() {
                 type="button"
                 onClick={() => {
                   setNotesFor(null);
-                  setNotes([]);
+
                   setNewNote("");
                 }}
                 className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-900 hover:text-white"
@@ -3178,11 +3158,24 @@ export default function WalletDispersionesPage() {
               </div>
             ) : null}
 
+            <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+              <span>Se actualiza mientras está visible, 5 s después de terminar cada consulta.</span>
+              <button type="button" onClick={notesState.refresh} disabled={notesState.loading} className="text-sky-300 disabled:opacity-40">Actualizar</button>
+            </div>
+            <button type="button" onClick={notesState.reloadFromStart} disabled={notesState.loading} className="mb-2 text-xs text-slate-300 disabled:opacity-40">Recargar historial desde el inicio</button>
+            {notesState.refreshPending ? <p className="mb-2 text-xs text-slate-400">Actualizando historial… Las notas recientes pueden estar más actualizadas.</p> : null}
+            {notesState.error ? <p role="alert" className="mb-2 text-sm text-amber-300">{notesState.error}</p> : null}
+            {notesState.hasMore ? <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder} className="mb-2 text-sm text-sky-300 disabled:opacity-40">Cargar anteriores</button> : null}
             <div className="mb-3 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3">
               {notes.length === 0 ? (
-                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
+                <div className="text-sm text-slate-400">{notesState.loading ? "Cargando notas…" : notesState.error ? "Notas no disponibles." : "Sin mensajes todavía."}</div>
               ) : (
-                notes.map((note) => <NoteBubble key={note.id} note={note} />)
+                <>
+                  <p className="text-xs text-slate-400">Notas recientes (más recientes primero) · última actualización: {notesState.headObservedAt ? noteDateTimeText(new Date(notesState.headObservedAt)) : "pendiente"}</p>
+                  {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} />)}
+                  {notesState.retainedNotes.length ? <p className="pt-2 text-xs text-slate-400">Historial cargado · última actualización completa: {notesState.windowObservedAt ? noteDateTimeText(new Date(notesState.windowObservedAt)) : "pendiente"}</p> : null}
+                  {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} />)}
+                </>
               )}
             </div>
 

@@ -5,6 +5,12 @@ PAY0 is a Next.js application with Firebase services and Cloud Functions.
 ## Local development
 
 1. Create `.env.local` with the required local Firebase and application settings.
+
+   In an isolated Git worktree, do not copy credentials into the worktree. Point
+   `PAY0_BUILD_ENV_FILE` to an existing protected environment file before running
+   `npm run build` or `npm run firebase:deploy:hosting`. Both commands validate
+   the required `NEXT_PUBLIC_FIREBASE_*` settings before starting Next.js or a
+   Hosting deployment, without printing their values.
 2. Install dependencies with `npm ci`.
 3. Run `npm run dev`.
 

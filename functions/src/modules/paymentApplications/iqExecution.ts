@@ -1,5 +1,6 @@
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import * as crypto from "node:crypto";
+import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import {
   HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
@@ -12,10 +13,15 @@ import {
   parseIqDateTimeMs,
 } from "../iq/iqDateTime";
 import type { PaymentApplicationActor } from "./service";
+import { requireIqAssociatedName } from "../iq/associatedName";
 import {
   PAYMENT_APPLICATION_IQ_EXECUTION_VERSION,
   buildPaymentApplicationIqExecutionAttemptId,
   } from "./domain";
+import {
+  assertIqIdentityInvariant,
+  resolveEffectiveIqIdentity,
+} from "../iq/originIdentity";
 type IqPaymentApplicationFieldCheck = {
   field:
     | "ASOCIADO"
@@ -103,10 +109,15 @@ function resolveIqApiOrigin(): string {
 export type IqAccess = {
   profileId: string;
   profileAlias: string;
+  associatedName: string;
   username: string;
   password: string;
   erpUrl: string;
   apiOrigin: string;
+  originActorUid?: string;
+  originIqProfileId?: string;
+  effectiveIqProfileId?: string;
+  identityResolutionReason?: string;
 };
 
 type StoredPlanItem = {
@@ -429,8 +440,36 @@ function decryptPassword(profile: Record<string, unknown>): string {
 
 export async function resolveIqAccess(
   actor: PaymentApplicationActor,
-  options?: { capability?: "PAYMENT_APPLICATIONS" | "CLIENTS" },
+  options?: {
+    capability?: "PAYMENT_APPLICATIONS" | "CLIENTS";
+    movement?: Record<string, any>;
+    legacyEvidence?: Record<string, any>[];
+  },
 ): Promise<IqAccess> {
+  if (options?.movement) {
+    const identity = await resolveEffectiveIqIdentity({
+      movement: options.movement,
+      rootId: actor.rootId,
+      authorizedActorUid: actor.uid,
+      encryptionSecret: IQ_PAYMENT_APPLICATION_CREDENTIALS_KEY.value(),
+      includePassword: true,
+      legacyEvidence: options.legacyEvidence,
+    });
+    assertIqIdentityInvariant(identity);
+    return {
+      profileId: identity.effectiveIqProfileId,
+      profileAlias: identity.credentialProfile.profileAlias,
+      associatedName: identity.originIqContext.associatedName,
+      username: identity.credentialProfile.username,
+      password: identity.credentialProfile.password,
+      erpUrl: identity.credentialProfile.erpUrl,
+      apiOrigin: resolveIqApiOrigin(),
+      originActorUid: identity.originActorUid,
+      originIqProfileId: identity.originIqProfileId,
+      effectiveIqProfileId: identity.effectiveIqProfileId,
+      identityResolutionReason: identity.identityResolutionReason,
+    };
+  }
   const accessSnap = await db.collection("iqUserAccess").doc(actor.uid).get();
   if (!accessSnap.exists) {
     throw new HttpsError("failed-precondition", "El usuario no tiene acceso IQ asignado.");
@@ -467,6 +506,7 @@ export async function resolveIqAccess(
   return {
     profileId,
     profileAlias: cleanText(profile.alias),
+    associatedName: requireIqAssociatedName(access.associatedName || profile.associatedName),
     username,
     password: decryptPassword(profile),
     erpUrl: normalizeErpUrl(profile.erpUrl),
@@ -740,6 +780,16 @@ async function claimExecution(params: {
       attemptType: "IQ_EXECUTION",
       profileId: access.profileId,
       profileAlias: access.profileAlias,
+      originActorUid: access.originActorUid || null,
+      originIqProfileId: access.originIqProfileId || access.profileId,
+      effectiveIqProfileId: access.effectiveIqProfileId || access.profileId,
+      identityResolutionReason: access.identityResolutionReason || "PERSISTED_ORIGIN",
+      authorizedBy: actor.uid,
+      authorizedAt: FieldValue.serverTimestamp(),
+      executedBy: actor.uid,
+      executionMode: cleanUpper(plan.iqExecutionDispatchOrigin) === "AUTOMATIC"
+        ? "SCHEDULER"
+        : "HUMAN",
       status: "IN_PROGRESS",
       iqExecutionStatus: "IN_PROGRESS",
       iqActionExecuted: false,
@@ -758,6 +808,10 @@ async function claimExecution(params: {
       iqExecutionStartedAt: FieldValue.serverTimestamp(),
       iqExecutionProfileId: access.profileId,
       iqExecutionProfileAlias: access.profileAlias,
+      effectiveIqProfileId: access.effectiveIqProfileId || access.profileId,
+      identityResolutionReason: access.identityResolutionReason || "PERSISTED_ORIGIN",
+      lastAuthorizedBy: actor.uid,
+      lastExecutedBy: actor.uid,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -813,7 +867,7 @@ async function claimExecution(params: {
       reservationId,
       pagoId,
       pagoIqFolio,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: cleanText(pago?.clienteNombre),
       empresaName: cleanText(pago?.empresaNombre),
       attemptId,
@@ -1831,7 +1885,10 @@ export async function resolvePaymentApplicationIqFolio(params: {
     );
   }
 
-  const access = await resolveIqAccess(params.actor);
+  const access = await resolveIqAccess(params.actor, {
+    movement: plan,
+    legacyEvidence: [attempt],
+  });
 
   const session = await loginIqHttpDirect({
     apiOrigin: access.apiOrigin,
@@ -1849,7 +1906,7 @@ export async function resolvePaymentApplicationIqFolio(params: {
       pagoIqFolio,
       solicitudIqFolio: item.solicitudIqFolio,
       amount: item.amount,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: cleanText(pago?.clienteNombre),
       empresaName: cleanText(pago?.empresaNombre),
       lowerBoundMs,
@@ -2041,7 +2098,19 @@ export async function executePaymentApplicationIqPlan(params: {
       clientId: cleanText(pago.clienteId || pago.clientId), permission: "operatePagos"});
   };
   await authorizeBeforePost();
-  const access = await resolveIqAccess(params.actor);
+  const planSnap = await db.collection("pagoApplicationIqPlans").doc(request.planId).get();
+  if (!planSnap.exists) {
+    throw new HttpsError("not-found", "Plan de Aplicacion de pagos IQ no existe.");
+  }
+  const plan = planSnap.data() || {};
+  assertPlanOwnership(plan, params.actor);
+  const pagoSnap = cleanText(plan.pagoId)
+    ? await db.collection("pagos").doc(cleanText(plan.pagoId)).get()
+    : null;
+  const access = await resolveIqAccess(params.actor, {
+    movement: plan,
+    legacyEvidence: pagoSnap?.exists ? [pagoSnap.data() || {}] : [],
+  });
   const claimed = await claimExecution({
     actor: params.actor,
     planId: request.planId,
@@ -2056,7 +2125,7 @@ export async function executePaymentApplicationIqPlan(params: {
       access,
       planId: claimed.planId,
       pagoIqFolio: claimed.pagoIqFolio,
-      asociadoName: access.username,
+      asociadoName: access.associatedName,
       clienteName: claimed.clienteName,
       empresaName: claimed.empresaName,
       items: claimed.items.map((item) => ({
@@ -2107,13 +2176,19 @@ export async function diagnosePaymentApplicationIqMethods(params: {
     planHash: params.planHash,
     confirmExecution: true,
   });
-  const access = await resolveIqAccess(params.actor);
   const planSnap = await db.collection("pagoApplicationIqPlans").doc(request.planId).get();
   if (!planSnap.exists) {
     throw new HttpsError("not-found", "Plan de Aplicacion de pagos IQ no existe.");
   }
   const plan = planSnap.data() || {};
   assertPlanOwnership(plan, params.actor);
+  const pagoSnap = cleanText(plan.pagoId)
+    ? await db.collection("pagos").doc(cleanText(plan.pagoId)).get()
+    : null;
+  const access = await resolveIqAccess(params.actor, {
+    movement: plan,
+    legacyEvidence: pagoSnap?.exists ? [pagoSnap.data() || {}] : [],
+  });
   if (cleanText(plan?.planHash).toLowerCase() !== request.planHash) {
     throw new HttpsError("already-exists", "El hash del plan IQ no coincide con el plan prevalidado.");
   }
@@ -2199,11 +2274,11 @@ export async function diagnosePaymentApplicationIqMethods(params: {
     },
     {
       field: "ASOCIADO",
-      expected: access.username,
+      expected: access.associatedName,
       actual: cleanText(deposit.partner),
       ok:
         cleanUpper(deposit.partner) ===
-        cleanUpper(access.username),
+        cleanUpper(access.associatedName),
     },
     {
       field: "MONTO",
@@ -2272,13 +2347,13 @@ export async function diagnosePaymentApplicationIqMethods(params: {
   }
 
   const c0=await getCat({});
-  const partner=oneByName(c0.cat.partner,access.username);
-  if(!partner)throw new HttpsError("failed-precondition",`No se encontro el asociado ${access.username} en IQ.`);
+  const partner=oneByName(c0.cat.partner,access.associatedName);
+  if(!partner)throw new HttpsError("failed-precondition",`No se encontro el asociado ${access.associatedName} en IQ.`);
   const partnerId=cleanText(partner.id);
 
   const c1=await getCat({partner_id:partnerId});
   const client=oneByName(c1.cat.client,targetClientName);
-  if(!client)throw new HttpsError("failed-precondition",`No se encontro el cliente ${targetClientName} para ${access.username} en IQ.`);
+  if(!client)throw new HttpsError("failed-precondition",`No se encontro el cliente ${targetClientName} para ${access.associatedName} en IQ.`);
   const clientId=cleanText(client.id);
 
   const c2=await getCat({partner_id:partnerId,client_id:clientId});
@@ -2312,7 +2387,7 @@ export async function diagnosePaymentApplicationIqMethods(params: {
   }
 
   const catalogValidations=[
-    {field:"ASOCIADO",expected:access.username,actual:cleanText(partner.name),ok:norm(partner.name)===norm(access.username)},
+    {field:"ASOCIADO",expected:access.associatedName,actual:cleanText(partner.name),ok:norm(partner.name)===norm(access.associatedName)},
     {field:"CLIENTE",expected:targetClientName,actual:cleanText(client.name),ok:norm(client.name)===norm(targetClientName)},
     {field:"EMPRESA",expected:targetCompanyName,actual:cleanText(company.name),ok:norm(company.name)===norm(targetCompanyName)},
     {field:"DEPOSITO_DISPONIBLE",expected:pagoIqFolio,actual:depositMatches.length===1?cleanText(depositMatches[0].id):"",ok:depositMatches.length===1},

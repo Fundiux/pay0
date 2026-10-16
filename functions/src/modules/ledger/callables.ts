@@ -649,6 +649,8 @@ async function readScopedClientWalletDetail(scope: LedgerScope, clienteId: strin
   const dispersionLookup: Record<string, ReturnType<typeof mapClientDetailDispersion>> = {};
 
   dispersionDocs.forEach((doc) => {
+    // Personal earnings are never part of a client's wallet statement.
+    if (doc.get("fundingSource.holderType") === "USER") return;
     const row = mapClientDetailDispersion(doc);
     dispersionLookup[doc.id] = row;
   });

@@ -141,6 +141,36 @@ El diff incorpora guardas de emisor Facturama y controles de solicitudes externa
 
 Las secciones siguientes describen cortes anteriores. Sus etiquetas «actual», «pendiente» y «última sesión» deben leerse con la fecha original; el estado vigente está arriba.
 
+## Registro hist?rico conservado al conciliar main
+
+El bloque siguiente conserva el registro anterior de main; no sustituye el estado m?s reciente indicado arriba ni certifica esta integraci?n local.
+
+## Estado vigente ASTRA — 2026-09-28
+
+ASTRA: **publicación técnica verificada; preparada para validación humana**. En el producto quedan las decisiones descritas abajo; el cierre global requiere completar main, push y comprobar CI después de este registro. Esta entrada prevalece sobre los cierres históricos cuando exista contradicción. La tabla completa de 22 puntos está en [BASE860115-05-TRACKER](docs/BASE860115-05-TRACKER.md).
+
+La entrega automática REP permanece **pausada**: Eventarc sin pushConfig desde 04:54 UTC, compuerta IQ cerrada y función de enqueue excluida del despliegue. Los cuatro vínculos históricos ya se migraron: ocho documentos canónicos activos, cero copias legacy activas y estados financieros conservados.
+
+La integración publicada contiene username/contraseña, operaciones de interfaz, registro/aplicación de pagos, MAT, recursos corporativos y comisiones por cliente/usuario. Las reglas coinciden con la fuente, los 100 índices están listos y las 284 Functions tienen revisión nueva y tráfico verificado. Se aplicaron 13 aliases y tres recursos corporativos con seis artefactos verificados. El permiso técnico de 23 callables se completó con aprobación específica del usuario; 26 comprobaciones anónimas confirmaron que la autenticación sigue exigida. Hosting `ae9632f51fe79634` / SSR `00570-rol`: **70/70 postflight**, nueve rutas y 14 assets idénticos al build. Evidencia: [publicación ASTRA](docs/audits/ASTRA-PUBLICATION-2026-09-28.md).
+
+Rama de implementación: `integration/astra-cycle-20260928`. La integración a main usa fast-forward y push normal; las referencias definitivas se verifican después de registrar este informe y se reportan en la entrega. Los worktrees y cambios ajenos permanecen preservados.
+
+Decisiones humanas separadas: símbolo visual; aceptación de voz P0/P0.5 y promoción; hora/días del corte diario; cuenta de facturación para staging (`billingEnabled:false`). Ninguna activa comisiones, REP ni un proveedor real automáticamente.
+
+### BASE860115-05 — Punto 2 cerrado: identidad de pestaña/navegador (2026-09-27)
+
+La identidad pública del navegador quedó normalizada a `PAY0`. El layout raíz declara título, application name, descripción, manifest PWA, OpenGraph y Twitter metadata desde servidor; el shell interactivo permanece separado como componente cliente, sin alterar autenticación, rutas ni configuración Firebase.
+
+Los identificadores técnicos internos se conservaron deliberadamente. En producción, `/`, `/login`, `/pagos` y `/manifest.webmanifest` responden HTTP 200; las páginas presentan título y OpenGraph `PAY0` y no exponen `pay-0-system` como identidad visible. El SSR `ssrpay0system-00558-nit` está `ACTIVE` con 100% del tráfico y no registró errores recientes. Evidencia local: frontend build de 44 rutas, baseline y 22 controles críticos PASS; emuladores cerrados. Commit funcional `1e638e6`.
+
+### BASE860115-05 — Punto 1 cerrado: complementos PPD (2026-09-27)
+
+PAY0 opera ahora un único pipeline canónico para complementos PPD. La evidencia REP importada por la automatización legacy se adopta idempotentemente, se revalida y se publica como documentos del Pago ligados a la aplicación; las copias generales de Solicitud se retiran lógicamente. Los jobs IQ bloqueados únicamente por elegibilidad no verificable pueden seguir haciendo una consulta segura, sin autorizar un nuevo envío.
+
+El caso productivo `AP1C13U3E5` quedó reconciliado: request y job `RECEIVED`, dos documentos `READY` bajo Pago y cero legacy activos. El XML timbrado difiere un centavo del importe histórico PAY0; la tolerancia queda limitada a adopción legacy y marcada en la aplicación. El detalle de `/pagos` permite descargar XML/PDF mediante el callable autorizado.
+
+Evidencia: smoke integral Firestore+Storage PASS (26 controles, cero acciones externas), builds frontend/Functions PASS, política y gates acumulativos PASS. Functions canónicas `ACTIVE` en `enqueueautomaticpaymentcomplement-00005-lal` y `checkpaymentcomplementsdaily-00009-gak`; scheduler `ENABLED`; las tres Functions legacy fueron eliminadas. Hosting/SSR `ACTIVE` en `ssrpay0system-00556-fax`; `/pagos` HTTP 200 y sin logs `ERROR` posteriores. No se solicitó un REP nuevo ni se timbró durante la validación.
+
 ### ASSETS interactivo, fechas y permisos por sistema (2026-09-20)
 
 ASSETS ya usa una identidad predominantemente grafito/gris con acentos naranja en todas sus pantallas; el verde queda reservado para utilidad o entradas. El Dashboard permite cambiar entre `Todo`, `Vehículos` y `Préstamos`: KPIs, rendimientos, actividad, posiciones y las dos gráficas se recalculan con el alcance elegido. La distribución de capital es horizontal y usa las etiquetas cortas `Vehículos`, `Préstamos+INT` y `Préstamos`; la utilidad generada se presenta en verde en ambas gráficas.

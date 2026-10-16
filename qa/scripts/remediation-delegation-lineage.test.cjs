@@ -1,15 +1,14 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const ts=require('../../functions/node_modules/typescript');
-require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,file);
+const bundleArtifact=process.env.PAY0_QA_BUNDLE_ARTIFACT;
+if(!bundleArtifact)require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,file);
 const {createRequire}=require('node:module'),fr=createRequire(path.resolve('functions/package.json'));
 const {Timestamp}=fr('firebase-admin/firestore'),{HttpsError}=fr('firebase-functions/v2/https');
-const guard=require('../../functions/src/utils/authGuard.ts');
-const policy=require('../../functions/src/modules/clientDelegations/policy.ts');
 const rows=new Map();let version=0,writes=0,beforeCommit=null,retries=0;
 const put=(key,value)=>{rows.set(key,{value,version:++version});};
 const ref=key=>({path:key,id:key.split('/').at(-1),get:async()=>snap(key)});
 const snap=key=>({exists:rows.has(key),id:key.split('/').at(-1),ref:ref(key),data:()=>rows.get(key)?.value});
-const query=prefix=>({path:prefix,query:true,get:async()=>({docs:[...rows.keys()].filter(k=>k.startsWith(prefix+'/')&&!k.slice(prefix.length+1).includes('/')).map(snap)})});
+const query=prefix=>({path:prefix,query:true,doc:id=>ref(`${prefix}/${id}`),get:async()=>({docs:[...rows.keys()].filter(k=>k.startsWith(prefix+'/')&&!k.slice(prefix.length+1).includes('/')).map(snap)})});
 const db={doc:ref,collection:query,async runTransaction(fn){
  for(let attempt=0;attempt<3;attempt++){
   const seen=new Map(),pending=[];
@@ -21,7 +20,16 @@ const db={doc:ref,collection:query,async runTransaction(fn){
 }};
 const firestore=Object.assign(()=>db,{Timestamp,FieldValue:{serverTimestamp:()=>Timestamp.fromMillis(Date.now())}});
 const admin={apps:[{}],firestore};
-function load(file,deps){const exports={};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('exports','require',code)(exports,name=>{assert(name in deps,name);return deps[name];});return exports;}
+let bundle;
+if(bundleArtifact){
+ global.fetch=async()=>{throw Error('EXTERNAL_NETWORK_FORBIDDEN');};
+ const realAdmin=fr('firebase-admin');if(!realAdmin.apps.length)realAdmin.initializeApp({projectId:'demo-pay0-bundle-lineage'});
+ const fakeAdmin={...realAdmin,firestore};Object.defineProperty(fakeAdmin,'apps',{enumerable:true,get:()=>realAdmin.apps});
+ bundle=require('./helpers/functions-bundle-harness.cjs').loadBundle({artifact:bundleArtifact,dependencyRoot:path.resolve('functions'),externalMocks:{'firebase-admin':fakeAdmin,'firebase-admin/firestore':{...fr('firebase-admin/firestore'),getFirestore:()=>db}}});
+}
+const guard=bundle?bundle.loadInternal('utils/authGuard.js'):require('../../functions/src/utils/authGuard.ts');
+const policy=bundle?bundle.loadInternal('modules/clientDelegations/policy.js'):require('../../functions/src/modules/clientDelegations/policy.ts');
+function load(file,deps){if(bundle)return bundle.loadInternal(file.replace('functions/src/','').replace(/\.ts$/,'.js'));const exports={};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('exports','require',code)(exports,name=>{assert(name in deps,name);return deps[name];});return exports;}
 const access=load('functions/src/modules/clientDelegations/access.ts',{'firebase-admin':admin,'firebase-functions/v2/https':{HttpsError},'./policy':policy,'../../utils/authGuard':guard});
 const service=load('functions/src/modules/clientDelegations/service.ts',{'firebase-admin':admin,'firebase-functions/v2/https':{HttpsError},'./policy':policy,'../../utils/authGuard':guard,'./access':access});
 const user=role=>({role,rootId:'root',active:true,modules:{usuarios:{clientDelegations:true}}});
@@ -59,5 +67,19 @@ function reset(){rows.clear();version=0;writes=0;beforeCommit=null;retries=0;for
  reset();for(let n=1;n<=17;n++){put(`users/u${n}`,user('admin'));put(`userClientAccess/u${n}/clients/client`,grant(`u${n}`,n===1?'root':`u${n-1}`));}
  assert.equal((await resolve('u16')).allowed,true);assert.equal((await resolve('u17')).allowed,false);
  reset();put('userClientAccess/c/clients/client',{...grant('c','a'),grantAuthority:{version:2,source:'DIRECT',grantorUid:'a'}});assert.equal((await resolve('c')).allowed,false);
+ if(bundle){
+  const deferred=bundle.loadInternal('utils/authorizeDeferredIntent.js');
+  const restriction=bundle.loadInternal('modules/users/restrictions.js');
+  const now=Date.now();
+  const trusted={schemaVersion:1,writer:restriction.TRUSTED_RESTRICTION_WRITER,policyVersion:restriction.TRUSTED_RESTRICTION_POLICY,restrictionId:'fixture',rootId:'root',subjectUid:'c',state:'ACTIVE',scope:'ACCOUNT_OPERATIONS',authority:'HUMAN_SECURITY_ADMIN',authorityUid:'root',reasonCode:'SECURITY_REVIEW',incidentId:'fixture',issuedAtMs:now-1000,expiresAtMs:now+60000,authorizationVersion:1};
+  const prepare=()=>{reset();put('users/c',{...user('admin'),modules:{pagos:{create:true,conciliate:true}}});put('userClientAccess/b/clients/client',grant('b','a'));put('userClientAccess/c/clients/client',grant('c','b'));};
+  const authorize=()=>deferred.authorizeDeferredIntent({uid:'c',rootId:'root',module:'pagos',action:['create','conciliate'],clientId:'client',permission:'operatePagos'});
+  for(const patch of [null,{active:false},{isActive:false},{disabled:true},{deleted:true},{isDeleted:true},{deletedAt:now},{rootId:'foreign'},{role:'unknown'},{modules:{pagos:{create:false,conciliate:false}}},{trustedRestrictionV1:null},{trustedRestrictionV1:trusted}]){
+   prepare();await authorize();if(patch===null)rows.delete('users/c');else put('users/c',{...rows.get('users/c').value,...patch});await assert.rejects(authorize);
+  }
+  prepare();await authorize();put('users/b',{...user('admin'),disabled:true});await assert.rejects(authorize);
+  prepare();put('users/c',{...user('superadmin'),trustedRestrictionV1:trusted});await assert.rejects(authorize);
+  console.log('PASS bundle deferred: 12 lifecycle/scope/permission/restriction revocations, grantor revocation and no superadmin bypass');
+ }
  console.log('PASS lineage: transitive permissions/revocation/expiry/root/ownership, cycles, explicit provenance, legacy unknown marker, four TOCTOU retries with zero writes, unauthorized removal denied');
 })().catch(error=>{console.error(error);process.exitCode=1;});

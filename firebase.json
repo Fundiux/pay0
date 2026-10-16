@@ -1,7 +1,21 @@
 {
     "functions":  {
                       "source":  "functions",
-                      "runtime":  "nodejs22"
+                      "runtime":  "nodejs22",
+                      "predeploy":  [
+                                        "node qa/scripts/verify-release-baseline.mjs",
+                                        "npm --prefix functions run build",
+                                        "npm run qa:functions-discovery",
+                                        "node qa/scripts/verify-client-csf-parser.cjs",
+                                        "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
+                                        "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
+                                        "node qa/scripts/verify-authorized-dispersion-capability.cjs",
+                                        "node qa/scripts/verify-simulated-dispersion-e2e.cjs",
+                                        "node qa/scripts/verify-hugo-voice-runtime-contract.cjs",
+                                        "npm run qa:client-csf-create",
+                                        "npm run qa:document-ui",
+                                        "npm run qa:document-access"
+                                    ]
                   },
     "firestore":  {
                       "rules":  "firestore.rules",
@@ -35,6 +49,11 @@
                                }
                   },
     "hosting":  {
+                    "predeploy":  [
+                                       "npm run qa:frontend-build-env",
+                                       "node qa/scripts/verify-release-baseline.mjs",
+                                       "npm run qa:document-access"
+                                   ],
                     "ignore":  [
                                    "firebase.json",
                                    "**/.*",
@@ -47,7 +66,18 @@
                                    ".env.*"
                                ],
                     "site":  "pay-0-system",
-                    "headers": [{"source": "**", "headers": [{"key": "X-Content-Type-Options", "value": "nosniff"}, {"key": "X-Frame-Options", "value": "DENY"}, {"key": "Referrer-Policy", "value": "strict-origin-when-cross-origin"}, {"key": "Permissions-Policy", "value": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"}, {"key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains"}]}],
+                    "headers":  [
+                                    {
+                                        "source":  "**",
+                                        "headers":  [
+                                                        { "key": "X-Content-Type-Options", "value": "nosniff" },
+                                                        { "key": "X-Frame-Options", "value": "DENY" },
+                                                        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+                                                        { "key": "Permissions-Policy", "value": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()" },
+                                                        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
+                                                    ]
+                                    }
+                                ],
                     "frameworksBackend":  {
                                               "region":  "us-central1"
                                           },

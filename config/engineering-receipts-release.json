@@ -15,7 +15,7 @@
     "Unrecognized receipt layouts must remain subject to human review",
     "Reader version V2 invalidates analysis cache and can cause fresh OCR calls",
     "Engineering history is a filtered sample of the last 50 Hugo observations",
-    "Local main divergence must be resolved before integration certification"
+    "Stable main promotion requires passing the complete grantor authorization matrix"
   ],
   "rollback": {
     "requiresExplicitApproval": true,
@@ -23,6 +23,20 @@
     "steps": ["Restore the recorded previous Hosting release", "Redeploy affected Functions from their recorded previous production revision", "Verify existing payment identification and authorized report access"],
     "dataPolicy": "Preserve observations, audit events, payments and analyses; no deletion or financial reversal"
   },
+  "blockingFindings": [
+    {
+      "code": "GRANTOR_RULES_EXPRESSION_BUDGET",
+      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs",
+      "result": "658/707 assertions passed; 49 unexpected denials; 68 expression-budget exhaustions",
+      "scope": "Existing pre-reconciliation rules; current actor and grantor restriction composition",
+      "requiredAction": "Optimize evaluation without relaxing authorization, then rerun the complete matrix"
+    },
+    {
+      "code": "DELEGATED_STORAGE_COVERAGE_GAPS",
+      "result": "325 restriction checks passed with 24 acknowledged delegated Storage gaps",
+      "requiredAction": "Resolve or explicitly bound delegated Storage coverage before security certification"
+    }
+  ],
   "productionVerification": "NOT_RUN",
   "historicalReceiptEvaluation": "NOT_RUN"
 }

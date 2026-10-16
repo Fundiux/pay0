@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "requiredCommits": [
+    {
+      "commit": "fe2b98b7544712fba6ef50f70cac8e8dd33a2624",
+      "capability": "Ciclo de distribucion de comisiones"
+    },
+    {
+      "commit": "6dc1764ab9cee7eb336c23a880ab9f7f3037715f",
+      "capability": "Correcciones operativas Betell, IQ y documentos"
+    },
+    {
+      "commit": "ca0cb423f2c15b19a33beb3a492cc6ef64c5f886",
+      "capability": "Hugo Voice y herramientas canonicas PAY0"
+    }
+  ],
+  "requiredText": [
+    {
+      "file": "src/components/ClientCommissionRulePanel.tsx",
+      "text": "Distribución de comisión",
+      "capability": "Configuracion de comisiones en el detalle del cliente"
+    },
+    {
+      "file": "src/app/clientes/[id]/costos/page.tsx",
+      "text": "<ClientCommissionRulePanel",
+      "capability": "Montaje de comisiones en Costos y distribucion"
+    },
+    {
+      "file": "src/app/reportes/page.tsx",
+      "text": "setActiveTab(\"commissions\")",
+      "capability": "Pestana Reportes > Comisiones"
+    },
+    {
+      "file": "src/app/reportes/page.tsx",
+      "text": "Validar sin dispersar",
+      "capability": "Preflight no financiero de comisiones"
+    },
+    {
+      "file": "functions/src/index.ts",
+      "text": "processPaymentCommissionDistribution",
+      "capability": "Functions del ciclo de comisiones"
+    },
+    {
+      "file": "src/services/beneficiaries.ts",
+      "text": "where(\"rootId\", \"==\", rootId)",
+      "capability": "Beneficiarios acotados al root autorizado"
+    },
+    {
+      "file": "functions/src/modules/financing/dispersionDispatchResolver.ts",
+      "text": "resolve",
+      "capability": "Enrutamiento automatico de dispersiones"
+    },
+    {
+      "file": "qa/scripts/verify-authorized-document-download.cjs",
+      "text": "signedDownloads",
+      "capability": "Descarga documental real autorizada y denegaciones por modulo, delegacion y root"
+    },
+    {
+      "file": "qa/scripts/verify-authorized-dispersion-capability.cjs",
+      "text": "IQ_MODULE_DENIED",
+      "capability": "Dispersion IQ autorizada sin dependencia de Super Admin ni asignacion manual de despacho"
+    },
+    {
+      "file": "qa/scripts/verify-simulated-dispersion-e2e.cjs",
+      "text": "terminalStatus: \"COMPLETADA\"",
+      "capability": "E2E simulado de dispersion hasta comprobante persistido y estado terminal"
+    },
+    {
+      "file": "src/components/hugo/HugoRealtimeVoice.tsx",
+      "text": "Hugo",
+      "capability": "Hugo Voice"
+    },
+    {
+      "file": "functions/src/modules/agent007/voiceDelegation.ts",
+      "text": "delegate",
+      "capability": "Delegacion canonica de Hugo Voice"
+    },
+    {
+      "file": "qa/scripts/verify-hugo-voice-runtime-contract.cjs",
+      "text": "browserDirectRealtimeDisabled: true",
+      "capability": "La experiencia humana usa el gateway server-side y no el Realtime directo del navegador"
+    },
+    {
+      "file": "qa/scripts/client-csf-create-regression.cjs",
+      "text": "equivalentCreatePaths",
+      "capability": "Alta manual y alta por CSF comparten clientes.create sin elevar privilegios"
+    },
+    {
+      "file": "qa/scripts/authorized-document-ui-integration.mjs",
+      "text": "ephemeralUrlDelivered: true",
+      "capability": "La UI entrega documentos solo despues del callable autorizado"
+    },
+    {
+      "file": "qa/scripts/authorized-document-ui-integration.mjs",
+      "text": "\"MATERIALIDAD\"",
+      "capability": "BASE8601-01: Materialidad entrega documentos mediante URL HTTPS efimera"
+    }
+  ],
+  "forbiddenText": [
+    {
+      "file": "src/app/materialidad/[id]/page.tsx",
+      "text": "getDownloadURL(",
+      "capability": "BASE8601-01: Materialidad no accede directamente a Storage"
+    },
+    {
+      "file": "src/app/pagos/page.tsx",
+      "text": "backgroundUpload: true",
+      "capability": "El comprobante de pago debe finalizar antes de continuar"
+    }
+  ]
+}

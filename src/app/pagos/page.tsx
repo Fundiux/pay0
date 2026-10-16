@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 import { db } from "@/lib/firebaseClient";
+import { usePagoNotes, pagoNoteDisplayDate } from "@/lib/usePagoNotes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador } from "@/lib/roles";
@@ -227,7 +228,7 @@ function NoteBubble({ note, myUid }: any) {
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
-          {tsToDateTimeText(note?.createdAt)}
+          {pagoNoteDisplayDate(note?.displayDate)?.toLocaleString() || "Sin fecha"}
         </div>
       </div>
     </div>
@@ -411,7 +412,7 @@ export default function PagosPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   const [notesFor, setNotesFor] = useState<any>(null);
-  const [notes, setNotes] = useState<any[]>([]);
+  const notesState = usePagoNotes(myUid || "", rootId || "", notesFor?.id, canViewPagos);
   const [newNote, setNewNote] = useState("");
   const [noteSending, setNoteSending] = useState(false);
 
@@ -1608,28 +1609,11 @@ export default function PagosPage() {
   }, [canViewPagos, rootId, myUid, role]);
 
   useEffect(() => {
-    if (!notesFor?.id) {
-      setNotes([]);
-      return;
-    }
-
-    (async () => {
-      try {
-        await changePagoStatus({ pagoId: notesFor.id, hasUnreadMsg: false });
-      } catch (e) {
-        console.warn("changePagoStatus(hasUnreadMsg:false) fallo.", e);
-      }
-    })();
-
-    const qy = query(
-      collection(db, `pagos/${notesFor.id}/notas`),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(qy, (snap) => {
-      setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    if (!notesFor?.id || !myUid || !rootId) return;
+    void changePagoStatus({ pagoId: notesFor.id, hasUnreadMsg: false }).catch(() => {
+      console.warn("No se pudo marcar la conversación como leída.");
     });
-  }, [notesFor]);
+  }, [myUid, rootId, notesFor?.id]);
 
   useEffect(() => {
     if (!rootId || !myUid) {
@@ -2584,6 +2568,7 @@ export default function PagosPage() {
           text,
         });
         setNewNote("");
+        notesState.refresh();
       });
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo guardar la nota.");
@@ -3680,7 +3665,6 @@ export default function PagosPage() {
               <button
                 onClick={() => {
                   setNotesFor(null);
-                  setNotes([]);
                   setNewNote("");
                 }}
                 className="text-slate-400 hover:text-white"
@@ -3690,11 +3674,20 @@ export default function PagosPage() {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {notes.length === 0 ? (
-                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
-              ) : (
-                notes.map((note) => <NoteBubble key={note.id} note={note} myUid={myUid} />)
-              )}
+              <div className="text-xs text-slate-400">Actualizaciones más recientes primero</div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <button type="button" onClick={notesState.refresh} disabled={notesState.loading}>Actualizar</button>
+                <button type="button" onClick={notesState.reloadFromStart}>Reiniciar lectura</button>
+                <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder}>Cargar anteriores</button>
+              </div>
+              {notesState.error && <div role="alert" className="text-sm text-amber-300">{notesState.error}</div>}
+              {notesState.loading && <div role="status" className="text-xs text-slate-400">Cargando notas...</div>}
+              {!notesState.loading && !notesState.error && notesState.notes.length === 0 && <div className="text-sm text-slate-400">Sin mensajes todavía.</div>}
+              <div className="text-xs text-slate-500">Última actualización: {notesState.headObservedAt === null ? "Pendiente" : tsToDateTimeText({ seconds: notesState.headObservedAt / 1000 })}</div>
+              {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} myUid={myUid} />)}
+              {notesState.retainedNotes.length > 0 && <div className="text-xs text-slate-400">Notas anteriores conservadas. {notesState.refreshPending ? "Actualizando historial..." : "Historial actualizado."}</div>}
+              {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} myUid={myUid} />)}
+              <div className="text-xs text-slate-500">Historial actualizado: {notesState.windowObservedAt === null ? "Pendiente" : tsToDateTimeText({ seconds: notesState.windowObservedAt / 1000 })}</div>
             </div>
 
             <div className="border-t border-white/10 p-4">

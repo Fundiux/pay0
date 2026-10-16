@@ -21,6 +21,7 @@ import {
 import { diagnosePagoFinancialContext as diagnosePagoFinancialContextCore } from "./modules/deposits/diagnose";
 import { assertAuthorized, normalizeRole, getUserRole } from "./utils/authGuard";
 import { getDefaultModules } from "./modules/users/defaultModules";
+import { createUserWithLogin, discardUnpublishedLoginUser } from "./modules/users/loginIdentity";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { logActivity, logActivityTx } from "./utils/logActivity";
@@ -83,12 +84,13 @@ async function getActiveClientDelegationAccess(
 }
 
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";
+export { loginWithUsername, setMyUsername } from "./modules/users/loginIdentity";
 
 export const upsertUser = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
-    const email = request.data?.email ? String(request.data.email) : null;
+    const email = (await admin.auth().getUser(uid)).email || null;
 
     const ref = db.doc(`users/${uid}`);
     const snap = await ref.get();
@@ -815,24 +817,10 @@ export const createAdmin = onCall(
       throw new HttpsError("invalid-argument", "email requerido y password minimo 6 caracteres.");
     }
 
-    let u: admin.auth.UserRecord;
-    try {
-      u = await admin.auth().createUser({
-        email,
-        password,
-        displayName: displayName || undefined,
-        disabled: false,
-      });
-    } catch (err: any) {
-      const code = err?.errorInfo?.code || err?.code || "";
-      if (code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "El email ya esta en uso.");
-      }
-      throw err;
-    }
-
-    const now = FieldValue.serverTimestamp();
     const rootId = String(caller?.rootId || callerUid);
+    const { user: u, username } = await createUserWithLogin({ email, password,
+      displayName: displayName || undefined, username: request.data?.username, rootId });
+    const now = FieldValue.serverTimestamp();
     const userRef = db.doc(`users/${u.uid}`);
     let userNumber = 0;
     let userSequenceCounterPath = "";
@@ -855,6 +843,8 @@ export const createAdmin = onCall(
           email,
           displayName: displayName || null,
           role: "admin",
+          username,
+          usernameNormalized: username,
           modules: getDefaultModules("admin"),        rootId,
           parentUserId: callerUid,
           parentRole: "superadmin",
@@ -872,6 +862,9 @@ export const createAdmin = onCall(
         },
         { merge: true }
       );
+    }).catch(async error => {
+      await discardUnpublishedLoginUser(u.uid, username);
+      throw error;
     });
 
     if (despachoId) {
@@ -887,6 +880,7 @@ export const createAdmin = onCall(
       uid: u.uid,
       userNumber,
       userFolio: `U${String(userNumber).padStart(2, "0")}`,
+      username,
       role: "admin",
       rootId,
       parentUserId: callerUid,
@@ -966,21 +960,8 @@ export const createOperador = onCall(
       }
     }
 
-    let u: admin.auth.UserRecord;
-    try {
-      u = await admin.auth().createUser({
-        email,
-        password,
-        displayName: displayName || undefined,
-        disabled: false,
-      });
-    } catch (err: any) {
-      const code = err?.errorInfo?.code || err?.code || "";
-      if (code === "auth/email-already-exists") {
-        throw new HttpsError("already-exists", "El email ya esta en uso.");
-      }
-      throw err;
-    }
+    const { user: u, username } = await createUserWithLogin({ email, password,
+      displayName: displayName || undefined, username: request.data?.username, rootId });
 
     const now = FieldValue.serverTimestamp();
     const userRef = db.doc(`users/${u.uid}`);
@@ -1005,6 +986,8 @@ export const createOperador = onCall(
           email,
           displayName: displayName || null,
           role: "operador",
+          username,
+          usernameNormalized: username,
           rootId,
           parentUserId,
           parentRole,
@@ -1023,6 +1006,9 @@ export const createOperador = onCall(
         },
         { merge: true }
       );
+    }).catch(async error => {
+      await discardUnpublishedLoginUser(u.uid, username);
+      throw error;
     });
 
     if (despachoId) {
@@ -1038,6 +1024,7 @@ export const createOperador = onCall(
       uid: u.uid,
       userNumber,
       userFolio: `U${String(userNumber).padStart(2, "0")}`,
+      username,
       role: "operador",
       rootId,
       parentUserId,
@@ -2516,7 +2503,14 @@ export const changePagoStatus = onCall(
     const uid = requireAuth(request);
     const rootId = await getRootId(uid);
     const me = await getMyUser(uid);
-    assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "conciliate" });
+    const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {};
+    const requestedStatus = String(newStatus || "").trim().toUpperCase();
+    const requiredAction = requestedStatus === "RECHAZADO" || requestedStatus === "CANCELADO"
+      ? "cancel"
+      : requestedStatus
+        ? "conciliate"
+        : "view";
+    assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction });
 
     const role = String(me?.role || "").trim().toLowerCase();
     const isSuperadmin = role === "superadmin";
@@ -2525,7 +2519,6 @@ export const changePagoStatus = onCall(
     const actorRole = String(me?.role || "unknown");
     const actorName = String(me?.name || me?.displayName || me?.email || uid);
     const adminId = getActivityAdminId(me, uid, rootId);
-const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {};
     if (!pagoId) throw new HttpsError("invalid-argument", "pagoId requerido.");
     if (!newStatus && typeof hasUnreadMsg !== "boolean") {
       throw new HttpsError("invalid-argument", "newStatus o hasUnreadMsg requerido.");
@@ -2538,7 +2531,16 @@ const { pagoId, newStatus, conciliationNote, hasUnreadMsg } = request.data || {}
     const data = snap.data()!;
 
     if (data.rootId !== rootId) throw new HttpsError("permission-denied", "No autorizado.");
-    const pagoAdminId = String(data.adminId || "").trim();     const pagoCreatedBy = String(data.createdBy || "").trim();      const canManagePagoScope =       isSuperadmin ||       pagoAdminId === uid ||       pagoAdminId === rootId ||       pagoCreatedBy === uid;      if (!canManagePagoScope) {       throw new HttpsError("permission-denied", "No autorizado para modificar este pago.");     }      const isUnreadOnly =       !newStatus &&       typeof hasUnreadMsg === "boolean" &&       hasUnreadMsg === false;      if (!isSuperadmin && !isUnreadOnly) {       throw new HttpsError("permission-denied", "Solo superadmin puede cambiar estado de pagos.");     }
+    const pagoAdminId = String(data.adminId || "").trim();
+    const pagoCreatedBy = String(data.createdBy || "").trim();
+    const canManagePagoScope =
+      isSuperadmin ||
+      pagoAdminId === uid ||
+      pagoAdminId === rootId ||
+      pagoCreatedBy === uid;
+    if (!canManagePagoScope) {
+      throw new HttpsError("permission-denied", "No autorizado para modificar este pago.");
+    }
 
     const patch: any = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -2771,8 +2773,10 @@ export {
   executePagoApplicationIqPlan,
   processPagoApplicationIqPlanOnDemandTask,
   processIqPaymentApplicationExecution,
+  enqueuePaymentApplicationImmediately,
   diagnosePagoApplicationIqMethods,
 } from "./modules/paymentApplications/callables";
+export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnReceipt, applyPaymentsAutomaticallyOnInvoice } from "./modules/paymentApplications/automaticApplication";
 
 export { addSolicitudNota, addPagoNota } from "./modules/notes/callables";
 export { repairUserNumbersByRootCallable } from "./modules/users/repairNumbers";
@@ -2817,6 +2821,10 @@ export {
   getCommissionDistributionsReport,
 } from "./modules/commissionDistributions/callables";
 export { onPaymentReadyForCommissionDistribution } from "./modules/commissionDistributions/triggers";
+export { getMyCommissionSettings, configureUserCommissionEntitlement, previewMyCommissionDestinations, saveMyCommissionDestinations } from "./modules/commissionDistributions/userDestinations";
+export { requestUserCommissionDispersion, previewUserCommissionWithdrawal } from "./modules/commissionDistributions/requests";
+export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from "./modules/commissionDistributions/execution";
+export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { getControlCenterEngineering } from "./modules/controlCenter/engineeringCallables";
@@ -2845,8 +2853,9 @@ export {
 export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
-export { refreshMaterialityFromUpload } from "./modules/materiality/triggers";
+export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
+export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
 export {
   createIqCredentialProfile,
   updateIqCredentialProfile,
@@ -2945,11 +2954,23 @@ export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
 export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
+export {
+  listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
+  importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
+  restoreCorporateResourceVersion, retireCorporateResourceVersion, getCorporateResourceDownloadUrl,
+  initCorporateResourceUpload, finalizeCorporateResourceUpload,
+} from "./modules/canonicalCenter/service";
 export { getFacturamaSandboxStatus, getFacturamaProductionStatus, saveFacturamaDraft, listFacturamaInvoices, importCompanyInvoiceCatalog, initGlobalSatCatalogUpload, finalizeGlobalSatCatalogImport } from "./modules/facturama/callables";
 export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturamaProductionInvoice, reconcileFacturamaIssuedMetadata, cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus, getFacturamaProductionCsdStatus, registerFacturamaProductionCsd } from "./modules/facturama/sandboxCallables";
-export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";
+export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";
+export { createHugoRealtimeSession } from "./modules/agent007/realtimeVoice";
+export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modules/agent007/voiceDelegation";
+export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 
 export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";
+export { listClientDispersionNotes } from "./modules/financing/noteReads";
+export { listPagoNotes } from "./modules/notes/pagoReads";
+export { listSolicitudNotes } from "./modules/notes/solicitudReads";

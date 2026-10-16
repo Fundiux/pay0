@@ -8,6 +8,7 @@ import {
 import {
   finalizeClientCsfIntake,
   parseAndCreateClientCsfIntake,
+  resolveClientCsfContinuationAction,
 } from "./csfService";
 
 function actorName(user:any,uid:string){
@@ -55,18 +56,33 @@ export const finalizeClientCsfIntakeCallable = onCall(
   async request=>{
     const uid=requireAuth(request);
     const user=await getMyUser(uid);
+    const rootId=String(user?.rootId||uid);
+    const intakeId=String(request.data?.intakeId||"");
+    const clientId=String(request.data?.clientId||"");
     assertAuthorized(request.auth,user,{
       allowedRoles:["superadmin","admin","operador"],
       requiredModule:"clientes",
-      requiredAction:"edit",
+      requiredAction:["create","edit"],
+    });
+    const requiredAction=await resolveClientCsfContinuationAction({
+      intakeId,
+      clientId,
+      uid,
+      rootId,
+      allowFinalizedCreate: true,
+    });
+    assertAuthorized(request.auth,user,{
+      allowedRoles:["superadmin","admin","operador"],
+      requiredModule:"clientes",
+      requiredAction,
     });
 
     return finalizeClientCsfIntake({
-      intakeId:String(request.data?.intakeId||""),
-      clientId:String(request.data?.clientId||""),
+      intakeId,
+      clientId,
       entityDocumentId:String(request.data?.entityDocumentId||""),
       uid,
-      rootId:String(user?.rootId||uid),
+      rootId,
       actorName:actorName(user,uid),
     });
   },

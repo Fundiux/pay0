@@ -1,4 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -9,7 +9,8 @@ import { executeRequestIqComplement, requestedComplementAction } from "./capabil
 import { Pay0Connector } from "./pay0Connector";
 import { HugoToolRouter } from "./hugoCore/toolRouter";
 import { HugoConversationCore } from "./hugoCore/conversationCore";
-import { VertexGeminiAdapter } from "./vertexGeminiAdapter";
+import { HugoModelRouter } from "./hugoModelRouter";
+import { HUGO_CAPABILITIES, classifyHugoProfile, classifyHugoRoutingSignals, normalizeHugoScope } from "./hugoCore/runtimeContract";
 import { conversationTrace } from "./traceStore";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
@@ -17,10 +18,13 @@ import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
+import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
+import { PlatformReadConnector } from "./platformReadConnector";
+import { publicHugoSystemCatalog } from "./systemCatalog";
 
 const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
-const conversationIdFor = (rootId: string, uid: string) => `${rootId}_${uid}`;
+const conversationIdFor = (rootId: string, uid: string, scope: "GLOBAL" | "PAY0" = "PAY0") => scope === "GLOBAL" ? `${rootId}_${uid}_global` : `${rootId}_${uid}`;
 const hugoData = new FirestoreHugoDataStore(db);
 const hugoLearning = new FirestoreHugoLearningStore(db);
 
@@ -52,7 +56,7 @@ export const recordAgent007Observation = onCall(
       actorUid: uid, actorRole: String(getUserRole(user)), authorization: { role: String(getUserRole(user)), scope: "rootId", rootId },
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null,
     });
-    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: observationId, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `Hugo registró observación supervisada: ${intent}` });
+    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: observationId, referenceType: "agent007Observation", relatedEntityId: caseId, relatedEntityType: caseType, description: `María registró observación supervisada: ${intent}` });
     return { ok: true, observationId };
   }
 );
@@ -119,7 +123,7 @@ export const resolveAgent007Recommendation = onCall(
       return true;
     });
     if (!resolved) return { ok: true, alreadyResolved: true };
-    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: recommendationId, referenceType: "agent007Recommendation", relatedEntityId: clean(row.caseId, 128), relatedEntityType: clean(row.caseType, 40), description: `Hugo Fase 2: recomendacion ${decision.toLowerCase()}` });
+    await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: recommendationId, referenceType: "agent007Recommendation", relatedEntityId: clean(row.caseId, 128), relatedEntityType: clean(row.caseType, 40), description: `María Fase 2: recomendacion ${decision.toLowerCase()}` });
     return { ok: true };
   },
 );
@@ -128,9 +132,40 @@ export const listAgent007Messages = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const { uid, rootId } = await actor(request);
-    const conversationId = conversationIdFor(rootId, uid);
-    const messages = await hugoData.listMessages(rootId, uid);
-    return { ok: true, conversationId, messages };
+    const data = request.data || {};
+    const scope = normalizeHugoScope(data.scope);
+    const conversationId = conversationIdFor(rootId, uid, scope);
+    const dateKey = clean(data.dateKey, 10) || hugoDateKey();
+    let bounds: { from: Date; to: Date };
+    try { bounds = hugoDayBounds(dateKey); }
+    catch { throw new HttpsError("invalid-argument", "Fecha de historial invalida."); }
+    const messageLimit = Math.min(Math.max(Number(data.limit) || 40, 1), 80), includeMessages = data.messagesDone !== true;
+    let messagesQuery = db.collection("agent007Messages")
+      .where("rootId", "==", rootId).where("conversationId", "==", conversationId)
+      .where("createdAt", ">=", Timestamp.fromDate(bounds.from)).where("createdAt", "<", Timestamp.fromDate(bounds.to))
+      .orderBy("createdAt", "desc").limit(messageLimit + 1);
+    const messageCursor = clean(data.messageCursor, 180);
+    if (messageCursor) {
+      const cursor = await db.collection("agent007Messages").doc(messageCursor).get();
+      if (!cursor.exists || cursor.data()?.rootId !== rootId || cursor.data()?.conversationId !== conversationId) throw new HttpsError("invalid-argument", "Cursor fuera de ambito.");
+      messagesQuery = messagesQuery.startAfter(cursor);
+    }
+    const voiceLimit = Math.min(Math.max(Number(data.voiceLimit) || 20, 1), 40), includeVoice = data.voiceDone !== true;
+    const voiceCollection = db.collection("agent007Conversations").doc(conversationId).collection("voiceSessions");
+    let voiceQuery = voiceCollection.where("startedAt", ">=", Timestamp.fromDate(bounds.from)).where("startedAt", "<", Timestamp.fromDate(bounds.to)).orderBy("startedAt", "desc").limit(voiceLimit + 1);
+    const voiceCursor = clean(data.voiceCursor, 180);
+    if (voiceCursor) {
+      const cursor = await voiceCollection.doc(voiceCursor).get();
+      if (!cursor.exists || cursor.data()?.rootId !== rootId || cursor.data()?.ownerUid !== uid) throw new HttpsError("invalid-argument", "Cursor de voz fuera de ambito.");
+      voiceQuery = voiceQuery.startAfter(cursor);
+    }
+    const [messageSnap, voiceSnap] = await Promise.all([includeMessages ? messagesQuery.get() : null, includeVoice ? voiceQuery.get() : null]);
+    const messageDocs = messageSnap?.docs.slice(0, messageLimit) || [], voiceDocs = voiceSnap?.docs.slice(0, voiceLimit) || [];
+    const messages = messageDocs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+    const voiceSessions = voiceDocs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+    return { ok: true, conversationId, dateKey, timeZone: "America/Mexico_City", messages, voiceSessions,
+      nextMessageCursor: messageSnap && messageSnap.docs.length > messageLimit ? messageDocs.at(-1)?.id || null : null,
+      nextVoiceCursor: voiceSnap && voiceSnap.docs.length > voiceLimit ? voiceDocs.at(-1)?.id || null : null };
   },
 );
 
@@ -148,27 +183,38 @@ export const sendAgent007Message = onCall(
   async (request) => {
     const { uid, user, rootId } = await actor(request);
     const text = clean(request.data?.text, 2000);
-    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
+    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para María.");
     const startedAt = Date.now();
-    const conversationId = conversationIdFor(rootId, uid);
+    const scope = normalizeHugoScope(request.data?.scope);
+    const profile = classifyHugoProfile(text);
+    const routingSignals = classifyHugoRoutingSignals(text, profile);
+    const conversationId = conversationIdFor(rootId, uid, scope);
     const name = displayName(user);
     const capability = requestedComplementAction(text)
       ? await executeRequestIqComplement({ db, rootId, uid, message: text })
       : null;
     const identity = { uid, rootId, role: "superadmin" as const };
     const pay0 = new Pay0Connector(db, identity);
+    const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
-      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit),
+      getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
+      searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
       getPaymentComplementStatus: ({ folio }) => pay0.getPaymentComplementStatus(folio),
       getPay0OperationalSummary: () => pay0.getPay0OperationalSummary(), getIqCapabilities: () => pay0.getIqCapabilities(),
+      getAuthorizedCapabilities: () => platform.getAuthorizedCapabilities(), getSystemCatalog: () => platform.getSystemCatalog(),
+      countClientsForUser: ({ query }) => platform.countClientsForUser(query), countClientsForCurrentUser: () => platform.countClientsForCurrentUser(),
+      getLatestSolicitudForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "SOLICITUD", period, limit), getLatestPagoForUser: ({ query, period, limit }) => platform.getLatestOperationForUser(query, "PAGO", period, limit),
+      getSessionContext: () => platform.getSessionContext(), getLastOperationDiagnostic: () => platform.getLastOperationDiagnostic(),
     });
-    const core = new HugoConversationCore(router, new VertexGeminiAdapter(), hugoData, hugoLearning);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, commandReply: capability?.reply, promptVersion: "hugo-v2" as const };
+    const modelRouter = new HugoModelRouter();
+    const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
+      modelCapability: profile === "PROGRAMMER" ? "STRONG_EXTERNAL" as const : "FAST_EXTERNAL" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
       await hugoData.saveErrorTrace(rootId, traceId, { schemaVersion: 1, conversationId, actorUid: uid, actorRole: "superadmin", channel: "WEB",
-        timestamp: FieldValue.serverTimestamp(), model: "gemini-2.5-flash", promptVersion: "hugo-v2", resultStatus: "ERROR",
+        timestamp: FieldValue.serverTimestamp(), scope, profile, task: "DIRECT_CONVERSATION", model: "unavailable", promptVersion: "hugo-v2", resultStatus: "ERROR",
         errorCode: error instanceof Error ? clean(error.name, 80) : "ERROR", latencyMs: Date.now() - startedAt,
         toolsRequested: error instanceof Error ? (error as Error & { hugoToolsRequested?: string[] }).hugoToolsRequested || [] : [],
         toolsExecuted: error instanceof Error ? (error as Error & { hugoToolsExecuted?: string[] }).hugoToolsExecuted || [] : [],
@@ -176,15 +222,39 @@ export const sendAgent007Message = onCall(
       throw error;
     });
     const reply = result.text;
-    const source = result.source === "MODEL_RESPONSE" ? "VERTEX_AI" : "HUGO_ENGINE";
-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+    const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     for (const experienceId of result.learningUsage?.includedIds || []) {
       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
     }
-    return { ok: true, conversationId, message: { id: saved.id, role: "assistant", text: reply, source, createdAt: saved.createdAt } };
+    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, source, scope, profile, createdAt: saved.createdAt } };
+  },
+);
+
+export const getHugoDashboard = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const [recommendations, traces, globalMessages] = await Promise.all([
+      hugoData.listRecommendations(rootId, 50),
+      hugoData.listTraces(rootId, { limit: 50, from: new Date(Date.now() - 30 * 86400000), to: new Date() }),
+      hugoData.listMessages(rootId, uid, 20, conversationIdFor(rootId, uid, "GLOBAL")),
+    ]);
+    const attention = recommendations.filter(row => row.status === "PENDING_REVIEW" && row.requiresHumanDecision !== false);
+    const byProvider: Record<string, any> = {};
+    for (const trace of traces.traces) {
+      const provider = String(trace.modelProvider || (trace.model === "none" ? "NO_MODEL" : "UNKNOWN"));
+      const metric = byProvider[provider] ||= { requests: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, errors: 0, latencyMs: 0 };
+      metric.requests++; metric.inputTokens += Number(trace.tokenUsage?.input || 0); metric.outputTokens += Number(trace.tokenUsage?.output || 0);
+      metric.reasoningTokens += Number(trace.tokenUsage?.reasoning || 0); metric.errors += trace.errorCode ? 1 : 0; metric.latencyMs += Number(trace.latencyMs || 0);
+    }
+    Object.values(byProvider).forEach((row: any) => { row.averageLatencyMs = row.requests ? Math.round(row.latencyMs / row.requests) : 0; delete row.latencyMs; });
+    return { ok: true, scope: "GLOBAL", attention: attention.slice(0, 12), activity: traces.traces.slice(0, 12), consumption: byProvider,
+      providers: new HugoModelRouter().status(), capabilities: HUGO_CAPABILITIES, conversations: [{ id: conversationIdFor(rootId, uid, "GLOBAL"), scope: "GLOBAL", messageCount: globalMessages.length,
+        lastMessage: globalMessages.at(-1)?.text || null }], systems: publicHugoSystemCatalog() };
   },
 );
 
@@ -244,7 +314,7 @@ export const createAgent007MemoryCandidate = onCall(
     const entityReference = raw ? { sourceSystem: clean(raw.sourceSystem, 40), entityType: clean(raw.entityType, 40), entityId: clean(raw.entityId, 160), displayReference: clean(raw.displayReference, 80) || undefined } : undefined;
     if (entityReference && (!entityReference.sourceSystem || !entityReference.entityType || !entityReference.entityId)) throw new HttpsError("invalid-argument", "Entidad inválida.");
     const result = await hugoData.createMemoryCandidate({ rootId, actorUid: uid, kind: kind as "USER_STATEMENT" | "PREFERENCE" | "DECISION" | "EXPERIENCE", content, entityReference });
-    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: `Hugo creó candidato de memoria ${kind}` });
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: `María creó candidato de memoria ${kind}` });
     return { ok: true, ...result, status: "CANDIDATE" };
   },
 );
@@ -257,7 +327,7 @@ export const reviewAgent007MemoryCandidate = onCall(
     const supersedesId = clean(request.data?.supersedesId, 160) || undefined;
     if (!id || !["CONFIRM", "REJECT"].includes(decision) || decision === "REJECT" && supersedesId) throw new HttpsError("invalid-argument", "Revisión de memoria inválida.");
     const result = await hugoData.reviewMemoryCandidate(rootId, uid, id, decision as "CONFIRM" | "REJECT", supersedesId);
-    if (result.changed) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: id, referenceType: "agent007Memory", description: `Hugo revisó candidato de memoria: ${decision}` });
+    if (result.changed) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: id, referenceType: "agent007Memory", description: `María revisó candidato de memoria: ${decision}` });
     return { ok: true, ...result };
   },
 );
@@ -269,7 +339,7 @@ export const linkAgent007VerifiedExperience = onCall(
     const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
     if (!observationId || !decisionId || !outcomeId) throw new HttpsError("invalid-argument", "Vínculos obligatorios.");
     const result = await hugoData.linkVerifiedExperience(rootId, observationId, decisionId, outcomeId);
-    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "Hugo vinculó experiencia con resultado verificado" });
+    if (result.created) await logActivity({ event: "AGENTE_007_OBSERVACION", rootId, adminId: getActivityAdminId(user, uid, rootId), actorUid: uid, actorName: clean(user?.email || uid), actorRole: String(getUserRole(user)), referenceId: result.id, referenceType: "agent007Memory", description: "María vinculó experiencia con resultado verificado" });
     return { ok: true, ...result };
   },
 );

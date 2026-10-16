@@ -41,7 +41,7 @@ export const updateRejectedPagoAmountForRetry = onCall(
   },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
-    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin"], requiredModule: "pagos", requiredAction: "conciliate" });
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin"], requiredModule: "pagos", requiredAction: "edit" });
     return await updateRejectedPagoAmountForRetryCore(request, {
       telegramBotToken: TELEGRAM_BOT_TOKEN.value(),
     });

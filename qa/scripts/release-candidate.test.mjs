@@ -83,6 +83,18 @@ test('gate failure records failure and never creates source archive', t => {
   assert(!fs.existsSync(path.join(directory, 'source.tar')));
 });
 
+test('successful local gates preserve known blockers and never certify production', t => {
+  const { cwd, git } = fixture(t);
+  fs.mkdirSync(path.join(cwd, 'config'));
+  const finding = { code: 'SYNTHETIC_RULE_GATE_FAILURE', requiredAction: 'Resolve before publication' };
+  fs.writeFileSync(path.join(cwd, 'config/engineering-receipts-release.json'), JSON.stringify({ blockingFindings: [finding] }));
+  git('add', 'config'); git('commit', '-m', 'Record blocking finding');
+  const { report } = prepareCandidate({ cwd, execute: () => {} });
+  assert.deepEqual(report.blockingFindings, [finding]);
+  assert.equal(report.productionCertified, false);
+  assert.equal(report.deploymentAuthorized, false);
+});
+
 test('source changes during checks invalidate candidate', t => {
   const { cwd } = fixture(t);
   assert.throws(() => prepareCandidate({ cwd, execute: () => fs.writeFileSync(path.join(cwd, 'source.txt'), 'mutated during gate') }), /checkout limpio/);

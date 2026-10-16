@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { aggregateCommissionStatus, allocatePostedCommission, decideCommissionPreflight, evaluateIqLink } from "./domain";
+import { materializeUserEarningDistribution, preflightUserEarningDistribution, terminalCommissionLeg } from "./userEarnings";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -19,11 +20,15 @@ export async function materializeCommissionDistribution(params: {
   paymentId: string;
   actorUid: string;
   dryRun?: boolean;
+  expectedRootId?: string;
+  ownerUid?: string;
 }) {
+  if (params.ownerUid) return materializeUserEarningDistribution({ ...params, ownerUid: params.ownerUid });
   const paymentRef = db.doc(`pagos/${params.paymentId}`);
   const paymentSnap = await paymentRef.get();
   if (!paymentSnap.exists) throw new Error("Pago no encontrado.");
   const payment: any = paymentSnap.data() || {};
+  if (params.expectedRootId && text(payment.rootId) !== params.expectedRootId) throw new Error("Pago fuera de alcance.");
   if (upper(payment.status) !== "CONCILIADO" || upper(payment.financialPostingStatus) !== "POSTED") {
     throw new Error("El ingreso todavía no está conciliado y contabilizado.");
   }
@@ -48,7 +53,12 @@ export async function materializeCommissionDistribution(params: {
     totalRateBps: rule.totalRateBps,
     legs: rule.legs,
   });
-  const distributionId = stableCommissionId(`${rootId}|${params.paymentId}|${rule.version || 1}`);
+  // Identity excludes the mutable rule version. Adopt any existing legacy calculation.
+  const historical = await db.collection("commissionDistributions").where("paymentId", "==", params.paymentId).get();
+  const prior = historical.docs.filter(doc => doc.data().rootId === rootId && doc.data().sourceType !== "USER_EARNINGS");
+  if (prior.length > 1) throw new Error("Existen distribuciones duplicadas para este pago; requieren conciliación.");
+  if (prior.length === 1) return { ok: true, skipped: false, idempotent: true, distributionId: prior[0].id, data: prior[0].data() };
+  const distributionId = stableCommissionId(`${rootId}|${params.paymentId}`);
   const distributionRef = db.doc(`commissionDistributions/${distributionId}`);
   const existing = await distributionRef.get();
   if (existing.exists) return { ok: true, skipped: false, idempotent: true, distributionId, data: existing.data() };
@@ -135,6 +145,7 @@ export async function preflightCommissionDistribution(params: { distributionId: 
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Distribución no encontrada.");
   const distribution: any = snap.data() || {};
+  if (distribution.sourceType === "USER_EARNINGS") return preflightUserEarningDistribution(params.distributionId, params.actorUid, now);
   const paymentSnap = await db.doc(`pagos/${text(distribution.paymentId)}`).get();
   const payment: any = paymentSnap.data() || {};
   const ruleSnapshot = distribution.ruleSnapshot || {};
@@ -155,7 +166,7 @@ export async function preflightCommissionDistribution(params: { distributionId: 
   const clientIqId = text(client?.iqLink?.clientId || client.iqClientId);
   if (!clientIqId) reasons.push({ code: "IQ_CLIENT_LINK_MISSING", scope: "DISTRIBUTION", message: "El cliente no tiene vínculo canónico con IQ." });
 
-  const evaluatedLegs = [];
+  const evaluatedLegs: any[] = [];
   for (const leg of Array.isArray(distribution.legs) ? distribution.legs : []) {
     const methodSnap = await db.doc(`clientBeneficiaryMethods/${text(leg.methodId)}`).get();
     const method: any = methodSnap.data() || {};
@@ -170,11 +181,16 @@ export async function preflightCommissionDistribution(params: { distributionId: 
     if (text(method.iqDespachoId) !== despachoId) legReasons.push("IQ_ORIGIN_CHANGED");
     if (!text(method.iqBeneficiaryId) || !text(method.iqAccountId)) legReasons.push("IQ_IDENTIFIERS_MISSING");
     for (const code of legReasons) reasons.push({ code, scope: "LEG", legId: leg.legId, message: `Destino ${leg.alias}: ${code}.` });
-    evaluatedLegs.push({ ...leg, status: legReasons.length ? "BLOCKED" : "READY", preflightReasons: legReasons, iqBeneficiaryId: text(method.iqBeneficiaryId) || null, iqAccountId: text(method.iqAccountId) || null, iqLinkVerifiedAt: verifiedAt ? new Date(verifiedAt).toISOString() : null, origin: { rootId: distribution.rootId, despachoId, iqCredentialProfileId: text(method.iqCredentialProfileId) || null, clientIqId: clientIqId || null } });
+    evaluatedLegs.push({ ...leg, status: terminalCommissionLeg(leg) ? leg.status : legReasons.length ? "BLOCKED" : "READY", preflightReasons: legReasons, iqBeneficiaryId: text(method.iqBeneficiaryId) || null, iqAccountId: text(method.iqAccountId) || null, iqLinkVerifiedAt: verifiedAt ? new Date(verifiedAt).toISOString() : null, origin: { rootId: distribution.rootId, despachoId, iqCredentialProfileId: text(method.iqCredentialProfileId) || null, clientIqId: clientIqId || null } });
   }
   const decision = decideCommissionPreflight(reasons.filter((reason) => reason.scope === "DISTRIBUTION").map((reason) => reason.code), evaluatedLegs.map((leg: any) => leg.preflightReasons));
   const ready = decision.ready;
   const result = { status: ready ? "READY_FOR_EXECUTION" : "BLOCKED", checkedAt: new Date(now).toISOString(), reasons, payment: { id: distribution.paymentId, folio: distribution.pay0Folio, status: payment.status, financialPostingStatus: payment.financialPostingStatus }, commission: { grossAmount: distribution.grossAmount, totalCommissionAmount: distribution.totalCommissionAmount, differenceAmount: distribution.differenceAmount, ruleVersion: distribution.ruleVersion }, origin: { rootId: distribution.rootId, despachoId: despachoId || null, despachoName: text(despacho.nombre) || null, clientIqId: clientIqId || null }, legs: evaluatedLegs };
-  await ref.set({ preflight: result, status: ready ? "READY" : aggregateCommissionStatus(evaluatedLegs.map((leg: any) => leg.status)), updatedAt: FieldValue.serverTimestamp(), lastPreflightBy: params.actorUid }, { merge: true });
+  await db.runTransaction(async tx => {
+    const latest = await tx.get(ref);
+    if (!latest.updateTime?.isEqual(snap.updateTime!)) throw new Error("La distribución cambió durante la revisión.");
+    const preserve = (distribution.legs || []).some(terminalCommissionLeg);
+    tx.update(ref, { preflight: result, ...(preserve ? {} : { status: ready ? "READY" : aggregateCommissionStatus(evaluatedLegs.map((leg: any) => leg.status)) }), updatedAt: FieldValue.serverTimestamp(), lastPreflightBy: params.actorUid });
+  });
   return { ok: true, distributionId: params.distributionId, ...result };
 }
