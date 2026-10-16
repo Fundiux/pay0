@@ -126,11 +126,31 @@ console.log("SMOKE_STAGE=oc_saved");
 await finalizeSolicitudDocumentUploadCore({ auth, data: { uploadId: init.uploadId, storagePath: init.storagePath } });
 console.log("SMOKE_STAGE=oc_finalized");
 
-const [oc, quote, operation, invoice] = await Promise.all([
+let [oc, quote, operation, invoice] = await Promise.all([
   waitForActiveUpload("ORDEN_COMPRA"), waitForActiveUpload("COTIZACION"), db.doc(`materialityOperations/${solicitudId}`).get(),
   db.collection("facturamaInvoices").where("sourceSolicitudId", "==", solicitudId).limit(1).get(),
 ]);
 assert.ok(oc, "La OC debe quedar activa.");
+if (process.env.PAY0_TEST_INJECT_QUOTATION_STORAGE_FAILURE === "1") {
+  const failed = await db.doc(`solicitudes/${solicitudId}`).get();
+  assert.equal(quote, null, "El fallo de Storage no debe registrar una cotizacion activa.");
+  assert.equal(failed.data()?.cotizacionAutoGenerateStatus, "ERROR");
+  assert.equal(failed.data()?.cotizacionAutoGenerateStage, "PDF_OR_STORAGE");
+  assert.match(String(failed.data()?.cotizacionAutoGenerateLastError), /PAY0_TEST_INJECTED_STORAGE_FAILURE/);
+  console.log("SMOKE_STAGE=storage_failure_persisted");
+  delete process.env.PAY0_TEST_INJECT_QUOTATION_STORAGE_FAILURE;
+  const { reprocessActiveSolicitudOcCore } = await import("../../functions/lib/modules/solicitudDocuments/service.js");
+  await reprocessActiveSolicitudOcCore({ auth, data: { solicitudId } });
+  const recoveredQuote = await waitForActiveUpload("COTIZACION");
+  const recovered = await db.doc(`solicitudes/${solicitudId}`).get();
+  const allQuotes = await db.collection("uploads").where("solicitudId", "==", solicitudId).where("documentType", "==", "COTIZACION").get();
+  assert.ok(recoveredQuote, "El reproceso debe restaurar la cotizacion.");
+  quote = recoveredQuote;
+  assert.equal(recovered.data()?.cotizacionAutoGenerateStatus, "READY");
+  assert.equal(recovered.data()?.cotizacionAutoGenerateLastError, undefined);
+  assert.equal(allQuotes.size, 1, "El fallo previo no debe dejar duplicados u huerfanos.");
+  console.log("SMOKE_STAGE=storage_recovery_verified");
+}
 assert.ok(quote, "La OC debe generar cotización automática.");
 assert.ok(operation.exists, "La OC debe crear/actualizar el expediente de Materialidad.");
 // This fixture is outside a PAY0 dispatch. A quotation must not imply that a
