@@ -1006,6 +1006,13 @@ const downloadDoc = async (doc: UploadRow) => {
                 {ocReprocessing ? "Reprocesando OC..." : "Reprocesar OC activa"}
               </button>
             </div>
+            {solicitud?.cotizacionAutoGenerateStatus === "ERROR" ? (
+              <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
+                La cotización no se generó automáticamente ({solicitud?.cotizacionAutoGenerateStage || "ETAPA_DESCONOCIDA"}). {solicitud?.cotizacionAutoGenerateLastError || "Reprocesa la OC activa tras corregir sus partidas."}
+              </div>
+            ) : solicitud?.cotizacionAutoGenerateStatus === "READY" ? (
+              <div className="mt-3 text-[11px] text-emerald-200">Cotización automática lista desde la OC activa.</div>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4">

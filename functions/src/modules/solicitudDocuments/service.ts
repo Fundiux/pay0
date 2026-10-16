@@ -12,6 +12,7 @@ import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service"
 import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -356,24 +357,6 @@ function canUploadSolicitudDocs(user: any): boolean {
   return false;
 }
 
-function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
-  const role = getRole(user);
-
-  if (role === "superadmin") {
-    return String(solicitud?.rootId || "") === rootId || String(solicitud?.createdBy || "") === uid;
-  }
-
-  if (role === "admin") {
-    return String(solicitud?.rootId || "") === rootId && String(solicitud?.adminId || "") === uid;
-  }
-
-  if (role === "operador") {
-    return String(solicitud?.rootId || "") === rootId && String(solicitud?.createdBy || "") === uid;
-  }
-
-  return false;
-}
-
 async function loadSolicitudOrThrow(input: {
   solicitudId: string;
   uid: string;
@@ -389,9 +372,16 @@ async function loadSolicitudOrThrow(input: {
 
   const solicitud = solicitudSnap.data() || {};
 
-  if (!canAccessSolicitud(input.user, input.uid, input.rootId, solicitud)) {
-    throw new HttpsError("permission-denied", "No autorizado.");
-  }
+  if (String(solicitud?.rootId || "") !== input.rootId) throw new HttpsError("permission-denied", "No autorizado.");
+  const clientId = String(solicitud?.clienteId || solicitud?.clientId || "").trim();
+  if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
+  await requireClientOperationalAccess({
+    uid: input.uid,
+    role: getRole(input.user) as "superadmin" | "admin" | "operador",
+    rootId: input.rootId,
+    clientId,
+    permission: "operateSolicitudes",
+  });
   if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
 
   return {
@@ -735,9 +725,12 @@ logActivityTx(tx, db, {
       // Replacing the active OC must also replace its derivative quotation.
       data: { solicitudId, replaceExisting: true },
     }).catch(async (error) => {
+      const errorCode = String(error?.code || "COTIZACION_GENERATION_FAILED").toUpperCase();
       await solicitudRef.set(
         {
           cotizacionAutoGenerateStatus: "ERROR",
+          cotizacionAutoGenerateStage: errorCode === "PERMISSION-DENIED" ? "AUTHORIZATION" : errorCode === "FAILED-PRECONDITION" ? "SOURCE_VALIDATION" : "PDF_OR_STORAGE",
+          cotizacionAutoGenerateErrorCode: errorCode,
           cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
           cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
         },
