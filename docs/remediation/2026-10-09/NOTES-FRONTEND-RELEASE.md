@@ -37,3 +37,9 @@ Postflight público fd17eb: /login, /pagos y /descarga/documento HTTP200, BUILD_
 ## Pendiente para cerrar el punto 2
 
 La publicación, el runtime SSR y la entrega pública están verificados. Falta la interacción autenticada de UI. El navegador conectado no pudo iniciar su runtime (os error 3); el estado QA configurado qa/.auth/superadmin.json no existe y las variables PAY0_QA_EMAIL/PAY0_QA_PASSWORD no están presentes (c2bdda). No se leyeron contraseñas ni tokens. Se pidió al usuario elegir entre iniciar sesión en un navegador QA dedicado o realizar la comprobación manual. Los HTTP200 públicos no acreditan acceso autorizado a notas ni el flujo completo de UI.
+
+Avance autenticado posterior: el usuario eligió iniciar sesión en Chromium QA. La primera instancia aislada no era visible; se cerró y se abrió otra fuera del sandbox (`7180a8`). El usuario confirmó el acceso, y el controlador observó `/dashboard` sin formulario de login (`294ed0`). No se guardó storageState ni se imprimieron credenciales, tokens, identificadores de registros o contenido de notas.
+
+Pagos apareció vacío por el filtro diario. Tras seleccionar Semana por indicación del usuario, se observaron 14 botones de notas y se abrió el primero (`325760`). El panel «Notas del pago» quedó visible y `listPagoNotes` respondió HTTP200 bajo la sesión autenticada (`1ebbd5`). No se creó ninguna nota ni se ejecutaron operaciones financieras. Las respuestas posteriores del polling normal del panel no se consideran pruebas adicionales.
+
+Todavía falta confirmar la presentación del historial o estado vacío sin errores y completar las aperturas autenticadas de Solicitudes y Dispersiones. Se solicitó al usuario abrir esos paneles existentes en la misma sesión; el controlador registra únicamente endpoint/estado HTTP. El punto 2 no se declara cerrado con la comprobación parcial de Pago.
