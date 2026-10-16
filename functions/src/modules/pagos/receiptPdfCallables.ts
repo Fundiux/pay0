@@ -28,6 +28,8 @@ type ReceiptData = {
   senderName: string;
   beneficiaryName: string;
   bankName: string;
+  sourceBankName: string;
+  destinationBankName: string;
   amount: number;
   date: string;
   time: string;
@@ -93,6 +95,8 @@ function normalize(value: unknown): string {
 function parseMoney(value: unknown): number {
   const raw = clean(value);
   if (!raw) return 0;
+  const spaced = raw.replace(/[^\d,.\- ]/g, "").trim();
+  if (/\d \d/.test(spaced) && !/^\d{1,3}(?: \d{3})+(?:[.,]\d{1,2})?$/.test(spaced)) return 0;
 
   const compact = raw
     .replace(/[^\d,.\-]/g, "")
@@ -126,9 +130,10 @@ function extractLabeled(lines: string[], labels: RegExp[]): string {
     if (!line) continue;
 
     for (const label of labels) {
-      const direct = line.match(label);
+      const direct = line.match(label) || normalize(line).match(label);
       if (direct?.[1]) {
-        const value = clean(direct[1]);
+        // Labels are accent-insensitive; names and concepts keep their spelling.
+        const value = clean(line.slice(line.length - direct[1].length));
         if (value) return value;
       }
 
@@ -136,7 +141,7 @@ function extractLabeled(lines: string[], labels: RegExp[]): string {
       // patterns require a nonempty capture, so a bare label followed by a
       // colon never matched. Probe with a sentinel, without inventing a value.
       const probe = `${line.replace(/[:\-]\s*$/, "")}: __PAY0_VALUE__`;
-      if (probe.match(label)?.[1] === "__PAY0_VALUE__") {
+      if ((probe.match(label) || normalize(probe).match(label))?.[1]?.toUpperCase() === "__PAY0_VALUE__") {
         const next = clean(lines[i + 1] || "");
         // A missing value must not consume the following field's label.
         if (next && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ][^:]{0,79}:/.test(next) && !/^(?:fecha|hora|referencia|folio|rastreo|clave de rastreo|concepto|ordenante|beneficiario|receptor|remitente|emisor|cuenta|clabe|banco|monto|importe|numero de (?:operacion|transaccion))\b/i.test(normalize(next))) return next;
@@ -491,6 +496,7 @@ function extractReceiptAmount(lines: string[], text: string): string {
 }
 export function parseReceiptText(textRaw: string): ReceiptData {
   const text = String(textRaw || "")
+    .normalize("NFC")
     .replace(/\r/g, "\n")
     .replace(/\n{2,}/g, "\n");
 
@@ -527,16 +533,29 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     /^alias\s*[:\-]\s*(.+)$/i,
   ]);
 
-  const destinationAccount = extractLabeled(lines, [
+  const normalizeAccount = (value: string) => /^[\d Xx*\-]+$/.test(value) ? value.replace(/[\s-]/g, "") : value;
+  const destinationAccount = normalizeAccount(extractLabeled(lines, [
     /^cuenta\s+de\s+dep[oÃƒÂ³]sito\s*[:\-]\s*(.+)$/i,
     /^cuenta\s+destino\s*[:\-]\s*(.+)$/i,
-    /^clabe\s+destino\s*[:\-]\s*(.+)$/i,
-  ]);
+    /^(?:cuenta|clabe)(?:\s+interbancaria)?\s+(?:de\s+)?(?:destino|beneficiario|receptor|abono|deposito)\s*[:\-]\s*(.+)$/i,
+  ]));
+  const sourceAccount = normalizeAccount(extractLabeled(lines, [
+    /^(?:cuenta|clabe)(?:\s+interbancaria)?\s+(?:de\s+)?(?:origen|ordenante|emisor|cargo)\s*[:\-]\s*(.+)$/i,
+  ]));
+  const sourceBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:origen|emisor|ordenante)\s*[:\-]\s*(.+)$/i]);
+  const destinationBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:destino|receptor|beneficiario)\s*[:\-]\s*(.+)$/i]);
 
   const amountRaw = extractReceiptAmount(lines, text);
   // Unlabelled monetary values remain manual suggestions; they never authorize an automatic payment.
-  const explicitAmounts = lines.map(line => normalize(line).match(/^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\s*(?:mxn|mxp|m\.n\.)?\s*[:$ ]+\s*(?:mxn|mxp|m\.n\.)?\s*\$?\s*([\d,.]+)\s*(?:mxn|mxp|m\.n\.)?\s*$/)?.[1])
-    .filter(Boolean).map(value => parseMoney(value));
+  const amountLabel = /^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\b\s*(?:mxn|mxp|m\.n\.)?\s*[:\-]?\s*/;
+  const explicitAmounts = lines.flatMap((line, index) => {
+    const match = normalize(line).match(amountLabel);
+    if (!match) return [];
+    const value = normalize(line).slice(match[0].length) || normalize(lines[index + 1] || "");
+    const money = value.match(/^(?:mxn|mxp|m\.n\.)?\s*\$?\s*(\d[\d,. ]*)\s*(?:mxn|mxp|m\.n\.)?$/);
+    // Missing or malformed explicit amounts also invalidate conflicting receipts.
+    return [money ? parseMoney(money[1]) : 0];
+  });
   const amountVerified = explicitAmounts.length > 0 && explicitAmounts.every(value => value > 0 && value === explicitAmounts[0]);
   const normalizedText = normalize(text);
   const blockedExecution = /\b(?:pendiente|programad[oa]|por\s+autorizar|en\s+proceso|capturad[oa]|rechazad[oa]|cancelad[oa]|fallid[oa]|no\s+(?:realizad[oa]|procesad[oa]|efectuad[oa]|completad[oa]|liquidad[oa]|aplicad[oa]|exitos[oa]))\b/.test(normalizedText);
@@ -544,12 +563,15 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const declaredStates = lines.map(normalize).filter(line => /^(?:estado|resultado)\b.*[:\-]/.test(line));
   const executionConfirmed = !blockedExecution && positiveExecution.test(normalizedText) && declaredStates.every(line => positiveExecution.test(line));
 
-  const dateRaw =
-    extractLabeled(lines, [
+  const dateLabels = [
       /^fecha\s*(?:\/\s*hora)?\s*[:\-]\s*(.+)$/i,
-      /^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i,
-      /^fecha\s+(?:de\s+)?(?:operacion|transferencia|pago)\s*[:\-]\s*(.+)$/i,
-    ]) ||
+      /^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:operacion|transferencia|pago|ejecucion)\s*[:\-]\s*(.+)$/i,
+  ];
+  const executionDates = lines.flatMap((line, index) => {
+    const value = extractLabeled([line, lines[index + 1] || ""], dateLabels);
+    return value ? [value] : [];
+  });
+  const dateRaw = executionDates[0] || extractLabeled(lines, [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i]) ||
     firstMatch(normalize(text), [
       /\b(\d{1,2}[-\/]\d{1,2}[-\/]20\d{2})\b/,
       /\b(20\d{2}[-\/]\d{1,2}[-\/]\d{1,2})\b/,
@@ -559,8 +581,14 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const time = parseTimeValue(dateRaw) || parseTimeValue(extractLabeled(lines, [
     /^hora\s*(?:de\s+)?(?:operacion|transferencia|pago)?\s*[:\-]\s*(.+)$/i,
   ]));
-  const shortDate = dateRaw.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
-  const dateVerified = !!dateRaw && (!shortDate || Number(shortDate[1]) > 12 || shortDate[1] === shortDate[2]);
+  const unambiguousDate = (value: string) => {
+    const short = value.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
+    return !short || Number(short[1]) > 12 || short[1] === short[2];
+  };
+  const parsedDate = parseDateValue(dateRaw);
+  const calendarTime = Date.parse(parsedDate);
+  const validDate = Number.isFinite(calendarTime) && new Date(calendarTime).toISOString().slice(0, 10) === parsedDate;
+  const dateVerified = executionDates.length > 0 && validDate && executionDates.every(value => parseDateValue(value) === parsedDate && unambiguousDate(value));
 
   const reference =
     extractLabeled(lines, [
@@ -588,14 +616,11 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const payerRfc = payerRfcs.length === 1 ? payerRfcs[0] : "";
   const beneficiaryRfc = beneficiaryRfcs.length === 1 ? beneficiaryRfcs[0] : "";
 
-  const clabe = firstMatch(text, [
-    /(?:clabe|clabe\s+interbancaria|cuenta\s+clabe)\s*[:\-]?\s*(\d[\d\s-]{16,22}\d)/i,
-    /\b(\d{18})\b/,
-  ]).replace(/\D/g, "").slice(0, 18);
+  const genericClabe = normalizeAccount(extractLabeled(lines, [/^(?:clabe|clabe\s+interbancaria|cuenta\s+clabe)\s*[:\-]\s*(.+)$/i]));
+  const clabe = /^\d{18}$/.test(destinationAccount) ? destinationAccount : /^\d{18}$/.test(genericClabe) ? genericClabe : "";
 
-  const account = firstMatch(text, [
-    /(?:cuenta|n[uÃƒÂº]mero\s+de\s+cuenta|cta\.?)\s*[:\-]?\s*([0-9*Xx\- ]{4,30})/i,
-  ]).replace(/\s+/g, " ").trim();
+  // Unqualified or destination accounts must never identify the payer.
+  const account = sourceAccount;
 
   const warnings: string[] = [];
   if (!amountVerified) warnings.push("Importe sin etiqueta inequívoca o importes contradictorios; requiere revisión.");
@@ -609,7 +634,7 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const amount = amountVerified ? explicitAmounts[0] : parseMoney(amountRaw);
   if (!amount) warnings.push("Monto no detectado.");
 
-  const date = parseDateValue(dateRaw);
+  const date = validDate ? parsedDate : "";
   if (!date) warnings.push("Fecha no detectada.");
 
   if (!reference) warnings.push("Referencia no detectada.");
@@ -617,12 +642,9 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   return {
     senderName,
     beneficiaryName,
-    bankName:
-      extractLabeled(lines, [
-        /^banco\s+destino\s*[:\-]\s*(.+)$/i,
-        /^banco\s+receptor\s*[:\-]\s*(.+)$/i,
-      ]) ||
-      detectBank(text),
+    bankName: destinationBankName || detectBank(text),
+    sourceBankName,
+    destinationBankName,
     amount,
     date,
     time,
@@ -806,7 +828,7 @@ export const correctPagoReceiptSemanticField = onCall(
     assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
     const analysisId = clean(request.data?.analysisId), fromField = clean(request.data?.field), toField = clean(request.data?.correctedField);
     const correctedValue = clean(request.data?.correctedValue);
-    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField) || !correctedValue)
+    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField) || !correctedValue || correctedValue.length > 240)
       throw new HttpsError("invalid-argument", "Correccion semantica invalida.");
     const analysisRef = db.doc(`pagoReceiptAnalyses/${analysisId}`), analysis = await analysisRef.get();
     if (!analysis.exists || analysis.get("rootId") !== rootId) throw new HttpsError("not-found", "Interpretacion no encontrada.");
@@ -819,6 +841,10 @@ export const correctPagoReceiptSemanticField = onCall(
     const correctionRef = db.doc(`pagoReceiptCorrections/${correctionId}`), observationRef = db.doc(`agent007Observations/receipt_${correctionId}`), memoryRef = db.doc(`agent007Memory/${receiptMemoryId(rootId, pattern.key)}`);
     const now = new Date().toISOString();
     await db.runTransaction(async tx => {
+      const [previousCorrection, previousMemory] = await Promise.all([tx.get(correctionRef), tx.get(memoryRef)]);
+      // A retry of the same authorized correction is not new learning evidence.
+      if (previousCorrection.exists) return;
+      const memory = previousMemory.data();
       tx.set(correctionRef, { schemaVersion: 1, learningVersion: RECEIPT_LEARNING_VERSION, rootId, analysisId, documentFingerprint: analysis.get("contentSha256"), readerVersion: analysis.get("readerVersion"), field: fromField,
         autoResult: { rawValue: auto.rawValue ?? null, normalizedValue: auto.normalizedValue ?? auto.value, confidence: auto.confidence, evidence: { label: auto.label ?? null, excerpt: auto.excerpt ?? null } },
         humanCorrection: { correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now }, finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" }, patternKey: pattern.key,
@@ -827,8 +853,8 @@ export const correctPagoReceiptSemanticField = onCall(
       tx.set(observationRef, { rootId, agentId: "AGENTE_007", phase: "OBSERVATION", source: "PAYMENT_RECEIPT_HUMAN_CORRECTION", caseType: "PAYMENT_RECEIPT_PATTERN", caseId: pattern.key, intent: "Aprender clasificacion de etiqueta documental", humanDecision: `${fromField}->${toField}`, outcome: content,
         pattern: { ...pattern, version: RECEIPT_LEARNING_VERSION }, actorUid: uid, actorRole: String(user?.role || ""), authorization: { role: String(user?.role || ""), scope: "rootId", rootId }, retrievalEligible: true,
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null }, { merge: false });
-      tx.set(memoryRef, { id: memoryRef.id, version: "memory-v2", rootId, kind: "HYPOTHESIS", status: "CANDIDATE", scope: { level: "ENTITY_TYPE", rootId, system: "PAY0", entityType: "PAYMENT_RECEIPT_PATTERN" }, entityKey: null,
-        content, source: "EXPLICIT_HUMAN", sourceSystem: "PAY0", authorUid: uid, confidence: null, createdAt: now, effectiveAt: now, lastVerifiedAt: null, validUntil: null, supersedes: [],
+      tx.set(memoryRef, { id: memoryRef.id, version: "memory-v2", rootId, kind: memory?.kind || "HYPOTHESIS", status: memory?.status || "CANDIDATE", scope: { level: "ENTITY_TYPE", rootId, system: "PAY0", entityType: "PAYMENT_RECEIPT_PATTERN" }, entityKey: null,
+        content, source: "EXPLICIT_HUMAN", sourceSystem: "PAY0", authorUid: uid, confidence: memory?.confidence ?? null, createdAt: memory?.createdAt || now, effectiveAt: memory?.effectiveAt || now, lastVerifiedAt: memory?.lastVerifiedAt ?? null, validUntil: memory?.validUntil ?? null, supersedes: memory?.supersedes || [],
         receiptLearning: { ...pattern, version: RECEIPT_LEARNING_VERSION, observationId: observationRef.id, confirmations: FieldValue.increment(1) } }, { merge: true });
     });
     const memory = await memoryRef.get();

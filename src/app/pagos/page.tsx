@@ -953,7 +953,7 @@ export default function PagosPage() {
           };
 
           const beneficiarySignals = {
-            clabe: parsed.destinationAccount || parsed.clabe,
+            clabe: parsed.destinationAccount,
             account: parsed.destinationAccount,
           };
 
@@ -1192,7 +1192,7 @@ export default function PagosPage() {
       detectedBankName: String(parsed.bankName || ""),
       detectedSenderName: String(parsed.senderName || ""),
       detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-      detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
+      detectedSourceAccount: String(parsed.account || ""),
       detectedDestinationAccount: String(parsed.destinationAccount || ""),
       detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
       detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
@@ -1220,7 +1220,7 @@ export default function PagosPage() {
       };
 
       const beneficiarySignals = {
-        clabe: parsed.destinationAccount || parsed.clabe,
+        clabe: parsed.destinationAccount,
         account: parsed.destinationAccount,
       };
 
@@ -1297,7 +1297,7 @@ export default function PagosPage() {
         detectedBankName: String(parsed.bankName || ""),
         detectedSenderName: String(parsed.senderName || ""),
         detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-        detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
+        detectedSourceAccount: String(parsed.account || ""),
         detectedDestinationAccount: String(parsed.destinationAccount || ""),
         detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
         detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
@@ -1517,7 +1517,7 @@ export default function PagosPage() {
         };
 
         const beneficiarySignals = {
-          clabe: parsed.destinationAccount || parsed.clabe,
+          clabe: parsed.destinationAccount,
           account: parsed.destinationAccount,
         };
 
@@ -3151,6 +3151,8 @@ export default function PagosPage() {
                                       ["Rastreo", parsed.semanticReceipt.fields?.trackingKey],
                                       ["Folio", parsed.semanticReceipt.fields?.folio],
                                       ["Transaccion", parsed.semanticReceipt.fields?.transactionId],
+                                      ["Banco emisor", parsed.semanticReceipt.fields?.sourceBankName],
+                                      ["Banco receptor", parsed.semanticReceipt.fields?.destinationBankName],
                                       ["Saldo", parsed.semanticReceipt.fields?.accountBalance],
                                       ["Comision", parsed.semanticReceipt.fields?.bankCommission],
                                     ].map(([label, evidence]: any) => evidence?.value != null && (

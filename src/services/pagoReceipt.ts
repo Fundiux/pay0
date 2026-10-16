@@ -15,6 +15,8 @@ export type ParsedPagoReceipt = {
   senderName: string;
   beneficiaryName: string;
   bankName: string;
+  sourceBankName?: string;
+  destinationBankName?: string;
   amount: number;
   date: string;
   time: string;
@@ -92,6 +94,8 @@ export async function parsePagoReceiptPdfFile(file: File, options: { operationTy
     senderName: String(receipt.senderName || ""),
     beneficiaryName: String(receipt.beneficiaryName || ""),
     bankName: String(receipt.bankName || ""),
+    sourceBankName: String(receipt.sourceBankName || ""),
+    destinationBankName: String(receipt.destinationBankName || ""),
     amount: Number(receipt.amount || 0),
     date: String(receipt.date || ""),
     time: String(receipt.time || ""),

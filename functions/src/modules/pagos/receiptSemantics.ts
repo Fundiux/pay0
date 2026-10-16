@@ -1,4 +1,4 @@
-export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V2";
+export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V3";
 
 export type ReceiptConfidence = "HIGH" | "MEDIUM" | "LOW" | "NONE";
 export type ReceiptFieldEvidence = {
@@ -74,7 +74,7 @@ function moneyFromLine(line: string | null): number | null {
 /** Builds evidence without retaining the full extracted/OCR text. */
 export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): SemanticReceipt {
   const lines = String(text || "").split(/\r?\n/).map(clean).filter(Boolean);
-  const amountLine = evidenceLine(lines, [/importe total.*deposito/, /monto (?:pagado|transferido|de la operacion)/, /total operado/]);
+  const amountLine = evidenceLine(lines, [/^importe\b/, /^monto\b/, /^total operado\b/]);
   const balanceLine = evidenceLine(lines, [/saldo (?:disponible|final|posterior|de la cuenta)/]);
   const commissionLine = evidenceLine(lines, [/comision(?: bancaria)?/, /cargo por (?:spei|transferencia)/]);
   const tracking = identifierEvidence(lines, /^(?:clave de rastreo|rastreo)\b\s*[:\-]?\s*/);
@@ -103,7 +103,9 @@ export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): Sema
     payerRfc: field(receipt.payerRfc, evidenceLine(lines, [/rfc.*(?:ordenante|emisor|pagador|cliente)/]), "HIGH"),
     beneficiaryRfc: field(receipt.beneficiaryRfc, evidenceLine(lines, [/rfc.*(?:beneficiario|receptor)/]), "HIGH"),
     sourceAccount: field(receipt.account, evidenceLine(lines, [/(?:cuenta|clabe).*(?:origen|cargo)/]), "MEDIUM", true),
-    destinationAccount: field(receipt.destinationAccount || receipt.clabe, evidenceLine(lines, [/(?:cuenta|clabe).*(?:destino|deposito)/]), "HIGH"),
+    destinationAccount: field(receipt.destinationAccount, evidenceLine(lines, [/(?:cuenta|clabe).*(?:destino|deposito|beneficiario|receptor|abono)/]), "HIGH"),
+    sourceBankName: field(receipt.sourceBankName, evidenceLine(lines, [/^(?:banco|institucion).*(?:origen|emisor|ordenante)/]), "HIGH"),
+    destinationBankName: field(receipt.destinationBankName, evidenceLine(lines, [/^(?:banco|institucion).*(?:destino|receptor|beneficiario)/]), "HIGH"),
     bankName: field(receipt.bankName, evidenceLine(lines, [/banco (?:destino|receptor)/]), "MEDIUM", true),
     concept: field(receipt.concept, evidenceLine(lines, [/^(?:concepto|motivo|descripcion)\b/]), "HIGH"),
     currency: field(receipt.currency, evidenceLine(lines, [/\b(?:mxn|mxp|m\.n\.|pesos mexicanos)\b/]), "HIGH"),

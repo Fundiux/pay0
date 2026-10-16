@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const ts = require('typescript');
-const measurementMode = process.argv.includes('--measure');
+const measurementMode = process.argv.includes('--measure') || require.main !== module;
 const test = measurementMode ? () => {} : require('node:test').test;
 let receiptSourceRef = null;
 
@@ -56,7 +56,10 @@ function database(seed = {}) {
           const data = docs.get(ref);
           return { exists: data !== undefined, data: () => data === undefined ? undefined : structuredClone(data) };
         };
-        await run({ get, getAll: (...refs) => Promise.all(refs.map(get)), set: (ref, data) => writes.set(ref.path || ref, data) });
+        await run({ get, getAll: (...refs) => Promise.all(refs.map(get)), set: (ref, data, options) => {
+          const target = ref.path || ref;
+          writes.set(target, options?.merge ? { ...(writes.get(target) || docs.get(target) || {}), ...data } : data);
+        } });
         if ([...reads].some(([ref, version]) => (versions.get(ref) || 0) !== version)) { this.conflicts++; continue; }
         for (const [ref, data] of writes) { docs.set(ref, data); versions.set(ref, (versions.get(ref) || 0) + 1); }
         return;
@@ -144,7 +147,7 @@ test('callable rejects unauthorized and oversized requests before parser/provide
   await assert.rejects(parse({ ...input, data: { base64: 'A'.repeat(1400000) } }), { code: 'invalid-argument' });
   const result = await parse(input);
   assert.equal(result.ok, true); assert.equal(result.textSource, 'PDF_TEXT'); assert.equal(result.receipt.amount, 100);
-  assert.match(result.analysisId, /^[a-f0-9]{64}$/); assert.equal(result.readerVersion, 'PAY0_RECEIPT_SEMANTIC_V2');
+  assert.match(result.analysisId, /^[a-f0-9]{64}$/); assert.equal(result.readerVersion, load('functions/src/modules/pagos/receiptSemantics.ts', {}).RECEIPT_READER_VERSION);
   assert.ok(result.semanticReceipt.fields); assert.equal(result.identification.analysisId, result.analysisId); assert.equal(result.cacheHit, false);
   const cached = await parse(input); assert.equal(cached.cacheHit, true); assert.equal(cached.providerCalls, 0);
   assert.deepEqual(cached.semanticReceipt, result.semanticReceipt);
@@ -249,6 +252,26 @@ test('correction writes root-scoped candidate memories without cross-root overwr
   assert.equal(db.docs.has(`agent007Memory/receipt_${a.patternKey}`), false);
 });
 
+test('repeated feedback is idempotent and new observations preserve rejected governance', async () => {
+  const db = database({ 'users/u1': profile() });
+  const analysisId = 'a'.repeat(64);
+  db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion: 'test-reader', contentSha256: 'b'.repeat(64), semanticReceipt: { fields: {
+    reference: { value: '12345', label: 'Referencia', confidence: 'MEDIUM' }, bankName: { normalizedValue: 'Banco' },
+  } } });
+  const correct = receiptHandler(db, { pdf: 0, vision: 0 }).correct;
+  const request = { auth: { uid: 'u1' }, data: { analysisId, field: 'reference', correctedField: 'folio', correctedValue: '12345' } };
+  const first = await correct(request);
+  const memoryPath = `agent007Memory/${first.memoryId}`;
+  db.docs.set(memoryPath, { ...db.docs.get(memoryPath), status: 'REJECTED', createdAt: 'ORIGINAL', receiptLearning: { key: first.patternKey, confirmations: 7 } });
+  await correct(request);
+  assert.equal(db.docs.get(memoryPath).receiptLearning.confirmations, 7);
+  assert.equal(db.docs.get(memoryPath).status, 'REJECTED');
+  await correct({ ...request, data: { ...request.data, correctedValue: '98765' } });
+  assert.equal(db.docs.get(memoryPath).status, 'REJECTED');
+  assert.equal(db.docs.get(memoryPath).createdAt, 'ORIGINAL');
+  assert.equal(db.docs.get(`pagoReceiptCorrections/${first.correctionId}`).autoResult.normalizedValue, '12345');
+});
+
 test('legacy memory fallback reads only same root and scoped candidate takes precedence', async () => {
   const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
   const readerVersion = load('functions/src/modules/pagos/receiptSemantics.ts', {}).RECEIPT_READER_VERSION;
@@ -283,7 +306,7 @@ test('PDF OCR requests verified pages and rejects partial or errored responses',
 
 // Reuse exactly the regression fixtures; no production documents or providers.
 // node qa/scripts/remediation-ocr-quota.test.cjs --measure <baseline-commit>
-if (measurementMode) {
+if (measurementMode && require.main === module) {
   const requestedRef = process.argv[process.argv.indexOf('--measure') + 1];
   if (!requestedRef || !/^[a-f0-9]{7,40}$/i.test(requestedRef)) throw Error('Supply an explicit baseline commit hash');
   const baselineCommit = require('node:child_process').execFileSync('git', ['rev-parse', '--verify', `${requestedRef}^{commit}`], { encoding: 'utf8' }).trim();
@@ -310,3 +333,10 @@ if (measurementMode) {
   fs.writeFileSync('output/receipt-reader-metrics.json', `${JSON.stringify(metrics, null, 2)}\n`);
   console.log(JSON.stringify(metrics));
 }
+
+module.exports.createEvaluationReader = (ref = null) => {
+  receiptSourceRef = ref;
+  const parse = receiptHandler(database(), { pdf: 0, vision: 0 }).parseText;
+  const semantic = load('functions/src/modules/pagos/receiptSemantics.ts', {});
+  return { parse, semantic: semantic.buildSemanticReceipt, readerVersion: semantic.RECEIPT_READER_VERSION };
+};
