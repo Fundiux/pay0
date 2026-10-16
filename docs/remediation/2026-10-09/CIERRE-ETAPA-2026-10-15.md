@@ -25,6 +25,8 @@ Cada punto termina con evidencia de aceptación o con un bloqueo explícito. No 
 
 Avance local del punto 4: exportador conectado al postflight de APPLY, con respuestas originales, tiempos de observación y hashes enlazados al estado/controlador; se vuelven a verificar antes de liberar el lock. Ocho pruebas nuevas aprobadas y suite afectada validada; control offline aprobado con cero llamadas Cloud. `LIVE=false`; no hubo APPLY. Sigue pendiente conectar el consumo en CREATE y obtener autorización. Evidencia: [NOTIFIER-APPLY-REMOTE-EXPORT.md](NOTIFIER-APPLY-REMOTE-EXPORT.md).
 
+Avance posterior del mismo punto: el modo Prepare de CREATE consume ya selecciones privadas con hashes revisados y valida su destino/frescura mediante el binder. Diez pruebas nuevas y Prepare real aprobados, sin autenticación ni llamadas Cloud. Los tres inputs siguen PENDING; falta la conexión del worker nativo supervisado, además de los recibos reales y autorización. No equivale a CREATE listo para ejecutar.
+
 ## Build frontend y pendiente técnico del punto 2
 
 El primer build de integración usó Next 15.5.27 compartido aunque su lockfile fijaba 15.5.25. El build aislado de diagnóstico con 15.5.25 también pasó (35e319). La discrepancia se corrigió en a5eed7e, ya integrado en main: manifest/lock alineados con el cambio revisado d66555b, dependencias propias instaladas offline y outputFileTracingRoot explícito. Build nuevo con Next 15.5.27 aprobado (ad854b), tipos y 46 páginas; 829 rutas de 61 manifiestos presentes dentro del worktree (05aa2f). No se repitieron suites financieras ni SDK.

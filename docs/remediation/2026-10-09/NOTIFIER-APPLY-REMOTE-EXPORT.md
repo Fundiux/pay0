@@ -18,4 +18,16 @@ La ejecución queda expresamente deshabilitada con `LIVE=false`. Las evidencias 
 
 ## Pendiente del mismo punto
 
-Revisar y conectar el consumo de este export por el launcher de CREATE, con sus hashes de confianza y comprobación de frescura. Después de autorización específica: renovar prerrequisitos, aplicar el plan guardado, verificar recursos y crear/verificar las tres Functions previstas, manteniendo entrega desactivada y colas pausadas. No activar ni enviar mensajes.
+El modo Prepare del launcher de CREATE ya consume selecciones revisadas de los nueve paquetes mediante `evidence-loader.cjs`. El manifiesto externo fija los hashes y la clausura de módulos del binder antes de cargarlos. El lector confina archivos al directorio privado `evidence`, rechaza enlaces, rutas fuera del ámbito, archivos grandes, cambios de hash y destinos distintos; vuelve a evaluar la frescura en cada lectura. No calcula hashes de confianza a partir de los archivos recibidos.
+
+Diez pruebas nuevas de integración aprobadas (`b4045b`): paquete sintético completo con el verificador real, caducidad, destino diferente, modificación del archivo, rutas inválidas, getters y rechazo semántico pese a hashes coincidentes. No se repitieron las suites sin cambios. Prepare real aprobado (`337d21`): tres destinos PENDING, `live=false`, `inputReady=false`, `infrastructureBindingReady=false`, cero autenticaciones y llamadas Cloud. El intento anterior (`83d2cc`) se detuvo por `DEBUG`; se quitó únicamente esa variable del proceso de comprobación y se restauró después.
+
+Hashes privados revisados:
+
+- `evidence-loader.cjs`: `db486ba0e8a8b7a02a4aed240cadab4ea05b7068ec257ae6c758b4ba2d1741e1`.
+- `owned.cjs`: `b7b9523a4dc0b3d03ff85c9676697925d1185297388fbe5854896578287b64aa`.
+- `owned-pins.json`: `7007fa3ab9e57b76cbfc6f6be429a271bd830cf0cc0f14ef6389dc58d109689a`.
+
+Sigue pendiente conectar la ejecución nativa supervisada: el worker deberá releer esos mismos paquetes fijados en cada comprobación fresh de createOnce, también después del registro de intención. Prepare no autoriza ni ejecuta CREATE. No hay recibos reales de APPLY/subida/prerrequisitos de creación y los tres inputs reales permanecen PENDING.
+
+Después de autorización específica: renovar prerrequisitos, aplicar el plan guardado, verificar recursos y crear/verificar las tres Functions previstas, manteniendo entrega desactivada y colas pausadas. No activar ni enviar mensajes.
