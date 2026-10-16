@@ -4,11 +4,11 @@ Etapa cerrada por instrucción del usuario. La remediación integral no se decla
 
 ## Terminado
 
-- Lectores de notas y autorización previa a leer padres: commit 5a9fa95, 165 pruebas focalizadas aprobadas (1 omisión histórica), 58 casos SDK aprobados, política y build Functions aprobados. Frontend sin cambios desde su build aprobado; descubrimiento de 352 endpoints aprobado. Código aislado, aún no integrado ni desplegado.
-- Escritura atómica de nota de Pago y marcador de no leído: commit 68c3972, 77 pruebas y 11 casos SDK aprobados, política y build Functions aprobados. Código aislado, aún no desplegado. No resuelve duplicados entre peticiones HTTP independientes.
+- Lectores de notas y autorización previa a leer padres: commit 5a9fa95, 165 pruebas focalizadas aprobadas (1 omisión histórica), 58 casos SDK aprobados, política y build Functions aprobados. Frontend sin cambios desde su build aprobado; descubrimiento de 352 endpoints aprobado. Integrado en main ee2a7d0; lectores pendientes de despliegue.
+- Escritura atómica de nota de Pago y marcador de no leído: commit 68c3972, 77 pruebas y 11 casos SDK aprobados, política y build Functions aprobados. Integrado en main ee2a7d0 y desplegado selectivamente; ver punto 1. No resuelve duplicados entre peticiones HTTP independientes.
 - Candidato de Rules eafd6075 probado y creado como ruleset c026f71f-0542-4a23-a170-99b012b1e835; todavía no activo.
 - Preparación local de infraestructura y controles de publicación del notificador. Exportador de evidencia remota: 15 pruebas aprobadas (99f548); enlace de evidencias: 32 aprobadas (35b36e). Esto no acredita infraestructura creada ni activación.
-- Colector de metadatos de addPagoNota revisado, 32 pruebas aprobadas (4c2935); su lectura real sigue pendiente.
+- Colector de metadatos de addPagoNota revisado, 32 pruebas aprobadas (4c2935); lectura real y recuperación del artefacto completadas; despliegue verificado en el punto 1.
 - Renovación autorizada completada: 3 lecturas del finalizador (7a1bb4), recibo 4ba5b70795d901250cc0ae64d915bb36e902648f798e4053ca0519134601af23; 19 lecturas de infraestructura (0470ff/67c061), recibo 597f9afba8c22a85795313711ec243ae07fbe653ea79bd592511d56e62b60ed1. Observaciones a las 16:12:16 y 16:12:56 UTC. Cero mutaciones; cierres confirmados y sin locks retenidos. Cinco cuentas, dos colas y dos roles siguen ausentes. Misma revisión del finalizador; V3 ausente en el código revisado y ruta heredada activa. No equivale a notificaciones globalmente apagadas.
 
 ## Lista finita pendiente para finalizar este alcance
@@ -23,13 +23,18 @@ Avance del punto 2: lote selectivo de tres lectores preparado, validado (341 exp
 
 Cada punto termina con evidencia de aceptación o con un bloqueo explícito. No se añaden puntos por hallazgos adicionales. Los metadatos caducados se renuevan solamente cuando una acción concreta necesite evidencia vigente; no mediante sondeo recurrente.
 
+## Aclaracion del build frontend y pendiente tecnico del punto 2
+
+El build de integracion paso usando Next 15.5.27 compartido, aunque main fija 15.5.25: no acredita reproducibilidad con su lockfile. El build aislado previamente iniciado termino con exit 0 (sesion 27735, resultado 35e319), tipos y 46 paginas correctos, con Next 15.5.25. Se conserva como diagnostico. Antes de publicar falta alinear manifest y lockfile con la actualizacion ya revisada a 15.5.27 y validar ese cambio con dependencias propias. No se inicio otro build en este cierre. Queda next.config.mjs modificado localmente para outputFileTracingRoot en .worktrees/notes-hosting-20261015, rama fix/notes-hosting-trace-root-20261015; sin integrar ni publicar. Este trabajo pertenece al punto 2 y no abre otra auditoria.
+
 ## Bloqueos por autorización
 
+- Despliegue de los tres lectores: revisión automática rechazó el primer PATCH porque la aprobación específica cubría únicamente addPagoNota. Pendiente autorización del lote y de la invocación HTTP del nuevo listPagoNotes; no hubo despliegue de lectores.
 - APPLY del plan de 19 altas: revisión automática rechazó la ejecución porque la autorización específica cubría lecturas y excluía aplicar Terraform. La nueva autorización vuelve a cubrir únicamente lecturas y recibos.
 - PATCH de activación de Rules: revisión automática rechazó el cambio persistente de acceso en producción. Falta autorización específica de activación.
 - Push de la rama de artefacto IQ: revisión automática rechazó la publicación por falta de confirmación del remoto confiable https://github.com/Fundiux/pay0.git y de su publicación.
 
-No se reintentaron estas tres acciones. Los pendientes técnicos de los puntos 1, 2 y 4 no se presentan como resueltos por una autorización.
+No se reintentaron estas cuatro acciones. addPagoNota ya fue autorizada y verificada. Los pendientes técnicos de los puntos 2 y 4 no se presentan como resueltos por una autorización.
 
 ## Fuera de alcance y criterio de pruebas
 

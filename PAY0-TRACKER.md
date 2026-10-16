@@ -1,5 +1,7 @@
 # PAY0 — Tracker de trabajo y continuidad
 
+Cierre vigente: etapa cerrada; remediación integral pendiente. addPagoNota autorizada, desplegada y verificada; notas integradas en main ee2a7d0. Lista finita y bloqueos: [CIERRE-ETAPA-2026-10-15](docs/remediation/2026-10-09/CIERRE-ETAPA-2026-10-15.md). El build frontend aislado terminó correctamente con Next 15.5.25; falta alinear manifest/lockfile con 15.5.27 antes de publicar. La aprobación anterior con dependencias compartidas no acredita reproducibilidad. Este corte prevalece sobre estados históricos inferiores. No se repitieron pruebas ni se iniciaron nuevas publicaciones en el cierre.
+
 Actualizacion de alcance cerrado: addPagoNota desplegada con autorizacion especifica; revision addpagonota-00033-zup Ready/100%, configuracion e IAM preservados, ZIP exacto verificado y HTTP401 sin autenticacion. Codigo de notas integrado en main ee2a7d0 con pruebas, politica y ambos builds aprobados; sin push. No se desplegaron los lectores nuevos ni su UI. Ver docs/remediation/2026-10-09/PAGO-NOTE-SELECTIVE-ARTIFACT.md y CIERRE-ETAPA-2026-10-15.md. No repetir suites aprobadas salvo cambios o evidencia nueva.
 
 ## Estado vigente — 15 de octubre de 2026
