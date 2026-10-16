@@ -17,6 +17,8 @@ qa/reports/playwright-html/
 qa/.auth/
 
 # Local QA/deployment artifacts
+/.worktrees/
+/qa/artifacts/
 .firebase.qa-whatsapp.json
 output/
 tmp/
