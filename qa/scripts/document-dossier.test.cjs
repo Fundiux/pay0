@@ -46,6 +46,15 @@ test('dossier scopes existing uploads, preserves explicit IQ provenance and pagi
   const noDeleted = await listOperationalDocumentsCore(request());
   assert.equal(noDeleted.documents.length, 39);
   assert.ok(noDeleted.documents.every(row => !row.id.includes('-00-')));
+  assert.equal(noDeleted.pendingDocuments.length, 1);
+  assert.equal(noDeleted.pendingDocuments[0].pendingReason, 'UPLOAD_PENDING');
+  assert.ok(!JSON.stringify(noDeleted.pendingDocuments).includes('storagePath'));
+  await seed(`uploads/${run}-00-legacy`, { rootId: root, entityType: 'pagos', pagoId: `${run}-pagos`, originalName: 'Legacy metadata only.pdf' });
+  const legacy = await listOperationalDocumentsCore(request());
+  assert.equal(legacy.pendingDocuments.length, 2);
+  assert.equal(legacy.pendingDocuments.find(row => row.id.endsWith('-legacy')).pendingReason, 'LEGACY_METADATA');
+  assert.ok(legacy.pendingDocuments.every(row => row.availability === 'PENDING_REVIEW'));
+  assert.ok(legacy.documents.every(row => row.availability === 'AVAILABLE'));
 });
 
 test('dossier denies anonymous, ordinary roles, disabled profiles, restrictions and module revocation', async () => {
@@ -60,5 +69,6 @@ test('dossier denies anonymous, ordinary roles, disabled profiles, restrictions 
   await seed(`users/${uid}`, { rootId: root, role: 'superadmin', active: true, modules: { pagos: { view: false } } });
   const sourceRevoked = await listOperationalDocumentsCore(request());
   assert.ok(sourceRevoked.documents.every(row => row.family !== 'pagos'));
+  assert.ok(sourceRevoked.pendingDocuments.every(row => row.family !== 'pagos'));
   assert.ok(sourceRevoked.documents.some(row => row.family === 'clientDispersions'));
 });

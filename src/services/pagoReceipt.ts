@@ -44,7 +44,7 @@ export type ParsedPagoReceipt = {
     reviewRequired: boolean;
     reviewReasons: string[];
     distinctions: Record<string, string>;
-    fields: Record<string, { value: string | number | null; rawValue: string | null; normalizedValue: string | number | null; confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE"; decision: "ACCEPTED" | "REVIEW" | "MISSING"; source: "DOCUMENT_TEXT"; label: string | null; excerpt: string | null; page: number | null }>;
+    fields: Record<string, { value: string | number | null; rawValue: string | null; normalizedValue: string | number | null; confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE"; decision: "ACCEPTED" | "REVIEW" | "MISSING"; source: "DOCUMENT_TEXT"; provenance?: "DETECTED" | "INFERRED" | "MISSING"; label: string | null; excerpt: string | null; page: number | null }>;
   };
   learningContext?: Array<{ id: string; status: string; patternKey: string; content: string; advisory: boolean }>;
   identification?: ReceiptIdentification;

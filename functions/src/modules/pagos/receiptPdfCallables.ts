@@ -191,7 +191,10 @@ function detectHeaderCompany(lines: string[]): string {
   );
 
   const searchEnd = resultIndex >= 0 ? resultIndex : Math.min(lines.length, 15);
-  const candidates = lines.slice(0, searchEnd);
+  // A header inference ends where structured receipt fields begin. Otherwise
+  // a beneficiary label (or its next-line value) can become the sender.
+  const fieldIndex = lines.findIndex(line => /^(?:fecha|hora|referencia|folio|rastreo|clave|concepto|ordenante|beneficiario|receptor|remitente|emisor|destinatario|titular|cliente|proveedor|nombre|datos|cuenta|clabe|banco|institucion|monto|importe|total|saldo|comision|para|destino|origen|de)\b/i.test(normalize(line)) || /^[^:]{1,80}:/.test(line));
+  const candidates = lines.slice(0, fieldIndex >= 0 ? Math.min(searchEnd, fieldIndex) : searchEnd);
 
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
     const line = clean(candidates[i]);

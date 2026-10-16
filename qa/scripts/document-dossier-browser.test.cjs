@@ -27,6 +27,7 @@ async function run() {
     storagePath: `roots/${prefix}/pagos/${prefix}/docs/${index}.pdf`,
   });
   seed(`uploads/${prefix}-foreign`, { rootId: "foreign-root", entityType: "pagos", pagoId: prefix, originalName: "NO MOSTRAR.pdf", active: true, status: "READY" });
+  seed(`uploads/${prefix}-zz-pending`, { rootId: prefix, entityType: 'pagos', pagoId: prefix, originalName: 'Pendiente antiguo.pdf' });
   await batch.commit();
   const browser = await chromium.launch({ headless: true });
   try {
@@ -63,7 +64,7 @@ async function run() {
     await expect(page.getByRole("article")).toHaveCount(0);
     await page.getByRole("button", { name: "Cargar más registros", exact: true }).click();
     await expect(page.getByRole("article")).toHaveCount(1);
-    await expect(page.getByRole("status")).toContainText("55 documentos cargados");
+    await expect(page.getByRole("status")).toContainText("56 documentos cargados");
     await expect(page.getByRole("button", { name: "Cargar más registros", exact: true })).toHaveCount(0);
     const popupReady = context.waitForEvent("page");
     await page.getByRole("button", { name: "Descargar", exact: true }).click();
@@ -72,6 +73,15 @@ async function run() {
     assert.equal(signerCalls, 1);
     assert.equal(await popup.evaluate(() => window.opener), null);
     await popup.close();
+    await page.getByLabel('Procedencia documental').selectOption('');
+    await page.getByLabel('Buscar en documentos cargados').fill('Pendiente antiguo');
+    await page.getByLabel('Estado de incorporación').selectOption('PENDING_REVIEW');
+    await expect(page.getByRole('article')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Descargar', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Ver pagos' })).toHaveAttribute('href', '/pagos?q=P-SINTETICO');
+    await page.getByLabel('Estado de incorporación').selectOption('AVAILABLE');
+    await page.getByLabel('Procedencia documental').selectOption('IQ');
+    await page.getByLabel('Buscar en documentos cargados').fill('Cierre final');
     await db.doc(`users/${prefix}`).update({ modules: { pagos: { view: false } } });
     await page.getByRole("button", { name: "Actualizar expediente", exact: true }).click();
     await expect(page.getByRole("article")).toHaveCount(0);

@@ -1,4 +1,4 @@
-export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V3";
+export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V3_1";
 
 export type ReceiptConfidence = "HIGH" | "MEDIUM" | "LOW" | "NONE";
 export type ReceiptFieldEvidence = {
@@ -8,6 +8,7 @@ export type ReceiptFieldEvidence = {
   confidence: ReceiptConfidence;
   decision: "ACCEPTED" | "REVIEW" | "MISSING";
   source: "DOCUMENT_TEXT";
+  provenance: "DETECTED" | "INFERRED" | "MISSING";
   label: string | null;
   excerpt: string | null;
   page: number | null;
@@ -55,8 +56,9 @@ function field(value: unknown, line: string | null, confidence: ReceiptConfidenc
     rawValue: present ? clean(value) : null,
     normalizedValue: present ? value as string | number : null,
     confidence: present ? confidence : "NONE",
-    decision: !present ? "MISSING" : forceReview || confidence !== "HIGH" ? "REVIEW" : "ACCEPTED",
+    decision: !present ? "MISSING" : forceReview || !line || confidence !== "HIGH" ? "REVIEW" : "ACCEPTED",
     source: "DOCUMENT_TEXT",
+    provenance: !present ? "MISSING" : line ? "DETECTED" : "INFERRED",
     label: line ? clean(line).split(/[:\-]/, 1)[0].slice(0, 80) : null,
     excerpt: line ? clean(line).slice(0, 240) : null,
     page: null,

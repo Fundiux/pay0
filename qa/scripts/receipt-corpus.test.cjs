@@ -5,6 +5,16 @@ const { validateManifest, evaluate } = require('./evaluate-receipt-corpus.cjs');
 const { createEvaluationReader } = require('./remediation-ocr-quota.test.cjs');
 const reader = createEvaluationReader();
 
+test('sender header inference never consumes beneficiary fields or their next-line values', () => {
+  for (const beneficiary of ['Beneficiario: EMPRESA SINTETICA', 'Beneficiario\nEMPRESA SINTETICA', 'Destinatario: EMPRESA SINTETICA']) {
+    const text = `BBVA\n${beneficiary}\nMonto: 100 MXN`;
+    assert.equal(reader.parse(text).senderName, '');
+    assert.equal(reader.semantic(text, reader.parse(text)).fields.senderName.provenance, 'MISSING');
+  }
+  assert.equal(reader.parse('COMERCIAL SINTETICA SA\nBeneficiario: OTRO NEGOCIO\nMonto: 100').senderName, 'COMERCIAL SINTETICA SA');
+  assert.equal(reader.parse('Ordenante: EMISOR EXPLICITO\nBeneficiario: OTRO NEGOCIO\nMonto: 100').senderName, 'EMISOR EXPLICITO');
+});
+
 for (const sample of manifest.samples) test(`receipt extraction: ${sample.id}`, () => {
   const result = evaluate({ ...manifest, samples: [sample] }, reader);
   assert.equal(result.exactFields, result.fields, JSON.stringify(result.errors));
@@ -33,4 +43,14 @@ test('explicit negative execution and missing identity remain review-only after 
   assert.equal(receipt.dateVerified, true);
   assert.equal(receipt.executionConfirmed, false);
   assert.equal(reader.semantic(text, receipt).reviewRequired, true);
+});
+
+test('evidence distinguishes detected values from inference and absent fields', () => {
+  const text = 'BBVA\nMonto: 100 MXN\nFecha: 2026-10-16';
+  const semantic = reader.semantic(text, reader.parse(text));
+  assert.equal(semantic.fields.transferAmount.provenance, 'DETECTED');
+  assert.equal(semantic.fields.bankName.provenance, 'INFERRED');
+  assert.equal(semantic.fields.bankName.decision, 'REVIEW');
+  assert.equal(semantic.fields.trackingKey.provenance, 'MISSING');
+  assert.equal(semantic.reviewRequired, true);
 });

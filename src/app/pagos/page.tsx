@@ -1,5 +1,6 @@
 "use client";
 
+import ReceiptEvidenceSummary from "@/components/pagos/ReceiptEvidenceSummary";
 import { beginOperationTiming } from "@/lib/operationTiming";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
@@ -3146,24 +3147,7 @@ export default function PagosPage() {
                                     <span className="text-slate-600">{parsed.readerVersion}</span>
                                     {parsed.cacheHit && <span className="text-sky-300">resultado reutilizado</span>}
                                   </div>
-                                  <div className="mt-2 grid grid-cols-1 gap-1 md:grid-cols-3">
-                                    {[
-                                      ["Rastreo", parsed.semanticReceipt.fields?.trackingKey],
-                                      ["Folio", parsed.semanticReceipt.fields?.folio],
-                                      ["Transaccion", parsed.semanticReceipt.fields?.transactionId],
-                                      ["Banco emisor", parsed.semanticReceipt.fields?.sourceBankName],
-                                      ["Banco receptor", parsed.semanticReceipt.fields?.destinationBankName],
-                                      ["Saldo", parsed.semanticReceipt.fields?.accountBalance],
-                                      ["Comision", parsed.semanticReceipt.fields?.bankCommission],
-                                    ].map(([label, evidence]: any) => evidence?.value != null && (
-                                      <div key={label} title={evidence.excerpt || ""}>
-                                        <span className="text-slate-500">{label}: </span>{String(evidence.value)}
-                                        <span className={evidence.decision === "ACCEPTED" ? "ml-1 text-emerald-400" : "ml-1 text-amber-300"}>
-                                          ({String(evidence.confidence).toLowerCase()})
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                  <ReceiptEvidenceSummary receipt={parsed.semanticReceipt} />
                                   {parsed.semanticReceipt.fields?.reference?.value && !parsed.semanticReceipt.fields?.trackingKey?.value && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                       <span className="text-slate-500">Corregir clasificación:</span>
