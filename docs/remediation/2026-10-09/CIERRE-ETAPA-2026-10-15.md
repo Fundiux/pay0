@@ -29,6 +29,8 @@ El build de integracion paso usando Next 15.5.27 compartido, aunque main fija 15
 
 ## Bloqueos por autorización
 
+Actualización del punto 2: el pendiente técnico de dependencias y trazas quedó resuelto en a5eed7e, rama fix/notes-hosting-trace-root-20261015 (todavía sin integrar en main). Instalación offline de 457 paquetes aprobada; manifest/lock alineados con el cambio revisado d66555b y scripts de main preservados. Build con Next 15.5.27 aprobado (ad854b), incluidas compilación, tipos y 46 páginas. Las 829 rutas de 61 manifiestos de trazas existen dentro del worktree (05aa2f), sin referencias externas. Detalle: docs/remediation/2026-10-15/NOTES-HOSTING-BUILD.md en esa rama. No se repitieron suites financieras ni SDK. Faltan integración de este cambio, empaquetado/publicación y UI autenticada; no se amplía la lista finita.
+
 - Despliegue de los tres lectores: revisión automática rechazó el primer PATCH porque la aprobación específica cubría únicamente addPagoNota. Pendiente autorización del lote y de la invocación HTTP del nuevo listPagoNotes; no hubo despliegue de lectores.
 - APPLY del plan de 19 altas: revisión automática rechazó la ejecución porque la autorización específica cubría lecturas y excluía aplicar Terraform. La nueva autorización vuelve a cubrir únicamente lecturas y recibos.
 - PATCH de activación de Rules: revisión automática rechazó el cambio persistente de acceso en producción. Falta autorización específica de activación.
