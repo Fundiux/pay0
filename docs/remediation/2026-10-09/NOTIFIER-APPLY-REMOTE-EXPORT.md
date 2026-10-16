@@ -30,4 +30,10 @@ Hashes privados revisados:
 
 Sigue pendiente conectar la ejecución nativa supervisada: el worker deberá releer esos mismos paquetes fijados en cada comprobación fresh de createOnce, también después del registro de intención. Prepare no autoriza ni ejecuta CREATE. No hay recibos reales de APPLY/subida/prerrequisitos de creación y los tres inputs reales permanecen PENDING.
 
+La composición `attemptBound` ya conecta el worker al lector de paquetes fijados: relee antes de autenticar, durante la comprobación del coordinador y después de la intención durable, inmediatamente antes de despachar HTTP. Vincula el upload y la versión numérica del secreto al request seleccionado. Si el archivo cambia después de la intención, conserva el owner y registra incertidumbre sin emitir POST. El punto pendiente se reduce al cableado nativo supervisado y sus comprobantes; la composición probada sigue siendo local y no habilita los gates.
+
+Verificación del worker modificado: 33 pruebas aprobadas (`8bdca8`), incluidas tres nuevas de rechazo antes de autenticación, cambio posterior a intención y paquetes ausentes. Se añadieron después dos pruebas de integración (`bd1f05`), ambas aprobadas: recibos sintéticos completos consumidos por el binder real con un único POST simulado y modificación real del archivo posterior a intención con cero dispatch. No se repitieron las 33 aprobadas al añadir esos dos casos. No hubo red, autenticación real ni mensajes.
+
+Hashes vigentes de esta composición: `owned.cjs` = `544fca77684d6cefaea0a191f1eacb8aa7c2162ff848d36a8ebfd037d9d05789`; `owned-pins.json` = `28a8aa1cb53ce782854fc0d4da4d3deacc7f8d72a0e41c9c6754cb82c24291b4`. Sustituyen únicamente los dos hashes anteriores; el loader permanece sin cambios. Versión anterior preservada privadamente en `versions/before-bound-attempt`.
+
 Después de autorización específica: renovar prerrequisitos, aplicar el plan guardado, verificar recursos y crear/verificar las tres Functions previstas, manteniendo entrega desactivada y colas pausadas. No activar ni enviar mensajes.
