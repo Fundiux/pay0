@@ -1,40 +1,52 @@
 {
   "schemaVersion": 1,
   "name": "Ingeniería interna y lectura de comprobantes",
-  "modules": ["controlCenter", "agent007", "pagos"],
+  "modules": ["controlCenter", "agent007", "pagos", "canonicalCenter", "users"],
   "dependencies": ["Firebase Authentication", "Firestore", "Hugo observations and activity log", "Existing receipt identification and OCR"],
   "publication": {
     "requiresExplicitApproval": true,
-    "functions": ["getControlCenterEngineering", "parsePagoReceiptPdf"],
+    "functions": ["getControlCenterEngineering", "importControlCenterEngineeringEvidence", "listOperationalDocuments", "parsePagoReceiptPdf", "correctPagoReceiptSemanticField"],
     "hosting": true,
-    "rules": false,
+    "rules": true,
+    "rulesScope": { "storage.rules": "LOCALLY_VALIDATED", "firestore.rules": "BLOCKED_ANCESTRY_AND_EXPRESSION_BUDGET" },
     "dataMigration": false,
-    "sequence": ["Validate candidate against the approved integration base", "Record previously deployed Hosting release and Functions source revision", "Publish the two selected Functions", "Publish Hosting", "Verify access, incident tracking and authorized receipt examples"]
+    "sequence": ["Validate candidate and security evidence against the approved integration base", "Record previously deployed Hosting release, rules and Functions source revision", "Obtain explicit approval for the selected publication scope", "Publish selected Functions before their consuming Hosting release", "Publish only separately certified rules", "Verify access, dossier downloads, engineering evidence and authorized receipt examples"]
   },
   "regressionRisks": [
     "Unrecognized receipt layouts must remain subject to human review",
-    "Reader version V2 invalidates analysis cache and can cause fresh OCR calls",
+    "Reader version V3 invalidates analysis cache and can cause fresh OCR calls; financial duplicate keys remain independent of reader version",
     "Engineering history is a filtered sample of the last 50 Hugo observations",
-    "Stable main promotion requires passing the complete grantor authorization matrix"
+    "Original grantor matrix passes, but expanded valid composition still has six budget denials; Firestore publication remains blocked",
+    "Operational dossier lists only finalized active uploads with valid parent scope; files not incorporated into PAY0 are not inventoried",
+    "Imported engineering evidence is human supplied, not independent verification of CI, model identity or publication",
+    "Delegated direct Storage downloads are denied; operational downloads must use the existing authorized callable"
   ],
   "rollback": {
     "requiresExplicitApproval": true,
     "previousProductionRevision": null,
-    "steps": ["Restore the recorded previous Hosting release", "Redeploy affected Functions from their recorded previous production revision", "Verify existing payment identification and authorized report access"],
+    "steps": ["Restore the recorded previous Hosting release", "Redeploy affected Functions from their recorded previous production revision", "Do not restore unsafe delegated Storage reads; review any rules rollback separately", "Verify existing payment identification and authorized report access"],
     "dataPolicy": "Preserve observations, audit events, payments and analyses; no deletion or financial reversal"
   },
   "blockingFindings": [
     {
-      "code": "GRANTOR_RULES_EXPRESSION_BUDGET",
-      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs",
-      "result": "658/707 assertions passed; 49 unexpected denials; 68 expression-budget exhaustions",
-      "scope": "Existing pre-reconciliation rules; current actor and grantor restriction composition",
-      "requiredAction": "Optimize evaluation without relaxing authorization, then rerun the complete matrix"
+      "code": "REPRESENTATIVE_DELEGATION_EXPRESSION_BUDGET",
+      "result": "Additional composition diagnostic: 35/41 passed, 6 unexpected denials due to expression budget",
+      "scope": "Both profiles retain revoked restrictions, administrator DIRECT grantor, explicit module/permission maps and valid delegation dates",
+      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs --representative-composition",
+      "requiredAction": "Reduce evaluation cost for this valid combination without relaxing checks; Firestore publication remains blocked"
     },
     {
-      "code": "DELEGATED_STORAGE_COVERAGE_GAPS",
-      "result": "325 restriction checks passed with 24 acknowledged delegated Storage gaps",
-      "requiredAction": "Resolve or explicitly bound delegated Storage coverage before security certification"
+      "code": "DELEGATION_ANCESTRY_NOT_CLOSED",
+      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs",
+      "result": "707/707 assertions passed with zero expression-budget exhaustions; 24 known ancestry-gap checks remain, ancestryClosed=false",
+      "scope": "Firestore reads of chained redelegations; distinct from the 24 delegated direct Storage gaps now closed",
+      "requiredAction": "Enforce the full delegation ancestry for affected reads and replace known-gap expectations with deny assertions before publishing this rules scope"
+    },
+    {
+      "code": "REAL_RECEIPT_VALIDATION_PENDING",
+      "result": "18 synthetic extracted-text samples, 32 exact fields; real anonymized corpus NOT_EVALUATED",
+      "scope": "Productive receipt accuracy claims; independent engineering and dossier changes remain locally validated",
+      "requiredAction": "Identify authorized documents through the native dossier, anonymize and review expected fields before real evaluation"
     }
   ],
   "productionVerification": "NOT_RUN",
