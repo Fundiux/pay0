@@ -73,13 +73,13 @@ assert.match(body(source,'delegationGrantorProfileAllowed'),/source == 'SUPERADM
 assert.equal((source.match(/roleAllowsClientDelegation\(role\)/g)||[]).length,2,'Exactly generated declaration and grantor-only callsite');
 console.log(JSON.stringify({mode:'GRANTOR_CANONICAL_SELECTOR',checks,identityCases,grantorPairChecks,actorBodyUnchanged:true,deterministic:true,externalEffects:false}));
 
-// Reuse the real pre-existing 169+325+24 suites without changing assertions.
+// Reuse the 169+325+24 suites with the reviewed backend-mediated transport boundary.
 // Only the reviewed candidate pin, import location and deny diagnostics change
 // in ignored temporary copies. The canonical block is verified above.
 if(process.argv.includes('--regressions')){
  assert.equal(process.env.GCLOUD_PROJECT,'demo-pay0-restriction-boundaries');
  for(const name of ['FIRESTORE_EMULATOR_HOST','FIREBASE_STORAGE_EMULATOR_HOST'])assert.match(process.env[name]||'',/^127\.0\.0\.1:\d+$/);
- const expected='0d59ce840b8a36b7f0ff11fa0313d37e0e2131d44bef5d3bc643f51250ac66b4';
+ const expected='a8295beda9d62ee6c13270682f8ff4e73b6b7eaa1841e4c671aaa361a0aa41b7';
  assert.equal(createHash('sha256').update(source).digest('hex'),expected,'Review and pin any candidate change');
  const parent=path.join(root,'.firebase/remediation-temp');fs.mkdirSync(parent,{recursive:true});
  const temp=fs.mkdtempSync(path.join(parent,'grantor-regressions-'));let exhausted=0;
@@ -90,11 +90,11 @@ if(process.argv.includes('--regressions')){
   assert.equal(code.split('assertFails(p)').length,2,'Exactly one original deny assertion required');
   code=code.replace('assertFails(p)',`assertFails(p.catch(error=>{if(/maximum of 1000 expressions|maximum.*expression.*reached|too many.*(?:get|exists).*calls/i.test(String(error.message||'')))console.error('GRANTOR_REGRESSION_BUDGET_EXHAUSTED '+JSON.stringify({case:typeof currentCase==='undefined'?'query-or-alias':currentCase,check:typeof checks==='undefined'?null:checks,code:error.code}));throw error;}))`);
   const script=path.join(temp,filename);fs.writeFileSync(script,code);
-  const out=spawnSync(process.execPath,[script],{cwd:root,encoding:'utf8',timeout:240000,maxBuffer:8*1024*1024,env:{...process.env,GCLOUD_PROJECT:project,PAY0_RULES_SOURCE_ROOT:root,PAY0_RESTRICTION_RULES_MODE:'actual'}});
+  const out=spawnSync(process.execPath,[script,'--backend-mediated'],{cwd:root,encoding:'utf8',timeout:240000,maxBuffer:8*1024*1024,env:{...process.env,GCLOUD_PROJECT:project,PAY0_RULES_SOURCE_ROOT:root,PAY0_RESTRICTION_RULES_MODE:'actual'}});
   const output=(out.stdout||'')+(out.stderr||'');
   exhausted+=(output.match(/GRANTOR_REGRESSION_BUDGET_EXHAUSTED|maximum of 1000 expressions|maximum.*expression.*reached|too many.*(?:get|exists).*calls/gi)||[]).length;
   process.stdout.write(out.stdout||'');process.stderr.write(out.stderr||'');
-  assert.equal(out.error,undefined,'Regression child must finish');assert.equal(out.status,0,'All unchanged assertions must pass');
+  assert.equal(out.error,undefined,'Regression child must finish');assert.equal(out.status,0,'All reviewed transport-boundary assertions must pass');
  }
  assert.equal(exhausted,0,'Budget exhaustion is never an acceptable denial');
  console.log(JSON.stringify({mode:'GRANTOR_REGRESSIONS',checks:518,expressionExhaustionDiagnostics:exhausted,rulesHash:expected,externalEffects:false}));

@@ -5,12 +5,12 @@ const test = require('node:test');
 const ts = require('typescript');
 const { execFileSync } = require('node:child_process');
 
-function load(file, dependencies = {}) {
+function load(file, dependencies = {}, globals = {}) {
   const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(js, { exports, require(name) {
+  vm.runInNewContext(js, { ...globals, exports, require(name) {
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
     return dependencies[name];
   }});
@@ -149,9 +149,9 @@ test('PAY0 failure never proceeds to IQ preparation', async () => {
   assert.equal(current.context.applyRequestKeyRef.current, 'stable-key');
 });
 
-test('actual hook ignores cached snapshots and late callbacks, surfaces revoked access and unsubscribes', () => {
+test('actual hook ignores cached snapshots and late callbacks, surfaces revoked access and unsubscribes', async () => {
   const effects = [], subscriptions = [], errors = [];
-  let rows = [{ id: 'p1', status: 'CONCILIACION_PENDIENTE' }];
+  let rows = [{ id: 'p1', rootId: 'root', adminId: 'user', status: 'CONCILIACION_PENDIENTE' }];
   const hook = load('src/lib/useLiveOperationRows.ts', {
     react: { useRef: current => ({ current }), useEffect: effect => effects.push(effect) },
     'firebase/firestore': {
@@ -163,27 +163,62 @@ test('actual hook ignores cached snapshots and late callbacks, surfaces revoked 
       },
     },
     '@/lib/firebaseClient': { db: {} },
-    '@/lib/liveOperationRows': { replaceOperationRow, createOperationSubscriptions },
+    '@/lib/liveOperationRows': { ...load('src/lib/liveOperationRows.ts') },
+    '@/services/operationalReads': { getAuthorizedOperationalRecords: async () => ({ items: [], deniedIds: ['p1'] }) },
     '@/lib/operationTiming': { traceReactiveOperation() {} },
     '@/lib/operationDiscovery': { buildOperationDiscoveryQuery() { return null; } },
-  });
+  }, { window: { setInterval() { return 1; }, clearInterval() {}, addEventListener() {}, removeEventListener() {} }, document: { hidden: false } });
   hook.useLiveOperationRows({ collectionName: 'pagos', scopeKey: 'user:root:range', enabled: true,
+    scope: { uid: 'user', rootId: 'root', role: 'admin', fromMillis: 0, toMillis: 999999 },
     rows, setRows: update => { rows = update(rows); }, onError: message => errors.push(message) });
   const cleanup = effects.map(effect => effect()).filter(Boolean);
   const subscription = subscriptions[0];
   const snapshot = fromCache => ({ metadata: { fromCache }, exists: () => true,
-    data: () => ({ status: 'CONCILIADO', pagoIqFolio: '456' }) });
+    data: () => ({ rootId: 'root', adminId: 'user', createdAt: { seconds: 1 }, status: 'CONCILIADO', pagoIqFolio: '456' }) });
   subscription.next(snapshot(true));
   assert.equal(rows[0].status, 'CONCILIACION_PENDIENTE');
   subscription.next(snapshot(false));
   assert.equal(rows[0].status, 'CONCILIADO');
-  subscription.error({ code: 'permission-denied' });
+  await subscription.error({ code: 'permission-denied' });
   assert.equal(rows.length, 0);
   assert.equal(errors.length, 1);
   cleanup.forEach(dispose => dispose());
   assert.equal(subscription.stopped, true);
   subscription.next(snapshot(false));
-  subscription.error({ code: 'permission-denied' });
+  await subscription.error({ code: 'permission-denied' });
   assert.equal(errors.length, 1);
   assert.equal(rows.length, 0);
+});
+
+test('delegated rows use bounded callable batches, survive transport failures and leave only on denied authority', async () => {
+  const effects = [], subscriptions = [], errors = [], batches = [], timers = [];
+  let failTransport = false, deny = false;
+  const own = { id: 'own', rootId: 'root', adminId: 'actor', createdAt: { seconds: 1 } };
+  let rows = [own, ...Array.from({ length: 45 }, (_, i) => ({ id: `delegated-${i}`, rootId: 'root', adminId: 'other', createdAt: { seconds: 1 } }))];
+  const hook = load('src/lib/useLiveOperationRows.ts', {
+    react: { useRef: current => ({ current }), useEffect: effect => effects.push(effect) },
+    'firebase/firestore': { doc: (_, collection, id) => ({ id }), onSnapshot: ref => { subscriptions.push(ref.id); return () => {}; } },
+    '@/lib/firebaseClient': { db: {} },
+    '@/lib/liveOperationRows': load('src/lib/liveOperationRows.ts'),
+    '@/lib/operationTiming': { traceReactiveOperation() {} },
+    '@/lib/operationDiscovery': { buildOperationDiscoveryQuery() { return null; } },
+    '@/services/operationalReads': { async getAuthorizedOperationalRecords(collection, ids) {
+      batches.push([...ids]); if (failTransport) throw Error('offline');
+      return { items: deny ? [] : ids.map(id => ({ id, rootId: 'root', adminId: 'other', createdAt: { seconds: 1 }, status: 'UPDATED' })), deniedIds: deny ? ids : [] };
+    } },
+  }, { window: { setInterval(fn) { timers.push(fn); return 1; }, clearInterval() {}, addEventListener() {}, removeEventListener() {} }, document: { hidden: false } });
+  hook.useLiveOperationRows({ collectionName: 'pagos', scopeKey: 'actor:root', enabled: true, rows,
+    scope: { uid: 'actor', rootId: 'root', role: 'admin', fromMillis: 0, toMillis: 10000 },
+    setRows: update => { rows = update(rows); }, onError: message => errors.push(message) });
+  const cleanup = effects.map(fn => fn()).filter(Boolean);
+  await new Promise(setImmediate);
+  assert.deepEqual(subscriptions, ['own']);
+  assert.deepEqual(batches.map(ids => ids.length), [20, 20, 5]);
+  assert.equal(rows.length, 46); assert.equal(rows[1].status, 'UPDATED');
+  failTransport = true; timers[0](); await new Promise(setImmediate);
+  assert.equal(rows.length, 46); assert.equal(errors.length, 1);
+  failTransport = false; deny = true; timers[0](); await new Promise(setImmediate);
+  assert.equal(rows.length, 1); assert.equal(rows[0].id, 'own');
+  cleanup.forEach(fn => fn());
+  const previous = batches.length; timers[0](); await new Promise(setImmediate); assert.equal(batches.length, previous);
 });

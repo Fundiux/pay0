@@ -58,11 +58,11 @@ export function operationCreatedMillis(row: OperationRow): number {
   return typeof time?.toMillis === "function" ? time.toMillis()
     : Number(time?.seconds ?? time?._seconds ?? 0) * 1000 + Number(time?.nanoseconds ?? time?._nanoseconds ?? 0) / 1e6;
 }
-export function operationBelongsToScope(row: OperationRow, collectionName: string, scope: OperationScope): boolean {
+export function operationBelongsToScope(row: OperationRow, collectionName: string, scope: OperationScope, independentlyAuthorized = false): boolean {
   if (!scope.uid || !scope.rootId) return false;
   if (row.rootId !== scope.rootId) return false;
-  if (scope.role === "admin" && row.adminId !== scope.uid) return false;
-  if (["operador", "operator"].includes(scope.role) && row.createdBy !== scope.uid) return false;
+  if (!independentlyAuthorized && scope.role === "admin" && row.adminId !== scope.uid) return false;
+  if (!independentlyAuthorized && ["operador", "operator"].includes(scope.role) && row.createdBy !== scope.uid) return false;
   if (!["superadmin", "admin", "operador", "operator"].includes(scope.role)) return false;
   if (["superadmin", "admin"].includes(scope.role) && scope.creatorUid && row.createdBy !== scope.creatorUid) return false;
   const at = operationCreatedMillis(row);

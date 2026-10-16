@@ -338,21 +338,10 @@ service cloud.firestore {
     }
 
     function clientDelegationPermissionForClient(clientId, client, rootId, permission, legacy) {
-      let uid = me();
-      let path = /databases/$(database)/documents/userClientAccess/$(uid)/clients/$(clientId);
-      let access = get(path).data;
-      let permissions = access.get("permissions", {});
-      let expiresAt = access.get("expiresAt", null);
-      let startsAt = access.get("startsAt", null);
-      return (clientId != null && exists(path)) ? (
-        [access.active, access.get("rootId", rootId), client.get("rootId", rootId), access.get("targetUid", uid), access.get("clientId", clientId)] == [true, rootId, rootId, uid, clientId]
-        && client.get("active", true) != false
-        && access.get("revokedAt", null) == null
-        && (expiresAt == null ? access.get("mode", "PERMANENT") != "TEMPORARY" : validDelegationTime(expiresAt, true))
-        && (startsAt == null || validDelegationTime(startsAt, false))
-        && (!("permissions" in access) || (permissions is map && permissions.get(permission, permissions.get(legacy, true)) == true))
-          ? delegationImmediateGrantorAllowed(access, clientId, client, rootId) : false
-      ) : false;
+      // Delegated reads require the canonical backend's complete, current lineage.
+      // Firestore cannot verify the supported ancestry depth within rule limits.
+      // Consumers use authorized record/list/note callables; direct owners remain below.
+      return false;
     }
 
     function clientDelegationPermission(clientId, permission, legacy) {
@@ -520,7 +509,7 @@ service cloud.firestore {
       let role = rawRole == 'operator' ? 'operador' : rawRole;
       let rawRoot = user.get('rootId', null);
       let rootId = rawRoot != null ? rawRoot : uid;
-      return documentActorAllowed(user, uid, role, moduleKey, actionKey) && (
+      return data.rootId == rootId && documentActorAllowed(user, uid, role, moduleKey, actionKey) && (
         role == 'superadmin' || data.get('adminId', null) == uid || data.get('createdBy', null) == uid
         || documentDelegatedAliases(data, rootId, permission)
       );
@@ -532,7 +521,7 @@ service cloud.firestore {
       let role = rawRole == 'operator' ? 'operador' : rawRole;
       let rawRoot = user.get('rootId', null);
       let rootId = rawRoot != null ? rawRoot : uid;
-      return documentActorAllowed(user, uid, role, 'clientes', 'view') && (
+      return data.rootId == rootId && documentActorAllowed(user, uid, role, 'clientes', 'view') && (
         role == 'superadmin' || data.get('adminId', null) == uid || data.get('createdBy', null) == uid
         || data.get('managedByUserId', null) == uid || data.get('operadorId', null) == uid
         || clientDelegationPermissionForClient(clientId, data, rootId, 'viewBasic', 'view')
@@ -598,7 +587,7 @@ service cloud.firestore {
       }
     }
     match /pagoAplicaciones/{aplicacionId} {
-      allow read: if accountAllowed() && (hasModuleAction("pagos", "create") && (
+      allow read: if resource.data.rootId == myRootId() && accountAllowed() && (hasModuleAction("pagos", "create") && (
         isSuperadmin()
         || (
           resource.data.get("rootId", null) == myRootId()
@@ -609,6 +598,7 @@ service cloud.firestore {
         )
         || (
           ("solicitudId" in resource.data)
+          && get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.rootId == myRootId()
           && (
             get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("adminId", null) == me()
             || get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("createdBy", null) == me()
@@ -619,7 +609,7 @@ service cloud.firestore {
         )
       ));
 
-      allow read: if accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
+      allow read: if resource.data.rootId == myRootId() && accountAllowed() && (hasModuleAction("pagos", "conciliate") && (
         isSuperadmin()
         || (
           resource.data.get("rootId", null) == myRootId()
@@ -630,6 +620,7 @@ service cloud.firestore {
         )
         || (
           ("solicitudId" in resource.data)
+          && get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.rootId == myRootId()
           && (
             get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("adminId", null) == me()
             || get(/databases/$(database)/documents/solicitudes/$(resource.data.solicitudId)).data.get("createdBy", null) == me()
@@ -820,7 +811,7 @@ service cloud.firestore {
     }
 
     match /clientBeneficiaries/{docId} {
-      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
+      allow read: if resource.data.rootId == myRootId() && accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())
@@ -880,7 +871,7 @@ service cloud.firestore {
       let rawRoot = user.get("rootId", null);
       // Operational root historically falls back only for null, not other falsy values.
       let rootId = rawRoot != null ? rawRoot : uid;
-      return userLifecycleActive(user)
+      return data.rootId == rootId && userLifecycleActive(user)
         && (!('trustedRestrictionV1' in user) || restrictionAllowsMap(user.trustedRestrictionV1, restrictionRoot(user, uid), uid))
         && (role == 'superadmin' || (role in ['admin', 'operador'] && (!('modules' in user) || individualAllowsViewAndActionForUser(user, 'wallet', 'dispersiones')))) && (
         ( !("fundingSource" in data) || dispersionUserFundingAllowed(data, uid, role, rootId)) && (
@@ -900,7 +891,7 @@ service cloud.firestore {
     }
 
     match /clientBeneficiaryMethods/{docId} {
-      allow read: if accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
+      allow read: if resource.data.rootId == myRootId() && accountAllowed() && (hasModuleAction("wallet", "beneficiarios") && (
         isSuperadmin()
         || (("adminId" in resource.data) && resource.data.adminId == me())
         || (("operadorId" in resource.data) && resource.data.operadorId == me())

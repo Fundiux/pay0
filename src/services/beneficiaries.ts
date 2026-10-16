@@ -1,6 +1,5 @@
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { db } from "@/lib/firebase";
+import { watchAuthorizedRelatedRecords } from "@/services/operationalReads";
 
 const functions = getFunctions();
 
@@ -186,56 +185,12 @@ export async function toggleClientBeneficiaryMethodActive(input: { methodId: str
   return result.data;
 }
 
-export function watchClientBeneficiaries(
-  clientId: string,
-  rootId: string,
-  onData: (rows: ClientBeneficiaryRow[]) => void,
-  onError?: (error: Error) => void
-) {
-  const q = query(
-    collection(db, "clientBeneficiaries"),
-    where("rootId", "==", rootId),
-    where("clientId", "==", clientId)
-  );
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const rows: ClientBeneficiaryRow[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<ClientBeneficiaryRow, "id">),
-      }));
-      onData(sortBeneficiaryRowsNewestFirst(rows));
-    },
-    (error) => {
-      if (onError) onError(error);
-    }
-  );
+export function watchClientBeneficiaries(clientId: string, rootId: string, onData: (rows: ClientBeneficiaryRow[]) => void, onError?: (error: Error) => void) {
+  if (!clientId || !rootId) { onData([]); return () => {}; }
+  return watchAuthorizedRelatedRecords("clientBeneficiaries", clientId, rows => onData(sortBeneficiaryRowsNewestFirst(rows)), onError);
 }
 
-export function watchClientBeneficiaryMethods(
-  clientId: string,
-  rootId: string,
-  onData: (rows: ClientBeneficiaryMethodRow[]) => void,
-  onError?: (error: Error) => void
-) {
-  const q = query(
-    collection(db, "clientBeneficiaryMethods"),
-    where("rootId", "==", rootId),
-    where("clientId", "==", clientId)
-  );
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const rows: ClientBeneficiaryMethodRow[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<ClientBeneficiaryMethodRow, "id">),
-      }));
-      onData(sortBeneficiaryRowsNewestFirst(rows));
-    },
-    (error) => {
-      if (onError) onError(error);
-    }
-  );
+export function watchClientBeneficiaryMethods(clientId: string, rootId: string, onData: (rows: ClientBeneficiaryMethodRow[]) => void, onError?: (error: Error) => void) {
+  if (!clientId || !rootId) { onData([]); return () => {}; }
+  return watchAuthorizedRelatedRecords("clientBeneficiaryMethods", clientId, rows => onData(sortBeneficiaryRowsNewestFirst(rows)), onError);
 }

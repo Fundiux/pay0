@@ -54,7 +54,7 @@ try {
    await seed(`users/${uid}`,user);
    const context=env.authenticatedContext(uid);
    for(const [collection,kind] of families){
-    await check(getDoc(doc(context.firestore(),collection,'op')),candidate?allowed:true);
+    await check(getDoc(doc(context.firestore(),collection,'op')),mode==='actual'&&uid==='delegate'?false:candidate?allowed:true);
     // Current rules route delegated downloads through the authorized callable.
     // Historical baseline/candidate fixtures preserve their former gap as controls.
     const storageAllowed=mode==='actual'&&uid==='delegate'?false:candidate&&uid!=='delegate'?allowed:true;

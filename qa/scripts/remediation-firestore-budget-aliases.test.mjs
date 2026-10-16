@@ -4,6 +4,7 @@ import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/ru
 import {doc,setDoc,getDoc} from 'firebase/firestore';
 const projectId='demo-pay0-restriction-boundaries';assert.equal(process.env.GCLOUD_PROJECT,projectId);assert.match(process.env.FIRESTORE_EMULATOR_HOST||'',/^127\.0\.0\.1:\d+$/);
 const env=await initializeTestEnvironment({projectId,firestore:{rules:fs.readFileSync(path.join(process.env.PAY0_RULES_SOURCE_ROOT,'firestore.rules'),'utf8')}});
+const backendMediated=process.argv.includes('--backend-mediated');
 let checks=0;const check=async(p,allowed)=>{await(allowed?assertSucceeds(p):assertFails(p));checks++;};const seed=(p,d)=>env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),p),d));
 try{
  await env.clearFirestore();await seed('users/delegate',{rootId:'root',active:true,role:'operador'});
@@ -11,8 +12,8 @@ try{
  const db=env.authenticatedContext('delegate').firestore();
  const cases=[['same-good',{clientId:'good',clienteId:'good'},true],['same-bad',{clientId:'bad',clienteId:'bad'},false],['distinct-primary',{clientId:'good',clienteId:'bad'},true],['distinct-legacy',{clientId:'bad',clienteId:'good'},true],['primary-only',{clientId:'good'},true],['legacy-only',{clienteId:'good'},true],['no-id',{},false],['null-primary',{clientId:null,clienteId:'good'},true]];
  for(const[name,ids,allowed]of cases){
-  for(const family of ['solicitudes','pagos']){await seed(family+'/'+name,{rootId:'root',adminId:'other',createdBy:'other',...ids});await check(getDoc(doc(db,family,name)),allowed);}
-  const write=setDoc(doc(db,'solicitudes/'+name+'/notas/note'),{text:'synthetic'});await check(write,allowed);
+  for(const family of ['solicitudes','pagos']){await seed(family+'/'+name,{rootId:'root',adminId:'other',createdBy:'other',...ids});await check(getDoc(doc(db,family,name)),backendMediated?false:allowed);}
+  const write=setDoc(doc(db,'solicitudes/'+name+'/notas/note'),{text:'synthetic'});await check(write,backendMediated?false:allowed);
  }
- console.log(JSON.stringify({mode:'FIRESTORE_ALIAS_COMPATIBILITY',checks,failures:0,cloudEffects:false}));
+ console.log(JSON.stringify({mode:backendMediated?'FIRESTORE_ALIAS_BACKEND_BOUNDARY':'FIRESTORE_ALIAS_COMPATIBILITY',checks,failures:0,cloudEffects:false}));
 }finally{await env.cleanup();}

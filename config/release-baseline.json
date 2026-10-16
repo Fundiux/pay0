@@ -42,8 +42,23 @@
     },
     {
       "file": "src/services/beneficiaries.ts",
-      "text": "where(\"rootId\", \"==\", rootId)",
-      "capability": "Beneficiarios acotados al root autorizado"
+      "text": "watchAuthorizedRelatedRecords(\"clientBeneficiaries\", clientId",
+      "capability": "Beneficiarios consultados mediante autoridad recursiva en servidor"
+    },
+    {
+      "file": "src/services/beneficiaries.ts",
+      "text": "watchAuthorizedRelatedRecords(\"clientBeneficiaryMethods\", clientId",
+      "capability": "Metodos consultados mediante autoridad recursiva en servidor"
+    },
+    {
+      "file": "functions/src/modules/documents/relatedReads.ts",
+      "text": ".where(\"rootId\", \"==\", rootId)",
+      "capability": "Consultas relacionadas acotadas al root autenticado"
+    },
+    {
+      "file": "functions/src/modules/documents/relatedReads.ts",
+      "text": "await requireClientOperationalAccess({ uid, role, rootId, clientId: id, transaction, permission: \"viewBasic\" })",
+      "capability": "Ascendencia vigente comprobada antes de leer beneficiarios"
     },
     {
       "file": "functions/src/modules/financing/dispersionDispatchResolver.ts",

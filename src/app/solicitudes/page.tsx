@@ -1,5 +1,6 @@
 "use client";
 import { useSolicitudNotes, solicitudNoteDisplayDate } from "@/lib/useSolicitudNotes";
+import { watchAuthorizedRelatedRecords } from "@/services/operationalReads";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
@@ -132,6 +133,7 @@ const SolicitudRow = React.memo(({
 }: any) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
+  const [childrenError, setChildrenError] = useState("");
   const saldo = money2(Math.max(0, money2(s.monto || 0) - money2(s.totalAbonado || 0)));
 
   const statusUpper = String(s?.status || "").toUpperCase();
@@ -194,14 +196,9 @@ const SolicitudRow = React.memo(({
       return;
     }
 
-    const q = query(
-      collection(db, "pagoAplicaciones"),
-      where("solicitudId", "==", s.id),
-    );
-
-    return onSnapshot(q, (snap) => {
-      const rows = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as any))
+    setChildrenError("");
+    return watchAuthorizedRelatedRecords("pagoAplicaciones", s.id, (items) => {
+      const rows = items
         .sort(
           (a, b) =>
             Number(a?.createdAt?.seconds || 0) -
@@ -209,7 +206,8 @@ const SolicitudRow = React.memo(({
         );
 
       setChildren(rows);
-    });
+      setChildrenError("");
+    }, () => setChildrenError("No se pudo verificar el acceso a las aplicaciones. Actualiza la consulta."));
   }, [isExpanded, s.id]);
 
   return (
@@ -522,7 +520,7 @@ const SolicitudRow = React.memo(({
             <div className="overflow-hidden">
               <table className="w-full text-left">
                 <tbody>
-                  {children.length > 0 ? (
+                  {childrenError ? <tr><td role="alert" className="p-3 text-amber-300">{childrenError}</td></tr> : children.length > 0 ? (
                     <>
                       <tr className="border-t border-white/5 bg-white/[0.02] text-[9px] uppercase text-slate-500">
                         <td className="p-2 pl-8 font-normal">Aplicación PAY0</td>

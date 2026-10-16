@@ -9,6 +9,8 @@ export const CALLABLES = {
   importControlCenterEngineeringEvidence: "importControlCenterEngineeringEvidence",
   assignControlCenterEngineeringTask: "assignControlCenterEngineeringTask",
   listOperationalDocuments: "listOperationalDocuments",
+  getAuthorizedOperationalRecord: "getAuthorizedOperationalRecord",
+  listAuthorizedRelatedRecords: "listAuthorizedRelatedRecords",
   refreshControlCenterOverview: "refreshControlCenterOverview",
   getOperationalIntelligenceReport: "getOperationalIntelligenceReport",
   getOperationalMetricsReport: "getOperationalMetricsReport",
