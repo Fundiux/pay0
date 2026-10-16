@@ -112,3 +112,54 @@ test('Run comparison allows only release bookkeeping and preserves env, scaling,
     const changed = structuredClone(after); change(changed); assert.throws(() => assertRunRuntimePreserved(before, changed));
   }
 });
+
+// Sanitized shape of the 2026-10-16 listPagoNotes before/after snapshots.
+// No production environment, source location, IAM members or revision IDs are retained.
+function googleIdentityFixture() {
+  const before = { name: 'projects/pay-0-system/locations/us-central1/services/listpagonotes',
+    annotations: {}, template: { labels: { 'deployment-callable': 'true' }, maxInstanceRequestConcurrency: 80,
+      containers: [{ env: [{ name: 'SYNTHETIC', value: 'unchanged' }], resources: { limits: { cpu: '1' } } }] },
+    terminalCondition: { state: 'CONDITION_SUCCEEDED' }, buildConfig: { functionTarget: 'listPagoNotes' },
+    invokerIamDisabled: false, traffic: [{ type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', percent: 100 }] };
+  const after = structuredClone(before);
+  Object.assign(after.template.labels, { 'goog-drz-cloudfunctions-location': 'us-central1', 'goog-drz-cloudfunctions-id': 'listpagonotes' });
+  after.annotations['cloudfunctions.googleapis.com/function-id'] = 'listPagoNotes';
+  return { before, after };
+}
+test('canonical Google identity additions are allowed without changing inputs', () => {
+  const { before, after } = googleIdentityFixture(), original = structuredClone(after);
+  assertRunRuntimePreserved(before, after); assert.deepEqual(after, original);
+  delete before.annotations; assertRunRuntimePreserved(before, after);
+  const unchanged = structuredClone(after); assertRunRuntimePreserved(unchanged, after);
+});
+test('Google identity additions must match exact function, service, project and region', () => {
+  for (const mutate of [
+    ({after}) => { after.template.labels['goog-drz-cloudfunctions-location'] = 'europe-west1'; },
+    ({after}) => { after.template.labels['goog-drz-cloudfunctions-id'] = 'other'; },
+    ({after}) => { after.annotations['cloudfunctions.googleapis.com/function-id'] = 'listpagonotes'; },
+    ({before,after}) => { before.name = after.name = before.name.replace('pay-0-system', 'foreign'); },
+    ({before,after}) => { before.name = after.name = before.name.replace('us-central1', 'europe-west1'); },
+    ({before,after}) => { before.buildConfig.functionTarget = after.buildConfig.functionTarget = 'listPagos'; },
+  ]) { const value=googleIdentityFixture(); mutate(value); assert.throws(()=>assertRunRuntimePreserved(value.before,value.after)); }
+});
+test('existing identity metadata is never normalized, repaired or removed', () => {
+  for (const [location,key] of [['labels','goog-drz-cloudfunctions-location'],['labels','goog-drz-cloudfunctions-id'],['annotations','cloudfunctions.googleapis.com/function-id']]) {
+    const {before,after}=googleIdentityFixture();
+    const oldMap=location==='labels'?before.template.labels:before.annotations;
+    const newMap=location==='labels'?after.template.labels:after.annotations;
+    oldMap[key]='preexisting-different';
+    assert.throws(()=>assertRunRuntimePreserved(before,after));
+    newMap[key]=oldMap[key]; assertRunRuntimePreserved(before,after);
+    delete newMap[key]; assert.throws(()=>assertRunRuntimePreserved(before,after));
+  }
+});
+test('identity tolerance does not hide other annotations, runtime, invoker or traffic drift', () => {
+  for (const mutate of [
+    after=>{after.annotations['other.googleapis.com/key']='new';},
+    after=>{after.template.labels['goog-other-key']='new';},
+    after=>{after.template.containers[0].env[0].value='changed';},
+    after=>{after.template.maxInstanceRequestConcurrency=1;},
+    after=>{after.invokerIamDisabled=true;},
+    after=>{after.traffic[0].percent=50;},
+  ]) {const {before,after}=googleIdentityFixture(); mutate(after); assert.throws(()=>assertRunRuntimePreserved(before,after));}
+});

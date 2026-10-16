@@ -84,6 +84,26 @@ export function assertRuntimePreserved(before, after) {
   assert.deepEqual(after.buildConfig.environmentVariables, before.buildConfig.environmentVariables, 'BUILD_ENV_CHANGED');
 }
 export function assertRunRuntimePreserved(before, after) {
+  // Google may add these identity annotations while replacing a revision.
+  // Normalize only additions absent in the baseline, and only canonical identity.
+  const normalizedAfter = structuredClone(after);
+  const normalizeAddedIdentity = (oldMap, newMap, key, expected) => {
+    if (!Object.hasOwn(oldMap || {}, key) && Object.hasOwn(newMap || {}, key)) {
+      assert.equal(after.name, before.name, 'RUN_IDENTITY_SERVICE_CHANGED');
+      const match = /^projects\/(pay-0-system|751158244178)\/locations\/us-central1\/services\/([^/]+)$/.exec(after.name || '');
+      assert.ok(match, 'RUN_IDENTITY_SCOPE');
+      const functionId = before.buildConfig?.functionTarget;
+      assert.ok(Object.values(DEPLOYMENT_GROUPS).flat().includes(functionId), 'RUN_IDENTITY_FUNCTION');
+      assert.equal(functionId.toLowerCase(), match[2], 'RUN_IDENTITY_FUNCTION_SERVICE');
+      assert.equal(newMap[key], expected(functionId, match[2]), 'RUN_IDENTITY_VALUE');
+      delete newMap[key];
+    }
+  };
+  normalizeAddedIdentity(before.template?.labels, normalizedAfter.template?.labels, 'goog-drz-cloudfunctions-location', () => REGION);
+  normalizeAddedIdentity(before.template?.labels, normalizedAfter.template?.labels, 'goog-drz-cloudfunctions-id', (_, serviceId) => serviceId);
+  normalizeAddedIdentity(before.annotations, normalizedAfter.annotations, 'cloudfunctions.googleapis.com/function-id', functionId => functionId);
+  if (before.annotations === undefined && normalizedAfter.annotations && !Object.keys(normalizedAfter.annotations).length) delete normalizedAfter.annotations;
+  if (before.template?.labels === undefined && normalizedAfter.template?.labels && !Object.keys(normalizedAfter.template.labels).length) delete normalizedAfter.template.labels;
   const comparable = value => {
     const copy = structuredClone(value);
     const latest = copy.latestReadyRevision;
@@ -107,7 +127,7 @@ export function assertRunRuntimePreserved(before, after) {
     return copy;
   };
   assert.equal(after.terminalCondition?.state, 'CONDITION_SUCCEEDED', 'RUN_NOT_READY');
-  assert.deepEqual(comparable(after), comparable(before), 'RUN_CONFIGURATION_CHANGED');
+  assert.deepEqual(comparable(normalizedAfter), comparable(before), 'RUN_CONFIGURATION_CHANGED');
 }
 export function assertOperationMatchesGet(operationResource, getResource) {
   // Long-running operation responses wrap Function in protobuf Any and can
