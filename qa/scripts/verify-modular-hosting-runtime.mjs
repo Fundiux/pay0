@@ -17,6 +17,9 @@ let server, browser;
 try {
   const input = check(inputFile, inputSha256);
   const build = JSON.parse(fs.readFileSync(input.buildFile));
+  const baseline = JSON.parse(fs.readFileSync(input.baselineFile));
+  const frameworkEntry = baseline.functions.ssrpay0system.resource.serviceConfig.environmentVariables.__FIREBASE_FRAMEWORKS_ENTRY__;
+  assert.equal(frameworkEntry, 'next.js', 'UNEXPECTED_PRESERVED_FRAMEWORK_ENTRY');
   const cwd = build.cwd;
   assert.equal(inspectSource(cwd).sourceCommit, input.sourceCommit, 'SOURCE_CHANGED');
   const directory = path.join(path.dirname(inputFile), `runtime-${crypto.randomUUID()}`);
@@ -51,7 +54,7 @@ try {
   `;
   const log = fs.openSync(path.join(directory, 'runtime.log'), 'w');
   server = spawn(process.execPath, ['-e', harness], { cwd: directory, windowsHide: true,
-    env: { ...process.env, NODE_ENV: 'production', GCLOUD_PROJECT: 'demo-pay0-hosting', FIREBASE_CONFIG: JSON.stringify({ projectId: 'demo-pay0-hosting' }) },
+    env: { ...process.env, __FIREBASE_FRAMEWORKS_ENTRY__: frameworkEntry, NODE_ENV: 'production', GCLOUD_PROJECT: 'demo-pay0-hosting', FIREBASE_CONFIG: JSON.stringify({ projectId: 'demo-pay0-hosting' }) },
     stdio: ['ignore', 'pipe', log] });
   fs.closeSync(log);
   const port = await new Promise((resolve, reject) => {
