@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceOnlyPatch, assertRuntimePreserved, previousSource } from '../../scripts/deploy-scoped-functions.mjs';
+import { sourceOnlyPatch, assertRuntimePreserved, previousSource, assertOperationMatchesGet, DEPLOYMENT_GROUPS, deploymentScope, assertArtifactProof, assertUploadSource, assertOperationScope, assertRunRuntimePreserved, assertPreservedSource } from '../../scripts/deploy-scoped-functions.mjs';
+import { createHash } from 'node:crypto';
 import { digest } from '../../scripts/capture-production-baseline.mjs';
 const resource = () => ({ name: 'projects/pay-0-system/locations/us-central1/functions/parsePagoReceiptPdf', state: 'ACTIVE',
   labels: { owner: 'existing' }, buildConfig: { runtime: 'nodejs22', entryPoint: 'parsePagoReceiptPdf', environmentVariables: { GOOGLE_NODE_RUN_SCRIPTS: '' },
     source: { storageSource: { bucket: 'gcf-v2-sources-751158244178-us-central1', object: 'parsePagoReceiptPdf/function-source.zip', generation: '123' } } },
   serviceConfig: { service: 'projects/pay-0-system/locations/us-central1/services/parsepagoreceiptpdf', revision: 'previous', uri: 'https://example.invalid',
     environmentVariables: { SECRET_TEST: 'retained-only-in-memory' }, maxInstanceCount: 4, availableMemory: '512Mi' } });
-const upload = { bucket: 'gcf-v2-uploads-751158244178-us-central1', object: 'generated/archive.zip', generation: '234' };
+const upload = { bucket: 'gcf-v2-uploads-751158244178.us-central1.cloudfunctions.appspot.com', object: 'generated/archive.zip', generation: '234' };
 test('patch changes only source and additive provenance labels without copying environment', () => {
   const before = resource();
   const patch = sourceOnlyPatch(before, upload, 'a'.repeat(40), 'b'.repeat(64));
@@ -38,4 +39,76 @@ test('runtime verifier tolerates a new revision but rejects configuration drift'
 test('metadata digest ignores object serialization order but retains meaningful changes', () => {
   assert.equal(digest({ a: 1, b: { c: 2, d: 3 } }), digest({ b: { d: 3, c: 2 }, a: 1 }));
   assert.notEqual(digest([1, 2]), digest([2, 1]));
+});
+test('operation Any wrapper and final timestamp differ without hiding source or configuration changes', () => {
+  const current = { ...resource(), updateTime: '2026-10-16T00:00:02Z' };
+  const operation = { ...structuredClone(current), '@type': 'type.googleapis.com/google.cloud.functions.v2.Function', updateTime: '2026-10-16T00:00:01Z' };
+  assert.doesNotThrow(() => assertOperationMatchesGet(operation, current));
+  for (const mutate of [
+    row => { row.buildConfig.source.storageSource.generation = '987'; },
+    row => { row.serviceConfig.maxInstanceCount = 99; },
+    row => { row.labels.owner = 'concurrent'; },
+  ]) { const changed = structuredClone(current); mutate(changed); assert.throws(() => assertOperationMatchesGet(operation, changed)); }
+});
+
+test('groups pin exact endpoints and old receipt inputs remain compatible', () => {
+  assert.equal(deploymentScope({ functions: [...DEPLOYMENT_GROUPS.receipts] }).group, 'receipts');
+  assert.equal(DEPLOYMENT_GROUPS['security-readers'].length, 9);
+  assert.deepEqual(DEPLOYMENT_GROUPS['engineering-action'], ['reconcileAgent007RecommendationsNow']);
+  for (const [group, names] of Object.entries(DEPLOYMENT_GROUPS)) {
+    const input = { group, functions: [...names], buildMode: 'BUNDLED_V1' };
+    assert.deepEqual(deploymentScope(input).names, names);
+    for (const name of names) {
+      const row = resource(); row.name = row.name.replace('parsePagoReceiptPdf', name);
+      assert.doesNotThrow(() => sourceOnlyPatch(row, upload, 'a'.repeat(40), 'b'.repeat(64), group));
+    }
+    assert.throws(() => deploymentScope({ ...input, functions: [...names, 'createPago'] }));
+    assert.throws(() => deploymentScope({ ...input, functions: [] }));
+    assert.throws(() => deploymentScope({ ...input, buildMode: 'UNKNOWN' }));
+  }
+  assert.throws(() => deploymentScope({ group: '__proto__', functions: [] }));
+  assert.throws(() => deploymentScope({ group: 'security-readers', functions: [...DEPLOYMENT_GROUPS.receipts] }));
+});
+
+test('proof requires exact names and counts for new groups and supports legacy receipt proof', () => {
+  const oldInput = { functions: [...DEPLOYMENT_GROUPS.receipts], sourceCommit: 'commit', archiveSha256: 'archive' };
+  const oldProof = { status: 'PASS', sourceCommit: 'commit', archiveSha256: 'archive', unauthenticatedDenied: 2 };
+  assertArtifactProof(oldInput, oldProof);
+  const input = { ...oldInput, group: 'security-readers', functions: [...DEPLOYMENT_GROUPS['security-readers']], buildMode: 'BUNDLED_V1' };
+  const proof = { ...oldProof, functions: input.functions, unauthenticatedDenied: 9, buildMode: 'BUNDLED_V1' };
+  assertArtifactProof(input, proof);
+  for (const patch of [{ functions: undefined }, { functions: [...input.functions].reverse() }, { unauthenticatedDenied: 8 }, { buildMode: 'NORMAL' }])
+    assert.throws(() => assertArtifactProof(input, { ...proof, ...patch }));
+});
+
+test('source and operation namespaces are exact to the production project and region', () => {
+  assertUploadSource(upload);
+  for (const patch of [{ generation: '0' }, { generation: '-1' }, { bucket: 'gcf-v2-uploads-999.us-central1.cloudfunctions.appspot.com' }, { bucket: 'gcf-v2-sources-751158244178-europe-west1' }])
+    assert.throws(() => assertUploadSource({ ...upload, ...patch }));
+  for (const project of ['pay-0-system', '751158244178']) assertOperationScope({ name: `projects/${project}/locations/us-central1/operations/fixture` });
+  for (const name of ['projects/foreign/locations/us-central1/operations/id', 'projects/pay-0-system/locations/europe-west1/operations/id']) assert.throws(() => assertOperationScope({ name }));
+});
+test('resume rollback artifact must match its original baseline source and revision', () => {
+  const before = resource(), bytes = Buffer.from('synthetic archived source');
+  const receipt = { sha256: createHash('sha256').update(bytes).digest('hex'), source: previousSource(before), previousRevision: before.serviceConfig.revision };
+  assertPreservedSource(before, receipt, bytes);
+  assert.throws(() => assertPreservedSource(before, receipt, Buffer.from('changed')));
+  assert.throws(() => assertPreservedSource(before, { ...receipt, previousRevision: 'foreign' }, bytes));
+  assert.throws(() => assertPreservedSource(before, { ...receipt, source: { ...receipt.source, generation: '999' } }, bytes));
+});
+
+test('Run comparison allows only release bookkeeping and preserves env, scaling, concurrency and traffic', () => {
+  const before = { name: 'service', generation: '1', updateTime: 'first', latestReadyRevision: 'service/revisions/old', latestCreatedRevision: 'service/revisions/old',
+    labels: { 'firebase-functions-hash': 'old', keep: 'yes' }, scaling: { maxInstanceCount: 4 }, ingress: 'ALL',
+    terminalCondition: { state: 'CONDITION_SUCCEEDED', lastTransitionTime: 'first' },
+    template: { revision: 'old', labels: { 'firebase-functions-hash': 'old' }, maxInstanceRequestConcurrency: 80, containers: [{ image: 'old', env: [{ name: 'FIXTURE', value: 'preserved' }], resources: { limits: { cpu: '1' } } }] },
+    traffic: [{ type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', percent: 100 }], trafficStatuses: [{ type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', percent: 100, revision: 'old' }],
+    buildConfig: { name: 'old', sourceLocation: 'old', imageUri: 'old', functionTarget: 'same' } };
+  const after = structuredClone(before); after.generation = '2'; after.updateTime = 'next'; after.latestReadyRevision = 'service/revisions/next'; after.latestCreatedRevision = after.latestReadyRevision;
+  after.labels['firebase-functions-hash'] = 'new'; after.labels['pay0-source-commit'] = 'commit'; after.template.revision = 'next'; after.template.labels['firebase-functions-hash'] = 'new'; after.template.containers[0].image = 'new';
+  after.terminalCondition.lastTransitionTime = 'next'; after.trafficStatuses[0].revision = 'next'; after.buildConfig.sourceLocation = 'new';
+  assertRunRuntimePreserved(before, after);
+  for (const change of [row => { row.template.containers[0].env = []; }, row => { row.template.maxInstanceRequestConcurrency = 1; }, row => { row.scaling.maxInstanceCount = 9; }, row => { row.traffic[0].percent = 50; }, row => { row.labels.keep = 'lost'; }, row => { row.buildConfig.functionTarget = 'other'; }]) {
+    const changed = structuredClone(after); change(changed); assert.throws(() => assertRunRuntimePreserved(before, changed));
+  }
 });

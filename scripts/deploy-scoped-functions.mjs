@@ -9,7 +9,37 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { PROJECT, REGION, tokenInMemory, getMetadata, digest } from './capture-production-baseline.mjs';
 
-const ALLOWED = new Set(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']);
+export const DEPLOYMENT_GROUPS = Object.freeze({
+  receipts: Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
+  'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
+  'engineering-action': Object.freeze(['reconcileAgent007RecommendationsNow']),
+});
+export function deploymentScope(input) {
+  const group = input.group === undefined ? 'receipts' : input.group;
+  assert.ok(Object.prototype.hasOwnProperty.call(DEPLOYMENT_GROUPS, group), 'GROUP_NOT_ALLOWED');
+  const names = DEPLOYMENT_GROUPS[group];
+  assert.deepEqual(input.functions, [...names], 'FUNCTION_SCOPE');
+  const buildMode = input.buildMode === undefined ? 'NORMAL' : input.buildMode;
+  assert.ok(['NORMAL', 'BUNDLED_V1'].includes(buildMode), 'BUILD_MODE_NOT_ALLOWED');
+  return { group, names, buildMode };
+}
+export function assertArtifactProof(input, proof) {
+  const { names } = deploymentScope(input);
+  assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
+  assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
+  assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
+  assert.equal(proof.unauthenticatedDenied, names.length, 'ARTIFACT_AUTH_NOT_VERIFIED');
+  if (proof.functions !== undefined || input.group !== undefined) assert.deepEqual(proof.functions, [...names], 'ARTIFACT_PROOF_FUNCTIONS');
+  if (input.buildMode !== undefined) assert.equal(proof.buildMode, input.buildMode, 'ARTIFACT_PROOF_MODE');
+}
+export function assertUploadSource(source) {
+  assert.ok(source && /^(?:gcf-v2-sources-751158244178-us-central1|gcf-v2-uploads-751158244178\.us-central1\.cloudfunctions\.appspot\.com)$/.test(source.bucket)
+    && typeof source.object === 'string' && source.object.length > 0 && !source.object.includes('..') && !source.object.startsWith('/')
+    && /^[1-9][0-9]*$/.test(source.generation || ''), 'UPLOAD_SOURCE_INVALID');
+}
+export function assertOperationScope(operation) {
+  assert.match(operation.name || '', /^projects\/(?:pay-0-system|751158244178)\/locations\/us-central1\/operations\/[^/]+$/, 'OPERATION_SCOPE');
+}
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PRIVATE = path.join(ROOT, '.firebase/modular-release');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -23,22 +53,22 @@ function privatePath(file) {
   assert.equal(spawnSync('git', ['check-ignore', '--quiet', '--', result], { cwd: ROOT }).status, 0, 'PRIVATE_NOT_IGNORED');
   return result;
 }
-function command(command, args, cwd, log) {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', windowsHide: true,
+function command(command, args, cwd, log, environment = process.env) {
+  const result = spawnSync(command, args, { cwd, env: environment, encoding: 'utf8', windowsHide: true,
     shell: process.platform === 'win32' && command === 'npm', maxBuffer: 20 * 1024 * 1024 });
   if (log) fs.appendFileSync(log, (result.stdout || '') + (result.stderr || ''));
   assert.equal(result.status, 0, `COMMAND_FAILED_${command}`);
   return (result.stdout || '').trim();
 }
-export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256) {
-  assert.ok(ALLOWED.has(baseline.name?.split('/').at(-1)), 'FUNCTION_NOT_ALLOWED');
+export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256, group = 'receipts') {
+  assert.ok(Object.prototype.hasOwnProperty.call(DEPLOYMENT_GROUPS, group) && DEPLOYMENT_GROUPS[group].includes(baseline.name?.split('/').at(-1)), 'FUNCTION_NOT_ALLOWED');
   assert.equal(baseline.name, `projects/${PROJECT}/locations/${REGION}/functions/${baseline.name.split('/').at(-1)}`, 'FUNCTION_SCOPE');
   assert.equal(baseline.state, 'ACTIVE', 'FUNCTION_NOT_ACTIVE');
   assert.equal(baseline.buildConfig.runtime, 'nodejs22', 'RUNTIME_CHANGED');
   assert.equal(baseline.buildConfig.environmentVariables?.GOOGLE_NODE_RUN_SCRIPTS, '', 'BUILD_SCRIPTS_UNREVIEWED');
   assert.match(sourceCommit, /^[a-f0-9]{40}$/, 'COMMIT_REQUIRED');
   assert.match(archiveSha256, /^[a-f0-9]{64}$/, 'ARCHIVE_HASH_REQUIRED');
-  assert.ok(source && /^gcf-v2-(?:uploads|sources)-/.test(source.bucket) && typeof source.object === 'string' && /^\d+$/.test(source.generation || ''), 'UPLOAD_SOURCE_INVALID');
+  assertUploadSource(source);
   return { name: baseline.name, buildConfig: { source: { storageSource: source } },
     labels: { ...baseline.labels, 'pay0-source-commit': sourceCommit, 'firebase-functions-hash': archiveSha256.slice(0, 40) } };
 }
@@ -53,10 +83,52 @@ export function assertRuntimePreserved(before, after) {
   assert.equal(after.buildConfig.entryPoint, before.buildConfig.entryPoint, 'ENTRYPOINT_CHANGED');
   assert.deepEqual(after.buildConfig.environmentVariables, before.buildConfig.environmentVariables, 'BUILD_ENV_CHANGED');
 }
+export function assertRunRuntimePreserved(before, after) {
+  const comparable = value => {
+    const copy = structuredClone(value);
+    const latest = copy.latestReadyRevision;
+    for (const key of ['generation', 'observedGeneration', 'updateTime', 'etag', 'latestCreatedRevision', 'latestReadyRevision']) delete copy[key];
+    const labels = target => {
+      if (!target?.labels) return;
+      delete target.labels['pay0-source-commit']; delete target.labels['firebase-functions-hash'];
+    };
+    labels(copy); labels(copy.template);
+    if (copy.template) {
+      delete copy.template.revision;
+      for (const container of copy.template.containers || []) delete container.image;
+    }
+    if (copy.buildConfig) for (const key of ['name', 'sourceLocation', 'imageUri']) delete copy.buildConfig[key];
+    if (copy.terminalCondition) delete copy.terminalCondition.lastTransitionTime;
+    for (const condition of copy.conditions || []) delete condition.lastTransitionTime;
+    for (const target of copy.trafficStatuses || []) if (target.type === 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST') {
+      assert.ok(latest && [latest, latest.split('/').at(-1)].includes(target.revision), 'RUN_LATEST_TRAFFIC_INVALID');
+      delete target.revision;
+    }
+    return copy;
+  };
+  assert.equal(after.terminalCondition?.state, 'CONDITION_SUCCEEDED', 'RUN_NOT_READY');
+  assert.deepEqual(comparable(after), comparable(before), 'RUN_CONFIGURATION_CHANGED');
+}
+export function assertOperationMatchesGet(operationResource, getResource) {
+  // Long-running operation responses wrap Function in protobuf Any and can
+  // precede the final bookkeeping timestamp. Compare every substantive field.
+  const comparable = value => {
+    const copy = structuredClone(value);
+    delete copy['@type']; delete copy.updateTime;
+    return copy;
+  };
+  assert.equal(digest(comparable(operationResource)), digest(comparable(getResource)), 'CONCURRENT_POSTFLIGHT_CHANGE');
+}
 export function previousSource(resource) {
   const source = resource.buildConfig?.sourceProvenance?.resolvedStorageSource || resource.buildConfig?.source?.storageSource;
-  assert.ok(source && /^gcf-v2-sources-[0-9]+-us-central1$/.test(source.bucket) && /^[A-Za-z0-9_-]+\/function-source\.zip$/.test(source.object) && /^[1-9][0-9]*$/.test(source.generation), 'PREVIOUS_SOURCE_NOT_PINNED');
+  assert.ok(source && /^gcf-v2-sources-751158244178-us-central1$/.test(source.bucket) && /^[A-Za-z0-9_-]+\/function-source\.zip$/.test(source.object) && /^[1-9][0-9]*$/.test(source.generation), 'PREVIOUS_SOURCE_NOT_PINNED');
   return source;
+}
+export function assertPreservedSource(resource, receipt, bytes) {
+  assert.ok(receipt, 'PREVIOUS_SOURCE_RECEIPT_REQUIRED');
+  assert.equal(sha(bytes), receipt.sha256, 'PREVIOUS_SOURCE_CHANGED');
+  assert.deepEqual(receipt.source, previousSource(resource), 'PREVIOUS_SOURCE_BASELINE_MISMATCH');
+  assert.equal(receipt.previousRevision, resource.serviceConfig.revision, 'PREVIOUS_REVISION_MISMATCH');
 }
 async function preservePrevious(resource, token, directory, name) {
   const source = previousSource(resource);
@@ -83,7 +155,7 @@ async function assertCurrent(expected, name, token) {
   return resource;
 }
 async function waitOperation(operation, token, emit, name) {
-  assert.match(operation.name, /^projects\/[^/]+\/locations\/us-central1\/operations\/[^/]+$/, 'OPERATION_SCOPE');
+  assertOperationScope(operation);
   for (let attempt = 0; attempt < 120; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10_000));
     const status = await getMetadata(`https://cloudfunctions.googleapis.com/v2/${operation.name}`, token);
@@ -92,9 +164,16 @@ async function waitOperation(operation, token, emit, name) {
   }
   throw Error('DEPLOYMENT_TIMEOUT');
 }
-export async function prepare(commit, baselineFile) {
+export async function prepare(commit, baselineFile, group = 'receipts', buildMode = 'NORMAL') {
+  const { names: functions } = deploymentScope({ group, functions: DEPLOYMENT_GROUPS[group], buildMode });
   assert.match(commit, /^[a-f0-9]{40}$/, 'COMMIT_REQUIRED');
   const baseline = fs.readFileSync(privatePath(baselineFile));
+  const baselineData = JSON.parse(baseline);
+  for (const name of functions) {
+    const resource = baselineData.functions?.[name]?.resource;
+    assert.ok(resource, 'EXISTING_FUNCTION_REQUIRED');
+    sourceOnlyPatch(resource, previousSource(resource), commit, '0'.repeat(64), group);
+  }
   const directory = privatePath(path.join(PRIVATE, `source-${commit.slice(0, 12)}-${crypto.randomUUID()}`));
   fs.mkdirSync(directory, { recursive: true });
   const source = path.join(directory, 'source'); fs.mkdirSync(source);
@@ -102,7 +181,7 @@ export async function prepare(commit, baselineFile) {
   command('git', ['archive', '--format=tar', `--output=${tar}`, commit], ROOT, log);
   command('tar', ['-xf', tar, '-C', source], ROOT, log);
   command('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'], path.join(source, 'functions'), log);
-  command('npm', ['run', 'build'], path.join(source, 'functions'), log);
+  command('npm', ['run', 'build'], path.join(source, 'functions'), log, { ...process.env, PAY0_FUNCTIONS_BUILD_MODE: buildMode });
   const require = createRequire(path.join(source, 'functions/package.json'));
   const JSZip = require('jszip'), zip = new JSZip();
   const names = [];
@@ -112,13 +191,13 @@ export async function prepare(commit, baselineFile) {
     if (fs.statSync(location).isDirectory()) for (const child of fs.readdirSync(location).sort()) add(`${relative}/${child}`);
     else { zip.file(relative, fs.readFileSync(location), { date: new Date('2026-01-01T00:00:00Z') }); names.push(relative); }
   }
-  add('lib'); add('package.json'); add('package-lock.json');
+  add('lib'); if (buildMode === 'BUNDLED_V1') add('.debug'); add('package.json'); add('package-lock.json');
   assert.ok(names.includes('lib/index.js') && !names.some(name => /(?:^|\/)\.env/.test(name)), 'ARTIFACT_CONTENTS');
   const bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   const archive = path.join(directory, 'functions.zip'); fs.writeFileSync(archive, bytes, { flag: 'wx' });
   const input = { schemaVersion: 1, sourceCommit: commit, sourceTree: command('git', ['rev-parse', `${commit}^{tree}`], ROOT),
     archive, archiveSha256: sha(bytes), baselineFile: privatePath(baselineFile), baselineSha256: sha(baseline),
-    functions: [...ALLOWED], compiledFiles: names.length, createdAt: new Date().toISOString() };
+    group, buildMode, functions: [...functions], compiledFiles: names.length, createdAt: new Date().toISOString() };
   const inputFile = path.join(directory, 'input.json');
   fs.writeFileSync(inputFile, JSON.stringify(input, null, 2), { flag: 'wx' });
   return { inputFile, inputSha256: sha(fs.readFileSync(inputFile)), archiveSha256: input.archiveSha256, compiledFiles: names.length };
@@ -130,35 +209,62 @@ async function mutation(url, token, body, method = 'POST') {
   assert.ok(response.ok, `MUTATION_HTTP_${response.status}`);
   return response.json();
 }
-export async function execute(inputFile, inputSha256) {
+async function executeInternal(inputFile, inputSha256, resume = false) {
   assert.match(inputSha256, /^[a-f0-9]{64}$/, 'INPUT_HASH_REQUIRED');
   const bytes = fs.readFileSync(privatePath(inputFile)); assert.equal(sha(bytes), inputSha256, 'INPUT_CHANGED');
   const input = JSON.parse(bytes);
-  assert.deepEqual(input.functions, [...ALLOWED], 'FUNCTION_SCOPE');
+  const { group, names } = deploymentScope(input);
   const baselineBytes = fs.readFileSync(privatePath(input.baselineFile)); assert.equal(sha(baselineBytes), input.baselineSha256, 'BASELINE_CHANGED');
   const baseline = JSON.parse(baselineBytes);
   const archive = fs.readFileSync(privatePath(input.archive)); assert.equal(sha(archive), input.archiveSha256, 'ARTIFACT_CHANGED');
   const proof = JSON.parse(fs.readFileSync(privatePath(path.join(path.dirname(inputFile), 'artifact-verification.json'))));
-  assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
-  assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
-  assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
-  assert.equal(proof.unauthenticatedDenied, 2, 'ARTIFACT_AUTH_NOT_VERIFIED');
+  assertArtifactProof(input, proof);
   const receiptFile = privatePath(path.join(path.dirname(inputFile), 'deployment.jsonl'));
-  const receipt = fs.openSync(receiptFile, 'wx');
+  const receipt = fs.openSync(receiptFile, resume ? 'a' : 'wx');
   const emit = value => { fs.writeSync(receipt, JSON.stringify({ at: new Date().toISOString(), ...value }) + '\n'); console.log(JSON.stringify(value)); };
   const lockPath = privatePath(path.join(PRIVATE, 'deployment.lock'));
-  let lock, unresolved = false;
+  let lock, unresolved = resume;
   try {
-    lock = fs.openSync(lockPath, 'wx');
+    if (resume) {
+      const pending = JSON.parse(fs.readFileSync(lockPath));
+      assert.equal(path.resolve(pending.inputFile), path.resolve(inputFile), 'OTHER_DEPLOYMENT_LOCK');
+      assert.equal(pending.inputSha256, inputSha256, 'OTHER_DEPLOYMENT_LOCK');
+      lock = fs.openSync(lockPath, 'r+');
+    } else lock = fs.openSync(lockPath, 'wx');
     let token = tokenInMemory();
-    for (const name of ALLOWED) {
+    const completedNames = new Set();
+    const preserved = resume ? fs.readFileSync(receiptFile, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+    for (const name of names) {
       const expected = baseline.functions[name];
       assert.ok(expected?.resource, 'EXISTING_FUNCTION_REQUIRED');
+      if (resume) assertPreservedSource(expected.resource,
+        preserved.find(record => record.state === 'PREVIOUS_SOURCE_PRESERVED' && record.function === name),
+        fs.readFileSync(privatePath(path.join(path.dirname(inputFile), `${name}-previous.zip`))));
+      const afterFile = path.join(path.dirname(inputFile), `${name}-after.json`);
+      if (resume && fs.existsSync(afterFile)) {
+        const saved = JSON.parse(fs.readFileSync(afterFile));
+        const current = await assertCurrent(saved, name, token);
+        const operation = JSON.parse(fs.readFileSync(path.join(path.dirname(inputFile), `${name}-operation.json`)));
+        assertOperationMatchesGet(operation, current);
+        assertRuntimePreserved(expected.resource, current);
+        assertRunRuntimePreserved(expected.service, saved.service);
+        assert.equal(current.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
+        assert.equal(current.labels?.['pay0-source-commit'], input.sourceCommit, 'POSTFLIGHT_COMMIT');
+        assert.equal(current.labels?.['firebase-functions-hash'], input.archiveSha256.slice(0, 40), 'POSTFLIGHT_ARTIFACT_LABEL');
+        assert.equal(sha(await readSourceBytes(previousSource(current), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
+        assert.equal(digest(saved.iam), digest(expected.iam), 'POSTFLIGHT_IAM_CHANGED');
+        completedNames.add(name);
+        emit({ state: 'CONFIGURATION_VERIFIED', resumed: true, function: name, revision: current.serviceConfig.revision, functionalVerification: 'PENDING' });
+        continue;
+      }
       const fresh = await assertCurrent(expected, name, token);
-      sourceOnlyPatch(fresh, fresh.buildConfig.source.storageSource, input.sourceCommit, input.archiveSha256);
-      const rollback = await preservePrevious(fresh, token, path.dirname(inputFile), name);
-      emit({ state: 'PREVIOUS_SOURCE_PRESERVED', function: name, source: rollback.source, sha256: rollback.sha256, previousRevision: fresh.serviceConfig.revision });
+      sourceOnlyPatch(fresh, fresh.buildConfig.source.storageSource, input.sourceCommit, input.archiveSha256, group);
+      if (!resume) {
+        const rollback = await preservePrevious(fresh, token, path.dirname(inputFile), name);
+        emit({ state: 'PREVIOUS_SOURCE_PRESERVED', function: name, source: rollback.source, sha256: rollback.sha256, previousRevision: fresh.serviceConfig.revision });
+      }
     }
+    if (completedNames.size === names.length) { unresolved = false; return; }
     const operations = await getMetadata(`${base}/operations?pageSize=100&filter=done%3Dfalse`, token);
     assert.equal((operations.operations || []).filter(row => !row.done).length, 0, 'CONCURRENT_DEPLOYMENT');
     const upload = await mutation(`${base}/functions:generateUploadUrl`, token, {});
@@ -170,11 +276,12 @@ export async function execute(inputFile, inputSha256) {
     assert.match(uploadedGeneration || '', /^[1-9][0-9]*$/, 'UPLOAD_GENERATION_REQUIRED');
     const uploadedSource = { ...upload.storageSource, generation: uploadedGeneration };
     emit({ state: 'ARTIFACT_UPLOADED', archiveSha256: input.archiveSha256, sourceCommit: input.sourceCommit });
-    for (const name of ALLOWED) {
+    for (const name of names) {
+      if (completedNames.has(name)) continue;
       token = tokenInMemory();
       const expected = baseline.functions[name];
       const fresh = await assertCurrent(expected, name, token);
-      const body = sourceOnlyPatch(fresh, uploadedSource, input.sourceCommit, input.archiveSha256);
+      const body = sourceOnlyPatch(fresh, uploadedSource, input.sourceCommit, input.archiveSha256, group);
       emit({ state: 'UPDATE_PREPARED', function: name, previousSource: previousSource(fresh), source: uploadedSource, previousRevision: fresh.serviceConfig.revision });
       unresolved = true;
       fs.writeFileSync(lockPath, JSON.stringify({ inputFile, inputSha256, function: name, state: 'DISPATCHING' }));
@@ -186,9 +293,10 @@ export async function execute(inputFile, inputSha256) {
       const after = await getMetadata(`${base}/functions/${name}`, token);
       const afterService = await getMetadata(`https://run.googleapis.com/v2/${after.serviceConfig.service}`, token);
       fs.writeFileSync(path.join(path.dirname(inputFile), `${name}-after.json`), JSON.stringify({ resource: after, service: afterService, iam: expected.iam }), { flag: 'wx', mode: 0o600 });
-      assert.equal(digest(after), digest(completed), 'CONCURRENT_POSTFLIGHT_CHANGE');
+      assertOperationMatchesGet(completed, after);
       assert.equal(after.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
       assertRuntimePreserved(fresh, after);
+      assertRunRuntimePreserved(expected.service, afterService);
       assert.equal(after.labels?.['pay0-source-commit'], input.sourceCommit, 'POSTFLIGHT_COMMIT');
       assert.equal(after.labels?.['firebase-functions-hash'], input.archiveSha256.slice(0, 40), 'POSTFLIGHT_ARTIFACT_LABEL');
       assert.equal(sha(await readSourceBytes(previousSource(after), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
@@ -203,10 +311,10 @@ export async function execute(inputFile, inputSha256) {
     if (lock !== undefined) { fs.closeSync(lock); if (!unresolved) fs.unlinkSync(lockPath); }
   }
 }
-export async function rollback(inputFile, inputSha256, name) {
-  assert.ok(ALLOWED.has(name), 'FUNCTION_NOT_ALLOWED');
+async function rollbackInternal(inputFile, inputSha256, name) {
   const inputBytes = fs.readFileSync(privatePath(inputFile)); assert.equal(sha(inputBytes), inputSha256, 'INPUT_CHANGED');
   const input = JSON.parse(inputBytes), directory = path.dirname(inputFile);
+  assert.ok(deploymentScope(input).names.includes(name), 'FUNCTION_NOT_ALLOWED');
   const baselineBytes = fs.readFileSync(privatePath(input.baselineFile)); assert.equal(sha(baselineBytes), input.baselineSha256, 'BASELINE_CHANGED');
   const before = JSON.parse(baselineBytes).functions[name];
   const expected = JSON.parse(fs.readFileSync(privatePath(path.join(directory, `${name}-after.json`))));
@@ -224,6 +332,7 @@ export async function rollback(inputFile, inputSha256, name) {
     const token = tokenInMemory();
     await assertCurrent(expected, name, token);
     assertRuntimePreserved(before.resource, expected.resource);
+    assertRunRuntimePreserved(before.service, expected.service);
     unresolved = true;
     fs.writeFileSync(lockPath, JSON.stringify({ inputFile, inputSha256, function: name, state: 'ROLLBACK_DISPATCHING' }));
     const operation = await mutation(`${base}/functions/${name}?updateMask=buildConfig.source,labels`, token,
@@ -234,17 +343,36 @@ export async function rollback(inputFile, inputSha256, name) {
     const after = await getMetadata(`${base}/functions/${name}`, token);
     assert.equal(after.state, 'ACTIVE', 'ROLLBACK_NOT_ACTIVE');
     assertRuntimePreserved(before.resource, after);
+    const afterService = await getMetadata(`https://run.googleapis.com/v2/${after.serviceConfig.service}`, token);
+    assertRunRuntimePreserved(before.service, afterService);
+    const afterIam = await getMetadata(`https://run.googleapis.com/v2/${after.serviceConfig.service}:getIamPolicy`, token);
+    assert.equal(digest(afterIam), digest(before.iam), 'ROLLBACK_IAM_CHANGED');
     assert.deepEqual(after.labels, before.resource.labels, 'ROLLBACK_LABELS_CHANGED');
     assert.equal(sha(await readSourceBytes(previousSource(after), token)), sha(fs.readFileSync(path.join(directory, `${name}-previous.zip`))), 'ROLLBACK_SOURCE_MISMATCH');
     emit({ state: 'ROLLBACK_VERIFIED', function: name, revision: after.serviceConfig.revision });
     unresolved = false;
   } finally { fs.closeSync(lock); if (!unresolved) fs.unlinkSync(lockPath); }
 }
+async function exclusiveRunner(task) {
+  // A persistent deployment lock may be resumed; this separate process lock
+  // prevents two --resume/rollback processes from acting on it concurrently.
+  const file = privatePath(path.join(PRIVATE, 'active-executor.lock'));
+  const descriptor = fs.openSync(file, 'wx', 0o600);
+  try { fs.writeFileSync(file, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })); return await task(); }
+  finally { fs.closeSync(descriptor); fs.unlinkSync(file); }
+}
+export async function execute(inputFile, inputSha256, resume = false) {
+  return exclusiveRunner(() => executeInternal(inputFile, inputSha256, resume));
+}
+export async function rollback(inputFile, inputSha256, name) {
+  return exclusiveRunner(() => rollbackInternal(inputFile, inputSha256, name));
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    const [mode, first, second, third] = process.argv.slice(2);
-    if (mode === '--prepare') console.log(JSON.stringify(await prepare(first, second)));
+    const [mode, first, second, third, fourth] = process.argv.slice(2);
+    if (mode === '--prepare') console.log(JSON.stringify(await prepare(first, second, third, fourth)));
     else if (mode === '--execute') await execute(first, second);
+    else if (mode === '--resume') await execute(first, second, true);
     else if (mode === '--rollback') await rollback(first, second, third);
     else throw Error('MODE_REQUIRED');
   } catch (error) { console.error(`SCOPED_DEPLOYMENT_FAILED ${/^[A-Z][A-Z_0-9]+$/.test(error.message) ? error.message : 'detailsRedacted=true'}`); process.exitCode = 1; }

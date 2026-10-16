@@ -9,7 +9,9 @@ export const PROJECT = 'pay-0-system';
 export const REGION = 'us-central1';
 export const FUNCTIONS = ['ssrpay0system', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField',
   'getControlCenterEngineering', 'importControlCenterEngineeringEvidence', 'listOperationalDocuments',
-  'getAuthorizedDocumentDownloadUrl', 'getAuthorizedOperationalRecord'];
+  'getAuthorizedDocumentDownloadUrl', 'getAuthorizedOperationalRecord',
+  'listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions',
+  'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'reconcileAgent007RecommendationsNow'];
 const hosts = new Set(['cloudfunctions.googleapis.com', 'run.googleapis.com', 'firebasehosting.googleapis.com', 'firebaserules.googleapis.com']);
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
