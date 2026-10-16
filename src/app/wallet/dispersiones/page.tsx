@@ -2386,6 +2386,7 @@ export default function WalletDispersionesPage() {
       <Modal
         open={openDispersionModal}
         title=""
+        ariaLabel="Nueva dispersión"
         onClose={() => {
           if (!saving) {
             setOpenDispersionModal(false);
@@ -2401,6 +2402,9 @@ export default function WalletDispersionesPage() {
         }}
         widthClassName="max-w-[430px]"
         bodyClassName="max-h-[calc(100vh-2rem)] overflow-y-auto px-5 py-3"
+        closeOnEscape={!saving}
+        closeOnBackdrop={!saving}
+        closeButtonDisabled={saving}
       >
         <div className="space-y-2">
           <div className="grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">
@@ -2649,6 +2653,7 @@ export default function WalletDispersionesPage() {
       <Modal
         open={openDispersionMassiveModal}
         title=""
+        ariaLabel="Importar dispersiones masivas"
         onClose={() => {
           if (!dispersionImportBusy && !dispersionImportSaving) {
             setOpenDispersionMassiveModal(false);
@@ -2660,6 +2665,9 @@ export default function WalletDispersionesPage() {
         }}
         widthClassName="max-w-[520px]"
         bodyClassName="max-h-[calc(100vh-2rem)] overflow-y-auto px-5 py-3"
+        closeOnEscape={!dispersionImportBusy && !dispersionImportSaving}
+        closeOnBackdrop={!dispersionImportBusy && !dispersionImportSaving}
+        closeButtonDisabled={dispersionImportBusy || dispersionImportSaving}
       >
         <div className="space-y-2">
           <div className="grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">
