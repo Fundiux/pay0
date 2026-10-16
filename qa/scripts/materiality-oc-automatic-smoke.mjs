@@ -133,8 +133,9 @@ const [oc, quote, operation, invoice] = await Promise.all([
 assert.ok(oc, "La OC debe quedar activa.");
 assert.ok(quote, "La OC debe generar cotización automática.");
 assert.ok(operation.exists, "La OC debe crear/actualizar el expediente de Materialidad.");
-assert.equal(invoice.size, 1, "La OC debe crear un único borrador Facturama idempotente.");
-assert.equal(invoice.docs[0].data().status, "AUTO_DRAFT_FISCAL_VALIDATED", "El borrador debe usar la clasificación fiscal autorizada.");
+// This fixture is outside a PAY0 dispatch. A quotation must not imply that a
+// Facturama draft was created for a company outside that fiscal boundary.
+assert.equal(invoice.size, 0, "Una empresa ajena a despacho PAY0 no debe crear borrador Facturama.");
 
 console.log("SMOKE_STAGE=automatic_documents_verified");
 // Simula el enlace que recibe el cliente. submitSolicitudSignature se invoca
