@@ -2827,7 +2827,7 @@ export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from 
 export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
-export { getControlCenterEngineering, importControlCenterEngineeringEvidence } from "./modules/controlCenter/engineeringCallables";
+export { getControlCenterEngineering, importControlCenterEngineeringEvidence, assignControlCenterEngineeringTask } from "./modules/controlCenter/engineeringCallables";
 export { listOperationalDocuments } from "./modules/canonicalCenter/documentDossier";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";

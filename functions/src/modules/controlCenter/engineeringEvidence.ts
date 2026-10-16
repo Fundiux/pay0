@@ -11,6 +11,32 @@ const date = (value: unknown) => {
   return new Date(value).toISOString();
 };
 
+function normalizeIntegration(value: any, commit: string, tree: string) {
+  if (value === undefined) return undefined;
+  const ids = new Set(["access", "documents", "pagos", "engineering", "experience", "platform"]);
+  const count = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0 && Number(n) <= 1_000_000;
+  const modules = (values: unknown) => {
+    if (!Array.isArray(values) || values.length > ids.size || values.some(id => !ids.has(id)) || new Set(values).size !== values.length) throw invalid();
+    return values as string[];
+  };
+  if (!value || value.status !== "candidate-only" || value.candidateCommit !== commit || value.sourceTree !== tree ||
+      !Array.isArray(value.modules) || value.modules.length > ids.size || !Array.isArray(value.worktrees) || value.worktrees.length > 200) throw invalid();
+  if (value.unavailableWorktreeCount !== undefined && !count(value.unavailableWorktreeCount)) throw invalid();
+  const mapped = value.modules.map((row: any) => {
+    if (!row || !ids.has(row.id) || !count(row.changedFiles)) throw invalid();
+    return { id: row.id as string, changedFiles: row.changedFiles as number, dependencies: modules(row.dependencies) };
+  });
+  if (new Set(mapped.map((row: any) => row.id)).size !== mapped.length) throw invalid();
+  const worktrees = value.worktrees.map((row: any) => {
+    if (!row || typeof row.branch !== "string" || row.branch.length < 1 || row.branch.length > 200 ||
+        /[\x00-\x1f\x7f]/.test(row.branch) || typeof row.dirty !== "boolean" || !count(row.overlapCount)) throw invalid();
+    return { branch: row.branch as string, head: hash(row.head, 40), dirty: row.dirty as boolean,
+      modules: modules(row.modules), overlapCount: row.overlapCount as number };
+  });
+  return { candidateCommit: commit, sourceTree: tree, status: "candidate-only" as const, modules: mapped, worktrees,
+    unavailableWorktreeCount: (value.unavailableWorktreeCount ?? 0) as number };
+}
+
 /** Validates a human-imported local gate report. Does not attest that Git or CI ran. */
 export function normalizeEngineeringEvidence(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input) || JSON.stringify(input).length > 64_000) throw invalid();
@@ -50,6 +76,7 @@ export function normalizeEngineeringEvidence(input: unknown) {
     blockingFindings,
     provenance: "HUMAN_IMPORTED" as const, authenticity: "NOT_INDEPENDENTLY_VERIFIED" as const,
     publication: "UNKNOWN" as const, productionVerification: "UNKNOWN" as const,
+    ...(row.integration === undefined ? {} : { integration: normalizeIntegration(row.integration, row.sourceCommit, row.sourceTree) }),
   };
   return { report, digest: createHash("sha256").update(JSON.stringify(report)).digest("hex") };
 }

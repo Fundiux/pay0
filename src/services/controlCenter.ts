@@ -4,6 +4,8 @@ import { functions } from "@/lib/firebaseClient";
 import { CALLABLES } from "@/lib/callableNames";
 
 export type EngineeringCatalog = {
+  assignees: Array<{ uid: string; name: string }>;
+  assigneesTruncated: boolean;
   schemaVersion: number;
   coverage: "CURATED";
   modules: Array<{ id: string; name: string; responsibility: string; data: string[]; boundary: string; dependencies: string[]; checks: string[]; source: string; technicalOwner: string | null; independence: "SHARED_FIREBASE_RUNTIME" }>;
@@ -23,10 +25,17 @@ export type EngineeringRunEvidence = {
   sourceArchiveSha256: string | null; blockingFindings: Array<{ code: string; summary: string }>;
   provenance: "HUMAN_IMPORTED"; authenticity: "NOT_INDEPENDENTLY_VERIFIED";
   publication: "UNKNOWN"; productionVerification: "UNKNOWN"; importedBy: string;
+  integration?: { candidateCommit: string; sourceTree: string; status: "candidate-only"; unavailableWorktreeCount: number;
+    modules: Array<{ id: string; changedFiles: number; dependencies: string[] }>;
+    worktrees: Array<{ branch: string; head: string; dirty: boolean; modules: string[]; overlapCount: number }> };
 };
 
 export async function importControlCenterEngineeringEvidence(data: { report: unknown; moduleId: string; observationId?: string }) {
   return (await httpsCallable<typeof data, { ok: boolean; id: string; created: boolean; digest: string }>(functions, CALLABLES.importControlCenterEngineeringEvidence)(data)).data;
+}
+
+export async function assignControlCenterEngineeringTask(data: { observationId: string; assigneeUid: string; requestId: string; note: string }) {
+  return (await httpsCallable<typeof data, { ok: boolean; id: string; created: boolean }>(functions, CALLABLES.assignControlCenterEngineeringTask)(data)).data;
 }
 
 export type ControlAnalytics = {

@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
-import { logActivity } from "../../utils/logActivity";
+import { logActivity, logActivityBatch } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { reconcileAgent007Recommendations } from "./reconciliation";
 import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
@@ -80,9 +80,20 @@ export const listAgent007Recommendations = onCall(
 export const reconcileAgent007RecommendationsNow = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
-    const { rootId } = await actor(request);
+    const { uid, rootId } = await actor(request);
     const changed = await reconcileAgent007Recommendations(db, rootId);
-    return { ok: true, changed };
+    const ref = db.collection("agent007Observations").doc(), batch = db.batch();
+    batch.create(ref, { rootId, caseType: "ENGINEERING", caseId: "agent007:recommendation-review", phase: "OBSERVATION",
+      source: "SERVER_RECONCILIATION", intent: "Revisión de recomendaciones operativas",
+      humanDecision: "Revisión determinista solicitada por un superadmin; sin ejecución de modelos ni proveedores externos.",
+      outcome: `${changed} recomendaciones actualizadas`, actorUid: uid, actorRole: "superadmin",
+      engineeringAction: { name: "RECONCILE_RECOMMENDATIONS", changed, limit: 100, status: "EXECUTED" },
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null });
+    logActivityBatch(batch, db, { event: "AGENTE_007_OBSERVACION", rootId, actorUid: uid, actorRole: "superadmin",
+      referenceId: ref.id, referenceType: "agent007Observation", relatedEntityId: "agent007:recommendation-review", relatedEntityType: "ENGINEERING",
+      description: `Revisión operativa ejecutada: ${changed} recomendaciones actualizadas, hasta 100 pendientes revisadas.` });
+    await batch.commit();
+    return { ok: true, changed, observationId: ref.id };
   },
 );
 

@@ -43,3 +43,22 @@ test("failed and diverged runs remain evidence, never a publication certificate"
   assert.equal(result.status, "failed"); assert.equal(result.mainOnly, 2);
   assert.equal(result.sourceArchiveSha256, null); assert.equal(result.publication, "UNKNOWN");
 });
+
+test("bounds modular inventory, binds it to the source and never elevates its provenance", () => {
+  const row = fixture();
+  row.integration = { candidateCommit: row.sourceCommit, sourceTree: row.sourceTree, status: "candidate-only",
+    modules: [{ id: "pagos", changedFiles: 4, dependencies: ["access", "documents"] }],
+    worktrees: [{ branch: "feature/test", head: "a".repeat(40), dirty: true, modules: ["pagos"], overlapCount: 2, absolutePath: "private-path" }] };
+  const result = normalize(row);
+  assert.equal(result.report.integration.worktrees[0].overlapCount, 2);
+  assert.equal(JSON.stringify(result).includes("private-path"), false);
+  assert.equal(result.report.publication, "UNKNOWN");
+  for (const mutate of [
+    value => { value.candidateCommit = "b".repeat(40); },
+    value => { value.status = "published"; },
+    value => { value.modules[0].dependencies = ["unknown"]; },
+    value => { value.worktrees[0].overlapCount = -1; },
+    value => { value.worktrees[0].branch = "unsafe\nbranch"; },
+    value => { value.worktrees = Array(201).fill(value.worktrees[0]); },
+  ]) { const invalid = structuredClone(row); mutate(invalid.integration); assert.throws(() => normalize(invalid), error => error.code === "invalid-argument"); }
+});

@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { inspectIntegration, integrationSummary } from './inspect-modular-integration.mjs';
 
 export const CANDIDATE_GATES = [
   ['frontend-dependencies', 'npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']],
@@ -64,6 +65,7 @@ export function prepareCandidate({ cwd = process.cwd(), mainRef = 'main', execut
   fs.mkdirSync(directory, { recursive: true });
   const report = {
     schemaVersion: 1, ...source, startedAt: new Date().toISOString(),
+    integration: integrationSummary(inspectIntegration(cwd, mainRef)),
     nodeVersion: process.version, status: 'checking', checks: [],
     scope: 'committed-source-and-local-gates', deploymentAuthorized: false,
     productionExercised: false,
