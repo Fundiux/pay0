@@ -15,6 +15,20 @@ export async function getControlCenterEngineering() {
   return (await httpsCallable<Record<string, never>, EngineeringCatalog & { ok: boolean }>(functions, CALLABLES.getControlCenterEngineering)({})).data;
 }
 
+export type EngineeringRunEvidence = {
+  sourceCommit: string; sourceTree: string; mainCommit: string; digest: string;
+  mainOnly: number; candidateOnly: number; mainCompatibility: string;
+  status: "validated-source-candidate" | "failed"; startedAt: string; finishedAt: string;
+  checks: Array<{ name: string; status: "passed" | "failed" }>;
+  sourceArchiveSha256: string | null; blockingFindings: Array<{ code: string; summary: string }>;
+  provenance: "HUMAN_IMPORTED"; authenticity: "NOT_INDEPENDENTLY_VERIFIED";
+  publication: "UNKNOWN"; productionVerification: "UNKNOWN"; importedBy: string;
+};
+
+export async function importControlCenterEngineeringEvidence(data: { report: unknown; moduleId: string; observationId?: string }) {
+  return (await httpsCallable<typeof data, { ok: boolean; id: string; created: boolean; digest: string }>(functions, CALLABLES.importControlCenterEngineeringEvidence)(data)).data;
+}
+
 export type ControlAnalytics = {
   ok: boolean; from: string; to: string; timezone: string;
   totals: Record<string, number>; previous: Record<string, number>;

@@ -2,17 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getControlCenterEngineering, type EngineeringCatalog } from "@/services/controlCenter";
+import { getControlCenterEngineering, importControlCenterEngineeringEvidence, type EngineeringCatalog, type EngineeringRunEvidence } from "@/services/controlCenter";
 import { listAgent007Observations, listAgent007Traces, recordAgent007Observation, type Agent007Observation, type HugoTrace } from "@/services/agent007";
 
 const panel = "rounded-2xl border border-white/10 bg-slate-950/60 p-5";
 const input = "rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-slate-100";
 const stages = ["Pendiente de desarrollo", "En desarrollo", "Bloqueado", "Pendiente de integración", "Implementado sin publicar", "Pendiente de certificación", "Publicado sin verificar", "Verificado", "Revertido"];
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "No se pudo consultar la evidencia.";
+type EngineeringObservation = Agent007Observation & { engineeringEvidence?: EngineeringRunEvidence };
+
+function RunEvidence({ report }: { report: EngineeringRunEvidence }) {
+  return <div className="mt-3 space-y-2 rounded-lg bg-slate-900 p-3">
+    <p className="font-medium text-sky-200">Evidencia local importada por usuario</p>
+    <dl className="grid gap-2 text-xs sm:grid-cols-2">
+      <div><dt className="text-slate-500">Desarrollo</dt><dd>Commit reportado: {report.sourceCommit.slice(0, 12)}</dd></div>
+      <div><dt className="text-slate-500">Integración</dt><dd>{report.mainOnly === 0 ? "Contiene la referencia main local reportada" : "Divergencia reportada con main"}; incorporación en main no verificada</dd></div>
+      <div><dt className="text-slate-500">Pruebas locales reportadas</dt><dd>{report.status === "validated-source-candidate" ? "Controles del candidato aprobados" : "Proceso de candidato fallido"}</dd></div>
+      <div><dt className="text-slate-500">Publicación y verificación productiva</dt><dd>Sin evidencia verificada</dd></div>
+    </dl>
+    <p className="text-xs text-slate-400">Finalizó: {new Date(report.finishedAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })} · Autenticidad no verificada independientemente.</p>
+    {report.blockingFindings.map(finding => <p key={finding.code} className="text-xs text-amber-200">Bloqueo reportado: {finding.summary}</p>)}
+    <details className="text-xs text-slate-400"><summary className="cursor-pointer">Resultados y huellas de la evidencia</summary><ul className="my-2 space-y-1">{report.checks.map(check => <li key={check.name}>{check.name}: {check.status === "passed" ? "aprobado" : "fallido"}</li>)}</ul><p className="break-all">Commit: {report.sourceCommit}</p><p className="break-all">Árbol: {report.sourceTree}</p><p className="break-all">Main local: {report.mainCommit}</p><p className="break-all">SHA-256 del archivo fuente declarado: {report.sourceArchiveSha256 || "No disponible"}</p><p className="break-all">Huella del registro normalizado: {report.digest}</p><p className="break-all">Importado por: {report.importedBy}</p></details>
+  </div>;
+}
 
 export default function EngineeringControl() {
   const [catalog, setCatalog] = useState<EngineeringCatalog | null>(null);
-  const [observations, setObservations] = useState<Agent007Observation[]>([]);
+  const [observations, setObservations] = useState<EngineeringObservation[]>([]);
   const [traces, setTraces] = useState<HugoTrace[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -23,6 +39,29 @@ export default function EngineeringControl() {
   const [evidence, setEvidence] = useState("");
   const [stage, setStage] = useState(stages[0]);
   const [message, setMessage] = useState("");
+  const [runReport, setRunReport] = useState<unknown>(null);
+  const [runFile, setRunFile] = useState("");
+  const [linkedObservationId, setLinkedObservationId] = useState("");
+  const [importMessage, setImportMessage] = useState("");
+
+  async function readReport(file?: File) {
+    setRunReport(null); setRunFile(""); setImportMessage("");
+    if (!file) return;
+    try {
+      if (file.size > 64_000) throw Error("El reporte debe tener como máximo 64 KB.");
+      setRunReport(JSON.parse(await file.text())); setRunFile(file.name);
+    } catch (error) { setImportMessage(errorMessage(error)); }
+  }
+
+  async function importReport() {
+    setSaving(true); setImportMessage("");
+    try {
+      const result = await importControlCenterEngineeringEvidence({ report: runReport, moduleId, ...(linkedObservationId ? { observationId: linkedObservationId } : {}) });
+      setImportMessage(result.created ? "Evidencia importada con tu identidad. No acredita publicación ni certificación productiva." : "Esta misma evidencia ya está registrada para este seguimiento; no se duplicó.");
+      await load();
+    } catch (error) { setImportMessage(errorMessage(error)); }
+    finally { setSaving(false); }
+  }
 
   async function load() {
     setLoading(true);
@@ -40,8 +79,8 @@ export default function EngineeringControl() {
   async function save() {
     setSaving(true); setMessage("");
     try {
-      await recordAgent007Observation({ caseType: "ENGINEERING", caseId: caseId || `${moduleId}:${crypto.randomUUID()}`, intent: title.trim(), humanDecision: evidence.trim(), outcome: stage });
-      setTitle(""); setEvidence(""); setCaseId("");
+      const saved = await recordAgent007Observation({ caseType: "ENGINEERING", caseId: caseId || `${moduleId}:${crypto.randomUUID()}`, intent: title.trim(), humanDecision: evidence.trim(), outcome: stage });
+      setTitle(""); setEvidence(""); setCaseId(""); setLinkedObservationId(saved.observationId);
       setMessage("Avance registrado con tu identidad en las observaciones de Hugo y en el registro de actividad.");
       await load();
     } catch (error) { setMessage(errorMessage(error)); }
@@ -54,20 +93,29 @@ export default function EngineeringControl() {
     {errors.map(error => <p key={error} role="alert" className="mt-3 text-sm text-amber-300">{error}</p>)}
     <div className="my-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-100">
       <p>Sol y Astra se usan en Codex para ingeniería. Hugo es el agente operativo existente en PAY0.</p>
-      <p className="mt-1">Versión desplegada, certificación y verificación productiva: sin evidencia conectada. Un avance declarado aquí no acredita una publicación ni ejecuta un despliegue.</p>
+      <p className="mt-1">Los controles locales pueden importarse desde su reporte. Versión publicada y verificación productiva permanecen sin acreditar. PAY0 no ejecuta Sol ni Astra desde esta pantalla.</p>
     </div>
     {catalog && <details className="mb-4"><summary className="cursor-pointer font-medium text-slate-200">Módulos y dependencias · catálogo inicial ({catalog.modules.length})</summary><p className="my-3 text-xs text-slate-400">Selección inicial de contratos, no inventario exhaustivo. Comparten Firebase y publicación de Functions; no son servicios independientes. Responsables técnicos pendientes de asignación.</p><div className="grid gap-3 md:grid-cols-2">{catalog.modules.map(module => <article key={module.id} className="rounded-xl border border-white/10 p-3 text-sm"><h3 className="font-semibold text-white">{module.name}</h3><p className="mt-1 text-slate-300">{module.responsibility}</p><p className="mt-2 text-slate-400">Dependencias revisadas: {module.dependencies.map(name).join(", ") || "Base de autorización"}</p><p className="mt-1 text-slate-400">Frontera: {module.boundary}</p><p className="mt-1 text-slate-400">Verificación requerida: {module.checks.join("; ")}. Estado: sin resultado conectado.</p><details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer">Referencia técnica</summary><p className="break-all">{module.source}</p><p>Datos: {module.data.join(", ")}</p></details></article>)}</div></details>}
     <form className="space-y-3 border-t border-white/10 pt-4" onSubmit={event => { event.preventDefault(); void save(); }}>
       <h3 className="font-medium text-white">{caseId ? "Registrar avance de la incidencia" : "Registrar incidencia o mejora"}</h3>
       <p className="text-xs text-slate-400">Se agrega una observación al historial existente de Hugo. Incluye referencia de commit, prueba, bloqueo o reversión cuando corresponda; no incluyas credenciales ni datos de clientes.</p>
-      <div className="flex flex-wrap gap-3"><label className="flex flex-col gap-1 text-xs text-slate-400">Módulo<select className={input} value={moduleId} disabled={!!caseId || !catalog || saving} onChange={event => setModuleId(event.target.value)}>{catalog?.modules.map(module => <option key={module.id} value={module.id}>{module.name}</option>)}</select></label><label className="flex flex-col gap-1 text-xs text-slate-400">Estado declarado<select className={input} value={stage} disabled={saving} onChange={event => setStage(event.target.value)}>{stages.map(value => <option key={value}>{value}</option>)}</select></label></div>
+      <div className="flex flex-wrap gap-3"><label className="flex flex-col gap-1 text-xs text-slate-400">Módulo<select className={input} value={moduleId} disabled={!!caseId || !catalog || saving} onChange={event => { setModuleId(event.target.value); setLinkedObservationId(""); }}>{catalog?.modules.map(module => <option key={module.id} value={module.id}>{module.name}</option>)}</select></label><label className="flex flex-col gap-1 text-xs text-slate-400">Estado declarado<select className={input} value={stage} disabled={saving} onChange={event => setStage(event.target.value)}>{stages.map(value => <option key={value}>{value}</option>)}</select></label></div>
       <label className="flex flex-col gap-1 text-xs text-slate-400">Incidencia o mejora<input className={input} value={title} disabled={saving} required maxLength={500} onChange={event => setTitle(event.target.value)} /></label>
       <label className="flex flex-col gap-1 text-xs text-slate-400">Decisión, avance y evidencia<textarea className={input} value={evidence} disabled={saving} required maxLength={500} rows={3} onChange={event => setEvidence(event.target.value)} /></label>
-      <div className="flex gap-3"><button className={input} disabled={saving || !catalog || !title.trim() || !evidence.trim()}>{saving ? "Guardando…" : "Registrar seguimiento"}</button>{caseId && <button type="button" className={input} disabled={saving} onClick={() => { setCaseId(""); setTitle(""); setEvidence(""); }}>Nueva incidencia</button>}</div>
+      <div className="flex gap-3"><button className={input} disabled={saving || !catalog || !title.trim() || !evidence.trim()}>{saving ? "Guardando…" : "Registrar seguimiento"}</button>{caseId && <button type="button" className={input} disabled={saving} onClick={() => { setCaseId(""); setLinkedObservationId(""); setTitle(""); setEvidence(""); }}>Nueva incidencia</button>}</div>
       <p role="status" className="text-sm text-sky-200">{message}</p>
     </form>
-    <div className="mt-5 space-y-3"><h3 className="font-medium text-white">Historial de ingeniería</h3><p className="text-xs text-slate-400">Filtrado de las últimas 50 observaciones generales de Hugo; puede omitir registros anteriores. Cada avance conserva la observación original.</p>{!observations.length && <p className="text-sm text-slate-400">Sin observaciones de ingeniería en la muestra disponible.</p>}{observations.map(row => <article key={row.id} className="rounded-xl border border-white/10 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><h4 className="font-medium text-white">{row.intent}</h4><span className="text-amber-200">{row.outcome}</span></div><p className="mt-1 text-xs text-slate-500">{name(row.caseId.split(":")[0])} · Declaración humana</p><p className="mt-2 whitespace-pre-wrap text-slate-300">{row.humanDecision}</p><button className={`${input} mt-2`} disabled={saving} onClick={() => { setCaseId(row.caseId); setModuleId(row.caseId.split(":")[0]); setTitle(row.intent); setEvidence(""); setStage(stages.includes(row.outcome) ? row.outcome : stages[0]); setMessage(""); }}>Agregar avance</button></article>)}</div>
+    <div className="mt-5 space-y-3 rounded-xl border border-sky-400/20 p-4">
+      <h3 className="font-medium text-white">Conectar evidencia de pruebas y candidato</h3>
+      <p className="text-xs text-slate-400">Importa el archivo evidence.json generado por el proceso de candidato del repositorio. Se guardan commit, fechas, resultados y huellas; se omiten comandos y rutas locales. La procedencia es humana: el servidor valida el formato, no autentica una ejecución de CI.</p>
+      <p className="text-sm text-slate-300">Destino: {name(moduleId)} · {linkedObservationId ? "incidencia seleccionada" : "candidato del módulo"}</p>
+      {linkedObservationId && <button type="button" className={input} disabled={saving} onClick={() => setLinkedObservationId("")}>Desvincular incidencia</button>}
+      <label className="flex flex-col gap-1 text-xs text-slate-400">Reporte local del candidato<input type="file" accept="application/json,.json" disabled={saving} onChange={event => void readReport(event.target.files?.[0])} className={input} /></label>
+      <div className="flex flex-wrap items-center gap-3"><button type="button" className={input} disabled={saving || !catalog || !runReport} onClick={() => void importReport()}>Importar evidencia local</button><span className="text-xs text-slate-400">{runFile}</span></div>
+      <p role="status" className="text-sm text-sky-200">{importMessage}</p>
+    </div>
+    <div className="mt-5 space-y-3"><h3 className="font-medium text-white">Historial de ingeniería</h3><p className="text-xs text-slate-400">Filtrado de las últimas 50 observaciones generales de Hugo; puede omitir registros anteriores. Cada avance conserva la observación original.</p>{!observations.length && <p className="text-sm text-slate-400">Sin observaciones de ingeniería en la muestra disponible.</p>}{observations.map(row => <article key={row.id} className="rounded-xl border border-white/10 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><h4 className="font-medium text-white">{row.intent}</h4><span className="text-amber-200">{row.outcome}</span></div><p className="mt-1 text-xs text-slate-500">{name(row.caseId.split(":")[0])} · Declaración humana</p><p className="mt-2 whitespace-pre-wrap text-slate-300">{row.humanDecision}</p>{row.engineeringEvidence && <RunEvidence report={row.engineeringEvidence} />}<button className={`${input} mt-2 mr-2`} disabled={saving} onClick={() => { setLinkedObservationId(row.id); setModuleId(row.caseId.split(":")[0]); setCaseId(""); setImportMessage("Incidencia seleccionada para vincular el reporte local."); }}>Vincular evidencia</button><button className={`${input} mt-2`} disabled={saving} onClick={() => { setCaseId(row.caseId); setLinkedObservationId(row.id); setModuleId(row.caseId.split(":")[0]); setTitle(row.intent); setEvidence(""); setStage(stages.includes(row.outcome) ? row.outcome : stages[0]); setMessage(""); }}>Agregar avance</button></article>)}</div>
     <details className="mt-5"><summary className="cursor-pointer text-sm font-medium text-slate-200">Actividad real de Hugo · últimas 10 trazas consultadas</summary><p className="mt-2 text-xs text-slate-400">Actividad operativa, no ejecuciones de Sol o Astra. Consulta limitada al periodo predeterminado de trazas.</p>{traces.map(trace => <p key={trace.id} className="mt-2 text-sm text-slate-300">{trace.resultStatus === "ERROR" ? "Error registrado" : "Ejecución registrada"} · {trace.toolsExecuted?.length || 0} herramientas · {trace.errorCode || trace.task || "Conversación"}</p>)}{!traces.length && <p className="mt-2 text-sm text-slate-400">Sin trazas en la muestra disponible.</p>}</details>
-    <div className="mt-4 flex gap-4 text-sm text-sky-300"><Link href="/hugo">Abrir Hugo y su evidencia</Link><Link href="/activity-log">Ver registro de actividad</Link></div>
+    <div className="mt-4 flex flex-wrap gap-4 text-sm text-sky-300"><Link href="/hugo">Abrir Hugo y su evidencia</Link><Link href="/activity-log">Ver registro de actividad</Link><Link href="/administracion/recursos-corporativos">Documentos de empresas propias</Link><Link href="/pagos">Comprobantes en Pagos</Link></div>
   </section>;
 }

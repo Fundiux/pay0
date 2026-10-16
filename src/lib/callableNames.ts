@@ -6,6 +6,7 @@ export const CALLABLES = {
   reverseControlCenterExpense: "reverseControlCenterExpense",
   getControlCenterOverview: "getControlCenterOverview",
   getControlCenterEngineering: "getControlCenterEngineering",
+  importControlCenterEngineeringEvidence: "importControlCenterEngineeringEvidence",
   refreshControlCenterOverview: "refreshControlCenterOverview",
   getOperationalIntelligenceReport: "getOperationalIntelligenceReport",
   getOperationalMetricsReport: "getOperationalMetricsReport",
