@@ -40,6 +40,14 @@ const profile = (rootId = 'r1') => ({ role: 'operador', rootId, active: true });
 // atomically. This fake models races; it never connects to Firebase or Vision.
 function database(seed = {}) {
   const docs = new Map(Object.entries(seed)), versions = new Map();
+  const mergeFields = (previous, patch) => {
+    const result = { ...previous };
+    for (const [key, value] of Object.entries(patch)) {
+      result[key] = value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length
+        ? mergeFields(previous?.[key] || {}, value) : value;
+    }
+    return result;
+  };
   return {
     docs, conflicts: 0,
     doc: path => ({ path, id: path.split('/').at(-1), get: async () => {
@@ -58,7 +66,7 @@ function database(seed = {}) {
         };
         await run({ get, getAll: (...refs) => Promise.all(refs.map(get)), set: (ref, data, options) => {
           const target = ref.path || ref;
-          writes.set(target, options?.merge ? { ...(writes.get(target) || docs.get(target) || {}), ...data } : data);
+          writes.set(target, options?.merge ? mergeFields(writes.get(target) || docs.get(target) || {}, data) : data);
         } });
         if ([...reads].some(([ref, version]) => (versions.get(ref) || 0) !== version)) { this.conflicts++; continue; }
         for (const [ref, data] of writes) { docs.set(ref, data); versions.set(ref, (versions.get(ref) || 0) + 1); }
@@ -270,6 +278,8 @@ test('repeated feedback is idempotent and new observations preserve rejected gov
   assert.equal(db.docs.get(memoryPath).status, 'REJECTED');
   assert.equal(db.docs.get(memoryPath).createdAt, 'ORIGINAL');
   assert.equal(db.docs.get(`pagoReceiptCorrections/${first.correctionId}`).autoResult.normalizedValue, '12345');
+  assert.equal(db.docs.get(`pagoReceiptAnalyses/${analysisId}`).humanCorrections.reference.correctedValue, '98765');
+  assert.equal(Object.hasOwn(db.docs.get(`pagoReceiptAnalyses/${analysisId}`), 'humanCorrections.reference'), false);
 });
 
 test('legacy memory fallback reads only same root and scoped candidate takes precedence', async () => {
