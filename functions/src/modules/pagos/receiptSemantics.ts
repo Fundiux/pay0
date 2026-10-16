@@ -1,4 +1,4 @@
-export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V1";
+export const RECEIPT_READER_VERSION = "PAY0_RECEIPT_SEMANTIC_V2";
 
 export type ReceiptConfidence = "HIGH" | "MEDIUM" | "LOW" | "NONE";
 export type ReceiptFieldEvidence = {
@@ -35,6 +35,19 @@ function evidenceLine(lines: string[], patterns: RegExp[]): string | null {
   return lines.find(line => patterns.some(pattern => pattern.test(normalized(line)))) || null;
 }
 
+function identifierEvidence(lines: string[], label: RegExp): { value: string | null; line: string | null } {
+  for (let i = 0; i < lines.length; i++) {
+    const match = normalized(lines[i]).match(label);
+    if (!match) continue;
+    // Match the accent-normalized label, but preserve the document's value.
+    const inline = lines[i].slice(match[0].length).trim();
+    const value = inline || lines[i + 1] || "";
+    if (!/^[a-z0-9][a-z0-9 -]*$/i.test(value) || !/\d/.test(value) || /^(?:referencia|folio|clave de rastreo|rastreo|numero|no\.|fecha|hora|cuenta|clabe|monto|importe|banco|concepto|beneficiario|ordenante)\b/.test(normalized(value))) return { value: null, line: lines[i] };
+    return { value, line: inline ? lines[i] : `${lines[i]} ${value}` };
+  }
+  return { value: null, line: null };
+}
+
 function field(value: unknown, line: string | null, confidence: ReceiptConfidence, forceReview = false): ReceiptFieldEvidence {
   const present = typeof value === "number" ? Number.isFinite(value) && value > 0 : clean(value).length > 0;
   return {
@@ -64,10 +77,10 @@ export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): Sema
   const amountLine = evidenceLine(lines, [/importe total.*deposito/, /monto (?:pagado|transferido|de la operacion)/, /total operado/]);
   const balanceLine = evidenceLine(lines, [/saldo (?:disponible|final|posterior|de la cuenta)/]);
   const commissionLine = evidenceLine(lines, [/comision(?: bancaria)?/, /cargo por (?:spei|transferencia)/]);
-  const trackingLine = evidenceLine(lines, [/clave de rastreo/, /^rastreo\b/]);
+  const tracking = identifierEvidence(lines, /^(?:clave de rastreo|rastreo)\b\s*[:\-]?\s*/);
   const referenceLine = evidenceLine(lines, [/^referencia(?: numerica)?\b/]);
-  const folioLine = evidenceLine(lines, [/^folio(?: electronico)?\b/]);
-  const transactionLine = evidenceLine(lines, [/(?:numero|no\.) de (?:transaccion|operacion)/]);
+  const folio = identifierEvidence(lines, /^folio(?: electronico)?\b\s*[:\-]?\s*/);
+  const transaction = identifierEvidence(lines, /^(?:numero de |no\.\s*(?:de )?)(?:transaccion|operacion)\b\s*[:\-]?\s*/);
   const dateLine = evidenceLine(lines, [/fecha.*(?:operacion|transferencia|pago|ejecucion)/, /^fecha\s*[:\-]/]);
   const reviewReasons: string[] = [];
   if (receipt.amountVerified !== true) reviewReasons.push("AMOUNT_REQUIRES_REVIEW");
@@ -82,9 +95,9 @@ export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): Sema
     executionDate: field(receipt.date, dateLine, receipt.dateVerified === true ? "HIGH" : "LOW", receipt.dateVerified !== true),
     executionTime: field(receipt.time, dateLine, receipt.dateVerified === true ? "HIGH" : "MEDIUM", receipt.dateVerified !== true),
     reference: field(receipt.reference, referenceLine, referenceLine ? "HIGH" : "MEDIUM", !referenceLine),
-    trackingKey: field(trackingLine?.replace(/^.*?(?:clave de rastreo|rastreo)\s*[:\-]?\s*/i, ""), trackingLine, "HIGH"),
-    folio: field(folioLine?.replace(/^.*?folio(?: electronico)?\s*[:\-]?\s*/i, ""), folioLine, "HIGH"),
-    transactionId: field(transactionLine?.replace(/^.*?(?:transaccion|operacion)\s*[:\-]?\s*/i, ""), transactionLine, "HIGH"),
+    trackingKey: field(tracking.value, tracking.line, "HIGH"),
+    folio: field(folio.value, folio.line, "HIGH"),
+    transactionId: field(transaction.value, transaction.line, "HIGH"),
     senderName: field(receipt.senderName, evidenceLine(lines, [/^(?:cliente|titular|ordenante|remitente|emisor|de|origen)\b/]), "MEDIUM", true),
     beneficiaryName: field(receipt.beneficiaryName, evidenceLine(lines, [/^(?:beneficiario|receptor|para|destino)\b/]), "MEDIUM", true),
     payerRfc: field(receipt.payerRfc, evidenceLine(lines, [/rfc.*(?:ordenante|emisor|pagador|cliente)/]), "HIGH"),

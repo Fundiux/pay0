@@ -2,14 +2,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const ts = require('typescript');
-const { test } = require('node:test');
+const measurementMode = process.argv.includes('--measure');
+const test = measurementMode ? () => {} : require('node:test').test;
+let receiptSourceRef = null;
 
 class HttpsError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
 function load(file, deps) {
   const exports = {};
-  const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+  const sourceText = receiptSourceRef && /receipt(?:PdfCallables|Semantics)\.ts$/.test(file)
+    ? require('node:child_process').execFileSync('git', ['show', `${receiptSourceRef}:${file}`], { encoding: 'utf8' })
+    : fs.readFileSync(file, 'utf8');
+  const source = ts.transpileModule(sourceText, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   new Function('exports', 'require', source)(exports, name => {
@@ -125,6 +130,7 @@ function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOc
     } } },
   });
   module.parsePagoReceiptPdf.correct = module.correctPagoReceiptSemanticField;
+  module.parsePagoReceiptPdf.parseText = module.parseReceiptText;
   return module.parsePagoReceiptPdf;
 }
 
@@ -138,7 +144,7 @@ test('callable rejects unauthorized and oversized requests before parser/provide
   await assert.rejects(parse({ ...input, data: { base64: 'A'.repeat(1400000) } }), { code: 'invalid-argument' });
   const result = await parse(input);
   assert.equal(result.ok, true); assert.equal(result.textSource, 'PDF_TEXT'); assert.equal(result.receipt.amount, 100);
-  assert.match(result.analysisId, /^[a-f0-9]{64}$/); assert.equal(result.readerVersion, 'PAY0_RECEIPT_SEMANTIC_V1');
+  assert.match(result.analysisId, /^[a-f0-9]{64}$/); assert.equal(result.readerVersion, 'PAY0_RECEIPT_SEMANTIC_V2');
   assert.ok(result.semanticReceipt.fields); assert.equal(result.identification.analysisId, result.analysisId); assert.equal(result.cacheHit, false);
   const cached = await parse(input); assert.equal(cached.cacheHit, true); assert.equal(cached.providerCalls, 0);
   assert.deepEqual(cached.semanticReceipt, result.semanticReceipt);
@@ -189,6 +195,45 @@ test('semantic reader keeps transfer, balance, commission and ambiguous executio
   assert.ok(semantic.fields.trackingKey.value);
 });
 
+const splitLabelCases = [
+  ['beneficiaryName', 'Beneficiario:\nEMPRESA SINTETICA SA'],
+  ['reference', 'Referencia\n00012345'],
+  ['destinationAccount', 'Cuenta destino:\n012345678901234567'],
+  ['concept', 'Concepto\nFactura sintetica 123'],
+  ['time', 'Hora:\n13:45:30'],
+];
+for (const [field, text] of splitLabelCases) test(`split PDF/OCR label preserves ${field}`, () => {
+  const parse = receiptHandler(database(), { pdf: 0, vision: 0 }).parseText;
+  assert.equal(parse(text)[field], text.split('\n')[1]);
+});
+
+const identifierCases = [
+  ['trackingKey', 'Clave de rastreo:\nABC001234', 'ABC001234'],
+  ['folio', 'Folio electrónico: 00012345', '00012345'],
+  ['transactionId', 'Número de operación:\n00098765', '00098765'],
+];
+for (const [field, text, expected] of identifierCases) test(`identifier evidence preserves ${field} and its original value`, () => {
+  const semantic = load('functions/src/modules/pagos/receiptSemantics.ts', {}).buildSemanticReceipt(text, {});
+  assert.equal(semantic.fields[field].value, expected);
+  assert.ok(semantic.fields[field].excerpt.includes(expected));
+  assert.equal(semantic.fields[field].decision, 'ACCEPTED');
+});
+
+test('missing split values do not consume a subsequent label or authorize payment', () => {
+  const parse = receiptHandler(database(), { pdf: 0, vision: 0 }).parseText;
+  const receipt = parse('Beneficiario:\nReferencia: 00012345\nConcepto:\nMonto: 100 MXN');
+  assert.equal(receipt.beneficiaryName, '');
+  assert.equal(receipt.concept, '');
+  assert.equal(receipt.executionConfirmed, false);
+  assert.equal(receipt.dateVerified, false);
+  const semantic = load('functions/src/modules/pagos/receiptSemantics.ts', {}).buildSemanticReceipt('Clave de rastreo:\nReferencia: 00012345', receipt);
+  assert.equal(semantic.fields.trackingKey.decision, 'MISSING');
+  assert.equal(semantic.reviewRequired, true);
+  assert.equal(parse('Beneficiario\nReferencia 123').beneficiaryName, '');
+  const unpunctuated = load('functions/src/modules/pagos/receiptSemantics.ts', {}).buildSemanticReceipt('Clave de rastreo\nReferencia 123', {});
+  assert.equal(unpunctuated.fields.trackingKey.decision, 'MISSING');
+});
+
 
 test('correction writes root-scoped candidate memories without cross-root overwrite or promotion', async () => {
   const db = database({ 'users/u1': profile('root-a'), 'users/u2': profile('root-b') });
@@ -206,7 +251,7 @@ test('correction writes root-scoped candidate memories without cross-root overwr
 
 test('legacy memory fallback reads only same root and scoped candidate takes precedence', async () => {
   const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
-  const readerVersion = 'PAY0_RECEIPT_SEMANTIC_V1';
+  const readerVersion = load('functions/src/modules/pagos/receiptSemantics.ts', {}).RECEIPT_READER_VERSION;
   const bytes = Buffer.from('%PDF-synthetic');
   const contentSha = crypto.createHash('sha256').update(bytes).digest('hex');
   const analysisId = crypto.createHash('sha256').update(`r1|${contentSha}|${readerVersion}`).digest('hex');
@@ -235,3 +280,33 @@ test('PDF OCR requests verified pages and rejects partial or errored responses',
     assert.deepEqual(counters, { pdf: 1, vision: 1 });
   }
 });
+
+// Reuse exactly the regression fixtures; no production documents or providers.
+// node qa/scripts/remediation-ocr-quota.test.cjs --measure <baseline-commit>
+if (measurementMode) {
+  const requestedRef = process.argv[process.argv.indexOf('--measure') + 1];
+  if (!requestedRef || !/^[a-f0-9]{7,40}$/i.test(requestedRef)) throw Error('Supply an explicit baseline commit hash');
+  const baselineCommit = require('node:child_process').execFileSync('git', ['rev-parse', '--verify', `${requestedRef}^{commit}`], { encoding: 'utf8' }).trim();
+  function measure(ref) {
+    receiptSourceRef = ref;
+    const parse = receiptHandler(database(), { pdf: 0, vision: 0 }).parseText;
+    const semantics = load('functions/src/modules/pagos/receiptSemantics.ts', {});
+    const fields = [
+      ...splitLabelCases.map(([field, text]) => ({ field, exact: parse(text)[field] === text.split('\n')[1] })),
+      ...identifierCases.map(([field, text, expected]) => ({ field, exact: semantics.buildSemanticReceipt(text, {}).fields[field].value === expected })),
+    ];
+    const exactFields = fields.filter(field => field.exact).length;
+    return { readerVersion: semantics.RECEIPT_READER_VERSION, exactFields, totalFields: fields.length, exactFieldRate: exactFields / fields.length, fields };
+  }
+  const metrics = {
+    schemaVersion: 1, fixtureSet: 'synthetic-split-labels-and-accented-identifiers-v1',
+    scope: 'Eight targeted synthetic field fixtures; not production accuracy or OCR provider quality.',
+    baselineCommit,
+    reproduce: `node qa/scripts/remediation-ocr-quota.test.cjs --measure ${baselineCommit}`,
+    regressionCommand: 'node --test qa/scripts/remediation-ocr-quota.test.cjs',
+    baseline: measure(baselineCommit), candidate: measure(null),
+  };
+  fs.mkdirSync('output', { recursive: true });
+  fs.writeFileSync('output/receipt-reader-metrics.json', `${JSON.stringify(metrics, null, 2)}\n`);
+  console.log(JSON.stringify(metrics));
+}

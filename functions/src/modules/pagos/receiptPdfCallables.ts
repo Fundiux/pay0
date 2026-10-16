@@ -132,9 +132,14 @@ function extractLabeled(lines: string[], labels: RegExp[]): string {
         if (value) return value;
       }
 
-      if (label.test(`${line}:`)) {
+      // PDF/OCR commonly puts a label and its value on separate lines. The
+      // patterns require a nonempty capture, so a bare label followed by a
+      // colon never matched. Probe with a sentinel, without inventing a value.
+      const probe = `${line.replace(/[:\-]\s*$/, "")}: __PAY0_VALUE__`;
+      if (probe.match(label)?.[1] === "__PAY0_VALUE__") {
         const next = clean(lines[i + 1] || "");
-        if (next) return next;
+        // A missing value must not consume the following field's label.
+        if (next && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ][^:]{0,79}:/.test(next) && !/^(?:fecha|hora|referencia|folio|rastreo|clave de rastreo|concepto|ordenante|beneficiario|receptor|remitente|emisor|cuenta|clabe|banco|monto|importe|numero de (?:operacion|transaccion))\b/i.test(normalize(next))) return next;
       }
     }
   }
