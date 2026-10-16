@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "Ingeniería interna y lectura de comprobantes",
+  "modules": ["controlCenter", "agent007", "pagos"],
+  "dependencies": ["Firebase Authentication", "Firestore", "Hugo observations and activity log", "Existing receipt identification and OCR"],
+  "publication": {
+    "requiresExplicitApproval": true,
+    "functions": ["getControlCenterEngineering", "parsePagoReceiptPdf"],
+    "hosting": true,
+    "rules": false,
+    "dataMigration": false,
+    "sequence": ["Validate candidate against the approved integration base", "Record previously deployed Hosting release and Functions source revision", "Publish the two selected Functions", "Publish Hosting", "Verify access, incident tracking and authorized receipt examples"]
+  },
+  "regressionRisks": [
+    "Unrecognized receipt layouts must remain subject to human review",
+    "Reader version V2 invalidates analysis cache and can cause fresh OCR calls",
+    "Engineering history is a filtered sample of the last 50 Hugo observations",
+    "Local main divergence must be resolved before integration certification"
+  ],
+  "rollback": {
+    "requiresExplicitApproval": true,
+    "previousProductionRevision": null,
+    "steps": ["Restore the recorded previous Hosting release", "Redeploy affected Functions from their recorded previous production revision", "Verify existing payment identification and authorized report access"],
+    "dataPolicy": "Preserve observations, audit events, payments and analyses; no deletion or financial reversal"
+  },
+  "productionVerification": "NOT_RUN",
+  "historicalReceiptEvaluation": "NOT_RUN"
+}

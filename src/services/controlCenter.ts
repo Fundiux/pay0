@@ -3,6 +3,18 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 import { CALLABLES } from "@/lib/callableNames";
 
+export type EngineeringCatalog = {
+  schemaVersion: number;
+  coverage: "CURATED";
+  modules: Array<{ id: string; name: string; responsibility: string; data: string[]; boundary: string; dependencies: string[]; checks: string[]; source: string; technicalOwner: string | null; independence: "SHARED_FIREBASE_RUNTIME" }>;
+  release: { deployedVersion: string | null; certification: "UNKNOWN"; productionVerification: "UNKNOWN"; explanation: string };
+  engineeringAgents: { environment: "CODEX"; names: string[]; explanation: string };
+};
+
+export async function getControlCenterEngineering() {
+  return (await httpsCallable<Record<string, never>, EngineeringCatalog & { ok: boolean }>(functions, CALLABLES.getControlCenterEngineering)({})).data;
+}
+
 export type ControlAnalytics = {
   ok: boolean; from: string; to: string; timezone: string;
   totals: Record<string, number>; previous: Record<string, number>;

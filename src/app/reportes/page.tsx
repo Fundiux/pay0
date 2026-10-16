@@ -8,6 +8,7 @@ import NoAccess from "@/components/NoAccess";
 import ControlCenterOverview from "@/components/control-center/ControlCenterOverview";
 import ControlCenterAnalytics from "@/components/control-center/ControlCenterAnalytics";
 import PaymentComplementFollowup from "@/components/control-center/PaymentComplementFollowup";
+import EngineeringControl from "@/components/control-center/EngineeringControl";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { downloadSpreadsheetFile } from "@/lib/spreadsheetReader";
@@ -598,6 +599,7 @@ export default function ReportesPage() {
         String(profile?.role || "").toLowerCase() === "superadmin" ? <div className="space-y-5">
           <ControlCenterAnalytics from={range.from} to={range.to} refreshVersion={controlRefreshVersion} />
           <PaymentComplementFollowup />
+          <EngineeringControl />
           <details className="rounded-xl border border-white/10 p-4"><summary className="mb-4 cursor-pointer font-bold">Resumen operativo global · sin filtro de fechas</summary><ControlCenterOverview snapshot={controlSnapshot} loading={controlLoading} error={controlError} onRefresh={refreshControlCenter} canRefresh /></details>
         </div> : <p className="rounded-xl border border-white/10 p-4">El Control Center consolidado está habilitado únicamente para Superadmin. Tus reportes autorizados continúan disponibles en las demás pestañas.</p>
       ) : activeTab === "commissions" ? (
