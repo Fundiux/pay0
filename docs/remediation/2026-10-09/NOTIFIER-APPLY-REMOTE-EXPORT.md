@@ -37,3 +37,13 @@ Verificación del worker modificado: 33 pruebas aprobadas (`8bdca8`), incluidas 
 Hashes vigentes de esta composición: `owned.cjs` = `544fca77684d6cefaea0a191f1eacb8aa7c2162ff848d36a8ebfd037d9d05789`; `owned-pins.json` = `28a8aa1cb53ce782854fc0d4da4d3deacc7f8d72a0e41c9c6754cb82c24291b4`. Sustituyen únicamente los dos hashes anteriores; el loader permanece sin cambios. Versión anterior preservada privadamente en `versions/before-bound-attempt`.
 
 Después de autorización específica: renovar prerrequisitos, aplicar el plan guardado, verificar recursos y crear/verificar las tres Functions previstas, manteniendo entrega desactivada y colas pausadas. No activar ni enviar mensajes.
+
+## Launcher nativo conectado, ejecución deshabilitada
+
+`native.cjs` conecta begin/worker/finish con el owner estable, bundles seleccionados por hash y `attemptBound`. `run-owned.ps1` usa el supervisor Windows Job ya fijado, con 240 segundos y 10 de cierre; guarda el comprobante del supervisor mediante escritura exclusiva y durable y solo finaliza con cierre y hashes válidos. ReadOperation restaura el owner y consulta la operación registrada: su preparación verifica el manifiesto sin exigir que sigan vigentes las observaciones de ausencia usadas para CREATE. No existe reintento automático de POST.
+
+El manifiesto añade tres bundles reales, todos PENDING, además de los tres paquetes de evidencia PENDING. `LIVE=false` e `infrastructureBindingReady=false` permanecen intactos. No se adquirió ningún owner de producción ni se lanzó OAuth o CREATE.
+
+Pruebas afectadas de preparación/manifiesto/PowerShell: 3 aprobadas (`0d011c`). Pruebas nuevas de entrada nativa: 7 aprobadas (`d9239a`), incluidos rechazo de los cuatro modos con efectos mientras el gate está apagado, manifiesto no revisado y bundle no seleccionado. Estas pruebas no acreditan la ejecución de un worker dentro del Job: queda por verificar esa composición con un proceso sintético sin autenticación ni red antes de habilitarla.
+
+Hashes vigentes: native `33fbb16eaf9c66779210433c089f030f77f4cf31f2b7d40de600454af47cd1ce`; owned `b028d6545c412e90c51122b5535a1e8e7583e880bd4c35e94e289bd1fc2565df`; launcher `22637b145adc9397fbac0ab4a416823949effffe87c46c8184a7d8ecdf2f7ccb`; manifiesto `d523a2fead486111dc876f80533a35503808089c2c92e0cbed0213e38f46c584`. Versiones anteriores preservadas en `versions/before-native-launcher`.
