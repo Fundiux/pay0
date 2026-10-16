@@ -11,25 +11,33 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Install frontend dependencies
-        run: npm ci
-      - name: Verify authorization policy
-        run: node scripts/verify-authorization-policy.mjs
-      - name: Build frontend
-        run: npm run build
-      - name: Install Functions dependencies
-        run: npm ci
-        working-directory: functions
-      - name: Lint Functions
-        run: npm run lint
-        working-directory: functions
-      - name: Build Functions
-        run: npm run build
-        working-directory: functions
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Validate committed source candidate
+        run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL: ${{ vars.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL }}
+      - name: Preserve candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-candidate-${{ github.sha }}
+          path: output/release-candidates/
+          if-no-files-found: ignore
+          retention-days: 14
