@@ -2828,6 +2828,7 @@ export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDaily
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
 export { getControlCenterEngineering, importControlCenterEngineeringEvidence } from "./modules/controlCenter/engineeringCallables";
+export { listOperationalDocuments } from "./modules/canonicalCenter/documentDossier";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
 export { getHugoComplementInventoryPage } from "./modules/paymentApplications/complementInventory";
