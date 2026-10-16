@@ -1,54 +1,108 @@
 {
   "schemaVersion": 1,
   "name": "Ingeniería interna y lectura de comprobantes",
-  "modules": ["controlCenter", "agent007", "pagos", "canonicalCenter", "users"],
-  "dependencies": ["Firebase Authentication", "Firestore", "Hugo observations and activity log", "Existing receipt identification and OCR"],
+  "modules": [
+    "controlCenter",
+    "agent007",
+    "pagos",
+    "canonicalCenter",
+    "users"
+  ],
+  "dependencies": [
+    "Firebase Authentication",
+    "Firestore",
+    "Hugo observations and activity log",
+    "Existing receipt identification and OCR"
+  ],
   "publication": {
     "requiresExplicitApproval": true,
-    "functions": ["getControlCenterEngineering", "importControlCenterEngineeringEvidence", "listOperationalDocuments", "parsePagoReceiptPdf", "correctPagoReceiptSemanticField"],
+    "functions": [
+      "getControlCenterEngineering",
+      "importControlCenterEngineeringEvidence",
+      "listOperationalDocuments",
+      "parsePagoReceiptPdf",
+      "correctPagoReceiptSemanticField",
+      "assignControlCenterEngineeringTask",
+      "getAuthorizedOperationalRecord",
+      "listAuthorizedRelatedRecords",
+      "listClientsCanonical",
+      "getClientCanonical",
+      "listPagos",
+      "listSolicitudes",
+      "listScopedClientDispersions",
+      "listPagoNotes",
+      "listSolicitudNotes",
+      "listClientDispersionNotes",
+      "getAuthorizedDocumentDownloadUrl",
+      "reconcileAgent007RecommendationsNow"
+    ],
     "hosting": true,
     "rules": true,
-    "rulesScope": { "storage.rules": "LOCALLY_VALIDATED", "firestore.rules": "BLOCKED_ANCESTRY_AND_EXPRESSION_BUDGET" },
+    "rulesScope": {
+      "storage.rules": "LOCALLY_VALIDATED_NOT_PUBLISHED",
+      "firestore.rules": "LOCALLY_VALIDATED_REQUIRES_SERVER_READERS_AND_HOSTING"
+    },
     "dataMigration": false,
-    "sequence": ["Validate candidate and security evidence against the approved integration base", "Record previously deployed Hosting release, rules and Functions source revision", "Obtain explicit approval for the selected publication scope", "Publish selected Functions before their consuming Hosting release", "Publish only separately certified rules", "Verify access, dossier downloads, engineering evidence and authorized receipt examples"]
+    "sequence": [
+      "Validate candidate and security evidence against the approved integration base",
+      "Record previously deployed Hosting release, rules and Functions source revision",
+      "Obtain explicit approval for the selected publication scope",
+      "Publish selected Functions before their consuming Hosting release",
+      "Publish only separately certified rules",
+      "Verify access, dossier downloads, engineering evidence and authorized receipt examples"
+    ]
   },
   "regressionRisks": [
     "Unrecognized receipt layouts must remain subject to human review",
     "Reader version V3 invalidates analysis cache and can cause fresh OCR calls; financial duplicate keys remain independent of reader version",
     "Engineering history is a filtered sample of the last 50 Hugo observations",
-    "Original grantor matrix passes, but expanded valid composition still has six budget denials; Firestore publication remains blocked",
-    "Operational dossier lists only finalized active uploads with valid parent scope; files not incorporated into PAY0 are not inventoried",
+    "Operational dossier lists available uploads and pending metadata in the authorized parent scope; external files not incorporated into PAY0 are not inventoried",
     "Imported engineering evidence is human supplied, not independent verification of CI, model identity or publication",
-    "Delegated direct Storage downloads are denied; operational downloads must use the existing authorized callable"
+    "Delegated direct Storage downloads are denied; operational downloads must use the existing authorized callable",
+    "Direct delegated SDK reads are denied; publish and verify canonical server readers and migrated consumers before publishing Firestore rules",
+    "Recommendation reconciliation code is shared with background triggers; publishing the manual callable does not certify or update those trigger revisions"
   ],
   "rollback": {
     "requiresExplicitApproval": true,
     "previousProductionRevision": null,
-    "steps": ["Restore the recorded previous Hosting release", "Redeploy affected Functions from their recorded previous production revision", "Do not restore unsafe delegated Storage reads; review any rules rollback separately", "Verify existing payment identification and authorized report access"],
+    "steps": [
+      "Restore the recorded previous Hosting release",
+      "Redeploy affected Functions from their recorded previous production revision",
+      "Do not restore unsafe delegated Storage reads; review any rules rollback separately",
+      "Verify existing payment identification and authorized report access"
+    ],
     "dataPolicy": "Preserve observations, audit events, payments and analyses; no deletion or financial reversal"
   },
   "blockingFindings": [
     {
-      "code": "REPRESENTATIVE_DELEGATION_EXPRESSION_BUDGET",
-      "result": "Additional composition diagnostic: 35/41 passed, 6 unexpected denials due to expression budget",
-      "scope": "Both profiles retain revoked restrictions, administrator DIRECT grantor, explicit module/permission maps and valid delegation dates",
-      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs --representative-composition",
-      "requiredAction": "Reduce evaluation cost for this valid combination without relaxing checks; Firestore publication remains blocked"
-    },
-    {
-      "code": "DELEGATION_ANCESTRY_NOT_CLOSED",
-      "gate": "qa/scripts/remediation-delegation-grantor.rules.test.mjs",
-      "result": "707/707 assertions passed with zero expression-budget exhaustions; 24 known ancestry-gap checks remain, ancestryClosed=false",
-      "scope": "Firestore reads of chained redelegations; distinct from the 24 delegated direct Storage gaps now closed",
-      "requiredAction": "Enforce the full delegation ancestry for affected reads and replace known-gap expectations with deny assertions before publishing this rules scope"
+      "code": "SECURITY_PRODUCTION_SEQUENCE_PENDING",
+      "result": "Final local rules: 707 main, 41 representative, 518 regression and 63 owner/root checks passed with zero expression-budget errors and zero known ancestry gaps; canonical server read flow: 543 passed",
+      "scope": "Publication of Firestore rules and delegated operational read flow",
+      "gate": "qa/scripts/security-operational-readflow.emulator.test.cjs",
+      "requiredAction": "Publish and verify the canonical readers and migrated Hosting consumers before independently publishing the certified rules; do not infer production closure from local tests"
     },
     {
       "code": "REAL_RECEIPT_VALIDATION_PENDING",
       "result": "18 synthetic extracted-text samples, 32 exact fields; real anonymized corpus NOT_EVALUATED",
       "scope": "Productive receipt accuracy claims; independent engineering and dossier changes remain locally validated",
       "requiredAction": "Identify authorized documents through the native dossier, anonymize and review expected fields before real evaluation"
+    },
+    {
+      "code": "STORAGE_24_PRODUCTION_GAPS_NOT_PUBLISHED",
+      "result": "Production source still permits delegated SDK downloads without the local lifecycle, trusted restriction, expiration and revocation boundary; 24 known Storage scenarios are not certified closed in production",
+      "scope": "firebase.storage/pay-0-system.firebasestorage.app",
+      "evidence": {
+        "checkedAt": "2026-10-16T08:43:02.452Z",
+        "ruleset": "projects/pay-0-system/rulesets/d37e96b3-5266-4a44-8ce6-c903a502a854",
+        "productionSha256": "5876da2001a4c13f1a5947e9e0729a4a9d30f17eed2f890ef1f8f1ef4ccc6282",
+        "localSha256": "f74c37cfc073603f3170b590aea2b702ee90ceba9658f7f30eb0cba64a484d06",
+        "report": "output/security-rules/storage-production-comparison.json",
+        "userDataRead": 0,
+        "productionWrites": 0
+      },
+      "requiredAction": "Publish and verify canonical download authority and Hosting consumers, then separately publish and verify the certified Storage rules; Firestore-only publication does not close these scenarios"
     }
   ],
-  "productionVerification": "NOT_RUN",
+  "productionVerification": "PARTIAL: receipt reader and semantic correction published from 8af329e; exact source ZIP, preserved runtime/IAM and unauthenticated HTTP 401 verified; authenticated workflow and real corpus pending",
   "historicalReceiptEvaluation": "NOT_RUN"
 }
