@@ -7,14 +7,16 @@ import {doc,collection,query,where,orderBy,getDocs,getDoc,setDoc,onSnapshot,Time
 const projectId='demo-pay0-firestore-release';
 assert.equal(process.env.GCLOUD_PROJECT,projectId);
 assert.match(process.env.FIRESTORE_EMULATOR_HOST||'',/^127\.0\.0\.1:\d+$/);
-const sourceRoot=path.resolve(process.env.PAY0_RULES_SOURCE_ROOT||'.worktrees/pay0-remediation-integration-20261009');
+const sourceRoot=path.resolve(process.env.PAY0_RULES_SOURCE_ROOT||'.');
 const rules=fs.readFileSync(path.join(sourceRoot,'firestore.rules'),'utf8');
 const hash=createHash('sha256').update(rules.replace(/\r\n/g,'\n')).digest('hex');
-assert.equal(hash,'03cca1237bd47a9e5670c4c1411e114383788a56c7763d6e0779cd7602601dc3','Pin reviewed integration rules; re-review changed candidate');
+assert.equal(hash,'0d59ce840b8a36b7f0ff11fa0313d37e0e2131d44bef5d3bc643f51250ac66b4','Pin reviewed integration rules; re-review changed candidate');
 // Keep executable query shapes tied to their actual UI sources.
+// Notes now use the paginated callable hooks. Direct-note queries below remain
+// authorization compatibility regressions, not a claim about current UI reads.
 for(const[file,needles]of [
- ['src/app/solicitudes/page.tsx',['where("rootId", "==", rootId)','where("adminId", "==", uid)','where("createdBy", "==", uid)','solicitudes/${commentFor.id}/notas','orderBy("createdAt", "asc")']],
- ['src/app/pagos/page.tsx',['where("adminId", "==", myUid)','where("createdBy", "==", myUid)','pagos/${notesFor.id}/notas']],
+ ['src/app/solicitudes/page.tsx',['where("rootId", "==", rootId)','where("adminId", "==", uid)','where("createdBy", "==", uid)','useSolicitudNotes(uid || "", rootId || "", commentFor?.id, canViewSolicitudes)']],
+ ['src/app/pagos/page.tsx',['where("adminId", "==", myUid)','where("createdBy", "==", myUid)','usePagoNotes(myUid || "", rootId || "", notesFor?.id, canViewPagos)']],
  ['src/services/beneficiaries.ts',['where("rootId", "==", rootId)','where("clientId", "==", clientId)']],
  ['src/components/DocsModal.tsx',['where("rootId", "==", solicitudRootId)','where("solicitudId", "==", solicitudId)']]
 ]){const source=fs.readFileSync(path.join(sourceRoot,file),'utf8');for(const needle of needles)assert.ok(source.includes(needle),'UI query contract changed');}

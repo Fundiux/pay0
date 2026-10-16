@@ -8,8 +8,10 @@ assert.match(process.env.FIRESTORE_EMULATOR_HOST||'',/^127\.0\.0\.1:\d+$/,'Loopb
 const root=path.resolve(process.env.PAY0_RULES_SOURCE_ROOT||path.join(path.dirname(fileURLToPath(import.meta.url)),'../..'));
 const baselineControl=process.argv.includes('--baseline-control');
 const compatibilityControl=process.argv.includes('--compatibility-control');
+const representativeComposition=process.argv.includes('--representative-composition');
 assert(!(baselineControl&&compatibilityControl),'Select one control');
 const controlFixtures=baselineControl||compatibilityControl;
+assert(!(representativeComposition&&controlFixtures),'Representative composition requires current rules');
 const source=fs.readFileSync(baselineControl?path.join(root,'.firebase/remediation-temp/grantor-guard/baseline.rules'):path.join(root,'firestore.rules'),'utf8').replace(/\r\n/g,'\n');
 const hash=createHash('sha256').update(source).digest('hex');
 if(baselineControl)assert.equal(hash,'7863811b85a57ff7dde6e9d3c5925253a90371dfdf4c63fc3a60bebf5ed31876','Preserved published baseline only');
@@ -43,7 +45,7 @@ assert(source.endsWith('  }\n}\n')||source.endsWith('  }\n}'));
 const testRules=baselineControl?source:source.replace(/  }\n}\n?$/,boundary+'  }\n}\n');
 const env=await initializeTestEnvironment({projectId,firestore:{rules:testRules}});
 const seed=(p,d)=>env.withSecurityRulesDisabled(c=>d===null?deleteDoc(doc(c.firestore(),p)):setDoc(doc(c.firestore(),p),d));
-const collectFailures=process.argv.includes('--collect-failures');
+const collectFailures=representativeComposition||process.argv.includes('--collect-failures');
 let checks=0,attempts=0,knownGapChecks=0,budgetErrors=0;
 const assertionFailures=[],budgetFailures=[];
 async function check(p,allowed,label){
@@ -123,6 +125,19 @@ if(controlFixtures){
  cases.splice(0,cases.length,...selected);
  add('baseline-actor-restricted',{actor:{trustedRestrictionV1:restriction({subjectUid:recipient,expiresAtMs:now+3600000})}},false);
 }
+if(representativeComposition){
+ // Preserve the default707 oracle. This separate regression combines explicit
+ // production-shaped maps with both valid revoked records, retaining all35
+ // boundary/alias/ownership/query/write controls below. Expected access stays
+ // ALLOW: budget denials remain failures rather than becoming accepted output.
+ cases.splice(0,cases.length);
+ add('representative-explicit-revoked',{
+  actor:{trustedRestrictionV1:restriction({...revoked,subjectUid:recipient}),modules:{clientes:{view:true},solicitudes:{view:true,comment:true},pagos:{view:true},wallet:{view:true,dispersiones:true}}},
+  user:{role:'admin',trustedRestrictionV1:restriction(revoked),modules:{usuarios:{view:true,clientDelegations:true}}},
+  client:{operadorId:grantor},
+  grant:{grantAuthority:authority('DIRECT'),permissions:{viewBasic:true,operateSolicitudes:true,operatePagos:true},startsAt:now-10000,expiresAt:now+3600000}
+ });
+}
 try{
  await env.clearFirestore();
  const db=env.authenticatedContext(recipient).firestore();
@@ -195,8 +210,8 @@ try{
  await seed('users/'+grantor,{role:'superadmin',rootId:'root',disabled:true});
  await check(setDoc(doc(db,'solicitudes/operation/notas/denied'),{text:'synthetic'}),false,'revoked-grantor-note-create');
  }
- assert.equal(attempts,controlFixtures?36:707,'Complete original coverage plus18 composition reads must execute');
- if(collectFailures)console.log(JSON.stringify({mode:'GRANTOR_AGGREGATE_DIAGNOSTIC',candidateSha256:hash,attempts,passedAssertions:checks,assertionFailures,budgetErrors,budgetFailures,passingGate:assertionFailures.length===0&&budgetErrors===0,externalEffects:false}));
+ assert.equal(attempts,controlFixtures?36:representativeComposition?41:707,'Complete selected coverage must execute: original707 or representative41');
+ if(collectFailures)console.log(JSON.stringify({mode:representativeComposition?'GRANTOR_REPRESENTATIVE_COMPOSITION':'GRANTOR_AGGREGATE_DIAGNOSTIC',candidateSha256:hash,attempts,passedAssertions:checks,assertionFailures,budgetErrors,budgetFailures,passingGate:assertionFailures.length===0&&budgetErrors===0,externalEffects:false}));
  assert.equal(assertionFailures.length,0,'Every original access assertion must pass; aggregate collection never relaxes assertions');
  assert.equal(budgetErrors,0,'Expression/doc-access exhaustion is a failure, even for expected denies');
  console.log(JSON.stringify({mode:baselineControl?'PUBLISHED_BASELINE_CONTROL':compatibilityControl?'CANDIDATE_COMPATIBILITY_CONTROL':'IMMEDIATE_GRANTOR_RULES',candidateSha256:hash,cases:cases.length,checks,budgetErrors,knownGapChecks,ancestryClosed:false,externalEffects:false}));

@@ -92,3 +92,22 @@ export function replaceRulesPolicyBlock(source, policy) {
   const newline = source.includes('\r\n') ? '\r\n' : '\n';
   return source.replace(existing, renderRulesPolicyBlock(policy).replace(/\n/g, newline));
 }
+
+// The bounded document evaluator specializes these fixed call sites. Fail
+// verification if canonical defaults or callers change instead of silently
+// retaining a broader role shortcut. Other actions use the generated selector.
+export function verifyOperationalReadSpecialization(source, policy) {
+  if (!source.includes('function documentActorAllowed(')) return;
+  const pairs = [['clientes', 'view'], ['solicitudes', 'view'], ['solicitudes', 'comment'], ['pagos', 'view'], ['wallet', 'view'], ['wallet', 'dispersiones']];
+  for (const role of ['admin', 'operador']) for (const [module, action] of pairs)
+    assert.equal(policy.roleDefaults[role]?.[module]?.[action], true, `Re-specialize bounded document policy: ${role}.${module}.${action}`);
+  for (const line of source.split(/\r?\n/)) {
+    if (line.includes('canReadOperationalDocument(') && !line.includes('function ')) {
+      const match = line.match(/, '(solicitudes|pagos)', '(operateSolicitudes|operatePagos)', '(view|comment)'\);/);
+      assert.ok(match, 'Bounded document callers require fixed, reviewed module/action pairs');
+      assert.ok(match[1] === 'solicitudes' ? match[2] === 'operateSolicitudes' : match[2] === 'operatePagos' && match[3] === 'view');
+    }
+    if (line.includes('documentActorAllowed(') && !line.includes('function '))
+      assert.ok(line.includes('documentActorAllowed(user, uid, role, moduleKey, actionKey)') || line.includes("documentActorAllowed(user, uid, role, 'clientes', 'view')"), 'Unreviewed bounded actor caller');
+  }
+}

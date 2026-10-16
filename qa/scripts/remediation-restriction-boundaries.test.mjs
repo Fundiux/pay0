@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {initializeTestEnvironment, assertFails, assertSucceeds} from '@firebase/rules-unit-testing';
 import {doc,getDoc,setDoc} from 'firebase/firestore';
-import {ref,getBytes,uploadBytes} from 'firebase/storage';
+import {ref,getBytes,uploadBytes,listAll,deleteObject} from 'firebase/storage';
 import {replaceRulesPolicyBlock} from '../../scripts/lib/authorization-policy-generator.mjs';
 const projectId='demo-pay0-restriction-boundaries';
 assert.equal(process.env.GCLOUD_PROJECT,projectId);
@@ -24,6 +24,14 @@ const record=(uid,patch={})=>({schemaVersion:1,writer:'PAY0_TRUSTED_RESTRICTION_
 async function seed(path,data){await env.withSecurityRulesDisabled(context=>setDoc(doc(context.firestore(),path),data));}
 try {
  await env.clearFirestore();
+ // Upload grants are create-only; a previous local run must not turn these
+ // create assertions into overwrite attempts against leftover objects.
+ // rules-unit-testing clearStorage only deletes top-level items in this
+ // installed SDK; these fixtures live below prefixes and need recursive clear.
+ await env.withSecurityRulesDisabled(async context=>{
+  const clear=async location=>{const entries=await listAll(location);for(const prefix of entries.prefixes)await clear(prefix);for(const item of entries.items)await deleteObject(item);};
+  await clear(ref(context.storage()));
+ });
  for(const [collection,kind] of families){await seed(`${collection}/op`,{rootId,clientId:'c1',adminId:'owner',createdBy:'owner'});await env.withSecurityRulesDisabled(c=>uploadBytes(ref(c.storage(),objectPath(kind)),new TextEncoder().encode('synthetic')));}
  await seed('clients/c1',{rootId,adminId:'owner',createdBy:'owner',active:true});
  await seed('userClientAccess/delegate/clients/c1',{rootId,targetUid:'delegate',clientId:'c1',active:true});

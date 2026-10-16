@@ -29,9 +29,9 @@ for(const role of ['superadmin','admin','operador','operator','ADMIN','',null])f
 const reorder=value=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)])):value;
 assert.equal(renderRulesPolicyBlock(reorder(policy)),block);
 assert.throws(()=>identifyRulesPolicyFormat(block.replace('role == "superadmin" || moduleKey in modules','true || moduleKey in modules'),policy));
-assert.match(source,/restrictionAllowsRecord\(user.trustedRestrictionV1, rootId, subjectUid\)/);
+assert.match(source,/restrictionAllowsMap\(user.trustedRestrictionV1, rootId, subjectUid\)/);
 assert.match(source,/restrictionAllowsUserForUid\(user, me\(\), restrictionRoot\(user, me\(\)\)\)/);
-assert.match(source,/row.subjectUid == subjectUid/);assert.match(body(source,'restrictionAllowsMap'),/let revokedBy = row.get\('revokedBy', null\)/);assert.match(body(source,'restrictionAllowsMap'),/revokedBy != subjectUid/);
+assert.match(body(source,'restrictionAllowsMap'),/'subjectUid': subjectUid/);assert.match(body(source,'restrictionAllowsMap'),/let revokedBy = row.get\('revokedBy', null\)/);assert.match(body(source,'restrictionAllowsMap'),/revokedBy != subjectUid/);
 // Fast-path string preserves the actual prior helper and backend string
 // normalization, including UTF-16 edge cases, without fabricating map IDs.
 const idTranslate=b=>translate(b).replace(/(?<![=!])!=(?!=)/g,'!==').replace(/value is string/g,'typeof value === "string"').replace(/value is number/g,'typeof value === "number"').replace(/value is bool/g,'typeof value === "boolean"');
@@ -79,14 +79,13 @@ console.log(JSON.stringify({mode:'GRANTOR_CANONICAL_SELECTOR',checks,identityCas
 if(process.argv.includes('--regressions')){
  assert.equal(process.env.GCLOUD_PROJECT,'demo-pay0-restriction-boundaries');
  for(const name of ['FIRESTORE_EMULATOR_HOST','FIREBASE_STORAGE_EMULATOR_HOST'])assert.match(process.env[name]||'',/^127\.0\.0\.1:\d+$/);
- const expected='6e5c79768f424de6619be34576fa4c99868d3698c3ac71f79c712f4a6ff1fe8e';
+ const expected='0d59ce840b8a36b7f0ff11fa0313d37e0e2131d44bef5d3bc643f51250ac66b4';
  assert.equal(createHash('sha256').update(source).digest('hex'),expected,'Review and pin any candidate change');
- const baseline='03cca1237bd47a9e5670c4c1411e114383788a56c7763d6e0779cd7602601dc3';
  const parent=path.join(root,'.firebase/remediation-temp');fs.mkdirSync(parent,{recursive:true});
  const temp=fs.mkdtempSync(path.join(parent,'grantor-regressions-'));let exhausted=0;
  for(const [filename,project]of [['remediation-firestore-release-queries.test.mjs','demo-pay0-firestore-release'],['remediation-restriction-boundaries.test.mjs','demo-pay0-restriction-boundaries'],['remediation-firestore-budget-aliases.test.mjs','demo-pay0-restriction-boundaries']]){
   let code=fs.readFileSync(path.join(root,'qa/scripts',filename),'utf8');
-  if(filename.includes('release-queries')){assert.equal(code.split(baseline).length,2);code=code.replace(baseline,expected);}
+  if(filename.includes('release-queries')){assert.equal(code.split(expected).length,2);}
   else code=code.replace("'../../scripts/lib/authorization-policy-generator.mjs'",JSON.stringify(pathToFileURL(path.join(root,'scripts/lib/authorization-policy-generator.mjs')).href));
   assert.equal(code.split('assertFails(p)').length,2,'Exactly one original deny assertion required');
   code=code.replace('assertFails(p)',`assertFails(p.catch(error=>{if(/maximum of 1000 expressions|maximum.*expression.*reached|too many.*(?:get|exists).*calls/i.test(String(error.message||'')))console.error('GRANTOR_REGRESSION_BUDGET_EXHAUSTED '+JSON.stringify({case:typeof currentCase==='undefined'?'query-or-alias':currentCase,check:typeof checks==='undefined'?null:checks,code:error.code}));throw error;}))`);

@@ -13,50 +13,45 @@ service cloud.firestore {
     // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
     function restrictionAllowsMap(row, rootId, subjectUid) {
       let nowMs = request.time.toMillis();
-      let state = row.get('state', null);
-      let issuedAt = row.get('issuedAtMs', null);
-      let expiresAt = row.get('expiresAtMs', null);
+      let state = row.state;
+      let issuedAt = row.issuedAtMs;
+      let expiresAt = row.expiresAtMs;
       let revokedAt = row.get('revokedAtMs', null);
       let revokedBy = row.get('revokedBy', null);
+      let version = row.authorizationVersion;
+      let authorityUid = row.authorityUid;
       // Keep the full schema and terminal-state validation in one context.
-      return ((state == 'ACTIVE' && expiresAt is int && expiresAt > nowMs) ? false : (
-        row.keys().size() == (state == 'ACTIVE' ? 15 : 18)
-        && row.schemaVersion == 1
-        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
-        && row.policyVersion == 'PAY0-CONTAINMENT@1'
-        && restrictionId(row.restrictionId)
-        && restrictionId(rootId) && row.rootId == rootId
-        && restrictionId(subjectUid) && row.subjectUid == subjectUid
-        && row.scope == 'ACCOUNT_OPERATIONS'
-        && row.authority == 'HUMAN_SECURITY_ADMIN'
-        && restrictionId(row.authorityUid) && row.authorityUid != subjectUid
-        && restrictionId(row.incidentId)
-        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
-        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
-        && restrictionMillis(issuedAt) && restrictionMillis(expiresAt)
+      return row is map && (
+        row.size() == (state == 'ACTIVE' ? 15 : 18)
+        && row.diff({'schemaVersion': 1, 'writer': 'PAY0_TRUSTED_RESTRICTION_WRITER@1', 'policyVersion': 'PAY0-CONTAINMENT@1', 'rootId': rootId, 'subjectUid': subjectUid, 'scope': 'ACCOUNT_OPERATIONS', 'authority': 'HUMAN_SECURITY_ADMIN'}).unchangedKeys().size() == 7
+        && (row.restrictionId + '/' + rootId + '/' + subjectUid + '/' + authorityUid + '/' + row.incidentId).matches('([A-Za-z0-9_-]{1,128}/){4}[A-Za-z0-9_-]{1,128}')
+        && authorityUid != subjectUid
+        && row.reasonCode.matches('(SECURITY_REVIEW|CREDENTIAL_COMPROMISE_CONFIRMED|SUPPORT_CONTAINMENT)')
+        && version is int && version >= 1 && version <= 9007199254740991
+        && issuedAt is int && expiresAt is int
+        && issuedAt >= 0 && expiresAt <= 253402300799999
         && issuedAt <= nowMs && expiresAt > issuedAt
         && expiresAt - issuedAt <= 86400000
-      )) ? (
+      ) && (
         state == 'ACTIVE' ? expiresAt <= nowMs : (
-          state == 'REVOKED' && restrictionMillis(revokedAt)
+          state == 'REVOKED' && revokedAt is int && revokedAt <= 253402300799999
           && revokedAt >= issuedAt && revokedAt <= nowMs
-          && restrictionId(revokedBy) && revokedBy != subjectUid
-          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY']
+          && revokedBy.matches('[A-Za-z0-9_-]{1,128}') && revokedBy != subjectUid
+          && row.revocationReason.matches('(REVIEW_CLEARED|CREDENTIALS_RECOVERED|SUPPORT_RECOVERY)')
         )
-      ) : false;
+      );
     }
     function restrictionAllowsRecord(row, rootId, subjectUid) {
-      return row is map ? restrictionAllowsMap(row, rootId, subjectUid) : false;
+      return restrictionAllowsMap(row, rootId, subjectUid);
     }
     function restrictionAllowsUserForUid(user, subjectUid, rootId) {
-      return !user.keys().hasAny(['trustedRestrictionV1']) ? true
-        : restrictionAllowsRecord(user.trustedRestrictionV1, rootId, subjectUid);
+      return !('trustedRestrictionV1' in user) ? true
+        : restrictionAllowsMap(user.trustedRestrictionV1, rootId, subjectUid);
     }
     function restrictionAllowsUser(user) { return restrictionAllowsUserForUid(user, me(), restrictionRoot(user, me())); }
     function userLifecycleActive(user) {
-      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
-        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
-        && user.get('isActive', true) != false && user.get('active', true) != false;
+      return user.diff({'isDeleted': true, 'deleted': true, 'disabled': true, 'isActive': false, 'active': false}).unchangedKeys().size() == 0
+        && user.get('deletedAt', null) == null;
     }
 
     function accountAllowed() { return authenticated() && restrictionAllowsUser(userDoc(me())); }
@@ -271,7 +266,7 @@ service cloud.firestore {
     // Immediate grantor guard only. DELEGATED ancestry remains a separate gate.
     function delegationFalsy(value) { return value == null || value == false || value == 0 || value == ''; }
     function delegationCleanId(value) {
-      return value is string ? value.trim() : (delegationFalsy(value) ? '' : (value is number || value is bool ? string(value) : ''));
+      return value is string ? value.trim() : (value is number ? (value == 0 ? '' : string(value)) : (value == true ? 'true' : ''));
     }
     function delegationProfileRole(user) {
       let raw = user.get('role', null);
@@ -289,40 +284,44 @@ service cloud.firestore {
       );
     }
     function delegationDirectGrantor(client, uid) {
-      return delegationCleanId(client.get('adminId', null)) == uid
+      return uid in [client.get('adminId', null), client.get('ownerId', null), client.get('managedByUserId', null), client.get('createdBy', null), client.get('operadorId', null)] ? true : (delegationCleanId(client.get('adminId', null)) == uid
         || delegationCleanId(client.get('ownerId', null)) == uid
         || delegationCleanId(client.get('managedByUserId', null)) == uid
         || delegationCleanId(client.get('createdBy', null)) == uid
-        || delegationCleanId(client.get('operadorId', null)) == uid;
+        || delegationCleanId(client.get('operadorId', null)) == uid);
     }
     function delegationGrantorProfileAllowed(uid, source, client, rootId) {
       let user = userDoc(uid);
       let role = delegationProfileRole(user);
+      let rawRoot = user.get('rootId', null);
       return userLifecycleActive(user)
-        && delegationCleanId(restrictionRoot(user, uid)) == rootId
-        && restrictionAllowsUserForUid(user, uid, rootId)
+        && (rawRoot is string && rawRoot != '' ? rawRoot.trim() == rootId : delegationCleanId(restrictionRoot(user, uid)) == rootId)
+        && (!('trustedRestrictionV1' in user) || restrictionAllowsMap(user.trustedRestrictionV1, rootId, uid))
         && role in ['superadmin', 'admin']
-        && delegationProfileModuleAllows(user, role)
+        && (role == 'superadmin' ? true : delegationProfileModuleAllows(user, role))
         && (source == 'SUPERADMIN' ? role == 'superadmin'
           : (source == 'DIRECT' ? (role == 'superadmin' || delegationDirectGrantor(client, uid)) : true));
     }
     function delegationAuthorityShapeValid(authority) {
-      return authority is map && authority.get('version', null) == 1
-        && authority.get('source', null) in ['SUPERADMIN', 'DIRECT', 'DELEGATED']
-        && authority.get('grantorUid', null) is string && authority.grantorUid.trim() != '';
+      return authority is map && authority.version == 1
+        && authority.source in ['SUPERADMIN', 'DIRECT', 'DELEGATED']
+        && authority.grantorUid is string && authority.grantorUid.trim() != '';
     }
     function delegationIdentifiedGrantorAllowed(uid, source, client, rootId) {
       return uid != me() && !uid.matches('.*[/].*')
         && delegationGrantorProfileAllowed(uid, source, client, rootId);
     }
     function delegationLegacyGrantorAllowed(raw, client, rootId) {
-      let uid = delegationCleanId(raw);
-      return (raw == null || raw is string || raw is number || raw is bool)
+      let uid = raw is string ? raw.trim() : delegationCleanId(raw);
+      return (raw is string || raw == null || raw is number || raw is bool)
         && (uid == '' ? true : delegationIdentifiedGrantorAllowed(uid, '', client, rootId));
     }
     function delegationLegacyAuthorityAllowed(access, client, rootId) {
       let grantedBy = access.get('grantedBy', null);
-      return delegationLegacyGrantorAllowed(delegationFalsy(grantedBy) ? access.get('createdBy', null) : grantedBy, client, rootId);
+      let raw = grantedBy is string && grantedBy != '' ? grantedBy : (delegationFalsy(grantedBy) ? access.get('createdBy', null) : grantedBy);
+      let uid = delegationCleanId(raw);
+      return (raw == null || raw is string || raw is number || raw is bool)
+        && (uid == '' ? true : (uid != me() && !uid.matches('.*[/].*') && delegationGrantorProfileAllowed(uid, '', client, rootId)));
     }
     function delegationExplicitAuthorityAllowed(authority, clientId, client, rootId) {
       return delegationAuthorityShapeValid(authority) ? (
@@ -333,7 +332,7 @@ service cloud.firestore {
     }
     function delegationImmediateGrantorAllowed(access, clientId, client, rootId) {
       // Keep absent provenance compatible; do not infer a historical parent.
-      return access.keys().hasAny(['grantAuthority'])
+      return ('grantAuthority' in access)
         ? delegationExplicitAuthorityAllowed(access.grantAuthority, clientId, client, rootId)
         : delegationLegacyAuthorityAllowed(access, client, rootId);
     }
@@ -343,19 +342,15 @@ service cloud.firestore {
       let path = /databases/$(database)/documents/userClientAccess/$(uid)/clients/$(clientId);
       let access = get(path).data;
       let permissions = access.get("permissions", {});
+      let expiresAt = access.get("expiresAt", null);
+      let startsAt = access.get("startsAt", null);
       return (clientId != null && exists(path)) ? (
-        access.active == true
-        && access.get("rootId", rootId) == rootId
-        && client.get("rootId", rootId) == rootId
+        [access.active, access.get("rootId", rootId), client.get("rootId", rootId), access.get("targetUid", uid), access.get("clientId", clientId)] == [true, rootId, rootId, uid, clientId]
         && client.get("active", true) != false
-        && access.get("targetUid", uid) == uid
-        && access.get("clientId", clientId) == clientId
         && access.get("revokedAt", null) == null
-        && (access.get("mode", "PERMANENT") != "TEMPORARY" || access.get("expiresAt", null) != null)
-        && validDelegationTime(access.get("expiresAt", null), true)
-        && validDelegationTime(access.get("startsAt", null), false)
-        && permissions is map
-        && permissions.get(permission, permissions.get(legacy, true)) == true
+        && (expiresAt == null ? access.get("mode", "PERMANENT") != "TEMPORARY" : validDelegationTime(expiresAt, true))
+        && (startsAt == null || validDelegationTime(startsAt, false))
+        && (!("permissions" in access) || (permissions is map && permissions.get(permission, permissions.get(legacy, true)) == true))
           ? delegationImmediateGrantorAllowed(access, clientId, client, rootId) : false
       ) : false;
     }
@@ -497,15 +492,55 @@ service cloud.firestore {
       allow write: if accountAllowed() && (signedIn() && isSuperadmin());
     }
 
+
+    function documentActorAllowed(user, uid, role, moduleKey, actionKey) {
+      return userLifecycleActive(user)
+        && (!('trustedRestrictionV1' in user) || restrictionAllowsMap(user.trustedRestrictionV1, restrictionRoot(user, uid), uid))
+        && (role == 'superadmin' || (
+          role in ['admin', 'operador']
+          && individualAllowsViewAndActionForUser(user, moduleKey, actionKey)
+        ));
+    }
+    function documentDelegatedClient(clientId, rootId, permission) {
+      let client = get(/databases/$(database)/documents/clients/$(clientId)).data;
+      return clientDelegationPermissionForClient(clientId, client, rootId, permission, 'operate');
+    }
+    function documentDelegatedAliases(data, rootId, permission) {
+      let clientId = data.get('clientId', null);
+      let legacyId = data.get('clienteId', null);
+      return data.get('rootId', rootId) == rootId && (
+        (clientId != null && documentDelegatedClient(clientId, rootId, permission))
+        || (legacyId != null && legacyId != clientId && documentDelegatedClient(legacyId, rootId, permission))
+      );
+    }
+    function canReadOperationalDocument(data, moduleKey, permission, actionKey) {
+      let uid = request.auth.uid;
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let rawRole = user.get('role', '');
+      let role = rawRole == 'operator' ? 'operador' : rawRole;
+      let rawRoot = user.get('rootId', null);
+      let rootId = rawRoot != null ? rawRoot : uid;
+      return documentActorAllowed(user, uid, role, moduleKey, actionKey) && (
+        role == 'superadmin' || data.get('adminId', null) == uid || data.get('createdBy', null) == uid
+        || documentDelegatedAliases(data, rootId, permission)
+      );
+    }
+    function canReadClientProfile(data, clientId) {
+      let uid = request.auth.uid;
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let rawRole = user.get('role', '');
+      let role = rawRole == 'operator' ? 'operador' : rawRole;
+      let rawRoot = user.get('rootId', null);
+      let rootId = rawRoot != null ? rawRoot : uid;
+      return documentActorAllowed(user, uid, role, 'clientes', 'view') && (
+        role == 'superadmin' || data.get('adminId', null) == uid || data.get('createdBy', null) == uid
+        || data.get('managedByUserId', null) == uid || data.get('operadorId', null) == uid
+        || clientDelegationPermissionForClient(clientId, data, rootId, 'viewBasic', 'view')
+      );
+    }
+
     match /clients/{docId} {
-      allow read: if accountAllowed() && (hasModuleView("clientes") && (
-        isSuperadmin()
-        || (("adminId" in resource.data) && resource.data.adminId == me())
-        || (("createdBy" in resource.data) && resource.data.createdBy == me())
-        || (("managedByUserId" in resource.data) && resource.data.managedByUserId == me())
-        || (("operadorId" in resource.data) && resource.data.operadorId == me())
-        || hasClientAccess(docId)
-      ));
+      allow read: if canReadClientProfile(resource.data, docId);
 
       allow create, update, delete: if false;
 
@@ -539,50 +574,25 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     match /solicitudes/{docId} {
-      allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
-        isSuperadmin()
-        || resource.data.adminId == me()
-        || resource.data.createdBy == me()
-        || hasClientSolicitudAccessFromData(resource.data)
-      ));
+      allow read: if canReadOperationalDocument(resource.data, 'solicitudes', 'operateSolicitudes', 'view');
 
       allow create, update, delete: if false;
 
       match /notas/{notaId} {
-        allow read: if accountAllowed() && (hasModuleView("solicitudes") && (
-          isSuperadmin()
-          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
-          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
-          || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
-        ));
+        allow read: if canReadOperationalDocument(get(/databases/$(database)/documents/solicitudes/$(docId)).data, 'solicitudes', 'operateSolicitudes', 'view');
 
-        allow create: if accountAllowed() && (hasModuleAction("solicitudes", "comment") && (
-          isSuperadmin()
-          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.adminId == me()
-          || get(/databases/$(database)/documents/solicitudes/$(docId)).data.createdBy == me()
-          || hasClientSolicitudAccessFromData(get(/databases/$(database)/documents/solicitudes/$(docId)).data)
-        ));
+        allow create: if canReadOperationalDocument(get(/databases/$(database)/documents/solicitudes/$(docId)).data, 'solicitudes', 'operateSolicitudes', 'comment');
 
         allow update, delete: if accountAllowed() && (signedIn() && isSuperadmin());
       }
     }
     match /pagos/{pagoId} {
-      allow read: if accountAllowed() && (hasModuleView("pagos") && (
-        isSuperadmin()
-        || resource.data.adminId == me()
-        || resource.data.createdBy == me()
-        || hasClientPagoAccessFromData(resource.data)
-      ));
+      allow read: if canReadOperationalDocument(resource.data, 'pagos', 'operatePagos', 'view');
 
       allow create, update, delete: if false;
 
       match /notas/{notaId} {
-        allow read: if accountAllowed() && (hasModuleView("pagos") && (
-          isSuperadmin()
-          || get(/databases/$(database)/documents/pagos/$(pagoId)).data.adminId == me()
-          || get(/databases/$(database)/documents/pagos/$(pagoId)).data.createdBy == me()
-          || hasClientPagoAccessFromData(get(/databases/$(database)/documents/pagos/$(pagoId)).data)
-        ));
+        allow read: if canReadOperationalDocument(get(/databases/$(database)/documents/pagos/$(pagoId)).data, 'pagos', 'operatePagos', 'view');
 
         allow create, update, delete: if false;
       }
@@ -834,8 +844,7 @@ service cloud.firestore {
     // Actor values come only from the current users/{request.auth.uid} snapshot.
     function dispersionActorModuleAllowed(user, role) {
       return role == "superadmin" ? true : (
-        roleDefaultAllowsForRole(role, "wallet", "view")
-        && roleDefaultAllowsForRole(role, "wallet", "dispersiones")
+        role in ["admin", "operador"]
         && individualAllowsViewAndActionForUser(user, "wallet", "dispersiones")
       );
     }
@@ -848,28 +857,12 @@ service cloud.firestore {
       );
     }
     function dispersionDocumentOwnerAllowed(data, uid, role, notes) {
-      return role == "superadmin" || (notes ? (
-        data.adminId == uid || data.operadorId == uid || data.createdBy == uid
-      ) : (
-        (("adminId" in data) && data.adminId == uid)
-        || (("operadorId" in data) && data.operadorId == uid)
-        || (("createdBy" in data) && data.createdBy == uid)
-      ));
+      return role == "superadmin" || uid in [data.get("adminId", null), data.get("operadorId", null), data.get("createdBy", null)];
     }
     function dispersionWalletClientAllowed(clientId, uid, role, rootId) {
       let clientPath = /databases/$(database)/documents/clients/$(clientId);
       let client = get(clientPath).data;
-      let direct = (role == "admin" && (
-        client.get("adminId", null) == uid
-        || client.get("ownerId", null) == uid
-        || client.get("managedByUserId", null) == uid
-        || client.get("createdBy", null) == uid
-        || client.get("operadorId", null) == uid
-      )) || (role == "operador" && (
-        client.get("managedByUserId", null) == uid
-        || client.get("operadorId", null) == uid
-        || client.get("createdBy", null) == uid
-      ));
+      let direct = (role == "admin" && uid in [client.get("adminId", null), client.get("ownerId", null), client.get("managedByUserId", null), client.get("createdBy", null), client.get("operadorId", null)]) || (role == "operador" && uid in [client.get("managedByUserId", null), client.get("operadorId", null), client.get("createdBy", null)]);
       return (clientId != null && exists(clientPath) && client.rootId == rootId)
         ? (direct ? true : clientDelegationPermissionForClient(clientId, client, rootId, "viewBasic", "view")) : false;
     }
@@ -887,16 +880,14 @@ service cloud.firestore {
       let rawRoot = user.get("rootId", null);
       // Operational root historically falls back only for null, not other falsy values.
       let rootId = rawRoot != null ? rawRoot : uid;
-      return (authenticated() && userExists(uid) && userLifecycleActive(user)) ? (
-        restrictionAllowsUserForUid(user, uid, restrictionRoot(user, uid)) ? (
-          dispersionActorModuleAllowed(user, role) ? (
-            dispersionUserFundingAllowed(data, uid, role, rootId) ? (
-              dispersionDocumentOwnerAllowed(data, uid, role, notes)
-              || dispersionWalletAliasesAllowed(data, uid, role, rootId)
-            ) : false
-          ) : false
-        ) : false
-      ) : false;
+      return userLifecycleActive(user)
+        && (!('trustedRestrictionV1' in user) || restrictionAllowsMap(user.trustedRestrictionV1, restrictionRoot(user, uid), uid))
+        && (role == 'superadmin' || (role in ['admin', 'operador'] && (!('modules' in user) || individualAllowsViewAndActionForUser(user, 'wallet', 'dispersiones')))) && (
+        ( !("fundingSource" in data) || dispersionUserFundingAllowed(data, uid, role, rootId)) && (
+          (role == "superadmin" || uid in [data.get("adminId", null), data.get("operadorId", null), data.get("createdBy", null)])
+          || dispersionWalletAliasesAllowed(data, uid, role, rootId)
+        )
+      );
     }
 
     match /clientDispersions/{docId} {

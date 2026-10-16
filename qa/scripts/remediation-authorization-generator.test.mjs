@@ -35,7 +35,12 @@ function body(source, name) {
 }
 function map(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  return { get(key, fallback) { return map(Object.hasOwn(value, key) ? value[key] : fallback); } };
+  return {
+    get(key, fallback) { return map(Object.hasOwn(value, key) ? value[key] : fallback); },
+    diff(other) { return { unchangedKeys() { return { size() {
+      return Object.keys(other).filter(key => Object.hasOwn(value, key) && value[key] === other[key]).length;
+    } }; } }; },
+  };
 }
 function evaluator(source, rawRole, profile) {
   const role = rawRole === 'operator' ? 'operador' : rawRole;

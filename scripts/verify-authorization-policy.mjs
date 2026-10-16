@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { validatePolicy, identifyRulesPolicyFormat } from './lib/authorization-policy-generator.mjs';
+import { validatePolicy, identifyRulesPolicyFormat, verifyOperationalReadSpecialization } from './lib/authorization-policy-generator.mjs';
 const args = process.argv.slice(2);
 let rulesFile = 'firestore.rules';
 for (let i = 0; i < args.length; i++) {
@@ -15,6 +15,7 @@ const match = generatedSource.match(/export const ROLE_DEFAULT_MODULES = (\{[\s\
 assert.ok(match, 'No se pudo leer ROLE_DEFAULT_MODULES generado.');
 assert.deepEqual(JSON.parse(match[1]), policy.roleDefaults, 'El backend diverge de config/authorization-policy.json.');
 const format = identifyRulesPolicyFormat(read(rulesFile), policy);
+verifyOperationalReadSpecialization(read(rulesFile), policy);
 const frontend = read('src/lib/roles.ts');
 assert.match(frontend, /config\/authorization-policy\.json/);
 assert.match(frontend, /merged\[moduleKey\]\[actionKey\] === true/);
