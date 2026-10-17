@@ -40,7 +40,7 @@ const env = await initializeTestEnvironment({ projectId,
 const rootId = "delegation-root", uid = "delegated-user", clientId = "delegated-client";
 const accessRef = db.doc(`userClientAccess/${uid}/clients/${clientId}`);
 const actor = { rootId, role: "operador", active: true };
-const grant = { rootId, targetUid: uid, clientId, active: true };
+const grant = { rootId, targetUid: uid, clientId, active: true, grantedBy: rootId };
 const families = [
   ["solicitudes", "solicitudes", "operateSolicitudes"],
   ["pagos", "pagos", "operatePagos"],
@@ -54,13 +54,14 @@ const objectPath = kind => `roots/${rootId}/${kind}/op/docs/EVIDENCIA/test.txt`;
 async function checkSurfaces(label, data, allowed) {
   await accessRef.set(data);
   assert.equal((await backend()).allowed, allowed, `${label}: backend`); assertions++;
+  // Delegated reads use authorized callables; direct SDK access remains denied.
   for (const collection of ["clients", "solicitudes", "pagos"]) {
     const promise = getDoc(doc(firestore, collection, collection === "clients" ? clientId : "op"));
-    await (allowed ? assertSucceeds(promise) : assertFails(promise)); assertions++;
+    await assertFails(promise); assertions++;
   }
   for (const [, kind] of families) {
     const promise = getBytes(ref(storage, objectPath(kind)));
-    await (allowed ? assertSucceeds(promise) : assertFails(promise)); assertions++;
+    await assertFails(promise); assertions++;
   }
   console.log(`PASS ${label}`);
 }
@@ -77,6 +78,8 @@ try {
     });
   }
   const now = Date.now(), future = stamp.fromMillis(now + 3600000);
+  const { grantedBy: ignoredGrantor, ...unverifiedGrant } = grant;
+  await checkSurfaces("legacy provenance absent", unverifiedGrant, false);
   for (const [label, data, allowed] of [
     ["legacy missing expiry/permissions", grant, true],
     ["legacy null expiry", { ...grant, expiresAt: null }, true],
@@ -109,15 +112,15 @@ try {
   assert.equal(await getCurrentClientDelegationAccess(uid, clientId, "operatePagos"), null);
   await assertFails(getDoc(doc(firestore, "pagos", "op")));
   await assertFails(getBytes(ref(storage, objectPath("pagos"))));
-  await assertSucceeds(getDoc(doc(firestore, "solicitudes", "op")));
-  await assertSucceeds(getBytes(ref(storage, objectPath("solicitudes")))); assertions += 6;
+  assert.equal((await backend()).permissions.operateSolicitudes, true); assertions++;
+  await assertFails(getDoc(doc(firestore, "solicitudes", "op")));
+  await assertFails(getBytes(ref(storage, objectPath("solicitudes")))); assertions += 6;
   await accessRef.set({ ...grant, permissions: { view: true, viewBasic: false, operate: true } });
   assert.equal((await backend()).permissions.view, false, "generic view cannot bypass viewBasic revocation");
   await assertFails(getDoc(doc(firestore, "clients", clientId))); assertions += 2;
   await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "clients", clientId)));
   await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), objectPath("solicitudes")))); assertions += 2;
-  // Current user lifecycle/root belongs to backend and Firestore. Storage S-01
-  // needs a separate design because operation+delegation consumes its 2 reads.
+  // Current lifecycle/root must be enforced before delegated backend access.
   await accessRef.set(grant);
   for (const patch of [{ active: false }, { isActive: false }, { isDeleted: true }, { disabled: true },
     { deleted: true }, { deletedAt: future }, { rootId: "other" }]) {
@@ -157,10 +160,10 @@ try {
   await regrant({ expiresAt: future, permissions: { operatePagos: false } }); assertions++;
   await db.doc(`userClientAccess/${grantor}/clients/${clientId}`).update({ revokedAt: stamp.now() });
   await assert.rejects(regrant({ expiresAt: future, permissions: { operatePagos: false } }), error => error.code === "permission-denied"); assertions++;
-  // Compatibility with the production baseline recovered before this change.
+  // A directly owned user-funded dispersion remains readable; delegation alone is insufficient.
   await accessRef.set(grant);
   const userFundedPath = `roots/${rootId}/dispersiones/private/docs/EVIDENCIA/test.txt`;
-  await db.doc("clientDispersions/private").set({ rootId, clientId, adminId: rootId, createdBy: rootId,
+  await db.doc("clientDispersions/private").set({ rootId, clientId, adminId: rootId, createdBy: uid,
     ownerUid: uid, fundingSource: { holderType: "USER", ownerUid: uid, sourceClientId: clientId } });
   await env.withSecurityRulesDisabled(context => uploadBytes(ref(context.storage(), userFundedPath), new Uint8Array([1])));
   await assertSucceeds(getDoc(doc(firestore, "clientDispersions", "private")));
