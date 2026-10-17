@@ -55,6 +55,7 @@ test('groups pin exact endpoints and old receipt inputs remain compatible', () =
   assert.equal(deploymentScope({ functions: [...DEPLOYMENT_GROUPS.receipts] }).group, 'receipts');
   assert.equal(DEPLOYMENT_GROUPS['security-readers'].length, 9);
   assert.deepEqual(DEPLOYMENT_GROUPS['engineering-action'], ['reconcileAgent007RecommendationsNow']);
+  assert.deepEqual(DEPLOYMENT_GROUPS['receipt-workflow'], ['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']);
   for (const [group, names] of Object.entries(DEPLOYMENT_GROUPS)) {
     const input = { group, functions: [...names], buildMode: 'BUNDLED_V1' };
     assert.deepEqual(deploymentScope(input).names, names);

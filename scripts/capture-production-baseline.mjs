@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 export const PROJECT = 'pay-0-system';
 export const REGION = 'us-central1';
-export const FUNCTIONS = ['ssrpay0system', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField',
+export const FUNCTIONS = ['ssrpay0system', 'createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField',
   'getControlCenterEngineering', 'importControlCenterEngineeringEvidence', 'listOperationalDocuments',
   'getAuthorizedDocumentDownloadUrl', 'getAuthorizedOperationalRecord',
   'listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions',

@@ -11,6 +11,7 @@ import { PROJECT, REGION, tokenInMemory, getMetadata, digest } from './capture-p
 
 export const DEPLOYMENT_GROUPS = Object.freeze({
   receipts: Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
+  'receipt-workflow': Object.freeze(['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
   'engineering-action': Object.freeze(['reconcileAgent007RecommendationsNow']),
 });
