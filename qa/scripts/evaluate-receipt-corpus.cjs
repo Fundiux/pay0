@@ -62,6 +62,37 @@ function evaluate(manifest, reader) {
     timing: { stage: 'TEXT_PARSER_ONLY', meanMs: durations.reduce((a, b) => a + b, 0) / durations.length, p95Ms: durations[Math.ceil(durations.length * .95) - 1] } };
 }
 
+// Paired outcomes prevent aggregate gains from hiding a field regression.
+function compare(manifest, baseline, candidate) {
+  validateManifest(manifest);
+  const failed = result => new Set(result.errors.map(error => `${error.sampleId}/${error.field}`));
+  const oldErrors = failed(baseline), newErrors = failed(candidate);
+  const byBankFormatField = {}, changes = [];
+  const totals = { improved: 0, regressed: 0, unchangedCorrect: 0, unchangedIncorrect: 0 };
+  for (const sample of manifest.samples) for (const field of Object.keys(sample.expected)) {
+    const key = `${sample.id}/${field}`, before = !oldErrors.has(key), after = !newErrors.has(key);
+    const outcome = before ? after ? 'unchangedCorrect' : 'regressed' : after ? 'improved' : 'unchangedIncorrect';
+    const group = `${sample.bank}/${sample.format}/${field}`;
+    byBankFormatField[group] ||= { improved: 0, regressed: 0, unchangedCorrect: 0, unchangedIncorrect: 0 };
+    byBankFormatField[group][outcome]++; totals[outcome]++;
+    if (before !== after) changes.push({ sampleId: sample.id, bank: sample.bank, format: sample.format, field, outcome });
+  }
+  return { ...totals, byBankFormatField, changes,
+    regressionGate: totals.regressed ? 'FAIL' : 'PASS',
+    promotion: 'HUMAN_REVIEW_REQUIRED_NO_AUTOMATIC_PROMOTION',
+    productionAccuracy: manifest.kind === 'SYNTHETIC' ? 'NOT_EVALUATED' : 'USER_ATTESTED_EXTRACTED_TEXT_ONLY',
+    learning: 'OFFLINE_COMPARISON_ONLY_NO_TRAINING_OR_WRITES' };
+}
+
+function sourceIdentity() {
+  const sourceFiles = ['functions/src/modules/pagos/receiptPdfCallables.ts', 'functions/src/modules/pagos/receiptSemantics.ts',
+    'functions/src/modules/pagos/receiptLearning.ts',
+    'qa/scripts/remediation-ocr-quota.test.cjs', 'qa/scripts/evaluate-receipt-corpus.cjs'];
+  return { headCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    kind: 'WORKING_TREE_SNAPSHOT',
+    files: Object.fromEntries(sourceFiles.map(file => [file, crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) };
+}
+
 if (require.main === module) {
   const [manifestPath, requestedRef] = process.argv.slice(2);
   if (!manifestPath || !requestedRef || !/^[a-f0-9]{7,40}$/i.test(requestedRef)) throw Error('Usage: node qa/scripts/evaluate-receipt-corpus.cjs <manifest.json> <baseline-commit>');
@@ -69,14 +100,18 @@ if (require.main === module) {
   const source = fs.readFileSync(manifestPath);
   const manifest = validateManifest(JSON.parse(source.toString('utf8')));
   const baselineCommit = execFileSync('git', ['rev-parse', '--verify', `${requestedRef}^{commit}`], { encoding: 'utf8' }).trim();
-  const result = { schemaVersion: 1, corpusKind: manifest.kind, manifestSha256: crypto.createHash('sha256').update(source).digest('hex'), baselineCommit,
+  const candidateSource = sourceIdentity();
+  const result = { schemaVersion: 2, candidateSource, corpusKind: manifest.kind, manifestSha256: crypto.createHash('sha256').update(source).digest('hex'), baselineCommit,
     scope: 'Extracted text only. No PDF rendering, OCR provider, live financial operation or model training.',
     realAnonymizedValidation: manifest.kind === 'REAL_ANONYMIZED' ? 'EVALUATED_USER_ATTESTED_CORPUS' : 'NOT_EVALUATED',
     authorizationReference: manifest.kind === 'REAL_ANONYMIZED' ? manifest.authorization.reference : null,
     baseline: evaluate(manifest, createEvaluationReader(baselineCommit)), candidate: evaluate(manifest, createEvaluationReader()) };
+  if (JSON.stringify(candidateSource) !== JSON.stringify(sourceIdentity())) throw Error('Candidate source changed during evaluation');
+  result.comparison = compare(manifest, result.baseline, result.candidate);
   fs.mkdirSync('output', { recursive: true });
   const output = path.join('output', `receipt-corpus-${manifest.kind.toLowerCase()}.json`);
   fs.writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
-  console.log(JSON.stringify({ output, corpusKind: result.corpusKind, realAnonymizedValidation: result.realAnonymizedValidation, baselineExact: result.baseline.exactFields, candidateExact: result.candidate.exactFields, fields: result.candidate.fields }));
+  console.log(JSON.stringify({ output, corpusKind: result.corpusKind, realAnonymizedValidation: result.realAnonymizedValidation, baselineExact: result.baseline.exactFields, candidateExact: result.candidate.exactFields, fields: result.candidate.fields, regressionGate: result.comparison.regressionGate, regressed: result.comparison.regressed }));
+  if (result.comparison.regressionGate === 'FAIL') process.exitCode = 1;
 }
-module.exports = { validateManifest, evaluate };
+module.exports = { validateManifest, evaluate, compare };
