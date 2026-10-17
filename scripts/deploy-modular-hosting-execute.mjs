@@ -14,10 +14,75 @@ const NAME = 'ssrpay0system', RESOURCE = `projects/${PROJECT}/locations/${REGION
 const FN = `https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}`;
 const HOSTING = `https://firebasehosting.googleapis.com/v1beta1/sites/${PROJECT}`;
 const RUN = `https://run.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/services/${NAME}`;
+const RUN_V1 = `https://run.googleapis.com/v1/projects/${PROJECT}/locations/${REGION}/services/${NAME}`;
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 const row = state => state.functions[NAME];
 const versionName = state => state.hosting.releases[0].version.name;
 const config = state => state.hosting.releases[0].version.config;
+
+export function tagRequest(before, revision, tag) {
+  assert.equal(before.apiVersion, 'serving.knative.dev/v1', 'V1_API');
+  assert.equal(before.kind, 'Service', 'V1_KIND');
+  assert.equal(before.metadata?.name, NAME, 'V1_SERVICE');
+  assert.ok(['751158244178', PROJECT].includes(before.metadata.namespace), 'V1_PROJECT');
+  assert.match(before.metadata.resourceVersion || '', /^[A-Za-z0-9_-]{1,200}$/, 'V1_RESOURCE_VERSION');
+  assert.equal(before.status?.latestReadyRevisionName, revision, 'V1_READY_REVISION');
+  assert.equal(before.status?.latestCreatedRevisionName, revision, 'V1_CREATED_REVISION');
+  assert.match(tag, /^fh-[a-f0-9]{8,64}$/);
+  assert.ok(!(before.spec.traffic || []).some(t => t.tag === tag), 'TAG_ALREADY_EXISTS');
+  const body = structuredClone(before);
+  delete body.status;
+  body.spec.traffic = [...(body.spec.traffic || []), { revisionName: revision, tag }];
+  return body;
+}
+
+export function assertV1Metadata(before, after, expectedModifier) {
+  for (const key of ['name', 'namespace', 'uid']) assert.equal(after.metadata[key], before.metadata[key], 'V1_IDENTITY_CHANGED');
+  assert.deepEqual(after.metadata.labels, before.metadata.labels, 'V1_LABELS_CHANGED');
+  const old = { ...before.metadata.annotations }, next = { ...after.metadata.annotations };
+  if (next['serving.knative.dev/lastModifier'] !== old['serving.knative.dev/lastModifier']) {
+    assert.ok(expectedModifier, 'EXPECTED_MODIFIER_REQUIRED');
+    assert.equal(next['serving.knative.dev/lastModifier'], expectedModifier, 'V1_MODIFIER_CHANGED');
+  }
+  if (next['run.googleapis.com/operation-id'] !== old['run.googleapis.com/operation-id'])
+    assert.match(next['run.googleapis.com/operation-id'] || '', /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/, 'V1_OPERATION_ID');
+  for (const key of ['serving.knative.dev/lastModifier', 'run.googleapis.com/operation-id']) { delete old[key]; delete next[key]; }
+  assert.deepEqual(next, old, 'V1_ANNOTATIONS_CHANGED');
+}
+export async function pinRevisionV1({ state, tag, read, readV1, put, emit = () => {}, delay = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const before = await readV1(), revision = row(state).resource.serviceConfig.revision;
+  const body = tagRequest(before, revision, tag);
+  assertFreshBaseline(state, await read());
+  const dryRun = await put(body, true);
+  assert.deepEqual(dryRun.spec, body.spec, 'V1_DRYRUN_SPEC_CHANGED');
+  const modifier = dryRun.metadata?.annotations?.['serving.knative.dev/lastModifier'];
+  assert.ok(typeof modifier === 'string' && modifier.length > 0, 'V1_DRYRUN_MODIFIER_REQUIRED');
+  assertV1Metadata(before, dryRun, modifier);
+  assertFreshBaseline(state, await read());
+  assert.equal(digest(await readV1()), digest(before), 'V1_CHANGED_BEFORE_TAG');
+  emit({ state: 'TAG_V1_PREFLIGHT_VERIFIED', beforeSha256: digest(before), dryRunSha256: digest(dryRun) });
+  // resourceVersion from the checked GET is preserved in this exact request.
+  await put(body, false);
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const current = await read();
+    if (row(current).service.terminalCondition?.state === 'CONDITION_SUCCEEDED'
+      && (row(current).service.trafficStatuses || []).some(target => target.tag === tag)) {
+      const after = await readV1(), oldSpec = structuredClone(before.spec), nextSpec = structuredClone(after.spec);
+      delete oldSpec.traffic; delete nextSpec.traffic;
+      assert.deepEqual(nextSpec, oldSpec, 'V1_SPEC_CHANGED');
+      assertV1Metadata(before, after, modifier);
+      assert.equal(digest(row(current).resource), digest(row(state).resource), 'FUNCTION_CHANGED_DURING_TAG');
+      assert.equal(digest(row(current).iam), digest(row(state).iam), 'IAM_CHANGED_DURING_TAG');
+      assert.equal(digest(row(current).service.template), digest(row(state).service.template), 'RUNTIME_CHANGED_DURING_TAG');
+      assertOnlyTagAdded(state, current, tag); assertTagPresent(current, tag);
+      assert.equal(digest(current.hosting.releases[0]), digest(state.hosting.releases[0]), 'CONCURRENT_HOSTING_CHANGE');
+      return;
+    }
+    if (attempt % 3 === 0) emit({ state: 'TAG_PENDING' });
+    await delay(10000);
+  }
+  throw Error('TAG_TIMEOUT');
+}
 
 export function assertRuntimeProof(proof, input) {
   assert.equal(proof?.schema, 'PAY0-MODULAR-HOSTING-RUNTIME@1', 'RUNTIME_PROOF_SCHEMA');
@@ -137,7 +202,7 @@ export function createApi(token, emit = () => {}) {
   async function request(url, method, body) {
     const allowed = url === `${FN}/functions:generateUploadUrl`
       || url === `${FN}/functions/${NAME}?updateMask=buildConfig.source,labels`
-      || url === `${RUN}?updateMask=traffic`
+      || ((url === RUN_V1 || url === `${RUN_V1}?dryRun=all`) && method === 'PUT')
       || url === `${HOSTING}/versions`
       || [...allowedVersions].some(version => url === `https://firebasehosting.googleapis.com/v1beta1/${version}:populateFiles`
         || url === `https://firebasehosting.googleapis.com/v1beta1/${version}?updateMask=status,config`
@@ -207,14 +272,8 @@ export function createApi(token, emit = () => {}) {
       await wait(operation, 'https://cloudfunctions.googleapis.com/v2');
     },
     async pinRevision(state, tag) {
-      assert.match(tag, /^fh-[a-f0-9]{8,64}$/);
-      const before = row(state).service, revision = row(state).resource.serviceConfig.revision;
-      assert.ok(typeof before.etag === 'string' && before.etag.length > 0, 'RUN_ETAG_REQUIRED');
-      assert.ok(!(before.traffic || []).some(target => target.tag === tag), 'TAG_ALREADY_EXISTS');
-      const traffic = [...(before.traffic || []), { type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION', revision, tag, percent: 0 }];
-      const operation = await request(`${RUN}?updateMask=traffic`, 'PATCH', { name: before.name, etag: before.etag, traffic });
-      emit({ state: 'TAG_OPERATION_ACCEPTED', operation: operation.name });
-      await wait(operation, 'https://run.googleapis.com/v2');
+      return pinRevisionV1({ state, tag, read: () => this.read(), readV1: () => getMetadata(RUN_V1, token),
+        put: (body, dryRun) => request(dryRun ? `${RUN_V1}?dryRun=all` : RUN_V1, 'PUT', body), emit });
     },
     async finalizeVersion(version, config) {
       assert.ok(allowedVersions.has(version), 'VERSION_NOT_OWNED');

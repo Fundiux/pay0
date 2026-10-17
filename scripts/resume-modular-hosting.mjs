@@ -6,7 +6,9 @@ import { gzipSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { PROJECT, digest, getMetadata, tokenInMemory } from './capture-production-baseline.mjs';
 import { check, privateFile, sha, validateBaseline, assertFreshBaseline, assertHostingConfigPreserved } from './deploy-modular-hosting.mjs';
-import { createApi, assertRuntimeProof, assertSsrReady, assertOnlyTagAdded, assertTagPresent, releaseConfig } from './deploy-modular-hosting-execute.mjs';
+import { createApi, assertRuntimeProof, assertSsrReady, assertOnlyTagAdded, assertTagPresent, releaseConfig, tagRequest, assertV1Metadata } from './deploy-modular-hosting-execute.mjs';
+
+export { tagRequest, assertV1Metadata };
 
 const NAME = 'ssrpay0system';
 const RUN = 'https://run.googleapis.com/v1/projects/pay-0-system/locations/us-central1/services/ssrpay0system';
@@ -40,22 +42,6 @@ export function assertOwnership({ own, lock, journal, inputFile, inputSha256 }) 
   assert.ok(states.slice(states.indexOf('SSR_VERIFIED') + 1).every(s => s === 'MUTATION_DISPATCHING'), 'JOURNAL_ADVANCED');
 }
 
-export function tagRequest(before, revision, tag) {
-  assert.equal(before.apiVersion, 'serving.knative.dev/v1', 'V1_API');
-  assert.equal(before.kind, 'Service', 'V1_KIND');
-  assert.equal(before.metadata?.name, NAME, 'V1_SERVICE');
-  assert.ok(['751158244178', PROJECT].includes(before.metadata.namespace), 'V1_PROJECT');
-  assert.match(before.metadata.resourceVersion || '', /^[A-Za-z0-9_-]{1,200}$/, 'V1_RESOURCE_VERSION');
-  assert.equal(before.status?.latestReadyRevisionName, revision, 'V1_READY_REVISION');
-  assert.equal(before.status?.latestCreatedRevisionName, revision, 'V1_CREATED_REVISION');
-  assert.match(tag, /^fh-[a-f0-9]{8,64}$/);
-  assert.ok(!(before.spec.traffic || []).some(t => t.tag === tag), 'TAG_ALREADY_EXISTS');
-  const body = structuredClone(before);
-  delete body.status;
-  body.spec.traffic = [...(body.spec.traffic || []), { revisionName: revision, tag }];
-  return body;
-}
-
 export function assertVersionFiles(files, expected) {
   assert.equal(files.length, expected.length, 'VERSION_FILE_COUNT');
   const map = new Map();
@@ -67,18 +53,6 @@ export function assertVersionFiles(files, expected) {
   for (const file of expected) assert.equal(map.get(file.path), file.hash, 'VERSION_FILE_CHANGED');
 }
 
-export function assertV1Metadata(before, after, expectedModifier) {
-  assert.deepEqual(after.metadata.labels, before.metadata.labels, 'V1_LABELS_CHANGED');
-  const old = { ...before.metadata.annotations }, next = { ...after.metadata.annotations };
-  if (next['serving.knative.dev/lastModifier'] !== old['serving.knative.dev/lastModifier']) {
-    assert.ok(expectedModifier, 'EXPECTED_MODIFIER_REQUIRED');
-    assert.equal(next['serving.knative.dev/lastModifier'], expectedModifier, 'V1_MODIFIER_CHANGED');
-  }
-  if (next['run.googleapis.com/operation-id'] !== old['run.googleapis.com/operation-id'])
-    assert.match(next['run.googleapis.com/operation-id'] || '', /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/, 'V1_OPERATION_ID');
-  for (const key of ['serving.knative.dev/lastModifier', 'run.googleapis.com/operation-id']) { delete old[key]; delete next[key]; }
-  assert.deepEqual(next, old, 'V1_ANNOTATIONS_CHANGED');
-}
 export async function resumeContract({ input, baseline, proof, own, api, expectedV1, expectedModifier, verifyLocal = async () => {}, checkpoint = async () => {} }) {
   assert.equal(own.state, 'SSR_VERIFIED', 'RESUME_STATE_NOT_SUPPORTED');
   assertRuntimeProof(proof, input); validateBaseline(baseline); await verifyLocal();

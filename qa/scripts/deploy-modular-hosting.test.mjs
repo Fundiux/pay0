@@ -10,7 +10,7 @@ import {
   assertSsrApiPreserved, assertHostingConfigPreserved, rollbackPlan,
 } from '../../scripts/deploy-modular-hosting.mjs';
 import { digest } from '../../scripts/capture-production-baseline.mjs';
-import { executeContract, rollbackContract, assertSource } from '../../scripts/deploy-modular-hosting-execute.mjs';
+import { executeContract, rollbackContract, assertSource, pinRevisionV1 } from '../../scripts/deploy-modular-hosting-execute.mjs';
 const require = createRequire(import.meta.url);
 const JSZip = require('../../functions/node_modules/jszip');
 const clone = value => structuredClone(value);
@@ -190,4 +190,59 @@ test('rollback rejects a release changed by another operator before any mutation
   f.state.hosting.releases[0].name = 'another-operator';
   await assert.rejects(rollbackContract({ input: f.input, baseline: f.before, expected, api: f.api }), /CONCURRENT_HOSTING_CHANGE/);
   assert.equal(f.calls.length, count);
+});
+
+
+function tagV1Fixture(mode = '') {
+  const f = deploymentFixture(), state = clone(f.state), calls = [];
+  const revision = state.functions.ssrpay0system.resource.serviceConfig.revision;
+  let v1 = { apiVersion: 'serving.knative.dev/v1', kind: 'Service',
+    metadata: { name: 'ssrpay0system', namespace: '751158244178', resourceVersion: 'opaque-123', labels: { preserved: 'yes' }, annotations: { 'serving.knative.dev/lastModifier': 'old@example.test' } },
+    spec: { template: { spec: { containers: [{ image: 'same-image' }] } }, traffic: [{ latestRevision: true, percent: 100 }] },
+    status: { latestReadyRevisionName: revision, latestCreatedRevisionName: revision } };
+  const initial = clone(v1);
+  return { calls, initial, args: { state, tag: 'fh-abcdef12', read: f.api.read,
+    readV1: async () => clone(v1), delay: async () => {},
+    put: async (body, dryRun) => {
+      calls.push(dryRun ? 'dry-run' : 'put');
+      assert.equal(body.metadata.resourceVersion, initial.metadata.resourceVersion);
+      const result = clone(body);
+      result.metadata.annotations['serving.knative.dev/lastModifier'] = 'operator@example.test';
+      if (dryRun) {
+        if (mode === 'dry-identity') result.metadata.name = 'other-service';
+        if (mode === 'dry-spec') result.spec.template.spec.containers[0].image = 'other';
+        if (mode === 'dry-metadata') result.metadata.annotations['run.googleapis.com/ingress'] = 'all';
+        if (mode === 'concurrent') v1.metadata.resourceVersion = 'changed';
+        if (mode === 'iam-before') f.state.functions.ssrpay0system.iam = { changed: true };
+        return result;
+      }
+      if (mode === 'conflict') throw Error('HTTP_409');
+      v1 = result;
+      await f.api.pinRevision(state, 'fh-abcdef12');
+      if (mode === 'runtime') v1.spec.template.spec.containers[0].image = 'changed';
+      if (mode === 'metadata') v1.metadata.annotations.extra = 'changed';
+      if (mode === 'modifier') v1.metadata.annotations['serving.knative.dev/lastModifier'] = 'unexpected@example.test';
+      if (mode === 'iam-after') f.state.functions.ssrpay0system.iam = { changed: true };
+      if (mode === 'traffic') f.state.functions.ssrpay0system.service.traffic[0].percent = 99;
+      if (mode === 'pending') f.state.functions.ssrpay0system.service.terminalCondition.state = 'CONDITION_PENDING';
+      return result;
+    } } };
+}
+test('primary Hosting tags through V1 dry-run and resourceVersion without changing old traffic', async () => {
+  const f = tagV1Fixture();
+  await pinRevisionV1(f.args);
+  assert.deepEqual(f.calls, ['dry-run', 'put']);
+});
+test('V1 tag rejects dry-run drift, concurrent changes and server CAS conflict', async () => {
+  for (const mode of ['dry-identity', 'dry-spec', 'dry-metadata', 'concurrent', 'iam-before', 'conflict']) {
+    const f = tagV1Fixture(mode);
+    await assert.rejects(pinRevisionV1(f.args));
+    assert.deepEqual(f.calls, mode === 'conflict' ? ['dry-run', 'put'] : ['dry-run']);
+  }
+});
+test('V1 tag refuses unexpected runtime, metadata, IAM, traffic and incomplete reconciliation', async () => {
+  for (const mode of ['runtime', 'metadata', 'modifier', 'iam-after', 'traffic', 'pending']) {
+    const f = tagV1Fixture(mode);
+    await assert.rejects(pinRevisionV1(f.args));
+  }
 });
