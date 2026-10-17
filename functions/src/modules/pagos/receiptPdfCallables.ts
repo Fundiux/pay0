@@ -6,7 +6,7 @@ import { db, getMyUser, getRootId } from "../sharedCallables/helpers";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { identifyParsedReceipt } from "./receiptIdentification";
 import { buildSemanticReceipt, RECEIPT_READER_VERSION } from "./receiptSemantics";
-import { containsSensitiveLearningData, receiptMemoryId, isCorrectableReceiptField, memoryCanAdvise, receiptPattern, RECEIPT_LEARNING_VERSION, sanitizedReceiptLearningContent } from "./receiptLearning";
+import { getReceiptActorCorrectionState, CORRECTABLE_RECEIPT_FIELDS, applyReceiptCorrections, normalizeReceiptCorrection, containsSensitiveLearningData, receiptMemoryId, isCorrectableReceiptField, memoryCanAdvise, receiptPattern, RECEIPT_LEARNING_VERSION, sanitizedReceiptLearningContent } from "./receiptLearning";
 
 let pdfParser: any;
 let visionClient: any;
@@ -51,16 +51,22 @@ type ReceiptData = {
   dateVerified: boolean;
 };
 
-async function retrieveReceiptLearningContext(rootId: string, semantic: ReturnType<typeof buildSemanticReceipt>) {
+async function retrieveReceiptLearningContext(rootId: string, semantic: ReturnType<typeof buildSemanticReceipt>, effectiveSemantic = semantic) {
   try {
     const fields = semantic.fields || {}, candidates: Array<{ pattern: ReturnType<typeof receiptPattern>; targetDecision: string }> = [];
-    for (const fromField of ["reference", "trackingKey", "folio", "transactionId"] as const) {
+    const identifiers = ["reference", "trackingKey", "folio", "transactionId"] as const;
+    for (const fromField of CORRECTABLE_RECEIPT_FIELDS) {
+      // Same-field feedback uses a fixed field label, never a personal value.
+      const pattern = receiptPattern({ readerVersion: semantic.readerVersion, bankName: fields.bankName?.normalizedValue, evidenceLabel: fromField.replace(/([a-z])([A-Z])/g, "$1 $2"), fromField, toField: fromField });
+      candidates.push({ pattern, targetDecision: effectiveSemantic.fields?.[fromField]?.decision || "MISSING" });
+    }
+    for (const fromField of identifiers) {
       const source = fields[fromField];
       if (!source?.label) continue;
-      for (const toField of ["reference", "trackingKey", "folio", "transactionId"] as const) {
+      for (const toField of identifiers) {
         if (fromField === toField) continue;
         const pattern = receiptPattern({ readerVersion: semantic.readerVersion, bankName: fields.bankName?.normalizedValue, evidenceLabel: source.label, fromField, toField });
-        candidates.push({ pattern, targetDecision: fields[toField]?.decision || "MISSING" });
+        candidates.push({ pattern, targetDecision: effectiveSemantic.fields?.[toField]?.decision || "MISSING" });
       }
     }
     if (!candidates.length) return [];
@@ -744,7 +750,7 @@ export const parsePagoReceiptPdf = onCall(
 
     if (contentType === "application/pdf") {
       try {
-        const parsed = await getPdfParser()(buffer, { max: RECEIPT_PROCESSING_LIMITS.pdfPages });
+        const parsed = await getPdfParser()(new Uint8Array(buffer), { max: RECEIPT_PROCESSING_LIMITS.pdfPages });
         const pages = Number(parsed?.numpages);
         if (!Number.isInteger(pages) || pages < 1) throw new HttpsError("failed-precondition", "No se pudo verificar el numero de paginas del comprobante.");
         if (pages > RECEIPT_PROCESSING_LIMITS.pdfPages) throw new HttpsError("invalid-argument", "El comprobante debe tener como maximo 5 paginas.");
@@ -787,19 +793,30 @@ export const parsePagoReceiptPdf = onCall(
 
     receipt = parseReceiptText(text);
     semanticReceipt = buildSemanticReceipt(text, receipt);
-    await analysisRef.set({
+    await db.runTransaction(async tx => {
+    const existing = await tx.get(analysisRef);
+    if (existing.exists && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
+    tx.set(analysisRef, {
       schemaVersion: 1, processingPolicyVersion: 2, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
       createdAt: new Date(), updatedAt: new Date(),
     }, { merge: false });
+    });
     }
+    const latestAnalysis = await analysisRef.get();
+    const actorCorrectionState = getReceiptActorCorrectionState(latestAnalysis.data() || {}, uid);
+    const correctionVersion = actorCorrectionState.version;
+    const overlay = applyReceiptCorrections(latestAnalysis.get("receipt") || receipt, latestAnalysis.get("semanticReceipt") || semanticReceipt, actorCorrectionState.corrections);
+    receipt = overlay.receipt as ReceiptData;
+    semanticReceipt = overlay.semanticReceipt as ReturnType<typeof buildSemanticReceipt>;
     const identification = await identifyParsedReceipt({ db,
       actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
       receipt, contentSha256, operationTypeKey: clean(data.operationTypeKey), analysisId,
-      readerVersion: RECEIPT_READER_VERSION, semanticReceipt,
+      readerVersion: RECEIPT_READER_VERSION, semanticReceipt, correctionVersion,
+      selectedClientId: clean(data.selectedClientId), selectedCompanyId: clean(data.selectedCompanyId),
     });
-    const learningContext = await retrieveReceiptLearningContext(rootId, semanticReceipt);
+    const learningContext = await retrieveReceiptLearningContext(rootId, latestAnalysis.get("semanticReceipt") || semanticReceipt, semanticReceipt);
 
     return {
       ok: true,
@@ -817,6 +834,7 @@ export const parsePagoReceiptPdf = onCall(
       receipt,
       semanticReceipt,
       learningContext,
+      correctionVersion,
       identification,
     };
   },
@@ -830,29 +848,42 @@ export const correctPagoReceiptSemanticField = onCall(
     const [user, rootId] = await Promise.all([getMyUser(uid), getRootId(uid)]);
     assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
     const analysisId = clean(request.data?.analysisId), fromField = clean(request.data?.field), toField = clean(request.data?.correctedField);
-    const correctedValue = clean(request.data?.correctedValue);
-    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField) || !correctedValue || correctedValue.length > 240)
+    let correctedValue: string | number;
+    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField))
       throw new HttpsError("invalid-argument", "Correccion semantica invalida.");
+    try { correctedValue = normalizeReceiptCorrection(fromField, toField, request.data?.correctedValue); }
+    catch { throw new HttpsError("invalid-argument", "Valor o reclasificacion invalida."); }
+    const expectedVersion = request.data?.expectedCorrectionVersion;
+    if (expectedVersion !== undefined && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0)) throw new HttpsError("invalid-argument", "Version invalida.");
     const analysisRef = db.doc(`pagoReceiptAnalyses/${analysisId}`), analysis = await analysisRef.get();
     if (!analysis.exists || analysis.get("rootId") !== rootId) throw new HttpsError("not-found", "Interpretacion no encontrada.");
-    const semantic = analysis.get("semanticReceipt") || {}, fields = semantic.fields || {}, auto = fields[fromField];
-    if (!auto || auto.value == null) throw new HttpsError("failed-precondition", "El campo automatico no tiene evidencia corregible.");
-    const pattern = receiptPattern({ readerVersion: clean(analysis.get("readerVersion")), bankName: fields.bankName?.normalizedValue, evidenceLabel: auto.label, fromField, toField });
+    const semantic = analysis.get("semanticReceipt") || {}, fields = semantic.fields || {}, auto = fields[fromField] || {};
+    if (fromField !== toField && auto.value == null) throw new HttpsError("failed-precondition", "El campo automatico no tiene evidencia reclasificable.");
+    const pattern = receiptPattern({ readerVersion: clean(analysis.get("readerVersion")), bankName: fields.bankName?.normalizedValue, evidenceLabel: fromField === toField ? fromField.replace(/([a-z])([A-Z])/g, "$1 $2") : auto.label, fromField, toField });
     const content = sanitizedReceiptLearningContent(pattern);
     if (containsSensitiveLearningData(content)) throw new HttpsError("failed-precondition", "La observacion no supero sanitizacion.");
-    const correctionId = createHash("sha256").update([rootId, analysisId, fromField, toField, correctedValue].join("|")).digest("hex");
+    const initialActorState = getReceiptActorCorrectionState(analysis.data() || {}, uid);
+    const previousOverlay = initialActorState.corrections[fromField];
+    const sameCurrentCorrection = expectedVersion === undefined && previousOverlay?.actorUid === uid && previousOverlay?.correctedField === toField && previousOverlay?.correctedValue === correctedValue;
+    const baseVersion = expectedVersion ?? initialActorState.version;
+    const correctionId = sameCurrentCorrection ? String(previousOverlay.correctionId) : createHash("sha256").update(JSON.stringify([rootId, uid, analysisId, fromField, toField, correctedValue, baseVersion])).digest("hex");
     const correctionRef = db.doc(`pagoReceiptCorrections/${correctionId}`), observationRef = db.doc(`agent007Observations/receipt_${correctionId}`), memoryRef = db.doc(`agent007Memory/${receiptMemoryId(rootId, pattern.key)}`);
     const now = new Date().toISOString();
     await db.runTransaction(async tx => {
-      const [previousCorrection, previousMemory] = await Promise.all([tx.get(correctionRef), tx.get(memoryRef)]);
+      const [previousCorrection, previousMemory, currentAnalysis] = await Promise.all([tx.get(correctionRef), tx.get(memoryRef), tx.get(analysisRef)]);
+      if (!currentAnalysis.exists || currentAnalysis.get("rootId") !== rootId) throw new HttpsError("not-found", "Interpretacion no encontrada.");
       // A retry of the same authorized correction is not new learning evidence.
       if (previousCorrection.exists) return;
+      const currentActorState = getReceiptActorCorrectionState(currentAnalysis.data() || {}, uid);
+      const currentVersion = currentActorState.version;
+      if (baseVersion !== currentVersion) throw new HttpsError("aborted", "El comprobante cambio. Actualiza antes de corregir.");
+      const version = currentVersion + 1;
       const memory = previousMemory.data();
-      tx.set(correctionRef, { schemaVersion: 1, learningVersion: RECEIPT_LEARNING_VERSION, rootId, analysisId, documentFingerprint: analysis.get("contentSha256"), readerVersion: analysis.get("readerVersion"), field: fromField,
-        autoResult: { rawValue: auto.rawValue ?? null, normalizedValue: auto.normalizedValue ?? auto.value, confidence: auto.confidence, evidence: { label: auto.label ?? null, excerpt: auto.excerpt ?? null } },
+      tx.set(correctionRef, { schemaVersion: 1, version, learningVersion: RECEIPT_LEARNING_VERSION, rootId, analysisId, documentFingerprint: analysis.get("contentSha256"), readerVersion: analysis.get("readerVersion"), field: fromField,
+        autoResult: { rawValue: auto.rawValue ?? null, normalizedValue: auto.normalizedValue ?? auto.value ?? null, confidence: auto.confidence ?? "NONE", evidence: { label: auto.label ?? null, excerpt: auto.excerpt ?? null } },
         humanCorrection: { correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now }, finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" }, patternKey: pattern.key,
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: false });
-      tx.set(analysisRef, { humanCorrections: { [fromField]: { correctionId, correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now } }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      tx.set(analysisRef, { correctionVersionsByActor: { [uid]: version }, humanCorrectionsByActor: { [uid]: { ...currentActorState.corrections, [fromField]: { version, correctionId, correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now } } }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.set(observationRef, { rootId, agentId: "AGENTE_007", phase: "OBSERVATION", source: "PAYMENT_RECEIPT_HUMAN_CORRECTION", caseType: "PAYMENT_RECEIPT_PATTERN", caseId: pattern.key, intent: "Aprender clasificacion de etiqueta documental", humanDecision: `${fromField}->${toField}`, outcome: content,
         pattern: { ...pattern, version: RECEIPT_LEARNING_VERSION }, actorUid: uid, actorRole: String(user?.role || ""), authorization: { role: String(user?.role || ""), scope: "rootId", rootId }, retrievalEligible: true,
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null }, { merge: false });
@@ -862,7 +893,17 @@ export const correctPagoReceiptSemanticField = onCall(
     });
     const memory = await memoryRef.get();
     const learningContext = memory.exists && memory.get("rootId") === rootId ? [{ id: memory.id, status: memory.get("status"), content: memory.get("content"), advisory: memoryCanAdvise({ patternKey: pattern.key, memoryPatternKey: memory.get("receiptLearning.key"), memoryStatus: memory.get("status"), documentEvidenceDecision: fields[toField]?.decision || "MISSING" }) }] : [];
-    return { ok: true, correctionId, observationId: observationRef.id, memoryId: memoryRef.id, patternKey: pattern.key, learningContext,
+    const latestAnalysis = await analysisRef.get();
+    const actorCorrectionState = getReceiptActorCorrectionState(latestAnalysis.data() || {}, uid);
+    const correctionVersion = actorCorrectionState.version;
+    const { receipt, semanticReceipt } = applyReceiptCorrections(latestAnalysis.get("receipt") || {}, latestAnalysis.get("semanticReceipt") || {}, actorCorrectionState.corrections);
+    const identification = await identifyParsedReceipt({ db,
+      actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
+      receipt, semanticReceipt, contentSha256: clean(latestAnalysis.get("contentSha256")), analysisId,
+      readerVersion: clean(latestAnalysis.get("readerVersion")), correctionVersion,
+      operationTypeKey: clean(request.data?.operationTypeKey), selectedClientId: clean(request.data?.selectedClientId), selectedCompanyId: clean(request.data?.selectedCompanyId),
+    });
+    return { ok: true, receipt, semanticReceipt, identification, correctionVersion, analysisId, correctionId, observationId: observationRef.id, memoryId: memoryRef.id, patternKey: pattern.key, learningContext,
       finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" } };
   },
 );

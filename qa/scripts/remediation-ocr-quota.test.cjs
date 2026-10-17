@@ -62,7 +62,7 @@ function database(seed = {}) {
           const ref = reference.path || reference;
           reads.set(ref, versions.get(ref) || 0);
           const data = docs.get(ref);
-          return { exists: data !== undefined, data: () => data === undefined ? undefined : structuredClone(data) };
+          return { exists: data !== undefined, get: field => field.split('.').reduce((v, key) => v?.[key], data), data: () => data === undefined ? undefined : structuredClone(data) };
         };
         await run({ get, getAll: (...refs) => Promise.all(refs.map(get)), set: (ref, data, options) => {
           const target = ref.path || ref;
@@ -118,7 +118,7 @@ test('window expiry is exact, root changes do not reset actor quota, and corrupt
   }
 });
 
-function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOcrMode = false) {
+function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOcrMode = false, actualPdfParser = null) {
   const http = { HttpsError, onCall: (_options, fn) => fn };
   const module = load('functions/src/modules/pagos/receiptPdfCallables.ts', {
     'firebase-functions/v2/https': http,
@@ -129,7 +129,7 @@ function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOc
     './receiptSemantics': load('functions/src/modules/pagos/receiptSemantics.ts', {}),
     './receiptLearning': load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto }),
     './receiptIdentification': { identifyParsedReceipt: async input => ({ outcome: 'REVIEW_REQUIRED', analysisId: input.analysisId, readerVersion: input.readerVersion, semanticReceipt: input.semanticReceipt }) },
-    'pdf-parse': async (_bytes, options) => { counters.pdf++; assert.equal(options.max, 5); return { text: pdfOcrMode ? '' : 'Monto: 100 MXN', numpages: pdfPages }; },
+    'pdf-parse': actualPdfParser || (async (_bytes, options) => { counters.pdf++; assert.equal(options.max, 5); return { text: pdfOcrMode ? '' : 'Monto: 100 MXN', numpages: pdfPages }; }),
     '@google-cloud/vision': { v1: { ImageAnnotatorClient: class {
       async documentTextDetection() { counters.vision++; if (providerError) throw Error('SECRET_PROVIDER_RESPONSE'); return [{ fullTextAnnotation: { text: 'Monto: 100 MXN' } }]; }
       async batchAnnotateFiles(input) {
@@ -278,7 +278,7 @@ test('repeated feedback is idempotent and new observations preserve rejected gov
   assert.equal(db.docs.get(memoryPath).status, 'REJECTED');
   assert.equal(db.docs.get(memoryPath).createdAt, 'ORIGINAL');
   assert.equal(db.docs.get(`pagoReceiptCorrections/${first.correctionId}`).autoResult.normalizedValue, '12345');
-  assert.equal(db.docs.get(`pagoReceiptAnalyses/${analysisId}`).humanCorrections.reference.correctedValue, '98765');
+  assert.equal(db.docs.get(`pagoReceiptAnalyses/${analysisId}`).humanCorrectionsByActor.u1.reference.correctedValue, '98765');
   assert.equal(Object.hasOwn(db.docs.get(`pagoReceiptAnalyses/${analysisId}`), 'humanCorrections.reference'), false);
 });
 
@@ -350,3 +350,118 @@ module.exports.createEvaluationReader = (ref = null) => {
   const semantic = load('functions/src/modules/pagos/receiptSemantics.ts', {});
   return { parse, semantic: semantic.buildSemanticReceipt, readerVersion: semantic.RECEIPT_READER_VERSION };
 };
+
+
+test('operational correction validation rejects ambiguous values and unrelated reclassification', () => {
+  const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
+  for (const [field, value] of [['transferAmount', '1,000'], ['transferAmount', '-1'], ['transferAmount', '1.001'], ['executionDate', '2025-02-29'], ['executionTime', '24:00'], ['sourceAccount', 'abc']])
+    assert.throws(() => learning.normalizeReceiptCorrection(field, field, value));
+  assert.throws(() => learning.normalizeReceiptCorrection('transferAmount', 'reference', '123'));
+  assert.equal(learning.normalizeReceiptCorrection('transferAmount', 'transferAmount', '100.50'), 100.5);
+  assert.equal(learning.normalizeReceiptCorrection('executionDate', 'executionDate', '2024-02-29'), '2024-02-29');
+});
+
+test('operational corrections preserve OCR and execution evidence, version edits, and survive cached parsing', async () => {
+  const db = database({ 'users/u1': profile() });
+  const handler = receiptHandler(db, { pdf: 0, vision: 0 });
+  const input = { auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-synthetic').toString('base64'), contentType: 'application/pdf' } };
+  const parsed = await handler(input);
+  const analysisPath = `pagoReceiptAnalyses/${parsed.analysisId}`;
+  const original = structuredClone(db.docs.get(analysisPath));
+  const request = { auth: input.auth, data: { analysisId: parsed.analysisId, field: 'transferAmount', correctedField: 'transferAmount', correctedValue: '250.50', expectedCorrectionVersion: 0 } };
+  const first = await handler.correct(request);
+  assert.equal(first.receipt.amount, 250.5);
+  assert.equal(first.correctionVersion, 1);
+  assert.equal(first.semanticReceipt.fields.transferAmount.provenance, 'HUMAN_CORRECTION');
+  assert.equal(first.receipt.executionConfirmed, original.receipt.executionConfirmed);
+  assert.deepEqual(db.docs.get(analysisPath).semanticReceipt, original.semanticReceipt);
+  assert.deepEqual(db.docs.get(analysisPath).receipt, original.receipt);
+  assert.equal((await handler.correct(request)).correctionVersion, 1);
+  await assert.rejects(handler.correct({ ...request, data: { ...request.data, correctedValue: '251' } }), { code: 'aborted' });
+  const second = await handler.correct({ ...request, data: { ...request.data, field: 'concept', correctedField: 'concept', correctedValue: 'Pago sintetico', expectedCorrectionVersion: 1 } });
+  assert.equal(second.correctionVersion, 2);
+  assert.equal(second.receipt.amount, 250.5);
+  assert.equal(second.receipt.concept, 'Pago sintetico');
+  const cached = await handler(input);
+  assert.equal(cached.receipt.amount, 250.5);
+  assert.equal(cached.receipt.concept, 'Pago sintetico');
+  assert.equal(cached.correctionVersion, 2);
+  const changed = await handler.correct({ ...request, data: { ...request.data, correctedValue: '300', expectedCorrectionVersion: 2 } });
+  const reverted = await handler.correct({ ...request, data: { ...request.data, expectedCorrectionVersion: 3 } });
+  assert.equal(changed.correctionVersion, 3);
+  assert.equal(reverted.correctionVersion, 4);
+  assert.notEqual(reverted.correctionId, first.correctionId);
+  assert.equal(reverted.receipt.amount, 250.5);
+  assert.equal([...db.docs.keys()].some(key => key.startsWith('pagos/')), false);
+});
+
+
+test('operational same-field memories are retrieved on the next document as advice only', async () => {
+  const db = database({ 'users/u1': profile() });
+  const handler = receiptHandler(db, { pdf: 0, vision: 0 });
+  const input = text => ({ auth: { uid: 'u1' }, data: { base64: Buffer.from(text).toString('base64'), contentType: 'application/pdf' } });
+  const firstInput = input('%PDF-first-synthetic');
+  const first = await handler(firstInput);
+  const correction = await handler.correct({ auth: firstInput.auth, data: { analysisId: first.analysisId, field: 'concept', correctedField: 'concept', correctedValue: 'Private synthetic concept', expectedCorrectionVersion: 0 } });
+  const next = await handler(input('%PDF-second-synthetic'));
+  const advisory = next.learningContext.find(row => row.id === correction.memoryId);
+  assert.ok(advisory);
+  assert.equal(advisory.advisory, true);
+  assert.ok(!advisory.content.includes('Private synthetic concept'));
+  assert.notEqual(next.receipt.concept, 'Private synthetic concept');
+  const sameDocument = await handler(firstInput);
+  assert.equal(sameDocument.learningContext.find(row => row.id === correction.memoryId).advisory, false);
+  const memory = db.docs.get(`agent007Memory/${correction.memoryId}`);
+  db.docs.set(`agent007Memory/${correction.memoryId}`, { ...memory, status: 'REJECTED' });
+  const rejected = await handler(input('%PDF-third-synthetic'));
+  assert.equal(rejected.learningContext.find(row => row.id === correction.memoryId).advisory, false);
+});
+
+
+test('actor overlays remain isolated and legacy correction ownership is preserved', async () => {
+  const db = database({ 'users/u1': profile(), 'users/u2': profile() });
+  const handler = receiptHandler(db, { pdf: 0, vision: 0 });
+  const input = { auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-isolation').toString('base64'), contentType: 'application/pdf' } };
+  const initial = await handler(input);
+  const edit = (uid, value, version) => handler.correct({ auth: { uid }, data: { analysisId: initial.analysisId, field: 'transferAmount', correctedField: 'transferAmount', correctedValue: value, expectedCorrectionVersion: version } });
+  const a = await edit('u1', '200', 0);
+  const b = await edit('u2', '300', 0);
+  assert.equal(a.correctionVersion, 1); assert.equal(b.correctionVersion, 1);
+  await edit('u2', '400', 1);
+  const againA = await handler(input), againB = await handler({ ...input, auth: { uid: 'u2' } });
+  assert.equal(againA.receipt.amount, 200); assert.equal(againA.correctionVersion, 1);
+  assert.equal(againB.receipt.amount, 400); assert.equal(againB.correctionVersion, 2);
+  const learning = load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto });
+  const legacy = { correctionVersion: 7, humanCorrections: { concept: { actorUid: 'u1', correctedValue: 'A' }, reference: { actorUid: 'u2', correctedValue: 'B' } } };
+  assert.deepEqual(Object.keys(learning.getReceiptActorCorrectionState(legacy, 'u1').corrections), ['concept']);
+  assert.equal(learning.getReceiptActorCorrectionState(legacy, 'u1').version, 7);
+  const own = { ...legacy, correctionVersionsByActor: { u1: 8 }, humanCorrectionsByActor: { u1: { concept: { actorUid: 'u1', correctedValue: 'NEW' } } } };
+  assert.equal(learning.getReceiptActorCorrectionState(own, 'u1').corrections.concept.correctedValue, 'NEW');
+  assert.deepEqual(legacy.humanCorrections.reference, { actorUid: 'u2', correctedValue: 'B' });
+});
+
+
+test('real PDF bytes parse through typed-array boundary and retain page and malformed guards', async () => {
+  const { PDFDocument, StandardFonts } = require('../../functions/node_modules/pdf-lib');
+  const realParser = require('../../functions/node_modules/pdf-parse');
+  const makePdf = async pages => {
+    const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+    for (let i = 0; i < pages; i++) pdf.addPage().drawText('Monto: 1000 MXN', { x: 40, y: 700, size: 14, font });
+    return Buffer.from(await pdf.save());
+  };
+  const counters = { pdf: 0, vision: 0 };
+  const handler = receiptHandler(database({ 'users/u1': profile() }), counters, false, 1, false, async (bytes, options) => {
+    assert.ok(bytes instanceof Uint8Array && !Buffer.isBuffer(bytes), 'pdf.js must not receive Node Buffer slice semantics');
+    assert.equal(options.max, 5);
+    return realParser(bytes, options);
+  });
+  const input = bytes => ({ auth: { uid: 'u1' }, data: { base64: bytes.toString('base64'), contentType: 'application/pdf' } });
+  const bytes = await makePdf(1), digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  const parsed = await handler(input(bytes));
+  assert.equal(parsed.receipt.amount, 1000);
+  assert.equal(parsed.contentSha256, digest);
+  assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), digest);
+  await assert.rejects(handler(input(await makePdf(6))), { code: 'invalid-argument' });
+  await assert.rejects(handler(input(Buffer.from('%PDF-1.7 malformed document'))), { code: 'failed-precondition' });
+  assert.equal(counters.vision, 0, 'Unverified PDFs never fall back to partial OCR');
+});

@@ -119,6 +119,24 @@ async function main() {
   check(reviewUi.exports.automaticPaymentReviewMessage({ status: 'REQUIRES_REVIEW', reason: 'AMOUNT_EXCEEDS_INVOICE' }).includes('saldo'), 'Automatic application exposes a human reason');
   check(!reviewUi.exports.automaticPaymentReviewMessage({ status: 'APPLIED' }), 'Completed application has no review badge');
   check(!reviewUi.exports.automaticPaymentReviewMessage({ status: 'REQUIRES_REVIEW', reason: 'internal-private-id' }).includes('internal-private-id'), 'Unknown internal identifiers never reach the badge');
+  check(ready.verifiedMatches.client.id === clientId && ready.verifiedMatches.company.id === companyId, 'Authorized catalog identities prefilled');
+  const incomplete = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-incomplete` });
+  check(incomplete.status === 'REQUIRES_REVIEW' && incomplete.verifiedMatches.client.id === clientId, 'Missing operation does not discard verified identities');
+  const duplicateClient = `${prefix}-duplicate-client`;
+  await db.doc(`clients/${duplicateClient}`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
+  const ambiguous = await identify({}, actors[0], `${sha}-ambiguous`);
+  check(ambiguous.reasons.includes('CLIENT_MULTIPLE_CANDIDATES') && ambiguous.candidates.client.length === 2 && !ambiguous.verifiedMatches.client, 'Ambiguous identities require explicit choice');
+  const selected = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-selected`, operationTypeKey: operation, selectedClientId: clientId });
+  check(selected.status === 'READY' && selected.verifiedMatches.client.id === clientId, 'Explicit verified candidate resolves ambiguity');
+  const forged = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-forged`, operationTypeKey: operation, selectedClientId: `${prefix}-foreign` });
+  check(forged.reasons.includes('CLIENT_INVALID_SELECTION') && !forged.createPayload, 'Arbitrary identity selection cannot create payment');
+  const restricted = await identify({}, actors[2], `${sha}-restricted`);
+  check(!restricted.candidates.client.some(row => row.id === duplicateClient), 'Unauthorized candidate never disclosed');
+  await db.doc(`clients/${duplicateClient}`).delete();
+  const analysisId = `${prefix}-analysis`;
+  await db.doc(`pagoReceiptAnalyses/${analysisId}`).set({ rootId: root, correctionVersionsByActor: { [actors[0].uid]: 2 } });
+  await assert.rejects(() => identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-stale`, operationTypeKey: operation, analysisId, correctionVersion: 1 }), error => error.code === 'aborted'); checks++;
+  check(!(await db.doc(`pagoReceiptIdentifications/${createHash('sha256').update([root, actors[0].uid, `${sha}-stale`].join('|')).digest('hex')}`).get()).exists, 'Stale correction cannot publish identification');
   const idRef = db.doc(`pagoReceiptIdentifications/${ready.id}`), snap = await idRef.get();
   for (const field of ['clienteId', 'companyId', 'despachoId', 'operationTypeKey', 'concepto', 'referencia', 'paymentForm'])
     check(assert.throws(() => assertReceiptCreation(snap, actors[0], { ...ready.createPayload, [field]: 'forged' })) === undefined, `Reject ${field} tamper`);

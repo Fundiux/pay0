@@ -3,6 +3,7 @@ import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } f
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
 import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
+import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
   buildPagoCoverageApplyPatch,
@@ -2104,13 +2105,31 @@ export const createPago = onCall(
     let folio = "";
     let pagoSequenceNumber = 0;
     let pagoSequenceCounterPath = "";
+    let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
 
     await db.runTransaction(async (tx) => {
       if (receiptIdentificationRef) {
         const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
         assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
+        const contentSha256 = String(receiptIdentificationSnap.get("contentSha256") || "");
+        if (!/^[a-f0-9]{64}$/.test(contentSha256)) throw new HttpsError("failed-precondition", "El comprobante no tiene una huella verificable.");
+        receiptContentClaimRef = db.doc(`pagoReceiptDedup/content_${createHash("sha256").update(JSON.stringify([rootId, contentSha256])).digest("hex")}`);
+        const contentClaim = await tx.get(receiptContentClaimRef);
+        if (contentClaim.exists) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: contentClaim.get("clienteId") === clienteId && contentClaim.get("companyId") === companyId ? contentClaim.get("pagoId") || null : null });
+        // Existing registrations remain protected without rewriting historical payments.
+        const earlierIdentifications = await tx.get(db.collection("pagoReceiptIdentifications").where("contentSha256", "==", contentSha256).limit(501));
+        if (earlierIdentifications.size > 500) throw new HttpsError("failed-precondition", "La huella del comprobante requiere revisión.");
+        const registered = earlierIdentifications.docs.find(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
+        if (registered) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: registered.get("createPayload.clienteId") === clienteId && registered.get("createPayload.companyId") === companyId ? registered.get("pagoId") || null : null });
         const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
         validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
+        if (validatedReceiptAnalysisId) {
+          const receiptAnalysis = await tx.get(db.doc(`pagoReceiptAnalyses/${validatedReceiptAnalysisId}`));
+          if (!receiptAnalysis.exists || receiptAnalysis.get("rootId") !== rootId ||
+              getReceiptActorCorrectionState(receiptAnalysis.data() || {}, uid).version !== Number(receiptIdentificationSnap.get("correctionVersion") || 0)) {
+            throw new HttpsError("failed-precondition", "El comprobante cambió; vuelve a validar sus datos antes de registrar el pago.");
+          }
+        }
         validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
         validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
           ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
@@ -2282,6 +2301,7 @@ export const createPago = onCall(
         });
       }
 
+      if (receiptContentClaimRef) tx.set(receiptContentClaimRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), pagoId: ref.id, type: "RECEIPT_CONTENT", createdAt: FieldValue.serverTimestamp() });
       if (receiptIdentificationRef) tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
 
       logActivityTx(tx, db, {
