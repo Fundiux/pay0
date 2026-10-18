@@ -1,13 +1,13 @@
 #!/bin/sh
 set -eu
+# This is Firebase Auth Emulator's public test API key, never a production credential.
+export PAY0_FIREBASE_WEB_API_KEY=qa-emulator-only
 mkdir -p /tmp/.cache
 cp -r /opt/emulator-cache/firebase /tmp/.cache/firebase
 node /opt/pay0/qa/emulator-isolation/preflight.mjs
 mkdir -p /tmp/pay0-next /tmp/pay0-test-results /tmp/pay0-playwright-results
 node /opt/pay0/qa/authenticated-isolation/path-preflight.mjs
 cd /tmp
-# This is Firebase Auth Emulator's public test API key, never a production credential.
-export PAY0_FIREBASE_WEB_API_KEY=qa-emulator-only
 emulator_log=/tmp/firebase-emulators.log
 firebase emulators:start --config /opt/pay0/firebase.authenticated-qa.json --project demo-pay0-ui-qa --only auth,firestore,functions >"$emulator_log" 2>&1 &
 emulator_pid=$!
