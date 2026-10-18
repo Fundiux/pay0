@@ -1,0 +1,29 @@
+name: QA authenticated Batch 1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-batch1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify candidate integrity
+        run: node qa/authenticated-isolation/verify-integrity.mjs
+      - name: Build isolated authenticated QA image
+        run: docker build --pull --tag pay0-qa-authenticated-batch1:local -f qa/authenticated-isolation/Dockerfile .
+      - name: Run authenticated Batch 1 in isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME=/tmp docker run --rm --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=768m --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 512 --user 65532:65532 \
+            --env HOME=/tmp --env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            pay0-qa-authenticated-batch1:local
