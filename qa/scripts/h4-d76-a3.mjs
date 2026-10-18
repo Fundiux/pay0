@@ -8,23 +8,28 @@ const index = fs.readFileSync("functions/src/index.ts", "utf8");
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log(`PASS ${name}`); };
 
-test("reportes cliente son observaciones sin autoridad", () => {
-  assert.match(backend, /origin: "CLIENT_REPORTED"/);
-  assert.match(backend, /decision: "OBSERVE_ONLY"/);
-  assert.doesNotMatch(backend, /HUGO SANCHEZ \| ACCESO BLOQUEADO/);
+test("mensaje Telegram corto usa folio y nombre", () => {
+  assert.match(backend, /HUGO SANCHEZ \| ACCESO BLOQUEADO/);
+  assert.match(backend, /Usuario: \$\{userFolio\} - \$\{actorName\}/);
 });
-test("guard no consume secretos ni codigos legacy", () => {
-  assert.doesNotMatch(guard, /unlockCodeHash|redeemMySecurityUnlockCode/);
-  assert.doesNotMatch(service, /locationHref|referrer|userAgent/);
+test("mensaje no expone UID", () => assert.doesNotMatch(backend, /`UID:/));
+test("mensaje contiene ruta modulo permiso e incidente", () => {
+  for (const marker of ["`Ruta:", "`Modulo:", "`Permiso faltante:", "`Incidente:"]) assert.match(backend, new RegExp(marker));
+});
+test("codigo de desbloqueo solo se envia por canal de seguridad", () => {
+  assert.match(backend, /`Codigo desbloqueo: \$\{unlockCode\}`/);
+  assert.doesNotMatch(guard, /unlockCodeHash/);
+});
+test("perfil almacena hash y no codigo plano", () => {
+  assert.match(backend, /unlockCodeHash: hashUnlockCode/);
+  assert.doesNotMatch(backend, /securityLock:\s*\{[\s\S]{0,300}unlockCode,/);
 });
 test("bloqueo ocurre antes de renderizar children", () => {
-  assert.ok(guard.indexOf("if (restrictionBlocks)") >= 0);
-  assert.ok(guard.indexOf("if (restrictionBlocks)") < guard.lastIndexOf("return <>{children}</>"));
+  assert.ok(guard.indexOf("if (isSecurityLocked)") < guard.lastIndexOf("return <>{children}</>"));
 });
-test("pantalla usa estado confiable sin folio legacy", () => { assert.match(guard, /getMyRestrictionStatus/); assert.doesNotMatch(guard, /securityLock|incidentCode/); });
-test("recuperacion consulta estado y conserva servicio legacy", () => {
-  assert.match(guard, /Actualizar estado/);
-  assert.doesNotMatch(guard, /redeemMySecurityUnlockCode/);
+test("pantalla muestra folio de incidente", () => assert.match(guard, /securityLock\?\.incidentCode/));
+test("usuario puede ingresar codigo recibido", () => {
+  assert.match(guard, /Codigo enviado por superadmin/);
   assert.match(service, /redeemMySecurityUnlockCode/);
 });
 test("codigo es de un solo uso", () => {
@@ -33,11 +38,8 @@ test("codigo es de un solo uso", () => {
   assert.match(backend, /unlockCodeHash: null/);
 });
 test("codigo se valida por hash ligado al usuario", () => assert.match(backend, /update\(`\$\{uid\}:\$\{cleanText\(code\)/));
-test("estado confiable bloquea redirect hasta validacion", () => assert.match(guard, /if \(!profileReady \|\| !user \|\| restrictionBlocks\) return/));
-test("consulta propia exportada sin writers", () => {
-  assert.match(index, /export \{ getMyRestrictionStatus \} from/);
-  assert.doesNotMatch(index, /export \{[^}]*\b(?:issueTrustedUserRestriction|revokeTrustedUserRestriction)\b/);
-});
+test("desbloqueo redirige antes de reabrir ruta prohibida", () => assert.match(guard, /await redeemMySecurityUnlockCode[\s\S]*router\.replace\(getFirstAllowedRoute\(profile\)\)/));
+test("alerta y notificacion reciben estado Telegram", () => assert.match(backend, /statusRefs: \[notificationRef, alertRef\]/));
 test("callable de canje esta exportada", () => assert.match(index, /redeemMySecurityUnlockCode/));
 
 console.log(`H4-D76-A3 QA: ${passed}/${passed} pruebas OK.`);

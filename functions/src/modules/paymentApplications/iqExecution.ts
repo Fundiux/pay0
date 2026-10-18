@@ -1,4 +1,3 @@
-import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import * as crypto from "node:crypto";
 import { fetchIqExternal as fetch } from "../iq/externalActionsPolicy";
 import {
@@ -13,7 +12,7 @@ import {
   parseIqDateTimeMs,
 } from "../iq/iqDateTime";
 import type { PaymentApplicationActor } from "./service";
-import { requireIqAssociatedName } from "../iq/associatedName";
+import { resolveIqAssociatedName } from "../iq/associatedName";
 import {
   PAYMENT_APPLICATION_IQ_EXECUTION_VERSION,
   buildPaymentApplicationIqExecutionAttemptId,
@@ -506,7 +505,7 @@ export async function resolveIqAccess(
   return {
     profileId,
     profileAlias: cleanText(profile.alias),
-    associatedName: requireIqAssociatedName(access.associatedName || profile.associatedName),
+    associatedName: resolveIqAssociatedName(username, access.associatedName || profile.associatedName),
     username,
     password: decryptPassword(profile),
     erpUrl: normalizeErpUrl(profile.erpUrl),
@@ -1134,7 +1133,6 @@ async function finalizeExecution(params: {
 
 // H4_D85_A10_A33_HTTP_DIRECT_PAYMENT_APPLICATION_EXECUTION
 async function runIqPaymentApplicationHttpDirect(params: {
-  authorizeBeforePost?: () => Promise<void>;
   access: IqAccess;
   planId: string;
   pagoIqFolio: string;
@@ -1568,7 +1566,6 @@ async function runIqPaymentApplicationHttpDirect(params: {
       });
     }
 
-    await params.authorizeBeforePost?.();
     const postUrl = new URL(
       "/payment_applications",
       auth.apiOrigin,
@@ -2089,15 +2086,6 @@ export async function executePaymentApplicationIqPlan(params: {
   confirmExecution: unknown;
 }): Promise<PaymentApplicationIqExecutionResult> {
   const request = validateExecutionRequest(params);
-  const authorizeBeforePost = async () => {
-    const plan = (await db.doc(`pagoApplicationIqPlans/${request.planId}`).get()).data();
-    if (!plan || plan.rootId !== params.actor.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
-    const pago = (await db.doc(`pagos/${cleanText(plan.pagoId)}`).get()).data();
-    if (!pago || pago.rootId !== params.actor.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
-    await authorizeDeferredIntent({uid: params.actor.uid, rootId: params.actor.rootId, module: "pagos", action: ["create", "conciliate"],
-      clientId: cleanText(pago.clienteId || pago.clientId), permission: "operatePagos"});
-  };
-  await authorizeBeforePost();
   const planSnap = await db.collection("pagoApplicationIqPlans").doc(request.planId).get();
   if (!planSnap.exists) {
     throw new HttpsError("not-found", "Plan de Aplicacion de pagos IQ no existe.");
@@ -2121,7 +2109,6 @@ export async function executePaymentApplicationIqPlan(params: {
 
   const browserResult =
     await runIqPaymentApplicationHttpDirect({
-      authorizeBeforePost,
       access,
       planId: claimed.planId,
       pagoIqFolio: claimed.pagoIqFolio,

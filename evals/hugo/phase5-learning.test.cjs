@@ -17,9 +17,9 @@ const iso = n => new Date(Date.UTC(2026, 8, 22, 12, n)).toISOString();
 const artifacts = (id = 'case-a') => ({ rootId, experienceId: `learning_${id}`, domain: 'SOLICITUDES', taskType: 'REASON', intent: 'EXPLAIN_DELAY', questionClass: 'DOCUMENT_REVIEW',
   memory: { id: `experience_${id}`, rootId, status: 'CONFIRMED', kind: 'EXPERIENCE', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: id },
     links: { observationId: `obs_${id}`, decisionId: `decision_${id}`, outcomeId: `outcome_${id}` }, createdAt: iso(3) },
-  observation: { id: `obs_${id}`, rootId, caseId: id, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', createdAt: iso(0) },
-  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: id, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: iso(1) },
-  outcome: { id: `outcome_${id}`, rootId, caseId: id, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: iso(2) },
+  observation: { id: `obs_${id}`, rootId, caseId: id, source: 'ACTIVITY_LOG', createdAt: iso(0) },
+  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', entityId: id, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: iso(1) },
+  outcome: { id: `outcome_${id}`, rootId, caseId: id, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: iso(2) },
   trace: { id: `trace_${id}`, rootId, evidenceReferences: [{ sourceSystem: 'PAY0', entityType: 'solicitud', entityId: id }], promptVersion: 'hugo-v2', model: 'FakeA', modelVersion: '1', modelProvider: 'TEST', resultStatus: 'MODEL_RESPONSE' },
   features: { entityType: 'SOLICITUD', status: 'PENDIENTE', issueCode: 'DOCUMENT_MISSING' }, now: iso(3) });
 const correction = id => ({ originalBehavior: 'COPY_PRIOR_ACTION', correctedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION', reasonCode: 'OUTCOME_SUPPORTED_CORRECTION',
@@ -43,7 +43,7 @@ test('draft correction remains ineligible until a later linked outcome verifies 
   assert.equal(draft.state, 'WAITING_FOR_OUTCOME'); assert.equal(draft.trainingEligibility.eligible, false);
   const corrected = withCorrection(draft, { ...correction('case-draft'), evidenceReferences: [{ system: 'HUGO', kind: 'OBSERVATION', id: source.observation.id, rootId }] }, 'VERIFY_DOCUMENT_BEFORE_DECISION');
   assert.equal(corrected.trainingEligibility.eligible, false);
-  const complete = withOutcome(corrected, { type: 'SOLICITUD_COMPLETADA', verified: true, occurredAt: iso(5), reference: { system: 'PAY0', kind: 'OUTCOME', id: source.outcome.id, rootId, entityType: 'SOLICITUD', entityId: source.observation.caseId } });
+  const complete = withOutcome(corrected, { type: 'SOLICITUD_COMPLETADA', verified: true, occurredAt: iso(5), reference: { system: 'PAY0', kind: 'OUTCOME', id: source.outcome.id, rootId } });
   assert.equal(complete.state, 'VERIFIED'); assert.equal(complete.trainingEligibility.eligible, true); assert.equal(complete.revision, 3);
   assert.throws(() => withOutcome(complete, complete.outcome), /LEARNING_OUTCOME_INVALID/);
 });

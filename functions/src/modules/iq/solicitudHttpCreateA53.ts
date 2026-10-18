@@ -1,4 +1,3 @@
-import { operationTiming } from "../../utils/operationTiming";
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { readFile } from "node:fs/promises";
 import {
@@ -339,17 +338,13 @@ async function postOnce(
   session: IqHttpAuthSession,
   item: IqSolicitudHttpItemA53,
   catalog: { clientId: number; companyId: number },
-  authorizeBeforePost?: () => Promise<void>,
 ): Promise<{ status: number; bodyText: string }> {
   const form = await buildFormData(item, catalog);
-  await authorizeBeforePost?.();
-  const dispatchAt = operationTiming("iq_dispatch_at", item.key || "");
   const response = await fetchIq(new URL("/invoices", session.apiOrigin), {
     method: "POST",
     headers: await authHeaders(session),
     body: form,
   }, { operation: "solicitud_create" });
-  operationTiming("iq_response_at", item.key || "", dispatchAt);
 
   return {
     status: response.status,
@@ -503,7 +498,6 @@ function baseResult(
 }
 
 export async function runIqCreateInvoiceHttpA53(input: {
-  authorizeBeforePost?: () => Promise<void>;
   erpUrl?: string;
   apiOrigin?: string;
   username: string;
@@ -583,13 +577,11 @@ export async function runIqCreateInvoiceHttpA53(input: {
         ? Math.max(requestedLower, postStartedAtMs - 5000)
         : postStartedAtMs - 5000;
 
-    await input.authorizeBeforePost?.();
     let post: { status: number; bodyText: string };
 
     try {
-      post = await postOnce(session, item, catalog, input.authorizeBeforePost);
+      post = await postOnce(session, item, catalog);
     } catch (error) {
-      if ((error as any)?.code === "permission-denied") throw error;
       result.submitClicked = true;
       result.outcome = "UNKNOWN";
       result.status = "IQ_SOLICITUD_CREATE_UNKNOWN";
@@ -610,12 +602,10 @@ export async function runIqCreateInvoiceHttpA53(input: {
       });
       if (input.sessionHolder) input.sessionHolder.session = session;
       result.authenticated = true;
-      await input.authorizeBeforePost?.();
 
       try {
-        post = await postOnce(session, item, catalog, input.authorizeBeforePost);
+        post = await postOnce(session, item, catalog);
       } catch (error) {
-        if ((error as any)?.code === "permission-denied") throw error;
         result.submitClicked = true;
         result.outcome = "UNKNOWN";
         result.status = "IQ_SOLICITUD_CREATE_UNKNOWN";
@@ -651,15 +641,10 @@ export async function runIqCreateInvoiceHttpA53(input: {
     };
 
     if (post.status !== 201) {
-      const unequivocalRejection = new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]).has(post.status);
-      // Timeout, server errors and unexpected success responses do not prove
-      // that IQ rejected the mutation. Consumers must block another POST.
-      result.outcome = unequivocalRejection ? "REJECTED" : "UNKNOWN";
-      result.status = unequivocalRejection ? "IQ_SOLICITUD_CREATE_REJECTED" : "IQ_SOLICITUD_CREATE_UNKNOWN";
+      result.outcome = "REJECTED";
+      result.status = "IQ_SOLICITUD_CREATE_REJECTED";
       result.responseMessage =
         clean(post.bodyText) || `IQ rechazó la solicitud con HTTP ${post.status}.`;
-      if (!unequivocalRejection) result.responseMessage =
-        `IQ devolvio HTTP ${post.status} con resultado incierto. No repetir el POST; requiere conciliacion.`;
       result.message = result.responseMessage;
       result.errors = [`IQ_SOLICITUD_HTTP_${post.status}`];
       return result;
@@ -705,10 +690,8 @@ export async function runIqCreateInvoiceHttpA53(input: {
     return result;
   } catch (error) {
     if (input.sessionHolder) input.sessionHolder.session = undefined;
-    const effectUncertain = result.submitClicked && result.postAccepted;
-    result.status = effectUncertain ? "IQ_SOLICITUD_CREATE_UNKNOWN" :
-      (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "IQ_SOLICITUD_CREATE_REJECTED";
-    result.outcome = effectUncertain ? "UNKNOWN" : "REJECTED";
+    result.status = "IQ_SOLICITUD_CREATE_REJECTED";
+    result.outcome = "REJECTED";
     result.message =
       clean(error instanceof Error ? error.message : error) ||
       "IQ_SOLICITUD_HTTP_ERROR";
@@ -719,7 +702,6 @@ export async function runIqCreateInvoiceHttpA53(input: {
 }
 
 export async function runIqCreateInvoiceBatchHttpA53(input: {
-  authorizeBeforePost?: (key: string) => Promise<void>;
   erpUrl?: string;
   apiOrigin?: string;
   username: string;
@@ -746,7 +728,6 @@ export async function runIqCreateInvoiceBatchHttpA53(input: {
 
   for (const item of input.items.slice(0, 25)) {
     const row = await runIqCreateInvoiceHttpA53({
-      authorizeBeforePost: input.authorizeBeforePost ? () => input.authorizeBeforePost!(item.key || "") : undefined,
       sessionHolder,
       erpUrl: input.erpUrl,
       apiOrigin: input.apiOrigin,

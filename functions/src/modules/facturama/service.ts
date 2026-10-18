@@ -1,7 +1,5 @@
-import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { resolveSolicitudFiscalClassification } from "./companyCatalog";
-import { belongsToPay0Dispatch, fiscalIssuerReason, loadPay0IssuerGuard, PAY0_DISPATCH_ID } from "./issuerGuard";
 
 const db = getFirestore();
 
@@ -44,6 +42,17 @@ function operationalDescription(solicitud: any) {
   ];
   const selected = candidates.map((value) => text(value, 1000)).find((value) => value && !/^(FACTURA[_ -]?SUBTOTAL|SUBTOTAL|TOTAL)$/i.test(value));
   return selected || "Servicio operativo según Orden de Compra";
+}
+
+export function isOwnInvoiceIssuerCompany(company: any): boolean {
+  const rfc = normalizeRfc(company?.rfc);
+  return (
+    company?.isOwnCompany === true ||
+    company?.ownedByRoot === true ||
+    company?.pay0OwnCompany === true ||
+    text(company?.ownership || company?.companyOwnership || company?.companyType).toUpperCase() === "PROPIA" ||
+    rfc === "TRO230717L64"
+  );
 }
 
 function pickName(row: any, fallback: string) {
@@ -105,24 +114,13 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
   const rootId = text(user.rootId || uid, 128);
   const solicitud: any = solicitudSnap.data() || {};
   if (text(solicitud.rootId, 128) !== rootId) return { ok: false, skipped: true, reason: "ROOT_MISMATCH" };
-  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") return {ok:true,skipped:true,reason:"SOURCE_DELETED"};
 
   const companyId = text(solicitud.companyId || solicitud.empresaId, 128);
   const clienteId = text(solicitud.clienteId || solicitud.clientId, 128);
   if (!companyId || !clienteId) return { ok: false, skipped: true, reason: "MISSING_RELATIONS" };
 
-  // External Solicitudes never enter fiscal preparation, including a CSD
-  // lookup or a Facturama draft query. Their Materialidad and IQ path continue.
-  if (!belongsToPay0Dispatch(rootId, solicitud.despachoId)) {
-    return { ok: true, skipped: true, reason: "EXTERNAL_DISPATCH" };
-  }
-  const eligibility = await loadPay0IssuerGuard({ db, rootId, companyId });
-  if (!eligibility.allowed) {
-    console.warn("FACTURAMA_ISSUER_REJECTED", { rootId, companyId, reason: eligibility.reason });
-    return { ok: true, skipped: true, reason: eligibility.reason };
-  }
-
-  const [clientSnap, existingSnap] = await Promise.all([
+  const [companySnap, clientSnap, existingSnap] = await Promise.all([
+    db.collection("companies").doc(companyId).get(),
     db.collection("clients").doc(clienteId).get(),
     db.collection("facturamaInvoices")
       .where("rootId", "==", rootId)
@@ -130,9 +128,16 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
       .limit(20)
       .get(),
   ]);
-  if (!clientSnap.exists) return { ok: false, skipped: true, reason: "RELATION_NOT_FOUND" };
-  const company: any = eligibility.company;
+  if (!companySnap.exists || !clientSnap.exists) return { ok: false, skipped: true, reason: "RELATION_NOT_FOUND" };
+  const company: any = companySnap.data() || {};
   const client: any = clientSnap.data() || {};
+  if (text(company.rootId, 128) !== rootId || company.active === false || !isOwnInvoiceIssuerCompany(company)) {
+    await solicitudSnap.ref.set({
+      facturamaAutoDraftStatus: "SKIPPED_NOT_OWN_ISSUER",
+      facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, skipped: true, reason: "NOT_OWN_ISSUER" };
+  }
 
   const receiver = buildReceiver(client, solicitud, clienteId);
   const complete = receiverIsComplete(receiver);
@@ -179,18 +184,7 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
       : "AUTO_DRAFT_FISCAL_REVIEW";
   const conceptDescription = operationalDescription(solicitud);
 
-  await db.runTransaction(async tx => {
-  const source = await tx.get(solicitudSnap.ref);
-  const currentInvoice = await tx.get(invoiceRef);
-  const currentCompany = await tx.get(db.doc(`companies/${companyId}`));
-  const currentDispatch = await tx.get(db.doc(`despachos/${PAY0_DISPATCH_ID}`));
-  const currentConfig = await tx.get(db.doc(`facturamaIssuerConfigs/${companyId}`));
-  const issuerReason = fiscalIssuerReason({ rootId, companyId, company: currentCompany.data(), dispatch: currentDispatch.data(), config: currentConfig.data() });
-  if (issuerReason || source.get("rootId") !== rootId || source.get("companyId") !== companyId ||
-      !belongsToPay0Dispatch(rootId, source.get("despachoId"))) throw new HttpsError("failed-precondition", `Emisor Facturama no autorizado: ${issuerReason || "SOURCE_SCOPE_MISMATCH"}.`);
-  if (currentInvoice.exists && currentInvoice.get("status") !== existingInvoiceData.status) throw new HttpsError("aborted", "El borrador cambio durante su actualizacion.");
-  if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
-  tx.set(invoiceRef, {
+  await invoiceRef.set({
     rootId,
     companyId,
     issuer: { name: pickName(company, companyId), rfc: normalizeRfc(company.rfc) },
@@ -243,7 +237,7 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  tx.set(solicitudSnap.ref, {
+  await solicitudSnap.ref.set({
     facturamaAutoDraftStatus: status,
     facturamaInvoiceId: invoiceRef.id,
     facturamaReceiverDataComplete: complete,
@@ -254,6 +248,5 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
     facturamaSyncUpdatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  });
   return { ok: true, skipped: false, reused: !!existingInvoice, invoiceId: invoiceRef.id, status };
 }

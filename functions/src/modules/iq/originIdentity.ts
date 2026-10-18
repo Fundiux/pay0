@@ -6,7 +6,6 @@ import {
   type IqCanonicalAccess,
   type IqCanonicalModule,
 } from "./iqCanonicalAccess";
-import { requireIqAssociatedName } from "./associatedName";
 
 type AnyRecord = Record<string, any>;
 
@@ -63,7 +62,6 @@ export async function captureIqOriginIdentity(input: {
     moduleKey: input.moduleKey,
     encryptionSecret: input.encryptionSecret || "not-used-without-password",
     includePassword: false,
-    requireAssociatedName: true,
   });
 
   return {
@@ -177,9 +175,6 @@ export async function resolveEffectiveIqIdentity(input: {
     includePassword: input.includePassword,
   });
   const context = record(movement.originIqContext);
-  const associatedName = requireIqAssociatedName(
-    clean(context.associatedName) || credentialProfile.associatedName,
-  );
 
   return {
     originActorUid: clean(movement.originActorUid ?? movement.createdBy),
@@ -187,7 +182,7 @@ export async function resolveEffectiveIqIdentity(input: {
     originIqProfileId: profileId,
     originIqContext: {
       profileAlias: clean(context.profileAlias) || credentialProfile.profileAlias,
-      associatedName,
+      associatedName: clean(context.associatedName) || credentialProfile.associatedName || credentialProfile.username,
       despachoId: clean(context.despachoId ?? movement.despachoId) || null,
       companyId: clean(context.companyId ?? movement.companyId) || null,
     },

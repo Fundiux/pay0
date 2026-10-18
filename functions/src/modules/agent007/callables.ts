@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
-import { logActivity, logActivityBatch } from "../../utils/logActivity";
+import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { reconcileAgent007Recommendations } from "./reconciliation";
 import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
@@ -80,20 +80,9 @@ export const listAgent007Recommendations = onCall(
 export const reconcileAgent007RecommendationsNow = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
-    const { uid, rootId } = await actor(request);
+    const { rootId } = await actor(request);
     const changed = await reconcileAgent007Recommendations(db, rootId);
-    const ref = db.collection("agent007Observations").doc(), batch = db.batch();
-    batch.create(ref, { rootId, caseType: "ENGINEERING", caseId: "agent007:recommendation-review", phase: "OBSERVATION",
-      source: "SERVER_RECONCILIATION", intent: "Revisión de recomendaciones operativas",
-      humanDecision: "Revisión determinista solicitada por un superadmin; sin ejecución de modelos ni proveedores externos.",
-      outcome: `${changed} recomendaciones actualizadas`, actorUid: uid, actorRole: "superadmin",
-      engineeringAction: { name: "RECONCILE_RECOMMENDATIONS", changed, limit: 100, status: "EXECUTED" },
-      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null });
-    logActivityBatch(batch, db, { event: "AGENTE_007_OBSERVACION", rootId, actorUid: uid, actorRole: "superadmin",
-      referenceId: ref.id, referenceType: "agent007Observation", relatedEntityId: "agent007:recommendation-review", relatedEntityType: "ENGINEERING",
-      description: `Revisión operativa ejecutada: ${changed} recomendaciones actualizadas, hasta 100 pendientes revisadas.` });
-    await batch.commit();
-    return { ok: true, changed, observationId: ref.id };
+    return { ok: true, changed };
   },
 );
 
@@ -344,7 +333,7 @@ export const reviewAgent007MemoryCandidate = onCall(
 );
 
 export const linkAgent007VerifiedExperience = onCall(
-  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, user, rootId } = await actor(request);
     const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
@@ -356,7 +345,7 @@ export const linkAgent007VerifiedExperience = onCall(
 );
 
 export const createAgent007LearningExperience = onCall(
-  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -369,7 +358,7 @@ export const createAgent007LearningExperience = onCall(
 );
 
 export const createAgent007LearningDraft = onCall(
-  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -382,7 +371,7 @@ export const createAgent007LearningDraft = onCall(
 );
 
 export const linkAgent007LearningOutcome = onCall(
-  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const record = await hugoLearning.linkOutcome(rootId, clean(request.data?.experienceId, 160), clean(request.data?.outcomeId, 160), uid);

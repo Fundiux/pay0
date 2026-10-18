@@ -1,4 +1,3 @@
-import { isIqHistoricalImport } from "../iq/historicalImportGuard";
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -7,7 +6,6 @@ import { db } from "../sharedCallables/helpers";
 import { logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
-import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 
 export const RECOVERY_FIELDS = {
   MATERIALITY: "materialitySyncStatus",
@@ -22,13 +20,10 @@ const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 // original actor's current scope and each domain service's authorization.
 export async function enqueueRecovery(solicitudId: string, row: any, kind: RecoveryKind) {
   if (!row.rootId || !row.createdBy) return;
-  if (kind === "DRAFT" && !belongsToPay0Dispatch(row.rootId, row.despachoId)) return;
   const generation = String(row.ocFiscalMetadataUploadId || "initial");
   const ref = db.collection("operationRecoveryJobs").doc(hash(`${row.rootId}:${solicitudId}:${kind}:${generation}`));
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
-    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
-    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") return;
     if (existing.exists && !["COMPLETED", "RESOLVED_EXTERNALLY", "SUPERSEDED"].includes(existing.data()?.status)) return;
     const automatic = kind === "DRAFT" || kind === "MATERIALITY";
     tx.set(ref, {
@@ -45,7 +40,7 @@ export const queueOperationRecovery = onDocumentWritten({
 }, async event => {
   if (!event.data?.after.exists) return;
   const row = (await db.doc(`solicitudes/${event.params.documentId}`).get()).data();
-  if (!row || isIqHistoricalImport(row) || row.isDeleted || row.deletedAt || row.status === "ELIMINADA") return;
+  if (!row) return;
   await reconcileRecoverySource(event.params.documentId, row);
   for (const kind of Object.keys(RECOVERY_FIELDS) as RecoveryKind[]) {
     if (row[RECOVERY_FIELDS[kind]] === "ERROR") await enqueueRecovery(event.params.documentId, row, kind);
@@ -80,7 +75,6 @@ export async function executeRecovery(job: any) {
   }
   const row = source.data()!;
   if (["CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO"].includes(row.status) || row.isDeleted) return;
-  if (job.kind === "DRAFT" && !belongsToPay0Dispatch(job.rootId, row.despachoId)) return;
   const field = RECOVERY_FIELDS[job.kind as RecoveryKind];
   if (!field) throw new Error("RECOVERY_KIND_INVALID");
   if (row[field] !== "ERROR") return;

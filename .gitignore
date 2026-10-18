@@ -30,7 +30,3 @@ tools/whatsapp-qr-connector/.wwebjs_auth/
 tools/whatsapp-qr-connector/.wwebjs_cache/
 tools/whatsapp-qr-connector/service-account*.json
 qa/.auth/
-
-# Local verified Functions bundle outputs
-functions/.debug/
-functions/.bundle-provenance.json

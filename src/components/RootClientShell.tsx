@@ -14,8 +14,7 @@ export default function RootClientShell({ children }: Readonly<{ children: React
   const isMatRoute = pathname === "/mat" || pathname?.startsWith("/mat/");
   const isSignatureRoute = pathname === "/firma" || pathname?.startsWith("/firma/");
   const isPublicVerificationRoute = pathname === "/verificar" || pathname?.startsWith("/verificar/");
-  const isDocumentDownloadRoute = pathname === "/descarga/documento";
-  const isLoginPage = pathname === "/login" || isMatRoute || isSignatureRoute || isPublicVerificationRoute || isDocumentDownloadRoute;
+  const isLoginPage = pathname === "/login" || isMatRoute || isSignatureRoute || isPublicVerificationRoute;
   const isAssetsRoute = pathname === "/assets" || pathname?.startsWith("/assets/");
   const isHugoRoute = pathname === "/hugo" || pathname?.startsWith("/hugo/");
   const isSystemLauncher = pathname === "/systems";

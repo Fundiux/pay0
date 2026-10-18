@@ -3,8 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { getUserRole, normalizeRole } from "../../utils/authGuard";
 import type { ClientDelegationConfigItem } from "./types";
-import { normalizeClientAccessPermissions, resolveClientOperationalAccess } from "./access";
-import { canonicalDelegationTime } from "./policy";
+import { normalizeClientAccessPermissions } from "./access";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -23,9 +22,8 @@ function requireAuth(request: any) {
   return uid;
 }
 
-async function getUserOrThrow(uid: string, transaction?: admin.firestore.Transaction) {
-  const ref = db.doc(`users/${uid}`);
-  const snap = transaction ? await transaction.get(ref) : await ref.get();
+async function getUserOrThrow(uid: string) {
+  const snap = await db.doc(`users/${uid}`).get();
 
   if (!snap.exists) {
     throw new HttpsError("not-found", "Usuario no existe.");
@@ -68,12 +66,6 @@ function assertTargetAllowed(params: {
 
   const targetRole = normalizeRole(target?.role ?? target?.supervisorRole) as Role;
 
-  if (!["admin", "operador"].includes(targetRole) || target.active === false
-    || target.isActive === false || target.isDeleted === true || target.disabled === true
-    || target.deleted === true || target.deletedAt != null) {
-    throw new HttpsError("permission-denied", "Usuario objetivo no disponible para delegación.");
-  }
-
   if (targetRole === "superadmin") {
     throw new HttpsError("permission-denied", "No se delegan clientes a superadmin.");
   }
@@ -90,13 +82,21 @@ function assertTargetAllowed(params: {
   }
 }
 
+async function hasActiveDelegation(uid: string, clientId: string) {
+  const snap = await db.doc(`userClientAccess/${uid}/clients/${clientId}`).get();
+
+  if (!snap.exists) return false;
+
+  const data: any = snap.data() || {};
+  return data.active === true && data?.permissions?.operate === true;
+}
+
 async function canCallerGrantClient(params: {
   callerUid: string;
   callerRole: Role;
   callerRootId: string;
   clientId: string;
   client: any;
-  transaction?: admin.firestore.Transaction;
 }) {
   const { callerUid, callerRole, callerRootId, clientId, client } = params;
 
@@ -131,15 +131,12 @@ async function canCallerGrantClient(params: {
     return true;
   }
 
-  const access = await resolveClientOperationalAccess({
-    uid: callerUid, role: callerRole, rootId: callerRootId, clientId, client, transaction: params.transaction,
-  });
-  return access.allowed && access.permissions.operate === true;
+  return hasActiveDelegation(callerUid, clientId);
 }
 
-async function getCallerContext(request: any, targetUid: string, transaction?: admin.firestore.Transaction) {
+async function getCallerContext(request: any, targetUid: string) {
   const callerUid = requireAuth(request);
-  const caller = await getUserOrThrow(callerUid, transaction);
+  const caller = await getUserOrThrow(callerUid);
   assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "clientDelegations" });
   const callerRole = getUserRole(caller) as Role;
 
@@ -147,7 +144,7 @@ async function getCallerContext(request: any, targetUid: string, transaction?: a
     throw new HttpsError("permission-denied", "Tu rol no puede delegar clientes.");
   }
 
-  const target = await getUserOrThrow(targetUid, transaction);
+  const target = await getUserOrThrow(targetUid);
 
   assertTargetAllowed({
     callerUid,
@@ -191,11 +188,7 @@ function cleanReason(value: any) {
 }
 
 function normalizeIncomingPermissions(raw: any, active: boolean) {
-  if (raw !== undefined && (raw === null || typeof raw !== "object" || Array.isArray(raw)
-    || Object.values(raw).some(value => typeof value !== "boolean"))) {
-    throw new HttpsError("invalid-argument", "Los permisos de delegación deben ser booleanos.");
-  }
-  const legacy = normalizeClientAccessPermissions(raw ?? {}, active);
+  const legacy = normalizeClientAccessPermissions(raw || {}, active);
 
   if (!active) {
     return normalizeClientAccessPermissions(
@@ -243,23 +236,9 @@ function normalizeIncomingClientAccessItems(data: any): IncomingClientAccessItem
       const clientId = cleanString(item?.clientId || item?.id);
       if (!clientId) return;
 
-      if (item?.active !== undefined && typeof item.active !== "boolean") {
-        throw new HttpsError("invalid-argument", "El estado de delegación debe ser booleano.");
-      }
       const active = item?.active !== false;
       const mode = cleanMode(item?.mode);
-      let expiresAt: admin.firestore.Timestamp | null;
-      let startsAt: admin.firestore.Timestamp | null;
-      try {
-        expiresAt = canonicalDelegationTime(item?.expiresAt);
-        startsAt = canonicalDelegationTime(item?.startsAt);
-      } catch {
-        throw new HttpsError("invalid-argument", `Fecha de delegación inválida para cliente ${clientId}.`);
-      }
-      if (expiresAt && (expiresAt.toMillis() <= Date.now()
-        || (startsAt && startsAt.toMillis() >= expiresAt.toMillis()))) {
-        throw new HttpsError("invalid-argument", `La delegación requiere vigencia futura para cliente ${clientId}.`);
-      }
+      const expiresAt = item?.expiresAt || null;
 
       if (mode === "TEMPORARY" && !expiresAt) {
         throw new HttpsError(
@@ -271,9 +250,9 @@ function normalizeIncomingClientAccessItems(data: any): IncomingClientAccessItem
       map.set(clientId, {
         clientId,
         active,
-        permissions: normalizeIncomingPermissions(item?.permissions, active),
+        permissions: normalizeIncomingPermissions(item?.permissions || {}, active),
         mode,
-        startsAt,
+        startsAt: item?.startsAt || null,
         expiresAt,
         grantReason: cleanReason(item?.grantReason),
       });
@@ -421,74 +400,83 @@ export async function setUserClientAccessService(request: any) {
     }
   }
 
-  await db.runTransaction(async tx => {
-    const ctx = await getCallerContext(request, targetUid, tx);
-    const now = FieldValue.serverTimestamp();
-    const accessCol = db.collection(`userClientAccess/${targetUid}/clients`);
-    const currentSnap = await tx.get(accessCol);
-    const current = new Map(currentSnap.docs.map(doc => [doc.id, doc]));
-    const activeIds = new Set(activeItems.map(item => item.clientId));
-    const removed = currentSnap.docs.filter(doc => !activeIds.has(doc.id) && doc.data().active === true);
-    const writes: Array<{ ref: admin.firestore.DocumentReference; data: any }> = [];
+  const ctx = await getCallerContext(request, targetUid);
 
-    // A replace-all request cannot revoke another client's grant without authority.
-    for (const doc of removed) {
-      const clientSnap = await tx.get(db.doc(`clients/${doc.id}`));
-      const client = clientSnap.data();
-      if (!client || !await canCallerGrantClient({ callerUid: ctx.callerUid, callerRole: ctx.callerRole,
-        callerRootId: ctx.callerRootId, clientId: doc.id, client, transaction: tx })) {
-        throw new HttpsError("permission-denied", `No puedes retirar este cliente: ${doc.id}`);
-      }
-      writes.push({ ref: doc.ref, data: { active: false, revokedAt: now, revokedBy: ctx.callerUid,
-        updatedAt: now, updatedBy: ctx.callerUid } });
-    }
+  const now = FieldValue.serverTimestamp();
+  const accessCol = db.collection(`userClientAccess/${targetUid}/clients`);
+  const currentSnap = await accessCol.get();
+  const batch = db.batch();
 
-    for (const item of activeItems) {
-      const clientId = item.clientId;
-      const clientSnap = await tx.get(db.doc(`clients/${clientId}`));
-      const client: any = clientSnap.data();
-      if (!client || client.active === false) {
-        throw new HttpsError("failed-precondition", `Cliente no disponible: ${clientId}`);
-      }
-      const grantorAccess = await resolveClientOperationalAccess({ uid: ctx.callerUid, role: ctx.callerRole,
-        rootId: ctx.callerRootId, clientId, client, transaction: tx, excludedAncestorUid: targetUid });
-      if (!grantorAccess.allowed || !grantorAccess.permissions.operate) {
-        throw new HttpsError("permission-denied", "Acceso del otorgante no vigente.");
-      }
-      if (grantorAccess.source === "DELEGATED") {
-        for (const [key, enabled] of Object.entries(item.permissions)) {
-          if (enabled === true && (grantorAccess.permissions as any)[key] !== true) {
-            throw new HttpsError("permission-denied", "No puedes ampliar los permisos de tu delegacion.");
-          }
-        }
-        const parentExpiry = canonicalDelegationTime(grantorAccess.delegation.expiresAt);
-        if (parentExpiry && (!item.expiresAt || item.expiresAt.toMillis() > parentExpiry.toMillis())) {
-          throw new HttpsError("permission-denied", "No puedes ampliar la vigencia de tu delegacion.");
-        }
-      }
-      if (item.expiresAt && item.expiresAt.toMillis() <= Date.now()) {
-        throw new HttpsError("invalid-argument", "La delegacion ya vencio.");
-      }
-      const previous = current.get(clientId)?.data() || {};
-      writes.push({ ref: db.doc(`userClientAccess/${targetUid}/clients/${clientId}`), data: {
-        active: true, rootId: ctx.callerRootId, targetUid, clientId,
-        clientName: getClientName(clientId, client), clientNumber: getClientNumber(client),
-        adminId: cleanString(client.adminId) || null, ownerId: cleanString(client.ownerId) || null,
-        managedByUserId: cleanString(client.managedByUserId) || null,
-        originalCreatedBy: cleanString(client.createdBy) || null,
-        permissions: item.permissions, mode: item.mode, startsAt: item.startsAt || null,
-        expiresAt: item.expiresAt || null, revokedAt: null, revokedBy: null, grantReason: item.grantReason,
-        grantedBy: ctx.callerUid,
-        grantAuthority: { version: 1, source: grantorAccess.source, grantorUid: ctx.callerUid,
-          parentPath: grantorAccess.source === "DELEGATED" ? grantorAccess.delegationPath : null },
-        updatedAt: now, updatedBy: ctx.callerUid,
-        createdAt: previous.createdAt || now, createdBy: previous.createdBy || ctx.callerUid,
-      } });
-    }
-    if (writes.length > 450) throw new HttpsError("resource-exhausted", "Demasiados cambios de delegacion.");
-    // All authority and ancestor reads belong to this transaction, before writes.
-    for (const write of writes) tx.set(write.ref, write.data, { merge: true });
+  currentSnap.docs.forEach((doc) => {
+    batch.set(
+      doc.ref,
+      {
+        active: false,
+        updatedAt: now,
+        updatedBy: ctx.callerUid,
+      },
+      { merge: true }
+    );
   });
+
+  for (const item of activeItems) {
+    const clientId = item.clientId;
+    const clientSnap = await db.doc(`clients/${clientId}`).get();
+
+    if (!clientSnap.exists) {
+      continue;
+    }
+
+    const client: any = clientSnap.data() || {};
+
+    const canGrant = await canCallerGrantClient({
+      callerUid: ctx.callerUid,
+      callerRole: ctx.callerRole,
+      callerRootId: ctx.callerRootId,
+      clientId,
+      client,
+    });
+
+    if (!canGrant) {
+      throw new HttpsError("permission-denied", `No puedes delegar este cliente: ${clientId}`);
+    }
+
+    const clientAdminId = String(client?.adminId || "").trim();
+    const clientOwnerId = String(client?.ownerId || "").trim();
+    const clientManagedByUserId = String(client?.managedByUserId || "").trim();
+    const clientCreatedBy = String(client?.createdBy || "").trim();
+
+    batch.set(
+      db.doc(`userClientAccess/${targetUid}/clients/${clientId}`),
+      {
+        active: true,
+        rootId: ctx.callerRootId,
+        targetUid,
+        clientId,
+        clientName: getClientName(clientId, client),
+        clientNumber: getClientNumber(client),
+        adminId: clientAdminId || null,
+        ownerId: clientOwnerId || null,
+        managedByUserId: clientManagedByUserId || null,
+        originalCreatedBy: clientCreatedBy || null,
+        permissions: item.permissions,
+        mode: item.mode,
+        startsAt: item.startsAt || null,
+        expiresAt: item.expiresAt || null,
+        revokedAt: null,
+        revokedBy: null,
+        grantReason: item.grantReason,
+        grantedBy: ctx.callerUid,
+        updatedAt: now,
+        updatedBy: ctx.callerUid,
+        createdAt: now,
+        createdBy: ctx.callerUid,
+      },
+      { merge: true }
+    );
+  }
+
+  await batch.commit();
 
   const clientIds = activeItems.map((item) => item.clientId);
 

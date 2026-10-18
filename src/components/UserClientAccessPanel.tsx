@@ -30,7 +30,6 @@ type ClientAccessItem = {
   active?: boolean;
   permissions?: Partial<PermissionState> | null;
   mode?: "PERMANENT" | "TEMPORARY";
-  startsAt?: any;
   expiresAt?: any;
   grantReason?: string | null;
 };
@@ -39,20 +38,6 @@ type ClientAccessState = {
   active: boolean;
   permissions: PermissionState;
 };
-
-export function buildClientAccessItemPayload(
-  client: ClientAccessItem, permissions: PermissionState
-): UserClientAccessItemPayload {
-  return {
-    clientId: client.clientId,
-    active: true,
-    permissions,
-    mode: client.mode ?? "PERMANENT",
-    startsAt: client.startsAt ?? null,
-    expiresAt: client.expiresAt ?? null,
-    grantReason: client.grantReason ?? null,
-  };
-}
 
 type Props = {
   targetUid: string;
@@ -201,7 +186,14 @@ const [msg, setMsg] = useState("");
         const state = accessMap[client.clientId];
         if (!state?.active) return null;
 
-        return buildClientAccessItemPayload(client, normalizePermissionConsistency(state.permissions));
+        return {
+          clientId: client.clientId,
+          active: true,
+          permissions: normalizePermissionConsistency(state.permissions),
+          mode: "PERMANENT",
+          expiresAt: null,
+          grantReason: null,
+        };
       })
       .filter(Boolean) as UserClientAccessItemPayload[];
   }, [clients, accessMap]);

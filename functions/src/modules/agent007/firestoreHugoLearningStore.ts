@@ -1,5 +1,3 @@
-import { observationEvidenceResolver, assertResolvedOutcomeTime } from "./observationEvidence";
-import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "./hugoCore/evidenceIdentity";
 import { createHash } from "node:crypto";
 import { Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -26,17 +24,16 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
       if (existing.exists) { const record = existing.data() as LearningExperience; if (record.rootId !== rootId) throw new HttpsError("not-found", "Experiencia no encontrada."); return { id, created: false, record }; }
       const decisionSnap = await tx.get(this.db.collection("agent007Memory").doc(input.decisionId)), d = decisionSnap.data();
       if (!d || d.rootId !== rootId || d.kind !== "DECISION" || d.status !== "CONFIRMED" || !validId(d.links?.observationId || "") ||
-        canonicalEvidenceType(d.entityReference?.entityType) !== canonicalEvidenceType(input.features.entityType)) throw new HttpsError("failed-precondition", "Falta decisión vinculada a observación.");
+        d.entityReference?.entityType !== input.features.entityType) throw new HttpsError("failed-precondition", "Falta decisión vinculada a observación.");
       const [observationSnap, traceSnap] = await Promise.all([tx.get(this.db.collection("agent007Observations").doc(d.links.observationId)),
         input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null)]);
-      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
-      const o = (await resolveEvidence(observationSnap.id, observationSnap.data())).observation, t = traceSnap?.data();
+      const o = observationSnap.data(), t = traceSnap?.data();
       if (!o || o.rootId !== rootId || o.caseId !== d.entityReference?.entityId || input.traceId && !t) throw new HttpsError("failed-precondition", "Observación o traza fuera de ámbito.");
       const now = new Date().toISOString(); let record: LearningExperience;
       try { record = buildDraftExperience({ rootId, experienceId: id, decisionMemoryId: input.decisionId, domain: input.domain, taskType: input.taskType, intent: input.intent,
         questionClass: input.questionClass, features: input.features, now,
-        observation: { id: observationSnap.id, rootId: o.rootId, caseId: o.caseId, caseType: o.caseType, sourceSystem: o.sourceSystem, source: o.source, createdAt: iso(o.createdAt) },
-        decision: { id: decisionSnap.id, rootId: d.rootId, kind: d.kind, status: d.status, entityId: d.entityReference?.entityId, entityType: d.entityReference?.entityType, sourceSystem: d.entityReference?.sourceSystem, actorUid: d.decision?.actorUid, decisionType: d.decision?.decisionType, decidedAt: d.decision?.decisionAt },
+        observation: { id: observationSnap.id, rootId: o.rootId, caseId: o.caseId, source: o.source, createdAt: iso(o.createdAt) },
+        decision: { id: decisionSnap.id, rootId: d.rootId, kind: d.kind, status: d.status, entityId: d.entityReference?.entityId, actorUid: d.decision?.actorUid, decisionType: d.decision?.decisionType, decidedAt: d.decision?.decisionAt },
         ...(t ? { trace: { id: traceSnap!.id, rootId: t.rootId, evidenceReferences: t.evidenceReferences || [], promptVersion: t.promptVersion, model: t.model, modelVersion: t.modelVersion, modelProvider: t.modelProvider, resultStatus: t.resultStatus } } : {}) }); }
       catch { throw new HttpsError("failed-precondition", "No hay linaje verificable para el borrador."); }
       tx.create(target, record); tx.create(this.db.collection("agent007LearningRevisions").doc(`${id}_1`), record);
@@ -62,20 +59,15 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
         tx.get(this.db.collection("agent007Observations").doc(m.links.observationId)), tx.get(this.db.collection("agent007Memory").doc(m.links.decisionId)),
         tx.get(this.db.collection("agent007Observations").doc(m.links.outcomeId)), input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null),
       ]);
-      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
-      const [initialEvidence, outcomeEvidence] = await Promise.all([
-        resolveEvidence(obsSnap.id, obsSnap.data()), resolveEvidence(outcomeSnap.id, outcomeSnap.data()),
-      ]);
-      const o = initialEvidence.observation, d = decisionSnap.data(), z = outcomeEvidence.observation, t = traceSnap?.data();
-      assertResolvedOutcomeTime(outcomeEvidence, Date.parse(d?.decision?.decisionAt || ""));
+      const o = obsSnap.data(), d = decisionSnap.data(), z = outcomeSnap.data(), t = traceSnap?.data();
       if (!o || !d || !z || input.traceId && !t) throw new HttpsError("failed-precondition", "Faltan fuentes de experiencia.");
       const now = new Date().toISOString();
       let record: LearningExperience;
       try { record = buildVerifiedExperience({ rootId, experienceId: id, domain: input.domain, taskType: input.taskType, intent: input.intent, questionClass: input.questionClass,
         features: input.features, now, memory: { id: memorySnap.id, rootId: m.rootId, status: m.status, kind: m.kind, entityReference: m.entityReference, links: m.links, createdAt: m.createdAt },
-        observation: { id: obsSnap.id, rootId: o!.rootId, caseId: o!.caseId, caseType: o!.caseType, sourceSystem: o!.sourceSystem, source: o!.source, createdAt: iso(o!.createdAt) },
-        decision: { id: decisionSnap.id, rootId: d!.rootId, kind: d!.kind, status: d!.status, entityId: d!.entityReference?.entityId, entityType: d!.entityReference?.entityType, sourceSystem: d!.entityReference?.sourceSystem, actorUid: d!.decision?.actorUid, decisionType: d!.decision?.decisionType, decidedAt: d!.decision?.decisionAt },
-        outcome: { id: outcomeSnap.id, rootId: z!.rootId, caseId: z!.caseId, caseType: z!.caseType, sourceSystem: z!.sourceSystem, source: z!.source, sourceEvent: z!.sourceEvent, occurredAt: iso(z!.createdAt) },
+        observation: { id: obsSnap.id, rootId: o!.rootId, caseId: o!.caseId, source: o!.source, createdAt: iso(o!.createdAt) },
+        decision: { id: decisionSnap.id, rootId: d!.rootId, kind: d!.kind, status: d!.status, entityId: d!.entityReference?.entityId, actorUid: d!.decision?.actorUid, decisionType: d!.decision?.decisionType, decidedAt: d!.decision?.decisionAt },
+        outcome: { id: outcomeSnap.id, rootId: z!.rootId, caseId: z!.caseId, source: z!.source, sourceEvent: z!.sourceEvent, occurredAt: iso(z!.createdAt) },
         ...(t ? { trace: { id: traceSnap!.id, rootId: t.rootId, evidenceReferences: t.evidenceReferences || [], promptVersion: t.promptVersion, model: t.model, modelVersion: t.modelVersion, modelProvider: t.modelProvider, resultStatus: t.resultStatus } } : {}) }); }
       catch { throw new HttpsError("failed-precondition", "Los vínculos no prueban una experiencia verificable."); }
       const eventId = `created_${id}`;
@@ -114,17 +106,13 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
       const snap = await tx.get(target), row = snap.data() as LearningExperience | undefined;
       if (!row || row.rootId !== scope) throw new HttpsError("not-found", "Experiencia no encontrada.");
       if (row.state !== "WAITING_FOR_OUTCOME" || row.outcome) throw new HttpsError("failed-precondition", "La experiencia ya tiene resultado o no está pendiente.");
-      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId));
-      const evidence = await observationEvidenceResolver(this.db, tx, scope)(outcomeId, outcomeSnap.data()), z = evidence.observation;
-      assertResolvedOutcomeTime(evidence, Date.parse(row.humanDecision?.decidedAt || ""), row.correction ? Date.parse(row.correction.correctedAt) : undefined);
-      if (!sameEvidenceIdentity(observationEntity(z), { sourceSystem: row.entityReferences[0]?.system, entityType: row.entityReferences[0]?.entityType, entityId: row.entityReferences[0]?.entityId }))
-        throw new HttpsError("failed-precondition", "Identidad del resultado incompleta o incompatible: sistema, tipo e identificador requeridos.");
+      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId)), z = outcomeSnap.data();
       const decisionAt = row.humanDecision?.decidedAt, correctedAt = row.correction?.correctedAt, occurredAt = iso(z?.createdAt);
       if (!z || z.rootId !== scope || z.caseId !== row.entityReferences[0]?.entityId || z.source !== "ACTIVITY_LOG" ||
         !["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "DISPERSION_INCIDENCIA_RESUELTA", "OPERACION_RECUPERADA"].includes(z.sourceEvent) ||
         !decisionAt || !occurredAt || Date.parse(occurredAt) < Date.parse(decisionAt) || correctedAt && Date.parse(occurredAt) < Date.parse(correctedAt))
         throw new HttpsError("failed-precondition", "El resultado no verifica esta secuencia.");
-      const outcome = { type: z.sourceEvent, verified: true, occurredAt, reference: { system: z.sourceSystem, kind: "OUTCOME", id: outcomeId, rootId: scope, entityType: canonicalEvidenceType(z.caseType)!, entityId: z.caseId } };
+      const outcome = { type: z.sourceEvent, verified: true, occurredAt, reference: { system: "PAY0", kind: "OUTCOME", id: outcomeId, rootId: scope } };
       const next = withOutcome(row, outcome);
       tx.set(target, next); tx.create(this.db.collection("agent007LearningRevisions").doc(`${experienceId}_${next.revision}`), next);
       const now = new Date().toISOString(), eventId = `outcome_${experienceId}_${next.revision}`;

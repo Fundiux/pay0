@@ -1,4 +1,3 @@
-import { traceDocumentOperation } from "@/lib/operationTiming";
 import { CALLABLES } from "@/lib/callableNames";
 import { httpsCallable } from "firebase/functions";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -31,10 +30,6 @@ type InitResp = {
   documentType: SolicitudDocumentType;
 };
 
-// Retain the same upload identity across a recoverable Storage/finalize failure.
-// Files stay in memory only; no business data or document is persisted locally.
-const checkpoints = new WeakMap<File, Map<string, { requestId: string; uploadId?: string; storagePath?: string; uploaded: boolean }>>();
-
 export async function uploadSolicitudDoc(opts: {
   solicitudId: string;
   documentType: SolicitudDocumentType;
@@ -48,70 +43,53 @@ export async function uploadSolicitudDoc(opts: {
     throw new Error("El archivo excede el limite de 1 MB.");
   }
 
+  
   const sha256 = await computeFileSha256(file);
-  const key = `${solicitudId}:${documentType}:${customDocumentTypeLabel || ""}`;
-  let files = checkpoints.get(file);
-  if (!files) { files = new Map(); checkpoints.set(file, files); }
-  let checkpoint = files.get(key);
-  if (!checkpoint) {
-    checkpoint = { requestId: crypto.randomUUID(), uploaded: false };
-    files.set(key, checkpoint);
+const init = httpsCallable(functions, CALLABLES.initSolicitudDocumentUpload);
+  const initRes = await init({
+    solicitudId,
+    documentType,
+    customDocumentTypeLabel: documentType === "OTRO" ? String(customDocumentTypeLabel || "").trim() : "",
+    originalName: file.name,
+    contentType: file.type || "application/octet-stream",
+    sizeBytes: file.size,
+    sha256,
+    integrityHashAlgorithm: sha256 ? "SHA-256" : "",
+  });
+
+  const { uploadId, storagePath } = (initRes.data as any) as InitResp;
+  if (!uploadId || !storagePath) {
+    throw new Error("initSolicitudDocumentUpload no devolvio uploadId/storagePath");
   }
-  traceDocumentOperation("document_upload_started_at", solicitudId);
-  if (!checkpoint.uploadId) {
-    const init = httpsCallable(functions, CALLABLES.initSolicitudDocumentUpload);
-    const initRes = await init({
-      solicitudId, documentType, uploadRequestId: checkpoint.requestId,
-      customDocumentTypeLabel: documentType === "OTRO" ? String(customDocumentTypeLabel || "").trim() : "",
-      originalName: file.name, contentType: file.type || "application/octet-stream",
-      sizeBytes: file.size, sha256, integrityHashAlgorithm: sha256 ? "SHA-256" : "",
-    });
-    const { uploadId, storagePath } = initRes.data as InitResp;
-    if (!uploadId || !storagePath) throw new Error("initSolicitudDocumentUpload no devolvio uploadId/storagePath");
-    Object.assign(checkpoint, { uploadId, storagePath });
-  }
-  const { uploadId, storagePath } = checkpoint;
-  if (!uploadId || !storagePath) throw new Error("Identidad de carga incompleta.");
 
   const storageRef = ref(storage, storagePath);
-  if (!checkpoint.uploaded) {
-    const task = uploadBytesResumable(storageRef, file, {
-      contentType: file.type || "application/octet-stream",
-      customMetadata: {
-          uploadid: uploadId,
-          sha256,
-          integrityHashAlgorithm: sha256 ? "SHA-256" : "",
-          integritySealVersion: "PAY0-MATERIALIDAD-V1",
-        },
-    });
+  const task = uploadBytesResumable(storageRef, file, {
+    contentType: file.type || "application/octet-stream",
+    customMetadata: {
+        uploadid: uploadId,
+        sha256,
+        integrityHashAlgorithm: sha256 ? "SHA-256" : "",
+        integritySealVersion: "PAY0-MATERIALIDAD-V1",
+      },
+  });
 
-    await new Promise<any>((resolve, reject) => {
-      task.on(
-        "state_changed",
-        (s) => {
-          if (onProgress && s.totalBytes) {
-            onProgress(Math.round((s.bytesTransferred / s.totalBytes) * 100));
-          }
-        },
-        reject,
-        () => resolve(task.snapshot)
-      );
-    });
+  const snap = await new Promise<any>((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (s) => {
+        if (onProgress && s.totalBytes) {
+          onProgress(Math.round((s.bytesTransferred / s.totalBytes) * 100));
+        }
+      },
+      reject,
+      () => resolve(task.snapshot)
+    );
+  });
 
-    checkpoint.uploaded = true;
-    traceDocumentOperation("document_uploaded_at", solicitudId);
-  }
+  const downloadURL = await getDownloadURL(snap.ref);
 
   const finalize = httpsCallable(functions, CALLABLES.finalizeSolicitudDocumentUpload);
   const finalizeRes = await finalize({ uploadId, storagePath });
-  const result = finalizeRes.data as any;
-  if (result?.ok !== true || result.uploadId !== uploadId || result.solicitudId !== solicitudId || result.status !== "READY" || result.active !== true || result.materialityConfirmed !== true) {
-    throw new Error("No se pudo confirmar el documento y su vinculo con Materialidad. Reintenta esta misma solicitud.");
-  }
-  traceDocumentOperation("document_finalized_at", solicitudId, result.documentFinalizedAt);
-
-  // A download-link failure must not prevent authoritative finalization.
-  const downloadURL = await getDownloadURL(storageRef).catch(() => "");
 
   return {
     uploadId,

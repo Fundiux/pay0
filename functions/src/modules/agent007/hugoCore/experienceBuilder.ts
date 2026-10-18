@@ -1,12 +1,11 @@
-import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "./evidenceIdentity";
 import { LearningExperience, LearningReference, LearningCorrection, LearningOutcome, LEARNING_SCHEMA_VERSION, trainingEligibility } from "./learningContract";
 
 export type VerifiedMemorySource = { id: string; rootId: string; status: string; kind: string; entityReference: { sourceSystem: string; entityType: string; entityId: string };
   links: { observationId?: string; decisionId?: string; outcomeId?: string }; createdAt: string };
 export type ExperienceArtifacts = { rootId: string; experienceId: string; domain: string; taskType: string; intent: string; questionClass: string;
-  memory: VerifiedMemorySource; observation: { id: string; rootId: string; caseId: string; caseType?: string; sourceSystem?: string; source: string; createdAt: string };
-  decision: { id: string; rootId: string; kind: string; status: string; entityId: string; entityType?: string; sourceSystem?: string; actorUid: string; decisionType: string; decidedAt: string };
-  outcome: { id: string; rootId: string; caseId: string; caseType?: string; sourceSystem?: string; source: string; sourceEvent: string; occurredAt: string };
+  memory: VerifiedMemorySource; observation: { id: string; rootId: string; caseId: string; source: string; createdAt: string };
+  decision: { id: string; rootId: string; kind: string; status: string; entityId: string; actorUid: string; decisionType: string; decidedAt: string };
+  outcome: { id: string; rootId: string; caseId: string; source: string; sourceEvent: string; occurredAt: string };
   trace?: { id: string; rootId: string; evidenceReferences: Array<{ sourceSystem: string; entityType: string; entityId: string }>; promptVersion: string; model: string; modelVersion: string; modelProvider?: string; resultStatus: string };
   features: Record<string, string>; now: string };
 const ref = (rootId: string, system: string, kind: string, id: string, entityType?: string, entityId?: string): LearningReference => ({ system, kind, id, rootId, ...(entityType ? { entityType } : {}), ...(entityId ? { entityId } : {}) });
@@ -14,15 +13,14 @@ const terminal = new Set(["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "
 export type DraftArtifacts = Omit<ExperienceArtifacts, "memory" | "outcome"> & { decisionMemoryId: string };
 export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
   const o = a.observation, d = a.decision;
-  if (!sameEvidenceIdentity(observationEntity(o), d) || canonicalEvidenceType(a.features.entityType) !== canonicalEvidenceType(d.entityType)) throw Error("LEARNING_DRAFT_IDENTITY_INVALID");
   if (o.rootId !== a.rootId || d.rootId !== a.rootId || o.caseId !== d.entityId || o.source !== "ACTIVITY_LOG" || d.kind !== "DECISION" || d.status !== "CONFIRMED" ||
     !Number.isFinite(Date.parse(o.createdAt)) || !Number.isFinite(Date.parse(d.decidedAt)) || Date.parse(o.createdAt) > Date.parse(d.decidedAt) ||
-    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => sameEvidenceIdentity(e, observationEntity(o))))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
-  const entityType = canonicalEvidenceType(d.entityType)!;
+    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
+  const entityType = String(a.features.entityType || "");
   const references = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id)];
   const record: LearningExperience = { schemaVersion: LEARNING_SCHEMA_VERSION, experienceId: a.experienceId, revision: 1, rootId: a.rootId, domain: a.domain, taskType: a.taskType,
     input: { intent: a.intent, questionClass: a.questionClass, ambiguity: "NONE" }, contextReferences: a.trace ? [ref(a.rootId, "HUGO", "TRACE", a.trace.id)] : [],
-    entityReferences: [ref(a.rootId, d.sourceSystem!, entityType, o.caseId, entityType, o.caseId)], evidenceReferences: references, evidenceCompleteness: "PARTIAL", features: a.features,
+    entityReferences: [ref(a.rootId, "PAY0", entityType, o.caseId, entityType, o.caseId)], evidenceReferences: references, evidenceCompleteness: "PARTIAL", features: a.features,
     modelDecision: a.trace ? { behavior: a.trace.resultStatus, provider: a.trace.modelProvider || null, model: a.trace.model, modelVersion: a.trace.modelVersion, promptVersion: a.trace.promptVersion } : null,
     humanDecision: { type: d.decisionType, actorUid: d.actorUid, decidedAt: d.decidedAt, reference: references[1] }, correction: null, outcome: null, expectedBehavior: null,
     state: "WAITING_FOR_OUTCOME", quality: { provenance: "VERIFIED", outcome: "UNKNOWN", feedback: "DECIDED" },
@@ -35,15 +33,14 @@ export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
 }
 export function buildVerifiedExperience(a: ExperienceArtifacts): LearningExperience {
   const { memory: m, observation: o, decision: d, outcome: z } = a;
-  if (!sameEvidenceIdentity(m.entityReference, observationEntity(o), d, observationEntity(z)) || canonicalEvidenceType(a.features.entityType) !== canonicalEvidenceType(m.entityReference?.entityType)) throw Error("LEARNING_IDENTITY_INVALID");
   if (m.rootId !== a.rootId || o.rootId !== a.rootId || d.rootId !== a.rootId || z.rootId !== a.rootId ||
     m.kind !== "EXPERIENCE" || m.status !== "CONFIRMED" || m.links.observationId !== o.id || m.links.decisionId !== d.id || m.links.outcomeId !== z.id ||
     o.caseId !== z.caseId || o.caseId !== m.entityReference.entityId || d.entityId !== o.caseId || d.kind !== "DECISION" || d.status !== "CONFIRMED" ||
     o.source !== "ACTIVITY_LOG" || z.source !== "ACTIVITY_LOG" || !terminal.has(z.sourceEvent) ||
     !(Date.parse(o.createdAt) <= Date.parse(d.decidedAt) && Date.parse(d.decidedAt) <= Date.parse(z.occurredAt)) ||
-    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => sameEvidenceIdentity(e, observationEntity(o))))) throw Error("LEARNING_LINEAGE_INVALID");
+    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_LINEAGE_INVALID");
   const entity = ref(a.rootId, m.entityReference.sourceSystem, m.entityReference.entityType, o.caseId, m.entityReference.entityType, o.caseId);
-  const evidence = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id), ref(a.rootId, z.sourceSystem!, "OUTCOME", z.id, canonicalEvidenceType(z.caseType)!, z.caseId)];
+  const evidence = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id), ref(a.rootId, "PAY0", "OUTCOME", z.id)];
   const record: LearningExperience = { schemaVersion: LEARNING_SCHEMA_VERSION, experienceId: a.experienceId, revision: 1, rootId: a.rootId, domain: a.domain, taskType: a.taskType,
     input: { intent: a.intent, questionClass: a.questionClass, ambiguity: "NONE" }, contextReferences: a.trace ? [ref(a.rootId, "HUGO", "TRACE", a.trace.id)] : [],
     entityReferences: [entity], evidenceReferences: evidence, evidenceCompleteness: "COMPLETE", features: a.features,
@@ -68,8 +65,6 @@ export function withCorrection(record: LearningExperience, correction: LearningC
   return next;
 }
 export function withOutcome(record: LearningExperience, outcome: LearningOutcome): LearningExperience {
-  if (!sameEvidenceIdentity({ sourceSystem: record.entityReferences[0]?.system, entityType: record.entityReferences[0]?.entityType, entityId: record.entityReferences[0]?.entityId },
-      { sourceSystem: outcome.reference.system, entityType: outcome.reference.entityType, entityId: outcome.reference.entityId })) throw Error("LEARNING_OUTCOME_INVALID_IDENTITY");
   if (record.state !== "WAITING_FOR_OUTCOME" || record.outcome || outcome.reference.rootId !== record.rootId || !outcome.verified || !terminal.has(outcome.type) ||
     !Number.isFinite(Date.parse(outcome.occurredAt)) || Date.parse(outcome.occurredAt) < Date.parse(record.correction?.correctedAt || record.humanDecision?.decidedAt || "")) throw Error("LEARNING_OUTCOME_INVALID");
   const next: LearningExperience = { ...record, revision: record.revision + 1, outcome, evidenceReferences: [...record.evidenceReferences, outcome.reference], evidenceCompleteness: "COMPLETE", state: "VERIFIED", finalizedAt: outcome.occurredAt,

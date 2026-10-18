@@ -38,14 +38,14 @@ async function main() {
   await callables.reviewAgent007MemoryCandidate.run({ auth, data: { memoryId: rootPreference.id, decision: 'CONFIRM' } });
   assert((await store.retrieveMemory({ rootId: root, entityReferences: [ref], intent: 'REASON' })).selected.some(x => x.record.id === rootPreference.id));
   const observationId = `activity_${root}-activity`, outcomeId = `activity_${root}-outcome`, recommendationId = `${root}-recommendation`;
-  await db.doc(`agent007Observations/${observationId}`).set({ rootId: root, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
+  await db.doc(`agent007Observations/${observationId}`).set({ rootId: root, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
     intent: 'Observar evento', humanDecision: 'superadmin', outcome: 'Ayer la solicitud estaba pendiente', createdAt: admin.firestore.Timestamp.now() });
   await db.doc(`agent007Recommendations/${recommendationId}`).set({ rootId: root, sourceActivityId: `${root}-activity`, caseId: ref.entityId, caseType: 'SOLICITUD', kind: 'OC_FISCAL_REVIEW',
     proposal: 'Revisar documento', status: 'PENDING_REVIEW', createdAt: admin.firestore.Timestamp.now() });
   await callables.resolveAgent007Recommendation.run({ auth, data: { recommendationId, decision: 'APPROVED' } });
   const decisionId = `decision_${recommendationId}`;
   assert.equal((await db.doc(`agent007Memory/${decisionId}`).get()).data().links.observationId, observationId);
-  await db.doc(`agent007Observations/${outcomeId}`).set({ rootId: root, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', caseId: ref.entityId,
+  await db.doc(`agent007Observations/${outcomeId}`).set({ rootId: root, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', caseId: ref.entityId,
     intent: 'Resultado posterior', humanDecision: 'SYSTEM', outcome: 'Completada tras revisión documental', createdAt: admin.firestore.Timestamp.now() });
   await rejects(() => callables.linkAgent007VerifiedExperience.run({ auth, data: { observationId, decisionId, outcomeId: `${other}-observation` } }), 'failed-precondition');
   const linked = await callables.linkAgent007VerifiedExperience.run({ auth, data: { observationId, decisionId, outcomeId } });
@@ -59,7 +59,7 @@ async function main() {
   assert(retrieved.selected.some(x => x.record.id === experience.id));
   assert(!retrieved.selected.some(x => x.record.id === `${other}-foreign` || x.record.id === `${root}-expired` || x.record.id === `${root}-wrong-entity`));
   assert(!(await store.retrieveMemory({ rootId: root, entityReferences: [{ ...ref, entityId: 'different-case' }], intent: 'REASON' })).selected.some(x => x.record.id === experience.id), 'counterexample does not reuse prior experience');
-  await db.doc(`agent007Observations/${other}-observation`).set({ rootId: other, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
+  await db.doc(`agent007Observations/${other}-observation`).set({ rootId: other, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', caseId: ref.entityId,
     intent: 'Extranjero', outcome: 'Foreign', createdAt: admin.firestore.Timestamp.now() });
   const first = await callables.sendAgent007Message.run({ auth, data: { text: '¿Qué pasó con S12345?' } });
   assert.match(first.message.text, /S12345/);

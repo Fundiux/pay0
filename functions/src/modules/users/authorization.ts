@@ -1,7 +1,4 @@
-import { getDefaultModules } from "./defaultModules";
-
-import { evaluateTrustedRestriction } from "./restrictions";
-
+﻿import { getDefaultModules } from "./defaultModules";
 
 export type CanonicalUserRole = "superadmin" | "admin" | "operador";
 export type CanonicalModuleMap = Record<string, Record<string, boolean>>;
@@ -20,8 +17,6 @@ export type AuthorizationDecision = {
     | "UNAUTHENTICATED"
     | "USER_NOT_FOUND"
     | "USER_INACTIVE"
-    | "USER_RESTRICTED"
-    | "USER_RESTRICTION_INVALID"
     | "ROLE_NOT_ALLOWED"
     | "MODULE_NOT_ALLOWED"
     | "ACTION_NOT_ALLOWED";
@@ -75,7 +70,6 @@ export function decideUserAuthorization(params: {
   authenticatedUid?: unknown;
   user: any;
   requirement?: AuthorizationRequirement;
-  nowMs?: number;
 }): AuthorizationDecision {
   const uid = String(params.authenticatedUid || "").trim();
   if (!uid) return { allowed: false, role: "", reason: "UNAUTHENTICATED" };
@@ -85,13 +79,6 @@ export function decideUserAuthorization(params: {
   if (!isCanonicalUserActive(params.user)) {
     return { allowed: false, role, reason: "USER_INACTIVE" };
   }
-
-  const restriction = evaluateTrustedRestriction(params.user, uid, params.nowMs ?? Date.now());
-  if (restriction.restricted) {
-    return { allowed: false, role, reason: restriction.state === "INVALID" ? "USER_RESTRICTION_INVALID" : "USER_RESTRICTED" };
-  }
-
-  if (!role) return { allowed: false, role, reason: "ROLE_NOT_ALLOWED" };
 
   const requirement = params.requirement || {};
   if (requirement.allowedRoles?.length && !requirement.allowedRoles.includes(role as CanonicalUserRole)) {

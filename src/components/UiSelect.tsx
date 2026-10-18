@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export type UiSelectOption = {
   value: string;
@@ -31,14 +31,10 @@ export default function UiSelect({
   menuMode = "absolute",
 }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef("");
   const searchTimerRef = useRef<number | null>(null);
-  const restoreTriggerFocusRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [fixedMenuStyle, setFixedMenuStyle] = useState<{ left: number; top: number; width: number } | null>(null);
-  const triggerId = useId();
-  const listboxId = useId();
 
   const compact = size === "compact";
   const inlineMenu = menuMode === "inline";
@@ -59,16 +55,6 @@ export default function UiSelect({
       setOpen(false);
     }
   }, [disabled, open]);
-
-  useEffect(() => {
-    if (open || !restoreTriggerFocusRef.current) return;
-
-    restoreTriggerFocusRef.current = false;
-    const trigger = triggerRef.current;
-    if (trigger?.isConnected && !trigger.disabled) {
-      trigger.focus();
-    }
-  }, [open]);
 
   useEffect(() => {
     return () => {
@@ -109,21 +95,11 @@ export default function UiSelect({
     };
   }, [open, fixedMenu]);
 
-  const closeFromEscape = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (!open) return false;
-
-    event.preventDefault();
-    event.stopPropagation();
-    restoreTriggerFocusRef.current = true;
-    setOpen(false);
-    return true;
-  };
-
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
 
     if (event.key === "Escape") {
-      closeFromEscape(event);
+      setOpen(false);
       return;
     }
 
@@ -179,12 +155,6 @@ export default function UiSelect({
     }
   };
 
-  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
-    if (event.key === "Escape") {
-      closeFromEscape(event);
-    }
-  };
-
   const triggerClass = compact
     ? "h-8 rounded-lg px-2.5 py-1 text-[11px]"
     : "h-10 rounded-xl px-3 py-2 text-sm";
@@ -207,13 +177,10 @@ export default function UiSelect({
   return (
     <div ref={rootRef} className={`relative ${className}`}>
       <button
-        ref={triggerRef}
-        id={triggerId}
         type="button"
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
         onClick={() => {
           if (disabled) return;
           setOpen((current) => !current);
@@ -236,10 +203,7 @@ export default function UiSelect({
 
       {open && (
         <ul
-          id={listboxId}
           role="listbox"
-          aria-labelledby={triggerId}
-          onKeyDown={handleMenuKeyDown}
           className={menuClass}
           style={fixedMenu && fixedMenuStyle ? { left: fixedMenuStyle.left, top: fixedMenuStyle.top, width: fixedMenuStyle.width } : undefined}
         >
@@ -247,12 +211,7 @@ export default function UiSelect({
             <li className={emptyClass}>Sin opciones</li>
           ) : (
             options.map((option) => (
-              <li
-                key={`${option.value}-${option.label}`}
-                role="option"
-                aria-selected={Boolean(value) && option.value === value}
-                aria-disabled={option.disabled || undefined}
-              >
+              <li key={`${option.value}-${option.label}`} role="option" aria-selected={Boolean(value) && option.value === value}>
                 <button
                   type="button"
                   disabled={option.disabled}

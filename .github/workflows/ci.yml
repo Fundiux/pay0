@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,22 +20,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
-      - name: Install dependencies for public build fixture
+      - name: Install frontend dependencies
         run: npm ci
-      - name: Configure public build-only environment
-        run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
+      - name: Verify authorization policy
+        run: node scripts/verify-authorization-policy.mjs
       - name: Verify cumulative release baseline
         run: npm run qa:release-baseline
-      - name: Validate committed source candidate
-        run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
-      - name: Preserve candidate evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-candidate-${{ github.sha }}
-          path: output/release-candidates/
-          if-no-files-found: ignore
-          retention-days: 14
+      - name: Configure public build-only environment
+        run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
+      - name: Build frontend
+        run: npm run build
+      - name: Install Functions dependencies
+        run: npm ci
+        working-directory: functions
+      - name: Lint Functions
+        run: npm run lint
+        working-directory: functions
+      - name: Build Functions
+        run: npm run build
+        working-directory: functions

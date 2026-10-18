@@ -452,7 +452,7 @@ export async function syncIqClientById(params: {
     return id ? { id, name: cleanText(selected.name ?? selected.value) } : null;
   };
 
-  const partner = exactPartner(access.associatedName);
+  const partner = exactPartner(access.associatedName) || exactPartner(access.profileAlias);
   if (!partner) {
     await persistReview({
       clientRef,
@@ -466,7 +466,7 @@ export async function syncIqClientById(params: {
       iqClientId:"",
       iqClientName:"",
       method:"IQ_PARTNER_NOT_FOUND",
-      message:"No se encontro un despacho IQ que coincida exactamente con el Asociado IQ configurado. Revisa la cuenta asignada.",
+      message:"No se encontro un despacho IQ que coincida exactamente con el usuario o alias de la cuenta IQ. Revisa la cuenta asignada.",
     };
   }
 

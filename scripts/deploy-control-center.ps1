@@ -1,4 +1,4 @@
-param([ValidateSet('Core', 'Links', 'Engineering', 'Hosting')][string]$Phase = 'Core')
+param([ValidateSet('Core', 'Links', 'Hosting')][string]$Phase = 'Core')
 $ErrorActionPreference = 'Stop'
 $env:DEBUG = ''
 if ($Phase -eq 'Core') {
@@ -14,9 +14,6 @@ if ($Phase -eq 'Core') {
     'queueControlCenterIqStatus','queueControlCenterIqReceipt','queueControlCenterIqDeposit',
     'queueControlCenterWhatsapp','queueControlCenterTelegram','reconcileDirtyControlCenters'
   )
-} elseif ($Phase -eq 'Engineering') {
-  # Publish only after candidate review and explicit production approval.
-  $ccTargets = @('getControlCenterEngineering', 'parsePagoReceiptPdf')
 } elseif ($Phase -eq 'Links') {
   $ccTargets = @(
     'issueFacturamaProductionInvoice','issueFacturamaSandboxInvoice','linkSolicitudToMaterialityOperation',

@@ -1,8 +1,6 @@
-import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
-import { normalizeRole } from "../../utils/authGuard";
-import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
-import { FieldPath, FieldValue, getFirestore, type Transaction, type QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { createHash } from "crypto";
+import { FieldPath, FieldValue, getFirestore, type QueryDocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import {
   MATERIALITY_REQUIRED_TYPES,
   buildMaterialityClientCompanyId,
@@ -10,7 +8,9 @@ import {
   getMaterialityDocumentLabel,
   normalizeMaterialityDocumentType,
 } from "./domain";
-import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
+import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { normalizeRole } from "../../utils/authGuard";
 
 const db = getFirestore();
 
@@ -78,7 +78,8 @@ function isTerminalSolicitudStatus(status: unknown): boolean {
 
 async function hasDelegatedClientAccess(uid: string, clienteId: string): Promise<boolean> {
   if (!uid || !clienteId) return false;
-  return (await getCurrentClientDelegationAccess(uid, clienteId, "viewBasic")) !== null;
+  const snap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
+  return snap.exists && snap.data()?.active === true;
 }
 
 async function assertCanAccessClient(user: any, uid: string, rootId: string, client: any, clienteId: string): Promise<void> {
@@ -406,18 +407,161 @@ export async function linkSolicitudToMaterialityOperationCore(request: any) {
     throw new HttpsError("not-found", "Solicitud no encontrada.");
   }
 
-  const solicitud = solicitudSnap.data() || {};
+  let solicitud = solicitudSnap.data() || {};
   assertSameRoot(solicitud, rootId, "Solicitud");
-  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") {
-    const prior = (await db.doc(`materialityOperations/${solicitudId}`).get()).data() || {};
-    return {ok:true,materialityOperationId:solicitudId,materialityClientCompanyId:prior.materialityClientCompanyId || "",status:prior.status || "INCOMPLETE",completedTypes:prior.completedTypes || [],missingTypes:prior.missingTypes || [],sourceDeleted:true};
-  }
+
+  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  const refreshedSolicitudSnap = await db.collection("solicitudes").doc(solicitudId).get();
+  solicitud = refreshedSolicitudSnap.data() || solicitud;
 
   const clienteId = cleanText(solicitud?.clienteId || solicitud?.clientId);
   const companyId = cleanText(solicitud?.companyId);
 
   const { client, company } = await loadClientAndCompany(user, uid, rootId, clienteId, companyId);
   return projectMaterialityOperation({ rootId, uid, username, solicitudId, solicitud, clienteId, companyId, client, company });
+}
+
+// Internal projection maintenance has no browser-supplied impersonation switch.
+// Its sources must share a root; it never creates provider drafts or fiscal work.
+export async function refreshMaterialityProjectionFromSource(input: { rootId: string; solicitudId: string }) {
+  const rootId = cleanText(input.rootId), solicitudId = cleanText(input.solicitudId);
+  if (!rootId || !solicitudId) throw new HttpsError("invalid-argument", "Alcance documental requerido.");
+  const snap = await db.doc(`solicitudes/${solicitudId}`).get(), solicitud = snap.data();
+  if (!solicitud || cleanText(solicitud.rootId) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera del root.");
+  const clienteId = cleanText(solicitud.clienteId || solicitud.clientId), companyId = cleanText(solicitud.companyId);
+  if (!clienteId || !companyId) throw new HttpsError("failed-precondition", "Expediente sin cliente o empresa.");
+  const [clientSnap, companySnap] = await Promise.all([db.doc(`clients/${clienteId}`).get(), db.doc(`companies/${companyId}`).get()]);
+  const client = clientSnap.data(), company = companySnap.data();
+  if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+    throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+  return projectMaterialityOperation({ rootId, uid: "SYSTEM", username: "Sistema", solicitudId, solicitud, clienteId, companyId, client, company });
+}
+
+async function projectMaterialityOperation(input: { rootId: string; uid: string; username: string; solicitudId: string;
+  solicitud: any; clienteId: string; companyId: string; client: any; company: any }) {
+  const { rootId, uid, username, solicitudId, clienteId, companyId } = input;
+  const operationRef = db.collection("materialityOperations").doc(solicitudId);
+  const solicitudRef = db.collection("solicitudes").doc(solicitudId);
+  return db.runTransaction(async (tx) => {
+    // Read all projection inputs under the same transaction snapshot. Concurrent
+    // finalization/replacement/reversal retries the complete calculation.
+    const [previousOperation, latestSolicitud] = await Promise.all([tx.get(operationRef), tx.get(solicitudRef)]);
+    const solicitud = latestSolicitud.data();
+    if (!solicitud || cleanText(solicitud.rootId) !== rootId || cleanText(solicitud.companyId) !== companyId || cleanText(solicitud.clienteId || solicitud.clientId) !== clienteId)
+      throw new HttpsError("aborted", "La solicitud cambió durante la actualización documental.");
+    if (previousOperation.exists && cleanText(previousOperation.data()?.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Expediente fuera del root.");
+    const [clientSnap, companySnap] = await Promise.all([tx.get(db.doc(`clients/${clienteId}`)), tx.get(db.doc(`companies/${companyId}`))]);
+    const client = clientSnap.data(), company = companySnap.data();
+    if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
+      throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
+    const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
+    const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
+    const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
+
+    const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
+      getActiveUploadsBySolicitud(rootId, solicitudId, tx),
+      getActivePagoUploadsBySolicitud(rootId, solicitudId, tx),
+      getPrimaryContract(materialityClientCompanyId, tx),
+    ]);
+
+    const activeUploadsByType = {
+      ...activeSolicitudUploadsByType,
+      ...activePagoUploadsByType,
+    };
+
+    const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
+    const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
+    const operationStatus = buildOperationStatus(solicitud, missingTypes);
+    const contractId = cleanText(contract?.id || "");
+    const now = FieldValue.serverTimestamp();
+    const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
+      id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
+      documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
+      storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
+      applicationId: cleanText(upload?.applicationId), applicationFolio: cleanText(upload?.applicationFolio), installment: Number(upload?.installment || 0),
+      pagoId: cleanText(upload?.pagoId), entityType: cleanText(upload?.entityType),
+    })).filter((upload: any) => upload.id && upload.storagePath);
+
+
+    const projectionDigest = createHash("sha256").update(JSON.stringify({
+      revision: 2, rootId, clienteId, clienteNombre, companyId, companyName, solicitudId,
+      folio: solicitud.folio || solicitudId, monto: toNumber(solicitud.monto), moneda: solicitud.moneda || "MXN",
+      concepto: solicitud.concepto || solicitud.comentario || solicitud.folio || solicitudId,
+      solicitudStatus: solicitud.status || "", operationStatus, contractId, documentRefs, missingTypes,
+      facturamaInvoiceId: solicitud.facturamaInvoiceId || null,
+      fiscalValidationStatus: solicitud.fiscalValidationStatus || null, fiscalValidationReason: solicitud.fiscalValidationReason || null,
+    })).digest("hex");
+
+    const result = { ok: true, materialityOperationId: solicitudId, materialityClientCompanyId,
+      status: operationStatus, completedTypes, missingTypes };
+    if (previousOperation.data()?.projectionDigest === projectionDigest) return result;
+    await ensureMaterialityClientCompanyTx(tx, {
+      rootId,
+      uid,
+      username,
+      clienteId,
+      companyId,
+      clienteNombre,
+      companyName,
+    });
+
+    tx.set(operationRef, {
+      rootId,
+      clienteId,
+      clienteNombre,
+      companyId,
+      companyName,
+      materialityClientCompanyId,
+      solicitudId,
+      solicitudFolio: cleanText(solicitud?.folio || solicitudId),
+      monto: toNumber(solicitud?.monto),
+      moneda: cleanText(solicitud?.moneda || "MXN") || "MXN",
+      concepto: cleanText(solicitud?.concepto || solicitud?.comentario || solicitud?.folio || solicitudId),
+      solicitudStatus: cleanText(solicitud?.status || ""),
+      status: operationStatus,
+      contractId: contractId || null,
+      ordenCompraUploadId: cleanText(activeUploadsByType.ORDEN_COMPRA?.id) || null,
+      cotizacionUploadId: cleanText(activeUploadsByType.COTIZACION?.id) || null,
+      constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
+      firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
+      documentRefs,
+      projectionDigest,
+      presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
+      facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
+      facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
+      facturamaInvoiceId: cleanText(solicitud?.facturamaInvoiceId) || null,
+      fiscalValidationStatus: cleanText(solicitud?.fiscalValidationStatus) || null,
+      fiscalValidationReason: cleanText(solicitud?.fiscalValidationReason) || null,
+      comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
+      comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
+      comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,
+      comprobanteDispersionUploadIds: FieldValue.delete(),
+      evidenciaUploadIds: activeUploadsByType.EVIDENCIA_OPERATIVA?.id
+        ? [cleanText(activeUploadsByType.EVIDENCIA_OPERATIVA.id)]
+        : [],
+      requiredTypes: MATERIALITY_REQUIRED_TYPES,
+      completedTypes,
+      missingTypes,
+      missingTypeLabels: missingTypes.map(getMaterialityDocumentLabel),
+      publicTokenId: null,
+      updatedAt: now,
+      updatedBy: uid,
+      updatedByUsername: username,
+      createdAt: previousOperation.data()?.createdAt || now,
+      createdBy: previousOperation.data()?.createdBy || uid,
+      createdByUsername: previousOperation.data()?.createdByUsername || username,
+    }, { merge: true });
+
+    tx.set(solicitudRef, {
+      materialityClientCompanyId,
+      materialityOperationId: solicitudId,
+      materialityStatus: operationStatus,
+      materialityMissingTypes: missingTypes,
+      materialityUpdatedAt: now,
+    }, { merge: true });
+    return result;
+  });
 }
 
 export async function getMaterialityOperationCore(request: any) {
@@ -796,151 +940,4 @@ export async function getMaterialityDashboardCore(request: any) {
     folders: filtered.slice(0, limit),
     alerts: rows.filter((row) => row.alertCount > 0).slice(0, 50),
   };
-}
-
-async function projectMaterialityOperation(input: { rootId: string; uid: string; username: string; solicitudId: string;
-  solicitud: any; clienteId: string; companyId: string; client: any; company: any }) {
-  const { rootId, uid, username, solicitudId, clienteId, companyId } = input;
-  const operationRef = db.collection("materialityOperations").doc(solicitudId);
-  const solicitudRef = db.collection("solicitudes").doc(solicitudId);
-  return db.runTransaction(async (tx) => {
-    // Read all projection inputs under the same transaction snapshot. Concurrent
-    // finalization/replacement/reversal retries the complete calculation.
-    const [previousOperation, latestSolicitud] = await Promise.all([tx.get(operationRef), tx.get(solicitudRef)]);
-    const solicitud = latestSolicitud.data();
-    if (!solicitud || cleanText(solicitud.rootId) !== rootId || cleanText(solicitud.companyId) !== companyId || cleanText(solicitud.clienteId || solicitud.clientId) !== clienteId)
-      throw new HttpsError("aborted", "La solicitud cambió durante la actualización documental.");
-    if (previousOperation.exists && cleanText(previousOperation.data()?.rootId) !== rootId)
-      throw new HttpsError("permission-denied", "Expediente fuera del root.");
-    if (solicitud?.isDeleted || solicitud?.deletedAt || solicitud?.status === "ELIMINADA") {
-      const prior = previousOperation.data() || {};
-      return {ok:true,materialityOperationId:solicitudId,materialityClientCompanyId:prior.materialityClientCompanyId || "",status:prior.status || "INCOMPLETE",completedTypes:prior.completedTypes || [],missingTypes:prior.missingTypes || [],sourceDeleted:true};
-    }
-    const [clientSnap, companySnap] = await Promise.all([tx.get(db.doc(`clients/${clienteId}`)), tx.get(db.doc(`companies/${companyId}`))]);
-    const client = clientSnap.data(), company = companySnap.data();
-    if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
-      throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
-    const clienteNombre = pickSolicitudClientName(solicitud, client, clienteId);
-    const companyName = pickSolicitudCompanyName(solicitud, company, companyId);
-    const materialityClientCompanyId = buildMaterialityClientCompanyId(rootId, clienteId, companyId);
-
-    const [activeSolicitudUploadsByType, activePagoUploadsByType, contract] = await Promise.all([
-      getActiveUploadsBySolicitud(rootId, solicitudId, tx),
-      getActivePagoUploadsBySolicitud(rootId, solicitudId, tx),
-      getPrimaryContract(materialityClientCompanyId, tx),
-    ]);
-
-    const activeUploadsByType = {
-      ...activeSolicitudUploadsByType,
-      ...activePagoUploadsByType,
-    };
-
-    const completedTypes = buildCompletedTypes(activeUploadsByType, contract);
-    const missingTypes = MATERIALITY_REQUIRED_TYPES.filter((type) => !completedTypes.includes(type));
-    const operationStatus = buildOperationStatus(solicitud, missingTypes);
-    const contractId = cleanText(contract?.id || "");
-    const now = FieldValue.serverTimestamp();
-    const documentRefs = Object.values(activeUploadsByType).map((upload: any) => ({
-      id: cleanText(upload?.id), documentType: cleanText(upload?.documentType).toUpperCase(),
-      documentTypeLabel: cleanText(upload?.documentTypeLabel), originalName: cleanText(upload?.originalName || upload?.filename),
-      storagePath: cleanText(upload?.storagePath), contentType: cleanText(upload?.contentType), sha256: cleanText(upload?.sha256),
-      applicationId: cleanText(upload?.applicationId), applicationFolio: cleanText(upload?.applicationFolio), installment: Number(upload?.installment || 0),
-      pagoId: cleanText(upload?.pagoId), entityType: cleanText(upload?.entityType),
-    })).filter((upload: any) => upload.id && upload.storagePath);
-
-
-    const ownFiscal = belongsToPay0Dispatch(rootId, company.despachoId) && solicitud.despachoId === company.despachoId;
-    const projectionDigest = createHash("sha256").update(JSON.stringify({
-      revision: 2, rootId, clienteId, clienteNombre, companyId, companyName, solicitudId,
-      folio: solicitud.folio || solicitudId, monto: toNumber(solicitud.monto), moneda: solicitud.moneda || "MXN",
-      concepto: solicitud.concepto || solicitud.comentario || solicitud.folio || solicitudId,
-      solicitudStatus: solicitud.status || "", operationStatus, contractId, documentRefs, missingTypes,
-      facturamaInvoiceId: ownFiscal ? solicitud.facturamaInvoiceId || null : null,
-      fiscalValidationStatus: ownFiscal ? solicitud.fiscalValidationStatus || null : null,
-      fiscalValidationReason: ownFiscal ? solicitud.fiscalValidationReason || null : null,
-    })).digest("hex");
-
-    const result = { ok: true, materialityOperationId: solicitudId, materialityClientCompanyId,
-      status: operationStatus, completedTypes, missingTypes };
-    if (previousOperation.data()?.projectionDigest === projectionDigest) return result;
-    await ensureMaterialityClientCompanyTx(tx, {
-      rootId,
-      uid,
-      username,
-      clienteId,
-      companyId,
-      clienteNombre,
-      companyName,
-    });
-
-    tx.set(operationRef, {
-      rootId,
-      clienteId,
-      clienteNombre,
-      companyId,
-      companyName,
-      materialityClientCompanyId,
-      solicitudId,
-      solicitudFolio: cleanText(solicitud?.folio || solicitudId),
-      monto: toNumber(solicitud?.monto),
-      moneda: cleanText(solicitud?.moneda || "MXN") || "MXN",
-      concepto: cleanText(solicitud?.concepto || solicitud?.comentario || solicitud?.folio || solicitudId),
-      solicitudStatus: cleanText(solicitud?.status || ""),
-      status: operationStatus,
-      contractId: contractId || null,
-      ordenCompraUploadId: cleanText(activeUploadsByType.ORDEN_COMPRA?.id) || null,
-      cotizacionUploadId: cleanText(activeUploadsByType.COTIZACION?.id) || null,
-      constanciaRecepcionUploadId: cleanText(activeUploadsByType.CONSTANCIA_RECEPCION_SATISFACCION?.id) || null,
-      firmaAutorizadaUploadId: cleanText(activeUploadsByType.FIRMA_AUTORIZADA_CLIENTE?.id) || null,
-      documentRefs,
-      projectionDigest,
-      presupuestoUploadId: cleanText(activeUploadsByType.PRESUPUESTO?.id) || null,
-      facturaXmlUploadId: cleanText(activeUploadsByType.FACTURA_XML?.id) || null,
-      facturaPdfUploadId: cleanText(activeUploadsByType.FACTURA_PDF?.id) || null,
-      facturamaInvoiceId: ownFiscal ? cleanText(solicitud?.facturamaInvoiceId) || null : null,
-      fiscalValidationStatus: ownFiscal ? cleanText(solicitud?.fiscalValidationStatus) || null : null,
-      fiscalValidationReason: ownFiscal ? cleanText(solicitud?.fiscalValidationReason) || null : null,
-      comprobantePagoUploadId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.id) || null,
-      comprobantePagoSourceEntityType: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.entityType) || null,
-      comprobantePagoSourcePagoId: cleanText(activeUploadsByType.COMPROBANTE_PAGO?.pagoId) || null,
-      comprobanteDispersionUploadIds: FieldValue.delete(),
-      evidenciaUploadIds: activeUploadsByType.EVIDENCIA_OPERATIVA?.id
-        ? [cleanText(activeUploadsByType.EVIDENCIA_OPERATIVA.id)]
-        : [],
-      requiredTypes: MATERIALITY_REQUIRED_TYPES,
-      completedTypes,
-      missingTypes,
-      missingTypeLabels: missingTypes.map(getMaterialityDocumentLabel),
-      publicTokenId: null,
-      updatedAt: now,
-      updatedBy: uid,
-      updatedByUsername: username,
-      createdAt: previousOperation.data()?.createdAt || now,
-      createdBy: previousOperation.data()?.createdBy || uid,
-      createdByUsername: previousOperation.data()?.createdByUsername || username,
-    }, { merge: true });
-
-    tx.set(solicitudRef, {
-      materialityClientCompanyId,
-      materialityOperationId: solicitudId,
-      materialityStatus: operationStatus,
-      materialityMissingTypes: missingTypes,
-      materialityUpdatedAt: now,
-    }, { merge: true });
-    return result;
-  });
-}
-
-export async function refreshMaterialityProjectionFromSource(input: { rootId: string; solicitudId: string }) {
-  const rootId = cleanText(input.rootId), solicitudId = cleanText(input.solicitudId);
-  if (!rootId || !solicitudId) throw new HttpsError("invalid-argument", "Alcance documental requerido.");
-  const snap = await db.doc(`solicitudes/${solicitudId}`).get(), solicitud = snap.data();
-  if (!solicitud || cleanText(solicitud.rootId) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera del root.");
-  const clienteId = cleanText(solicitud.clienteId || solicitud.clientId), companyId = cleanText(solicitud.companyId);
-  if (!clienteId || !companyId) throw new HttpsError("failed-precondition", "Expediente sin cliente o empresa.");
-  const [clientSnap, companySnap] = await Promise.all([db.doc(`clients/${clienteId}`).get(), db.doc(`companies/${companyId}`).get()]);
-  const client = clientSnap.data(), company = companySnap.data();
-  if (!client || !company || cleanText(client.rootId) !== rootId || cleanText(company.rootId) !== rootId)
-    throw new HttpsError("permission-denied", "Fuentes del expediente fuera del root.");
-  return projectMaterialityOperation({ rootId, uid: "SYSTEM", username: "Sistema", solicitudId, solicitud, clienteId, companyId, client, company });
 }

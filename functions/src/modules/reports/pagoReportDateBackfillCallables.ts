@@ -74,27 +74,17 @@ export const backfillPagoReportDates = onCall(
       })
       .filter((item) => !item.hasReportDate && item.value && item.source);
 
-    let updated = 0;
     if (apply && candidates.length) {
-      updated = await db.runTransaction(async tx => {
-        const current = await Promise.all(candidates.map(({ doc }) => tx.get(doc.ref)));
-        let count = 0;
-        current.forEach(doc => {
-          if (!doc.exists) return;
-          const data = doc.data() || {};
-          if (data.rootId !== rootId || data.reportDateAt) return;
-          const resolved = resolveReportDate(data);
-          if (!resolved.value || !resolved.source) return;
-          tx.update(doc.ref, {
-            reportDateAt: resolved.value,
-            reportDateSource: resolved.source,
-            reportDateBackfilledAt: admin.firestore.FieldValue.serverTimestamp(),
-            reportDateBackfilledByUid: uid,
-          });
-          count++;
+      const batch = db.batch();
+      candidates.forEach(({ doc, value, source }) => {
+        batch.update(doc.ref, {
+          reportDateAt: value,
+          reportDateSource: source,
+          reportDateBackfilledAt: admin.firestore.FieldValue.serverTimestamp(),
+          reportDateBackfilledByUid: uid,
         });
-        return count;
       });
+      await batch.commit();
     }
 
     return {
@@ -103,7 +93,7 @@ export const backfillPagoReportDates = onCall(
       rootId,
       scanned: snap.size,
       candidates: candidates.length,
-      updated,
+      updated: apply ? candidates.length : 0,
       skippedWithoutDate: snap.docs.filter((doc) => {
         const data = (doc.data() || {}) as Record<string, unknown>;
         return !data.reportDateAt && !resolveReportDate(data).value;

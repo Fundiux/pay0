@@ -1,18 +1,13 @@
 "use client";
 
-import ReceiptEvidenceSummary from "@/components/pagos/ReceiptEvidenceSummary";
-import { beginOperationTiming } from "@/lib/operationTiming";
-
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
+import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
 import { automaticReceiptPayload, automaticReceiptMissing } from "@/lib/receiptAutomaticRegistration";
 import { automaticPaymentReviewMessage } from "@/lib/automaticPaymentReview";
-import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
-import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
+import { collection, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
 import {
   Ban,
   ChevronDown,
@@ -28,7 +23,6 @@ import {
 } from "lucide-react";
 
 import { db } from "@/lib/firebaseClient";
-import { usePagoNotes, pagoNoteDisplayDate } from "@/lib/usePagoNotes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador } from "@/lib/roles";
@@ -229,7 +223,7 @@ function NoteBubble({ note, myUid }: any) {
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
-          {pagoNoteDisplayDate(note?.displayDate)?.toLocaleString() || "Sin fecha"}
+          {tsToDateTimeText(note?.createdAt)}
         </div>
       </div>
     </div>
@@ -413,7 +407,7 @@ export default function PagosPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   const [notesFor, setNotesFor] = useState<any>(null);
-  const notesState = usePagoNotes(myUid || "", rootId || "", notesFor?.id, canViewPagos);
+  const [notes, setNotes] = useState<any[]>([]);
   const [newNote, setNewNote] = useState("");
   const [noteSending, setNoteSending] = useState(false);
 
@@ -954,7 +948,7 @@ export default function PagosPage() {
           };
 
           const beneficiarySignals = {
-            clabe: parsed.destinationAccount,
+            clabe: parsed.destinationAccount || parsed.clabe,
             account: parsed.destinationAccount,
           };
 
@@ -1039,21 +1033,6 @@ export default function PagosPage() {
     } catch (error: any) {
       setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row));
     } finally { setReceiptBatchBusy(false); }
-  }
-
-  async function reclassifyReceiptReference(item: any, correctedField: "trackingKey" | "folio" | "transactionId") {
-    const parsed = item?.parsed;
-    const value = String(parsed?.semanticReceipt?.fields?.reference?.value || parsed?.reference || "").trim();
-    if (!parsed?.analysisId || !value || receiptBatchBusy || receiptBatchCreating) return;
-    setReceiptBatchBusy(true);
-    try {
-      const result = await correctPagoReceiptSemanticField({ analysisId: parsed.analysisId, field: "reference", correctedField, correctedValue: value });
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, parsed: { ...parsed, semanticReceipt: { ...parsed.semanticReceipt,
-        fields: { ...parsed.semanticReceipt.fields, [correctedField]: { ...parsed.semanticReceipt.fields.reference, value, normalizedValue: value, decision: "ACCEPTED", confidence: "HIGH", source: "DOCUMENT_TEXT" } },
-      } }, learningResult: result } : row));
-      setPageMsg("Correccion semantica guardada con observacion sanitizada.");
-    } catch (error: any) { setPageMsg(error?.message || "No se pudo guardar la correccion semantica."); }
-    finally { setReceiptBatchBusy(false); }
   }
 
   const receiptBatchCreationSummary = useMemo(() => {
@@ -1193,7 +1172,7 @@ export default function PagosPage() {
       detectedBankName: String(parsed.bankName || ""),
       detectedSenderName: String(parsed.senderName || ""),
       detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-      detectedSourceAccount: String(parsed.account || ""),
+      detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
       detectedDestinationAccount: String(parsed.destinationAccount || ""),
       detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
       detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
@@ -1221,7 +1200,7 @@ export default function PagosPage() {
       };
 
       const beneficiarySignals = {
-        clabe: parsed.destinationAccount,
+        clabe: parsed.destinationAccount || parsed.clabe,
         account: parsed.destinationAccount,
       };
 
@@ -1298,7 +1277,7 @@ export default function PagosPage() {
         detectedBankName: String(parsed.bankName || ""),
         detectedSenderName: String(parsed.senderName || ""),
         detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-        detectedSourceAccount: String(parsed.account || ""),
+        detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
         detectedDestinationAccount: String(parsed.destinationAccount || ""),
         detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
         detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
@@ -1407,25 +1386,6 @@ export default function PagosPage() {
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
-  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
-  const operationScopeKey = `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
-
-  useLiveOperationRows({
-    collectionName: "pagos", rows: pagos, setRows: setPagos,
-    enabled: Boolean(myUid && rootId && canViewPagos),
-    discovery, scope: { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
-    scopeKey: operationScopeKey,
-    onError: setPageMsg,
-  });
-
-  useEffect(() => {
-    const current = (row: any) => row ? pagos.find((item) => item.id === row.id) || null : null;
-    setNotesFor(current);
-    setApplyFor(current);
-    setViewAplicacionesFor(current);
-    setPagoDocsFor(current);
-  }, [pagos]);
-
   useEffect(() => {
     clientesRef.current = clientes;
   }, [clientes]);
@@ -1456,8 +1416,7 @@ export default function PagosPage() {
         cursorId: pagoCursor.id,
       } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined });
       if (requestSeq !== pagosRequestSeq.current) return;
-      setPagos((current) => append ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))] : page.items);
-      if (!append) setDiscovery(operationDiscoverySeed(operationScopeKey, page.items));
+      setPagos((current) => append ? [...current, ...page.items] : page.items);
       setCreatorOptions(page.creatorOptions || []);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
@@ -1467,7 +1426,7 @@ export default function PagosPage() {
     } finally {
       if (requestSeq === pagosRequestSeq.current) { setLoadingPagos(false); setLoadingMorePagos(false); }
     }
-  }, [canViewPagos, rootId, myUid, pagoCursor, range, creatorUid, role, operationScopeKey]);
+  }, [canViewPagos, rootId, myUid, pagoCursor, range, creatorUid, role]);
 
   useEffect(() => { setPagoCursor(null); setHasMorePagos(false); setPagos([]); void loadPagosPage(false); return () => { pagosRequestSeq.current++; }; }, [canViewPagos, rootId, myUid, range, creatorUid, role]);
 
@@ -1518,7 +1477,7 @@ export default function PagosPage() {
         };
 
         const beneficiarySignals = {
-          clabe: parsed.destinationAccount,
+          clabe: parsed.destinationAccount || parsed.clabe,
           account: parsed.destinationAccount,
         };
 
@@ -1610,11 +1569,28 @@ export default function PagosPage() {
   }, [canViewPagos, rootId, myUid, role]);
 
   useEffect(() => {
-    if (!notesFor?.id || !myUid || !rootId) return;
-    void changePagoStatus({ pagoId: notesFor.id, hasUnreadMsg: false }).catch(() => {
-      console.warn("No se pudo marcar la conversación como leída.");
+    if (!notesFor?.id) {
+      setNotes([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        await changePagoStatus({ pagoId: notesFor.id, hasUnreadMsg: false });
+      } catch (e) {
+        console.warn("changePagoStatus(hasUnreadMsg:false) fallo.", e);
+      }
+    })();
+
+    const qy = query(
+      collection(db, `pagos/${notesFor.id}/notas`),
+      orderBy("createdAt", "asc")
+    );
+
+    return onSnapshot(qy, (snap) => {
+      setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-  }, [myUid, rootId, notesFor?.id]);
+  }, [notesFor]);
 
   useEffect(() => {
     if (!rootId || !myUid) {
@@ -1936,7 +1912,6 @@ export default function PagosPage() {
     file: File;
     onPagoCreated?: (pagoId: string) => void;
   }) {
-    const requestSeq = pagosRequestSeq.current;
     const createPayload = {
       clienteId: input.clienteId,
       companyId: input.companyId,
@@ -2007,18 +1982,6 @@ export default function PagosPage() {
 
     input.onPagoCreated?.(createdPagoId);
 
-    // Publish only the new row; its document listener handles subsequent IQ writes.
-    void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
-      if (requestSeq !== pagosRequestSeq.current || !snapshot.exists()) return;
-      const row = { ...snapshot.data(), id: snapshot.id };
-      if (!operationBelongsToScope(row, "pagos", { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
-      setPagos((current) => current.some((item) => item.id === row.id) ? current : [row, ...current]);
-    }).catch(() => {
-      if (requestSeq === pagosRequestSeq.current) {
-        setPageMsg("Pago creado; no se pudo mostrar la fila. Revisa tu conexión y permisos.");
-      }
-    });
-
     const uploadReceipt = () =>
       uploadPagoDoc({
         pagoId: createdPagoId,
@@ -2039,8 +2002,6 @@ export default function PagosPage() {
   }
 
   const onCreatePago = async () => {
-    const releaseTiming = beginOperationTiming();
-    let createdId = "";
     if (!canCreatePagos) return;
     if (saving) return;
 
@@ -2108,7 +2069,6 @@ export default function PagosPage() {
           operatorSelectedBankName: String(selectedCompanyLearning?.bankName || selectedCompanyLearning?.banco || ""),
           operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
-          onPagoCreated: (id) => { createdId = id; },
         });
 
         setSelectedClientId("");
@@ -2124,7 +2084,6 @@ export default function PagosPage() {
     setComprobantePagoFile(null);
         setOpenNewPago(false);
       });
-      if (createdId) releaseTiming(createdId);
     } catch (e: any) {
       const createdPagoId = String(e?.pagoId || "").trim();
       setPageMsg(
@@ -2318,16 +2277,16 @@ export default function PagosPage() {
 
     let pay0Result: any = null;
     try {
-      pay0Result = await globalLoading.run(undefined, () => applyPagoToSolicitudesAtomic({
+      await globalLoading.run(undefined, async () => {
+        pay0Result = await applyPagoToSolicitudesAtomic({
           pagoId: pago.id,
           idempotencyKey,
           aplicaciones: seleccionados.map((item) => ({
             solicitudId: item.solicitud.id,
             montoAplicado: item.monto,
           })),
-        }));
+        });
 
-        setIqFlowOpen(false);
         setIqFlow((current: any) => current ? {
           ...current,
           pay0Result,
@@ -2350,6 +2309,7 @@ export default function PagosPage() {
           stage: getIqFlowStage(planResult),
           message: "Plan IQ prevalidado. Revisa cada dato antes de confirmar.",
         } : current);
+      });
       applyRequestKeyRef.current = "";
     } catch (error: any) {
       setIqFlow((current: any) => current ? {
@@ -2569,7 +2529,6 @@ export default function PagosPage() {
           text,
         });
         setNewNote("");
-        notesState.refresh();
       });
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo guardar la nota.");
@@ -2688,20 +2647,6 @@ export default function PagosPage() {
       </header>
 
       {(isSuperAdmin(role) || isAdmin(role)) && <div className="mb-2 flex flex-wrap items-center gap-2"><RecordCreatorFilter value={creatorUid} onChange={setCreatorUid} options={creatorOptions} /></div>}
-      {iqFlow && !iqFlowOpen && iqFlow.pay0Result && (
-        <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
-          <span>{iqFlow.message}</span>
-          <button
-            type="button"
-            disabled={iqFlowBusy}
-            onClick={() => setIqFlowOpen(true)}
-            className="shrink-0 rounded-lg border border-sky-400/30 px-3 py-2 hover:bg-sky-500/20 disabled:opacity-50"
-          >
-            {iqFlowBusy ? "Preparando IQ…" : "Revisar aplicación IQ"}
-          </button>
-        </div>
-      )}
-
       {pageMsg && (
         <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}
@@ -2799,7 +2744,7 @@ export default function PagosPage() {
                   <tr
                     key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p, creatorOptions)}>{recordCreatorLabel(p, creatorOptions)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p)}>{recordCreatorLabel(p)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">
@@ -3136,33 +3081,6 @@ export default function PagosPage() {
                                 <span className="text-slate-500">Referencia: </span>
                                 {parsed.reference || "Sin detectar"}
                               </div>
-
-                              {parsed.semanticReceipt && (
-                                <div className="md:col-span-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-slate-500">Lectura semantica:</span>
-                                    <span className={parsed.semanticReceipt.reviewRequired ? "text-amber-300" : "text-emerald-300"}>
-                                      {parsed.semanticReceipt.reviewRequired ? "requiere revision" : "evidencia consistente"}
-                                    </span>
-                                    <span className="text-slate-600">{parsed.readerVersion}</span>
-                                    {parsed.cacheHit && <span className="text-sky-300">resultado reutilizado</span>}
-                                  </div>
-                                  <ReceiptEvidenceSummary receipt={parsed.semanticReceipt} />
-                                  {parsed.semanticReceipt.fields?.reference?.value && !parsed.semanticReceipt.fields?.trackingKey?.value && (
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      <span className="text-slate-500">Corregir clasificación:</span>
-                                      {(["trackingKey", "folio", "transactionId"] as const).map(field => (
-                                        <button key={field} type="button" disabled={receiptBatchBusy || receiptBatchCreating}
-                                          onClick={() => void reclassifyReceiptReference(item, field)}
-                                          className="rounded-lg border border-sky-400/30 px-2 py-1 text-[10px] text-sky-200 disabled:opacity-40">
-                                          {field === "trackingKey" ? "Clave de rastreo" : field === "folio" ? "Folio" : "Transacción"}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {item.learningResult && <div className="mt-2 text-[10px] text-emerald-300">Corrección persistida · observation y memoria candidata enlazadas.</div>}
-                                </div>
-                              )}
 
                               <div className="md:col-span-3">
                                 <div className="mb-1 text-slate-500">
@@ -3651,6 +3569,7 @@ export default function PagosPage() {
               <button
                 onClick={() => {
                   setNotesFor(null);
+                  setNotes([]);
                   setNewNote("");
                 }}
                 className="text-slate-400 hover:text-white"
@@ -3660,20 +3579,11 @@ export default function PagosPage() {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              <div className="text-xs text-slate-400">Actualizaciones más recientes primero</div>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <button type="button" onClick={notesState.refresh} disabled={notesState.loading}>Actualizar</button>
-                <button type="button" onClick={notesState.reloadFromStart}>Reiniciar lectura</button>
-                <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder}>Cargar anteriores</button>
-              </div>
-              {notesState.error && <div role="alert" className="text-sm text-amber-300">{notesState.error}</div>}
-              {notesState.loading && <div role="status" className="text-xs text-slate-400">Cargando notas...</div>}
-              {!notesState.loading && !notesState.error && notesState.notes.length === 0 && <div className="text-sm text-slate-400">Sin mensajes todavía.</div>}
-              <div className="text-xs text-slate-500">Última actualización: {notesState.headObservedAt === null ? "Pendiente" : tsToDateTimeText({ seconds: notesState.headObservedAt / 1000 })}</div>
-              {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} myUid={myUid} />)}
-              {notesState.retainedNotes.length > 0 && <div className="text-xs text-slate-400">Notas anteriores conservadas. {notesState.refreshPending ? "Actualizando historial..." : "Historial actualizado."}</div>}
-              {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} myUid={myUid} />)}
-              <div className="text-xs text-slate-500">Historial actualizado: {notesState.windowObservedAt === null ? "Pendiente" : tsToDateTimeText({ seconds: notesState.windowObservedAt / 1000 })}</div>
+              {notes.length === 0 ? (
+                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
+              ) : (
+                notes.map((note) => <NoteBubble key={note.id} note={note} myUid={myUid} />)
+              )}
             </div>
 
             <div className="border-t border-white/10 p-4">

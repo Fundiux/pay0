@@ -93,8 +93,6 @@ export default function IqIntegrationPage() {
     setUsername,
   ] = useState("");
 
-  const [associatedName, setAssociatedName] = useState("");
-
   const [
     password,
     setPassword,
@@ -108,7 +106,6 @@ export default function IqIntegrationPage() {
   const [editing, setEditing] = useState<IqCredentialProfile | null>(null);
   const [editAlias, setEditAlias] = useState("");
   const [editUsername, setEditUsername] = useState("");
-  const [editAssociatedName, setEditAssociatedName] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editErpUrl, setEditErpUrl] = useState("");
 
@@ -162,11 +159,10 @@ export default function IqIntegrationPage() {
   async function onCreateProfile() {
     if (
       !alias.trim() ||
-      !username.trim() ||
-      !associatedName.trim()
+      !username.trim()
     ) {
       setMessage(
-        "Captura alias, usuario IQ y Asociado IQ.",
+        "Captura alias y usuario IQ.",
       );
       return;
     }
@@ -179,7 +175,6 @@ export default function IqIntegrationPage() {
         alias: alias.trim(),
         username:
           username.trim(),
-        associatedName: associatedName.replace(/\s+/g, " ").trim(),
         password:
           password.trim() ||
           undefined,
@@ -190,7 +185,6 @@ export default function IqIntegrationPage() {
 
       setAlias("");
       setUsername("");
-      setAssociatedName("");
       setPassword("");
 
       await loadData();
@@ -245,7 +239,7 @@ export default function IqIntegrationPage() {
         );
 
       await loadData();
-      setMessage(result.operatorMessage || result.message);
+      setMessage(result.message);
     } catch (error) {
       const err = error as Error;
 
@@ -262,7 +256,6 @@ export default function IqIntegrationPage() {
     setEditing(profile);
     setEditAlias(profile.alias);
     setEditUsername(profile.username);
-    setEditAssociatedName(profile.associatedName || "");
     setEditPassword("");
     setEditErpUrl(profile.erpUrl || DEFAULT_IQ_ERP_URL);
     setMessage(null);
@@ -270,8 +263,8 @@ export default function IqIntegrationPage() {
 
   async function onSaveEdit() {
     if (!editing) return;
-    if (!editAlias.trim() || !editUsername.trim() || !editAssociatedName.trim()) {
-      setMessage("Alias, usuario IQ y Asociado IQ son requeridos.");
+    if (!editAlias.trim() || !editUsername.trim()) {
+      setMessage("Alias y usuario IQ son requeridos.");
       return;
     }
 
@@ -282,7 +275,6 @@ export default function IqIntegrationPage() {
         profileId: editing.id,
         alias: editAlias.trim(),
         username: editUsername.trim(),
-        associatedName: editAssociatedName.replace(/\s+/g, " ").trim(),
         password: editPassword.trim() || undefined,
         erpUrl: editErpUrl.trim() || DEFAULT_IQ_ERP_URL,
       });
@@ -393,9 +385,6 @@ export default function IqIntegrationPage() {
               <label style={{ display: "grid", gap: 6 }}>Usuario IQ
                 <input style={inputStyle()} value={editUsername} onChange={(event) => setEditUsername(event.target.value)} autoComplete="off" />
               </label>
-              <label style={{ display: "grid", gap: 6 }}>Asociado IQ
-                <input style={inputStyle()} value={editAssociatedName} onChange={(event) => setEditAssociatedName(event.target.value)} autoComplete="off" />
-              </label>
               <label style={{ display: "grid", gap: 6 }}>Nueva contraseña IQ
                 <input style={inputStyle()} type="password" value={editPassword} onChange={(event) => setEditPassword(event.target.value)} autoComplete="new-password" placeholder="Dejar vacía para conservar la actual" />
               </label>
@@ -457,23 +446,6 @@ export default function IqIntegrationPage() {
                     placeholder="Alias"
                     autoComplete="off"
                     name="iq-alias-new"
-                  />
-                </label>
-
-                <label
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                  }}
-                >
-                  <span>Asociado IQ</span>
-                  <input
-                    value={associatedName}
-                    onChange={(event) => setAssociatedName(event.target.value)}
-                    style={inputStyle()}
-                    placeholder="Identidad operativa en IQ"
-                    autoComplete="off"
-                    name="iq-associated-name-new"
                   />
                 </label>
 
@@ -705,10 +677,6 @@ export default function IqIntegrationPage() {
                           Usuario IQ
                         </th>
 
-                        <th style={{ padding: 10 }}>
-                          Asociado IQ
-                        </th>
-
                         <th
                           style={{
                             padding: 10,
@@ -771,12 +739,6 @@ export default function IqIntegrationPage() {
                               {
                                 profile.alias
                               }
-                            </td>
-
-                            <td style={{ padding: 10 }}>
-                              {profile.associatedName || (
-                                <span style={{ color: "#fbbf24" }}>Pendiente</span>
-                              )}
                             </td>
 
                             <td

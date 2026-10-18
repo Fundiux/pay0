@@ -3,8 +3,6 @@ import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { db } from "../sharedCallables/helpers";
-import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
-import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 import { context } from "../controlCenter/callables";
 import { logActivityTx } from "../../utils/logActivity";
 
@@ -29,7 +27,7 @@ export async function reconcilePaymentComplement(applicationId: string, deletedA
     const solicitud = solicitudSnap.data(), pago = pagoSnap.data();
     if (!solicitud || !pago || solicitud.rootId !== app.rootId || pago.rootId !== app.rootId) throw Error("COMPLEMENT_SCOPE_MISMATCH");
     const invoiceUuid = clean(solicitud.facturaUuid || solicitud.uuidCfdi || solicitud.iqInvoiceUuid).toUpperCase();
-    const provider = belongsToPay0Dispatch(app.rootId, solicitud.despachoId) && solicitud.facturamaEnvironment === "PRODUCTION" && solicitud.facturamaInvoiceId ? "FACTURAMA" : clean(solicitud.iqId || solicitud.iqFolio || solicitud.folioIq || solicitud.iqSolicitudId) ? "IQ" : "EMISOR";
+    const provider = solicitud.facturamaEnvironment === "PRODUCTION" && solicitud.facturamaInvoiceId ? "FACTURAMA" : clean(solicitud.iqId || solicitud.iqFolio || solicitud.folioIq || solicitud.iqSolicitudId) ? "IQ" : "EMISOR";
     const appliedInIq = app.iqApplicationStatus === "IQ_APPLIED" && app.iqActionExecuted === true;
     const amountMinor = Math.round(Number(app.montoAplicado || 0) * 100);
     const fiscalComplete = uuid.test(invoiceUuid) && Number.isSafeInteger(amountMinor) && amountMinor > 0;
@@ -58,7 +56,6 @@ export async function reconcilePaymentComplement(applicationId: string, deletedA
 }
 
 export const trackPaymentComplement = onDocumentWritten({ document: "pagoAplicaciones/{applicationId}", region: "us-central1", retry: true }, async event => {
-  if (shouldSuppressIqHistoricalImport(event.data?.before.data(), event.data?.after.data())) return;
   await reconcilePaymentComplement(event.params.applicationId, event.data?.before.data());
 });
 
@@ -77,12 +74,10 @@ async function refreshParentApplications(field: "solicitudId" | "pagoId", id: st
 export const refreshComplementOnSolicitud = onDocumentWritten({ document: "solicitudes/{solicitudId}", region: "us-central1", retry: true, timeoutSeconds: 540 }, async event => {
   if (!event.data?.after.exists) return;
   const before = event.data.before.data() || {}, after = event.data.after.data() || {};
-  if (shouldSuppressIqHistoricalImport(before, after)) return;
   if (["facturaUuid", "uuidCfdi", "iqInvoiceUuid", "iqFolio", "folioIq", "iqSolicitudId", "status"].some(key => before[key] !== after[key])) await refreshParentApplications("solicitudId", event.params.solicitudId);
 });
 
 export const refreshComplementOnPago = onDocumentWritten({ document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 540 }, async event => {
-  if (shouldSuppressIqHistoricalImport(event.data?.before.data(), event.data?.after.data())) return;
   if (event.data?.after.exists && event.data.before.data()?.status !== event.data.after.data()?.status) await refreshParentApplications("pagoId", event.params.pagoId);
 });
 

@@ -62,18 +62,8 @@ requireText(
 );
 requireText(
   "src/services/beneficiaries.ts",
-  'watchAuthorizedRelatedRecords("clientBeneficiaries", clientId',
-  "Los beneficiarios se consultan mediante autoridad del servidor",
-);
-requireText(
-  "functions/src/modules/documents/relatedReads.ts",
-  '.where("rootId", "==", rootId)',
-  "Las consultas relacionadas se acotan al root autenticado",
-);
-requireText(
-  "functions/src/modules/documents/relatedReads.ts",
-  'await requireClientOperationalAccess({ uid, role, rootId, clientId: id, transaction, permission: "viewBasic" })',
-  "Beneficiarios requieren autoridad recursiva vigente",
+  'where("rootId", "==", rootId)',
+  "Los beneficiarios se consultan dentro del root autorizado",
 );
 requireText(
   "functions/src/modules/clients/csfService.ts",

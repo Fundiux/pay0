@@ -1,15 +1,10 @@
 "use client";
-import { useSolicitudNotes, solicitudNoteDisplayDate } from "@/lib/useSolicitudNotes";
-import { watchAuthorizedRelatedRecords } from "@/services/operationalReads";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
-import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
-import { collection, query, where, onSnapshot, doc, getDoc} from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, doc, getDoc} from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -20,7 +15,7 @@ import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellatio
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
 import { canAutomaticallyRefreshCancellation } from "@/lib/solicitudCancellationFollowup";
-import { formatDateOnly, formatDateTime24 } from "@/lib/dateTime";
+import { formatDateOnly } from "@/lib/dateTime";
 import { canApplyPagoFromPagos, canRejectSolicitudUI, needsCompletarSustitucion, canShowCancelSatAction, getDefaultCancelSatMotivo } from "@/lib/solicitudActionRules";
 import {
   Plus,
@@ -74,7 +69,10 @@ function matchPagoWithSolicitud(p: any, s: any) {
 }
 
 function noteDateTimeText(value: any) {
-  return formatDateTime24(solicitudNoteDisplayDate(value), "Fecha no disponible");
+  if (value?.seconds) {
+    return new Date(value.seconds * 1000).toLocaleString();
+  }
+  return "Ahora";
 }
 
 function NoteBubble({ note, myUid }: any) {
@@ -92,7 +90,7 @@ function NoteBubble({ note, myUid }: any) {
         </div>
         <div className="whitespace-pre-wrap text-sm">{note?.text || "-"}</div>
         <div className={`mt-2 text-[10px] ${isMine ? "text-right text-sky-200/70" : "text-left text-slate-500"}`}>
-          {noteDateTimeText(note?.displayDate)}
+          {noteDateTimeText(note?.createdAt)}
         </div>
       </div>
     </div>
@@ -103,7 +101,6 @@ const SolicitudRow = React.memo(({
   s,
   onApplyPago,
   onDelete,
-  onHide,
   onComment,
   onCancel,
   onReject,
@@ -127,13 +124,11 @@ const SolicitudRow = React.memo(({
   canUploadDocs,
   showIqFolio,
   showCreator,
-  creatorOptions,
   allSolicitudes,
   sustitucionIndex
 }: any) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
-  const [childrenError, setChildrenError] = useState("");
   const saldo = money2(Math.max(0, money2(s.monto || 0) - money2(s.totalAbonado || 0)));
 
   const statusUpper = String(s?.status || "").toUpperCase();
@@ -196,9 +191,14 @@ const SolicitudRow = React.memo(({
       return;
     }
 
-    setChildrenError("");
-    return watchAuthorizedRelatedRecords("pagoAplicaciones", s.id, (items) => {
-      const rows = items
+    const q = query(
+      collection(db, "pagoAplicaciones"),
+      where("solicitudId", "==", s.id),
+    );
+
+    return onSnapshot(q, (snap) => {
+      const rows = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
         .sort(
           (a, b) =>
             Number(a?.createdAt?.seconds || 0) -
@@ -206,15 +206,14 @@ const SolicitudRow = React.memo(({
         );
 
       setChildren(rows);
-      setChildrenError("");
-    }, () => setChildrenError("No se pudo verificar el acceso a las aplicaciones. Actualiza la consulta."));
+    });
   }, [isExpanded, s.id]);
 
   return (
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
         <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div></td>
-        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s, creatorOptions)}>{recordCreatorLabel(s, creatorOptions)}</td> : null}
+        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s)}>{recordCreatorLabel(s)}</td> : null}
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -353,8 +352,7 @@ const SolicitudRow = React.memo(({
               </>
             )}
 
-            {canCancel && !isTerminal && <button title={isHidden ? "Mostrar" : "Ocultar"} onClick={() => onHide(s.id, !isHidden)} className="text-slate-500 hover:text-sky-400 p-1"><Eye size={16} /></button>}
-            {canCancel && !isTerminal && (
+            {!isHidden && !isTerminal && (
               <button
                 title="Eliminar"
                 onClick={() => onDelete(s.id)}
@@ -520,7 +518,7 @@ const SolicitudRow = React.memo(({
             <div className="overflow-hidden">
               <table className="w-full text-left">
                 <tbody>
-                  {childrenError ? <tr><td role="alert" className="p-3 text-amber-300">{childrenError}</td></tr> : children.length > 0 ? (
+                  {children.length > 0 ? (
                     <>
                       <tr className="border-t border-white/5 bg-white/[0.02] text-[9px] uppercase text-slate-500">
                         <td className="p-2 pl-8 font-normal">Aplicación PAY0</td>
@@ -619,6 +617,84 @@ export default function SolicitudesPage() {
   const checkedCancellationIds = useRef(new Set<string>());
   const [cancellationErrors, setCancellationErrors] = useState<Record<string, string>>({});
 
+  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
+
+  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
+
+  useEffect(() => {
+
+    const onSolicitudCreatedLocal = async (event: Event) => {
+
+      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
+
+      const solicitudId = String(detail?.solicitudId || "").trim();
+
+      if (!solicitudId) return;
+
+  
+
+      try {
+
+        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
+
+        if (!snap.exists()) return;
+
+  
+
+        const incoming: any = { id: snap.id, ...snap.data() };
+
+  
+
+        setSolicitudes((prev: any[]) => {
+
+          const index = prev.findIndex((item: any) => item?.id === incoming.id);
+
+          if (index < 0) return [incoming, ...prev];
+
+  
+
+          const next = prev.slice();
+
+          next[index] = { ...prev[index], ...incoming };
+
+          return next;
+
+        });
+
+      } catch (error) {
+
+        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
+
+      }
+
+    };
+
+  
+
+    window.addEventListener(
+
+      "PAY0_SOLICITUD_CREATED_LOCAL",
+
+      onSolicitudCreatedLocal
+
+    );
+
+  
+
+    return () => {
+
+      window.removeEventListener(
+
+        "PAY0_SOLICITUD_CREATED_LOCAL",
+
+        onSolicitudCreatedLocal
+
+      );
+
+    };
+
+  }, []);
+
   const [pagos, setPagos] = useState<any[]>([]);
   const [applicationFoliosBySolicitud, setApplicationFoliosBySolicitud] = useState<Record<string, string[]>>({});
   const [filter, setFilter] = useState("");
@@ -640,6 +716,7 @@ export default function SolicitudesPage() {
 
   const [docsFor, setDocsFor] = useState<any>(null);
   const [commentFor, setCommentFor] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const [newMsg, setNewMsg] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -741,7 +818,6 @@ export default function SolicitudesPage() {
   const canCreateSolicitud = !!modules?.solicitudes?.create;
   const canCommentSolicitud = !!modules?.solicitudes?.comment;
   const canCancelSolicitud = !!modules?.solicitudes?.cancel;
-  const notesState = useSolicitudNotes(uid || "", rootId || "", commentFor?.id, canViewSolicitudes);
   const canUploadDocsSolicitud = !!modules?.solicitudes?.uploadDocs;
   const canReadPaymentApplications = !!modules?.pagos?.create;
 
@@ -769,7 +845,6 @@ export default function SolicitudesPage() {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       loadedSolicitudesRequestSeq.current = requestSeq;
       setSolicitudes(page.items || []);
-      setDiscovery(operationDiscoverySeed(operationScopeKey, page.items || []));
       setCreatorOptions(page.creatorOptions || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
@@ -817,106 +892,6 @@ export default function SolicitudesPage() {
       }
     }
   }, [loadingMoreSolicitudes, solicitudesCursor, range, creatorUid, role]);
-
-  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
-  const operationScopeKey = `${uid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
-
-  useLiveOperationRows({
-    collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
-    enabled: Boolean(uid && canViewSolicitudes),
-    discovery, scope: { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
-    scopeKey: operationScopeKey, onError: setPageMsg,
-  });
-
-  useEffect(() => {
-    const current = (row: any) => row ? solicitudes.find((item) => item.id === row.id) || null : null;
-    setDocsFor(current);
-    setCommentFor(current);
-    setApplyPagoFor(current);
-    setCancelSatFor(current);
-    setRejectFor(current);
-  }, [solicitudes]);
-
-  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
-
-  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
-
-  useEffect(() => {
-    let active = true;
-
-    const onSolicitudCreatedLocal = async (event: Event) => {
-
-      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
-
-      const solicitudId = String(detail?.solicitudId || "").trim();
-
-      if (!solicitudId) return;
-
-
-
-      try {
-
-        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
-
-        if (!active || !snap.exists()) return;
-
-
-
-        const incoming: any = { id: snap.id, ...snap.data() };
-
-
-
-        if (!operationBelongsToScope(incoming, "solicitudes", { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
-        setSolicitudes((prev: any[]) => {
-
-          const index = prev.findIndex((item: any) => item?.id === incoming.id);
-
-          if (index < 0) return [incoming, ...prev];
-
-
-
-          const next = prev.slice();
-
-          next[index] = { ...prev[index], ...incoming };
-
-          return next;
-
-        });
-
-      } catch (error) {
-
-        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
-
-      }
-
-    };
-
-
-
-    window.addEventListener(
-
-      "PAY0_SOLICITUD_CREATED_LOCAL",
-
-      onSolicitudCreatedLocal
-
-    );
-
-
-
-    return () => {
-      active = false;
-
-      window.removeEventListener(
-
-        "PAY0_SOLICITUD_CREATED_LOCAL",
-
-        onSolicitudCreatedLocal
-
-      );
-
-    };
-
-  }, [operationScopeKey]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -968,12 +943,28 @@ export default function SolicitudesPage() {
     setPagos([]);
   }, [uid, rootId, role, canViewSolicitudes]);
 
-  // One best-effort unread mutation per opening/actor scope; independent of reader polling.
   useEffect(() => {
-    if (!uid || !rootId || !commentFor?.id) return;
-    void changeSolicitudStatus({ solicitudId: commentFor.id, hasUnreadMsg: false })
-      .catch(() => { /* Existing cancel permission may deny this optional marker. */ });
-  }, [uid, rootId, commentFor?.id]);
+    if (commentFor) {
+      const q = query(collection(db, `solicitudes/${commentFor.id}/notas`), orderBy("createdAt", "asc"));
+
+      (async () => {
+        try {
+          await changeSolicitudStatus({ solicitudId: commentFor.id, hasUnreadMsg: false });
+        } catch (e) {
+          console.warn("changeSolicitudStatus(hasUnreadMsg:false) fallo", e);
+        }
+      })();
+
+      return onSnapshot(
+        q,
+        (snap) => setMessages(snap.docs.map(d => d.data())),
+        (err) => {
+          setPageMsg("No se pudieron cargar notas.");
+          setMessages([]);
+        }
+      );
+    }
+  }, [commentFor]);
 
   useEffect(() => {
     if (!uid || !rootId || !canReadPaymentApplications) {
@@ -1364,20 +1355,12 @@ export default function SolicitudesPage() {
     }
   };
 
-  const handleHide = async (id: string, ocultar: boolean) => {
+  const handleHide = async (id: string) => {
     try {
-      await changeSolicitudStatus({ solicitudId: id, ocultar });
+      await changeSolicitudStatus({ solicitudId: id, ocultar: true });
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo completar la accion.");
     }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Eliminar esta solicitud de forma logica y detener su trabajo pendiente? Se conservaran documentos e historial. No se cancelaran operaciones externas.")) return;
-    try {
-      const response = await changeSolicitudStatus({solicitudId:id,newStatus:"ELIMINADA"});
-      if ((response.data as any)?.isDeleted !== true) throw new Error("El backend no confirmo la eliminacion.");
-    } catch (error: any) { setPageMsg(error?.message || "No se pudo eliminar la solicitud."); }
   };
 
   const sendNote = async () => {    setPageMsg("");
@@ -1392,7 +1375,6 @@ export default function SolicitudesPage() {
     try {
       await addSolicitudNota({ solicitudId: commentFor.id, text });
       setNewMsg("");
-      notesState.refresh();
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo completar la accion.");
     } finally {
@@ -1689,14 +1671,12 @@ export default function SolicitudesPage() {
                   cancelSatSaving={cancelSatSaving}
                   cancellationError={cancellationErrors[s.id]}
                   onDocs={setDocsFor}
-                  onDelete={handleDelete}
-                  onHide={handleHide}
+                  onDelete={handleHide}
                   canComment={canCommentSolicitud}
                   canCancel={canCancelSolicitud}
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
                   showCreator={isSuperAdmin(role) || isAdmin(role)}
-                  creatorOptions={creatorOptions}
                   allSolicitudes={filteredSortedData}
                   sustitucionIndex={sustitucionIndex}
                 />
@@ -1817,6 +1797,7 @@ export default function SolicitudesPage() {
               <button
                 onClick={() => {
                   setCommentFor(null);
+                  setMessages([]);
                   setNewMsg("");
                 }}
                 className="text-slate-400 hover:text-white"
@@ -1826,20 +1807,17 @@ export default function SolicitudesPage() {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              <div className="text-xs text-slate-400">Actualizaciones más recientes primero</div>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <button type="button" onClick={notesState.refresh} disabled={notesState.loading}>Actualizar</button>
-                <button type="button" onClick={notesState.reloadFromStart}>Reiniciar lectura</button>
-                <button type="button" onClick={notesState.loadOlder} disabled={!notesState.canLoadOlder}>Cargar anteriores</button>
-              </div>
-              {notesState.error && <div role="alert" className="text-sm text-amber-300">{notesState.error}</div>}
-              {notesState.loading && <div role="status" className="text-xs text-slate-400">Cargando notas...</div>}
-              {!notesState.loading && !notesState.error && notesState.notes.length === 0 && <div className="text-sm text-slate-400">Sin mensajes todavía.</div>}
-              <div className="text-xs text-slate-500">Última actualización: {formatDateTime24(notesState.headObservedAt, "Pendiente")}</div>
-              {notesState.headNotes.map(note => <NoteBubble key={note.id} note={note} myUid={uid} />)}
-              {notesState.retainedNotes.length > 0 && <div className="text-xs text-slate-400">Notas anteriores conservadas. {notesState.refreshPending ? "Actualizando historial..." : "Historial actualizado."}</div>}
-              {notesState.retainedNotes.map(note => <NoteBubble key={note.id} note={note} myUid={uid} />)}
-              <div className="text-xs text-slate-500">Historial actualizado: {formatDateTime24(notesState.windowObservedAt, "Pendiente")}</div>
+              {messages.length === 0 ? (
+                <div className="text-sm text-slate-400">Sin mensajes todavia.</div>
+              ) : (
+                messages.map((note, i) => (
+                  <NoteBubble
+                    key={note?.id || i}
+                    note={note}
+                    myUid={uid}
+                  />
+                ))
+              )}
             </div>
 
             <div className="border-t border-white/10 p-4">

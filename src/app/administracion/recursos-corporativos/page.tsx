@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import DocumentDossier from "@/components/corporate-resources/DocumentDossier";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
 import { changeCorporateVersion, downloadCorporateResource, getCorporateResource, importCorporateResource,
@@ -47,7 +46,6 @@ export default function CorporateResourcesPage() {
     {error && <p role="alert" className="rounded-lg border border-red-400/30 bg-red-950/30 p-3 text-red-200">{error}</p>}
     {message && <p role="status" className="rounded-lg bg-emerald-950/30 p-3 text-emerald-200">{message}</p>}
     {!companies.length && <p className="rounded-lg border border-amber-400/30 p-4 text-sm text-amber-100">No hay empresas propias activas en tu ámbito. Su propiedad debe estar identificada en el catálogo antes de administrar recursos.</p>}
-    <DocumentDossier />
     <section className="grid gap-3 md:grid-cols-3">
       <div className="rounded-xl border border-white/10 p-4"><h2 className="font-semibold">Documentos y plantillas</h2><p className="mt-1 text-sm text-slate-400">Versiona, aprueba, activa, descarga y reutiliza archivos por empresa propia.</p></div>
       <div className="rounded-xl border border-white/10 p-4"><h2 className="font-semibold">Catálogo fiscal emisor</h2><p className="mt-1 text-sm text-slate-400">El catálogo SAT por empresa propia conserva su flujo fiscal especializado.</p><Link href="/facturacion" className="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Abrir facturación y catálogo</Link></div>

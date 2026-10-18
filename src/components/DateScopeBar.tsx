@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import {
   CustomRange,
@@ -30,16 +30,6 @@ export default function DateScopeBar({
 }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(baseDate);
-  const pickerId = useId();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const previousMonthRef = useRef<HTMLButtonElement>(null);
-  const shouldRestoreFocusRef = useRef(false);
-
-  const closePicker = (restoreFocus = false) => {
-    shouldRestoreFocusRef.current = restoreFocus;
-    setShowPicker(false);
-  };
 
   useEffect(() => {
     if (showPicker) {
@@ -50,33 +40,6 @@ export default function DateScopeBar({
       }
     }
   }, [showPicker, baseDate, mode, customRange]);
-
-  useEffect(() => {
-    if (showPicker) {
-      previousMonthRef.current?.focus();
-      return;
-    }
-
-    if (shouldRestoreFocusRef.current) {
-      shouldRestoreFocusRef.current = false;
-      const trigger = triggerRef.current;
-      if (trigger?.isConnected && !trigger.disabled) trigger.focus();
-    }
-  }, [showPicker]);
-
-  useEffect(() => {
-    if (!showPicker) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (pickerRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      closePicker();
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [showPicker]);
 
   const calendarDays = useMemo(() => {
     const year = pickerDate.getFullYear();
@@ -120,15 +83,8 @@ export default function DateScopeBar({
       end: date,
     });
     onModeChange("custom");
-    closePicker(true);
+    setShowPicker(false);
   };
-
-  const formatDateLabel = (date: Date) =>
-    date.toLocaleDateString("es-MX", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
 
   return (
     <div className={`relative ${className}`}>
@@ -139,7 +95,6 @@ export default function DateScopeBar({
               key={m}
               type="button"
               onClick={() => onModeChange(m)}
-              aria-pressed={mode === m}
               className={
                 mode === m
                   ? "h-7 px-2 text-xs font-normal text-sky-300 transition-colors"
@@ -157,7 +112,6 @@ export default function DateScopeBar({
               type="button"
               onClick={() => onNavigate(-1)}
               disabled={mode === "custom"}
-              aria-label="Periodo anterior"
               className="bg-transparent px-1 text-lg font-normal text-sky-400 hover:text-sky-300 disabled:opacity-40"
             >
               &lt;
@@ -171,7 +125,6 @@ export default function DateScopeBar({
               type="button"
               onClick={() => onNavigate(1)}
               disabled={mode === "custom"}
-              aria-label="Periodo siguiente"
               className="bg-transparent px-1 text-lg font-normal text-sky-400 hover:text-sky-300 disabled:opacity-40"
             >
               &gt;
@@ -182,15 +135,7 @@ export default function DateScopeBar({
         <div className="relative shrink-0">
           <button
             type="button"
-            ref={triggerRef}
-            onClick={() => {
-              if (showPicker) closePicker(true);
-              else setShowPicker(true);
-            }}
-            aria-label="Seleccionar periodo personalizado"
-            aria-expanded={showPicker}
-            aria-controls={showPicker ? pickerId : undefined}
-            aria-haspopup="dialog"
+            onClick={() => setShowPicker((p) => !p)}
             className={
               mode === "custom"
                 ? "inline-flex h-7 w-7 items-center justify-center text-sky-300 transition-colors"
@@ -201,39 +146,23 @@ export default function DateScopeBar({
           </button>
 
           {showPicker && (
-            <div
-              ref={pickerRef}
-              id={pickerId}
-              role="dialog"
-              aria-modal="false"
-              aria-labelledby={`${pickerId}-title`}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  closePicker(true);
-                }
-              }}
-              className="absolute right-0 top-[36px] z-[1600] w-[320px] rounded-2xl border border-white/10 bg-[#0b1220] p-4 shadow-2xl"
-            >
+            <div className="absolute right-0 top-[36px] z-[1600] w-[320px] rounded-2xl border border-white/10 bg-[#0b1220] p-4 shadow-2xl">
               <div className="mb-4 flex items-center justify-between text-white">
                 <button
                   type="button"
-                  ref={previousMonthRef}
                   onClick={() => setPickerDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                  aria-label="Mes anterior"
                   className="bg-transparent text-lg font-normal text-sky-400 hover:text-sky-300"
                 >
                   -
                 </button>
 
-                <span id={`${pickerId}-title`} className="text-sm font-normal" aria-live="polite">
+                <span className="text-sm font-normal">
                   {formatMonthSpanish(pickerDate)} {pickerDate.getFullYear()}
                 </span>
 
                 <button
                   type="button"
                   onClick={() => setPickerDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                  aria-label="Mes siguiente"
                   className="bg-transparent text-lg font-normal text-sky-400 hover:text-sky-300"
                 >
                   +
@@ -241,12 +170,8 @@ export default function DateScopeBar({
               </div>
 
               <div className="mb-2 grid grid-cols-7 gap-1 text-center">
-                {["L", "M", "M", "J", "V", "S", "D"].map((d, index) => (
-                  <span
-                    key={`${d}-${index}`}
-                    aria-label={["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][index]}
-                    className="text-[10px] font-normal text-slate-500"
-                  >
+                {["L", "M", "M", "J", "V", "S", "D"].map((d) => (
+                  <span key={d} className="text-[10px] font-normal text-slate-500">
                     {d}
                   </span>
                 ))}
@@ -269,8 +194,6 @@ export default function DateScopeBar({
                       key={date.toISOString()}
                       type="button"
                       onClick={() => handleDateClick(date)}
-                      aria-label={formatDateLabel(date)}
-                      aria-pressed={Boolean(isStart || isEnd)}
                       className={
                         isStart || isEnd
                           ? "rounded-md bg-sky-400 py-2 text-xs font-normal text-black"
@@ -291,7 +214,7 @@ export default function DateScopeBar({
                   onClick={() => {
                     onCustomRangeChange?.({});
                     onModeChange("day");
-                    closePicker(true);
+                    setShowPicker(false);
                   }}
                   className="rounded-lg border border-white/10 px-3 py-2 text-xs font-normal text-slate-300 hover:bg-white/5"
                 >
@@ -304,18 +227,11 @@ export default function DateScopeBar({
                     const today = new Date();
                     onCustomRangeChange?.({ start: today, end: today });
                     onModeChange("custom");
-                    closePicker(true);
+                    setShowPicker(false);
                   }}
                   className="rounded-lg bg-sky-500 px-3 py-2 text-xs font-normal text-black hover:bg-sky-400"
                 >
                   Hoy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => closePicker(true)}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs font-normal text-slate-300 hover:bg-white/5"
-                >
-                  Cancelar
                 </button>
               </div>
             </div>

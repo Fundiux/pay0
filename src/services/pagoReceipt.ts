@@ -15,8 +15,6 @@ export type ParsedPagoReceipt = {
   senderName: string;
   beneficiaryName: string;
   bankName: string;
-  sourceBankName?: string;
-  destinationBankName?: string;
   amount: number;
   date: string;
   time: string;
@@ -32,21 +30,6 @@ export type ParsedPagoReceipt = {
   shortName: string;
   destinationAccount: string;
   warnings: string[];
-  readerVersion?: string;
-  analysisId?: string;
-  contentSha256?: string;
-  cacheHit?: boolean;
-  providerCalls?: number;
-  durationMs?: number;
-  semanticReceipt?: {
-    schemaVersion: number;
-    readerVersion: string;
-    reviewRequired: boolean;
-    reviewReasons: string[];
-    distinctions: Record<string, string>;
-    fields: Record<string, { value: string | number | null; rawValue: string | null; normalizedValue: string | number | null; confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE"; decision: "ACCEPTED" | "REVIEW" | "MISSING"; source: "DOCUMENT_TEXT"; provenance?: "DETECTED" | "INFERRED" | "MISSING"; label: string | null; excerpt: string | null; page: number | null }>;
-  };
-  learningContext?: Array<{ id: string; status: string; patternKey: string; content: string; advisory: boolean }>;
   identification?: ReceiptIdentification;
 };
 
@@ -94,8 +77,6 @@ export async function parsePagoReceiptPdfFile(file: File, options: { operationTy
     senderName: String(receipt.senderName || ""),
     beneficiaryName: String(receipt.beneficiaryName || ""),
     bankName: String(receipt.bankName || ""),
-    sourceBankName: String(receipt.sourceBankName || ""),
-    destinationBankName: String(receipt.destinationBankName || ""),
     amount: Number(receipt.amount || 0),
     date: String(receipt.date || ""),
     time: String(receipt.time || ""),
@@ -111,20 +92,6 @@ export async function parsePagoReceiptPdfFile(file: File, options: { operationTy
     shortName: String(receipt.shortName || ""),
     destinationAccount: String(receipt.destinationAccount || ""),
     warnings: Array.isArray(receipt.warnings) ? receipt.warnings.map(String) : [],
-    readerVersion: String(data.readerVersion || ""),
-    analysisId: String(data.analysisId || ""),
-    contentSha256: String(data.contentSha256 || ""),
-    cacheHit: data.cacheHit === true,
-    providerCalls: Number(data.providerCalls || 0),
-    durationMs: Number(data.durationMs || 0),
-    semanticReceipt: data.semanticReceipt,
-    learningContext: Array.isArray(data.learningContext) ? data.learningContext : [],
     identification: data.identification,
   };
-}
-
-export async function correctPagoReceiptSemanticField(input: { analysisId: string; field: "reference" | "trackingKey" | "folio" | "transactionId"; correctedField: "reference" | "trackingKey" | "folio" | "transactionId"; correctedValue: string }) {
-  const callable = httpsCallable(functions, "correctPagoReceiptSemanticField");
-  const response = await callable(input);
-  return response.data as { ok: true; correctionId: string; observationId: string; memoryId: string; patternKey: string; learningContext: Array<{ id: string; status: string; content: string; advisory: boolean }>; finalResult: { field: string; value: string; source: string } };
 }

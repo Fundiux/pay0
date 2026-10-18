@@ -2,57 +2,6 @@ rules_version = "2";
 service firebase.storage {
   match /b/{bucket}/o {
 
-
-    function restrictionId(value) { return value.matches('[A-Za-z0-9_-]{1,128}'); }
-    function restrictionMillis(value) { return value is int && value >= 0 && value <= 253402300799999; }
-    function restrictionRoot(user) {
-      let root = user.get('rootId', null);
-      return root == null || root == '' || root == false || root == 0 ? request.auth.uid : root;
-    }
-    // Every required property is accessed below; exact map size rejects unknown fields.
-    // ACTIVE has15 mandatory fields; REVOKED has18, including all3 revocation fields.
-    function restrictionRecordValid(row, rootId) {
-      return row is map
-        && row.keys().size() == (row.state == 'ACTIVE' ? 15 : 18)
-        && row.schemaVersion == 1
-        && row.writer == 'PAY0_TRUSTED_RESTRICTION_WRITER@1'
-        && row.policyVersion == 'PAY0-CONTAINMENT@1'
-        && restrictionId(row.restrictionId)
-        && restrictionId(rootId) && row.rootId == rootId
-        && restrictionId(request.auth.uid) && row.subjectUid == request.auth.uid
-        && row.scope == 'ACCOUNT_OPERATIONS'
-        && row.authority == 'HUMAN_SECURITY_ADMIN'
-        && restrictionId(row.authorityUid) && row.authorityUid != request.auth.uid
-        && restrictionId(row.incidentId)
-        && row.reasonCode in ['SECURITY_REVIEW','CREDENTIAL_COMPROMISE_CONFIRMED','SUPPORT_CONTAINMENT']
-        && row.authorizationVersion is int && row.authorizationVersion >= 1 && row.authorizationVersion <= 9007199254740991
-        && restrictionMillis(row.issuedAtMs) && restrictionMillis(row.expiresAtMs)
-        && row.issuedAtMs <= request.time.toMillis() && row.expiresAtMs > row.issuedAtMs
-        && row.expiresAtMs - row.issuedAtMs <= 86400000;
-    }
-    function restrictionAllowsRecord(row, rootId) {
-      return restrictionRecordValid(row, rootId) && (
-        (row.state == 'ACTIVE' && row.expiresAtMs <= request.time.toMillis())
-        || (row.state == 'REVOKED' && restrictionMillis(row.revokedAtMs)
-          && row.revokedAtMs >= row.issuedAtMs && row.revokedAtMs <= request.time.toMillis()
-          && restrictionId(row.revokedBy) && row.revokedBy != request.auth.uid
-          && row.revocationReason in ['REVIEW_CLEARED','CREDENTIALS_RECOVERED','SUPPORT_RECOVERY'])
-      );
-    }
-    function restrictionAllowsUser(user) {
-      return !user.keys().hasAny(['trustedRestrictionV1']) || restrictionAllowsRecord(user.trustedRestrictionV1, restrictionRoot(user));
-    }
-    function userLifecycleActive(user) {
-      return user.get('isDeleted', false) != true && user.get('deleted', false) != true
-        && user.get('disabled', false) != true && user.get('deletedAt', null) == null
-        && user.get('isActive', true) != false && user.get('active', true) != false;
-    }
-
-    function currentUserAllowed(rootId) {
-      let user = userDoc();
-      return signedIn() && userLifecycleActive(user) && restrictionRoot(user) == rootId && restrictionAllowsUser(user);
-    }
-
     function signedIn() {
       return request.auth != null;
     }
@@ -79,42 +28,152 @@ service firebase.storage {
         : request.auth.uid;
     }
 
-    function validDelegationTime(value, expiry) {
-      return value == null || (
-        (value is timestamp && (expiry ? value > request.time : value <= request.time))
-        || (value is number && value > 0 && value <= 253402300799999 && (expiry ? value > request.time.toMillis() : value <= request.time.toMillis()))
-      );
+    function hasClientBasicAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("viewBasic" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.viewBasic == true
+          )
+          || (
+            !("viewBasic" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("view" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.view != false
+            )
+          )
+        );
     }
 
-    // Operation + delegation are the two allowed Firestore documents. User
-    // lifecycle checks require a separate download-authority design (S-01).
-    function clientDelegationPermission(clientId, rootId, permission, legacy) {
-      let path = /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId);
-      let access = firestore.get(path).data;
-      let permissions = access.get("permissions", {});
-      return signedIn() && clientId != null && firestore.exists(path)
-        && access.active == true
-        && access.get("rootId", rootId) == rootId
-        && access.get("targetUid", request.auth.uid) == request.auth.uid
-        && access.get("clientId", clientId) == clientId
-        && access.get("revokedAt", null) == null
-        && (access.get("mode", "PERMANENT") != "TEMPORARY" || access.get("expiresAt", null) != null)
-        && validDelegationTime(access.get("expiresAt", null), true)
-        && validDelegationTime(access.get("startsAt", null), false)
-        && permissions is map
-        && permissions.get(permission, permissions.get(legacy, true)) == true;
+    function hasClientSolicitudAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operateSolicitudes" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operateSolicitudes == true
+          )
+          || (
+            !("operateSolicitudes" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
     }
 
-    function hasClientSolicitudAccess(clientId, rootId) {
-      return clientDelegationPermission(clientId, rootId, "operateSolicitudes", "operate");
+    function hasClientPagoAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operatePagos" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operatePagos == true
+          )
+          || (
+            !("operatePagos" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
     }
 
-    function hasClientPagoAccess(clientId, rootId) {
-      return clientDelegationPermission(clientId, rootId, "operatePagos", "operate");
-    }
-
-    function hasClientDispersionAccess(clientId, rootId) {
-      return clientDelegationPermission(clientId, rootId, "operateDispersiones", "operate");
+    function hasClientDispersionAccess(clientId) {
+      return signedIn()
+        && clientId != null
+        && firestore.exists(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+        ).data.active == true
+        && (
+          !("permissions" in firestore.get(
+            /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+          ).data)
+          || (
+            ("operateDispersiones" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions.operateDispersiones == true
+          )
+          || (
+            !("operateDispersiones" in firestore.get(
+              /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+            ).data.permissions)
+            && (
+              !("operate" in firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions)
+              || firestore.get(
+                /databases/(default)/documents/userClientAccess/$(request.auth.uid)/clients/$(clientId)
+              ).data.permissions.operate != false
+            )
+          )
+        );
     }
 
     function ownsDocument(data) {
@@ -127,36 +186,36 @@ service firebase.storage {
 
     function solicitudAccessFromData(data) {
       return (
-        (("clientId" in data) && hasClientSolicitudAccess(data.clientId, data.rootId))
-        || (("clienteId" in data) && hasClientSolicitudAccess(data.clienteId, data.rootId))
+        (("clientId" in data) && hasClientSolicitudAccess(data.clientId))
+        || (("clienteId" in data) && hasClientSolicitudAccess(data.clienteId))
       );
     }
 
     function pagoAccessFromData(data) {
       return (
-        (("clientId" in data) && hasClientPagoAccess(data.clientId, data.rootId))
-        || (("clienteId" in data) && hasClientPagoAccess(data.clienteId, data.rootId))
+        (("clientId" in data) && hasClientPagoAccess(data.clientId))
+        || (("clienteId" in data) && hasClientPagoAccess(data.clienteId))
       );
     }
 
     function dispersionAccessFromData(data) {
       return (
-        (("clientId" in data) && hasClientDispersionAccess(data.clientId, data.rootId))
-        || (("clienteId" in data) && hasClientDispersionAccess(data.clienteId, data.rootId))
+        (("clientId" in data) && hasClientDispersionAccess(data.clientId))
+        || (("clienteId" in data) && hasClientDispersionAccess(data.clienteId))
       );
     }
 
-    // Storage admite dos consultas: operacion y perfil actual del actor.
-    // Las descargas delegadas usan getAuthorizedDocumentDownloadUrl, que valida
-    // tambien la delegacion y sus otorgantes antes de emitir una URL efimera.
+    // Cada evaluacion de Storage puede consultar como maximo dos documentos
+    // de Firestore. El documento de la operacion cuenta como uno y el acceso
+    // delegado como el segundo; por eso aqui no se vuelve a leer users/{uid}.
     function canAccessSolicitudDocument(rootId, data) {
       return signedIn()
         && ("rootId" in data)
         && data.rootId == rootId
         && (
-          (request.auth.uid == rootId || ownsDocument(data))
-            ? currentUserAllowed(rootId)
-            : false
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || solicitudAccessFromData(data)
         );
     }
 
@@ -165,17 +224,16 @@ service firebase.storage {
         && ("rootId" in data)
         && data.rootId == rootId
         && (
-          (request.auth.uid == rootId || ownsDocument(data))
-            ? currentUserAllowed(rootId)
-            : false
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || pagoAccessFromData(data)
         );
     }
 
     function canReadUserFundedDispersion(rootId, data) {
       let user = userDoc();
       let funding = data.fundingSource;
-      return currentUserAllowed(rootId)
-        && myRootId() == rootId
+      return myRootId() == rootId
         && funding.sourceClientId == (("clientId" in data) ? data.clientId : data.clienteId)
         && data.ownerUid == funding.ownerUid
         && (isSuperAdmin() || funding.ownerUid == request.auth.uid)
@@ -199,9 +257,9 @@ service firebase.storage {
           (("fundingSource" in data) && data.fundingSource.holderType == "USER")
           ? canReadUserFundedDispersion(rootId, data)
           : (
-          (request.auth.uid == rootId || ownsDocument(data))
-            ? currentUserAllowed(rootId)
-            : false
+          request.auth.uid == rootId
+          || ownsDocument(data)
+          || dispersionAccessFromData(data)
           )
         );
     }
@@ -310,7 +368,7 @@ service firebase.storage {
       documentType,
       fileName
     ) {
-      return currentUserAllowed(rootId) && hasPreparedUploadId()
+      return hasPreparedUploadId()
         && (
           (
             ("uploadid" in request.resource.metadata)
@@ -416,7 +474,7 @@ service firebase.storage {
       documentType,
       fileName
     ) {
-      return currentUserAllowed(rootId) && hasPreparedEntityDocumentId()
+      return hasPreparedEntityDocumentId()
         && (
           (
             ("documentid" in request.resource.metadata)
@@ -444,7 +502,7 @@ service firebase.storage {
     }
 
     function preparedSatCatalogMatches(rootId, fileName) {
-      return currentUserAllowed(rootId)
+      return signedIn()
         && isSuperAdmin()
         && firestore.exists(
           /databases/(default)/documents/satCatalogImports/$(fileName)
@@ -518,7 +576,7 @@ service firebase.storage {
     }
 
     match /roots/{rootId}/entityDocuments/{entityType}/{entityId}/{documentType}/{fileName} {
-      allow read: if currentUserAllowed(rootId) && request.auth.uid == rootId;
+      allow read: if signedIn() && request.auth.uid == rootId;
 
       allow create: if resource == null
                     && signedIn()
@@ -538,11 +596,10 @@ service firebase.storage {
     // assetDocuments/{documentId}; la carga no puede crear posiciones ni
     // movimientos y el objeto queda inmutable después de finalizar.
     match /roots/{rootId}/assets/{ownerUid}/documents/{documentId}/{fileName} {
-      allow read: if currentUserAllowed(rootId) && request.auth.uid == ownerUid;
+      allow read: if signedIn() && request.auth.uid == ownerUid;
 
       allow create: if resource == null
                     && signedIn()
-                    && currentUserAllowed(rootId)
                     && request.auth.uid == ownerUid
                     && request.resource.size <= 10 * 1024 * 1024
                     && request.resource.contentType in [
@@ -574,7 +631,7 @@ service firebase.storage {
     // Archivo fuente del catálogo SAT. Solo una importación preparada por
     // superadministración puede crear un objeto inmutable en esta ruta.
     match /roots/{rootId}/fiscal-catalogs/sat/{fileName} {
-      allow read: if currentUserAllowed(rootId) && isSuperAdmin() && myRootId() == rootId;
+      allow read: if signedIn() && isSuperAdmin() && myRootId() == rootId;
       allow create: if resource == null
                     && request.resource.size <= 40 * 1024 * 1024
                     && request.resource.contentType == "application/x-bzip2"
@@ -606,7 +663,7 @@ service firebase.storage {
     function preparedCorporateUpload(rootId, uid, sessionId) {
       let user = userDoc();
       let session = firestore.get(/databases/(default)/documents/pay0CanonicalUploadSessions/$(sessionId)).data;
-      return currentUserAllowed(rootId) && isSuperAdmin()
+      return isSuperAdmin()
         && myRootId() == rootId && request.auth.uid == uid
         && (!("active" in user) || user.active != false)
         && (!("isActive" in user) || user.isActive != false)

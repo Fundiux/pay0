@@ -11,7 +11,6 @@ import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecy
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { renderCanonicalQuotePdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
-import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -68,34 +67,16 @@ function username(user: any, uid: string): string {
   return clean(user?.username || user?.displayName || user?.email || uid, 180);
 }
 
-function sha256(buffer: Buffer): string {
-  return createHash("sha256").update(buffer).digest("hex");
+function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
+  const r = role(user);
+  if (r === "superadmin") return clean(solicitud?.rootId, 128) === rootId;
+  if (r === "admin") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.adminId, 128) === uid;
+  if (r === "operador") return clean(solicitud?.rootId, 128) === rootId && clean(solicitud?.createdBy, 128) === uid;
+  return false;
 }
 
-type OcItem = { quantity?: unknown; unit?: unknown; productCode?: unknown; description?: unknown };
-
-function requireQuotationSource(solicitud: any, activeOcUploadId: string) {
-  if (!activeOcUploadId || clean(solicitud.ocFiscalMetadataUploadId, 128) !== activeOcUploadId) {
-    throw new HttpsError("failed-precondition", "La OC activa debe reprocesarse antes de generar la cotizacion.");
-  }
-  const items = Array.isArray(solicitud.ocItems) ? solicitud.ocItems as OcItem[] : [];
-  if (!items.length || items.some(item =>
-    !clean(item.description, 1000) || !clean(item.unit, 60) || !/^\d{8}$/.test(clean(item.productCode, 16)) ||
-    !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0
-  )) {
-    throw new HttpsError("failed-precondition", "La OC no contiene partidas completas. Corrige o reprocesa la OC antes de generar la cotizacion.");
-  }
-  const total = money(solicitud.total || solicitud.monto || solicitud.amount);
-  if (total <= 0) throw new HttpsError("failed-precondition", "La solicitud no tiene un importe total valido para la cotizacion.");
-  return {
-    items: items.map(item => ({
-      description: clean(item.description, 1000),
-      unit: clean(item.unit, 60),
-      productCode: clean(item.productCode, 16),
-      quantity: Number(item.quantity),
-    })),
-    total,
-  };
+function sha256(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
 }
 
 function activeDepositAccount(company: any): { bankName: string; accountNumber: string; clabe: string } {
@@ -134,11 +115,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     const solicitudSnap = await solicitudRef.get();
     if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const solicitud: any = solicitudSnap.data() || {};
-    if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
-
-    const clientId = clean(solicitud.clienteId || solicitud.clientId, 128);
-    if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
-    await requireClientOperationalAccess({ uid, role: role(user) as "superadmin" | "admin" | "operador", rootId, clientId, permission: "operateSolicitudes" });
+    if (!canAccessSolicitud(user, uid, rootId, solicitud)) throw new HttpsError("permission-denied", "No autorizado.");
 
     const replaceExisting = request.data?.replaceExisting === true;
     const existing = await db.collection("uploads")
@@ -154,6 +131,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     }
 
     const companyId = clean(solicitud.companyId || solicitud.empresaId, 128);
+    const clientId = clean(solicitud.clienteId || solicitud.clientId, 128);
     const [companySnap, clientSnap] = await Promise.all([
       companyId ? db.collection("companies").doc(companyId).get() : Promise.resolve(null),
       clientId ? db.collection("clients").doc(clientId).get() : Promise.resolve(null),
@@ -169,16 +147,6 @@ export async function generateCotizacionForSolicitudCore(request: {
       throw new HttpsError("failed-precondition", "La empresa de la solicitud no tiene RFC o catalogo empresarial valido.");
     }
 
-    const activeOc = await db.collection("uploads")
-      .where("rootId", "==", rootId)
-      .where("solicitudId", "==", solicitudId)
-      .where("documentType", "==", "ORDEN_COMPRA")
-      .where("active", "==", true)
-      .limit(1)
-      .get();
-    if (activeOc.empty) throw new HttpsError("failed-precondition", "Se requiere una Orden de Compra activa para generar la cotizacion.");
-    const quotationSource = requireQuotationSource(solicitud, activeOc.docs[0].id);
-
     const companyName = clean(company.nombre || company.razonSocial || solicitud.empresaNombre || solicitud.companyName, 180);
     const companySlug = canonicalSlug(companyName || companyRfc);
     const canonicalTemplate = canonicalQuotationTemplateByRfc(companyRfc);
@@ -193,10 +161,13 @@ export async function generateCotizacionForSolicitudCore(request: {
     const folio = `COT-${clean(solicitud.folio || solicitudId, 80)}`;
     // Solicitudes conservan monto como total operativo. A quote must never
     // treat that total as a subtotal and charge IVA twice.
-    const total = quotationSource.total;
+    const total = money(solicitud.total || solicitud.monto || solicitud.amount);
     const subtotal = Math.round((total / 1.16) * 100) / 100;
     const iva = Math.round((total - subtotal) * 100) / 100;
-    const description = clean(quotationSource.items[0]?.description, 240);
+    const description = clean(
+      solicitud.ocConceptDescription || solicitud.ordenCompraConcepto || solicitud.concepto || solicitud.descripcion || solicitud.operationTypeName || "Servicio operativo segun Orden de Compra",
+      240,
+    );
 
     // This opaque token is intentionally the only credential in the QR.  It
     // verifies one sealed quotation publicly and never grants access to PAY0.
@@ -229,7 +200,7 @@ export async function generateCotizacionForSolicitudCore(request: {
       solicitudId,
       referencePdf: templateSnapshot.referencePdf,
       verificationUrl,
-      items: quotationSource.items,
+      items: Array.isArray(solicitud.ocItems) ? solicitud.ocItems : [],
     });
     const documentSha256 = sha256(pdf);
     const uploadId = db.collection("uploads").doc().id;
@@ -252,58 +223,52 @@ export async function generateCotizacionForSolicitudCore(request: {
     });
 
     const uploadRef = db.collection("uploads").doc(uploadId);
-    await db.runTransaction(async (tx) => {
-      const currentSource = await tx.get(solicitudRef);
-      if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
-      tx.set(uploadRef, {
-        rootId,
-        adminId: solicitud.adminId || rootId,
-        clienteId: solicitud.clienteId || solicitud.clientId || null,
-        clienteNombre: solicitud.clienteNombre || solicitud.clientName || null,
-        companyId: solicitud.companyId || null,
-        empresaNombre: solicitud.empresaNombre || solicitud.companyName || companyName,
-        entityType: "solicitudes",
-        entityId: solicitudId,
-        solicitudId,
-        solicitudFolio: solicitud.folio || null,
-        documentType: "COTIZACION",
-        documentTypeLabel: "Cotizacion",
-        originalName: filename,
-        filename,
-        contentType: "application/pdf",
-        sizeBytes: pdf.length,
-        storagePath,
-        sha256: documentSha256,
-        integrityHashAlgorithm: "SHA-256",
-        integritySealStatus: "HASH_SERVER_GENERATED",
-        integritySealVersion: "PAY0-MATERIALIDAD-V1",
-        generatedBySystem: true,
-        generatedByModule: "cotizaciones",
-        quotationTemplate: templateSnapshot,
-        quotationSnapshot: {
-          folio,
-          subtotal,
-          iva,
-          total,
-          description,
-          documentSha256,
-        },
-        publicVerificationToken,
-        publicVerificationUrl: verificationUrl,
-        status: "PENDING",
-        active: false,
-        version: null,
-        createdBy: uid,
-        createdUsername: username(user, uid),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+    await uploadRef.set({
+      rootId,
+      adminId: solicitud.adminId || rootId,
+      clienteId: solicitud.clienteId || solicitud.clientId || null,
+      clienteNombre: solicitud.clienteNombre || solicitud.clientName || null,
+      companyId: solicitud.companyId || null,
+      empresaNombre: solicitud.empresaNombre || solicitud.companyName || companyName,
+      entityType: "solicitudes",
+      entityId: solicitudId,
+      solicitudId,
+      solicitudFolio: solicitud.folio || null,
+      documentType: "COTIZACION",
+      documentTypeLabel: "Cotizacion",
+      originalName: filename,
+      filename,
+      contentType: "application/pdf",
+      sizeBytes: pdf.length,
+      storagePath,
+      sha256: documentSha256,
+      integrityHashAlgorithm: "SHA-256",
+      integritySealStatus: "HASH_SERVER_GENERATED",
+      integritySealVersion: "PAY0-MATERIALIDAD-V1",
+      generatedBySystem: true,
+      generatedByModule: "cotizaciones",
+      quotationTemplate: templateSnapshot,
+      quotationSnapshot: {
+        folio,
+        subtotal,
+        iva,
+        total,
+        description,
+        documentSha256,
+      },
+      publicVerificationToken,
+      publicVerificationUrl: verificationUrl,
+      status: "PENDING",
+      active: false,
+      version: null,
+      createdBy: uid,
+      createdUsername: username(user, uid),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     let finalVersion = 1;
     await db.runTransaction(async (tx) => {
-      const currentSource = await tx.get(solicitudRef);
-      if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
       finalVersion = await finalizeSolicitudDocumentVersionTx({
         tx,
         db,
@@ -323,14 +288,6 @@ export async function generateCotizacionForSolicitudCore(request: {
           integritySealedUsername: username(user, uid),
         },
       });
-
-      tx.set(solicitudRef, {
-        cotizacionAutoGenerateStatus: "READY",
-        cotizacionAutoGenerateStage: "COMPLETED",
-        cotizacionAutoGenerateLastError: FieldValue.delete(),
-        cotizacionAutoGenerateErrorCode: FieldValue.delete(),
-        cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
 
       logActivityTx(tx, db, {
         event: "COTIZACION_GENERADA",

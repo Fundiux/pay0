@@ -1,13 +1,11 @@
-import { copyFile, mkdir, readFile, cp } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
-export async function copyCanonicalAssets({ repositoryRoot = resolve(import.meta.dirname, ".."), functionsLibRoot = resolve(repositoryRoot, "functions/lib"), includePublicBrand = true } = {}) {
-const root = repositoryRoot;
+const root = resolve(import.meta.dirname, "..");
 const source = resolve(root, "src/canonicos/formatos/LOGOS/Trostre.png");
 const targets = [
-  ...(includePublicBrand ? [resolve(root, "public/brand/Trostre.png")] : []),
-  resolve(functionsLibRoot, "assets/Trostre.png"),
+  resolve(root, "public/brand/Trostre.png"),
+  resolve(root, "functions/lib/assets/Trostre.png"),
 ];
 
 for (const target of targets) {
@@ -24,9 +22,9 @@ const canonicalCompaniesRoot = resolve(
   root,
   "src/canonicos/formatos/CONSTANCIAS/PAY0_CONSTANCIAS_CANONICAS_REGENERADAS_FINAL",
 );
-const functionLogoRoot = resolve(functionsLibRoot, "assets/companies");
-const functionQuotationRoot = resolve(functionsLibRoot, "assets/cotizaciones");
-const functionQuotationTemplateRoot = resolve(functionsLibRoot, "assets/cotizaciones/templates/base");
+const functionLogoRoot = resolve(root, "functions/lib/assets/companies");
+const functionQuotationRoot = resolve(root, "functions/lib/assets/cotizaciones");
+const functionQuotationTemplateRoot = resolve(root, "functions/lib/assets/cotizaciones/templates/base");
 await mkdir(functionLogoRoot, { recursive: true });
 await mkdir(functionQuotationRoot, { recursive: true });
 await mkdir(functionQuotationTemplateRoot, { recursive: true });
@@ -55,24 +53,11 @@ for (const template of manifest.templates || []) {
   );
   for (const kind of ["constancia-entrega", "constancia-servicio"]) {
     const original = resolve(canonicalCompaniesRoot, companyFolder, kind, "v1.1");
-    const destination = resolve(functionsLibRoot, "assets/constancias", rfc, kind);
+    const destination = resolve(root, "functions/lib/assets/constancias", rfc, kind);
     await mkdir(destination, { recursive: true });
     for (const filename of ["template.html", "template.css", "manifest.json", "reference.pdf"])
       await copyFile(resolve(original, filename), resolve(destination, filename));
   }
 }
 
-await copyFile(manifestPath, resolve(functionsLibRoot, "assets/cotizaciones-manifest.json"));
-
-// Preserve the deployed generators' company-specific reference bundles.
-for (const template of manifest.templates || []) {
-  const companyFolder = String(template.companyId || "").replace(/-/g, "_");
-  for (const kind of ["constancia-entrega", "constancia-servicio"]) {
-    await cp(resolve(canonicalCompaniesRoot, companyFolder, kind, "v1.1"),
-      resolve(functionsLibRoot, "assets/constancias", template.rfc, kind), { recursive: true });
-  }
-}
-
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await copyCanonicalAssets();
+await copyFile(manifestPath, resolve(root, "functions/lib/assets/cotizaciones-manifest.json"));

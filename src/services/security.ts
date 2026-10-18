@@ -13,11 +13,10 @@ export async function reportUnauthorizedRouteAttempt(input: UnauthorizedRouteAtt
   const fn = httpsCallable(functions, "logUnauthorizedRouteAttempt");
 
   const res: any = await fn({
-    path: input.path,
-    matchedRuleHref: input.matchedRuleHref ?? null,
-    requiredModule: input.requiredModule ?? null,
-    requiredAction: input.requiredAction ?? null,
-    superadminOnly: input.superadminOnly === true,
+    ...input,
+    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+    referrer: typeof document !== "undefined" ? document.referrer : "",
+    locationHref: typeof window !== "undefined" ? window.location.href : "",
   });
 
   return res?.data;
@@ -27,11 +26,4 @@ export async function redeemMySecurityUnlockCode(code: string) {
   const fn = httpsCallable(functions, "redeemMySecurityUnlockCode");
   const res: any = await fn({ code });
   return res?.data;
-}
-
-// Own state only. This callable never issues/revokes restrictions or returns a bypass token.
-export async function getMyRestrictionStatus() {
-  const fn = httpsCallable(functions, "getMyRestrictionStatus");
-  const result = await fn({});
-  return result.data;
 }

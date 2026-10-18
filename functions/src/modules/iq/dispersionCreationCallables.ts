@@ -1,4 +1,3 @@
-import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 import { bindVerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 import * as admin from "firebase-admin";
@@ -11,7 +10,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { resolveIqBeneficiaryInstrument } from "./dispersionHttpCreateCore";
-import { requireIqAssociatedName } from "./associatedName";
+import { resolveIqAssociatedName } from "./associatedName";
 import { assertIqAuthorized } from "./authorization";
 import { loadEnabledIqAutomationRoots } from "./automationRuntime";
 import { assertDispersionDestination } from "./dispersionDestinationGuard";
@@ -327,7 +326,6 @@ async function buildDispersionSchedulerAuth(
   }
 
   const user = record(userSnap.data());
-  await authorizeDeferredIntent({uid, rootId: expectedRootId, module: "wallet", action: "dispersiones"});
   const role = clean(user.role).toLowerCase();
   const rootId =
     clean(user.rootId ?? uid) || uid;
@@ -629,10 +627,10 @@ async function loadIqAccess(
     return {
       profileId: identity.effectiveIqProfileId,
       profileAlias: identity.credentialProfile.profileAlias,
-      associatedName: requireIqAssociatedName(
+      associatedName:
         identity.originIqContext.associatedName ||
-        clean(despacho.iqAssociatedName ?? despacho.associatedName),
-      ),
+        clean(despacho.iqAssociatedName ?? despacho.associatedName) ||
+        identity.credentialProfile.username,
       username: identity.credentialProfile.username,
       password: identity.credentialProfile.password,
       erpUrl: identity.credentialProfile.erpUrl,
@@ -729,7 +727,8 @@ async function loadIqAccess(
     profileAlias:
       clean(profile.alias) ||
       profileId,
-    associatedName: requireIqAssociatedName(
+    associatedName: resolveIqAssociatedName(
+      username,
       clean(
         despacho.iqAssociatedName ??
           despacho.associatedName ??
@@ -1422,18 +1421,6 @@ export async function runCreateClientDispersionIqCore(input: {
   const principal = record(
     principalSnap.data(),
   );
-  const authorizeBeforePost = async () => {
-    const current = record((await principalRef.get()).data());
-    if (clean(current.rootId) !== auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
-    const userFunded = current.fundingSource?.holderType === "USER";
-    const actor = await authorizeDeferredIntent({uid: auth.uid, rootId: auth.rootId, module: "wallet", action: "dispersiones",
-      ...(userFunded ? {} : {clientId: clean(current.clienteId || current.clientId), permission: "operateDispersiones" as const})});
-    if (userFunded && actor.role !== "superadmin" && current.fundingSource.ownerUid !== auth.uid)
-      throw new HttpsError("permission-denied", "AUTH_FUNDING_OWNER_CHANGED");
-    auth.role = actor.role;
-  };
-  if (!previewOnly) await authorizeBeforePost();
-
   assertDispersionFundingOwner({ rootId: auth.rootId, uid: auth.uid, role: auth.role, dispersion: principal });
   if (principal.fundingSource?.holderType === "USER" && input.allowCommissionExecution !== true && !previewOnly) throw new HttpsError("permission-denied", "La utilidad debe ejecutarse desde su solicitud de comisión autorizada.");
   if (principal.iqExecutionHeld === true && !previewOnly && !(input.allowCommissionExecution === true && principal.fundingSource?.holderType === "USER")) throw new HttpsError("failed-precondition", "La dispersión conserva una retención explícita de ejecución.");
@@ -1988,7 +1975,6 @@ export async function runCreateClientDispersionIqCore(input: {
     const iqResult =
       await runIqCreateDispersionHttpH4D85A50(
         {
-          authorizeBeforePost,
           apiOrigin:
             clean(
               process.env.PAY0_IQ_API_ORIGIN,

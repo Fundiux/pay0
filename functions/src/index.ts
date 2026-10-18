@@ -1,8 +1,3 @@
-import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
-import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
-import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
-import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
 
 import {
   buildPagoCoverageApplyPatch,
@@ -28,7 +23,6 @@ import { logActivity, logActivityTx } from "./utils/logActivity";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { FieldValue, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
-import { operationTiming } from "./utils/operationTiming";
 import { nextSequenceTx, buildCanonicalFolio } from "./modules/sequences/service";
 import {
   resolveCanonicalBusinessFolioContext,
@@ -38,12 +32,15 @@ import { normalizeSolicitudBackendStatus, canTransitionSolicitudBackendStatus, n
 import { canCancelSolicitudWithAbonos, needsUuidOrRelatedForSatCancel01, needsUuidOrRelatedForEnSustitucion, getSolicitudStatusEventMeta, getSolicitudRechazadaEventMeta } from "./utils/solicitudStatusHandlerRules";
 import { buildSolicitudCanceladaPatch, buildSolicitudEnSustitucionPatch, getSolicitudCanceladaEventMeta, getSolicitudEnSustitucionEventMeta } from "./utils/solicitudStatusPatches";
 import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } from "./modules/iq/solicitudCancellationService";
-import { getCurrentClientDelegationAccess } from "./modules/clientDelegations/access";
+import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
-import { belongsToPay0Dispatch } from "./modules/facturama/issuerGuard";
 import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
+import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
+import { manualNoteAuthor } from "./modules/notes/domain";
+import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -80,7 +77,19 @@ async function getActiveClientDelegationAccess(
   clienteId: string,
   requiredPermission: "operateSolicitudes" | "operatePagos"
 ) {
-  return getCurrentClientDelegationAccess(uid, clienteId, requiredPermission);
+  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
+  if (!accessSnap.exists) return null;
+
+  const data: any = accessSnap.data() || {};
+  if (data?.active !== true) return null;
+  const permissions = normalizeClientAccessPermissions(data?.permissions, true);
+  if (permissions.view !== true || permissions[requiredPermission] !== true) return null;
+
+  return {
+    id: accessSnap.id,
+    path: accessSnap.ref.path,
+    data,
+  };
 }
 
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";
@@ -468,12 +477,6 @@ export const createSolicitud = onCall(
         rootId,
         adminId,
         createdBy: uid,
-        createdByDisplayName: String(caller.displayName || caller.name || caller.username || "").trim(),
-        createdByUsername: String(caller.username || "").trim(),
-        createdByUserNumber: Number(caller.userNumber || caller.numeroUsuario || caller.sequenceNumber || 0) || null,
-        folioOwnerId: businessFolioContext.ownerUid,
-        delegateUid: businessFolioContext.delegateUid,
-        delegateUserNumber: businessFolioContext.delegateUserNumber,
         ownerId: operationalOwnerId,
         operationalOwnerId,
         operationalOwnerName,
@@ -548,7 +551,6 @@ export const createSolicitud = onCall(
     });
 
     __mark("folio_transaction");
-    operationTiming("pay0_persisted_at", solicitudRef.id, __perfStartedAt);
 
     const comentarioText = String(comentario || "").trim();
 
@@ -608,7 +610,7 @@ export const createSolicitud = onCall(
       ),
     );
 
-    if (belongsToPay0Dispatch(rootId, companyDespachoId)) postCreateTasks.push(
+    postCreateTasks.push(
       ensureAutomaticFacturamaDraftForSolicitud({
         auth: request.auth,
         solicitudId: solicitudRef.id,
@@ -1078,8 +1080,6 @@ async function resolveSolicitudRelacion(rootId: string, rawValue: any, currentSo
 }
 
 const changeSolicitudStatusHandler = async (request: any) => {
-  if (normalizeSolicitudBackendStatus(request.data?.newStatus) === "ELIMINADA" ||
-      (typeof request.data?.ocultar === "boolean" && !request.data?.newStatus)) return changeSolicitudVisibilityCore(request);
   const uid = requireAuth(request);
   const rootId = await getRootId(uid);
   const me = await getMyUser(uid);
@@ -1719,9 +1719,6 @@ export const createPago = onCall(
       throw new HttpsError("invalid-argument", "Identificación de comprobante inválida.");
     }
     const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
-    let validatedReceiptAnalysisId = "";
-    let validatedReceiptReaderVersion = "";
-    let validatedReceiptSemantic: Record<string, unknown> | null = null;
 
     const costGuardOperationTypeKey = String(operationTypeKey || "").trim().toUpperCase();
     const costGuardDespachoId = String(despachoId || "").trim();
@@ -2107,13 +2104,7 @@ export const createPago = onCall(
 
     await db.runTransaction(async (tx) => {
       if (receiptIdentificationRef) {
-        const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
-        assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
-        const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
-        validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
-        validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
-        validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
-          ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
+        assertReceiptCreation(await tx.get(receiptIdentificationRef), { uid, rootId }, request.data || {});
       }
       if (receiptDuplicateRef) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
@@ -2213,9 +2204,6 @@ export const createPago = onCall(
         concepto: String(request.data?.concepto || "").trim().slice(0, 1000) || null,
         referenciaNormalized: referenciaNormalized || null,
         receiptLearningSignals: {
-          analysisId: validatedReceiptAnalysisId || null,
-          readerVersion: validatedReceiptReaderVersion || null,
-          semanticReceipt: validatedReceiptSemantic,
           detectedBankName: detectedBankNameValue || null,
           detectedSenderName: detectedSenderNameValue || null,
           detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
@@ -2240,12 +2228,6 @@ export const createPago = onCall(
         moneda: String(moneda || "MXN"),
         comprobantes: [],
         createdBy: uid,
-        createdByDisplayName: String(me.displayName || me.name || me.username || "").trim(),
-        createdByUsername: String(me.username || "").trim(),
-        createdByUserNumber: Number(me.userNumber || me.numeroUsuario || me.sequenceNumber || 0) || null,
-        folioOwnerId: businessFolioContextPago.ownerUid,
-        delegateUid: businessFolioContextPago.delegateUid,
-        delegateUserNumber: businessFolioContextPago.delegateUserNumber,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         conciliatedBy: null,
@@ -2318,7 +2300,6 @@ export const createPago = onCall(
 
 
     __mark("folio_transaction");
-    operationTiming("pay0_persisted_at", ref.id, __perfStartedAt);
 
     await recordOperationalMetric({
       rootId,
@@ -2798,7 +2779,7 @@ export { addClientDispersionNota } from "./modules/financing/callables";
 export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
 export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
 export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";
-export { getPublicConstanciaVerification, generateSolicitudReceiptCertificate } from "./modules/constancias/service";
+export { getPublicConstanciaVerification } from "./modules/constancias/service";
 export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoAmountForRetry, deactivatePagoDocument } from "./modules/pagoDocuments/callables";
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
 
@@ -2827,8 +2808,6 @@ export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from 
 export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
-export { getControlCenterEngineering, importControlCenterEngineeringEvidence, assignControlCenterEngineeringTask } from "./modules/controlCenter/engineeringCallables";
-export { listOperationalDocuments } from "./modules/canonicalCenter/documentDossier";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
 export { getHugoComplementInventoryPage } from "./modules/paymentApplications/complementInventory";
@@ -2855,10 +2834,9 @@ export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
 export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
+export { generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
-export { getAuthorizedOperationalRecord } from "./modules/documents/operationalReads";
-export { listAuthorizedRelatedRecords } from "./modules/documents/relatedReads";
 export {
   createIqCredentialProfile,
   updateIqCredentialProfile,
@@ -2946,8 +2924,6 @@ export {
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
 export {
   processIqPagoDepositCreateQueue,
-  dispatchQueuedPagoIqCreation,
-  processIqPagoDepositAutomaticTask,
   processIqPagoDepositReconciliationQueue,
 } from "./modules/iq/pagoDepositCallables";
 // H4_D82_A3_A6_A3C_AUTOMATION_CONTROL_END
@@ -2956,7 +2932,7 @@ export {
 export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
-export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
+export { parsePagoReceiptPdf } from "./modules/pagos/receiptPdfCallables";
 export {
   listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
   importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
@@ -2972,8 +2948,3 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
-
-export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";
-export { listClientDispersionNotes } from "./modules/financing/noteReads";
-export { listPagoNotes } from "./modules/notes/pagoReads";
-export { listSolicitudNotes } from "./modules/notes/solicitudReads";

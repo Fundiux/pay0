@@ -1,5 +1,4 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
-import { operationTiming } from "../../utils/operationTiming";
 import { createHash } from "node:crypto";
 import { fetchIq } from "./iqHttpClient";
 
@@ -126,7 +125,6 @@ export interface RecoveryOptions {
 }
 
 export interface CreateDepositInput {
-  authorizeBeforePost?: () => Promise<void>;
   auth: IqAuthContext;
   identity: DepositIdentity;
   voucher: VoucherInput;
@@ -252,9 +250,6 @@ async function dispatchDepositPost(
 
   const postDispatchedAt = new Date().toISOString();
 
-  // Outside the transport catch: a denied intent was never sent to IQ.
-  await input.authorizeBeforePost?.();
-
   await input.journal.transition({
     pay0PagoId: input.identity.pay0PagoId,
     iqAttemptId: input.identity.iqAttemptId,
@@ -265,13 +260,11 @@ async function dispatchDepositPost(
   });
 
   try {
-    const dispatchAt = operationTiming("iq_dispatch_at", input.identity.pay0PagoId);
     const response = await fetchIq(apiUrl(input.auth, "/deposits"), {
       method: "POST",
       headers: authHeaders(input.auth),
       body: form,
     }, { operation: "deposit_create" });
-    operationTiming("iq_response_at", input.identity.pay0PagoId, dispatchAt);
 
     const postAcknowledgedAt = new Date().toISOString();
     const body = (await response.json().catch(() => ({}))) as {
@@ -280,12 +273,8 @@ async function dispatchDepositPost(
     const responseMessage = String(body.message ?? "");
 
     if (response.status !== 201 || responseMessage !== "success") {
-      // Only explicit client-side refusals prove that this POST was rejected.
-      // A gateway/server timeout, conflict, throttle or unexpected success body
-      // may follow a committed deposit. Recover its ID; never enable blind replay.
-      const unequivocalRejection = new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]);
       return {
-        state: unequivocalRejection.has(response.status) ? "POST_REJECTED" : "OUTCOME_UNKNOWN",
+        state: "POST_REJECTED",
         postDispatchedAt,
         postAcknowledgedAt,
         httpStatus: response.status,

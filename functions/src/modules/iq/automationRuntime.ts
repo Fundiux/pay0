@@ -178,15 +178,12 @@ async function claimIqAutomationProcessIfDue(input: {
   });
 }
 
-type IqAutomationRootsInput = {
+export async function loadEnabledIqAutomationRoots(input: {
   process: IqAutomationProcessKey;
   purpose?: IqOperatingPurpose;
   respectWindow?: boolean;
   now?: Date;
-};
-
-/** Read-only eligibility. Does not claim scheduler intervals or update runtime state. */
-export async function readEnabledIqAutomationRoots(input: IqAutomationRootsInput): Promise<Map<string, IqOperatingCalendarConfig>> {
+}): Promise<Map<string, IqOperatingCalendarConfig>> {
   const db = getFirestore();
   const snap = await db
     .collection("iqIntegrationConfigs")
@@ -222,6 +219,17 @@ export async function readEnabledIqAutomationRoots(input: IqAutomationRootsInput
       }
     }
 
+    const due = await claimIqAutomationProcessIfDue({
+      rootId: doc.id,
+      process: input.process,
+      config,
+      now,
+    });
+
+    if (!due) {
+      continue;
+    }
+
     enabled.set(doc.id, config);
   }
 
@@ -229,16 +237,3 @@ export async function readEnabledIqAutomationRoots(input: IqAutomationRootsInput
 }
 
 
-
-/** Scheduler/recovery eligibility with the existing transactional interval claim. */
-export async function loadEnabledIqAutomationRoots(input: IqAutomationRootsInput): Promise<Map<string, IqOperatingCalendarConfig>> {
-  const now = input.now ?? new Date();
-  const candidates = await readEnabledIqAutomationRoots({ ...input, now });
-  const claimed = new Map<string, IqOperatingCalendarConfig>();
-  for (const [rootId, config] of candidates) {
-    if (await claimIqAutomationProcessIfDue({ rootId, process: input.process, config, now })) {
-      claimed.set(rootId, config);
-    }
-  }
-  return claimed;
-}

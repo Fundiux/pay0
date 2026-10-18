@@ -607,11 +607,6 @@ export const processPagoApplicationIqPlanOnDemandTask =
       }
 
       const plan = planSnap.data() || {};
-      if (cleanDispatchText(plan.iqExecutionDispatchRequestedBy) !== uid) {
-        await planRef.set({iqExecutionDispatchStatus: "AUTH_STOPPED", iqExecutionDispatchLastError: "El solicitante no coincide con la intenci?n vigente."}, {merge:true});
-        return;
-      }
-
 
       if (
         cleanDispatchText(
@@ -667,9 +662,16 @@ export const processPagoApplicationIqPlanOnDemandTask =
         )
           .toLowerCase();
 
-      let inactive = !userSnap.exists;
-      try { assertAuthorized({ uid }, user, {allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"]}); }
-      catch { inactive = true; }
+      const inactive =
+        !userSnap.exists ||
+        user.active === false ||
+        user.deleted === true ||
+        Boolean(user.deletedAt) ||
+        ![
+          "superadmin",
+          "admin",
+          "operador",
+        ].includes(currentRole);
 
       if (!hasPersistedIqOrigin && inactive) {
         await planRef.set(

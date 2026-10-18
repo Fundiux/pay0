@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "../sharedCallables/helpers";
-import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+import { getUserRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { logActivityTx } from "../../utils/logActivity";
 import { dayMexico, hash } from "./complementPolicy";
@@ -10,10 +10,6 @@ export type GateDecision = { allowed: boolean; reason: string; limit: number };
 export const REP_REQUEST_HARD_DISABLED = "REP_REQUEST_HARD_DISABLED";
 export const isIqRepRequestHardEnabled = (config: any): boolean => config?.iqRequestEnabled === true;
 const effectiveProfileId = (job: any) => String(job?.originIqProfileId || job?.profileId || "").trim();
-const isDurableReconciliation = (job: any, action: IqComplementAction) => action === "LOOKUP" &&
-  ["UNKNOWN", "REQUESTED", "ISSUED_PENDING_FILES"].includes(job?.status) &&
-  [job?.attemptedAt, job?.requestedAt].some(value => typeof value?.toMillis === "function" && value.toMillis() > 0);
-
 
 const clamp = (value: unknown, fallback: number, ceiling: number) => {
   const number = Number(value);
@@ -34,15 +30,10 @@ function decide(job: any, action: IqComplementAction, config: any, master: any, 
   if (action === "REQUEST" && config.iqEnabled !== true) return deny("REP_GATE_REQUEST_OFF");
   if (action === "REQUEST" && master?.automation?.aplicacionPagos !== true) return deny("REP_GATE_APPLICATION_FLOW_OFF");
   if (limit === 0) return deny("REP_GATE_QUOTA_ZERO");
-  // Keep the persisted IQ identity for historical reconciliation. Every new
-  // request still requires current PAY0 authority. Legacy lookups may bypass
-  // mutable actor access only when a durable prior attempt needs reconciliation.
-  if (action === "REQUEST") {
-    try { assertAuthorized({uid: job.actorUid}, user, {allowedRoles:["superadmin", "admin", "operador"], requiredModule:"pagos", requiredAction:["create", "conciliate"]}); }
-    catch { return deny("REP_GATE_ACTOR_INVALID"); }
-    if (String(user?.rootId || job.actorUid) !== job.rootId) return deny("REP_GATE_ACTOR_INVALID");
-  }
-  if (!job.originIqProfileId && !isDurableReconciliation(job, action)) {
+  // A durable origin was authorized when the application/job was created.
+  // Schedulers must not re-authorize that historical action from mutable user
+  // or iqUserAccess state. Legacy jobs retain the former live checks.
+  if (!job.originIqProfileId) {
     const role = user && getUserRole(user);
     if (!role || user.rootId !== job.rootId || user.active === false || user.disabled === true) return deny("REP_GATE_ACTOR_INVALID");
     if (!access || access.rootId !== job.rootId || access.active !== true || access.iqEnabled !== true ||
@@ -69,7 +60,7 @@ export async function inspectIqComplementGate(job: any, action: IqComplementActi
   const decision = decide(job, action, current.config, current.master, current.user, current.access, current.profile);
   if (!decision.allowed) return decision;
   try {
-    if (action === "REQUEST" || (!job.originIqProfileId && !isDurableReconciliation(job, action))) {
+    if (!job.originIqProfileId) {
       await requireClientOperationalAccess({ uid: job.actorUid, role: getUserRole(current.user)!, rootId: job.rootId,
         clientId: job.clientId, permission: "operatePagos" });
     }

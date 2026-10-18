@@ -1,7 +1,5 @@
-import { createHash } from "crypto";
-import { operationTiming } from "../../utils/operationTiming";
 import * as admin from "firebase-admin";
-import { openBoundedWorkbook, createWorkbookStructureBudget, WorkbookLimitError } from "../../utils/boundedZip";
+import type JSZip from "jszip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
@@ -9,14 +7,16 @@ import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallabl
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
-import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
-import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
+
+function getJsZip(): typeof JSZip {
+  return require("jszip");
+}
 function isSolicitudIqTerminalForReplacementH4D58H(solicitud: Record<string, unknown>): boolean {
   if (solicitud.iqTerminalLocked === true) return true;
   if (solicitud.iqSolicitudTerminalLocked === true) return true;
@@ -128,31 +128,26 @@ function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g
 function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
 
 async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
-  // Fetch one extra byte so an oversized object is rejected before full allocation.
-  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+  const [buffer] = await bucket.file(storagePath).download();
   return parseOcFiscalMetadataBuffer(buffer);
 }
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
 export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
-  try {
-  const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
-  const sharedXml = await zip.readText("xl/sharedStrings.xml");
-  const shared: string[] = [];
-  for (const match of sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)) { budget.sharedString(); shared.push(xmlValue(match[1])); }
-  const sheetNames = zip.sheetNames;
+  const zip = await getJsZip().loadAsync(buffer);
+  const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
+  const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => xmlValue(match[1]));
+  const sheetNames = Object.keys(zip.files).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
   const parseRows = async (sheetName: string): Promise<string[][]> => {
-    const sheet = await zip.readText(sheetName);
+    const sheet = await zip.file(sheetName)?.async("string") || "";
     const parsed: string[][] = [];
     for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
-      budget.row();
       const values: string[] = [];
       // Ignore self-closing cells from merged ranges. The former expression
       // treated `<c .../>` as an opening tag and then consumed the next real
       // cell, shifting values such as regimen, CP and uso CFDI one column.
       for (const cell of row[1].matchAll(/<c\b([^>]*[^/])>([\s\S]*?)<\/c>/g)) {
         const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "";
-        budget.cell(reference, true);
         const raw = cell[2].match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || cell[2].match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "";
         values[excelColumn(reference) - 1] = cell[1].includes('t="s"') ? shared[Number(raw)] || "" : xmlValue(raw);
       }
@@ -262,10 +257,6 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   // CSF remains a fiscal validation source, but no quote should display a
   // placeholder when the OC already supplies the data.
   return code && unit ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items } : null;
-  } catch (error) {
-    if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
-    throw error;
-  }
 }
 
 function cleanCfdiText(value: any): string {
@@ -357,6 +348,24 @@ function canUploadSolicitudDocs(user: any): boolean {
   return false;
 }
 
+function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
+  const role = getRole(user);
+
+  if (role === "superadmin") {
+    return String(solicitud?.rootId || "") === rootId || String(solicitud?.createdBy || "") === uid;
+  }
+
+  if (role === "admin") {
+    return String(solicitud?.rootId || "") === rootId && String(solicitud?.adminId || "") === uid;
+  }
+
+  if (role === "operador") {
+    return String(solicitud?.rootId || "") === rootId && String(solicitud?.createdBy || "") === uid;
+  }
+
+  return false;
+}
+
 async function loadSolicitudOrThrow(input: {
   solicitudId: string;
   uid: string;
@@ -372,17 +381,9 @@ async function loadSolicitudOrThrow(input: {
 
   const solicitud = solicitudSnap.data() || {};
 
-  if (String(solicitud?.rootId || "") !== input.rootId) throw new HttpsError("permission-denied", "No autorizado.");
-  const clientId = String(solicitud?.clienteId || solicitud?.clientId || "").trim();
-  if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
-  await requireClientOperationalAccess({
-    uid: input.uid,
-    role: getRole(input.user) as "superadmin" | "admin" | "operador",
-    rootId: input.rootId,
-    clientId,
-    permission: "operateSolicitudes",
-  });
-  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+  if (!canAccessSolicitud(input.user, input.uid, input.rootId, solicitud)) {
+    throw new HttpsError("permission-denied", "No autorizado.");
+  }
 
   return {
     solicitudRef,
@@ -440,24 +441,10 @@ const { solicitud } = await loadSolicitudOrThrow({
 
   
 const safeName = sanitizeFilename(originalName);
-  const uploadRequestId = String(data.uploadRequestId || "").trim();
-  if (uploadRequestId && !/^[a-zA-Z0-9_-]{8,128}$/.test(uploadRequestId)) throw new HttpsError("invalid-argument", "Identificador de carga invalido.");
-  const uploadId = uploadRequestId
-    ? createHash("sha256").update(JSON.stringify([rootId, uid, solicitudId, documentType, uploadRequestId])).digest("hex")
-    : db.collection("uploads").doc().id;
+  const uploadId = db.collection("uploads").doc().id;
   const storagePath = buildSolicitudDocumentStoragePath({ rootId, solicitudId, documentType, uploadId, originalName: safeName });
 
-  const uploadRef = db.collection("uploads").doc(uploadId);
-  await db.runTransaction(async tx => {
-    const existing = await tx.get(uploadRef);
-    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
-    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
-    if (existing.exists) {
-      const row = existing.data()!;
-      if (row.createdBy !== uid || row.solicitudId !== solicitudId || row.originalName !== originalName || row.sizeBytes !== sizeBytes || (row.sha256 || "") !== sha256) throw new HttpsError("failed-precondition", "La carga existente no coincide con el archivo.");
-      return;
-    }
-    tx.create(uploadRef, {
+  await db.collection("uploads").doc(uploadId).set({
     rootId,
     adminId: solicitud.adminId || rootId,
     clienteId: solicitud.clienteId || solicitud.clientId || null,
@@ -491,7 +478,6 @@ const safeName = sanitizeFilename(originalName);
     createdUsername: getUsername(user, uid),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
   });
 
   return {
@@ -549,7 +535,7 @@ export async function finalizeSolicitudDocumentUploadCore(request: any) {
     throw new HttpsError("failed-precondition", "Upload sin solicitudId.");
   }
 
-  const { solicitud } = await loadSolicitudOrThrow({
+  await loadSolicitudOrThrow({
     solicitudId,
     uid,
     user,
@@ -587,20 +573,9 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
   }
 
   let finalVersion = 1;
-  let didFinalize = false;
 
   await db.runTransaction(async (tx) => {
-    didFinalize = false;
-    const currentUpload = await tx.get(uploadRef);
-    const current = currentUpload.data() || {};
     const solicitudSnapH4D58H = await tx.get(solicitudRef);
-    if (!solicitudSnapH4D58H.exists || solicitudSnapH4D58H.data()?.isDeleted || solicitudSnapH4D58H.data()?.deletedAt) throw new HttpsError("failed-precondition", "La solicitud no esta disponible.");
-    if (current.status === "READY" && current.active === true) {
-      finalVersion = Number(current.version || 1);
-      return;
-    }
-    if (current.status !== "PENDING") throw new HttpsError("failed-precondition", "La carga ya fue reemplazada o desactivada.");
-    didFinalize = true;
     const solicitudH4D58H = solicitudSnapH4D58H.exists ? ((solicitudSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
     // H4_D58H_B1_SOLICITUD_DOC_TX_READ
     finalVersion = await finalizeSolicitudDocumentVersionTx({
@@ -717,29 +692,22 @@ logActivityTx(tx, db, {
     });
   });
 
-  const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
-  const generateOcQuotation = async () => {
-    if (!didFinalize || documentType !== "ORDEN_COMPRA") return;
-    await generateCotizacionForSolicitudCore({
-      auth: request.auth,
-      // Replacing the active OC must also replace its derivative quotation.
-      data: { solicitudId, replaceExisting: true },
+  if (documentType === "ORDEN_COMPRA") {
+    await enqueueIqCreationForSolicitud({
+      solicitudId,
+      requestedBy: uid,
+      source: "OC_UPLOAD",
     }).catch(async (error) => {
-      const errorCode = String(error?.code || "COTIZACION_GENERATION_FAILED").toUpperCase();
       await solicitudRef.set(
         {
-          cotizacionAutoGenerateStatus: "ERROR",
-          cotizacionAutoGenerateStage: errorCode === "PERMISSION-DENIED" ? "AUTHORIZATION" : errorCode === "FAILED-PRECONDITION" ? "SOURCE_VALIDATION" : "PDF_OR_STORAGE",
-          cotizacionAutoGenerateErrorCode: errorCode,
-          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
-          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+          iqCreateQueueStatus: "NOT_ENQUEUED",
+          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
+          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
     });
-  };
 
-  if (documentType === "ORDEN_COMPRA" && belongsToPay0Dispatch(rootId, solicitud.despachoId)) {
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
       solicitudId,
@@ -755,9 +723,25 @@ logActivityTx(tx, db, {
       );
     });
 
+    await generateCotizacionForSolicitudCore({
+      auth: request.auth,
+      // The active OC is the source of truth. Replacing it must also replace
+      // the derivative quotation; returning an old active version leaves its
+      // SAT key, concept, amount, and receiver data stale.
+      data: { solicitudId, replaceExisting: true },
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          cotizacionAutoGenerateStatus: "ERROR",
+          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
+          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
   }
 
-  if (didFinalize && documentType === "FIRMA_AUTORIZADA_CLIENTE") {
+  if (documentType === "FIRMA_AUTORIZADA_CLIENTE") {
     await generateConstanciaRecepcionForSolicitudCore({
       auth: request.auth,
       data: {
@@ -777,8 +761,7 @@ logActivityTx(tx, db, {
     });
   }
 
-
-  const materiality = await linkSolicitudToMaterialityOperationCore({
+  await linkSolicitudToMaterialityOperationCore({
     auth: request.auth,
     data: { solicitudId },
   }).catch(async (error) => {
@@ -790,41 +773,7 @@ logActivityTx(tx, db, {
       },
       { merge: true },
     );
-    // The OC is already READY. Preserve the derivative quotation on this
-    // failure path so an idempotent finalize retry does not silently lose it.
-    await generateOcQuotation();
-    throw error;
   });
-
-  if (["ORDEN_COMPRA", "FACTURA_XML"].includes(documentType) &&
-      (materiality.materialityOperationId !== solicitudId || !materiality.completedTypes.includes(documentType))) {
-    await generateOcQuotation();
-    throw new HttpsError("failed-precondition", "Materialidad no confirma el documento obligatorio.");
-  }
-  operationTiming("materiality_confirmed_at", solicitudId);
-
-  if (documentType === "ORDEN_COMPRA") {
-    await enqueueIqCreationForSolicitud({
-      solicitudId,
-      requestedBy: uid,
-      source: "OC_UPLOAD",
-    }).catch(async (error) => {
-      await solicitudRef.set(
-        {
-          iqCreateQueueStatus: "NOT_ENQUEUED",
-          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
-          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-
-    // The OC and its Materialidad projection are already durable. The
-    // quotation still runs and refreshes Materialidad, but it must not hold
-    // the immediate IQ dispatch behind PDF rendering and Storage writes.
-    await generateOcQuotation();
-
-  }
 
   return {
     ok: true,
@@ -832,9 +781,6 @@ logActivityTx(tx, db, {
     status: "READY",
     active: true,
     version: finalVersion,
-    solicitudId,
-    materialityConfirmed: true,
-    documentFinalizedAt,
   };
 }
 
@@ -877,13 +823,12 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     ocFiscalMetadataSource: "ORDEN_COMPRA_XLSX",
     ocFiscalMetadataUploadId: activeOc.docs[0].id,
     ocFiscalMetadataUpdatedAt: FieldValue.serverTimestamp(),
-    ...(belongsToPay0Dispatch(rootId, solicitud.despachoId) ? { facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC" } : {}),
+    facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC",
     cotizacionAutoGenerateStatus: "REPROCESSING_ACTIVE_OC",
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  if (belongsToPay0Dispatch(rootId, solicitud.despachoId))
-    await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
   const quote = await generateCotizacionForSolicitudCore({ auth: request.auth, data: { solicitudId, replaceExisting: true } });
   await linkSolicitudToMaterialityOperationCore({ auth: request.auth, data: { solicitudId } });
   await logActivity({
@@ -898,7 +843,7 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     referenceId: solicitudId,
     referenceFolio: solicitud.folio || solicitudId,
     referenceType: "solicitudDocument",
-    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron ${belongsToPay0Dispatch(rootId, solicitud.despachoId) ? "Facturacion y Cotizacion" : "Cotizacion y Materialidad"}.`,
+    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron Facturacion y Cotizacion.`,
     createdBy: uid,
     extra: { source: "docs", activeOcUploadId: activeOc.docs[0].id, productCode: metadata.productCode, unitCode: metadata.unitCode, quotationUploadId: (quote as any).uploadId || null },
   });

@@ -126,36 +126,15 @@ console.log("SMOKE_STAGE=oc_saved");
 await finalizeSolicitudDocumentUploadCore({ auth, data: { uploadId: init.uploadId, storagePath: init.storagePath } });
 console.log("SMOKE_STAGE=oc_finalized");
 
-let [oc, quote, operation, invoice] = await Promise.all([
+const [oc, quote, operation, invoice] = await Promise.all([
   waitForActiveUpload("ORDEN_COMPRA"), waitForActiveUpload("COTIZACION"), db.doc(`materialityOperations/${solicitudId}`).get(),
   db.collection("facturamaInvoices").where("sourceSolicitudId", "==", solicitudId).limit(1).get(),
 ]);
 assert.ok(oc, "La OC debe quedar activa.");
-if (process.env.PAY0_TEST_INJECT_QUOTATION_STORAGE_FAILURE === "1") {
-  const failed = await db.doc(`solicitudes/${solicitudId}`).get();
-  assert.equal(quote, null, "El fallo de Storage no debe registrar una cotizacion activa.");
-  assert.equal(failed.data()?.cotizacionAutoGenerateStatus, "ERROR");
-  assert.equal(failed.data()?.cotizacionAutoGenerateStage, "PDF_OR_STORAGE");
-  assert.match(String(failed.data()?.cotizacionAutoGenerateLastError), /PAY0_TEST_INJECTED_STORAGE_FAILURE/);
-  console.log("SMOKE_STAGE=storage_failure_persisted");
-  delete process.env.PAY0_TEST_INJECT_QUOTATION_STORAGE_FAILURE;
-  const { reprocessActiveSolicitudOcCore } = await import("../../functions/lib/modules/solicitudDocuments/service.js");
-  await reprocessActiveSolicitudOcCore({ auth, data: { solicitudId } });
-  const recoveredQuote = await waitForActiveUpload("COTIZACION");
-  const recovered = await db.doc(`solicitudes/${solicitudId}`).get();
-  const allQuotes = await db.collection("uploads").where("solicitudId", "==", solicitudId).where("documentType", "==", "COTIZACION").get();
-  assert.ok(recoveredQuote, "El reproceso debe restaurar la cotizacion.");
-  quote = recoveredQuote;
-  assert.equal(recovered.data()?.cotizacionAutoGenerateStatus, "READY");
-  assert.equal(recovered.data()?.cotizacionAutoGenerateLastError, undefined);
-  assert.equal(allQuotes.size, 1, "El fallo previo no debe dejar duplicados u huerfanos.");
-  console.log("SMOKE_STAGE=storage_recovery_verified");
-}
 assert.ok(quote, "La OC debe generar cotización automática.");
 assert.ok(operation.exists, "La OC debe crear/actualizar el expediente de Materialidad.");
-// This fixture is outside a PAY0 dispatch. A quotation must not imply that a
-// Facturama draft was created for a company outside that fiscal boundary.
-assert.equal(invoice.size, 0, "Una empresa ajena a despacho PAY0 no debe crear borrador Facturama.");
+assert.equal(invoice.size, 1, "La OC debe crear un único borrador Facturama idempotente.");
+assert.equal(invoice.docs[0].data().status, "AUTO_DRAFT_FISCAL_VALIDATED", "El borrador debe usar la clasificación fiscal autorizada.");
 
 console.log("SMOKE_STAGE=automatic_documents_verified");
 // Simula el enlace que recibe el cliente. submitSolicitudSignature se invoca
@@ -169,7 +148,7 @@ const signature = buildSignaturePng().toString("base64");
 let signatureHandledByCore = false;
 if (process.env.SMOKE_SIGNATURE_MODE === "core") {
   const { submitSolicitudSignature } = await import("../../functions/lib/modules/signatureLinks/callables.js");
-  const signatureResult = await submitSolicitudSignature.run({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Instalacion QA", receiptAddress: "Calle QA 1, Ciudad de Mexico", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } });
+  const signatureResult = await submitSolicitudSignature.run({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Almacen sintetico", receiptAddress: "Calle de pruebas 123, CDMX", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } });
   assert.equal(signatureResult?.ok, true, "La firma publica debe confirmar exito.");
   console.log("SMOKE_STAGE=signature_core_passed");
   signatureHandledByCore = true;
@@ -178,7 +157,7 @@ if (!signatureHandledByCore) {
 const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST || "127.0.0.1:5001";
 const response = await fetch(`http://${functionsHost}/${projectId}/us-central1/submitSolicitudSignature`, {
   method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Instalacion QA", receiptAddress: "Calle QA 1, Ciudad de Mexico", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } }),
+  body: JSON.stringify({ data: { token, signerName: "Receptor Smoke", signerRole: "Autorizado", receiptLocation: "Almacen sintetico", receiptAddress: "Calle de pruebas 123, CDMX", acceptedNoClaimPolicy: true, signatureDataUrl: `data:image/png;base64,${signature}` } }),
 });
 const payload = await response.json();
 // Callable v2 uses `result` in the emulator and `data` in some runtimes.
@@ -198,7 +177,7 @@ assert.equal(signedRequest.data()?.status, "SIGNED", "El enlace debe quedar cons
 assert.equal(finalOperation.data()?.solicitudId, solicitudId, "La constancia debe seguir en el mismo expediente Materialidad.");
 
 console.log(JSON.stringify({
-  result: "PASS", solicitudId, quoteUploadId: quote.id, facturamaInvoiceId: null,
+  result: "PASS", solicitudId, quoteUploadId: quote.id, facturamaInvoiceId: invoice.docs[0].id,
   signatureUploadId: signatureUpload.id, constanciaUploadId: constancia.id,
-  materialityOperationId: solicitudId, facturamaStatus: null,
+  materialityOperationId: solicitudId, facturamaStatus: invoice.docs[0].data().status,
 }, null, 2));

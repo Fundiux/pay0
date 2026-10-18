@@ -14,7 +14,6 @@ import { inspectIqComplementGate, type IqComplementAction } from "./complementGa
 import { readIqRepDepositFields } from "./iqRepDepositFields";
 import { sanitizeIqOperationalError } from "./iqOperationalError";
 import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "../iq/originIdentity";
-import { assertPay0Issuer, PAY0_DISPATCH_ID } from "../facturama/issuerGuard";
 
 function getJsZip(): typeof JSZip {
   return require("jszip");
@@ -220,8 +219,6 @@ async function facturama(path: string, init: RequestInit = {}) {
   return response.json();
 }
 export async function prepareFacturamaComplement(job: any, source: any, app: any, solicitud: any, pago: any) {
-  if (solicitud.despachoId !== PAY0_DISPATCH_ID || solicitud.rootId !== job.rootId) throw Error("REP_FACTURAMA_EXTERNAL_DISPATCH");
-  await assertPay0Issuer({ db, rootId: job.rootId, companyId: text(solicitud.companyId) });
   const invoice = (await db.doc(`facturamaInvoices/${text(solicitud.facturamaInvoiceId)}`).get()).data();
   if (!invoice || invoice.rootId !== job.rootId || invoice.status !== "PRODUCTION_ISSUED" || invoice.sourceSolicitudId !== source.solicitudId || invoice.companyId !== solicitud.companyId || invoice.uuid !== source.invoiceUuid) throw Error("REP_FACTURAMA_SOURCE_INVALID");
   const company = (await db.doc(`companies/${solicitud.companyId}`).get()).data();

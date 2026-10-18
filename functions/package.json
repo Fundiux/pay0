@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "build": "node ../scripts/build-functions.mjs",
+    "build": "tsc && node ../scripts/copy-canonical-assets.mjs",
     "lint": "eslint --ext .js,.ts .",
     "seed:perf": "node scripts/seed-performance-fixtures.mjs",
     "verify:operation-roles": "node scripts/verify-operation-role-access.mjs",
@@ -11,9 +11,7 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log",
-    "build:bundle:candidate": "node ../scripts/build-functions-internal-bundle.mjs",
-    "build:normal": "node ../scripts/build-functions.mjs --normal"
+    "logs": "firebase functions:log"
   },
   "engines": {
     "node": "22"
@@ -37,19 +35,13 @@
     "sql.js": "^1.14.2"
   },
   "devDependencies": {
-    "@typescript-eslint/parser": "^8.71.1",
+    "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
-    "typescript": "^5.9.3",
-    "esbuild": "0.28.2"
+    "typescript": "^5.9.3"
   },
   "private": true,
   "overrides": {
     "protobufjs": "7.6.5",
-    "websocket-driver": "0.7.5",
-    "@fastify/busboy": "3.2.2",
-    "proxy-addr": "2.0.8",
-    "brace-expansion@1": "1.1.21",
-    "brace-expansion@2": "2.1.7",
-    "uuid": "11.1.1"
+    "websocket-driver": "0.7.5"
   }
 }

@@ -24,7 +24,6 @@ import {
 } from "./iqDepositHttpCatalogResolver";
 
 export interface PagoDepositHttpCreateFlowInput {
-  authorizeBeforePost?: () => Promise<void>;
   pagoId: string;
   actorUid: string;
   source: string;
@@ -35,7 +34,6 @@ export interface PagoDepositHttpCreateFlowInput {
   receipt: PagoReceiptDescriptor;
   sum: number;
   iqAttemptId?: string;
-  expectedUploadId?: string;
   allowHttpPost: boolean;
   sessionHolder?: {
     username: string;
@@ -79,7 +77,6 @@ function voucherSha256(bytes: Uint8Array): string {
 export async function runPagoDepositHttpCreateFlow(
   input: PagoDepositHttpCreateFlowInput,
 ): Promise<PagoDepositHttpCreateFlowResult> {
-  await input.authorizeBeforePost?.();
   const pagoId = cleanText(input.pagoId);
   const actorUid = cleanText(input.actorUid);
   const source = cleanText(input.source) || "PAY0_HTTP";
@@ -168,7 +165,6 @@ export async function runPagoDepositHttpCreateFlow(
     actorUid,
     source,
     fingerprint,
-    expectedUploadId: input.expectedUploadId,
   };
 
   const result = await createIqDepositHttpControlled({
@@ -203,7 +199,6 @@ export async function runPagoDepositHttpCreateFlow(
       adapterContext,
     ),
     allowHttpPost: input.allowHttpPost,
-    authorizeBeforePost: input.authorizeBeforePost,
   });
 
   return {

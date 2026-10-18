@@ -1,7 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldPath, getFirestore } from "firebase-admin/firestore";
 import { assertAuthorized } from "../../utils/authGuard";
-import { authorizeListUsersObserved } from "../securityObservation/authorizationDenied";
 
 const db = getFirestore();
 
@@ -18,10 +17,7 @@ export const listUsers = onCall(
 
       const meSnap = await db.doc(`users/${uid}`).get();
       const me = meSnap.data() || {};
-      await authorizeListUsersObserved(
-        () => assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "view" }),
-        { uid, exists: meSnap.exists, rootId: me.rootId }
-      );
+      assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin"], requiredModule: "usuarios", requiredAction: "view" });
       const myRole = String(me.role || me.supervisorRole || "");
       const myRootId = (me.rootId as string) || uid;
 

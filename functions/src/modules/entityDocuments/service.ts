@@ -3,7 +3,6 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
-import { verifyStorageObject } from "../../utils/verifiedStorageObject";
 import { resolveClientCsfContinuationAction } from "../clients/csfService";
 import {
   EntityDocumentEntityType,
@@ -165,7 +164,7 @@ async function requireEntityDocumentWrite(ctx: AuthContext, input: {
   documentType: EntityDocumentType;
   documentCreatedBy?: string;
   allowFinalizedCreate?: boolean;
-}, tx?: FirebaseFirestore.Transaction) {
+}) {
   if (ctx.role === "superadmin") return;
   if (
     input.entityType !== "CLIENTE" ||
@@ -176,8 +175,7 @@ async function requireEntityDocumentWrite(ctx: AuthContext, input: {
     return;
   }
 
-  const clientRef = db.doc(`clients/${input.entityId}`);
-  const clientSnap = tx ? await tx.get(clientRef) : await clientRef.get();
+  const clientSnap = await db.doc(`clients/${input.entityId}`).get();
   const intakeId = cleanText(clientSnap.data()?.fiscalProfile?.csfIntakeId);
   const requiredAction = await resolveClientCsfContinuationAction({
     intakeId,
@@ -185,7 +183,6 @@ async function requireEntityDocumentWrite(ctx: AuthContext, input: {
     uid: ctx.uid,
     rootId: ctx.rootId,
     allowFinalizedCreate: input.allowFinalizedCreate,
-    readDocument: tx ? (path: string) => tx.get(db.doc(path)) : undefined,
   });
   assertAuthorized({ uid: ctx.uid }, ctx.user, {
     allowedRoles: ["superadmin", "admin", "operador"],
@@ -464,90 +461,41 @@ export async function finalizeEntityDocumentUploadCore(request: any) {
     throw new HttpsError("invalid-argument", "storagePath no coincide con el registro.");
   }
 
-  const assertEligible = (row: Record<string, any>) => {
-    if (row.deletedAt || row.isDeleted || row.deactivatedAt || row.supersededByDocumentId ||
-        !["PENDING_UPLOAD", "FINALIZED"].includes(cleanText(row.uploadStatus)) ||
-        !["INACTIVE", "ACTIVE"].includes(cleanText(row.status))) {
-      throw new HttpsError("failed-precondition", "El documento ya no admite finalizacion.");
-    }
-    if (row.uploadStatus === "FINALIZED" && (row.active !== true || row.isCurrent !== true)) {
-      throw new HttpsError("failed-precondition", "El documento finalizado ya no esta vigente.");
-    }
-  };
-  assertEligible(document);
-  const expectedPath = buildEntityDocumentStoragePath({ rootId: ctx.rootId, entityType, entityId, documentType,
-    documentId, safeName: cleanText(document.fileName || document.filename) });
-  if (expectedPath !== storagePath) throw new HttpsError("failed-precondition", "Ruta de carga no valida.");
-  const verified = await verifyStorageObject({
-    bucket: getEntityDocumentsBucket(), storagePath,
-    expectedSize: Number(document.sizeBytes || document.fileSize),
-    expectedContentType: cleanText(document.contentType) || "application/octet-stream",
-    maxBytes: getEntityDocumentMaxSizeBytes(documentType), expectedClientSha256: parseSha256(document),
-    expectedMetadata: { entityDocumentId: documentId, entityType, entityId, documentType },
-  });
-  // Metadata hashed here is the prepared contract, not mutable display/audit fields.
-  const contract = (row: Record<string, any>) => JSON.stringify([
-    row.rootId, row.entityType, row.entityId, row.documentType, row.documentPeriod ?? null,
-    row.storagePath, row.fileName || row.filename, row.sizeBytes || row.fileSize, row.contentType,
-    row.sha256 || null, row.supersedesDocumentId || null, row.createdBy, row.version,
-  ]);
-  const expectedContract = contract(document);
-  const supersedesDocumentId = cleanText(document.supersedesDocumentId);
-  const supersedesRef = supersedesDocumentId ? db.collection("entityDocuments").doc(supersedesDocumentId) : null;
-  const currentQuery = db.collection("entityDocuments")
-    .where("rootId", "==", ctx.rootId).where("entityType", "==", entityType)
-    .where("entityId", "==", entityId).where("documentType", "==", documentType)
-    .where("active", "==", true).where("isCurrent", "==", true);
+  const [exists] = await getEntityDocumentsBucket().file(storagePath).exists();
+  if (!exists) {
+    throw new HttpsError("failed-precondition", "El archivo no existe en Storage.");
+  }
 
-  await db.runTransaction(async tx => {
-    const currentSnap = await tx.get(documentRef);
-    if (!currentSnap.exists) throw new HttpsError("not-found", "Documento no encontrado.");
-    const current = currentSnap.data() || {};
-    assertEligible(current);
-    // A successful concurrent finalization is retry-safe, but never resurrect an old version.
-    const alreadyVerified = current.uploadStatus === "FINALIZED" && current.integritySealStatus === "HASH_SERVER_VERIFIED" &&
-      current.storageGeneration === verified.storageGeneration && current.sha256 === verified.sha256;
-    const comparable = alreadyVerified ? { ...current, sha256: document.sha256 } : current;
-    if (contract(comparable) !== expectedContract) throw new HttpsError("failed-precondition", "La carga preparada cambio durante la verificacion.");
-    const userSnap = await tx.get(db.collection("users").doc(ctx.uid));
-    const user = userSnap.data() || {};
-    const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"] });
-    if ((cleanText(user.rootId) || ctx.uid) !== ctx.rootId) throw new HttpsError("permission-denied", "El acceso cambio durante la carga.");
-    const entitySnap = await tx.get(db.collection(getEntityCollectionName(entityType)).doc(entityId));
-    const entity = entitySnap.data();
-    if (!entity || (cleanText(entity.rootId) && cleanText(entity.rootId) !== ctx.rootId) || entity.deletedAt || entity.isDeleted) {
-      throw new HttpsError("permission-denied", "Entidad fuera del contexto autorizado.");
+  const supersedesDocumentId = cleanText(document.supersedesDocumentId);
+  const supersedesRef = supersedesDocumentId
+    ? db.collection("entityDocuments").doc(supersedesDocumentId)
+    : null;
+
+  await db.runTransaction(async (tx) => {
+    if (supersedesRef) {
+      const prevSnap = await tx.get(supersedesRef);
+      if (prevSnap.exists && cleanText((prevSnap.data() || {}).rootId) === ctx.rootId) {
+        tx.update(supersedesRef, {
+          isCurrent: false,
+          status: "REPLACED",
+          supersededByDocumentId: documentId,
+          replacedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
     }
-    await requireEntityDocumentWrite({ ...ctx, role, user, username: getUsername(user, ctx.uid) }, {
-      entityType, entityId, documentType, documentCreatedBy: cleanText(current.createdBy), allowFinalizedCreate: true,
-    }, tx);
-    const versions = await tx.get(currentQuery);
-    const samePeriod = versions.docs.filter(snap => cleanText(snap.data().documentPeriod) === cleanText(current.documentPeriod));
-    if (alreadyVerified) {
-      if (samePeriod.some(snap => snap.id !== documentId)) throw new HttpsError("failed-precondition", "Existe otra version vigente.");
-      return;
-    }
-    const prevSnap = supersedesRef ? await tx.get(supersedesRef) : null;
-    const prev = prevSnap?.data();
-    if (samePeriod.some(snap => snap.id !== documentId && snap.id !== supersedesDocumentId)) {
-      throw new HttpsError("failed-precondition", "Otra carga ya actualizo la version vigente.");
-    }
-    if (supersedesRef && (!prev || prev.rootId !== ctx.rootId || prev.entityType !== entityType || prev.entityId !== entityId ||
-        prev.documentType !== documentType || cleanText(prev.documentPeriod) !== cleanText(current.documentPeriod) ||
-        prev.active !== true || prev.isCurrent !== true || prev.status !== "ACTIVE" || prev.supersededByDocumentId || prev.deletedAt || prev.isDeleted)) {
-      throw new HttpsError("failed-precondition", "La version anterior cambio; prepara una nueva carga.");
-    }
-    if (supersedesRef) tx.update(supersedesRef, {
-      active: false, isCurrent: false, status: "REPLACED", supersededByDocumentId: documentId,
-      replacedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-    });
+
     tx.update(documentRef, {
-      active: true, isCurrent: true, status: "ACTIVE", uploadStatus: "FINALIZED",
-      finalizedBy: ctx.uid, finalizedByName: getUsername(user, ctx.uid), finalizedAt: FieldValue.serverTimestamp(),
-      clientReportedSha256: parseSha256(document), ...verified,
-      integrityHashAlgorithm: "SHA-256", integritySealStatus: "HASH_SERVER_VERIFIED",
-      malwareScanStatus: "NOT_SCANNED",
-      integritySealedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      active: true,
+      isCurrent: true,
+      status: "ACTIVE",
+      uploadStatus: "FINALIZED",
+      finalizedBy: ctx.uid,
+      finalizedByName: ctx.username,
+      finalizedAt: FieldValue.serverTimestamp(),
+      integritySealStatus: document.sha256 ? "SEALED" : "SEALED_NO_HASH",
+      integritySealedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   });
 

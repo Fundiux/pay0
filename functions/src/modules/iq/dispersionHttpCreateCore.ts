@@ -912,7 +912,6 @@ function resultBase(
 
 export async function runIqCreateDispersionHttpH4D85A50(
   input: {
-    authorizeBeforePost?: () => Promise<void>;
     apiOrigin?: string;
     username: string;
     password: string;
@@ -1142,7 +1141,6 @@ export async function runIqCreateDispersionHttpH4D85A50(
       new URL("/dispersions", apiOrigin);
     const dispatchedAtMs = Date.now();
 
-    await input.authorizeBeforePost?.();
     postDispatched = true;
 
     let response: Response;
@@ -1203,19 +1201,17 @@ export async function runIqCreateDispersionHttpH4D85A50(
     };
 
     if (response.status !== 201) {
-      const unequivocalRejection = new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]).has(response.status);
-      // A dispatched request with an ambiguous response must retain the claim.
       return {
         ...resultBase(authenticated),
         authenticated,
-        outcome: unequivocalRejection ? "FAILED_SAFE" : "OUTCOME_UNKNOWN",
+        outcome: "FAILED_SAFE",
         submitClicked: true,
         postAccepted: false,
         iqId: null,
         resultPath: "/dispersions",
-        responseMessage: unequivocalRejection
-          ? clean(responseBody) || `IQ rechazo la dispersion con HTTP ${response.status}.`
-          : `IQ devolvio HTTP ${response.status} con resultado incierto. Reintento bloqueado; requiere conciliacion.`,
+        responseMessage:
+          clean(responseBody) ||
+          `IQ rechazo la dispersion con HTTP ${response.status}.`,
         writeContract,
         selected,
         destinationVerified,

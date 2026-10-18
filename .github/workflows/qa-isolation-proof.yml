@@ -1,0 +1,37 @@
+name: QA isolation proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolation-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            qa/isolation-proof
+          sparse-checkout-cone-mode: false
+      - name: Build minimal isolation image
+        run: docker build --pull --tag pay0-qa-isolation-proof:local qa/isolation-proof
+      - name: Run network-isolated proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME=/tmp docker run --rm \
+            --network none \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 64 \
+            --user 65532:65532 \
+            --workdir /opt/isolation \
+            --env HOME=/tmp \
+            --env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            pay0-qa-isolation-proof:local

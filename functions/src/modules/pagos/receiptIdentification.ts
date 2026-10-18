@@ -28,7 +28,7 @@ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatal
 }
 
 /** Called only with bytes and parsed signals obtained by the server parser. */
-export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown> }): Promise<ReceiptIdentificationResult> {
+export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string }): Promise<ReceiptIdentificationResult> {
   const { db, actor, receipt } = input;
   const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
   if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
@@ -64,8 +64,6 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     detectedPayerRfc: clean(receipt.payerRfc), detectedBeneficiaryRfc: clean(receipt.beneficiaryRfc),
     operatorSelectedBankName: clean(company!.bankName || company!.banco), operatorSelectedAccount: clean(company!.bankClabe || company!.clabe || company!.cuenta),
     receiptIdentificationId: id,
-    receiptAnalysisId: clean(input.analysisId), receiptReaderVersion: clean(input.readerVersion),
-    receiptSemantic: input.semanticReceipt || null,
   } : null;
   const evidence = { client: clientMatch.evidence, company: companyMatch.evidence };
   return db.runTransaction(async tx => {
@@ -86,7 +84,6 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     const status = ready ? "READY" : "REQUIRES_REVIEW";
     tx.set(ref, { schemaVersion: 1, rootId: actor.rootId, actorUid: actor.uid, source: "RECEIPT", contentSha256: input.contentSha256,
       status, reasons, evidence, createPayload, stage: ready ? "IDENTIFIED" : "REQUIRES_REVIEW",
-      analysisId: clean(input.analysisId) || null, readerVersion: clean(input.readerVersion) || null,
       updatedAt: FieldValue.serverTimestamp(), ...(!existing.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
       attempts: FieldValue.increment(1), metricDetected: true, metricIdentifiedAutomatically: ready, metricRequiresReview: !ready,
     }, { merge: true });

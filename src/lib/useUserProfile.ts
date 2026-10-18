@@ -5,20 +5,43 @@ import { useAuth } from "@/lib/auth";
 
 export function useUserProfile() {
   const { user, loading: authLoading } = useAuth();
-  const uid = user?.uid || null;
-  const [snapshot, setSnapshot] = useState<{ profile: any | null; uid: string | null; loading: boolean }>({ profile: null, uid: null, loading: true });
+  const [profile, setProfile] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    let current = true;
-    if (authLoading) return;
-    if (!uid) { setSnapshot({ profile: null, uid: null, loading: false }); return; }
-    setSnapshot({ profile: null, uid: null, loading: true });
-    const unsub = onSnapshot(doc(db, "users", uid), snap => {
-      if (current) setSnapshot({ profile: snap.exists() ? snap.data() || null : null, uid, loading: false });
-    }, () => {
-      if (current) setSnapshot({ profile: null, uid, loading: false });
-    });
-    return () => { current = false; unsub(); };
-  }, [authLoading, uid]);
-  const matches = snapshot.uid === uid;
-  return { profile: matches ? snapshot.profile : null, profileUid: snapshot.uid, loading: authLoading || snapshot.loading || !matches };
+    const uid = (user as any)?.uid as string | undefined;
+
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    if (!uid) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const refUsers = doc(db, "users", uid);
+
+    const unsub = onSnapshot(
+      refUsers,
+      (snap) => {
+        if (snap.exists()) setProfile((snap.data() as any) || null);
+        else setProfile(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("[useUserProfile] users/{uid}:", (err as any)?.code || (err as any)?.message || err);
+        setProfile(null);
+        setLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [authLoading, (user as any)?.uid]);
+
+  return { profile, loading };
 }

@@ -6,7 +6,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
-import { assertPay0Issuer, fiscalIssuerReason, PAY0_DISPATCH_ID } from "./issuerGuard";
+import { isOwnInvoiceIssuerCompany } from "./service";
 import { logActivityBatch } from "../../utils/logActivity";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
@@ -129,8 +129,9 @@ export const saveFacturamaIssuerConfig = onCall(
     const uid = requireAuth(request); const user = await getMyUser(uid);
     assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
     const rootId = clean(user?.rootId || uid, 128); const companyId = clean(request.data?.companyId, 128);
-    const { company } = await assertPay0Issuer({ db, rootId, companyId, requireCsd: false });
-    const config = issuerConfig(company, request.data);
+    const company = await db.doc(`companies/${companyId}`).get();
+    if (!company.exists || clean(company.data()?.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Empresa fuera de alcance.");
+    const config = issuerConfig(company.data(), request.data);
     await db.doc(`facturamaIssuerConfigs/${companyId}`).set({ rootId, companyId, issuerName: config.name, fiscalRegime: config.fiscalRegime, expeditionPlace: config.expeditionPlace, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { ok: true, companyId, ...config };
   },
@@ -148,7 +149,6 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
     if (!invoiceSnap.exists) throw new HttpsError("not-found", "Borrador no encontrado.");
     const invoice: any = invoiceSnap.data() || {};
     if (clean(invoice.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Borrador fuera de alcance.");
-    await assertPay0Issuer({ db, rootId, companyId: clean(invoice.companyId, 128) });
     if (invoice.fiscalValidation?.status !== "VALID") throw new HttpsError("failed-precondition", "El borrador no tiene validación fiscal vigente.");
     const issuedStatus = `${options.environment}_ISSUED`;
     const emittingStatus = `${options.environment}_EMITTING`;
@@ -156,15 +156,14 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
     if (invoice.facturamaCfdiId && clean(invoice.facturamaEnvironment || invoice.environment, 16) !== options.environment) {
       throw new HttpsError("failed-precondition", "El borrador ya tiene un CFDI asociado a otro ambiente y no puede reutilizarse para emitir en producción.");
     }
+    if (invoice.status === issuedStatus && invoice.facturamaCfdiId) return { ok: true, reused: true, invoiceId, status: invoice.status, facturamaCfdiId: invoice.facturamaCfdiId, uuid: invoice.uuid || null };
     const solicitudId = clean(invoice.sourceSolicitudId, 128);
     if (!solicitudId) throw new HttpsError("failed-precondition", "El borrador no esta ligado a una Solicitud.");
     const [companySnap, configSnap, solicitudSnap] = await Promise.all([db.doc(`companies/${invoice.companyId}`).get(), db.doc(`facturamaIssuerConfigs/${invoice.companyId}`).get(), db.doc(`solicitudes/${solicitudId}`).get()]);
     if (!companySnap.exists || !solicitudSnap.exists) throw new HttpsError("failed-precondition", "Emisor o Solicitud no encontrados.");
     if (companySnap.data()?.rootId !== rootId || solicitudSnap.data()?.rootId !== rootId ||
         (solicitudSnap.data()?.companyId || solicitudSnap.data()?.empresaId) !== invoice.companyId ||
-        solicitudSnap.data()?.despachoId !== PAY0_DISPATCH_ID ||
         (configSnap.exists && configSnap.data()?.rootId !== rootId)) throw new HttpsError("permission-denied", "Emisor, configuración o solicitud fuera del ámbito del CFDI.");
-    if (invoice.status === issuedStatus && invoice.facturamaCfdiId) return { ok: true, reused: true, invoiceId, status: invoice.status, facturamaCfdiId: invoice.facturamaCfdiId, uuid: invoice.uuid || null };
     const issuer = issuerConfig(companySnap.data(), configSnap.data()); const solicitud: any = solicitudSnap.data() || {};
     const folio = clean(solicitud.folio || invoiceId, 40).replace(/[^A-Za-z0-9_-]/g, "");
     const items = (invoice.concepts || []).map((item: any) => {
@@ -187,15 +186,6 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
     let claimedInvoice: any = invoice;
     await db.runTransaction(async tx => {
       const currentSnap = await tx.get(invoiceRef);
-      const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
-      const currentCompany = await tx.get(db.doc(`companies/${invoice.companyId}`));
-      const currentDispatch = await tx.get(db.doc(`despachos/${PAY0_DISPATCH_ID}`));
-      const currentConfig = await tx.get(db.doc(`facturamaIssuerConfigs/${invoice.companyId}`));
-      const issuerReason = fiscalIssuerReason({ rootId, companyId: invoice.companyId, company: currentCompany.data(), dispatch: currentDispatch.data(), config: currentConfig.data() });
-      if (issuerReason || source.get("rootId") !== rootId || source.get("despachoId") !== PAY0_DISPATCH_ID ||
-          (source.get("companyId") || source.get("empresaId")) !== invoice.companyId ||
-          currentSnap.get("companyId") !== invoice.companyId) throw new HttpsError("failed-precondition", `Emisor Facturama no autorizado: ${issuerReason || "SOURCE_SCOPE_MISMATCH"}.`);
-      if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada; no se emite.");
       if (!currentSnap.exists) throw new HttpsError("not-found", "Borrador no encontrado.");
       const current: any = currentSnap.data() || {};
       if (clean(current.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Borrador fuera de alcance.");
@@ -264,8 +254,6 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
           const originalInvoiceSnap = originalInvoiceId ? await db.doc(`facturamaInvoices/${originalInvoiceId}`).get() : null;
           const originalInvoice: any = originalInvoiceSnap?.data() || {};
           if (!originalSnap.exists || clean(original.rootId, 128) !== rootId || !originalInvoice.facturamaCfdiId || !originalInvoiceSnap) throw new Error("No se encontro el CFDI original.");
-          await assertPay0Issuer({ db, rootId, companyId: clean(original.companyId || original.empresaId, 128) });
-          if (original.despachoId !== PAY0_DISPATCH_ID || originalInvoice.companyId !== (original.companyId || original.empresaId)) throw new Error("FACTURAMA_REPLACEMENT_ISSUER_SCOPE");
           const cancelResult = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(originalInvoice.facturamaCfdiId)}?${new URLSearchParams({ motive: "01", uuidReplacement: uuid }).toString()}`, { method: "DELETE" });
           const cancellationStatus = clean(cancelResult?.Status || cancelResult?.status, 32).toUpperCase() || "REQUESTED";
           const cancellationTerminal = ["CANCELED", "ACEPTED", "EXPIRED"].includes(cancellationStatus);
@@ -325,8 +313,6 @@ export const reconcileFacturamaIssuedMetadata = onCall(
       const solicitudSnap = await solicitudRef.get(); const solicitud: any = solicitudSnap.data() || {};
       if (!solicitudSnap.exists || clean(solicitud.rootId, 128) !== rootId || (clean(solicitud.facturaDisplay, 128) && clean(solicitud.facturaFecha, 64))) { skipped++; continue; }
       try {
-        await assertPay0Issuer({ db, rootId, companyId: clean(invoice.companyId, 128) });
-        if (solicitud.despachoId !== PAY0_DISPATCH_ID || (solicitud.companyId || solicitud.empresaId) !== invoice.companyId) { skipped++; continue; }
         const xmlResult = await requestFacturama(PRODUCTION_BASE_URL, `/api/Cfdi/xml/issuedLite/${encodeURIComponent(clean(invoice.facturamaCfdiId, 256))}`);
         const metadata = issuedCfdiMetadata(Buffer.from(clean(xmlResult?.Content, 20_000_000), "base64"));
         if (!metadata.folio && !metadata.uuid) { failed++; continue; }
@@ -354,12 +340,9 @@ export const cancelFacturamaProductionInvoice = onCall(
     if (motive === "01" && !/^[0-9A-F]{8}-[0-9A-F-]{27}$/.test(replacement)) throw new HttpsError("invalid-argument", "Motivo 01 requiere UUID sustituto.");
     const solSnap = await db.doc(`solicitudes/${solicitudId}`).get(); if (!solSnap.exists) throw new HttpsError("not-found", "Solicitud no encontrada.");
     const sol: any = solSnap.data() || {}; if (clean(sol.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera de alcance.");
-    await assertPay0Issuer({ db, rootId, companyId: clean(sol.companyId || sol.empresaId, 128) });
-    if (sol.despachoId !== PAY0_DISPATCH_ID) throw new HttpsError("failed-precondition", "La Solicitud no pertenece al despacho PAY0.");
     const invoiceId = clean(sol.facturamaInvoiceId, 128); if (!invoiceId) throw new HttpsError("failed-precondition", "La Solicitud no tiene CFDI Facturama.");
     const invRef = db.doc(`facturamaInvoices/${invoiceId}`); const invSnap = await invRef.get(); const inv: any = invSnap.data() || {};
     if (!invSnap.exists || clean(inv.rootId, 128) !== rootId || inv.environment !== "PRODUCTION" || !inv.facturamaCfdiId) throw new HttpsError("failed-precondition", "CFDI productivo Facturama no disponible.");
-    if (inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
     const qs = new URLSearchParams({ motive, ...(replacement ? { uuidReplacement: replacement } : {}) });
     const result = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(inv.facturamaCfdiId)}?${qs.toString()}`, { method: "DELETE" });
     const externalStatus = clean(result?.Status || result?.status, 32).toUpperCase();
@@ -387,11 +370,8 @@ export const refreshFacturamaProductionCancellationStatus = onCall(
     const sol: any = solSnap.data() || {};
     if (clean(sol.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera de alcance.");
     const invoiceId = clean(sol.facturamaInvoiceId, 128);
-    await assertPay0Issuer({ db, rootId, companyId: clean(sol.companyId || sol.empresaId, 128) });
-    if (sol.despachoId !== PAY0_DISPATCH_ID) throw new HttpsError("failed-precondition", "La Solicitud no pertenece al despacho PAY0.");
     const invSnap = invoiceId ? await db.doc(`facturamaInvoices/${invoiceId}`).get() : null;
     const inv: any = invSnap?.data() || {};
-    if (invSnap?.exists && (inv.rootId !== rootId || inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId)) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
     // The cancellation path also heals legacy records that were issued before
     // metadata extraction existed, so Solicitudes never remains at S/F.
     let metadata = { serie: null as string | null, folio: null as string | null, uuid: null as string | null, fecha: null as string | null, display: null as string | null };
@@ -467,7 +447,11 @@ async function scopedOwnIssuer(request: any) {
   assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
   const rootId = clean(user?.rootId || uid, 128); const companyId = clean(request.data?.companyId, 128);
   if (!companyId) throw new HttpsError("invalid-argument", "companyId requerido.");
-  const { company } = await assertPay0Issuer({ db, rootId, companyId, requireCsd: false });
+  const snap = await db.doc(`companies/${companyId}`).get();
+  const company: any = snap.exists ? snap.data() || {} : null;
+  if (!company || clean(company.rootId, 128) !== rootId || company.active === false || !isOwnInvoiceIssuerCompany(company)) {
+    throw new HttpsError("permission-denied", "Emisor propio fuera de alcance.");
+  }
   const rfc = clean(company.rfc, 13).toUpperCase();
   if (!/^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc)) throw new HttpsError("failed-precondition", "El emisor no tiene RFC válido.");
   return { uid, user, rootId, companyId, company, rfc };

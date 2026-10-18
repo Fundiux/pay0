@@ -20,17 +20,15 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-// The isolated 8af329e artifact exposes 351 endpoints. This candidate adds
-// engineering assignment and the two server-authorized operational readers.
-// Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 354;
+// ASTRA adds 2 identities, 4 payment continuations, 12 commission operations,
+// 1 materiality projection, 1 receipt certificate, 11 corporate resources and
+// 1 scoped voice-activity reader to the certified 309-endpoint baseline.
+const expectedEndpointCount = 341;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
   "getAuthorizedDocumentDownloadUrl",
-  "getControlCenterEngineering", "importControlCenterEngineeringEvidence", "assignControlCenterEngineeringTask",
-  "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
   "createClientDispersionIq",
   "processIqDispersionCreate",
   "previewPaymentCommissionDistribution",

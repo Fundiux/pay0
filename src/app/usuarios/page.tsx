@@ -1060,15 +1060,7 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      <Modal
-        open={openCreate}
-        title="Nuevo usuario"
-        onClose={() => setOpenCreate(false)}
-        widthClassName="max-w-xl"
-        closeOnEscape={!loading}
-        closeOnBackdrop={!loading}
-        closeButtonDisabled={loading}
-      >
+      <Modal open={openCreate} title="Nuevo usuario" onClose={() => setOpenCreate(false)} widthClassName="max-w-xl">
         <div className="grid gap-3">
           <label className="text-slate-300 text-sm">
             Tipo

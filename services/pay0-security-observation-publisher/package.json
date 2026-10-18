@@ -1,8 +1,0 @@
-{
-  "name": "pay0-security-observation-publisher",
-  "version": "1.0.0",
-  "private": true,
-  "engines": { "node": "22" },
-  "scripts": { "build": "node scripts/build.mjs", "start": "node src/main.mjs" },
-  "devDependencies": { "typescript": "5.9.3" }
-}

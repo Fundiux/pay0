@@ -17,10 +17,10 @@ async function main() {
   await db.doc(`users/${root}`).set({ role: 'superadmin', rootId: root, active: true });
   await db.doc(`users/${other}`).set({ role: 'superadmin', rootId: other, active: true });
   const ids = { observation: `obs_${root}`, decision: `decision_${root}`, outcome: `outcome_${root}`, memory: `experience_${root}`, trace: `trace_${root}` };
-  await db.doc(`agent007Observations/${ids.observation}`).set({ rootId: root, caseId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', createdAt: time(0) });
+  await db.doc(`agent007Observations/${ids.observation}`).set({ rootId: root, caseId, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', createdAt: time(0) });
   await db.doc(`agent007Memory/${ids.decision}`).set({ rootId: root, kind: 'DECISION', status: 'CONFIRMED', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: caseId },
     links: { observationId: ids.observation, linkStatus: 'LINKED' }, decision: { actorUid: root, actorRole: 'superadmin', decisionType: 'APPROVED', decisionAt: time(1).toDate().toISOString() } });
-  await db.doc(`agent007Observations/${ids.outcome}`).set({ rootId: root, caseId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', createdAt: time(2) });
+  await db.doc(`agent007Observations/${ids.outcome}`).set({ rootId: root, caseId, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', createdAt: time(2) });
   await db.doc(`agent007Memory/${ids.memory}`).set({ rootId: root, kind: 'EXPERIENCE', status: 'CONFIRMED', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: caseId },
     links: { observationId: ids.observation, decisionId: ids.decision, outcomeId: ids.outcome }, createdAt: time(3).toDate().toISOString() });
   await db.doc(`agent007Traces/${ids.trace}`).set({ rootId: root, evidenceReferences: [{ sourceSystem: 'PAY0', entityType: 'solicitud', entityId: caseId }],
@@ -75,7 +75,7 @@ async function main() {
   const ledger = await callables.listAgent007LearningLineage.run({ auth, data: { experienceId: created.id } });
   assert.deepEqual(new Set(ledger.events.map(x => x.type)), new Set(['EXPERIENCE_CREATED', 'EXPERIENCE_VERIFIED', 'CORRECTION_RECORDED', 'EXPERIENCE_RETRIEVED', 'LEARNING_EFFECT_MEASURED', 'SPLIT_ASSIGNED']));
   const laterCase = `${root}-later`, laterObs = `obs_${laterCase}`, laterDecision = `decision_${laterCase}`, laterOutcome = `outcome_${laterCase}`;
-  await db.doc(`agent007Observations/${laterObs}`).set({ rootId: root, caseId: laterCase, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', createdAt: time(0) });
+  await db.doc(`agent007Observations/${laterObs}`).set({ rootId: root, caseId: laterCase, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_STATUS_ACTUALIZADO', createdAt: time(0) });
   await db.doc(`agent007Memory/${laterDecision}`).set({ rootId: root, kind: 'DECISION', status: 'CONFIRMED', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId: laterCase },
     links: { observationId: laterObs, linkStatus: 'LINKED' }, decision: { actorUid: root, actorRole: 'superadmin', decisionType: 'APPROVED', decisionAt: time(1).toDate().toISOString() } });
   const draft = await callables.createAgent007LearningDraft.run({ auth, data: { decisionId: laterDecision, domain: 'SOLICITUDES', taskType: 'REASON', intent: 'EXPLAIN_DELAY',
@@ -85,7 +85,7 @@ async function main() {
     correctedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION', reasonCode: 'HUMAN_CORRECTION', expectedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION',
     evidenceReferences: [{ system: 'HUGO', kind: 'OBSERVATION', id: laterObs }] } });
   assert.equal(early.trainingEligibility.eligible, false);
-  await db.doc(`agent007Observations/${laterOutcome}`).set({ rootId: root, caseId: laterCase, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', createdAt: admin.firestore.Timestamp.now() });
+  await db.doc(`agent007Observations/${laterOutcome}`).set({ rootId: root, caseId: laterCase, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', createdAt: admin.firestore.Timestamp.now() });
   const linked = await callables.linkAgent007LearningOutcome.run({ auth, data: { experienceId: draft.id, outcomeId: laterOutcome } });
   assert.equal(linked.state, 'VERIFIED'); assert.equal(linked.trainingEligibility.eligible, true);
   const draftEvents = (await callables.listAgent007LearningLineage.run({ auth, data: { experienceId: draft.id } })).events.map(x => x.type);

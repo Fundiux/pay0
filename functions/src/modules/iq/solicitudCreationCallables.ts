@@ -1,6 +1,5 @@
-import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { DEFAULT_IQ_ERP_URL } from "./config";
-import { requireIqAssociatedName } from "./associatedName";
+import { resolveIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -1260,7 +1259,7 @@ export const createSolicitudIq = onCall(
     const username = cleanText(profile.username);
     const profileAlias = cleanText(profile.alias);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
-    const associatedName = requireIqAssociatedName(profile.associatedName);
+    const associatedName = resolveIqAssociatedName(username, profile.associatedName);
 
     const pay0ClientId = cleanText(
       solicitud.clienteId ??
@@ -1450,7 +1449,6 @@ export const createSolicitudIq = onCall(
           iqId: reservation.iqId,
           iqProfileId: profileId,
           iqProfileAlias: profileAlias || null,
-          iqAssociatedName: associatedName,
           attemptCount: reservation.attemptCount,
           idempotent: true,
           fingerprint: reservation.fingerprint,
@@ -1501,7 +1499,6 @@ export const createSolicitudIq = onCall(
         attemptCount: reservation.attemptCount,
         iqProfileId: profileId,
         iqProfileAlias: profileAlias || null,
-        iqAssociatedName: associatedName,
         fingerprint,
         startedAtMs,
         targetDateIso,
@@ -1567,12 +1564,6 @@ export const createSolicitudIq = onCall(
       markPerf("credential_decrypt");
 
       browserResult = await runIqCreateInvoiceHttpA53({
-        authorizeBeforePost: async () => {
-          const current = (await solicitudRef.get()).data();
-          if (!current || current.rootId !== auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
-          await authorizeDeferredIntent({uid: auth.uid, rootId: auth.rootId, module: "solicitudes", action: "create",
-            clientId: cleanText(current.clienteId || current.clientId), permission: "operateSolicitudes"});
-        },
         erpUrl,
         username,
         password,
