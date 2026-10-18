@@ -12,7 +12,7 @@ RUN npm ci --ignore-scripts \
  && npm install --global firebase-tools@${FIREBASE_TOOLS_VERSION}
 COPY . .
 
-RUN npm --prefix functions run build \
+RUN printf 'PAY0_FIREBASE_WEB_API_KEY=qa-emulator-only\n' > functions/.env.local && npm --prefix functions run build \
  && npx playwright install --with-deps chromium \
  && chmod -R a+rX /opt/ms-playwright \
  && firebase setup:emulators:firestore \
