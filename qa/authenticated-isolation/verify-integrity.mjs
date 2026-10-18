@@ -1,14 +1,13 @@
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 const base = "21e45105ccfeeb90c3f90f443884c4499547ebbf";
 const protectedPaths = ["src", "functions", "firestore.rules", "storage.rules", "firebase.json", "firebase.emulator-tests.json"];
-const changed = [
-  execFileSync("git", ["diff", "--name-only", "--", ...protectedPaths], { encoding: "utf8" }),
-  execFileSync("git", ["diff", "--cached", "--name-only", "--", ...protectedPaths], { encoding: "utf8" }),
-].join("").trim();
-if (changed) throw new Error(`CANDIDATE_WORKTREE_DIRTY:${changed.replace(/\r?\n/g, ",")}`);
-for (const path of protectedPaths) {
-  const expected = execFileSync("git", ["rev-parse", `${base}:${path}`], { encoding: "utf8" }).trim();
-  const actual = execFileSync("git", ["rev-parse", `HEAD:${path}`], { encoding: "utf8" }).trim();
-  if (actual !== expected) throw new Error(`CANDIDATE_TREE_MISMATCH:${path}`);
-}
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const git = (args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+if (git(["rev-parse", "--is-inside-work-tree"]) !== "true") throw new Error("CANDIDATE_REPOSITORY_INVALID");
+if (git(["rev-parse", "HEAD"]) !== base) throw new Error(`CANDIDATE_HEAD_MISMATCH:${git(["rev-parse", "HEAD"])}`);
+const changed = [git(["diff", "--name-only", "--", ...protectedPaths]), git(["diff", "--cached", "--name-only", "--", ...protectedPaths])].filter(Boolean).join(",");
+if (changed) throw new Error(`CANDIDATE_WORKTREE_DIRTY:${changed}`);
+for (const path of protectedPaths) if (git(["rev-parse", `${base}:${path}`]) !== git(["rev-parse", `HEAD:${path}`])) throw new Error(`CANDIDATE_TREE_MISMATCH:${path}`);
 console.log("CANDIDATE_FUNCTIONAL_INTEGRITY_PASS");
