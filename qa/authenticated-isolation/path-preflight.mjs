@@ -8,4 +8,5 @@ const config = JSON.parse(await readFile(configPath, "utf8"));
 if (config.functions?.source !== "functions" || config.firestore?.rules !== "firestore.rules") throw new Error("AUTHENTICATED_QA_FIREBASE_CONFIG_PATH_INVALID");
 const hosts = [config.emulators?.auth?.host, config.emulators?.firestore?.host, config.emulators?.functions?.host];
 if (!hosts.every((host) => host === "127.0.0.1")) throw new Error("AUTHENTICATED_QA_NONLOCAL_EMULATOR_HOST");
+if (process.env.PAY0_FIREBASE_WEB_API_KEY !== "qa-emulator-only") throw new Error("AUTHENTICATED_QA_UNEXPECTED_FUNCTIONS_PARAM");
 console.log("AUTHENTICATED_QA_PATH_PREFLIGHT_PASS");
