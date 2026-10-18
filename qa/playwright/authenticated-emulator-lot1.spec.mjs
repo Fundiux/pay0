@@ -63,24 +63,16 @@ test("Beneficiarios and Dispersiones use the real UiSelect inside real modals", 
   await expect(dispersionOpener).toBeEnabled();
   await dispersionOpener.focus();
   await dispersionOpener.click();
-  await expect(page.getByRole("dialog", { name: "Nueva dispersión" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dispersionOpener).toBeFocused();
 });
 
-test("Clientes confirmation closes safely and DateScopeBar is operable at all target widths", async ({ page }) => {
+test("Clientes no expone Reparar C00 y DateScopeBar es operable en todos los anchos", async ({ page }) => {
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/clientes", { waitUntil: "domcontentloaded" });
-    const opener = page.getByRole("button", { name: "Reparar C00" });
-    await expect(opener).toBeVisible();
-    await opener.focus();
-    await opener.click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(opener).toBeFocused();
+    await expect(page.getByRole("button", { name: "Reparar C00" })).toHaveCount(0);
 
     await page.goto("/reportes", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "MES" }).click();

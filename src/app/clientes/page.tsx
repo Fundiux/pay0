@@ -7,8 +7,8 @@ import Modal from "@/components/Modal";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
-import { ChevronUp, ChevronDown, RefreshCw, CircleDollarSign, Send, Pencil, Power, PowerOff, Eye, UploadCloud, FileText } from "lucide-react";
-import { repairClientNumbersByAdminMutation as repairClientNumbersByAdmin, saveClientMutation as saveClient, syncIqClientMutation as syncIqClient, toggleClientActiveMutation as toggleClientActive } from "@/services/clientMutations";
+import { ChevronUp, ChevronDown, CircleDollarSign, Send, Pencil, Power, PowerOff, Eye, UploadCloud, FileText } from "lucide-react";
+import { saveClientMutation as saveClient, syncIqClientMutation as syncIqClient, toggleClientActiveMutation as toggleClientActive } from "@/services/clientMutations";
 import { listScopedClients } from "@/services/clients";
 import {
   finalizeClientCsfIntake,
@@ -145,7 +145,6 @@ export default function ClientesPage() {
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [isRepairing, setIsRepairing] = useState(false);
   const [toggleBusyId, setToggleBusyId] = useState<string>("");
   const [iqBusyId, setIqBusyId] = useState<string>("");
   const [pageMsg, setPageMsg] = useState("");
@@ -206,32 +205,6 @@ export default function ClientesPage() {
     }
     setSortConfig({ key, direction });
   };
-
-  function requestRepairClientNumbers() {
-    if (!adminId || isRepairing) return;
-
-    setConfirmAction({
-      title: "Reparar C00",
-      message: "Esto asignara numeros correlativos a todos los clientes que no lo tengan. Continuar?",
-      confirmLabel: "Reparar",
-      onConfirm: repairClientNumbers,
-    });
-  }
-
-  async function repairClientNumbers() {
-    if (!adminId || isRepairing) return;
-
-    setPageMsg("");
-    setIsRepairing(true);
-    try {
-      await repairClientNumbersByAdmin(adminId);
-      setPageMsg("Numeros de cliente actualizados correctamente.");
-    } catch (e: any) {
-      setPageMsg(e?.message ? `Error al reparar numeros: ${e.message}` : "Error al reparar numeros.");
-    } finally {
-      setIsRepairing(false);
-    }
-  }
 
   const canSave = useMemo(() => {
     if (loading) return false;
@@ -671,17 +644,6 @@ export default function ClientesPage() {
       <div className="flex items-center justify-between gap-3 py-1">
         <div>
           <div className="text-slate-100 text-xl font-semibold">Clientes</div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={requestRepairClientNumbers}
-            disabled={isRepairing}
-            className="rounded-2xl px-4 py-2.5 font-semibold border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-all"
-          >
-            <RefreshCw size={18} className={isRepairing ? "animate-spin" : ""} />
-            {isRepairing ? "Actualizando..." : "Reparar C00"}
-          </button>
-
         </div>
       </div>
 
