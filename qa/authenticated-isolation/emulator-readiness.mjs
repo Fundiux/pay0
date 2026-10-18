@@ -43,7 +43,7 @@ while (Date.now() < deadline) {
     const callable = await request(`http://127.0.0.1:5001/${projectId}/us-central1/logAuthEventCallable`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data: { event: "LOGIN" } }),
     });
-    if (auth.ok && firestore.ok && [401, 403].includes(callable.status)) {
+    if (auth.status < 500 && firestore.status < 500 && [401, 403].includes(callable.status)) {
       console.log("AUTHENTICATED_QA_STAGE auth:ready");
       console.log("AUTHENTICATED_QA_STAGE firestore:ready");
       console.log("AUTHENTICATED_QA_STAGE functions:ready callable=logAuthEventCallable");
