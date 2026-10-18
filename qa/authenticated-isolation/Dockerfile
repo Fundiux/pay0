@@ -11,6 +11,7 @@ RUN npm ci --ignore-scripts \
  && npm --prefix functions ci --ignore-scripts \
  && npm install --global firebase-tools@${FIREBASE_TOOLS_VERSION}
 COPY . .
+RUN cp qa/authenticated-isolation/firebase.json firebase.authenticated-qa.json
 RUN npm --prefix functions run build \
  && npx playwright install --with-deps chromium \
  && chmod -R a+rX /opt/ms-playwright \
