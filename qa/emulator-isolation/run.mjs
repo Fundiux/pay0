@@ -1,0 +1,10 @@
+import http from "node:http";
+import net from "node:net";
+import { chromium } from "playwright";
+const ports=[9099,8080,5001];
+for (const port of ports) await new Promise((resolve,reject)=>{const s=net.createConnection({host:"127.0.0.1",port});s.once("connect",()=>{s.destroy();resolve();});s.once("error",reject);});
+const ping=await new Promise((resolve,reject)=>http.get("http://127.0.0.1:5001/demo-pay0-ui-qa/us-central1/ping",(r)=>{let text="";r.on("data",d=>text+=d);r.on("end",()=>resolve({status:r.statusCode,text}));}).on("error",reject));
+if(ping.status!==200||ping.text!=="synthetic-ok") throw new Error("EMULATOR_CHECK_FAILED:synthetic_function");
+const server=http.createServer((q,s)=>s.end("playwright-local-ok")); await new Promise(r=>server.listen(0,"127.0.0.1",r));
+const browser=await chromium.launch({headless:true}); const page=await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}`); if(await page.textContent("body")!=="playwright-local-ok") throw new Error("EMULATOR_CHECK_FAILED:playwright"); await browser.close(); await new Promise(r=>server.close(r));
+console.log("AUTH_EMULATOR_PASS"); console.log("FIRESTORE_EMULATOR_PASS"); console.log("FUNCTIONS_EMULATOR_PASS"); console.log("PLAYWRIGHT_LOCAL_PASS");
