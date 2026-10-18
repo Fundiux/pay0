@@ -1,0 +1,36 @@
+name: QA authenticated Batch 1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-batch1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Materialize immutable functional candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/pay0-candidate 21e45105ccfeeb90c3f90f443884c4499547ebbf
+          mkdir -p /tmp/pay0-candidate/qa
+          cp -a qa/authenticated-isolation qa/emulator-isolation /tmp/pay0-candidate/qa/
+          node /tmp/pay0-candidate/qa/authenticated-isolation/verify-integrity.mjs
+      - name: Build isolated authenticated QA image
+        run: docker build --pull --tag pay0-qa-authenticated-batch1:local -f /tmp/pay0-candidate/qa/authenticated-isolation/Dockerfile /tmp/pay0-candidate
+      - name: Run authenticated Batch 1 in isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME=/tmp docker run --rm --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=768m --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 512 --user 65532:65532 \
+            --env HOME=/tmp --env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            pay0-qa-authenticated-batch1:local
