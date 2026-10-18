@@ -8,7 +8,7 @@ node /opt/pay0/qa/authenticated-isolation/path-preflight.mjs
 cd /tmp
 set +e
 env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-pay0-ui-qa \
-  firebase emulators:exec --config /opt/pay0/qa/authenticated-isolation/firebase.json --project demo-pay0-ui-qa --only auth,firestore,functions "node /opt/pay0/qa/authenticated-isolation/run.mjs"
+  firebase emulators:exec --config /opt/pay0/firebase.authenticated-qa.json --project demo-pay0-ui-qa --only auth,firestore,functions "node /opt/pay0/qa/authenticated-isolation/run.mjs"
 status=$?
 set -e
 if [ "$status" -ne 0 ]; then
