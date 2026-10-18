@@ -4,6 +4,8 @@ import { readFile, mkdir } from "node:fs/promises";
 const fixturePath = "qa/.auth/emulator-fixtures.json";
 
 async function loginAndSave(page, account, password, destination) {
+  const startedAt = Date.now();
+  console.log(`QA_AUTH_STAGE session:start role=${account.key}`);
   const diagnostics = [];
   page.on("console", (message) => {
     if (message.type() === "error" || message.type() === "warning") diagnostics.push(`${message.type()}: ${message.text()}`);
@@ -26,6 +28,7 @@ async function loginAndSave(page, account, password, destination) {
   await page.locator("#login-identifier").fill(account.email);
   await page.locator("input[type=password]").fill(password);
   await page.getByRole("button", { name: "Entrar al sistema" }).click();
+  console.log(`QA_AUTH_STAGE session:submitted role=${account.key}`);
   await page.waitForTimeout(10_000);
   if (page.url().includes("/login")) {
     throw new Error(`Emulator login did not navigate: ${await page.locator("main").innerText()} | ${diagnostics.join(" | ")}`);
@@ -33,6 +36,7 @@ async function loginAndSave(page, account, password, destination) {
   await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 30_000 });
   await expect(page.locator("body")).toBeVisible();
   await page.context().storageState({ path: destination, indexedDB: true });
+  console.log(`QA_AUTH_STAGE session:done role=${account.key} durationMs=${Date.now() - startedAt}`);
 }
 
 setup("creates reusable authenticated emulator sessions for three roles", async ({ browser }) => {

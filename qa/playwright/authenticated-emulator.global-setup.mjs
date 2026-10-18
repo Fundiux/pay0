@@ -15,6 +15,8 @@ function requireLocal(value, name) {
 }
 
 export default async function globalSetup() {
+  const startedAt = Date.now();
+  console.log("QA_AUTH_STAGE global-setup:start");
   if (process.env.GCLOUD_PROJECT !== projectId) {
     throw new Error(`Authenticated QA requires ${projectId}.`);
   }
@@ -32,6 +34,7 @@ export default async function globalSetup() {
   ];
 
   for (const account of accounts) {
+    console.log(`QA_AUTH_STAGE seed-user:start role=${account.key}`);
     await auth.createUser({ uid: account.uid, email: account.email, password, displayName: `QA ${account.key}` });
     await db.doc(`users/${account.uid}`).set({
       rootId: account.rootId,
@@ -43,6 +46,7 @@ export default async function globalSetup() {
       email: account.email,
       ...(account.modules ? { modules: account.modules } : {}),
     });
+    console.log(`QA_AUTH_STAGE seed-user:done role=${account.key}`);
   }
 
   const now = new Date();
@@ -65,4 +69,5 @@ export default async function globalSetup() {
 
   await mkdir(dirname(fixturePath), { recursive: true });
   await writeFile(fixturePath, JSON.stringify({ projectId, password, accounts }, null, 2), { mode: 0o600 });
+  console.log(`QA_AUTH_STAGE global-setup:done durationMs=${Date.now() - startedAt}`);
 }
