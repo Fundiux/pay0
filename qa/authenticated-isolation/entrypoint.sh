@@ -3,6 +3,8 @@ set -eu
 mkdir -p /tmp/.cache
 cp -r /opt/emulator-cache/firebase /tmp/.cache/firebase
 node /opt/pay0/qa/emulator-isolation/preflight.mjs
+mkdir -p /tmp/pay0-next /tmp/pay0-test-results /tmp/pay0-playwright-results
+node /opt/pay0/qa/authenticated-isolation/path-preflight.mjs
 cd /tmp
 set +e
 env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-pay0-ui-qa \
