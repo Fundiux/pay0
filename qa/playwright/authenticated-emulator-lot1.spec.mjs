@@ -8,6 +8,30 @@ async function stubLocalCallables(page) {
     const data = operation === "listClientsCanonical" ? { clients: [client] }
       : operation === "listClientDispersions" ? { items: [], dispersions: [] }
       : operation === "listUsersByRole" ? { users: [] }
+      : operation === "listPaymentComplementFollowup" ? {
+        ok: true,
+        rows: [],
+        truncated: false,
+        automation: { iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false },
+      }
+      : operation === "getControlCenterAnalytics" ? {
+        ok: true,
+        from: "2026-01-01",
+        to: "2026-01-31",
+        timezone: "America/Mexico_City",
+        totals: {},
+        previous: {},
+        daily: [],
+        current: {},
+        coverage: { complete: true, source: 0, processed: 0, expensesComplete: true },
+      }
+      : operation === "getControlCenterEvidence" ? {
+        rows: [],
+        incidents: [],
+        facets: [],
+        incidentsTruncated: false,
+        facetsTruncated: false,
+      }
       : {};
     await route.fulfill({
       status: 200,
@@ -93,7 +117,9 @@ test("DateScopeBar es operable en todos los anchos", async ({ page }) => {
     await page.getByRole("button", { name: "MES" }).click();
     const calendar = page.getByRole("button", { name: "Seleccionar periodo personalizado" });
     await calendar.click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const calendarDialog = page.getByRole("dialog");
+    await expect(calendarDialog).toBeVisible();
+    await expect(calendarDialog).toHaveAttribute("aria-modal", "false");
     await expect(page.getByRole("button", { name: /Mes anterior/ })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(calendar).toBeFocused();
