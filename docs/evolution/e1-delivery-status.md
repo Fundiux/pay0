@@ -1,6 +1,6 @@
 # E1 — reconciliación y entregas progresivas
 
-Fecha de preparación: 2026-10-19. No se ha ejecutado una publicación en esta operación.
+Fecha de actualización: 2026-10-19. R1 publicado con autorización explícita; pendiente de verificación funcional autenticada.
 
 ## Referencia productiva observada
 
@@ -9,7 +9,7 @@ La consulta autenticada de metadatos encontró Hosting `d446c05b06cc4941` y el g
 | Capacidad | Evidencia y estado |
 | --- | --- |
 | Reporte público de utilidades | El cuerpo del cálculo desplegado coincide con el que reutiliza R1. Se conserva; no se vuelve a publicar ese endpoint. |
-| Reporte de utilidades en chat y delegación Hugo | R1 tiene dos artefactos exactos compilados y verificados sobre las fuentes descargadas de cada Function. `DEPLOYMENT_PENDING`: falta autorización específica de publicación. |
+| Reporte de utilidades en chat y delegación Hugo | R1 publicado en `sendagent007message-00016-zop` y `delegatehugovoiceturn-00009-mez`, con hashes e IAM verificados y denegación sin autenticar comprobada en producción. `DEPLOYED_NOT_VERIFIED`: falta sesión autorizada para contrastar el reporte real. |
 | Protección de root en cotizaciones | Confirmada en fuente productiva de `generateSolicitudQuotation`, revisión `generatesolicitudquotation-00021-vuq`. Recuperada en la línea local, con tres pruebas. No requiere otra publicación por este cambio. No se declara verificado el flujo funcional completo. |
 | Herramienta directa de reporte en gateway | Pendiente de construir y aprobar imagen específica. La revisión actual conserva las 13 herramientas anteriores. |
 | Comparaciones de periodos y contexto | Integradas localmente en `0a783d0`; 56 pruebas backend y 49 gateway aprobadas. Requieren paquete posterior sobre la base productiva vigente. `DEPLOYMENT_PENDING`. |
@@ -32,4 +32,4 @@ Functions compila con Node 22 en modo NORMAL y el frontend pasa su build de prod
 
 Cada actualización debe detenerse si cambian fuente, runtime o IAM frente a su captura. Conservar archivos previos y metadatos privados para reversión; no borrar auditoría ni datos. El estado después de desplegar será `DEPLOYED_NOT_VERIFIED` hasta comprobar el flujo autenticado real. Ninguna capacidad nueva se declara `COMPLETED` sólo por estar en Git.
 
-Los worktrees anteriores, incluidos los cambios locales del Lote 1, permanecen intactos. No se hizo merge, rebase, push ni despliegue.
+Los worktrees anteriores, incluidos los cambios locales del Lote 1, permanecen intactos. No se hizo merge, rebase ni push. Se publicaron exclusivamente las dos Functions de R1 autorizadas.

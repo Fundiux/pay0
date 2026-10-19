@@ -1,6 +1,19 @@
 # R1 — reporte canónico de utilidades en Hugo
 
-Estado: **DEPLOYMENT_PENDING**. Compilación, pruebas de comportamiento y arranque aislado aprobados. No publicado; listo para solicitar autorización de estos dos artefactos exactos.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicación expresamente autorizada y ejecutada el 2026-10-19. Configuración, fuentes e IAM verificados; falta la prueba funcional con sesión autorizada.
+
+## Resultado de publicación
+
+| Function | Revisión activa | Comprobación productiva |
+| --- | --- | --- |
+| `sendAgent007Message` | `sendagent007message-00016-zop` | Archivo SHA256 aprobado, runtime/IAM conservados; petición sin autenticar devuelve 401 `UNAUTHENTICATED` |
+| `delegateHugoVoiceTurn` | `delegatehugovoiceturn-00009-mez` | Archivo SHA256 aprobado, runtime/IAM conservados; petición sin autenticar devuelve 401 `UNAUTHENTICATED` |
+
+No se necesitó reversión. El verificador detuvo inicialmente el cierre de chat porque no contemplaba las tres etiquetas nuevas de procedencia. Se confirmó que las diferencias eran exclusivamente esas etiquetas y metadatos esperados de revisión; se corrigió el comparador para exigir sus valores exactos. Pasaron 18 pruebas, incluidas alteración de etiquetas y deriva de configuración. La reanudación verificó la revisión existente sin volver a publicar chat. Este ajuste local no cambió ninguno de los dos artefactos autorizados.
+
+La lectura posterior confirmó que gateway y endpoint público de reportes coinciden con la captura original. No se publicó Hosting, reglas ni otras Functions. Los recibos y pruebas de denegación están en el directorio privado de cada artefacto.
+
+El usuario indicó que abriría una sesión PAY0 conectada. Hasta disponer de ella no se afirma haber comprobado los importes reales ni el flujo autenticado completo. No se registró `COMPLETED`.
 
 ## Alcance exacto
 

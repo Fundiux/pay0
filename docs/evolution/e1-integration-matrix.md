@@ -167,5 +167,7 @@ productivas. El verificador mantiene ahora un timeout local de 120 segundos.
 
 Los inputs, rollback originales y proofs permanecen privados en
 `.firebase/modular-release/e1-2026-10-19T15-47-39-867Z/r1-report-overlay/`.
-Estado: preparados y verificados localmente; no publicados. No se incluye el
-gateway ni se redeploya el endpoint público de reportes en este paquete.
+Actualización posterior: R1 fue autorizado y publicado en `sendagent007message-00016-zop`
+y `delegatehugovoiceturn-00009-mez`. Estado `DEPLOYED_NOT_VERIFIED`: configuración,
+fuentes y denegación sin autenticar verificadas; falta el flujo autenticado.
+No se incluye el gateway ni se redeploya el endpoint público de reportes.
