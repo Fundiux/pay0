@@ -59,10 +59,15 @@ export default function Modal({
   const titleId = useId();
   const hasTitle = Boolean(title?.trim());
 
+  // Capture before children mount: an autoFocus child can otherwise replace the opener
+  // before the effect that manages the open dialog runs.
+  if (open && !restoreFocusRef.current && typeof document !== "undefined") {
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+
   useEffect(() => {
     if (!open) return;
 
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     openModalIds.add(modalId);
     if (dialogRef.current) openModalElements.set(modalId, dialogRef.current);
     if (openModalIds.size === 1) bodyOverflowBeforeModal = document.body.style.overflow;
@@ -96,6 +101,7 @@ export default function Modal({
       openModalElements.delete(modalId);
       if (openModalIds.size === 0) document.body.style.overflow = bodyOverflowBeforeModal;
       const previousFocus = restoreFocusRef.current;
+      restoreFocusRef.current = null;
       const remainingTopId = Array.from(openModalIds).at(-1);
       if (wasTopModal) window.requestAnimationFrame(() => {
         // A new dialog may have opened since cleanup. Never steal its focus.
@@ -105,7 +111,7 @@ export default function Modal({
           const target = previousFocus?.isConnected && remainingDialog.contains(previousFocus)
             ? previousFocus : getFocusable(remainingDialog)[0] || remainingDialog;
           target.focus();
-        } else if (previousFocus?.isConnected) previousFocus.focus();
+        } else if (previousFocus?.isConnected && !previousFocus.hasAttribute("disabled") && previousFocus.tabIndex >= 0) previousFocus.focus();
       });
     };
   }, [initialFocusRef, modalId, open]);

@@ -32,7 +32,7 @@ async function run() {
           closeOnEscape: !spec.busy, closeOnBackdrop: !spec.busy,
           closeButtonDisabled: !!spec.busy,
           onClose: () => window.closeCalls.push(spec.id),
-        }, React.createElement('button', { id: spec.id + '-first' }, 'Primero'),
+        }, React.createElement('button', { id: spec.id + '-first', autoFocus: !!spec.autoFocus }, 'Primero'),
         React.createElement('button', { id: spec.id + '-last' }, 'Último')))));
     }, code);
     const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -78,6 +78,12 @@ async function run() {
     assert.deepEqual(await page.evaluate(() => window.closeCalls), ['B'], 'Busy dialog ignores Escape and backdrop');
     await render([]);
     assert.equal(await active(), 'outside', 'Final close restores original opener');
+
+    await page.locator('#outside').focus();
+    await render([{ id: 'autofocus', autoFocus: true }]);
+    assert.equal(await active(), 'autofocus-first', 'Child autofocus is preserved');
+    await render([]);
+    assert.equal(await active(), 'outside', 'Child autofocus must not replace the captured opener');
 
     // Replace the top dialog in the same commit: old restoration must not steal new focus.
     await render([{ id: 'old' }]);
