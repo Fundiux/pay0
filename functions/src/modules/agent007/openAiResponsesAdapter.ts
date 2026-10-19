@@ -30,7 +30,7 @@ export class OpenAiResponsesAdapter implements HugoModelAdapter {
       const text = clean(payload.output_text || payload.output?.flatMap((item: any) => item.content || []).map((item: any) => item.text || "").join(" ")) || null;
       const usage = payload.usage || {};
       const incomplete = payload.status === "incomplete" ? clean(payload.incomplete_details?.reason, 80) || "INCOMPLETE" : null;
-      return { ...base, text, answer: text, tokenUsage: { input: usage.input_tokens, output: usage.output_tokens, cachedInput: usage.input_tokens_details?.cached_tokens, reasoning: usage.output_tokens_details?.reasoning_tokens },
+      return { ...base, text, answer: text, tokenUsage: Object.fromEntries(Object.entries({ input: usage.input_tokens, output: usage.output_tokens, cachedInput: usage.input_tokens_details?.cached_tokens, reasoning: usage.output_tokens_details?.reasoning_tokens }).filter(([, value]) => value !== undefined)),
         attempts: [{ finishReason: incomplete || "STOP", latencyMs: Date.now() - started, promptChars: 0, outputLimit,
           inputTokens: usage.input_tokens ?? null, outputTokens: usage.output_tokens ?? null, cachedInputTokens: usage.input_tokens_details?.cached_tokens ?? null, reasoningTokens: usage.output_tokens_details?.reasoning_tokens ?? null }],
         ...(incomplete ? { text: null, answer: null, error: incomplete === "max_output_tokens" ? "MAX_TOKENS" : incomplete.toUpperCase() } : {}) };
