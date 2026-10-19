@@ -1,6 +1,6 @@
 # R1.2 — Continuidad de reportes y descarga real
 
-Estado: paquete preparado; no publicado. El commit de identidad del parche y la autorización de nuevos bytes están pendientes. La interfaz se prepara por separado desde su base publicada.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado el 2026-10-19 con autorización específica en `sendagent007message-00018-sav`, sin reversión. Fuente, hash, runtime e IAM verificados; petición anónima HTTP 401 / UNAUTHENTICATED comprobada. Falta la consulta con sesión real. Commit de identidad: `f1ee85b3ec86310abcca573898a123f8021c2800`. La interfaz se prepara por separado desde su base publicada. Este backend es compatible con la interfaz actual y permite consultar el reporte real en texto; el botón XLSX no estará disponible hasta publicar la interfaz correspondiente.
 
 ## Corrección
 
@@ -17,6 +17,8 @@ La aclaración vence a los 30 minutos o cuatro turnos y se invalida al cambiar d
 - SHA256 de ZIP desplegado R1.1: `8472bd111b323231b827e13e495fbfb137e17bbcb8ff6d823ad2d6d95b33413a`.
 - ZIP local: `.firebase/modular-release/r12-chat-report/sendAgent007Message-r12-report.zip`.
 - SHA256 de ZIP R1.2: `4c28005eed1d3cd22dda824212aa136d979fe24ff91f79659999bb6eed2ef577`.
+- Input de publicación: `.firebase/modular-release/r12-chat-report/release-sendAgent007Message/input.json`, SHA256 `dd96b44ae16dd837efbe1019060aefb8559969aba4ba4f4c787c800be2486ad9`.
+- Patch fuente reproducible: `qa/patches/r12-chat-report.patch`, SHA256 `6082ec30ade160ea31e71548556857c0061664ad90524605000ba5f29ed5b712`; receta `qa/scripts/build-r12-chat-overlay.mjs`. El commit integrado contiene también compatibilidad local D/R2; el parche de publicación los excluye y sólo modifica la base R1.1 declarada.
 - Conserva las 796 entradas originales, manifests y dependencias. Cambian siete módulos JS y sus siete mapas: callables, firestoreHugoDataStore, contextBuilderV2, conversationCore, conversationState, reportSemantics y reportConnector.
 - Excluye aprendizaje D y comparaciones R2. `sourceTree` es null: overlay selectivo sobre fuente desplegada, no despliegue del árbol integrado completo.
 - Evidencia privada local: `baseline.json`, `manifest.json`, fuente aislada y runtime en el mismo directorio ignorado. No publicar metadatos completos ni variables.
@@ -38,4 +40,4 @@ node qa/scripts/build-r12-chat-overlay.mjs .firebase/modular-release/e1-2026-10-
 - Startup con red bloqueada: PASS, 342 endpoints cargados y rechazo del destino sin autenticación.
 - Typecheck aislado `tsc --noEmit`: PASS. El build integrado final 45259 pasó y su lib final obtuvo 21/21 sin hook. Un build anterior había emitido reportSemantics antes del último sufijo; la prueba detectó ese desfase (20/21), corregido por el build final.
 
-La reversión debe restaurar el ZIP R1.1 capturado y su configuración vigente. No se han invocado proveedores, Telegram ni acciones financieras de producción. La comprobación funcional con la cuenta del usuario sigue pendiente de publicación autorizada.
+La publicación sólo actualiza `sendAgent007Message`, con preflight fresco de fuente, runtime e IAM. No incluye voz, gateway, Hosting, aprendizaje D, comparaciones R2 ni otras Functions. La reversión restaura el ZIP R1.1 capturado y conserva datos y configuración. No se han invocado proveedores, Telegram ni acciones financieras de producción. La comprobación funcional con la cuenta del usuario sigue pendiente de publicación autorizada: repetir la secuencia indicada y comprobar que el texto informa importes del cliente correcto; comprobar la descarga después del paquete UI.
