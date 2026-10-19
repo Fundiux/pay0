@@ -5,7 +5,7 @@ for (const path of ["/opt/pay0/.next", "/opt/pay0/test-results", "/opt/pay0/qa/p
 const configPath = "/opt/pay0/firebase.authenticated-qa.json";
 await access(configPath, constants.R_OK);
 const config = JSON.parse(await readFile(configPath, "utf8"));
-if (config.functions?.source !== "functions" || config.firestore?.rules !== "firestore.rules") throw new Error("AUTHENTICATED_QA_FIREBASE_CONFIG_PATH_INVALID");
+if (config.functions?.source !== "qa/authenticated-functions-entry" || config.firestore?.rules !== "firestore.rules") throw new Error("AUTHENTICATED_QA_FIREBASE_CONFIG_PATH_INVALID");
 const hosts = [config.emulators?.auth?.host, config.emulators?.firestore?.host, config.emulators?.functions?.host];
 if (!hosts.every((host) => host === "127.0.0.1")) throw new Error("AUTHENTICATED_QA_NONLOCAL_EMULATOR_HOST");
 if (process.env.PAY0_FIREBASE_WEB_API_KEY !== "qa-emulator-only") throw new Error("AUTHENTICATED_QA_UNEXPECTED_FUNCTIONS_PARAM");
