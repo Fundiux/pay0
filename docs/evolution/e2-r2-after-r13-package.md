@@ -10,7 +10,7 @@ Directorio privado: `.firebase/modular-release/r2-after-r13/candidate-final/`.
 - ZIP candidato: `sendAgent007Message-r2-after-r13.zip`, SHA256 `83baf34e6e7c3f52c90d820ef18a555da8d2aba854bbb8dc552b72be44c36bfe`.
 - Patch: `qa/patches/r2-after-r13-report.patch`, SHA256 `174fadf544ef8a203b0517a7b1c5e56a029b4c1bfea8f062e67adf9b4bb82575`.
 - Receta: `qa/scripts/build-r2-after-r13-overlay.mjs`. Parte de la fuente R1.3 verificada y su ZIP; aplica sólo el patch, comprueba el emit base y reproduce los bytes esperados sin leer las Functions integradas ni instalar dependencias.
-- `sourceTree` debe ser `null`: el árbol integrado contiene capacidades ajenas al overlay. El futuro `patchCommit` debe identificar el commit que contiene este patch exacto, no el antiguo commit R2.
+- `sourceTree` debe ser `null`: el árbol integrado contiene capacidades ajenas al overlay. `sourceCommit` y `patchCommit`: `9204e901efc3a1c49eb0e2d71e6d6a5f2c93307b`, que contiene este patch exacto; no se atribuye el artefacto al antiguo commit R2.
 
 El delta reutiliza las comparaciones de `0a783d038393113b955029df7c940f54da203d3a` ya integradas y conserva las correcciones R1.3. Cambia cinco fuentes: `contextBuilderV2`, `conversationState`, `reportSemantics`, `toolRouter` y `reportConnector`. Sólo cuatro generan cambios de runtime: ocho entradas JS/maps; las otras 788 entradas del ZIP son idénticas. `toolRouter` cambia tipos. No modifica dependencias, exports, configuración, reglas, fórmulas financieras ni el handler canónico de reportes.
 
