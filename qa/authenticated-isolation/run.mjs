@@ -22,7 +22,7 @@ const run = (command, args, env = process.env) => new Promise((resolve, reject) 
   child.once("close", (code, signal) => code === 0 ? resolve() : reject(new Error(`QA_COMMAND_FAILED:${command}:${code ?? signal}`)));
 });
 
-await run("npx", ["playwright", "test", "--config", "qa/playwright/authenticated-emulator.config.mjs"]);
+await run("npx", ["playwright", "test", "--config", "qa/playwright/authenticated-emulator.config.mjs", "--output=/tmp/pay0-playwright-output"]);
 const fixtures = JSON.parse(await readFile("/opt/pay0/qa/.auth/emulator-fixtures.json", "utf8"));
 const superadmin = fixtures.accounts.find((account) => account.key === "superadmin");
 if (!superadmin || !fixtures.password) throw new Error("AUTH_FIXTURE_MISSING");
