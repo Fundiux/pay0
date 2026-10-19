@@ -1,6 +1,6 @@
 # R1.4: solicitud natural de reporte y aclaración de año
 
-Estado: **CANDIDATO PROBADO; PENDIENTE DE AUTORIZACIÓN**. No se ha publicado. El destino es únicamente `sendAgent007Message`, sobre el R2 publicado; no incorpora D1/D2 ni cambios de interfaz.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado con autorización específica únicamente en `sendAgent007Message`, sobre R2; no incorpora D1/D2 ni cambios de interfaz. La identidad y conservación técnica están verificadas; falta el recorrido autenticado del usuario.
 
 ## Problema y resultado
 
@@ -35,6 +35,16 @@ Evidencia privada del candidato: `natural-dialogue-proof.json`, `startup.log`, `
 
 El input `hugo-chat-overlay` está preparado en `.firebase/modular-release/r14-report-natural/release/input.json`, SHA256 `fc0f3ffd668e16a7391736a5cd8d6e71a7246e261359e18d2a74640e507b6d15`, contra la baseline R2 indicada. `assertArtifactProof` y `sourceOnlyPatch` aprobaron el alcance y la identidad. El preflight de sólo lectura del `2026-10-19T21:53:05.494Z` confirmó Function, servicio e IAM sin cambios frente a `sendagent007message-00020-faf`; evidencia en `release/preflight.json`. No ejecutó escrituras productivas. Esta comprobación puntual debe repetirse al ejecutar.
 
-La autorización específica de R1.4 está solicitada y pendiente; la autorización de R2 no la sustituye. No requiere una nueva UI: usa el contrato PDF/XLSX ya publicado.
+El usuario autorizó R1.4 y su reversión. No requiere una nueva UI: usa el contrato PDF/XLSX ya publicado.
 
-La reversión restaura el ZIP R2 preservado y sus etiquetas, manteniendo configuración e IAM. No elimina conversaciones, adjuntos persistidos ni auditoría. La validación funcional con datos productivos no forma parte de estas pruebas y queda pendiente de la publicación autorizada.
+La reversión restaura el ZIP R2 preservado y sus etiquetas, manteniendo configuración e IAM. No elimina conversaciones, adjuntos persistidos ni auditoría. La validación funcional con datos productivos no forma parte de las pruebas locales y sigue pendiente tras la publicación autorizada.
+
+## Publicación autorizada
+
+El ejecutor finalizó con código 0 y `CONFIGURATION_VERIFIED`. La revisión publicada es `sendagent007message-00021-koz`; la anterior `00020-faf` y su ZIP R2 permanecen preservados. No fue necesaria una reversión.
+
+La verificación independiente del `2026-10-19T22:24:20.044Z` confirmó el ZIP `21922d59…`, la procedencia del input y el rechazo anónimo HTTP 401 / UNAUTHENTICATED. La comparación del ejecutor confirmó configuración e IAM conservados. No se consultaron importes ni se crearon operaciones financieras.
+
+Evidencia privada: `release/deployment.jsonl`, `post-publication-verification.json`, `published-source.zip` y `published-baseline.json`. La baseline tiene SHA256 `3e9d6b42b230c23b0b64d89b1559ccf3ac4895a1bac108744feed077e1795d27` y sirve de punto de partida para una futura integración D1; no autoriza otro despliegue.
+
+Se solicitó al usuario repetir la petición natural, elegir PDF y comprobar el saludo. Hasta recibir esa verificación, no se declara COMPLETED.
