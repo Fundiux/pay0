@@ -572,15 +572,27 @@ export const configurePaymentComplementAutomation = onCall({ region: "us-central
     await safety.setControl({ rootId, process: "REP", master: scope === "MASTER", paused, reason, actor: request.auth!.uid });
     return { ok: true };
   }
-  if (typeof request.data?.iqEnabled !== "boolean" || typeof request.data?.facturamaEnabled !== "boolean") throw new HttpsError("invalid-argument", "Indica qué proveedores automatizar.");
-  if (request.data.facturamaEnabled && request.data.confirmation !== "AUTORIZO_REP_AUTOMATICO") throw new HttpsError("failed-precondition", "Confirma la emisión automática de CFDI de pago reales.");
+  const input = request.data || {};
+  const patchProvider = Object.prototype.hasOwnProperty.call(input, "provider") || Object.prototype.hasOwnProperty.call(input, "enabled");
+  if (patchProvider) {
+    if (!["IQ", "FACTURAMA"].includes(input.provider) || typeof input.enabled !== "boolean" ||
+        Object.prototype.hasOwnProperty.call(input, "iqEnabled") || Object.prototype.hasOwnProperty.call(input, "facturamaEnabled"))
+      throw new HttpsError("invalid-argument", "Indica un solo proveedor y su estado; no combines contratos de configuración.");
+  } else if (typeof input.iqEnabled !== "boolean" || typeof input.facturamaEnabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "Indica qué proveedores automatizar.");
+  }
+  const enablesFacturama = patchProvider ? input.provider === "FACTURAMA" && input.enabled : input.facturamaEnabled;
+  if (enablesFacturama && input.confirmation !== "AUTORIZO_REP_AUTOMATICO") throw new HttpsError("failed-precondition", "Confirma la emisión automática de CFDI de pago reales.");
   const ref = db.doc(`paymentComplementConfigs/${rootId}`);
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
-    tx.set(ref, { rootId, iqEnabled: request.data.iqEnabled, facturamaEnabled: request.data.facturamaEnabled,
+    const current = existing.data() || {};
+    const iqEnabled = patchProvider ? input.provider === "IQ" ? input.enabled : current.iqEnabled === true : input.iqEnabled;
+    const facturamaEnabled = patchProvider ? input.provider === "FACTURAMA" ? input.enabled : current.facturamaEnabled === true : input.facturamaEnabled;
+    tx.set(ref, { rootId, iqEnabled, facturamaEnabled,
       activatedAt: existing.data()?.activatedAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
     logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: request.auth!.uid, actorRole: "superadmin",
-      referenceId: rootId, referenceType: "configuracion", description: `Automatización de complementos actualizada: IQ ${request.data.iqEnabled ? "activo" : "pausado"}; Facturama ${request.data.facturamaEnabled ? "activo" : "pausado"}. Sólo aplicaciones posteriores a la activación.` });
+      referenceId: rootId, referenceType: "configuracion", description: `Automatización de complementos actualizada: IQ ${iqEnabled ? "activo" : "pausado"}; Facturama ${facturamaEnabled ? "activo" : "pausado"}. Sólo aplicaciones posteriores a la activación.` });
   });
   return { ok: true };
 });
