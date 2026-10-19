@@ -1,6 +1,6 @@
 # F — paquete acotado de recuperación
 
-Estado de entrega: **DEPLOYMENT_PENDING**. Artefactos y pruebas aprobados; falta autorización específica. No despliegue ni envío externo. Los artefactos privados están en `.firebase/modular-release/recovery-{queue,reconcile}-5b0db917bd70/`.
+Estado de entrega: **DEPLOYED_NOT_VERIFIED**. Autorización específica recibida y ambos artefactos publicados el 2026-10-19. Revisiones activas: `queueoperationrecovery-00007-dov` y `reconcileoperationrecovery-00008-xim`. Fuente, configuración, IAM, trigger y agenda preservados y verificados. Falta observación funcional real; no se fabricaron trabajos ni operaciones financieras para probarlos. Los artefactos privados están en `.firebase/modular-release/recovery-{queue,reconcile}-5b0db917bd70/`.
 
 ## Alcance y procedencia
 
@@ -45,4 +45,6 @@ La lectura privada y la captura requieren autorización local para credenciales 
 
 No cambia Hosting, índices, rules, runtime, IAM ni variables. El baseline contiene metadatos privados de las dos Functions, servicios e IAM. Preflight debe volver a comprobar que producción coincide: una publicación externa invalida el baseline y requiere nueva revisión. No reutilizar el baseline de Hosting previo a la actualización externa del 19 de octubre.
 
-Publicar sólo estos dos grupos con aprobación expresa. Revertir únicamente su código al ZIP fuente original y verificar las revisiones previas capturadas. Conservar documentos de trabajos, solicitudes y auditoría: revertir código no implica borrar ni reiniciar trabajos. La preparación actual no ha publicado nada.
+Se publicaron sólo estos dos grupos con aprobación expresa. La reversión autorizada restaura únicamente su código al ZIP fuente original; conserva documentos de trabajos, solicitudes y auditoría. Revisiones anteriores: `queueoperationrecovery-00006-saz` y `reconcileoperationrecovery-00007-zuf`. No fue necesaria reversión.
+
+Un primer preflight del encolador rechazó una permutación del orden de filtros del evento, sin escritura productiva. Se corrigió la comparación para ordenar filtros sin omitir valores, operadores ni duplicados; pasaron 27 pruebas del ejecutor y se reintentó el mismo input aprobado.

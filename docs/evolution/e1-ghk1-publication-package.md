@@ -3,7 +3,9 @@
 Estado: **DEPLOYED_NOT_VERIFIED**. Autorización explícita recibida; publicado
 el 2026-10-19 en `getauthorizeddocumentdownloadurl-00007-yah`. Fuente, hash,
 runtime e IAM verificados, sin reversión. La petición sin autenticar devuelve
-HTTP 401. Falta comprobar una descarga autorizada real. El paquete afecta exclusivamente
+HTTP 401. El usuario confirmó que las descargas de solicitudes y pagos funcionan.
+Verificación funcional limitada a esos flujos; otros módulos y sustitución de objetos
+no se comprobaron en producción. El paquete afecta exclusivamente
 `getAuthorizedDocumentDownloadUrl`; no incluye gateway, interfaz, reglas ni
 otros endpoints.
 

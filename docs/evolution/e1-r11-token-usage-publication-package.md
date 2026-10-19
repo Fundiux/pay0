@@ -1,6 +1,6 @@
 # R1.1 — corrección de persistencia de métricas de María
 
-Estado: **DEPLOYED_NOT_VERIFIED**. Autorización específica recibida y publicación ejecutada el 2026-10-19. Revisión activa de chat: `sendagent007message-00017-nup`; revisión de voz: `delegatehugovoiceturn-00010-caj`. Fuente, hash, runtime e IAM verificados; ambas rechazan peticiones sin autenticar con HTTP 401. Falta repetir el flujo autenticado que producía INTERNAL.
+Estado: **DEPLOYED_NOT_VERIFIED**. Autorización específica recibida y publicación ejecutada el 2026-10-19. Revisión activa de chat: `sendagent007message-00017-nup`; revisión de voz: `delegatehugovoiceturn-00010-caj`. Fuente, hash, runtime e IAM verificados; ambas rechazan peticiones sin autenticar con HTTP 401. El usuario repitió el flujo autenticado sin mostrar INTERNAL, pero el reporte no se ejecutó: María confirmó una solicitud y luego no pudo confirmar generación ni descarga. R1 sigue funcionalmente incompleto. R1.2 corrige contexto pendiente, selección de cliente y descarga real; requiere su propio paquete y autorización. Voz no verificada funcionalmente.
 
 No hubo reversión. Un primer preflight terminó sin cambios porque la copia de rollback ya estaba preparada en la ruta que el ejecutor reserva. Se verificó su hash, se conservó como evidencia y se reintentó el mismo input autorizado. Los bytes publicados no cambiaron.
 
