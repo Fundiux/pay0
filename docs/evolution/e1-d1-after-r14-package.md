@@ -1,6 +1,6 @@
 # D1 sobre R1.4: composición local preservada
 
-Estado: **LOCAL_CANDIDATE_TESTED_NOT_DEPLOY_READY**. No hay input productivo, publicación ni activación de gates. El paquete conserva R2 y la corrección de lenguaje R1.4; sustituye como futuro candidato al D1 basado directamente en R2.
+Estado: **SUPERSEDED_LOCAL** por [D1 con revocación disponible con gate OFF](e1-d1-revoke-off-package.md). Se conserva esta evidencia histórica; el ZIP `a6f29085` no incluye esa corrección y no es el candidato vigente. No se publicó ni se activaron gates.
 
 ## Identidad y composición
 

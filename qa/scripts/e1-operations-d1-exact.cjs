@@ -37,7 +37,8 @@ fixture('evals/hugo/evolution-reports.test.cjs', '9204e901efc3a1c49eb0e2d71e6d6a
 fs.mkdirSync(path.join(qa, 'learning'), { recursive: true });
 fs.writeFileSync(path.join(qa, 'learning/export.cjs'), execFileSync('git', ['show', '0b17cfc:evals/hugo/learning/export.cjs'], { cwd: root }));
 for (const name of ['e1-learning-rules-emulator', 'e1-learning-emulator', 'r12-report-emulator'])
-  fixture(`qa/scripts/${name}.test.cjs`, '0b17cfc6423ab4005c6d30087e50aa90ddd5e748');
+  fixture(`qa/scripts/${name}.test.cjs`, name === 'e1-learning-rules-emulator' && process.env.PAY0_D1_REVOKE_OFF_TESTS === 'true'
+    ? 'b0545c2fdace63e8b366458d7abb0b7eecb98175' : '0b17cfc6423ab4005c6d30087e50aa90ddd5e748');
 fixture('qa/scripts/r2-report-after-r13-emulator.test.cjs', '9204e901efc3a1c49eb0e2d71e6d6a5f2c93307b');
 const onFile = path.join(qa, 'r13-report-gate-on.test.cjs');
 fs.writeFileSync(onFile, fs.readFileSync(path.join(qa, 'r12-report-emulator.test.cjs'), 'utf8')
