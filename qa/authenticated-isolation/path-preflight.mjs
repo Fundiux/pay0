@@ -1,7 +1,7 @@
 import { access, constants, readFile, stat } from "node:fs/promises";
-const required = ["/opt/pay0/functions", "/opt/pay0/firestore.rules", "/opt/pay0/.next", "/opt/pay0/test-results", "/opt/pay0/qa/playwright/test-results"];
+const required = ["/opt/pay0/functions", "/opt/pay0/firestore.rules", "/opt/pay0/.next", "/opt/pay0/test-results", "/opt/pay0/qa/playwright/test-results", "/opt/pay0/qa/.auth"];
 for (const path of required) await access(path, constants.F_OK);
-for (const path of ["/opt/pay0/.next", "/opt/pay0/test-results", "/opt/pay0/qa/playwright/test-results"]) { await access(path, constants.W_OK); const info = await stat(path); if (!info.isDirectory()) throw new Error(`WRITABLE_PATH_NOT_DIRECTORY:${path}`); }
+for (const path of ["/opt/pay0/.next", "/opt/pay0/test-results", "/opt/pay0/qa/playwright/test-results", "/opt/pay0/qa/.auth"]) { await access(path, constants.W_OK); const info = await stat(path); if (!info.isDirectory()) throw new Error(`WRITABLE_PATH_NOT_DIRECTORY:${path}`); }
 const configPath = "/opt/pay0/firebase.authenticated-qa.json";
 await access(configPath, constants.R_OK);
 const config = JSON.parse(await readFile(configPath, "utf8"));

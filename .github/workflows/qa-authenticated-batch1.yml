@@ -37,6 +37,7 @@ jobs:
             --tmpfs /opt/pay0/.next:rw,noexec,nosuid,nodev,size=512m,uid=65532,gid=65532,mode=0755 \
             --tmpfs /opt/pay0/test-results:rw,noexec,nosuid,nodev,size=128m,uid=65532,gid=65532,mode=0755 \
             --tmpfs /opt/pay0/qa/playwright/test-results:rw,noexec,nosuid,nodev,size=128m,uid=65532,gid=65532,mode=0755 \
+            --tmpfs /opt/pay0/qa/.auth:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700 \
             --cap-drop ALL --security-opt no-new-privileges --pids-limit 512 --user 65532:65532 \
             --env HOME=/tmp --env PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             pay0-qa-authenticated-batch1:local

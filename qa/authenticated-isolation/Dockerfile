@@ -26,7 +26,7 @@ RUN node qa/authenticated-isolation/instrument-functions-config.cjs /opt/pay0/fu
  && mkdir -p /opt/emulator-cache \
  && cp -r /root/.cache/firebase /opt/emulator-cache/firebase \
  && chown -R 65532:65532 /opt/pay0 /opt/emulator-cache
-RUN mkdir -p /opt/pay0/.next /opt/pay0/test-results /opt/pay0/qa/playwright/test-results \
+RUN mkdir -p /opt/pay0/.next /opt/pay0/test-results /opt/pay0/qa/playwright/test-results /opt/pay0/qa/.auth \
  && chmod 0555 qa/authenticated-isolation/entrypoint.sh
 USER 65532:65532
 ENTRYPOINT ["sh", "/opt/pay0/qa/authenticated-isolation/entrypoint.sh"]
