@@ -1,0 +1,52 @@
+const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || !/^demo-pay0-e1-/.test(process.env.GCLOUD_PROJECT || '')) throw Error('Isolated emulator required');
+async function check(short) {
+  const dir = path.resolve(__dirname, `../../.firebase/modular-release/recovery-${short}-5b0db917bd70`);
+  const input = JSON.parse(fs.readFileSync(path.join(dir, 'input.json')));
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(input.archive)).digest('hex'), input.archiveSha256);
+  const runtime = path.join(dir, 'behavior-runtime');
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(runtime, 'lib/modules/controlCenter/recovery.js'))).digest('hex'), input.sourceIdentity.patchSha256);
+  const admin = require(path.join(runtime, 'node_modules/firebase-admin'));
+  const recovery = require(path.join(runtime, 'lib/modules/controlCenter/recovery.js'));
+  const db = admin.firestore();
+  const row = { rootId: `root-${short}`, createdBy: `actor-${short}`, status: 'PROCESANDO', materialitySyncStatus: 'ERROR' };
+  const source = db.doc(`solicitudes/artifact-${short}`);
+  await source.set(row);
+  await db.doc(`users/${row.createdBy}`).set({ rootId: row.rootId, active: true, role: 'superadmin' });
+  await Promise.all(Array.from({ length: 6 }, () => recovery.enqueueRecovery(source.id, row, 'MATERIALITY')));
+  const jobs = await db.collection('operationRecoveryJobs').where('solicitudId', '==', source.id).get();
+  assert.equal(jobs.size, 1);
+  const ref = jobs.docs[0].ref;
+  await ref.update({ status: 'COMPLETED', attempts: 5 });
+  await recovery.enqueueRecovery(source.id, row, 'MATERIALITY');
+  assert.equal((await ref.get()).get('status'), 'COMPLETED');
+  assert.equal((await ref.get()).get('attempts'), 5);
+  await ref.update({ status: 'PENDING', attempts: 4, nextAttemptAt: admin.firestore.Timestamp.now() });
+  let invocations = 0;
+  await recovery.processRecoveryJobs(async () => { invocations++; throw Error('SYNTHETIC_RETRY_FAILURE'); });
+  assert.equal(invocations, 1);
+  assert.equal((await ref.get()).get('status'), 'NEEDS_REVIEW');
+  assert.equal((await ref.get()).get('attempts'), 5);
+  await recovery.enqueueRecovery(source.id, row, 'MATERIALITY');
+  assert.equal((await ref.get()).get('attempts'), 5);
+  for (const terminal of [{ status: 'CANCELADA' }, { deletedAt: admin.firestore.Timestamp.now() }]) {
+    await source.set({ ...row, ...terminal });
+    const before = (await source.get()).data();
+    await recovery.executeRecovery({ ...jobs.docs[0].data(), solicitudId: source.id });
+    assert.deepEqual((await source.get()).data(), before);
+  }
+  await source.set(row);
+  await assert.rejects(recovery.executeRecovery({ ...jobs.docs[0].data(), rootId: 'foreign-root' }), /RECOVERY_SCOPE_DENIED/);
+  await db.doc(`users/${row.createdBy}`).update({ rootId: 'foreign-root' });
+  await assert.rejects(recovery.executeRecovery(jobs.docs[0].data()), /RECOVERY_SCOPE_DENIED/);
+  const foreign = db.doc(`solicitudes/foreign-${short}`);
+  await foreign.set({ ...row, rootId: 'foreign-root' });
+  await recovery.enqueueRecovery(foreign.id, row, 'MATERIALITY');
+  assert.equal((await db.collection('operationRecoveryJobs').where('solicitudId', '==', foreign.id).get()).size, 0);
+  assert.deepEqual((await source.get()).data(), row);
+  const proof = { status: 'PASS', archiveSha256: input.archiveSha256, terminalPreserved: true, retryBudgetPreserved: true, scopedRootsPreserved: true, persistence: 'REAL_ISOLATED_FIRESTORE_EMULATOR', domainSideEffectsInvoked: false, checkedAt: new Date().toISOString() };
+  fs.writeFileSync(path.join(dir, 'behavior-verification.json'), JSON.stringify(proof, null, 2));
+  console.log(JSON.stringify({ group: input.group, ...proof }));
+  await db.terminate();
+}
+(async () => { await check('queue'); await check('reconcile'); })().catch(e => { console.error(e); process.exitCode = 1; });
