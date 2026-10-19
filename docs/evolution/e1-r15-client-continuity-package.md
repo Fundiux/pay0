@@ -1,6 +1,6 @@
 # R1.5: cambiar de cliente dentro de un reporte
 
-Estado: **LOCAL_VALIDATED_INPUT_PENDING**. El destino propuesto es únicamente `sendAgent007Message`; no se publicó ni se cambió gate, UI, IAM o datos productivos. No incorpora D1/D2. Falta fijar el commit de entrega, crear su input y completar preflight antes de solicitar autorización.
+Estado: **DEPLOYMENT_PENDING**: paquete exacto preparado, pendiente de autorización. El destino es únicamente `sendAgent007Message`; no se publicó ni se cambió gate, UI, IAM o datos productivos. No incorpora D1/D2.
 
 ## Problema y alcance
 
@@ -33,6 +33,12 @@ La expectativa de `report-continuation` para «octubre» se actualizó de pedir 
 
 ## Publicación y reversión
 
-La futura entrega selecciona sólo el grupo `hugo-chat-overlay`. Requiere input con el commit final, proof del ZIP, baseline R1.4 y preflight GET de Function/servicio/IAM antes de autorización/ejecución. La autorización de versiones previas no autoriza este update. No necesita una nueva UI ni otro endpoint.
+La entrega selecciona sólo el grupo `hugo-chat-overlay`, con sourceCommit/patchCommit `397035caa23ddd56fff0dedcf62158b7df129d4a` y `sourceTree:null`. Los commits documentales posteriores no sustituyen esa identidad.
+
+- Input: `.firebase/modular-release/r15-client-continuity/release/input.json`, SHA256 `8f6642fe2a158cb4cb4f3e21cbfbba06f39d1678513f427726fc5fa538771204`.
+- Artifact proof: `release/artifact-verification.json`, SHA256 `755ba02e44b56cc6171e0bd98618d3bf16565515c60834c9d45a13bd2eeaabb8`.
+- Preflight GET: PASS el 2026-10-19 a las 23:06:17 UTC, revisión base `sendagent007message-00021-koz`. Function, servicio e IAM coinciden con la baseline R1.4; cero escrituras. Recibo `release/preflight.json`.
+
+El validador de proof y la construcción pura del patch de fuente pasaron con ese input. El preflight debe repetirse al ejecutar y rechazar cambios concurrentes; su resultado no permanece fresco indefinidamente. La autorización de versiones previas no autoriza este update. No necesita una nueva UI ni otro endpoint.
 
 La reversión preserva el ZIP R1.4 desplegado y su configuración/IAM; no elimina conversaciones ni adjuntos. Si R1.5 se publica antes de D1, la composición D1 debe rehacerse sobre R1.5 para conservar este comportamiento; no ejecutar el input D1 basado en R1.4 como si incluyera la corrección nueva.
