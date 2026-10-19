@@ -2,7 +2,7 @@ FROM node:22.18.0-bookworm-slim
 
 ARG FIREBASE_TOOLS_VERSION=15.3.1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/pay0
 COPY package.json package-lock.json ./
