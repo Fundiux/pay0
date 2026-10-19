@@ -76,7 +76,7 @@ test('canonical report, authorized tool, written core and voice share the same c
   const data = { loadConversationState: async () => ({ history: [], memory: { recommendations: [], rules: [] }, recentEntities: [], conversationState: emptyConversationState(identity.rootId) }) };
   const adapter = { generate: async () => { throw Error('UNEXPECTED_MODEL_CALL'); }, generateCanonical: async () => { throw Error('UNEXPECTED_MODEL_CALL'); } };
   const core = new HugoConversationCore(router(), adapter, data);
-  const response = await core.respond({ channel: 'WEB', identity, name: 'Fixture', conversationId: 'fixture-report', message: 'Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19', promptVersion: 'hugo-v2' });
+  const response = await core.respond({ channel: 'WEB', identity, name: 'Fixture', conversationId: 'fixture-report', message: 'Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19 en Excel', promptVersion: 'hugo-v2' });
   assert.equal(response.text, speech);
   assert.equal(response.responsePolicy, 'DETERMINISTIC_OPERATION');
   assert.deepEqual(response.toolsExecuted.map(row => row.tool), ['getEarningsByClientReport']);
@@ -132,7 +132,7 @@ test('chained comparison keeps only fresh scoped filters and re-reads financial 
   const adapter = { generate: async () => { throw Error('UNEXPECTED_MODEL_CALL'); }, generateCanonical: async () => { throw Error('UNEXPECTED_MODEL_CALL'); } };
   const core = new HugoConversationCore(router(), adapter);
   const turn = (message, conversationState) => core.respond({ channel: 'WEB', identity, name: 'Fixture', conversationId: 'fixture-report-chain', message, conversationState, promptVersion: 'hugo-v2' });
-  const first = await turn('Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19');
+  const first = await turn('Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19 en Excel');
   assert.deepEqual(first.conversationState.lastEarningsReport.query, { ...input, includeCompensated: false });
   assert.equal(JSON.stringify(first.conversationState).includes('summary'), false);
   const original = rows[0].totalEarningsAmount;

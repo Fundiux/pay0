@@ -1,4 +1,4 @@
-import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest } from "./reportSemantics";
+import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest, reportConversationResetReply } from "./reportSemantics";
 import { ToolRequest, ToolResult } from "./toolRouter";
 import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
 import { HugoDataStore } from "./dataStoreContract";
@@ -37,18 +37,30 @@ const compact = (value: unknown, max = 350) => String(value ?? "").replace(/\s+/
 export async function buildHugoContextV2(input: { message: string; rootId: string; conversationState: ConversationState; router: { execute(request: ToolRequest): Promise<ToolResult> }; dataStore?: HugoDataStore; now?: number }) {
   const now = input.now || Date.now();
   const resolution = resolveConversationReference(input.message, input.conversationState, input.rootId, now);
+  const reportResetReply = reportConversationResetReply(input.message);
+  if (reportResetReply) {
+    delete resolution.state.pendingEarningsReport;
+    delete resolution.state.lastEarningsReport;
+    resolution.folios = []; resolution.active = null; resolution.reason = "TOPIC_SHIFT";
+    resolution.clarification = reportResetReply;
+  }
+  if (!reportResetReply && !resolution.state.pendingEarningsReport && /^\s*\d{4}-\d{2}-\d{2}\s+(?:al|a|hasta)\s+\d{4}-\d{2}-\d{2}\s*[.!?]?\s*$/i.test(input.message)) {
+    resolution.clarification = "Indicaste un periodo. ¿Qué reporte quieres consultar y para qué cliente?";
+  }
   const reportComparison = isEarningsReportComparison(input.message) && !resolution.folios.length && !/\b(pagos?|solicitudes?|folios?)\b/i.test(input.message)
     && (!!resolution.state.lastEarningsReport || /\b\d{4}-\d{2}-\d{2}\b/.test(input.message));
   const pendingRequest = pendingReportRequest(input.message, resolution.state.pendingEarningsReport);
   const reportIntent = isEarningsReportQuestion(input.message) || reportComparison || pendingRequest.intent;
-  const reportRequest = reportComparison ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : pendingRequest.request;
+  const parsedReportRequest = reportComparison ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : pendingRequest.request;
+  const reportRequest = parsedReportRequest && (parsedReportRequest.format || reportComparison) ? parsedReportRequest : null;
   if (!reportIntent) delete resolution.state.pendingEarningsReport;
   if (reportIntent) {
-    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
-      includeCompensated: reportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
-      ...(reportRequest ? { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo } : {}) };
+    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
+      includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
+      ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
+      ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
     resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
-    resolution.clarification = reportRequest ? null : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
+    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
   }
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,

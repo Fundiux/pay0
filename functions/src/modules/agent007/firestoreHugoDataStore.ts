@@ -68,8 +68,11 @@ export class FirestoreHugoDataStore implements HugoDataStore {
     if (!this.ownsConversation(this.scope(input.rootId), input.uid, input.conversationId)) throw new HttpsError("permission-denied", "Conversación fuera de ámbito.");
     const messages = this.db.collection("agent007Messages"), userMessage = messages.doc(), assistantMessage = messages.doc(), now = Timestamp.now();
     const batch = this.db.batch();
-    batch.set(this.db.collection("agent007Conversations").doc(input.conversationId), { rootId: input.rootId, ownerUid: input.uid, participantUids: [input.uid], status: "ACTIVE", lastMessage: input.reply,
-      lastMessageAt: now, updatedAt: now, recentEntities: input.recentEntities, ...(input.conversationState ? { conversationState: input.conversationState } : {}), createdAt: FieldValue.serverTimestamp() }, { merge: true });
+    const conversation = { rootId: input.rootId, ownerUid: input.uid, participantUids: [input.uid], status: "ACTIVE", lastMessage: input.reply,
+      lastMessageAt: now, updatedAt: now, recentEntities: input.recentEntities, ...(input.conversationState ? { conversationState: input.conversationState } : {}), createdAt: FieldValue.serverTimestamp() };
+    // Replace the supplied state map: recursive merge would revive cleared report filters.
+    // Other top-level conversation fields remain untouched; the batch keeps turn writes atomic.
+    batch.set(this.db.collection("agent007Conversations").doc(input.conversationId), conversation, { mergeFields: Object.keys(conversation) });
     batch.create(userMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "user", text: input.text, senderUid: input.uid, source: "USER", visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, createdAt: now });
     batch.create(assistantMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "assistant", text: input.reply, ...(input.reportExport ? { reportExport: input.reportExport } : {}), recipientUid: input.uid, source: input.source,
       visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, capability: input.capability || null, capabilityExecuted: input.capabilityExecuted, contextSummary: input.contextSummary, createdAt: Timestamp.fromMillis(now.toMillis() + 1) });

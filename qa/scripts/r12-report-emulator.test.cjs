@@ -11,7 +11,7 @@ const { sendAgent007Message, listAgent007Messages } = runtimeRequire('./lib/modu
 let providerCalls = 0;
 global.fetch = async () => { providerCalls++; throw Error('EXTERNAL_PROVIDER_FORBIDDEN'); };
 
-test('R1.2 full callable flow persists pending clarification and a bounded downloadable report', { timeout: 90000 }, async () => {
+test('R1.3 full callable flow persists format, quoted client, resets and a bounded downloadable report', { timeout: 90000 }, async () => {
   const rootId = 'r12-root', uid = 'r12-reviewer', auth = { uid, token: {} };
   await db.doc(`users/${uid}`).set({ rootId, role: 'superadmin', active: true });
   await db.doc('earningsDistributions/pc-one').set({ rootId, clienteId: 'pc-directo', clienteNombre: 'PC Directo', totalEarningsAmount: 12.35, createdAt: admin.firestore.Timestamp.fromDate(new Date('2026-09-10T12:00:00Z')) });
@@ -22,13 +22,18 @@ test('R1.2 full callable flow persists pending clarification and a bounded downl
   assert.match(first.message.text, /fecha/i);
   assert.equal(first.message.reportExport, undefined);
   const conversation = db.doc(`agent007Conversations/${rootId}_${uid}_global`);
+  await conversation.set({ unrelatedMarker: 'preserve-this-field' }, { merge: true });
   assert.equal((await conversation.get()).get('conversationState.pendingEarningsReport.clientQuery'), 'pc directo');
   await send('hola dame un reporte de utilidades del cliente pc directo del mes de septiembre');
   assert.equal((await conversation.get()).get('conversationState.pendingEarningsReport.clientQuery'), 'pc directo');
   const second = await send('septiembre');
   assert.match(second.message.text, /fecha/i);
   assert.equal(second.message.reportExport, undefined);
-  const third = await send('2026-09-01 al 2026-09-30');
+  const formatChoice = await send('2026-09-01 al 2026-09-30');
+  assert.match(formatChoice.message.text, /PDF.*Excel/);
+  assert.equal(formatChoice.message.reportExport, undefined);
+  assert.equal((await conversation.get()).get('conversationState.pendingEarningsReport.stage'), 'FORMAT');
+  const third = await send('Excel');
   assert.match(third.message.text, /37\.45/);
   assert.equal(third.message.reportExport.rows[0].clienteId, 'pc-directo');
   assert.equal(third.message.reportExport.rows[0].totalEarningsAmount, 37.45);
@@ -39,6 +44,32 @@ test('R1.2 full callable flow persists pending clarification and a bounded downl
   assert.deepEqual(listed.messages.find(row => row.id === third.message.id).reportExport, third.message.reportExport);
   const download = await send('¿Dónde lo descargo?');
   assert.equal(download.message.reportExport.rows[0].totalEarningsAmount, 37.45);
+  const pdf = await send('reporte de utilidades del cliente pc directo», del 2026-09-01 al 2026-09-30 y lo quiero en formato pdf');
+  assert.equal(pdf.message.reportExport.format, 'PDF');
+  assert.match(pdf.message.reportExport.fileName, /\.pdf$/);
+  assert.deepEqual((await db.doc(`agent007Messages/${pdf.message.id}`).get()).get('reportExport'), pdf.message.reportExport);
+  const repeated = await send('geera el reporte de utilidades nuevamente');
+  assert.equal(repeated.message.reportExport.format, 'PDF');
+  assert.equal(repeated.message.reportExport.rows[0].clienteId, 'pc-directo');
+  for (const [id, name] of [['bank-september', 'Banco de Septiembre'], ['bank-mexico', 'Banco de México']]) {
+    await db.doc(`earningsDistributions/${id}`).set({ rootId, clienteId: id, clienteNombre: name, totalEarningsAmount: 1, createdAt: admin.firestore.Timestamp.fromDate(new Date('2026-09-11T12:00:00Z')) });
+  }
+  const bankChoice = await send('reporte utilidades cliente Banco del 2026-09-01 al 2026-09-30 en PDF');
+  assert.equal(bankChoice.message.reportExport, undefined);
+  const bank = await send('"Banco de Septiembre"');
+  assert.equal(bank.message.reportExport.rows[0].clienteId, 'bank-september');
+  assert.equal(bank.message.reportExport.dateFrom, '2026-09-01');
+  assert.equal(bank.message.reportExport.format, 'PDF');
+  for (const greeting of ['hola', 'hola', 'hola Maria']) {
+    const result = await send(greeting);
+    assert.match(result.message.text, /^Hola\./);
+    assert.equal(result.message.reportExport, undefined);
+    assert.equal((await conversation.get()).get('conversationState.pendingEarningsReport'), undefined);
+    assert.equal((await conversation.get()).get('unrelatedMarker'), 'preserve-this-field');
+  }
+  const datesAfterReset = await send('2026-09-01 al 2026-09-30');
+  assert.equal(datesAfterReset.message.reportExport, undefined);
+  assert.equal((await conversation.get()).get('conversationState.pendingEarningsReport'), undefined);
   assert.equal(providerCalls, 0);
   await db.doc(`users/${uid}`).update({ active: false });
   await assert.rejects(send('descargar archivo'), e => e.code === 'permission-denied');

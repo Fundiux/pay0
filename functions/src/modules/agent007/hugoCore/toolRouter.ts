@@ -24,7 +24,7 @@ export const HUGO_READ_TOOLS = {
 export type HugoToolName = keyof typeof HUGO_READ_TOOLS;
 export type ToolResult = { sourceSystem: string; tool: string; retrievedAt: string; scope: { rootId: string }; completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; evidence: Array<{ entityType: string; entityId: string; kind: string; sourceSystem: string; completeness: string }>; data: any; trace: { latencyMs: number; result: string; error?: string } };
 export type ToolIdentity = { uid: string; rootId: string; role: string };
-export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated?: boolean; clientQuery?: string; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
+export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated?: boolean; clientQuery?: string; format?: "PDF" | "XLSX"; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
 
 export class HugoToolRouter {
   constructor(private readonly identity: ToolIdentity, private readonly tools: Partial<Record<HugoToolName, (input: any) => Promise<ToolResult>>>, private readonly onResult?: (request: ToolRequest, result?: ToolResult, error?: unknown) => void) {

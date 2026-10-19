@@ -47,7 +47,8 @@ export async function executeEarningsReportTool(request: CallableRequest, input:
   const exportRows = report.rows.slice(0, 250).map(row => ({ ...row, clienteId: row.clienteId, clienteNombre: row.clienteNombre === null ? null : String(row.clienteNombre).slice(0, 200) }));
   const numericKeys = ["operationsCount", "grossAmount", "baseAmount", "despachoCostAmount", "superadminEarningAmount", "adminEarningAmount", "operadorEarningAmount", "totalEarningsAmount", "clientChargeAmount", "clientNetAmount"] as const;
   const exportValid = exportRows.every(row => row.clienteId.length <= 160 && numericKeys.every(key => typeof row[key] === "number" && Number.isFinite(row[key])));
-  let reportExport: HugoReportExport | undefined = exportRows.length && exportValid ? { version: 1, kind: "EARNINGS_BY_CLIENT", fileName: `pay0-utilidades-${input.dateFrom}-a-${input.dateTo}.xlsx`,
+  const format = input.format || "XLSX";
+  let reportExport: HugoReportExport | undefined = exportRows.length && exportValid ? { version: 1, kind: "EARNINGS_BY_CLIENT", format, fileName: `pay0-utilidades-${input.dateFrom}-a-${input.dateTo}.${format.toLowerCase()}`,
     dateFrom: input.dateFrom!, dateTo: input.dateTo!, includeCompensated: report.includeCompensated, docsScanned: report.docsScanned, scanLimit,
     matchedClients: report.rows.length, exportedClients: Math.min(report.rows.length, 250), truncatedByScan: report.docsScanned >= scanLimit,
     truncatedByExport: report.rows.length > 250 || report.rows.some(row => (row.clienteNombre || "").length > 200), rows: exportRows } : undefined;
