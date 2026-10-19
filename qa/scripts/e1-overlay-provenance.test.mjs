@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity } from '../../scripts/deploy-scoped-functions.mjs';
+
+const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'a'.repeat(64), patchCommit: 'b'.repeat(40), patchSha256: 'c'.repeat(64) };
+const input = { group: 'hugo-chat-overlay', functions: ['sendAgent007Message'], sourceCommit: identity.patchCommit, archiveSha256: 'd'.repeat(64), sourceIdentity: identity };
+const resource = { name: 'projects/pay-0-system/locations/us-central1/functions/sendAgent007Message', state: 'ACTIVE', labels: { owner: 'retained' }, buildConfig: { runtime: 'nodejs22', environmentVariables: { GOOGLE_NODE_RUN_SCRIPTS: '' } } };
+const source = { bucket: 'gcf-v2-sources-751158244178-us-central1', object: 'fixture/function-source.zip', generation: '123' };
+
+test('production overlay identifies deployed base and patch rather than claiming a complete checkout', () => {
+  const patch = sourceOnlyPatch(resource, source, input.sourceCommit, input.archiveSha256, input.group, identity);
+  assert.equal(patch.labels['pay0-source-mode'], 'production-overlay-v1');
+  assert.equal(patch.labels['pay0-base-source'], identity.baseArchiveSha256.slice(0, 40));
+  assert.equal(patch.labels.owner, 'retained');
+  assert.deepEqual(resource.labels, { owner: 'retained' });
+  assertPublishedIdentity(patch, input);
+  assert.throws(() => assertPublishedIdentity({ ...patch, labels: { ...patch.labels, 'pay0-base-source': 'e'.repeat(40) } }, input));
+});
+
+test('artifact proof binds exact overlay base, patch, function scope and archive', () => {
+  const proof = { status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, functions: input.functions, unauthenticatedDenied: 1, sourceIdentity: identity };
+  assertArtifactProof(input, proof);
+  assert.throws(() => assertArtifactProof(input, { ...proof, sourceIdentity: { ...identity, baseArchiveSha256: 'e'.repeat(64) } }));
+  assert.throws(() => validateSourceIdentity({ ...identity, patchCommit: 'f'.repeat(40) }, input.group, input.sourceCommit));
+  assert.throws(() => validateSourceIdentity(identity, 'receipts', input.sourceCommit));
+  assert.throws(() => validateSourceIdentity(undefined, input.group, input.sourceCommit));
+  assert.throws(() => validateSourceIdentity({ ...identity, extra: true }, input.group, input.sourceCommit));
+});
+
+test('a later full-checkout update does not retain stale overlay provenance', () => {
+  const baseline = { ...resource, labels: { owner: 'retained', 'pay0-source-mode': 'production-overlay-v1', 'pay0-base-source': 'a'.repeat(40), 'pay0-patch-sha': 'c'.repeat(40) } };
+  const patch = sourceOnlyPatch(baseline, source, input.sourceCommit, input.archiveSha256, 'hugo-reports');
+  assert.equal(patch.labels['pay0-source-mode'], undefined);
+  assert.equal(patch.labels['pay0-base-source'], undefined);
+});

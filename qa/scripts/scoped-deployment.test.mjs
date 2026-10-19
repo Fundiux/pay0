@@ -55,13 +55,15 @@ test('groups pin exact endpoints and old receipt inputs remain compatible', () =
   assert.equal(deploymentScope({ functions: [...DEPLOYMENT_GROUPS.receipts] }).group, 'receipts');
   assert.equal(DEPLOYMENT_GROUPS['security-readers'].length, 9);
   assert.deepEqual(DEPLOYMENT_GROUPS['engineering-action'], ['reconcileAgent007RecommendationsNow']);
+  assert.deepEqual(DEPLOYMENT_GROUPS['hugo-reports'], ['sendAgent007Message', 'delegateHugoVoiceTurn', 'getEarningsByClientReport']);
   assert.deepEqual(DEPLOYMENT_GROUPS['receipt-workflow'], ['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']);
   for (const [group, names] of Object.entries(DEPLOYMENT_GROUPS)) {
     const input = { group, functions: [...names], buildMode: 'BUNDLED_V1' };
     assert.deepEqual(deploymentScope(input).names, names);
     for (const name of names) {
       const row = resource(); row.name = row.name.replace('parsePagoReceiptPdf', name);
-      assert.doesNotThrow(() => sourceOnlyPatch(row, upload, 'a'.repeat(40), 'b'.repeat(64), group));
+      const identity = group.endsWith('-overlay') ? { mode: 'PRODUCTION_OVERLAY_V1', patchCommit: 'a'.repeat(40), baseArchiveSha256: 'c'.repeat(64), patchSha256: 'd'.repeat(64) } : undefined;
+      assert.doesNotThrow(() => sourceOnlyPatch(row, upload, 'a'.repeat(40), 'b'.repeat(64), group, identity));
     }
     assert.throws(() => deploymentScope({ ...input, functions: [...names, 'createPago'] }));
     assert.throws(() => deploymentScope({ ...input, functions: [] }));

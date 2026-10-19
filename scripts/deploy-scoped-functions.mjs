@@ -14,7 +14,31 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'receipt-workflow': Object.freeze(['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
   'engineering-action': Object.freeze(['reconcileAgent007RecommendationsNow']),
+  'hugo-reports': Object.freeze(['sendAgent007Message', 'delegateHugoVoiceTurn', 'getEarningsByClientReport']),
+  'hugo-chat-overlay': Object.freeze(['sendAgent007Message']),
+  'hugo-voice-overlay': Object.freeze(['delegateHugoVoiceTurn']),
 });
+export function validateSourceIdentity(identity, group, sourceCommit) {
+  if (identity === undefined) {
+    assert.ok(!['hugo-chat-overlay', 'hugo-voice-overlay'].includes(group), 'OVERLAY_IDENTITY_REQUIRED');
+    return;
+  }
+  assert.ok(['hugo-chat-overlay', 'hugo-voice-overlay'].includes(group), 'OVERLAY_GROUP_REQUIRED');
+  assert.deepEqual(Object.keys(identity).sort(), ['baseArchiveSha256', 'mode', 'patchCommit', 'patchSha256'].sort(), 'OVERLAY_IDENTITY_FIELDS');
+  assert.equal(identity.mode, 'PRODUCTION_OVERLAY_V1', 'OVERLAY_MODE');
+  assert.equal(identity.patchCommit, sourceCommit, 'OVERLAY_PATCH_COMMIT');
+  for (const key of ['baseArchiveSha256', 'patchSha256']) assert.match(identity[key], /^[a-f0-9]{64}$/, 'OVERLAY_HASH_REQUIRED');
+}
+export function assertPublishedIdentity(resource, input) {
+  validateSourceIdentity(input.sourceIdentity, input.group, input.sourceCommit);
+  assert.equal(resource.labels?.['pay0-source-commit'], input.sourceCommit, 'POSTFLIGHT_COMMIT');
+  assert.equal(resource.labels?.['firebase-functions-hash'], input.archiveSha256.slice(0, 40), 'POSTFLIGHT_ARTIFACT_LABEL');
+  if (input.sourceIdentity) {
+    assert.equal(resource.labels?.['pay0-source-mode'], 'production-overlay-v1', 'POSTFLIGHT_SOURCE_MODE');
+    assert.equal(resource.labels?.['pay0-base-source'], input.sourceIdentity.baseArchiveSha256.slice(0, 40), 'POSTFLIGHT_BASE_SOURCE');
+    assert.equal(resource.labels?.['pay0-patch-sha'], input.sourceIdentity.patchSha256.slice(0, 40), 'POSTFLIGHT_PATCH');
+  }
+}
 export function deploymentScope(input) {
   const group = input.group === undefined ? 'receipts' : input.group;
   assert.ok(Object.prototype.hasOwnProperty.call(DEPLOYMENT_GROUPS, group), 'GROUP_NOT_ALLOWED');
@@ -26,6 +50,8 @@ export function deploymentScope(input) {
 }
 export function assertArtifactProof(input, proof) {
   const { names } = deploymentScope(input);
+  validateSourceIdentity(input.sourceIdentity, input.group, input.sourceCommit);
+  if (input.sourceIdentity) assert.deepEqual(proof.sourceIdentity, input.sourceIdentity, 'ARTIFACT_PROOF_SOURCE_IDENTITY');
   assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
   assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
@@ -61,7 +87,7 @@ function command(command, args, cwd, log, environment = process.env) {
   assert.equal(result.status, 0, `COMMAND_FAILED_${command}`);
   return (result.stdout || '').trim();
 }
-export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256, group = 'receipts') {
+export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256, group = 'receipts', sourceIdentity) {
   assert.ok(Object.prototype.hasOwnProperty.call(DEPLOYMENT_GROUPS, group) && DEPLOYMENT_GROUPS[group].includes(baseline.name?.split('/').at(-1)), 'FUNCTION_NOT_ALLOWED');
   assert.equal(baseline.name, `projects/${PROJECT}/locations/${REGION}/functions/${baseline.name.split('/').at(-1)}`, 'FUNCTION_SCOPE');
   assert.equal(baseline.state, 'ACTIVE', 'FUNCTION_NOT_ACTIVE');
@@ -70,8 +96,12 @@ export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256, g
   assert.match(sourceCommit, /^[a-f0-9]{40}$/, 'COMMIT_REQUIRED');
   assert.match(archiveSha256, /^[a-f0-9]{64}$/, 'ARCHIVE_HASH_REQUIRED');
   assertUploadSource(source);
+  validateSourceIdentity(sourceIdentity, group, sourceCommit);
+  const labels = { ...baseline.labels, 'pay0-source-commit': sourceCommit, 'firebase-functions-hash': archiveSha256.slice(0, 40) };
+  for (const key of ['pay0-source-mode', 'pay0-base-source', 'pay0-patch-sha']) delete labels[key];
+  if (sourceIdentity) Object.assign(labels, { 'pay0-source-mode': 'production-overlay-v1', 'pay0-base-source': sourceIdentity.baseArchiveSha256.slice(0, 40), 'pay0-patch-sha': sourceIdentity.patchSha256.slice(0, 40) });
   return { name: baseline.name, buildConfig: { source: { storageSource: source } },
-    labels: { ...baseline.labels, 'pay0-source-commit': sourceCommit, 'firebase-functions-hash': archiveSha256.slice(0, 40) } };
+    labels };
 }
 export function assertRuntimePreserved(before, after) {
   const select = value => {
@@ -270,8 +300,7 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
         assertRuntimePreserved(expected.resource, current);
         assertRunRuntimePreserved(expected.service, saved.service);
         assert.equal(current.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
-        assert.equal(current.labels?.['pay0-source-commit'], input.sourceCommit, 'POSTFLIGHT_COMMIT');
-        assert.equal(current.labels?.['firebase-functions-hash'], input.archiveSha256.slice(0, 40), 'POSTFLIGHT_ARTIFACT_LABEL');
+        assertPublishedIdentity(current, input);
         assert.equal(sha(await readSourceBytes(previousSource(current), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
         assert.equal(digest(saved.iam), digest(expected.iam), 'POSTFLIGHT_IAM_CHANGED');
         completedNames.add(name);
@@ -279,9 +308,10 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
         continue;
       }
       const fresh = await assertCurrent(expected, name, token);
-      sourceOnlyPatch(fresh, fresh.buildConfig.source.storageSource, input.sourceCommit, input.archiveSha256, group);
+      sourceOnlyPatch(fresh, fresh.buildConfig.source.storageSource, input.sourceCommit, input.archiveSha256, group, input.sourceIdentity);
       if (!resume) {
         const rollback = await preservePrevious(fresh, token, path.dirname(inputFile), name);
+        if (input.sourceIdentity) assert.equal(rollback.sha256, input.sourceIdentity.baseArchiveSha256, 'OVERLAY_BASE_ARCHIVE_CHANGED');
         emit({ state: 'PREVIOUS_SOURCE_PRESERVED', function: name, source: rollback.source, sha256: rollback.sha256, previousRevision: fresh.serviceConfig.revision });
       }
     }
@@ -302,7 +332,7 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
       token = tokenInMemory();
       const expected = baseline.functions[name];
       const fresh = await assertCurrent(expected, name, token);
-      const body = sourceOnlyPatch(fresh, uploadedSource, input.sourceCommit, input.archiveSha256, group);
+      const body = sourceOnlyPatch(fresh, uploadedSource, input.sourceCommit, input.archiveSha256, group, input.sourceIdentity);
       emit({ state: 'UPDATE_PREPARED', function: name, previousSource: previousSource(fresh), source: uploadedSource, previousRevision: fresh.serviceConfig.revision });
       unresolved = true;
       fs.writeFileSync(lockPath, JSON.stringify({ inputFile, inputSha256, function: name, state: 'DISPATCHING' }));
@@ -318,8 +348,7 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
       assert.equal(after.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
       assertRuntimePreserved(fresh, after);
       assertRunRuntimePreserved(expected.service, afterService);
-      assert.equal(after.labels?.['pay0-source-commit'], input.sourceCommit, 'POSTFLIGHT_COMMIT');
-      assert.equal(after.labels?.['firebase-functions-hash'], input.archiveSha256.slice(0, 40), 'POSTFLIGHT_ARTIFACT_LABEL');
+      assertPublishedIdentity(after, input);
       assert.equal(sha(await readSourceBytes(previousSource(after), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
       const iam = await getMetadata(`https://run.googleapis.com/v2/${after.serviceConfig.service}:getIamPolicy`, token);
       assert.equal(digest(iam), digest(expected.iam), 'POSTFLIGHT_IAM_CHANGED');
@@ -339,7 +368,7 @@ async function rollbackInternal(inputFile, inputSha256, name) {
   const baselineBytes = fs.readFileSync(privatePath(input.baselineFile)); assert.equal(sha(baselineBytes), input.baselineSha256, 'BASELINE_CHANGED');
   const before = JSON.parse(baselineBytes).functions[name];
   const expected = JSON.parse(fs.readFileSync(privatePath(path.join(directory, `${name}-after.json`))));
-  assert.equal(expected.resource.labels?.['pay0-source-commit'], input.sourceCommit, 'ROLLBACK_NOT_OWN_RELEASE');
+  assertPublishedIdentity(expected.resource, input);
   const lockPath = privatePath(path.join(PRIVATE, 'deployment.lock'));
   let lock, unresolved = false;
   if (fs.existsSync(lockPath)) {

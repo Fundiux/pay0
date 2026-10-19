@@ -51,6 +51,6 @@ const JSZip = require('../../functions/node_modules/jszip');
   assert.equal(runtime.status, 0, 'ARTIFACT_STARTUP_OR_AUTH_FAILED');
   const result = JSON.parse(runtime.stdout.trim());
   assert.deepEqual(result.functions, [...names]); assert.equal(result.unauthenticatedDenied, names.length);
-  fs.writeFileSync(path.join(path.dirname(file), 'artifact-verification.json'), JSON.stringify({ ...result, group, buildMode, sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, checkedAt: new Date().toISOString(), productionWrites: 0 }, null, 2));
+  fs.writeFileSync(path.join(path.dirname(file), 'artifact-verification.json'), JSON.stringify({ ...result, group, buildMode, sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, ...(input.sourceIdentity ? { sourceIdentity: input.sourceIdentity } : {}), checkedAt: new Date().toISOString(), productionWrites: 0 }, null, 2));
   console.log(JSON.stringify(result));
 })().catch(error => { console.error(`ARTIFACT_VERIFICATION_FAILED ${/^[A-Z_]+$/.test(error.message) ? error.message : 'detailsRedacted=true'}`); process.exitCode = 1; });
