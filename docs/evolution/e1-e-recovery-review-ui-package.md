@@ -1,4 +1,4 @@
-﻿# E — revisión administrativa: delta de UI
+# E — revisión administrativa: delta de UI
 
 Estado: candidato local verificado, sin publicación ni build completo en esta etapa. Requiere autorización y disponibilidad de ambos callables de revisión antes de publicar la interfaz.
 
@@ -12,7 +12,7 @@ El snapshot separado `.firebase/modular-release/e-recovery-review-ui/source` par
 - `src/components/control-center/EngineeringControl.tsx`: monta la vista existente con identidad vigente; la key cambia al cambiar uid, root, rol o actividad. Durante carga de identidad o pérdida de acceso se desmonta.
 - `src/services/controlCenter.ts`: los dos wrappers tipados ya existentes en integración, sin nuevas Functions ni contratos.
 
-El parche de publicación es `qa/patches/e1-recovery-review-ui.patch`, SHA256 `dd00b2edc86e18614df56dd87858d54a6122aa3750a87dd7a9c9f49f6f63dd4e`. Conserva por contenido los otros 2167 archivos de la base. No incorpora D, comparaciones backend R2, MAT ni cambios en la descarga R1.2. El endurecimiento de las dos componentes también se aplica al árbol integrado; no se modificó el clon R1.2 congelado. La aplicación del parche sobre los archivos base con `git -c core.autocrlf=false apply` reprodujo exactamente los tres archivos del candidato; fijar esa opción evita conversiones de bytes en Windows.
+El parche de publicación es `qa/patches/e1-recovery-review-ui.patch`, SHA256 `8031c85f87af9867bcbf66141620631065f1500e51b8e79f016a7915be94fd62`. Conserva por contenido los otros 2167 archivos de la base. No incorpora D, comparaciones backend R2, MAT ni cambios en la descarga R1.2. El endurecimiento de las dos componentes también se aplica al árbol integrado; no se modificó el clon R1.2 congelado. La aplicación del parche sobre los archivos base con `git -c core.autocrlf=false apply` reprodujo exactamente los tres archivos del candidato; fijar esa opción evita conversiones de bytes en Windows.
 
 La ruta existente es `/reportes`, pestaña Control Center, sección Ingeniería y seguimiento. La ruta limita esta sección a superadmin; el componente además depende de identidad cargada y activa. Esto no sustituye autorización del servidor.
 
@@ -31,4 +31,3 @@ La UI consulta al montarse; publicarla antes de disponer de ambos endpoints prod
 `qa/scripts/e1-recovery-review-ui.test.cjs` ejecuta el componente y el montaje real en Chromium headless, con servicios sintéticos. El candidato y el árbol integrado obtuvieron 3/3 cada uno: wrappers exactos, paginación/acuse/error recuperable y aislamiento de uid/root con carga/acuse pendientes e inactivación. El componente anterior falló la prueba de cambio de root: conservaba la instancia y no consultaba el nuevo ámbito. Logs: `tmp/e-recovery-review-ui-final.log` y `tmp/e-recovery-review-baseline-context.log` y `tmp/e-recovery-review-root-final.log`.
 
 Estas pruebas no certifican Firebase Auth, rules, índices ni despliegue. No se invocaron proveedores, callables productivos ni acciones financieras.
-
