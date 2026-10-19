@@ -22,9 +22,12 @@ function replaceOnce(before, after) {
 replaceOnce("const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');", `const repo = ${JSON.stringify(repo)};`);
 replaceOnce('83baf34e6e7c3f52c90d820ef18a555da8d2aba854bbb8dc552b72be44c36bfe', '21922d596a664b2916fa459c5c51b165388db5a5b4af897995f3bb85d89b06f9');
 replaceOnce('55c5c45aaab2a1603499a058605f4f38522e5092d2159957097566ac9b6dd077', 'c9a64571acecff5303afc99e79e17411bf3f3fdbcdfb9f6561705b74bb55280d');
-replaceOnce('744e16e5f5166acd3fbeb5a60d674a59245f4287db7cf01d318a17856418e9ae', 'd50be4740c312452675ac39870cf018a54e69298a85ec8b72ba007eeb7c4a1a7');
+replaceOnce('744e16e5f5166acd3fbeb5a60d674a59245f4287db7cf01d318a17856418e9ae', 'ecbcdb61ff78e31f1ff70c0130b36bc32722703faf2f7376d68de9883618dca3');
 replaceOnce("'qa/patches/d1-after-r2-learning.patch'", "'qa/patches/d1-after-r14-revoke-off.patch'");
 replaceOnce("'d1-after-r2.zip'", "'d1-after-r14-revoke-off.zip'");
+// Binary patches preserve the source's original line endings; disable Git conversion.
+assert.equal(recipe.split("execFileSync('git', ['apply',").length, 3, 'Expected two apply calls');
+recipe = recipe.replaceAll("execFileSync('git', ['apply',", "execFileSync('git', ['-c', 'core.autocrlf=false', 'apply',");
 fs.mkdirSync(path.dirname(args[3]), { recursive: true });
 const driver = path.join(path.dirname(args[3]), `.d1-r14-composer-${randomUUID()}.mjs`);
 fs.writeFileSync(driver, recipe, { flag: 'wx' });

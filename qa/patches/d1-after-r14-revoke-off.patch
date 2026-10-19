@@ -1,639 +1,311 @@
 diff --git a/src/index.ts b/src/index.ts
-index 3a21a3d..3ec70aa 100644
---- a/src/index.ts
-+++ b/src/index.ts
-@@ -149,7 +149,7 @@ export const createSolicitud = onCall(
-       clienteId: clienteIdRaw,
-       companyId,
-       despachoId: despachoIdRaw,
--      operationTypeKey,
-+      operationTypeKey,
-       monto,
-       tipoFactura,
-       comentario,
-@@ -1718,10 +1718,10 @@ export const createPago = onCall(
-     if (receiptIdentificationId && !/^[a-f0-9]{64}$/.test(receiptIdentificationId)) {
-       throw new HttpsError("invalid-argument", "Identificación de comprobante inválida.");
-     }
--    const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
--    let validatedReceiptAnalysisId = "";
--    let validatedReceiptReaderVersion = "";
--    let validatedReceiptSemantic: Record<string, unknown> | null = null;
-+    const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
-+    let validatedReceiptAnalysisId = "";
-+    let validatedReceiptReaderVersion = "";
-+    let validatedReceiptSemantic: Record<string, unknown> | null = null;
- 
-     const costGuardOperationTypeKey = String(operationTypeKey || "").trim().toUpperCase();
-     const costGuardDespachoId = String(despachoId || "").trim();
-@@ -2106,14 +2106,14 @@ export const createPago = onCall(
-     let pagoSequenceCounterPath = "";
- 
-     await db.runTransaction(async (tx) => {
--      if (receiptIdentificationRef) {
--        const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
--        assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
--        const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
--        validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
--        validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
--        validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
--          ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
-+      if (receiptIdentificationRef) {
-+        const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
-+        assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
-+        const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
-+        validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
-+        validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
-+        validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
-+          ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
-       }
-       if (receiptDuplicateRef) {
-         const duplicateSnap = await tx.get(receiptDuplicateRef);
-@@ -2212,10 +2212,10 @@ export const createPago = onCall(
-         referencia: referenciaValue || null,
-         concepto: String(request.data?.concepto || "").trim().slice(0, 1000) || null,
-         referenciaNormalized: referenciaNormalized || null,
--        receiptLearningSignals: {
--          analysisId: validatedReceiptAnalysisId || null,
--          readerVersion: validatedReceiptReaderVersion || null,
--          semanticReceipt: validatedReceiptSemantic,
-+        receiptLearningSignals: {
-+          analysisId: validatedReceiptAnalysisId || null,
-+          readerVersion: validatedReceiptReaderVersion || null,
-+          semanticReceipt: validatedReceiptSemantic,
-           detectedBankName: detectedBankNameValue || null,
-           detectedSenderName: detectedSenderNameValue || null,
-           detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
-@@ -2944,7 +2944,7 @@ export {
- export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
- 
- export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
--export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
-+export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
- export {
-   listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
-   importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
-@@ -2953,7 +2953,7 @@ export {
- } from "./modules/canonicalCenter/service";
- export { getFacturamaSandboxStatus, getFacturamaProductionStatus, saveFacturamaDraft, listFacturamaInvoices, importCompanyInvoiceCatalog, initGlobalSatCatalogUpload, finalizeGlobalSatCatalogImport } from "./modules/facturama/callables";
- export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturamaProductionInvoice, reconcileFacturamaIssuedMetadata, cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus, getFacturamaProductionCsdStatus, registerFacturamaProductionCsd } from "./modules/facturama/sandboxCallables";
--export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";
-+export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews, reviewAgent007LearningRule } from "./modules/agent007/callables";
- export { createHugoRealtimeSession } from "./modules/agent007/realtimeVoice";
- export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modules/agent007/voiceDelegation";
- export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
+index 3a21a3df2e81947a8e3dd4d3a429ba09d475c0c7..3ec70aab9d5cab7d9a95896896515871437df278 100644
+GIT binary patch
+delta 217
+zcmZo#!M*{A%%vH5H=9d;xz5Ntx#6?q^j$`byevve)?nV`+|R;baZjM4lb<izP7g6*
+z6qvr!kkOfuclsMc#&{s*ZNwM`q!t=6#!k*($T59|5u*@Lqrh}^V@4~mNQN<EF;K;A
+zV@ChUOfI6^?MxVh1c3q*Tp6vVukmK&nts`p(R_N98zawjQ8z{{M&9lAZj48or}yk(
+z<l8QAim{$eT1TNMwJbBW+%Y{huf)K>+$S}$C@(WFJ*YHivLKhpbcaifoZDAlU<_vl
+E0ENg%fB*mh
+
+delta 131
+zcmdn6g1u=4`v!CA%@)#Mu20tetO>-DlM6lzgXy`S4K|<qe9?CL0z<~2>7NZ5<EIB3
+zF@{agF=mvUe%Of71<V2}7np8n%xDGTRZV|x%;>+}+=MYraQZw~px{kcMu+KAZj7ee
+a1Kb#oG;bF@#n{6(If+wv`-KaP3CsXIGBa8L
+
 diff --git a/src/modules/agent007/callables.ts b/src/modules/agent007/callables.ts
-index cdbca6b..6154558 100644
---- a/src/modules/agent007/callables.ts
-+++ b/src/modules/agent007/callables.ts
-@@ -17,6 +17,7 @@ import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
- import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
- import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
- import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
-+import { FirestoreHugoLearningRuleStore } from "./firestoreHugoLearningRuleStore";
- import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
- import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
- import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
-@@ -29,6 +30,19 @@ const conversationIdFor = (rootId: string, uid: string, scope: "GLOBAL" | "PAY0"
- const hugoData = new FirestoreHugoDataStore(db);
- const hugoLearning = new FirestoreHugoLearningStore(db);
- 
-+export const reviewAgent007LearningRule = onCall(
-+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
-+  async request => {
-+    const { uid, rootId } = await actor(request);
-+    const data = request.data || {};
-+    if (!["APPROVE", "REVOKE"].includes(data.action)) throw new HttpsError("invalid-argument", "Acción de revisión inválida.");
-+    return { ok: true, ...await new FirestoreHugoLearningRuleStore(db).review({ uid, rootId }, {
-+      action: data.action, ruleId: clean(data.ruleId, 160),
-+      supportingIds: Array.isArray(data.supportingIds) ? data.supportingIds.map((id: unknown) => clean(id, 160)) : undefined,
-+    }) };
-+  },
-+);
-+
- function displayName(user: any): string {
-   return clean(user?.displayName || user?.name || user?.nombre || user?.firstName || user?.email?.split?.("@")[0] || "", 80) || "usuario";
- }
+index cdbca6b660232b237fcc736ce59f6f5c53663004..6154558252e90b46f26210de51081c6bda65afec 100644
+GIT binary patch
+delta 440
+zcmY+9PfG$p7{)<X5>te-5F~irL+!ve*u{fUu?GVwQVhIQhiPYwp>0<7kDJ&c-8yv{
+z=pI4mz%LN^Me0*@iD=g~$T_|5GtV=>XI>ssPmig$?X>(<)|8HKF}bB|$nT}hY?+kP
+zUnyBzDag`!ZuyuIM{sc!*<_`AD}N4k`Fa9X-UF?2rW);br`2t!I;fpSw{_G|FEAIT
+z<x}Qrlz0Ra)8n>4^1f7(@0&$1Op{M10w@EA4Y)g7xEM^IElvqmrLkJhVT?&YxCep-
+z@<Ul4$1P7i+hH2LL^uwzKpTP2sSb{9drb<V4x@Y)W+#Ex;a`Ku7roJ>bucYPL{cu1
+zbl9m?k^UEU{eIteyy(+S>ej(<95Nna?#9C~$t_qA93-Fx72lA)rtyg9i)&#A0>R$?
+koE^80kqF{j%6eQdI_HN7!riz^7zrqv^4Xq0DP{_HzezTaeE<Le
+
+delta 19
+acmbQ%$F#VEX@f57=0?`1Oq*G`1#19FDh8$i
+
 diff --git b/src/modules/agent007/firestoreHugoLearningRuleStore.ts b/src/modules/agent007/firestoreHugoLearningRuleStore.ts
 new file mode 100644
-index 0000000..b9db96d
---- /dev/null
-+++ b/src/modules/agent007/firestoreHugoLearningRuleStore.ts
-@@ -0,0 +1,152 @@
-+import { createHash } from "node:crypto";
-+import { isDeepStrictEqual } from "node:util";
-+import { Firestore, Transaction } from "firebase-admin/firestore";
-+import { HttpsError } from "firebase-functions/v2/https";
-+import { assertAuthorized } from "../../utils/authGuard";
-+import { LearningEventType, LearningExperience, LearningQuery, trainingEligibility } from "./hugoCore/learningContract";
-+import { buildVerifiedExperience } from "./hugoCore/experienceBuilder";
-+import { decideWithoutModel, measureLearningEffect, proposeRuleCandidates } from "./hugoCore/learningEvaluation";
-+import { selectLearningExperiences } from "./hugoCore/learningStore";
-+import { observationEvidenceResolver, assertResolvedOutcomeTime } from "./observationEvidence";
-+
-+const enabled = () => process.env.HUGO_SUPERVISED_RULES_ENABLED === "true";
-+const valid = (value: string) => /^[A-Za-z0-9_-]{1,160}$/.test(value);
-+const iso = (value: any) => value?.toDate?.()?.toISOString?.() || (typeof value === "string" ? value : "");
-+const behavior = "VERIFY_DOCUMENT_BEFORE_DECISION";
-+type Identity = { uid: string; rootId: string };
-+type Rule = { schemaVersion: "supervised-rule-v1"; ruleId: string; rootId: string; status: "ACTIVE" | "INVALIDATED";
-+  version: number; domain: string; taskType: string; features: Record<string, string>; behavior: string;
-+  supportingIds: string[]; supportingRevisions: Record<string, number>; approvedBy: string; approvedAt: string; expiresAt: string;
-+  invalidatedBy: string | null; evaluation: { improved: boolean; overgeneralized: boolean; modelAdapter: string } };
-+
-+/** Optional advice only. No business mutation, model call or financial rule is executed. */
-+export class FirestoreHugoLearningRuleStore {
-+  constructor(private readonly db: Firestore) {}
-+  private async actor(tx: Transaction, identity: Identity) {
-+    if (!valid(identity.uid) || !valid(identity.rootId)) throw new HttpsError("unauthenticated", "Sesión inválida.");
-+    const user = (await tx.get(this.db.doc(`users/${identity.uid}`))).data();
-+    assertAuthorized({ uid: identity.uid }, user, { allowedRoles: ["superadmin"] });
-+    if ((user?.rootId || identity.uid) !== identity.rootId) throw new HttpsError("permission-denied", "Ámbito de aprendizaje revocado.");
-+  }
-+  private async verifyEvidence(tx: Transaction, row: LearningExperience) {
-+    if (!trainingEligibility(row).eligible || !row.correction || row.correction.correctedBehavior !== row.expectedBehavior)
-+      throw new HttpsError("failed-precondition", "Experiencia no vigente.");
-+    const memory = (await tx.get(this.db.doc(`agent007Memory/${row.createdFrom.memoryId}`))).data();
-+    if (!memory || memory.rootId !== row.rootId || memory.kind !== "EXPERIENCE" || memory.status !== "CONFIRMED" ||
-+      ![memory.links?.observationId, memory.links?.decisionId, memory.links?.outcomeId].every(x => typeof x === "string" && valid(x)))
-+      throw new HttpsError("failed-precondition", "Memoria de origen revocada.");
-+    const [observation, decision, outcome] = await Promise.all([
-+      tx.get(this.db.doc(`agent007Observations/${memory.links.observationId}`)),
-+      tx.get(this.db.doc(`agent007Memory/${memory.links.decisionId}`)),
-+      tx.get(this.db.doc(`agent007Observations/${memory.links.outcomeId}`)),
-+    ]);
-+    const resolve = observationEvidenceResolver(this.db, tx, row.rootId);
-+    const [initial, final] = await Promise.all([resolve(observation.id, observation.data()), resolve(outcome.id, outcome.data())]);
-+    const d = decision.data();
-+    assertResolvedOutcomeTime(final, Date.parse(d?.decision?.decisionAt || ""));
-+    try {
-+      const verified = buildVerifiedExperience({ rootId: row.rootId, experienceId: row.experienceId, domain: row.domain, taskType: row.taskType,
-+        intent: row.input.intent, questionClass: row.input.questionClass, features: row.features, now: row.createdAt,
-+        memory: { id: row.createdFrom.memoryId, rootId: memory.rootId, kind: memory.kind, status: memory.status, entityReference: memory.entityReference, links: memory.links, createdAt: memory.createdAt },
-+        observation: { id: observation.id, ...initial.observation, createdAt: iso(initial.observation.createdAt) },
-+        decision: { id: decision.id, rootId: d?.rootId, kind: d?.kind, status: d?.status, entityId: d?.entityReference?.entityId,
-+          entityType: d?.entityReference?.entityType, sourceSystem: d?.entityReference?.sourceSystem, actorUid: d?.decision?.actorUid,
-+          decisionType: d?.decision?.decisionType, decidedAt: d?.decision?.decisionAt },
-+        outcome: { id: outcome.id, ...final.observation, occurredAt: iso(final.observation.createdAt) } });
-+      if (!isDeepStrictEqual(verified.evidenceReferences, row.evidenceReferences) ||
-+        !isDeepStrictEqual(verified.outcome, row.outcome) || !isDeepStrictEqual(verified.humanDecision, row.humanDecision) ||
-+        !row.correction.evidenceReferences.every(ref => verified.evidenceReferences.some(e => JSON.stringify(e) === JSON.stringify(ref) ||
-+          e.system === ref.system && e.kind === ref.kind && e.id === ref.id && e.rootId === ref.rootId))) throw Error("CHANGED_EVIDENCE");
-+    } catch { throw new HttpsError("failed-precondition", "Evidencia de aprendizaje revocada."); }
-+  }
-+  private async matching(tx: Transaction, query: LearningQuery) {
-+    const snap = await tx.get(this.db.collection("agent007LearningExperiences").where("rootId", "==", query.rootId)
-+      .where("domain", "==", query.domain).where("taskType", "==", query.taskType).limit(101));
-+    if (snap.size > 100) throw new HttpsError("failed-precondition", "Revisión de aprendizaje excede el límite seguro.");
-+    return selectLearningExperiences(snap.docs.map(doc => doc.data() as LearningExperience), { ...query, limit: 5 });
-+  }
-+  private event(tx: Transaction, rule: Rule, type: LearningEventType, actorUid: string, reason: string) {
-+    const eventId = `${rule.ruleId}_${rule.version}_${type}`;
-+    tx.create(this.db.doc(`agent007LearningLedger/${eventId}`), { eventId, rootId: rule.rootId, experienceId: rule.supportingIds[0], type,
-+      at: new Date().toISOString(), actorUid, references: rule.supportingIds.map(id => ({ system: "HUGO", kind: "EXPERIENCE", id, rootId: rule.rootId })),
-+      metadata: { ruleId: rule.ruleId, version: rule.version, reason } });
-+  }
-+  async review(identity: Identity, input: { action: "APPROVE" | "REVOKE"; supportingIds?: string[]; ruleId?: string }) {
-+    if (!enabled() && input.action !== "REVOKE") throw new HttpsError("failed-precondition", "Las reglas supervisadas están deshabilitadas.");
-+    return this.db.runTransaction(async tx => {
-+      await this.actor(tx, identity);
-+      if (input.action === "REVOKE") {
-+        if (!valid(input.ruleId || "")) throw new HttpsError("invalid-argument", "Regla inválida.");
-+        const ref = this.db.doc(`agent007LearnedRules/${input.ruleId}`), rule = (await tx.get(ref)).data() as Rule | undefined;
-+        if (!rule || rule.schemaVersion !== "supervised-rule-v1" || rule.rootId !== identity.rootId) throw new HttpsError("not-found", "Regla no encontrada.");
-+        if (rule.status !== "ACTIVE") return { ruleId: rule.ruleId, status: rule.status, version: rule.version };
-+        const next: Rule = { ...rule, status: "INVALIDATED", version: rule.version + 1, invalidatedBy: "HUMAN_REVOKED" };
-+        tx.set(ref, next); this.event(tx, next, "RULE_REVOKED", identity.uid, "HUMAN_REVOKED");
-+        return { ruleId: next.ruleId, status: next.status, version: next.version };
-+      }
-+      const ids = input.supportingIds;
-+      if (input.action !== "APPROVE" || !Array.isArray(ids) || ids.length < 2 || ids.length > 5 || new Set(ids).size !== ids.length || !ids.every(valid))
-+        throw new HttpsError("invalid-argument", "Se requieren dos a cinco experiencias independientes.");
-+      const rows = await Promise.all(ids.map(async id => (await tx.get(this.db.doc(`agent007LearningExperiences/${id}`))).data() as LearningExperience | undefined));
-+      if (rows.some(row => !row || row.rootId !== identity.rootId)) throw new HttpsError("not-found", "Experiencia no encontrada.");
-+      const support = rows as LearningExperience[], first = support[0];
-+      if (first.domain !== "SOLICITUDES" || first.taskType !== "REASON" || first.features.entityType !== "SOLICITUD" ||
-+        first.features.status !== "PENDIENTE" || first.features.issueCode !== "DOCUMENT_MISSING" || support.some(r => r.expectedBehavior !== behavior))
-+        throw new HttpsError("failed-precondition", "Sólo se admite la recomendación de revisión documental.");
-+      const query = { rootId: identity.rootId, domain: first.domain, taskType: first.taskType, entityType: "SOLICITUD", features: first.features };
-+      const matched = await this.matching(tx, query);
-+      if (matched.conflict || !ids.every(id => matched.selected.some(row => row.experienceId === id))) throw new HttpsError("failed-precondition", "Experiencias contradictorias o incompatibles.");
-+      for (const row of support) await this.verifyEvidence(tx, row);
-+      const candidate = proposeRuleCandidates(support).find(c => c.expectedBehavior === behavior && c.supportingIds.length === ids.length && !c.contradictoryIds.length);
-+      if (!candidate) throw new HttpsError("failed-precondition", "Faltan resultados independientes.");
-+      const task = { caseId: "supervised-contract-evaluation", query, expectedBehavior: behavior, currentFacts: { documentStatus: "UNVERIFIED" }, modelNecessity: "MODEL_NOT_REQUIRED" as const };
-+      const evaluation = measureLearningEffect({ task, experience: first, before: decideWithoutModel(task, []), after: decideWithoutModel(task, support),
-+        modelAdapter: "NONE", promptVersion: "policy-v1", evidenceDigest: createHash("sha256").update(JSON.stringify(support.map(r => [r.experienceId, r.revision]))).digest("hex") });
-+      if (!evaluation.improved || evaluation.overgeneralized) throw new HttpsError("failed-precondition", "Evaluación no aprobada.");
-+      const ruleId = `supervised_${createHash("sha256").update(JSON.stringify([identity.rootId, [...ids].sort()])).digest("hex").slice(0, 40)}`;
-+      const ref = this.db.doc(`agent007LearnedRules/${ruleId}`), previous = (await tx.get(ref)).data() as Rule | undefined;
-+      const revisions = Object.fromEntries(support.map(r => [r.experienceId, r.revision]));
-+      if (previous?.status === "ACTIVE" && Date.parse(previous.expiresAt) > Date.now() &&
-+        ids.every(id => previous.supportingRevisions[id] === revisions[id]))
-+        return { ruleId, status: previous.status, version: previous.version };
-+      const now = Date.now(), rule: Rule = { schemaVersion: "supervised-rule-v1", ruleId, rootId: identity.rootId, status: "ACTIVE", version: (previous?.version || 0) + 1,
-+        domain: first.domain, taskType: first.taskType, features: { ...first.features }, behavior, supportingIds: [...ids].sort(),
-+        supportingRevisions: revisions, approvedBy: identity.uid, approvedAt: new Date(now).toISOString(),
-+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(), invalidatedBy: null,
-+        evaluation: { improved: evaluation.improved, overgeneralized: evaluation.overgeneralized, modelAdapter: "NONE" } };
-+      tx.set(ref, rule); this.event(tx, rule, "RULE_ACTIVATED", identity.uid, "SUPERVISED_POLICY_CONTRACT_PASS");
-+      return { ruleId, status: rule.status, version: rule.version };
-+    });
-+  }
-+  async resolve(identity: Identity, query: LearningQuery, entityId: string, folio: string): Promise<{ ruleId: string; text: string } | null> {
-+    if (!enabled()) return null;
-+    if (!valid(entityId) || !/^S\d{1,12}$/.test(folio) || query.rootId !== identity.rootId) return null;
-+    return this.db.runTransaction(async tx => {
-+      await this.actor(tx, identity);
-+      const current = (await tx.get(this.db.doc(`solicitudes/${entityId}`))).data();
-+      if (!current || current.rootId !== identity.rootId || current.folio !== folio || (current.status || current.estatus) !== "PENDIENTE" || current.deletedAt || current.isDeleted === true) return null;
-+      const snap = await tx.get(this.db.collection("agent007LearnedRules").where("rootId", "==", identity.rootId).where("schemaVersion", "==", "supervised-rule-v1").where("status", "==", "ACTIVE").limit(21));
-+      if (snap.size > 20) return null;
-+      const ruleDoc = snap.docs.find(doc => { const r = doc.data() as Rule; return r.domain === query.domain && r.taskType === query.taskType &&
-+        Object.entries(r.features).every(([k, v]) => query.features[k] === v); });
-+      if (!ruleDoc) return null;
-+      const rule = ruleDoc.data() as Rule;
-+      let invalid = Date.parse(rule.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(rule.expiresAt)) ? "EXPIRED" : "";
-+      try { await this.actor(tx, { uid: rule.approvedBy, rootId: identity.rootId }); } catch { invalid ||= "SUPERVISOR_REVOKED"; }
-+      const matched = await this.matching(tx, query);
-+      if (matched.conflict) invalid = "CONTRADICTION";
-+      for (const id of rule.supportingIds) {
-+        const row = (await tx.get(this.db.doc(`agent007LearningExperiences/${id}`))).data() as LearningExperience | undefined;
-+        if (!row || row.revision !== rule.supportingRevisions[id] || !trainingEligibility(row).eligible || row.expectedBehavior !== rule.behavior ||
-+          !matched.selected.some(item => item.experienceId === id)) { invalid ||= "SUPPORT_REVOKED"; continue; }
-+        try { await this.verifyEvidence(tx, row); } catch { invalid ||= "EVIDENCE_REVOKED"; }
-+      }
-+      if (invalid) {
-+        const next: Rule = { ...rule, status: "INVALIDATED", version: rule.version + 1, invalidatedBy: invalid };
-+        tx.set(ruleDoc.ref, next); this.event(tx, next, "RULE_INVALIDATED", identity.uid, invalid); return null;
-+      }
-+      if (rule.behavior !== behavior) return null;
-+      return { ruleId: rule.ruleId, text: `Antes de decidir sobre ${folio}, verifica la documentación. Esta recomendación no confirma que falte un documento ni determina la causa de su estado.` };
-+    });
-+  }
-+}
+index 0000000000000000000000000000000000000000..b9db96d5e05dd27c70e411c9c68f95349dff049d
+GIT binary patch
+literal 14176
+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
+
+literal 0
+HcmV?d00001
+
 diff --git a/src/modules/agent007/firestoreHugoLearningStore.ts b/src/modules/agent007/firestoreHugoLearningStore.ts
-index a4bf3d2..6cdb3da 100644
---- a/src/modules/agent007/firestoreHugoLearningStore.ts
-+++ b/src/modules/agent007/firestoreHugoLearningStore.ts
-@@ -1,6 +1,9 @@
-+import { observationEvidenceResolver, assertResolvedOutcomeTime } from "./observationEvidence";
-+import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "./hugoCore/evidenceIdentity";
- import { createHash } from "node:crypto";
- import { Firestore } from "firebase-admin/firestore";
- import { HttpsError } from "firebase-functions/v2/https";
-+import { FirestoreHugoLearningRuleStore } from "./firestoreHugoLearningRuleStore";
- import { buildDraftExperience, buildVerifiedExperience, withCorrection, withOutcome } from "./hugoCore/experienceBuilder";
- import { HugoLearningStore, selectLearningExperiences } from "./hugoCore/learningStore";
- import { LearningCorrection, LearningEffect, LearningEventType, LearningExperience, LearningLedgerEvent, LearningQuery, LearningRetrieval, LearningSplit, trainingEligibility } from "./hugoCore/learningContract";
-@@ -10,6 +13,9 @@ const iso = (value: any) => value?.toDate?.()?.toISOString?.() || (typeof value
- const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40);
- export class FirestoreHugoLearningStore implements HugoLearningStore {
-   constructor(private readonly db: Firestore) {}
-+  resolveSupervisedRule(identity: { uid: string; rootId: string }, query: LearningQuery, entityId: string, folio: string) {
-+    return new FirestoreHugoLearningRuleStore(this.db).resolve(identity, query, entityId, folio);
-+  }
-   private scope(rootId: string) { if (!validId(rootId)) throw new HttpsError("invalid-argument", "Ámbito de aprendizaje inválido."); return rootId; }
-   private ref(id: string) { if (!validId(id)) throw new HttpsError("invalid-argument", "Experiencia inválida."); return this.db.collection("agent007LearningExperiences").doc(id); }
-   private ledgerRef(id: string) { return this.db.collection("agent007LearningLedger").doc(id); }
-@@ -24,16 +30,17 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
-       if (existing.exists) { const record = existing.data() as LearningExperience; if (record.rootId !== rootId) throw new HttpsError("not-found", "Experiencia no encontrada."); return { id, created: false, record }; }
-       const decisionSnap = await tx.get(this.db.collection("agent007Memory").doc(input.decisionId)), d = decisionSnap.data();
-       if (!d || d.rootId !== rootId || d.kind !== "DECISION" || d.status !== "CONFIRMED" || !validId(d.links?.observationId || "") ||
--        d.entityReference?.entityType !== input.features.entityType) throw new HttpsError("failed-precondition", "Falta decisión vinculada a observación.");
-+        canonicalEvidenceType(d.entityReference?.entityType) !== canonicalEvidenceType(input.features.entityType)) throw new HttpsError("failed-precondition", "Falta decisión vinculada a observación.");
-       const [observationSnap, traceSnap] = await Promise.all([tx.get(this.db.collection("agent007Observations").doc(d.links.observationId)),
-         input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null)]);
--      const o = observationSnap.data(), t = traceSnap?.data();
-+      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
-+      const o = (await resolveEvidence(observationSnap.id, observationSnap.data())).observation, t = traceSnap?.data();
-       if (!o || o.rootId !== rootId || o.caseId !== d.entityReference?.entityId || input.traceId && !t) throw new HttpsError("failed-precondition", "Observación o traza fuera de ámbito.");
-       const now = new Date().toISOString(); let record: LearningExperience;
-       try { record = buildDraftExperience({ rootId, experienceId: id, decisionMemoryId: input.decisionId, domain: input.domain, taskType: input.taskType, intent: input.intent,
-         questionClass: input.questionClass, features: input.features, now,
--        observation: { id: observationSnap.id, rootId: o.rootId, caseId: o.caseId, source: o.source, createdAt: iso(o.createdAt) },
--        decision: { id: decisionSnap.id, rootId: d.rootId, kind: d.kind, status: d.status, entityId: d.entityReference?.entityId, actorUid: d.decision?.actorUid, decisionType: d.decision?.decisionType, decidedAt: d.decision?.decisionAt },
-+        observation: { id: observationSnap.id, rootId: o.rootId, caseId: o.caseId, caseType: o.caseType, sourceSystem: o.sourceSystem, source: o.source, createdAt: iso(o.createdAt) },
-+        decision: { id: decisionSnap.id, rootId: d.rootId, kind: d.kind, status: d.status, entityId: d.entityReference?.entityId, entityType: d.entityReference?.entityType, sourceSystem: d.entityReference?.sourceSystem, actorUid: d.decision?.actorUid, decisionType: d.decision?.decisionType, decidedAt: d.decision?.decisionAt },
-         ...(t ? { trace: { id: traceSnap!.id, rootId: t.rootId, evidenceReferences: t.evidenceReferences || [], promptVersion: t.promptVersion, model: t.model, modelVersion: t.modelVersion, modelProvider: t.modelProvider, resultStatus: t.resultStatus } } : {}) }); }
-       catch { throw new HttpsError("failed-precondition", "No hay linaje verificable para el borrador."); }
-       tx.create(target, record); tx.create(this.db.collection("agent007LearningRevisions").doc(`${id}_1`), record);
-@@ -59,15 +66,20 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
-         tx.get(this.db.collection("agent007Observations").doc(m.links.observationId)), tx.get(this.db.collection("agent007Memory").doc(m.links.decisionId)),
-         tx.get(this.db.collection("agent007Observations").doc(m.links.outcomeId)), input.traceId ? tx.get(this.db.collection("agent007Traces").doc(input.traceId)) : Promise.resolve(null),
-       ]);
--      const o = obsSnap.data(), d = decisionSnap.data(), z = outcomeSnap.data(), t = traceSnap?.data();
-+      const resolveEvidence = observationEvidenceResolver(this.db, tx, rootId);
-+      const [initialEvidence, outcomeEvidence] = await Promise.all([
-+        resolveEvidence(obsSnap.id, obsSnap.data()), resolveEvidence(outcomeSnap.id, outcomeSnap.data()),
-+      ]);
-+      const o = initialEvidence.observation, d = decisionSnap.data(), z = outcomeEvidence.observation, t = traceSnap?.data();
-+      assertResolvedOutcomeTime(outcomeEvidence, Date.parse(d?.decision?.decisionAt || ""));
-       if (!o || !d || !z || input.traceId && !t) throw new HttpsError("failed-precondition", "Faltan fuentes de experiencia.");
-       const now = new Date().toISOString();
-       let record: LearningExperience;
-       try { record = buildVerifiedExperience({ rootId, experienceId: id, domain: input.domain, taskType: input.taskType, intent: input.intent, questionClass: input.questionClass,
-         features: input.features, now, memory: { id: memorySnap.id, rootId: m.rootId, status: m.status, kind: m.kind, entityReference: m.entityReference, links: m.links, createdAt: m.createdAt },
--        observation: { id: obsSnap.id, rootId: o!.rootId, caseId: o!.caseId, source: o!.source, createdAt: iso(o!.createdAt) },
--        decision: { id: decisionSnap.id, rootId: d!.rootId, kind: d!.kind, status: d!.status, entityId: d!.entityReference?.entityId, actorUid: d!.decision?.actorUid, decisionType: d!.decision?.decisionType, decidedAt: d!.decision?.decisionAt },
--        outcome: { id: outcomeSnap.id, rootId: z!.rootId, caseId: z!.caseId, source: z!.source, sourceEvent: z!.sourceEvent, occurredAt: iso(z!.createdAt) },
-+        observation: { id: obsSnap.id, rootId: o!.rootId, caseId: o!.caseId, caseType: o!.caseType, sourceSystem: o!.sourceSystem, source: o!.source, createdAt: iso(o!.createdAt) },
-+        decision: { id: decisionSnap.id, rootId: d!.rootId, kind: d!.kind, status: d!.status, entityId: d!.entityReference?.entityId, entityType: d!.entityReference?.entityType, sourceSystem: d!.entityReference?.sourceSystem, actorUid: d!.decision?.actorUid, decisionType: d!.decision?.decisionType, decidedAt: d!.decision?.decisionAt },
-+        outcome: { id: outcomeSnap.id, rootId: z!.rootId, caseId: z!.caseId, caseType: z!.caseType, sourceSystem: z!.sourceSystem, source: z!.source, sourceEvent: z!.sourceEvent, occurredAt: iso(z!.createdAt) },
-         ...(t ? { trace: { id: traceSnap!.id, rootId: t.rootId, evidenceReferences: t.evidenceReferences || [], promptVersion: t.promptVersion, model: t.model, modelVersion: t.modelVersion, modelProvider: t.modelProvider, resultStatus: t.resultStatus } } : {}) }); }
-       catch { throw new HttpsError("failed-precondition", "Los vínculos no prueban una experiencia verificable."); }
-       const eventId = `created_${id}`;
-@@ -106,13 +118,17 @@ export class FirestoreHugoLearningStore implements HugoLearningStore {
-       const snap = await tx.get(target), row = snap.data() as LearningExperience | undefined;
-       if (!row || row.rootId !== scope) throw new HttpsError("not-found", "Experiencia no encontrada.");
-       if (row.state !== "WAITING_FOR_OUTCOME" || row.outcome) throw new HttpsError("failed-precondition", "La experiencia ya tiene resultado o no está pendiente.");
--      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId)), z = outcomeSnap.data();
-+      const outcomeSnap = await tx.get(this.db.collection("agent007Observations").doc(outcomeId));
-+      const evidence = await observationEvidenceResolver(this.db, tx, scope)(outcomeId, outcomeSnap.data()), z = evidence.observation;
-+      assertResolvedOutcomeTime(evidence, Date.parse(row.humanDecision?.decidedAt || ""), row.correction ? Date.parse(row.correction.correctedAt) : undefined);
-+      if (!sameEvidenceIdentity(observationEntity(z), { sourceSystem: row.entityReferences[0]?.system, entityType: row.entityReferences[0]?.entityType, entityId: row.entityReferences[0]?.entityId }))
-+        throw new HttpsError("failed-precondition", "Identidad del resultado incompleta o incompatible: sistema, tipo e identificador requeridos.");
-       const decisionAt = row.humanDecision?.decidedAt, correctedAt = row.correction?.correctedAt, occurredAt = iso(z?.createdAt);
-       if (!z || z.rootId !== scope || z.caseId !== row.entityReferences[0]?.entityId || z.source !== "ACTIVITY_LOG" ||
-         !["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "DISPERSION_INCIDENCIA_RESUELTA", "OPERACION_RECUPERADA"].includes(z.sourceEvent) ||
-         !decisionAt || !occurredAt || Date.parse(occurredAt) < Date.parse(decisionAt) || correctedAt && Date.parse(occurredAt) < Date.parse(correctedAt))
-         throw new HttpsError("failed-precondition", "El resultado no verifica esta secuencia.");
--      const outcome = { type: z.sourceEvent, verified: true, occurredAt, reference: { system: "PAY0", kind: "OUTCOME", id: outcomeId, rootId: scope } };
-+      const outcome = { type: z.sourceEvent, verified: true, occurredAt, reference: { system: z.sourceSystem, kind: "OUTCOME", id: outcomeId, rootId: scope, entityType: canonicalEvidenceType(z.caseType)!, entityId: z.caseId } };
-       const next = withOutcome(row, outcome);
-       tx.set(target, next); tx.create(this.db.collection("agent007LearningRevisions").doc(`${experienceId}_${next.revision}`), next);
-       const now = new Date().toISOString(), eventId = `outcome_${experienceId}_${next.revision}`;
+index a4bf3d2cd09a29579e1434f936d1dd4e198b8bb7..6cdb3dac611a58c48c84107756383a9a697f64f7 100644
+GIT binary patch
+delta 2063
+zcmbVN&u<$=6jqW0!mgW$gn+0?pN)ietJQ|IJs^iDiPT7q1ZtZ^;(&6P>^!&A+B@#d
+zY(m^d4rh=GniB|dMB;!Dvcv)PzzxJ-!GRlx3it<@@$Rg5Bm06+o|*S+-}k-m{r=s|
+zH$Tq|ShvT8f+xU_B#L9A7>{?38O1olJ(Rq2j3NLc&7;cB^iHB8-o*pfML2`D;9Y2j
+zs}lk=*K3tLfh1jYk#|je#nfrwmGY){5RsV2EFv9eesJ3R;>Ge}R+e+N(LeuIe=_&#
+z^}VEn`-+QVJ#8jX+PmAyef~ZY5wrMyZusMuAI=Sof&IY!q-Q>zNu>7KvmbAZYniSj
+zjJ7~3VO-ZiaISXqGn@tRI6-0TT=aYP7(nViwhW-nJB+(PK0K*a!2Bu#RU%@D@kF1`
+zEpO+=dFla^AwBZLtirseEaf;y7TY(y02ux?_w1$RN$o>V_p5K#eQ0cKOzf{Q_`3Rr
+z{^#A-^&i(>8~#~+Z)Q77?ofb@5?B{V;%W{+eH>)1(hIevJ03Y9Ou>a<UV$$AG3kYj
+z2F38BJ4zJseBTcX#(JxMZAfb$%wCU(M8gbh0T12(03=UDg!`vbVb{JC&-#b?pQ<T3
+zBS(E&U0J>8Lc`Qz58Ej07;Khe45Njws*XATzcndfmIV=yrGk%G%oH0_-ZUefGMD1e
+zv_I|SUBUIrR%MWq$cC8E+hR|Py)@9Iq<3+>EYH{>&0BJEsSXQe>npXFuUx3Q1k`-}
+z?Io9`^srTjgQ<$*>T#X{+#(9Y9uX2fx*1Z8m^30a{<p2*=~HMneSNpKG<;b9boQpB
+zgCRg;IyV|6VD-N%&nshc=x0~!uUM9p`C+b?FO@j;{ncLz`TEoInWv)T@Dc1R3`TQ1
+zrU7PCm4jVizU#<dCd=iClM(Ns@4B~Zr)dI^&^M7?5(CO07yZ1D>Bu<05+s73gb$J~
+ziEovFp-6LFtQ?$#5f=g@yI){4$JFHa%8$;@`uos=B&OJAG14*hSR1^?q;*mhm7S4>
+zdwoAJGG6R^YgA1(<NC9;%ZqX(7EV)BWjJ4h`4s)s(x|yUUwiA)neV${0R6Wg9;Vxf
+z5(*SMcDRy`B9sG*&5rDKP!Vtkvs{llMy@2Y;zW#6vK|M7bm6qk#-m)A5O%9D%4OIb
+v{`$^~*~|SBZ}jsUtG7$VP7(Be&V0Y&?CnxY?{}%$-DmpV`r>f*=5O#HDTd{6
+
+delta 187
+zcmbQYi}BP-#)%h}Z9c{5#k~0^YZv=uTVYAgkjjEo1w~t1g~<mwB_}&MNlad#FTPot
+z&xTPdU%^%(KdCsis4TH0Ge0jlFR?%`C9xz?Lv!<Q{&J?t%Y?RU-Xc7MTL`KUNx|d_
+z1vPGD{%?M*%~p!tOp|{r@0u*Ax^FY9nzI0}jzSg4j?$9k{M^*Z4KgB|Z(2NMVp9rm
+Rj5JW1e8yUTv%SrI1puGnLRSC)
+
 diff --git a/src/modules/agent007/hugoCore/conversationCore.ts b/src/modules/agent007/hugoCore/conversationCore.ts
-index 7e1cde4..6e669b9 100644
---- a/src/modules/agent007/hugoCore/conversationCore.ts
-+++ b/src/modules/agent007/hugoCore/conversationCore.ts
-@@ -54,7 +54,7 @@ function fallbackReply(message: string, name: string, context: any): string {
- }
- 
- export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; routingSignals?: { intent: string; risk: "READ" | "WRITE" | "EXTERNAL_SIDE_EFFECT"; complexity: "LOW" | "MEDIUM" | "HIGH"; requiredCapabilities: string[] }; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
--export type ConversationOutput = { reportExport?: HugoReportExport; text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
-+export type ConversationOutput = { reportExport?: HugoReportExport; text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean; appliedRuleId?: string }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
- 
- export class HugoConversationCore {
-   constructor(private readonly router: HugoToolRouter, private readonly model: HugoModelAdapter | null, private readonly dataStore?: HugoDataStore, private readonly learningStore?: HugoLearningStore) {}
-@@ -97,6 +97,7 @@ export class HugoConversationCore {
-     const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
-     const learningContext = built.context as any;
-     let learningUsage: ConversationOutput["learningUsage"];
-+    let supervisedRuleReply: string | null = null;
-     if (v2 && this.learningStore && !policyReply && learningContext.folioConsultado && learningContext.questionIntent === "REASON") {
-       const isSolicitud = String(learningContext.folioConsultado).startsWith("S");
-       const first = isSolicitud ? learningContext.solicitudes?.[0] : learningContext.pagos?.[0];
-@@ -105,14 +106,20 @@ export class HugoConversationCore {
-         const issueCode = typeof first.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(first.issueCode) ? first.issueCode :
-           /\b(documentos? faltantes?|faltan? (los? )?documentos?|falta (el )?documento)\b/i.test(input.message) ? "DOCUMENT_MISSING" : null;
-         try {
--          const retrieved = await this.learningStore.retrieve({ rootId: input.identity.rootId, domain: isSolicitud ? "SOLICITUDES" : "PAGOS", taskType: "REASON", entityType,
--            features: { entityType, ...(first.estado ? { status: String(first.estado).toUpperCase() } : {}), ...(issueCode ? { issueCode } : {}) }, limit: 2 });
-+          const learningQuery = { rootId: input.identity.rootId, domain: isSolicitud ? "SOLICITUDES" : "PAGOS", taskType: "REASON", entityType,
-+            features: { entityType, ...(first.estado ? { status: String(first.estado).toUpperCase() } : {}), ...(issueCode ? { issueCode } : {}) }, limit: 2 };
-+          const retrieved = await this.learningStore.retrieve(learningQuery);
-           const included = retrieved.selected.slice(0, 2);
-           learningContext.learningExperiences = included.map(compactLearningExperience);
-           learningUsage = { considered: retrieved.considered, selected: retrieved.selected.length,
-             candidateIds: [...retrieved.selected.map(row => row.experienceId), ...retrieved.rejected.map(row => row.experienceId)].slice(0, 20),
-             retrievedIds: retrieved.selected.map(row => row.experienceId), includedIds: included.map(row => row.experienceId),
-             rejected: retrieved.rejected.slice(0, 10), conflict: retrieved.conflict, effectClassification: "NOT_EVALUATED" };
-+          if (exactComplete && first.folio === learningContext.folioConsultado && this.learningStore.resolveSupervisedRule) {
-+            const entityId = built.recentEntities.find(row => row.type === "SOLICITUD" && row.folio === first.folio)?.id || "";
-+            const rule = await this.learningStore.resolveSupervisedRule(input.identity, learningQuery, entityId, first.folio);
-+            if (rule && !retrieved.conflict) { supervisedRuleReply = rule.text; learningUsage.appliedRuleId = rule.ruleId; }
-+          }
-         } catch { learningUsage = { considered: 0, selected: 0, includedIds: [], rejected: [], error: "LEARNING_RETRIEVAL_UNAVAILABLE" }; }
-       }
-     }
-@@ -121,7 +128,7 @@ export class HugoConversationCore {
-     const budget = v2 ? applyHugoContextBudget(learningContext) : undefined;
-     if (learningUsage) learningUsage.includedIds = (learningContext.learningExperiences || []).map((row: any) => row.id);
-     const budgetReply = budget?.exceeded ? "El contexto excede el límite seguro. Puedo revisar un folio concreto con menos antecedentes." : null;
--    const skipModel = input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply;
-+    const skipModel = input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply;
-     let model: ModelOutput = skipModel ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: input.commandReply ? "COMMAND_HANDLED" : "POLICY_HANDLED" } :
-       !this.model ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: "MODEL_UNAVAILABLE" } :
-         { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null };
-@@ -143,8 +150,8 @@ export class HugoConversationCore {
-     const reportExport = executed.find(row => row.tool === "getEarningsByClientReport")?.data?.reportExport as HugoReportExport | undefined;
-     const unbackedReportReply = !executed.some(row => row.tool === "getEarningsByClientReport") && model.text && claimsUnexecutedReport(model.text, input.message)
-       ? "No he ejecutado un reporte ni creado un archivo en este turno. Indica el reporte y las fechas exactas para consultar los datos autorizados." : null;
--    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || unbackedReportReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
--    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || unbackedReportReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : unbackedReportReply ? "UNBACKED_REPORT_CLAIM" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
-+    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply || unbackedReportReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
-+    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply || unbackedReportReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : supervisedRuleReply ? "SUPERVISED_DOCUMENT_REVIEW" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : unbackedReportReply ? "UNBACKED_REPORT_CLAIM" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
-       ...(reportExport ? { reportExport } : {}), context: built.context, pieces: built.pieces,
-       recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, conversationState: "conversationState" in built ? built.conversationState : undefined,
-       memoryUsage: "memoryUsage" in built ? built.memoryUsage : undefined, composition: "composition" in built ? built.composition : undefined,
+index 7e1cde49b6eb27f69de7c6d1bbcc6c0f55a28d8b..6e669b95ffffc17d80c5d990989e17e08e88e688 100644
+GIT binary patch
+delta 707
+zcmZva&uZI15XO<)Lr8I(KngvWFcHPr;B4d4LlZ@D!BT=Cty?>GkHNJ@VPPYQ)yj#e
+zgP)<OZZCO*TmpK5oB}=fIeO`#=k7YhSSEW}nE7_U-~9RhLz`S`*OSr<1NvdeD7x*K
+zq2o4oAQGJVC)uQQwYterKop0_hcvpAv@vAKy$D9&$BcnFy|Qg`TUcS(=f3>lQ;a;3
+znQXKEOw)|?&(^zQE|=}T{#hskP!B42-XDl&a2iTOgmM`?$|FI%fYAU<(@X>MGF`1d
+zA4dTjVkbvbg|EeBm^*{Oj|8AEs7M@FB7BJ{6NKYH#%vX)7!i;9ZiNSDVD5puh)6<I
+zR-kuUhfdQu>RP%YQMnn%);w6XL8uF(5$L+{5CNARO_%EH4?$O`AI3tyzr(CSt~Iq8
+zeJy9WV52&xOcdq@M>#hfqDy4`9-{*x8#5hVZ((|}BkC0qcrJ{YaX0FpAjvJmy-=wg
+z*MN)pDlf8MZ}i7c^V^Z$SZmq8x4)k(#IqagN?V9Y?W^?L{@;53i|K+vLyn>Q(Qfyg
+aj%^)Vt!DSV{o&}iZTB4eb2dJhJo*m<((<AJ
+
+delta 69
+zcmbO_hjGd@#tl<tHm{XgEx5TyZ$H!IS|h#9(T4ntn|ByZXWATPF2S<7)A}Cw<W6hu
+Z&7JPk89|K6o$k_;V?94@Zt<GP3;@Y68+QNz
+
 diff --git b/src/modules/agent007/hugoCore/evidenceIdentity.ts b/src/modules/agent007/hugoCore/evidenceIdentity.ts
 new file mode 100644
-index 0000000..d9234e0
---- /dev/null
-+++ b/src/modules/agent007/hugoCore/evidenceIdentity.ts
-@@ -0,0 +1,23 @@
-+import { ACTIVITY_SYSTEMS } from "../../activityLog/systemBoundary";
-+
-+export type EvidenceEntity = { sourceSystem?: unknown; entityType?: unknown; entityId?: unknown };
-+export function isEvidenceSystem(value: unknown): value is string {
-+  return typeof value === "string" && (ACTIVITY_SYSTEMS as readonly string[]).includes(value);
-+}
-+// Logging producers use e.g. "solicitud"/"pago"; observer uppercases them.
-+// Only letter case is an alias. Never infer cross-domain relationships from an ID.
-+export function canonicalEvidenceType(value: unknown): string | null {
-+  if (typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(value)) return null;
-+  return value.toUpperCase();
-+}
-+export function evidenceIdentity(value: EvidenceEntity | undefined): string | null {
-+  const type = canonicalEvidenceType(value?.entityType);
-+  if (!type || !isEvidenceSystem(value?.sourceSystem) || typeof value?.entityId !== "string" ||
-+      !value.entityId || value.entityId.length > 160 || /[\/\\\x00-\x1f]/.test(value.entityId)) return null;
-+  return JSON.stringify([value.sourceSystem, type, value.entityId]);
-+}
-+export function sameEvidenceIdentity(...values: Array<EvidenceEntity | undefined>): boolean {
-+  const first = evidenceIdentity(values[0]);
-+  return first !== null && values.every(value => evidenceIdentity(value) === first);
-+}
-+export const observationEntity = (row: any): EvidenceEntity => ({ sourceSystem: row?.sourceSystem, entityType: row?.caseType, entityId: row?.caseId });
+index 0000000000000000000000000000000000000000..d9234e059d742696727a09dd5d19427fd8ec56bb
+GIT binary patch
+literal 1509
+zcmaJ>?{C^L5dDtC|8PW8l}O;w51UlFwCcKk$keqTV3Rsvm76%!TCgMAq0I{a`_B16
+z1GGbtkbLKNckjJ3UuIGnc!7({N%%9I+})4w#*?e>W7t5V<Psc0eEeu+_==n2S}uHD
+zXv3CYWG-T=3g@)j>2}z2iDQb4!PSb#OhoKT7`y=iqHCF}h>gpO=Of6)A0eN_DX=nS
+zg0~J&!}#?KHdv*uk>moKkpj4GDpkPlil#Z+qI)AK4=@k3QCuwGrP~2e%;ZXdZB-_9
+zN)QC#R7nmT9f5m52i16y#!{q3jW(Togo`N6W2URp9yYn@c6=X@riCq-DH-PxQyOy3
+zfRP2kGBV{6H+k&%PDU5fIR*KknOZRgd6qF1QOz`%N46v-*sZOZGGj2o#_T{;08Kg7
+z1a6qU$VFnKN@_ib<&tuN?WWZ7q#t>vD>3m__!U9-nT)8Af=4uM2(^kF(pj^(29c*}
+zMJ7+c-C?rVW^%oTp8tD#G5AFXf9Li8aBy-ze;M{ao@_q&#4v4Y_Pj<K3y)N8r7C44
+zM*gtuTp|N*&Gh~ptae_A{<Gd|Mrg*W9l1sW#w_82#b}Z@rizd?Q#u6Q`yX=7$*X~F
+zO8}OSo+SkA>~A~toV3@$vzcuQ8_+O@Ju+<p`|DMNRJAb;0d`MF%EZDv!WkTY8rrZw
+zo%yrb?0GmG%$|>vd7JlohA{Tt72w<W_J&kE@uYC4RkijM{c?o<ULW&!bkcOm8cnuZ
+z5kg8_J%S6RXz{tpI8^NnWqXh^WoYPfrz^n{u28lB-nN0B4$FSFwyM%C$EBZf?W_94
+zZdC0Z2+rPt^T0kDCC2WQRWH>_mkU_;AAqam(+F3$!1nis!!qvfGdTjx-nB}<^<LIt
+S`ySY3Z9-w(3ZOMMwzq%$Z3_AT
+
+literal 0
+HcmV?d00001
+
 diff --git a/src/modules/agent007/hugoCore/experienceBuilder.ts b/src/modules/agent007/hugoCore/experienceBuilder.ts
-index aedb22b..ad4b6d9 100644
---- a/src/modules/agent007/hugoCore/experienceBuilder.ts
-+++ b/src/modules/agent007/hugoCore/experienceBuilder.ts
-@@ -1,11 +1,12 @@
-+import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "./evidenceIdentity";
- import { LearningExperience, LearningReference, LearningCorrection, LearningOutcome, LEARNING_SCHEMA_VERSION, trainingEligibility } from "./learningContract";
- 
- export type VerifiedMemorySource = { id: string; rootId: string; status: string; kind: string; entityReference: { sourceSystem: string; entityType: string; entityId: string };
-   links: { observationId?: string; decisionId?: string; outcomeId?: string }; createdAt: string };
- export type ExperienceArtifacts = { rootId: string; experienceId: string; domain: string; taskType: string; intent: string; questionClass: string;
--  memory: VerifiedMemorySource; observation: { id: string; rootId: string; caseId: string; source: string; createdAt: string };
--  decision: { id: string; rootId: string; kind: string; status: string; entityId: string; actorUid: string; decisionType: string; decidedAt: string };
--  outcome: { id: string; rootId: string; caseId: string; source: string; sourceEvent: string; occurredAt: string };
-+  memory: VerifiedMemorySource; observation: { id: string; rootId: string; caseId: string; caseType?: string; sourceSystem?: string; source: string; createdAt: string };
-+  decision: { id: string; rootId: string; kind: string; status: string; entityId: string; entityType?: string; sourceSystem?: string; actorUid: string; decisionType: string; decidedAt: string };
-+  outcome: { id: string; rootId: string; caseId: string; caseType?: string; sourceSystem?: string; source: string; sourceEvent: string; occurredAt: string };
-   trace?: { id: string; rootId: string; evidenceReferences: Array<{ sourceSystem: string; entityType: string; entityId: string }>; promptVersion: string; model: string; modelVersion: string; modelProvider?: string; resultStatus: string };
-   features: Record<string, string>; now: string };
- const ref = (rootId: string, system: string, kind: string, id: string, entityType?: string, entityId?: string): LearningReference => ({ system, kind, id, rootId, ...(entityType ? { entityType } : {}), ...(entityId ? { entityId } : {}) });
-@@ -13,14 +14,15 @@ const terminal = new Set(["SOLICITUD_COMPLETADA", "PAGO_APLICADO_A_SOLICITUD", "
- export type DraftArtifacts = Omit<ExperienceArtifacts, "memory" | "outcome"> & { decisionMemoryId: string };
- export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
-   const o = a.observation, d = a.decision;
-+  if (!sameEvidenceIdentity(observationEntity(o), d) || canonicalEvidenceType(a.features.entityType) !== canonicalEvidenceType(d.entityType)) throw Error("LEARNING_DRAFT_IDENTITY_INVALID");
-   if (o.rootId !== a.rootId || d.rootId !== a.rootId || o.caseId !== d.entityId || o.source !== "ACTIVITY_LOG" || d.kind !== "DECISION" || d.status !== "CONFIRMED" ||
-     !Number.isFinite(Date.parse(o.createdAt)) || !Number.isFinite(Date.parse(d.decidedAt)) || Date.parse(o.createdAt) > Date.parse(d.decidedAt) ||
--    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
--  const entityType = String(a.features.entityType || "");
-+    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => sameEvidenceIdentity(e, observationEntity(o))))) throw Error("LEARNING_DRAFT_LINEAGE_INVALID");
-+  const entityType = canonicalEvidenceType(d.entityType)!;
-   const references = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id)];
-   const record: LearningExperience = { schemaVersion: LEARNING_SCHEMA_VERSION, experienceId: a.experienceId, revision: 1, rootId: a.rootId, domain: a.domain, taskType: a.taskType,
-     input: { intent: a.intent, questionClass: a.questionClass, ambiguity: "NONE" }, contextReferences: a.trace ? [ref(a.rootId, "HUGO", "TRACE", a.trace.id)] : [],
--    entityReferences: [ref(a.rootId, "PAY0", entityType, o.caseId, entityType, o.caseId)], evidenceReferences: references, evidenceCompleteness: "PARTIAL", features: a.features,
-+    entityReferences: [ref(a.rootId, d.sourceSystem!, entityType, o.caseId, entityType, o.caseId)], evidenceReferences: references, evidenceCompleteness: "PARTIAL", features: a.features,
-     modelDecision: a.trace ? { behavior: a.trace.resultStatus, provider: a.trace.modelProvider || null, model: a.trace.model, modelVersion: a.trace.modelVersion, promptVersion: a.trace.promptVersion } : null,
-     humanDecision: { type: d.decisionType, actorUid: d.actorUid, decidedAt: d.decidedAt, reference: references[1] }, correction: null, outcome: null, expectedBehavior: null,
-     state: "WAITING_FOR_OUTCOME", quality: { provenance: "VERIFIED", outcome: "UNKNOWN", feedback: "DECIDED" },
-@@ -33,14 +35,15 @@ export function buildDraftExperience(a: DraftArtifacts): LearningExperience {
- }
- export function buildVerifiedExperience(a: ExperienceArtifacts): LearningExperience {
-   const { memory: m, observation: o, decision: d, outcome: z } = a;
-+  if (!sameEvidenceIdentity(m.entityReference, observationEntity(o), d, observationEntity(z)) || canonicalEvidenceType(a.features.entityType) !== canonicalEvidenceType(m.entityReference?.entityType)) throw Error("LEARNING_IDENTITY_INVALID");
-   if (m.rootId !== a.rootId || o.rootId !== a.rootId || d.rootId !== a.rootId || z.rootId !== a.rootId ||
-     m.kind !== "EXPERIENCE" || m.status !== "CONFIRMED" || m.links.observationId !== o.id || m.links.decisionId !== d.id || m.links.outcomeId !== z.id ||
-     o.caseId !== z.caseId || o.caseId !== m.entityReference.entityId || d.entityId !== o.caseId || d.kind !== "DECISION" || d.status !== "CONFIRMED" ||
-     o.source !== "ACTIVITY_LOG" || z.source !== "ACTIVITY_LOG" || !terminal.has(z.sourceEvent) ||
-     !(Date.parse(o.createdAt) <= Date.parse(d.decidedAt) && Date.parse(d.decidedAt) <= Date.parse(z.occurredAt)) ||
--    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => e.entityId === o.caseId))) throw Error("LEARNING_LINEAGE_INVALID");
-+    a.trace && (a.trace.rootId !== a.rootId || !a.trace.evidenceReferences.some(e => sameEvidenceIdentity(e, observationEntity(o))))) throw Error("LEARNING_LINEAGE_INVALID");
-   const entity = ref(a.rootId, m.entityReference.sourceSystem, m.entityReference.entityType, o.caseId, m.entityReference.entityType, o.caseId);
--  const evidence = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id), ref(a.rootId, "PAY0", "OUTCOME", z.id)];
-+  const evidence = [ref(a.rootId, "HUGO", "OBSERVATION", o.id), ref(a.rootId, "HUGO", "DECISION", d.id), ref(a.rootId, z.sourceSystem!, "OUTCOME", z.id, canonicalEvidenceType(z.caseType)!, z.caseId)];
-   const record: LearningExperience = { schemaVersion: LEARNING_SCHEMA_VERSION, experienceId: a.experienceId, revision: 1, rootId: a.rootId, domain: a.domain, taskType: a.taskType,
-     input: { intent: a.intent, questionClass: a.questionClass, ambiguity: "NONE" }, contextReferences: a.trace ? [ref(a.rootId, "HUGO", "TRACE", a.trace.id)] : [],
-     entityReferences: [entity], evidenceReferences: evidence, evidenceCompleteness: "COMPLETE", features: a.features,
-@@ -65,6 +68,8 @@ export function withCorrection(record: LearningExperience, correction: LearningC
-   return next;
- }
- export function withOutcome(record: LearningExperience, outcome: LearningOutcome): LearningExperience {
-+  if (!sameEvidenceIdentity({ sourceSystem: record.entityReferences[0]?.system, entityType: record.entityReferences[0]?.entityType, entityId: record.entityReferences[0]?.entityId },
-+      { sourceSystem: outcome.reference.system, entityType: outcome.reference.entityType, entityId: outcome.reference.entityId })) throw Error("LEARNING_OUTCOME_INVALID_IDENTITY");
-   if (record.state !== "WAITING_FOR_OUTCOME" || record.outcome || outcome.reference.rootId !== record.rootId || !outcome.verified || !terminal.has(outcome.type) ||
-     !Number.isFinite(Date.parse(outcome.occurredAt)) || Date.parse(outcome.occurredAt) < Date.parse(record.correction?.correctedAt || record.humanDecision?.decidedAt || "")) throw Error("LEARNING_OUTCOME_INVALID");
-   const next: LearningExperience = { ...record, revision: record.revision + 1, outcome, evidenceReferences: [...record.evidenceReferences, outcome.reference], evidenceCompleteness: "COMPLETE", state: "VERIFIED", finalizedAt: outcome.occurredAt,
+index aedb22b1d4d7b03895bedad9b9deba9de1bb38b6..ad4b6d92e97dc44df50e12b6d5049f7c72d0dd44 100644
+GIT binary patch
+delta 1171
+zcmezE^42#kGq)hWs6?S!p*S%&)wL`$B{eTO)e}gTWR_IwDC8#<rxukZmSpDVxk81K
+z6Z7)(GLsW?V5&nZ3sMzo71E0Ga}|{I^i$CcQL^Uc+OUjCAvv))6{OVON};%<C^IkJ
+zTA?_<v?w_>xU#q;HP?Rf9Hy?xT8vy0I2Fh+Hxgrt)aJF!yP4}1vH3^?!$TVRnmP(8
+znhG^FK(n#<Oe0Y*Ej6*Ev?#S$4-zUMPiQJA+S=mKkOEf6R#FL4IQfEtq=ZY5qgzP4
+zr;Dp!h-XM-yr*B7qmQSHlIG@k_9={dSlyY5CG3Gt)zkzTI9Y{LUj@5sA(lhz)>PbF
+z#`&I+KSd8YpcN-Ka*J(l<j!Hm5k$FAe+H$dr51sb19qnXLk*iml_t?)=>SY(gaQ-8
+zG4@EY0168k%wPp3I0c2wGzE>^$qIrJo7n`{GLaF;o1X~FF#1-ZhMkUrl7DE3v%jya
+zl8!=^UM4UIu*XA{9xT0UDuPskc%GXdaF#P}?iKsVfg|XF*$^p9SSb{xCg&Hyq7)t<
+z#nA?__IkzOY@?%qNR;^1Bh&%)xPvpZX9_V|JW~{EbwEK10%$Ird{ACk7>i3l;*&i^
+gcsL=p0xbfGaKU&AwZN#;;DKieB~9zib@G3i0F<eyUH||9
+
+delta 214
+zcmaFs``d*hGq)hWs6?T9@<ut)jm@1*lg*eLCO={>2hswYC$sEkX3U@bQCNKPHDRgE
+z_MDN75~+Hrc_o=8m7XaIwzjqk`FhET#i^btnv)BKB`4qK(pL^HDay=C*GSY$OHC{(
+zElMqhY6z(;NL8q*QBYFS+-$`Co{>!{z%kN5X|n-u6YJ)s!pE5K8ohawm<*!`M2n7s
+gl7DE3v%jyal8!>v=2_g8jGHG({^Z#FL-{Kc0K(5nIRF3v
+
 diff --git a/src/modules/agent007/hugoCore/learningContract.ts b/src/modules/agent007/hugoCore/learningContract.ts
-index 4a3a2cd..2fe8684 100644
---- a/src/modules/agent007/hugoCore/learningContract.ts
-+++ b/src/modules/agent007/hugoCore/learningContract.ts
-@@ -22,7 +22,7 @@ export type LearningExperience = {
-   sourceVersions: { core: string; context: string; memory: string; prompt: string | null };
-   createdAt: string; finalizedAt: string | null; supersedesId: string | null; supersededById?: string | null;
- };
--export type LearningEventType = "EXPERIENCE_CREATED" | "CORRECTION_RECORDED" | "OUTCOME_LINKED" | "EXPERIENCE_VERIFIED" | "EXPERIENCE_REJECTED" | "EXPERIENCE_RETRIEVED" | "EXPERIENCE_SUPERSEDED" | "LEARNING_EFFECT_MEASURED" | "RULE_CANDIDATE_CREATED" | "SPLIT_ASSIGNED";
-+export type LearningEventType = "EXPERIENCE_CREATED" | "CORRECTION_RECORDED" | "OUTCOME_LINKED" | "EXPERIENCE_VERIFIED" | "EXPERIENCE_REJECTED" | "EXPERIENCE_RETRIEVED" | "EXPERIENCE_SUPERSEDED" | "LEARNING_EFFECT_MEASURED" | "RULE_CANDIDATE_CREATED" | "SPLIT_ASSIGNED" | "RULE_ACTIVATED" | "RULE_REVOKED" | "RULE_INVALIDATED";
- export type LearningLedgerEvent = { eventId: string; rootId: string; experienceId: string; type: LearningEventType; at: string; actorUid: string | null; references: LearningReference[]; metadata: Record<string, string | number | boolean | null> };
- export type LearningQuery = { rootId: string; domain: string; taskType: string; entityType: string; features: Record<string, string>; limit?: number };
- export type LearningRetrieval = { considered: number; selected: LearningExperience[]; rejected: Array<{ experienceId: string; reason: string }>; conflict?: boolean };
+index 4a3a2cdfedb608a1bfbf30ff89d63b4e0c2fa23e..2fe86845dc701a7fe6e30717260ddc48f4702e07 100644
+GIT binary patch
+delta 73
+zcmbQKc}a7FIk$yEje=58sE=#BqjQL7m}7{mixONY$TiI08(F~9FU--$(*>kzasZ>m
+JW<PFkP5>A}6tMsR
+
+delta 16
+XcmcblIa70kIrrp1M)A$<+}@l3GqeRo
+
 diff --git a/src/modules/agent007/hugoCore/learningGovernance.ts b/src/modules/agent007/hugoCore/learningGovernance.ts
-index 43295d1..1e54f1a 100644
---- a/src/modules/agent007/hugoCore/learningGovernance.ts
-+++ b/src/modules/agent007/hugoCore/learningGovernance.ts
-@@ -1,7 +1,9 @@
--import { LearningExperience } from "./learningContract";
-+import { LearningExperience, trainingEligibility } from "./learningContract";
- 
- export function internalTrainingAuthorization(record: LearningExperience): { approved: boolean; reason: string } {
--  if (!record.trainingEligibility.eligible) return { approved: false, reason: "QUALITY_INELIGIBLE" };
-+  // Eligibility is derived from the current revision, not a persisted approval.
-+  // Invalidation, protected splits and supersession must revoke stale grants.
-+  if (!record.trainingEligibility.eligible || !trainingEligibility(record).eligible) return { approved: false, reason: "QUALITY_INELIGIBLE" };
-   if (record.governance?.use !== "TRAINING_ELIGIBLE_INTERNAL" || !record.governance.reviewedBy || !record.governance.reviewedAt)
-     return { approved: false, reason: "HUMAN_GOVERNANCE_REVIEW_REQUIRED" };
-   return { approved: true, reason: "INTERNAL_ONLY" };
+index 43295d1e58408379823084bad3aeb625bdf10e91..1e54f1a51b4427e7cd2db1a316b54373b8d3c340 100644
+GIT binary patch
+delta 231
+zcmZvWF$%&^42Ho)6dau#{M{6ap2ERnJlj}<?RzCj3xePkbP_y-;OZ?rhPUvwlY?85
+z|I3%W`uD+QGEQLP*t5^q1?Rlwg6(*n+|H{NekNc=M#2qc*hwg1dqP@^kT(c5tQ>p-
+z9}Er^iLzQmT~$eFT(KMtfoR<L*l^~oqhn^2wwzY+tit(N*6lh?wKbxwweyDqLCqC}
+aT%0#uULOf?I$`$b{kc#YBwIY+pWYV|NL7^p
+
+delta 18
+acmbQmxr=>*^hAT{lQS7LHt%A5zytt69|qk3
+
 diff --git a/src/modules/agent007/hugoCore/learningStore.ts b/src/modules/agent007/hugoCore/learningStore.ts
-index 1439e4e..85ff7bf 100644
---- a/src/modules/agent007/hugoCore/learningStore.ts
-+++ b/src/modules/agent007/hugoCore/learningStore.ts
-@@ -1,6 +1,7 @@
- import { LearningCorrection, LearningEffect, LearningEventType, LearningExperience, LearningLedgerEvent, LearningQuery, LearningRetrieval, LearningSplit } from "./learningContract";
- 
- export interface HugoLearningStore {
-+  resolveSupervisedRule?(identity: { uid: string; rootId: string }, query: LearningQuery, entityId: string, folio: string): Promise<{ ruleId: string; text: string } | null>;
-   createDraftFromDecision(input: { rootId: string; decisionId: string; traceId?: string; domain: string; taskType: string; intent: string; questionClass: string; features: Record<string, string>; actorUid: string }): Promise<{ id: string; created: boolean; record: LearningExperience }>;
-   createFromVerifiedMemory(input: { rootId: string; memoryId: string; traceId?: string; domain: string; taskType: string; intent: string; questionClass: string; features: Record<string, string>; actorUid: string }): Promise<{ id: string; created: boolean; record: LearningExperience }>;
-   addCorrection(rootId: string, experienceId: string, correction: LearningCorrection, expectedBehavior: string): Promise<LearningExperience>;
+index 1439e4e8e42bc99e04736d17d9daa7a624b4a352..85ff7bfb7ed4855cf245ed8e27447f8637308bff 100644
+GIT binary patch
+delta 165
+zcmZ3dcvoq{Lx-Z&;{2Sl)Zo&B)S|M?;?$I&(wtO#jm(tPypqh4N-KqGh0@FvD}~~c
+zqRhN>YlWix{1Q(%U!ivLIUcc49R-MLgoKVlT7FJuK1`pcl|n#KelE~_n`(t3pbZF>
+c)(R!56(ul*3bhI~3VEeDId;|??_T5w0Bb}&<p2Nx
+
+delta 11
+Tcmcbsv`%rt!_5;I&+-ERBBcdj
+
 diff --git b/src/modules/agent007/observationEvidence.ts b/src/modules/agent007/observationEvidence.ts
 new file mode 100644
-index 0000000..8f73f8d
---- /dev/null
-+++ b/src/modules/agent007/observationEvidence.ts
-@@ -0,0 +1,68 @@
-+import type { Firestore, Transaction } from "firebase-admin/firestore";
-+import { HttpsError } from "firebase-functions/v2/https";
-+import { canonicalEvidenceType, evidenceIdentity, isEvidenceSystem, observationEntity } from "./hugoCore/evidenceIdentity";
-+import { buildPaymentApplicationActivityId } from "../paymentApplications/domain";
-+
-+const collections = ["pay0ActivityLog", "assetsActivityLog", "tttActivityLog", "hugoActivityLog", "activityLog"] as const;
-+const systems = ["PAY0", "ASSETS", "TTT", "HUGO"] as const;
-+const safeId = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,151}$/.test(value);
-+const millis = (value: any): number | null => {
-+  const ms = typeof value?.toMillis === "function" ? value.toMillis() : NaN;
-+  return Number.isFinite(ms) && ms > 0 ? ms : null;
-+};
-+function reject(reason: string): never {
-+  throw new HttpsError("failed-precondition", "La procedencia historica de la observacion no es verificable.", { reason });
-+}
-+export type ResolvedObservationEvidence = { observation: any; activityCreatedAt: number | null };
-+
-+/** Construct inside each transaction callback; no cache survives a retry.
-+ * Only absent systems may be resolved. No historical document is rewritten.
-+ */
-+export function observationEvidenceResolver(db: Firestore, tx: Transaction, rootId: string) {
-+  const cache = new Map<string, Promise<Array<{ collection: string; data: any }>>>();
-+  return async (observationId: string, observation: any): Promise<ResolvedObservationEvidence> => {
-+    if (!observation || observation.rootId !== rootId || observation.source !== "ACTIVITY_LOG") reject("OBSERVATION_SCOPE_INVALID");
-+    if (Object.prototype.hasOwnProperty.call(observation, "sourceSystem")) {
-+      if (!evidenceIdentity(observationEntity(observation))) reject("OBSERVATION_IDENTITY_INVALID");
-+      return { observation, activityCreatedAt: null };
-+    }
-+    const sourceId = observation.sourceActivityId;
-+    // observer writes observationRef(`activity_${activityId}`); observationRef does not truncate/sanitize.
-+    if (!safeId(sourceId) || observationId !== `activity_${sourceId}` ||
-+        !canonicalEvidenceType(observation.caseType) ||
-+        (typeof observation.caseId !== "string" || !observation.caseId || observation.caseId.length > 160 || /[\/\\\x00-\x1f]/.test(observation.caseId)) ||
-+        typeof observation.sourceEvent !== "string" || !/^[A-Z][A-Z0-9_]{1,119}$/.test(observation.sourceEvent)) reject("OBSERVATION_SOURCE_REFERENCE_INVALID");
-+    if (!cache.has(sourceId)) cache.set(sourceId, Promise.all(collections.map(async collection => {
-+      const snap = await tx.get(db.collection(collection).doc(sourceId));
-+      return { collection, data: snap.exists ? snap.data() : undefined };
-+    })));
-+    const found = (await cache.get(sourceId)!).filter(item => item.data !== undefined);
-+    if (found.length !== 1) reject(found.length ? "ACTIVITY_SOURCE_AMBIGUOUS" : "ACTIVITY_SOURCE_MISSING");
-+    const { collection, data } = found[0];
-+    if (data.rootId !== rootId || !isEvidenceSystem(data.sourceSystem) || data.event !== observation.sourceEvent ||
-+        ["type", "eventType"].some(key => key in data && data[key] !== data.event)) reject("ACTIVITY_SOURCE_CONTRADICTION");
-+    const index = collections.indexOf(collection as typeof collections[number]);
-+    if (index < 4 && data.sourceSystem !== systems[index]) reject("ACTIVITY_COLLECTION_SYSTEM_INVALID");
-+    const hasReference = Boolean(data.referenceType || data.referenceId);
-+    const type = hasReference ? data.referenceType : data.entityType;
-+    const entityId = hasReference ? data.referenceId : data.entityId;
-+    const identity = evidenceIdentity({ sourceSystem: data.sourceSystem, entityType: type, entityId });
-+    if (!identity || identity !== evidenceIdentity({ sourceSystem: data.sourceSystem, entityType: observation.caseType, entityId: observation.caseId }) ||
-+        (hasReference && (data.entityType || data.entityId) && identity !== evidenceIdentity({ sourceSystem: data.sourceSystem, entityType: data.entityType, entityId: data.entityId }))) reject("ACTIVITY_ENTITY_INVALID");
-+    if (collection === "activityLog") {
-+      const applied = data.event === "PAGO_APLICADO_A_SOLICITUD";
-+      if ((!applied && data.event !== "SOLICITUD_COMPLETADA") || data.sourceSystem !== "PAY0" ||
-+          canonicalEvidenceType(type) !== (applied ? "PAGO" : "SOLICITUD") ||
-+          data.activitySchemaVersion !== 2 || data.atomicBatch !== true ||
-+          !safeId(data.paymentApplicationId) || !safeId(data.batchReservationId) ||
-+          buildPaymentApplicationActivityId(data.paymentApplicationId, applied ? "APPLIED" : "COMPLETED") !== sourceId) reject("LEGACY_ACTIVITY_PRODUCER_INVALID");
-+    }
-+    const sourceAt = millis(data.createdAt), observedAt = millis(observation.createdAt);
-+    if (sourceAt === null || observedAt === null || sourceAt > observedAt) reject("ACTIVITY_SOURCE_TIME_INVALID");
-+    return { observation: { ...observation, sourceSystem: data.sourceSystem }, activityCreatedAt: sourceAt };
-+  };
-+}
-+export function assertResolvedOutcomeTime(evidence: ResolvedObservationEvidence, decisionAt: number, correctedAt?: number) {
-+  if (evidence.activityCreatedAt !== null && (!Number.isFinite(decisionAt) || decisionAt <= 0 || evidence.activityCreatedAt < decisionAt ||
-+      correctedAt !== undefined && (!Number.isFinite(correctedAt) || correctedAt <= 0 || evidence.activityCreatedAt < correctedAt))) reject("ACTIVITY_OUTCOME_PREDATES_DECISION");
-+}
+index 0000000000000000000000000000000000000000..8f73f8da9f9900875db74a3d961ab5f7c86ca24b
+GIT binary patch
+literal 5562
+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
+O((}6hSdBU0!T$iP6+w^y
+
+literal 0
+HcmV?d00001
+
