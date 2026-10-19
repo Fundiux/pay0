@@ -60,7 +60,10 @@ export function deploymentScope(input) {
 export function assertArtifactProof(input, proof) {
   const { names } = deploymentScope(input);
   validateSourceIdentity(input.sourceIdentity, input.group, input.sourceCommit);
-  if (input.sourceIdentity) assert.deepEqual(proof.sourceIdentity, input.sourceIdentity, 'ARTIFACT_PROOF_SOURCE_IDENTITY');
+  if (input.sourceIdentity) {
+    assert.equal(input.sourceTree, null, 'OVERLAY_MUST_NOT_CLAIM_SOURCE_TREE');
+    assert.deepEqual(proof.sourceIdentity, input.sourceIdentity, 'ARTIFACT_PROOF_SOURCE_IDENTITY');
+  }
   assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
   assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity, assertRunRuntimePreserved, artifactProbeContract, assertRuntimePreserved } from '../../scripts/deploy-scoped-functions.mjs';
 
 const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'a'.repeat(64), patchCommit: 'b'.repeat(40), patchSha256: 'c'.repeat(64) };
-const input = { group: 'hugo-chat-overlay', functions: ['sendAgent007Message'], sourceCommit: identity.patchCommit, archiveSha256: 'd'.repeat(64), sourceIdentity: identity };
+const input = { group: 'hugo-chat-overlay', functions: ['sendAgent007Message'], sourceCommit: identity.patchCommit, sourceTree: null, archiveSha256: 'd'.repeat(64), sourceIdentity: identity };
 const resource = { name: 'projects/pay-0-system/locations/us-central1/functions/sendAgent007Message', state: 'ACTIVE', labels: { owner: 'retained' }, buildConfig: { runtime: 'nodejs22', environmentVariables: { GOOGLE_NODE_RUN_SCRIPTS: '' } } };
 const source = { bucket: 'gcf-v2-sources-751158244178-us-central1', object: 'fixture/function-source.zip', generation: '123' };
 
@@ -20,6 +20,7 @@ test('production overlay identifies deployed base and patch rather than claiming
 test('artifact proof binds exact overlay base, patch, function scope and archive', () => {
   const proof = { status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, functions: input.functions, unauthenticatedDenied: 1, sourceIdentity: identity };
   assertArtifactProof(input, proof);
+  assert.throws(() => assertArtifactProof({ ...input, sourceTree: 'f'.repeat(40) }, proof), /OVERLAY_MUST_NOT_CLAIM_SOURCE_TREE/);
   assert.throws(() => assertArtifactProof(input, { ...proof, sourceIdentity: { ...identity, baseArchiveSha256: 'e'.repeat(64) } }));
   assert.throws(() => validateSourceIdentity({ ...identity, patchCommit: 'f'.repeat(40) }, input.group, input.sourceCommit));
   assert.throws(() => validateSourceIdentity(identity, 'receipts', input.sourceCommit));
