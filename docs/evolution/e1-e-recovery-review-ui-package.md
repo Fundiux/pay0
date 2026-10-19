@@ -1,6 +1,6 @@
 # E — revisión administrativa: delta de UI
 
-Estado: candidato combinado admin/MAT con build completo PASS, sin preparación SSR ni publicación. Requiere autorización y disponibilidad de ambos callables de revisión antes de publicar la interfaz.
+Estado: candidato combinado admin/MAT con build y runtime SSR PASS, preparado sin publicación. Requiere autorización y creación de ambos callables de revisión antes de publicar la interfaz. El [dossier combinado](e1-admin-mat-publication-package.md) fija los artefactos finales y el override de fixture QA explícito.
 
 ## Bases y alcance
 
@@ -21,7 +21,7 @@ La ruta existente es `/reportes`, pestaña Control Center, sección Ingeniería 
 1. Crear y verificar, con autorización separada, `listOperationRecoveryReviews` y `acknowledgeOperationRecoveryReview`. La preparación del backend está documentada en `e1-e-recovery-review-create-package.md`; este delta no los crea ni publica.
 2. Mantener los controles backend: sesión Firebase, superadmin vigente, módulo reportes/view y root propio; paginación root/NEEDS_REVIEW/ID; acuse idempotente y auditoría. No abrir reglas de Firestore: los wrappers llaman al backend.
 3. Conservar la configuración e índices requeridos por esa consulta. Las pruebas de UI con dobles no certifican índices productivos; usar la evidencia de preparación backend y comprobación autorizada.
-4. El candidato combinado ya tiene build completo con configuración pública preservada y dependencias originales; conserva EUI y R1.3/PDF. Falta preparar/verificar SSR sobre una nueva línea base productiva después de publicar R1.3; este build no autoriza ni prepara el despliegue.
+4. El candidato combinado tiene build y runtime SSR verificados sobre la baseline estabilizada de R1.3; conserva EUI y R1.3/PDF. El dossier combinado documenta el fixture QA adaptado y los hashes. Estas pruebas no autorizan la publicación.
 5. Publicar backend antes de esta UI y efectuar la prueba manual autorizada del flujo administrativo. Un acuse sólo registra revisión; no reintenta, no modifica el trabajo de recuperación y no declara éxito financiero.
 
 La UI consulta al montarse; publicarla antes de disponer de ambos endpoints produciría errores. La reversión de UI consiste en volver al candidato base verificado; no eliminar trabajos, revisiones ni auditoría.
@@ -38,6 +38,6 @@ El clon independiente `.firebase/modular-release/admin-mat-ui-source`, rama `rel
 
 QA del candidato exacto: revisión administrativa **3/3 PASS** y MAT **5/5 PASS**, usando los overrides de fuente de los verificadores existentes. Build aislado mediante `build()` de `scripts/deploy-modular-hosting.mjs`: **PASS**, 457 dependencias fijadas, guard de entorno 7/7, Next 15.5.27, compilación/lint/tipos y 47 páginas. Fuente limpia y huella de configuración verificada antes/después.
 
-Recibo privado: `.firebase/modular-release/hosting-a335e195e8e7-80cd6688-809e-48d4-85be-6dc109aaf0be/build.json`, SHA256 `e6e681076650d628fb9886fd8667b73b2dbbd07ab392723206032cebf27c6d0a`. Build ID `hCQThzHoo0tmK4eygfaNb`; huella de entorno público `876b2564ca82eab5a6039013fa04ce502884511cf3d251c779282ac6650b03d4`. No se preparó SSR ni se publicó este candidato.
+Recibo privado: `.firebase/modular-release/hosting-a335e195e8e7-80cd6688-809e-48d4-85be-6dc109aaf0be/build.json`, SHA256 `e6e681076650d628fb9886fd8667b73b2dbbd07ab392723206032cebf27c6d0a`. Build ID `hCQThzHoo0tmK4eygfaNb`; huella de entorno público `876b2564ca82eab5a6039013fa04ce502884511cf3d251c779282ac6650b03d4`. La preparación SSR posterior pasó con proof documentado en el dossier combinado; no se publicó este candidato.
 
 Preflight de los dos endpoints nuevos, exclusivamente de lectura: **PASS**. Input `fe8bc6e77c0cf8e677b1af523e1e8994741dfff8bfaa8bf7b755628941a82b6f`, plan `4966074d4575a6995c4c0bf18050bd31c4faf28312041769c7c092200405dfb4`. Padre `getcontrolcenterengineering-00001-cij` conserva recurso, servicio e IAM exactos; ambos destinos siguen ausentes. Prueba privada `new-recovery-review/readonly-preflight.json`, SHA256 `cf4736db7cb3e19eac1ff4daa0fbccb727c3676b932c98b043a6c3ab43f25392`. Esa observación no reserva estado remoto ni sustituye la revalidación al ejecutar. Ambos endpoints siguen pendientes de autorización; la UI no está funcionalmente completa en producción mientras no existan.

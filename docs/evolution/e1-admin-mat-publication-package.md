@@ -1,0 +1,70 @@
+# Paquete exacto — revisión administrativa y acceso MAT
+
+Estado: **PREPARED_NOT_RELEASE_AUTHORIZED**. Artefactos y runtime locales verificados; todavía no se crearon los endpoints ni se publicó esta UI. El paquete consta de dos Functions nuevas y una actualización conjunta Hosting/SSR. No incluye aprendizaje D, R2, Sentinel, conector WhatsApp, cambios de reglas ni dependencias nuevas.
+
+## Alcance y orden
+
+1. Crear únicamente `listOperationRecoveryReviews` y `acknowledgeOperationRecoveryReview` en `pay-0-system/us-central1`. La primera lista incidencias del root autorizado; la segunda registra un acuse idempotente. No reintenta trabajos ni cambia operaciones financieras.
+2. Dar **invocación pública `roles/run.invoker` a `allUsers` únicamente en esos dos servicios nuevos**, como requiere el transporte callable Firebase. Esto no sustituye la autorización lógica: ambos endpoints exigen sesión Firebase, superadmin vigente y root permitido. No se amplían roles del proyecto ni permisos de otros servicios.
+3. Verificar creación, artefacto, configuración e IAM. Sólo después publicar los 169 archivos Hosting y el ZIP SSR exacto del candidato `a335e195e8e70f889be1e60aa0df850e4d278585`.
+4. Verificar técnicamente Hosting/SSR y, con sesión autorizada, comprobar la lista/acuse. El estado funcional permanece pendiente hasta esa comprobación; ninguna prueba local cuenta como una acción productiva.
+
+El candidato parte de R1.3 UI `13620b74516843b232747904b606b34d0747f986`; conserva PDF/XLSX, las correcciones E de proveedores y el resto de esa fuente. El delta son exactamente cinco archivos: dos páginas MAT, `EngineeringControl.tsx`, `RecoveryReview.tsx` y `services/controlCenter.ts`. Rama local `release/admin-mat-ui-integration`, árbol `035110ae1587af8111877b2d6b36892ed16df627`. No se alteró el candidato después del build.
+
+## Identidades para aprobación
+
+Directorio Functions: `.firebase/modular-release/new-recovery-review/`.
+
+| Artefacto | SHA256 |
+| --- | --- |
+| `source.zip` | `6624acacb3939d846a528426cb39146d1175bdc6bedf18747426e994138844dd` |
+| `input.json` | `fe8bc6e77c0cf8e677b1af523e1e8994741dfff8bfaa8bf7b755628941a82b6f` |
+| `create-plan.json` | `4966074d4575a6995c4c0bf18050bd31c4faf28312041769c7c092200405dfb4` |
+| `startup-verification.json` | `d7675c44ad7b2f678d23e876b605de13feba18bf69735c5758a5a3d8f730826f` |
+| `behavior-verification.json` | `5233536f0e26dd36db56aae16a0e1348972b84d110235e1d80fe8d1b24a3aa2e` |
+| `readonly-preflight.json` | `35decb03a7faec125ca0b67b84dcf5a2afbacd61c0448017f6ebeccc24e2211b` |
+
+Fuente aditiva `ADDITIVE_NEW_FUNCTIONS_V1`, `sourceTree:null`: archivo base `6615bb840530acf6dc31f2f86e988210f5505d2d17a0b4c05850c0c0eb2eb713`, commit `a280e72fec4dee7e3c452752ba119a2f7ca8f630`, patch `fc28b3aebecc32796e862576cdaf0b726783e547e63aae82b3f7adb925c2ce11`. Conserva 1174 archivos originales. Detalle de comportamiento y executor acotado: [paquete Functions](e1-e-recovery-review-create-package.md).
+
+Directorio UI: `.firebase/modular-release/hosting-a335e195e8e7-80cd6688-809e-48d4-85be-6dc109aaf0be/`.
+
+| Artefacto | SHA256 |
+| --- | --- |
+| `build.json` | `e6e681076650d628fb9886fd8667b73b2dbbd07ab392723206032cebf27c6d0a` |
+| `input.json` | `a58f04802d5149de49c02526bc2c03f62d250ae2c721813b27fa0c8e81205c6a` |
+| `ssr.zip` | `f0e47ff8aae70da0b50836f23367a5c49ab641baf12c89af3a90edbb569ebf0f` |
+| `runtime-384e7d32-5902-4e29-a9fd-86dd5742a044/proof-with-qa-override.json` | `4fcd9d3f1f44f0d7776e596859d56e1b5d7419c911529067b75a5a414905d7d7` |
+| Baseline `.firebase/modular-release/ui-r13-stable-idle-baseline.json` | `7308e3635b98f2ace78ed98a13ded99ab5154614927f763178ed107744c3d01f` |
+
+Base publicada que se preserva: Hosting `bf259a13a5d229c3`, SSR `ssrpay0system-00602-log`, fuente UI `13620b74516843b232747904b606b34d0747f986`. ZIP previo `.firebase/modular-release/hosting-13620b745168-2e88fdfd-6bcd-4eac-b902-bfbb13ac4efc/ssr.zip`, SHA256 `12fcc18131b58621b2dd4409a56b847970fc30e1a8d6b23c6fe5df82d7e0fe0e`. El input fija executor `c9167c451b575fb3c4e29d5c462f575e3cbd3a976a4469f0dfe904cdd037bf21` y helper `43dd1f8cac2fa4424c05e581ea3f052dd428ede98bab583f1c1097700f98966d`. No se cambió ningún helper para producir estos artefactos.
+
+## Pruebas y adaptación explícita de QA
+
+- Build aislado PASS: Next 15.5.27, 47 páginas, compilación/lint/tipos; guard de configuración pública 7/7. Los manifiestos/locks se conservaron.
+- MAT 5/5 y revisión administrativa 3/3 sobre la fuente candidata con fixtures sintéticos.
+- Runtime exacto: instalación independiente de 430 paquetes; cierre de dependencias y realpaths PASS. Reutilización posterior verifica otra vez todos los archivos del ZIP y no usa enlaces de dependencias externos en el runtime.
+- Cinco rutas HTTP 200: `/login`, `/pagos`, `/solicitudes`, `/administracion/recursos-corporativos`, `/reportes`. Chromium: login a 390 y 1440 px, sin desbordamiento; `/pagos` anónimo redirige a `/login`, sin errores JS.
+- Cinco pruebas de componentes PASS: recibos, dossier, Ingeniería, carga global y accesibilidad de modal. Incluyen backend real con Firestore Emulator y datos sintéticos; no certifican reglas Firestore ni sesiones productivas.
+
+La primera ejecución **falló** en `engineering-control-emulator.test.cjs`: su fixture no proveía `useUserProfile` ni cargaba el nuevo `RecoveryReview`. Ese resultado está conservado y no se presenta como PASS. Se adaptó únicamente el harness en memoria mediante un preload limitado al path exacto y hash del test; la fuente `a335`, el ZIP, el input y los componentes permanecieron intactos. No existe parámetro equivalente en ese test antiguo.
+
+La adaptación mantiene sus aserciones backend/UI, carga `RecoveryReview` real con wrappers de revisión stub y contexto sintético superadmin/root, y añade negativos de sesión ausente, rol no autorizado e inactividad: ninguno monta ni consulta las revisiones. Los nuevos endpoints no se invocan contra producción. La instalación de Functions reutilizada sólo para el QA tiene árbol, manifest y lock idénticos a la fuente candidata; esos enlaces no entran al ZIP ni al runtime SSR final.
+
+Huellas del override, bajo `qa-fixture/` del directorio UI:
+
+| Elemento | SHA256 |
+| --- | --- |
+| Test original del candidato | `35f5d7a297be43cc652cc216a341b75e70d41d5764a5c4e19261111cd5aa0c82` |
+| `engineering-control-emulator.adapted.cjs` | `593b8fd70a744c0cc126cd3645b1ce57046f75fb99fa06358721fead5826faa7` |
+| `preload.cjs` | `a171d26da0bb9d0c4b6488bc244490562e69f8888075a3e7beccddacf5ac0b02` |
+| `fixture.patch` | `ee06769cb098f131d9f04119c3a91852330628d390d28b6a7b4fd7f474468675` |
+
+El proof canónico de la segunda ejecución queda intacto, SHA256 `6c9a93bde88069201d55d673c34e72bb21fbb788bc4319b6f9b0ab11f57acaec`. El proof de aprobación añade la declaración del override y sus hashes, incluida la indicación `originalTestExecutedUnmodified:false`; `assertRuntimeProof` lo acepta. No se presenta como ejecución del test original sin modificaciones.
+
+Preflight de creación actualizado a **2026-10-19 21:06:52 UTC**: los dos destinos siguen ausentes y `getControlCenterEngineering` conserva recurso, servicio e IAM de la revisión `getcontrolcenterengineering-00001-cij`. El primer intento agotó autenticación antes de HTTP; el segundo pasó, sin mutaciones. La baseline UI anterior con una operación activa fue rechazada antes de stage; se conserva evidencia del aborto. El input final usa la captura idle autorizada. Los ejecutores deben revalidar otra vez inmediatamente antes de mutar.
+
+## Límites y reversión
+
+MAT sólo embebe formularios cuando existe sesión Firebase y su UID coincide con el UID canónico de Telegram; en otro caso navega al flujo web protegido. Este paquete **no** crea un puente Telegram→Firebase ni hace disponibles operaciones financieras con sólo Telegram. No activa proveedores, envía dinero, reintenta trabajos ni ejecuta acciones WhatsApp/IQ/Telegram.
+
+Reversión, si se autoriza y el estado coincide con el journal: retirar únicamente `allUsers` de `roles/run.invoker` en los dos nuevos endpoints, conservando Functions, otros bindings, revisiones, trabajos y auditoría. Restaurar Hosting/SSR juntos a la base R1.3 y ZIP previo indicados arriba. No usar la base E anterior ni sobrescribir una publicación posterior. Los controles de identidad/deriva y locks siguen siendo obligatorios; un resultado remoto incierto requiere reconciliación, no repetición ciega.
