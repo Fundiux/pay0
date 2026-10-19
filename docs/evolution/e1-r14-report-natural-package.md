@@ -18,7 +18,7 @@ La captura tolera puntuación y comillas de cierre sin quitar puntuación intern
 - Patch: `qa/patches/r14-report-natural.patch`, SHA256 `6784975e087cb788f835ac637b97a60f48df5d0cda0197fad746a645d957ee20`.
 - Receta: `qa/scripts/build-r14-report-overlay.mjs`; exige la base y el patch exactos y reproduce el SHA candidato. Los bloques binarios Git conservan los finales de línea; el código sigue revisable en las dos fuentes.
 
-Sólo cambian `hugoCore/reportSemantics.ts` y `hugoCore/contextBuilderV2.ts`. El ZIP modifica sus cuatro entradas JS/mapas y conserva las otras **792 entradas**, inventario total 796. No cambia callables, index, dependencias, configuración, permisos, fórmulas ni exportadores. La procedencia futura usa `sourceTree:null` y el commit que contiene este patch exacto, no el árbol integrado completo.
+Sólo cambian `hugoCore/reportSemantics.ts` y `hugoCore/contextBuilderV2.ts`. El ZIP modifica sus cuatro entradas JS/mapas y conserva las otras **792 entradas**, inventario total 796. No cambia callables, index, dependencias, configuración, permisos, fórmulas ni exportadores. La procedencia usa `sourceTree:null` y `sourceCommit`/`patchCommit` `2b10b0ed9235430c17674144eb4b18e9d2c94ebb`, que contiene este patch exacto; no usa el árbol integrado completo.
 
 ## Verificación
 
@@ -33,6 +33,8 @@ Evidencia privada del candidato: `natural-dialogue-proof.json`, `startup.log`, `
 
 ## Publicación y reversión
 
-Preparar el input `hugo-chat-overlay` contra la baseline R2 indicada, con el ZIP R1.4 y la procedencia del patch; verificar de nuevo Function, servicio e IAM antes de ejecutar. La autorización de R2 no autoriza R1.4. No requiere una nueva UI: usa el contrato PDF/XLSX ya publicado.
+El input `hugo-chat-overlay` está preparado en `.firebase/modular-release/r14-report-natural/release/input.json`, SHA256 `fc0f3ffd668e16a7391736a5cd8d6e71a7246e261359e18d2a74640e507b6d15`, contra la baseline R2 indicada. `assertArtifactProof` y `sourceOnlyPatch` aprobaron el alcance y la identidad. El preflight de sólo lectura del `2026-10-19T21:53:05.494Z` confirmó Function, servicio e IAM sin cambios frente a `sendagent007message-00020-faf`; evidencia en `release/preflight.json`. No ejecutó escrituras productivas. Esta comprobación puntual debe repetirse al ejecutar.
+
+La autorización específica de R1.4 está solicitada y pendiente; la autorización de R2 no la sustituye. No requiere una nueva UI: usa el contrato PDF/XLSX ya publicado.
 
 La reversión restaura el ZIP R2 preservado y sus etiquetas, manteniendo configuración e IAM. No elimina conversaciones, adjuntos persistidos ni auditoría. La validación funcional con datos productivos no forma parte de estas pruebas y queda pendiente de la publicación autorizada.
