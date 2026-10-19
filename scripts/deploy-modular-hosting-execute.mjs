@@ -93,6 +93,9 @@ export function assertRuntimeProof(proof, input) {
   assert.equal(proof.runtimeHttpPassed, true, 'RUNTIME_HTTP_REQUIRED');
   assert.equal(proof.criticalBrowserPassed, true, 'CRITICAL_BROWSER_REQUIRED');
   assert.equal(proof.verifierSha256, sha(fs.readFileSync(path.resolve(import.meta.dirname, '../qa/scripts/verify-modular-hosting-runtime.mjs'))), 'RUNTIME_VERIFIER_CHANGED');
+  assert.equal(proof.runtimeRealpathsPassed, true, 'RUNTIME_REALPATHS_REQUIRED');
+  assert.equal(proof.runtimeRealpathsSha256, sha(fs.readFileSync(path.resolve(import.meta.dirname, '../qa/scripts/verify-runtime-realpaths.cjs'))), 'RUNTIME_REALPATHS_HELPER_CHANGED');
+  assert.equal(proof.dependencyClosureVerifierSha256, sha(fs.readFileSync(path.resolve(import.meta.dirname, '../qa/scripts/verify-runtime-dependency-closure.cjs'))), 'DEPENDENCY_CLOSURE_HELPER_CHANGED');
 }
 export function assertSource(source) {
   assert.match(source?.bucket || '', /^(?:gcf-v2-sources-751158244178-us-central1|gcf-v2-uploads-751158244178\.us-central1\.cloudfunctions\.appspot\.com)$/);

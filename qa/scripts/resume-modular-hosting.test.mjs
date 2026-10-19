@@ -65,6 +65,7 @@ function fixture() {
   row.service.latestReadyRevision = row.service.name + '/revisions/ssrpay0system-new'; row.service.latestCreatedRevision = row.service.latestReadyRevision;
   const own = { state: 'SSR_VERIFIED', version, snapshot: clone(state) }, calls = [];
   const proof = { schema: 'PAY0-MODULAR-HOSTING-RUNTIME@1', status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, hostingManifestSha256: digest(input.hostingFiles), runtimeHttpPassed: true, criticalBrowserPassed: true, verifierSha256: sha(fs.readFileSync('qa/scripts/verify-modular-hosting-runtime.mjs')) };
+  Object.assign(proof, { runtimeRealpathsPassed: true, runtimeRealpathsSha256: sha(fs.readFileSync('qa/scripts/verify-runtime-realpaths.cjs')), dependencyClosureVerifierSha256: sha(fs.readFileSync('qa/scripts/verify-runtime-dependency-closure.cjs')) });
   let finalConfig;
   const api = {
     async read() { return clone(state); }, async sourceHash() { return input.archiveSha256; }, async assertOwnedVersion() { calls.push('owned'); }, async readV1() { return clone(serviceV1); },
@@ -79,6 +80,14 @@ test('resume publishes only after verified tag and exact file/config checks', as
   assert.equal((await resumeContract({ ...f, checkpoint: async s => checkpoints.push(s) })).status, 'RELEASE_VERIFIED');
   assert.deepEqual(f.calls, ['owned', 'tag', 'owned', 'finalize', 'release']);
   assert.equal(checkpoints.at(-1), 'RELEASE_VERIFIED');
+});
+
+test('resume rejects stale dependency and realpath helper proofs before publication', async () => {
+  for (const field of ['runtimeRealpathsSha256', 'dependencyClosureVerifierSha256']) {
+    const f = fixture(); f.proof[field] = 'stale';
+    await assert.rejects(resumeContract({ input: f.input, baseline: f.baseline, proof: f.proof, own: f.own, api: f.api }), /HELPER_CHANGED/);
+    assert.deepEqual(f.calls, []);
+  }
 });
 test('drift, wrong proof, inventory failure and tag failure cannot publish or overwrite SSR', async () => {
   for (const mode of ['drift', 'proof', 'files', 'tag', 'spec', 'source', 'traffic', 'metadata', 'config']) {

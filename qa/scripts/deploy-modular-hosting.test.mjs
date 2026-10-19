@@ -126,6 +126,9 @@ function deploymentFixture() {
   const calls = [], input = { sourceCommit: 'a'.repeat(40), archiveSha256: 'b'.repeat(64), previousSha256: 'c'.repeat(64), hostingFiles: [] };
   const proof = { schema: 'PAY0-MODULAR-HOSTING-RUNTIME@1', status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256,
     verifierSha256: require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve('qa/scripts/verify-modular-hosting-runtime.mjs'))).digest('hex'),
+    runtimeRealpathsPassed: true,
+    runtimeRealpathsSha256: require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve('qa/scripts/verify-runtime-realpaths.cjs'))).digest('hex'),
+    dependencyClosureVerifierSha256: require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve('qa/scripts/verify-runtime-dependency-closure.cjs'))).digest('hex'),
     hostingManifestSha256: digest(input.hostingFiles), runtimeHttpPassed: true, criticalBrowserPassed: true };
   const api = {
     async read() { return clone(state); },
@@ -181,6 +184,18 @@ test('no release on wrong runtime evidence, source bytes, prior traffic mutation
   f.api.finalizeVersion = async (...args) => { await finalize(...args); f.state.functions.ssrpay0system.service.concurrent = true; };
   await assert.rejects(executeContract({ input: f.input, baseline: f.before, proof: f.proof, api: f.api }), /CONCURRENT_SERVICE_CHANGE/);
   assert.ok(!f.calls.includes('release'));
+});
+
+test('runtime proofs require successful realpath inspection and current helper hashes', async () => {
+  for (const [field, value, reason] of [
+    ['runtimeRealpathsPassed', false, /RUNTIME_REALPATHS_REQUIRED/],
+    ['runtimeRealpathsSha256', 'stale', /RUNTIME_REALPATHS_HELPER_CHANGED/],
+    ['dependencyClosureVerifierSha256', 'stale', /DEPENDENCY_CLOSURE_HELPER_CHANGED/],
+  ]) {
+    const f = deploymentFixture(); f.proof[field] = value;
+    await assert.rejects(executeContract({ input: f.input, baseline: f.before, proof: f.proof, api: f.api }), reason);
+    assert.deepEqual(f.calls, []);
+  }
 });
 
 test('rollback rejects a release changed by another operator before any mutation', async () => {

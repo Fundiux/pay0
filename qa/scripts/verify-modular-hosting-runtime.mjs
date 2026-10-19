@@ -48,7 +48,14 @@ try {
     fs.writeFileSync(path.join(directory, 'install.log'), (install.stdout || '') + (install.stderr || ''));
     assert.equal(install.status, 0, 'RUNTIME_INSTALL_FAILED');
   }
-  const { inspectRuntimeDependencyClosure } = require('./verify-runtime-dependency-closure.cjs');
+  const realpathsFile = path.resolve(import.meta.dirname, 'verify-runtime-realpaths.cjs');
+  const closureFile = path.resolve(import.meta.dirname, 'verify-runtime-dependency-closure.cjs');
+  const runtimeRealpathsSha256 = sha(fs.readFileSync(realpathsFile));
+  const dependencyClosureVerifierSha256 = sha(fs.readFileSync(closureFile));
+  const { assertRuntimeRealpaths } = require(realpathsFile);
+  const runtimeRealpaths = assertRuntimeRealpaths(directory);
+  fs.writeFileSync(path.join(directory, 'runtime-realpaths.json'), JSON.stringify(runtimeRealpaths, null, 2));
+  const { inspectRuntimeDependencyClosure } = require(closureFile);
   const dependencyClosure = inspectRuntimeDependencyClosure(directory, { timeout: 120000 });
   fs.writeFileSync(path.join(directory, 'dependency-closure.json'), JSON.stringify(dependencyClosure, null, 2));
   assert.equal(dependencyClosure.status, 'PASS', 'RUNTIME_DEPENDENCY_CLOSURE_FAILED');
@@ -125,9 +132,13 @@ try {
   }
   assert.equal(inspectSource(cwd).sourceCommit, input.sourceCommit, 'SOURCE_CHANGED_DURING_CHECK');
   check(inputFile, inputSha256);
+  assert.equal(sha(fs.readFileSync(realpathsFile)), runtimeRealpathsSha256, 'REALPATHS_HELPER_CHANGED_DURING_CHECK');
+  assert.equal(sha(fs.readFileSync(closureFile)), dependencyClosureVerifierSha256, 'CLOSURE_HELPER_CHANGED_DURING_CHECK');
   const proof = { schema: 'PAY0-MODULAR-HOSTING-RUNTIME@1', status: 'PASS', sourceCommit: input.sourceCommit,
     archiveSha256: input.archiveSha256, hostingManifestSha256: digest(input.hostingFiles), runtimeHttpPassed: true,
     reusedRuntime: Boolean(reuseRuntime), verifiedSourceFiles, dependencyClosureSha256: sha(fs.readFileSync(path.join(directory, 'dependency-closure.json'))),
+    runtimeRealpathsPassed: true, runtimeRealpathsSha256, dependencyClosureVerifierSha256,
+    runtimeRealpathsReportSha256: sha(fs.readFileSync(path.join(directory, 'runtime-realpaths.json'))),
     criticalBrowserPassed: true, verifierSha256: sha(fs.readFileSync(import.meta.filename)), http, browserChecks, components, externalRequestsBlocked,
     authenticatedProductionVerification: 'NOT_RUN', financialMutations: 0, checkedAt: new Date().toISOString() };
   const proofFile = path.join(directory, 'proof.json');
