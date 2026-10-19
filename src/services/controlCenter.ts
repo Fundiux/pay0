@@ -3,6 +3,14 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 import { CALLABLES } from "@/lib/callableNames";
 
+export type RecoveryReviewRow = { id: string; solicitudId: string; kind: string; status: "NEEDS_REVIEW"; attempts: number; lastErrorCode: string; acknowledged: boolean; acknowledgedBy: string | null; note: string | null };
+export async function listOperationRecoveryReviews(cursor?: string) {
+  return (await httpsCallable<{ cursor?: string }, { ok: boolean; rows: RecoveryReviewRow[]; truncated: boolean; nextCursor: string | null }>(functions, "listOperationRecoveryReviews")(cursor ? { cursor } : {})).data;
+}
+export async function acknowledgeOperationRecoveryReview(data: { jobId: string; note: string }) {
+  return (await httpsCallable<typeof data, { ok: boolean; created: boolean; jobId: string }>(functions, "acknowledgeOperationRecoveryReview")(data)).data;
+}
+
 export type EngineeringCatalog = {
   assignees: Array<{ uid: string; name: string }>;
   assigneesTruncated: boolean;

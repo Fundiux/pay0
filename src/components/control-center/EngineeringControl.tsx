@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import RecoveryReview from "./RecoveryReview";
 import { getControlCenterEngineering, assignControlCenterEngineeringTask, importControlCenterEngineeringEvidence, type EngineeringCatalog, type EngineeringRunEvidence } from "@/services/controlCenter";
 import { listAgent007Observations, reconcileAgent007RecommendationsNow, listAgent007Traces, recordAgent007Observation, type Agent007Observation, type HugoTrace } from "@/services/agent007";
 
@@ -118,6 +119,7 @@ export default function EngineeringControl() {
 
   const name = (id: string) => catalog?.modules.find(module => module.id === id)?.name || "Módulo fuera del catálogo inicial";
   return <section className={panel} aria-label="Control de ingeniería">
+    <RecoveryReview />
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">Ingeniería y seguimiento</h2><p className="mt-1 text-sm text-slate-400">Contratos del código y avances declarados por superadmin, con evidencia conservada.</p></div><button className={input} disabled={loading || saving} onClick={() => void load()}>{loading ? "Consultando…" : "Actualizar ingeniería"}</button></div>
     {errors.map(error => <p key={error} role="alert" className="mt-3 text-sm text-amber-300">{error}</p>)}
     <div className="my-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-100">

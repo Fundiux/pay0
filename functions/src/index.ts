@@ -2860,6 +2860,7 @@ export { runHugoIqRepReadCohort } from "./modules/paymentApplications/repReadCoh
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";
+export { listOperationRecoveryReviews, acknowledgeOperationRecoveryReview } from "./modules/controlCenter/recoveryReviewCallables";
 export { queueControlCenterApplications, queueControlCenterBalances, queueControlCenterMovements, queueControlCenterAdvances, queueControlCenterLearning, queueControlCenterRecovery, queueControlCenterExpenses } from "./modules/controlCenter/automation";
 export { queueControlCenterIqInvoice, queueControlCenterIqCreate, queueControlCenterIqStatus, queueControlCenterIqReceipt, queueControlCenterIqDeposit, queueControlCenterWhatsapp, queueControlCenterTelegram } from "./modules/controlCenter/automation";
 export {
