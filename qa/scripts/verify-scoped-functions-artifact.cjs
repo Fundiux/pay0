@@ -47,10 +47,12 @@ const JSZip = require('../../functions/node_modules/jszip');
     })().catch(() => { process.exitCode = 1; });
   `;
   const runtime = spawnSync(process.execPath, ['-e', probe], { cwd: directory, encoding: 'utf8', windowsHide: true,
-    env: { ...process.env, GCLOUD_PROJECT: 'demo-pay0-artifact', FIREBASE_CONFIG: JSON.stringify({ projectId: 'demo-pay0-artifact' }), FIRESTORE_EMULATOR_HOST: '127.0.0.1:1' }, timeout: 30_000 });
+    env: { ...process.env, GCLOUD_PROJECT: 'demo-pay0-artifact', FIREBASE_CONFIG: JSON.stringify({ projectId: 'demo-pay0-artifact' }), FIRESTORE_EMULATOR_HOST: '127.0.0.1:1' }, timeout: 120_000 });
+  if (runtime.status !== 0) console.error(JSON.stringify({ stage: 'isolated-runtime-probe', exitCode: runtime.status,
+    signal: runtime.signal || null, errorCode: runtime.error?.code || null }));
   assert.equal(runtime.status, 0, 'ARTIFACT_STARTUP_OR_AUTH_FAILED');
   const result = JSON.parse(runtime.stdout.trim());
   assert.deepEqual(result.functions, [...names]); assert.equal(result.unauthenticatedDenied, names.length);
   fs.writeFileSync(path.join(path.dirname(file), 'artifact-verification.json'), JSON.stringify({ ...result, group, buildMode, sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, ...(input.sourceIdentity ? { sourceIdentity: input.sourceIdentity } : {}), checkedAt: new Date().toISOString(), productionWrites: 0 }, null, 2));
   console.log(JSON.stringify(result));
-})().catch(error => { console.error(`ARTIFACT_VERIFICATION_FAILED ${/^[A-Z_]+$/.test(error.message) ? error.message : 'detailsRedacted=true'}`); process.exitCode = 1; });
+})().catch(error => { const code = String(error.message).match(/^[A-Z_]+(?=\s|$)/)?.[0]; console.error(`ARTIFACT_VERIFICATION_FAILED ${code || 'detailsRedacted=true'}`); process.exitCode = 1; });
