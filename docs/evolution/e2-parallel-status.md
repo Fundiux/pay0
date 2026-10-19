@@ -11,7 +11,7 @@ archivos modificados y no se escribe sobre ellos.
 | A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.3 publicado: chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Identidad/HTTP verificados; prueba funcional autenticada solicitada |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
 | C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX publicado, uso real pendiente. Comparaciones R2: 69 regresiones integradas, 40 de artefacto y startup PASS; input exacto 42f359f3 preparado sobre R1.3 vigente; autorización solicitada, no publicado |
-| D | Regla supervisada persistida y enlazada al Core | Candidato D1 sobre R2 21eba53: 61 regresiones, 20 emulador, startup343 y typecheck PASS. Gate OFF; D2 añade revisión humana en el panel existente y está en pruebas. Planificación de consultas D2 PASS con índices actuales, sin leer documentos. Sin endpoint nuevo ni UI de revisión publicada |
+| D | Regla supervisada persistida y enlazada al Core | D1 sobre R2 21eba53 probado; gate OFF. D2 con builds frontend/Functions, 69 regresiones, siete pruebas de emulador y UI PASS. Integración pendiente sobre diagnostics 00002-pin: su ZIP no contiene tres módulos requeridos; el endpoint de aprobación todavía no existe. Planificación de consultas PASS sin leer documentos. No publicado |
 | E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores conservados en R1.3: backend 00008-des, SSR 00602-log y Hosting bf259a13a5d229c3; panel autenticado pendiente. Administración/MAT a335e195: build y runtime completos PASS con override QA documentado; preflight de dos endpoints ausentes PASS. Autorización específica solicitada; sin publicación |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
@@ -37,6 +37,7 @@ archivos modificados y no se escribe sobre ellos.
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
 | R2 reportes | Commit 9204e90 / ZIP 83baf34e | Pruebas y startup PASS; input 42f359f3 y preflight de sólo chat sobre R1.3 documentados. Autorización específica pendiente; sin publicación |
 | D1 sobre R2 | Commit 21eba53 / ZIP 55c5c45a | Candidato local probado, no listo para desplegar: requiere R2 vigente, nuevo endpoint, configuración explícita del gate y revisión humana accesible |
+| D2 revisión humana | Diagnóstico base 00002-pin / ZIP c50f0d7a | LOCAL_VALIDATED_INTEGRATION_PENDING. Builds, 69 regresiones y siete pruebas de emulador PASS; conserva la vista anterior ante backend legacy. Falta cerrar dependencias sobre su propia base y preparar publicación conjunta con revisión D1; no usar el ZIP de chat ni copiar callables completo |
 
 ## Integración de interfaz sin pérdida funcional
 
