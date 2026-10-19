@@ -1,6 +1,6 @@
 # D1 — propuesta de creador acotado para revisión supervisada
 
-Estado: **RUNNER_LOCAL_VERIFIED_INPUT_PENDING**. Se implementó un runner específico con pruebas simuladas; no se creó un endpoint, modificó IAM, activó el gate ni ejecutó un despliegue. No se modificó `create-recovery-review-functions.mjs` ni sus inputs. Falta una baseline propia aprobada y no se generó un input ejecutable.
+Estado: **PLAN_ONLY_REQUIRES_EXPLICIT_CREATE_AND_IAM_APPROVAL**. Se implementó un runner específico con pruebas simuladas y se prepararon baseline, input y plan locales. No se creó un endpoint, modificó IAM, activó el gate ni ejecutó un despliegue. No se modificó `create-recovery-review-functions.mjs` ni sus inputs.
 
 ## Artefacto y dependencia
 
@@ -41,4 +41,20 @@ Rollback del creador: revalidar que función/servicio/IAM coinciden con su journ
 
 `node --test qa/scripts/supervised-learning-review-create.test.mjs qa/scripts/e1-operations-create-plan.test.mjs`: **48/48 PASS**, cero skips, de las cuales 27 corresponden al runner nuevo y 21 preservan el creador E. Prueban otro destino/duplicados, pins del ZIP/commit/patch, destino existente, deriva del padre, gate ON/ambiguo, secretos no revisados, política inesperada, ruta fuera de privado, junction, alteración de proof antes de parsearlo, identidad de proof distinta, pins del plan, concurrencia, respuesta incierta sin recreación, reanudación y rollback limitado. El caso positivo demuestra también que no se exige un recurso chat R2 para crear review apagado. Toda la red está sustituida por IO de prueba.
 
-Pendiente: congelar baseline propia, vincular proofs de identidad al input, preparar/revisar el plan exacto y obtener autorización específica de creación/IAM. Tener runner probado no equivale a endpoint creado ni gate habilitado. La actualización posterior de chat D1 mantiene su precondición R2 y su aprobación independiente. No se preparó un input de producción durante este trabajo.
+## Paquete local preparado
+
+Directorio privado: `.firebase/modular-release/learning-review-create/`. La captura de sólo lectura confirmó padre `getcontrolcenterengineering-00001-cij`, destino ausente, cero operaciones activas, cero referencias/volúmenes de secretos y gate ausente. El plan nuevo fija el gate del destino a `false` y sólo propone `allUsers` como invoker del nuevo servicio.
+
+| Archivo | SHA256 |
+| --- | --- |
+| `baseline.json` | `47e6cc83296861d0de288089a15263c83d72646b162ad5a3e682f419ac513866` |
+| `input.json` | `098b11dffbc8927b624e1733a359444a294e483c9bf4efffe4ebfd7bb1467143` |
+| `create-plan.json` | `a58252a5f24835cbaf49133074bd3800d02b4dc780e4b9e6202e362dec327bbb` |
+| `startup-verification.json` | `2e0f275f5c8fc3355726cb4525d1eb616e575c81ff9120a8a70077a1160e8c3b` |
+| `behavior-verification.json` | `b593f7994752c1fa6084e1c2b41ebc2547edacb74a1b1b7ee7fde5566c4b4e8d` |
+
+Los dos proofs son envolturas locales de identidad de la evidencia original ya revisada; no afirman una nueva ejecución de sus pruebas. Conservan todos los resultados y añaden `sourceIdentity` e `identityBinding`, con ruta y SHA del original. Antes de producirlas se verificaron el ZIP exacto `55c5…`, los originals `bfbe97c878bdb92c961aef09de70637e6a08fa9c5d04285e5ae30206438a04a2` (startup) y `61789ae49b7a5a6f02643a5402c80e42220e92e2df68e504707d12d4439541e4` (comportamiento). Los originales no se modificaron.
+
+`local-validation.json` confirma regeneración idéntica del plan, hashes de proofs, identidad, scope único y gate OFF; cero llamadas de red y escrituras productivas durante esa validación. La captura de metadatos anterior sí usó GET autenticados, sin leer documentos. El ejecutor repetirá las verificaciones de recursos y ausencia justo antes de cualquier mutación.
+
+Pendiente: revisión final del paquete y autorización específica de creación/IAM. Tener runner y plan no equivale a endpoint creado ni gate habilitado. La actualización posterior de chat D1 mantiene su precondición R2 y su aprobación independiente.
