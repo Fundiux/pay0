@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import NuevaSolicitudModal from "@/components/NuevaSolicitudModal";
 import Modal from "@/components/Modal";
+import { GlobalLoadingProvider } from "@/components/GlobalLoading";
 import dynamic from "next/dynamic";
 
 import { MatBalanceCard } from "@/components/mat/MatBalanceCard";
@@ -305,7 +306,7 @@ export default function MatUsuariosPage() {
       {hasMatchingSession && <NuevaSolicitudModal open={newSolicitudOpen} onClose={() => setNewSolicitudOpen(false)} />}
       {hasMatchingSession && returnOpen && <Modal open title="Solicitar retorno" ariaLabel="Retorno desde MAT" onClose={() => setReturnOpen(false)} widthClassName="max-w-7xl">
         <p className="mb-3 text-sm text-slate-400">Operación con tu sesión PAY0. Selecciona la fuente, revisa la cotización y confirma en el formulario existente.</p>
-        <CanonicalDispersionPage />
+        <GlobalLoadingProvider><CanonicalDispersionPage /></GlobalLoadingProvider>
       </Modal>}
     </MatShell>
   );
