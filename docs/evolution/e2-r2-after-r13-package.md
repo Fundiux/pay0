@@ -1,6 +1,6 @@
 # R2 de reportes sobre R1.3 — candidato local
 
-Estado: **LOCAL_CANDIDATE_TESTED_NOT_DEPLOY_READY**. Este paquete no se ha publicado y no contiene un input de ejecución. Requiere que R1.3 se publique y se capture después una base vigente de `sendAgent007Message`, además de autorización independiente para estos bytes.
+Estado: **PREPARADO PARA AUTORIZACIÓN; NO PUBLICADO**. R1.3 ya está publicado y el input exacto de R2 se preparó sobre su base capturada. El preflight de solo lectura aprobó Function, servicio e IAM. Estos bytes requieren autorización independiente y comprobar su vigencia nuevamente al ejecutar.
 
 ## Alcance y procedencia
 
@@ -31,8 +31,17 @@ Las dos fallas de `phase6-hardening` también se reprodujeron en el ZIP R1.3 bas
 
 Sólo se prepara `sendAgent007Message`. No se incluye `delegateHugoVoiceTurn`, el gateway ni su imagen; este paquete por sí solo no habilita R2 en voz. La comparación usa dos lecturas canónicas independientes y lo declara; no ofrece una instantánea transaccional entre periodos. La descarga PDF/XLSX conserva el reporte del periodo principal; la comparación se presenta en el texto, no como una tabla comparativa dentro del archivo.
 
-El siguiente paso es capturar la Function, revisión, fuente, configuración e IAM realmente vigentes después de R1.3 y preparar un input source-only contra esa identidad. La reversión debe restaurar ese ZIP R1.3 y conservar su configuración; no borra conversaciones ni auditoría. Cualquier cambio concurrente invalida el preflight. No se realizaron llamadas a modelos, proveedores, acciones financieras ni escrituras productivas.
+La base publicada es `sendagent007message-00019-qon`, fuente R1.3 `0b17cfc6423ab4005c6d30087e50aa90ddd5e748` y ZIP `a33ed9badb033a48a061a38ddb8295fd20f0aa5dedb567b37e423e7c37d68496`. La reversión debe restaurar ese ZIP y conservar su configuración; no borra conversaciones ni auditoría. El executor preserva la fuente anterior antes de modificarla. Cualquier cambio concurrente invalida el preflight. No se realizaron llamadas a modelos, proveedores, acciones financieras ni escrituras productivas.
 
-La preparación privada `r2-after-r13/readiness/` contiene un template con `readyForExecution:false` y baseline nula; no es un input ejecutable. La receta `prepare-input-after-r13.mjs` exige confirmación explícita del backend R1.3, baseline/hash y ZIP actual capturados, y comprueba sus identidades antes de generar un input nuevo. No se adelantó la captura productiva ni se autorizó R2 mediante la autorización de R1.3.
+La preparación privada `r2-after-r13/readiness/` conserva el template histórico no ejecutable. Tras confirmación expresa de R1.3, `prepare-input-after-r13.mjs` verificó baseline, ZIP actual, patch versionado y prueba de artefacto antes de crear `r2-after-r13/release-after-r13/input.json`. La autorización de R1.3 no autoriza R2.
 
 Evidencia privada: `candidate-final/manifest.json`, `regressions.log`, `typecheck.log`, `emulator-final.log` y los resultados separados de `phase6` en el directorio padre.
+
+## Input exacto y preflight
+
+- Input SHA256: `42f359f360b5fd6b800c535195d494c067fb530da8d6fab225d65d7b6eaaf326`.
+- Baseline: `r13-chat-report/published-baseline.json`, SHA256 `f114b8732d6eb8cd6197b976ff51af7b31a5f06cf50b4765fdaf96c1c29b6e76`; `published-source.zip` coincide con la base R1.3.
+- Identidad: `PRODUCTION_OVERLAY_V1`, `sourceTree:null`, `sourceCommit` y `patchCommit` `9204e901efc3a1c49eb0e2d71e6d6a5f2c93307b`, grupo `hugo-chat-overlay`, modo `NORMAL`, destino exclusivo `sendAgent007Message`.
+- `assertArtifactProof`, alcance y `sourceOnlyPatch`: PASS. No incluye D, voz, nuevas Functions ni cambios de configuración.
+- Preflight `2026-10-19T20:51:54.062Z`: PASS; Function, servicio e IAM coincidieron con la captura. Evidencia privada `release-after-r13/preflight.json`. Solo GET autenticados de metadatos; cero escrituras productivas.
+- Esta comprobación puntual debe repetirse al ejecutar; no sustituye autorización ni valida una conversación financiera real.
