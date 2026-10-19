@@ -12,13 +12,13 @@ archivos modificados y no se escribe sobre ellos.
 | B | Chat/voz y entrega de resultados | XLSX en paquete UI; R1.3 añade selección de formato y PDF solicitados por el usuario. Voz y gateway conservan paquetes independientes |
 | C | Selección de cliente y reportes canónicos | R1.2 backend publicado; resuelve cliente autorizado antes del recorte, ambigüedad y ausencia no generan archivo. XLSX pendiente de interfaz |
 | D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador + 50 regresiones; aprobación/revocación y gate apagado; no publicado |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Backend exacto probado; interfaz mínima a334817 sobre producción c1738b4 compilada, runtime en verificación. CREATE independiente pasa 21 pruebas; no autorizado |
-| F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Ambos artefactos autorizados y publicados; configuración verificada, operación real pendiente |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Paquete independiente de proveedores a334817: build, runtime, cinco rutas y componentes PASS, autorización solicitada. Revisión administrativa endurecida y compilada, aún sin publicar |
+| F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Descargas autorizadas ligadas a generación Storage exacta | GHK1 publicado; usuario confirma descargas en solicitudes y pagos, sin certificar otros módulos |
-| I | MAT reutiliza formularios y dominio existente | Tres overlays de aislamiento y sesión firmada publicados; configuración y rechazo sin scope verificados, flujo Telegram real pendiente |
+| I | MAT reutiliza formularios y dominio existente | Guardas publicadas; fix del provider integrado y compilado con cinco pruebas UI. Formularios requieren sesión Firebase coincidente; no hay puente sólo Telegram |
 | J | Transporte Telegram y sesiones MAT | Autenticación HMAC real probada con claves sintéticas; sin envíos reales. Consumidor QR sigue sin localizar |
-| K | Homologación de artefactos y evaluación Next 16 aislada | Next 16 probado aisladamente; verificación transitiva offline añadida como QA independiente. Producción permanece en Next 15 |
+| K | Homologación de artefactos y evaluación Next 16 aislada | Cierre transitivo y aislamiento real de módulos integrados; 28 pruebas del nuevo control PASS. Next 16 sigue aislado; producción permanece en Next 15 |
 
 ## Paquetes y estados de entrega
 
@@ -29,7 +29,7 @@ archivos modificados y no se escribe sobre ellos.
 | R1.2 | Commit f1ee85b; chat 00018-sav | Reporte en texto confirmado con nombre simple; flujo completo incompleto y XLSX aún sin publicar. R1.3 corrige conversación/puntuación y añade formato PDF |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
-| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | Integrado, compilado y probado conjuntamente; autorización productiva pendiente |
+| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | Paquete exacto y preflight fresco PASS; autorización específica solicitada, independiente de R1.3 |
 | E/F/I mínimo | Revisión administrativa y MAT de `a280e72` | Contrato preparado; no equivale a ZIP desplegable ni a publicación |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |

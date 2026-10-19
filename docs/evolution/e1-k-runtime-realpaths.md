@@ -17,4 +17,6 @@ Pruebas: **28/28 PASS** entre publicación, reanudación y filesystem. Incluyen 
 
 Runtime E preservado: PASS, 42,194 entradas, 6,159 directorios, cero enlaces y cero incidencias. Evidencia privada: `output/reuse-review/e-runtime-realpaths.json`. Revisión de rutas únicamente; no se arrancó ni cambió el runtime durante ese escaneo. Los árboles Functions con junctions de test no se inspeccionaron.
 
+Runtime R1 preservado, tras finalizar la instalación y detener el probe anterior: PASS, 42,195 entradas, 6,159 directorios, cero enlaces y cero incidencias. Evidencia privada: `output/reuse-review/r1-runtime-realpaths.json`. No se ejecutaron ni reescribieron fuentes durante el escaneo.
+
 Sin nuevas dependencias, instalaciones, builds ni publicación. El check no sustituye la verificación de bytes del ZIP, el cierre transitivo, las pruebas de navegador ni una auditoría de vulnerabilidades.
