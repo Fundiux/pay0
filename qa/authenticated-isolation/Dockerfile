@@ -1,6 +1,6 @@
 FROM node:22.18.0-bookworm-slim
 
-ARG FIREBASE_TOOLS_VERSION=13.35.1
+ARG FIREBASE_TOOLS_VERSION=15.3.1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -13,6 +13,7 @@ RUN npm ci --ignore-scripts \
 COPY . .
 
 RUN node qa/authenticated-isolation/instrument-functions-config.cjs /opt/pay0/functions/node_modules/firebase-functions \
+ && node qa/authenticated-isolation/verify-firebase-tools-runtime.mjs \
  && printf 'PAY0_FIREBASE_WEB_API_KEY=qa-emulator-only\n' > functions/.env.local && npm --prefix functions run build \
  && npx playwright install --with-deps chromium \
  && chmod -R a+rX /opt/ms-playwright \
