@@ -1,5 +1,5 @@
 {
-  "functions": { "source": "functions" },
+  "functions": { "source": "qa/authenticated-functions-entry" },
   "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
   "emulators": { "auth": { "host": "127.0.0.1", "port": 9099 }, "functions": { "host": "127.0.0.1", "port": 5001 }, "firestore": { "host": "127.0.0.1", "port": 8080 }, "ui": { "enabled": false }, "singleProjectMode": false }
 }
