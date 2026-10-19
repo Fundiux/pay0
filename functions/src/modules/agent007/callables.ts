@@ -423,7 +423,15 @@ export const correctAgent007LearningExperience = onCall(
 export const listAgent007LearningDiagnostics = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
-    const { rootId } = await actor(request);
+    const { uid, rootId } = await actor(request);
+    const input = request.data == null ? {} : request.data;
+    if (typeof input !== "object" || Array.isArray(input)) throw new HttpsError("invalid-argument", "Parámetros de diagnóstico inválidos.");
+    if (input.mode !== undefined) {
+      if (input.mode !== "SUPERVISED_REVIEW" || Object.keys(input).some(key => !["mode", "candidateCursor", "ruleCursor", "focusedRuleId", "limit"].includes(key)))
+        throw new HttpsError("invalid-argument", "Modo de diagnóstico inválido.");
+      return { ok: true, mode: "SUPERVISED_REVIEW", ...await new FirestoreHugoLearningRuleStore(db).readReview({ uid, rootId }, input) };
+    }
+    if (Object.keys(input).length) throw new HttpsError("invalid-argument", "Parámetros de diagnóstico inválidos.");
     const records = await hugoLearning.list(rootId, 100);
     return { ok: true, boundedTo: 100, experiences: records.map(row => ({ id: row.experienceId, domain: row.domain, taskType: row.taskType, state: row.state,
       revision: row.revision, createdAt: row.createdAt, provenance: row.quality.provenance, outcome: row.quality.outcome, feedback: row.quality.feedback,

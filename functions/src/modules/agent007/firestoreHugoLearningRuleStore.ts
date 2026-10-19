@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { Firestore, Transaction } from "firebase-admin/firestore";
+import { FieldPath, Firestore, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
-import { LearningEventType, LearningExperience, LearningQuery, trainingEligibility } from "./hugoCore/learningContract";
+import { LearningEventType, LearningExperience, LearningQuery, trainingEligibility, validReference } from "./hugoCore/learningContract";
 import { buildVerifiedExperience } from "./hugoCore/experienceBuilder";
 import { decideWithoutModel, measureLearningEffect, proposeRuleCandidates } from "./hugoCore/learningEvaluation";
 import { selectLearningExperiences } from "./hugoCore/learningStore";
@@ -14,6 +14,7 @@ const valid = (value: string) => /^[A-Za-z0-9_-]{1,160}$/.test(value);
 const iso = (value: any) => value?.toDate?.()?.toISOString?.() || (typeof value === "string" ? value : "");
 const behavior = "VERIFY_DOCUMENT_BEFORE_DECISION";
 type Identity = { uid: string; rootId: string };
+export type SupervisedReviewQuery = { candidateCursor?: string; ruleCursor?: string; focusedRuleId?: string; limit?: number };
 type Rule = { schemaVersion: "supervised-rule-v1"; ruleId: string; rootId: string; status: "ACTIVE" | "INVALIDATED";
   version: number; domain: string; taskType: string; features: Record<string, string>; behavior: string;
   supportingIds: string[]; supportingRevisions: Record<string, number>; approvedBy: string; approvedAt: string; expiresAt: string;
@@ -22,6 +23,95 @@ type Rule = { schemaVersion: "supervised-rule-v1"; ruleId: string; rootId: strin
 /** Optional advice only. No business mutation, model call or financial rule is executed. */
 export class FirestoreHugoLearningRuleStore {
   constructor(private readonly db: Firestore) {}
+  async readReview(identity: Identity, input: SupervisedReviewQuery) {
+    const limit = input.limit === undefined ? 20 : input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 25) throw new HttpsError("invalid-argument", "Límite de revisión inválido.");
+    if (input.focusedRuleId !== undefined && (typeof input.focusedRuleId !== "string" || !valid(input.focusedRuleId)))
+      throw new HttpsError("invalid-argument", "Regla de revisión inválida.");
+    const cursorId = (value: string | undefined, kind: "CANDIDATES" | "RULES") => {
+      if (value === undefined) return null;
+      try {
+        if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,512}$/.test(value)) throw Error();
+        const row = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+        if (Object.keys(row).sort().join(",") !== "id,kind,rootId,v" || row.v !== 1 || row.kind !== kind ||
+          row.rootId !== identity.rootId || typeof row.id !== "string" || !valid(row.id)) throw Error();
+        return row.id as string;
+      } catch { throw new HttpsError("invalid-argument", "Página de revisión inválida."); }
+    };
+    const candidateId = cursorId(input.candidateCursor, "CANDIDATES"), ruleId = cursorId(input.ruleCursor, "RULES");
+    const nextCursor = (id: string, kind: "CANDIDATES" | "RULES") => Buffer.from(JSON.stringify({ v: 1, kind, rootId: identity.rootId, id })).toString("base64url");
+    return this.db.runTransaction(async tx => {
+      await this.actor(tx, identity);
+      const candidates = this.db.collection("agent007LearningExperiences").where("rootId", "==", identity.rootId)
+        .where("domain", "==", "SOLICITUDES").where("taskType", "==", "REASON").orderBy(FieldPath.documentId());
+      const rules = this.db.collection("agent007LearnedRules").where("rootId", "==", identity.rootId)
+        .where("schemaVersion", "==", "supervised-rule-v1").orderBy(FieldPath.documentId());
+      const candidateStart = candidateId ? await tx.get(this.db.collection("agent007LearningExperiences").doc(candidateId)) : null;
+      const ruleStart = ruleId ? await tx.get(this.db.collection("agent007LearnedRules").doc(ruleId)) : null;
+      if (candidateStart && (!candidateStart.exists || candidateStart.get("rootId") !== identity.rootId ||
+        candidateStart.get("domain") !== "SOLICITUDES" || candidateStart.get("taskType") !== "REASON"))
+        throw new HttpsError("invalid-argument", "Página de experiencias fuera de ámbito.");
+      if (ruleStart && (!ruleStart.exists || ruleStart.get("rootId") !== identity.rootId || ruleStart.get("schemaVersion") !== "supervised-rule-v1"))
+        throw new HttpsError("invalid-argument", "Página de reglas fuera de ámbito.");
+      const [candidatePage, rulePage, focused] = await Promise.all([
+        tx.get((candidateStart ? candidates.startAfter(candidateStart) : candidates).limit(limit + 1)),
+        tx.get((ruleStart ? rules.startAfter(ruleStart) : rules).limit(limit + 1)),
+        input.focusedRuleId ? tx.get(this.db.collection("agent007LearnedRules").doc(input.focusedRuleId)) : Promise.resolve(null),
+      ]);
+      if (focused && (!focused.exists || focused.get("rootId") !== identity.rootId || focused.get("schemaVersion") !== "supervised-rule-v1"))
+        throw new HttpsError("not-found", "Regla no encontrada.");
+      const candidateRows = [];
+      const code = (value: unknown) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,79}$/.test(value) ? value : "UNKNOWN";
+      const id = (value: unknown) => typeof value === "string" && valid(value) ? value : "";
+      const date = (value: unknown) => typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value)) ? value : null;
+      const object = (value: any) => !!value && typeof value === "object" && !Array.isArray(value);
+      const reference = (value: any) => object(value) && typeof value.id === "string" && typeof value.system === "string" &&
+        typeof value.kind === "string" && validReference(value, identity.rootId);
+      const references = (value: any, nonempty = false) => Array.isArray(value) && value.length <= 20 &&
+        (!nonempty || value.length > 0) && value.every(reference);
+      for (const doc of candidatePage.docs.slice(0, limit)) {
+        const row = doc.data() as LearningExperience;
+        const reasons: string[] = [];
+        const complete = row.schemaVersion === "hugo-learning-v1" && row.experienceId === doc.id && Number.isInteger(row.revision) && row.revision > 0 &&
+          object(row.input) && code(row.input.intent) !== "UNKNOWN" && code(row.input.questionClass) !== "UNKNOWN" &&
+          object(row.features) && object(row.quality) && references(row.contextReferences) && references(row.entityReferences, true) && references(row.evidenceReferences, true) &&
+          Array.isArray(row.protectedCaseIds) && row.protectedCaseIds.length <= 100 && row.protectedCaseIds.every(value => !!id(value)) &&
+          object(row.createdFrom) && !!id(row.createdFrom.memoryId) && !!date(row.createdAt) &&
+          object(row.correction) && references(row.correction?.evidenceReferences, true) && !!id(row.correction?.actorUid) && !!date(row.correction?.correctedAt) &&
+          object(row.humanDecision) && reference(row.humanDecision?.reference) && !!id(row.humanDecision?.actorUid) && !!date(row.humanDecision?.decidedAt) &&
+          object(row.outcome) && reference(row.outcome?.reference) && !!date(row.outcome?.occurredAt);
+        if (!complete) reasons.push("INCOMPLETE_RECORD");
+        else if (!trainingEligibility(row).eligible) reasons.push("QUALITY_INELIGIBLE");
+        if (row.state !== "VERIFIED" || row.features?.entityType !== "SOLICITUD" || row.features?.status !== "PENDIENTE" ||
+          row.features?.issueCode !== "DOCUMENT_MISSING" || row.expectedBehavior !== behavior || row.correction?.correctedBehavior !== behavior)
+          reasons.push("OUTSIDE_SUPERVISED_CONTRACT");
+        if (!reasons.length) try { await this.verifyEvidence(tx, row); } catch (error) {
+          if (error instanceof HttpsError && ["failed-precondition", "not-found"].includes(error.code)) reasons.push("EVIDENCE_NOT_VERIFIED");
+          else throw error;
+        }
+        candidateRows.push({ id: doc.id, revision: Number.isInteger(row.revision) ? row.revision : 0, state: code(row.state), split: code(row.split), domain: code(row.domain), taskType: code(row.taskType),
+          features: { entityType: code(row.features?.entityType), status: code(row.features?.status), issueCode: code(row.features?.issueCode) },
+          expectedBehavior: code(row.expectedBehavior), correctionCode: code(row.correction?.reasonCode),
+          outcomeType: code(row.outcome?.type), outcomeAt: date(row.outcome?.occurredAt),
+          evidence: (Array.isArray(row.evidenceReferences) ? row.evidenceReferences : []).filter(ref => ref && ref.rootId === identity.rootId && id(ref.id) && code(ref.system) !== "UNKNOWN" && code(ref.kind) !== "UNKNOWN").slice(0, 20)
+            .map(ref => ({ system: ref.system, kind: ref.kind, id: ref.id })),
+          selectionEligible: reasons.length === 0, reasons });
+      }
+      const ruleView = (doc: { id: string; data(): any }) => {
+        const row = doc.data() as Rule;
+        const supportingIds = (Array.isArray(row.supportingIds) ? row.supportingIds : []).filter(value => id(value)).slice(0, 5);
+        return { id: doc.id, status: code(row.status), version: Number.isInteger(row.version) ? row.version : 0, behavior: code(row.behavior),
+          supportingIds, supportingRevisions: Object.fromEntries(supportingIds.map(key => [key, Number.isInteger(row.supportingRevisions?.[key]) ? row.supportingRevisions[key] : 0])), approvedBy: id(row.approvedBy),
+          approvedAt: date(row.approvedAt), expiresAt: date(row.expiresAt), expired: !date(row.expiresAt) || Date.parse(row.expiresAt) <= Date.now(),
+          invalidatedBy: row.invalidatedBy ? code(row.invalidatedBy) : null };
+      };
+      return { gateStatus: { diagnosticsLocalFlag: enabled(), review: "UNKNOWN" as const, chat: "UNKNOWN" as const }, queriedAt: new Date().toISOString(), limit, candidates: candidateRows,
+        nextCandidateCursor: candidatePage.size > limit ? nextCursor(candidatePage.docs[limit - 1].id, "CANDIDATES") : null,
+        rules: rulePage.docs.slice(0, limit).map(ruleView),
+        nextRuleCursor: rulePage.size > limit ? nextCursor(rulePage.docs[limit - 1].id, "RULES") : null,
+        focusedRule: focused ? ruleView(focused) : null };
+    });
+  }
   private async actor(tx: Transaction, identity: Identity) {
     if (!valid(identity.uid) || !valid(identity.rootId)) throw new HttpsError("unauthenticated", "Sesión inválida.");
     const user = (await tx.get(this.db.doc(`users/${identity.uid}`))).data();

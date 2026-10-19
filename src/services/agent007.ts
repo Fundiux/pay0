@@ -42,6 +42,24 @@ export async function linkAgent007VerifiedExperience(observationId: string, deci
 export type HugoLearningDiagnostic = { id: string; domain: string; taskType: string; state: string; revision: number; createdAt: string; provenance: string; outcome: string; feedback: string; trainingEligible: boolean; reasons: string[]; memoryId: string; traceId: string | null; correctionCode: string | null; outcomeType: string | null; supersededById?: string | null };
 export type HugoLearningEvent = { eventId: string; type: string; at: string; actorUid: string | null; references: Array<{ system: string; kind: string; id: string }>; metadata: Record<string, string | number | boolean | null> };
 export async function listAgent007LearningDiagnostics() { return (await httpsCallable<Record<string, never>, { ok: boolean; boundedTo: number; experiences: HugoLearningDiagnostic[] }>(functions, "listAgent007LearningDiagnostics")({})).data; }
+export type HugoSupervisedCandidate = { id: string; revision: number; state: string; split: string; domain: string; taskType: string;
+  features: { entityType: string; status: string; issueCode: string }; expectedBehavior: string; correctionCode: string;
+  outcomeType: string; outcomeAt: string | null; evidence: Array<{ system: string; kind: string; id: string }>;
+  selectionEligible: boolean; reasons: string[] };
+export type HugoSupervisedRule = { id: string; status: string; version: number; behavior: string; supportingIds: string[];
+  supportingRevisions: Record<string, number>; approvedBy: string; approvedAt: string | null; expiresAt: string | null;
+  expired: boolean; invalidatedBy: string | null };
+export type HugoSupervisedReview = { ok: boolean; mode: "SUPERVISED_REVIEW";
+  gateStatus: { diagnosticsLocalFlag: boolean; review: "UNKNOWN"; chat: "UNKNOWN" }; queriedAt: string; limit: number;
+  candidates: HugoSupervisedCandidate[]; nextCandidateCursor: string | null; rules: HugoSupervisedRule[];
+  nextRuleCursor: string | null; focusedRule: HugoSupervisedRule | null };
+export async function listAgent007SupervisedReview(input: { candidateCursor?: string; ruleCursor?: string; focusedRuleId?: string; limit?: number } = {}) {
+  const data = (await httpsCallable<typeof input & { mode: "SUPERVISED_REVIEW" }, HugoSupervisedReview>(functions, "listAgent007LearningDiagnostics")({ ...input, mode: "SUPERVISED_REVIEW" })).data;
+  if (data?.mode !== "SUPERVISED_REVIEW" || !Array.isArray(data.candidates) || !Array.isArray(data.rules) ||
+    !data.gateStatus || typeof data.gateStatus.diagnosticsLocalFlag !== "boolean" || data.gateStatus.review !== "UNKNOWN" || data.gateStatus.chat !== "UNKNOWN")
+    throw new Error("La revisión supervisada no está disponible en este servidor. El diagnóstico anterior sigue disponible.");
+  return data;
+}
 export async function listAgent007LearningLineage(experienceId: string) { return (await httpsCallable<{ experienceId: string }, { ok: boolean; events: HugoLearningEvent[] }>(functions, "listAgent007LearningLineage")({ experienceId })).data; }
 export async function supersedeAgent007LearningExperience(experienceId: string, replacementId: string) {
   return (await httpsCallable<{ experienceId: string; replacementId: string }, { ok: boolean; id: string; state: string; revision: number; supersededById: string }>(functions, "supersedeAgent007LearningExperience")({ experienceId, replacementId })).data;
