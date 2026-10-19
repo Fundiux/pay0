@@ -48,3 +48,11 @@ La verificación independiente del `2026-10-19T22:24:20.044Z` confirmó el ZIP `
 Evidencia privada: `release/deployment.jsonl`, `post-publication-verification.json`, `published-source.zip` y `published-baseline.json`. La baseline tiene SHA256 `3e9d6b42b230c23b0b64d89b1559ccf3ac4895a1bac108744feed077e1795d27` y sirve de punto de partida para una futura integración D1; no autoriza otro despliegue.
 
 Se solicitó al usuario repetir la petición natural, elegir PDF y comprobar el saludo. Hasta recibir esa verificación, no se declara COMPLETED.
+
+## Resultado funcional recibido y siguiente corrección
+
+El usuario confirmó que la segunda secuencia de petición natural → año → PDF muestra la tarjeta y el control de descarga. No confirmó que descargara el archivo ni probó el saludo. Después, al pedir otro cliente con una frase abreviada, recibió nuevamente el reporte anterior; la petición de otro cliente sin nombre salió del flujo de reportes y empezó a solicitar un folio. La capacidad sigue incompleta, sin cierre funcional.
+
+La incidencia se reprodujo contra el ZIP R1.4 exacto en un emulador aislado: tras un reporte sintético del cliente A, la petición abreviada del cliente B devolvió las filas de A. El emulador terminó y se cerró; evidencia privada `tmp/r15-baseline-client-switch.log`. La prueba nueva usa únicamente datos sintéticos y no conserva importes productivos.
+
+R1.5 se prepara para cambiar o aclarar el cliente dentro del contexto de reportes, conservando periodo/formato sin pedir folio. No está autorizado ni publicado. La corrección no usará mayúsculas como criterio para truncar nombres que contengan meses; ante una forma ambigua pedirá aclaración antes de ejecutar.
