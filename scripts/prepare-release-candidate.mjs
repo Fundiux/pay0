@@ -10,6 +10,8 @@ export const CANDIDATE_GATES = [
   ['technology-negative-tests', 'node', ['--test', 'qa/scripts/technology-baseline.test.mjs']],
   ['frontend-dependencies', 'npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']],
   ['functions-dependencies', 'npm', ['ci', '--prefix', 'functions', '--prefer-offline', '--no-audit', '--no-fund']],
+  ['capability-registration', 'node', ['scripts/verify-capability-registration.mjs']],
+  ['capability-negative-tests', 'node', ['--test', 'qa/scripts/capability-registration.test.mjs']],
   ['authorization-policy', 'node', ['scripts/verify-authorization-policy.mjs']],
   ['authorization-contract', 'node', ['--test', 'qa/scripts/remediation-document-policy-specialization.test.mjs', 'qa/scripts/remediation-restrictions.test.cjs']],
   ['candidate-contract', 'node', ['--test', 'qa/scripts/release-candidate.test.mjs', 'qa/scripts/modular-integration.test.mjs', 'qa/scripts/scoped-deployment.test.mjs']],
