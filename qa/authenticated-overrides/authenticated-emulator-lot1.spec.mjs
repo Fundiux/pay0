@@ -2,6 +2,34 @@ import { test, expect } from "@playwright/test";
 
 const client = { id: "qa-client-001", name: "Cliente sintÃ©tico QA", razonSocial: "Cliente sintÃ©tico QA", active: true };
 
+const controlCenterSnapshot = {
+  id: "qa-control-center",
+  version: 1,
+  coverage: { complete: true, mode: "QA" },
+  summary: {
+    solicitudesActive: 0,
+    pagosCount: 0,
+    pagosAmount: 0,
+    pendingPagosAmount: 0,
+    invoicesIssued: 0,
+    criticalAlerts: 0,
+  },
+  pipeline: [],
+  health: {},
+  alerts: [],
+  daily: {},
+  generatedAt: "2026-01-31T00:00:00.000Z",
+};
+
+function assertControlCenterSnapshot(snapshot) {
+  const requiredSummary = ["solicitudesActive", "pagosCount", "pagosAmount", "pendingPagosAmount", "invoicesIssued", "criticalAlerts"];
+  if (!snapshot || !snapshot.summary || !requiredSummary.every((key) => typeof snapshot.summary[key] === "number") || !Array.isArray(snapshot.pipeline) || !snapshot.health || !Array.isArray(snapshot.alerts) || !snapshot.daily) {
+    throw new Error("QA_CONTROL_CENTER_FIXTURE_INVALID");
+  }
+}
+
+assertControlCenterSnapshot(controlCenterSnapshot);
+
 async function stubLocalCallables(page) {
   await page.route("http://127.0.0.1:5001/**", async (route) => {
     const operation = new URL(route.request().url()).pathname.split("/").pop();
@@ -14,7 +42,7 @@ async function stubLocalCallables(page) {
         truncated: false,
         automation: { iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false },
       }
-      : operation === "getControlCenterOverview" || operation === "refreshControlCenterOverview" ? { snapshot: { generatedAt: "2026-01-31T00:00:00.000Z", totals: {}, alerts: [] } }
+      : operation === "getControlCenterOverview" || operation === "refreshControlCenterOverview" ? { snapshot: controlCenterSnapshot }
       : operation === "getControlCenterAnalytics" ? {
         ok: true,
         from: "2026-01-01",
