@@ -2,13 +2,19 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 const { createRequire } = require('node:module');
 const ts = require('../../functions/node_modules/typescript');
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || !/^demo-pay0-e1-/.test(process.env.GCLOUD_PROJECT || '')) throw Error('Isolated demo emulator required');
-const admin = require('../../functions/node_modules/firebase-admin');
+const artifactDirectory = process.env.PAY0_CONFIG_ARTIFACT_DIR ? fs.realpathSync(process.env.PAY0_CONFIG_ARTIFACT_DIR) : null;
+if (artifactDirectory && !artifactDirectory.startsWith(path.resolve(__dirname, '../../.firebase/modular-release') + path.sep)) throw Error('Private exact artifact required');
+const uiRoot = path.resolve(process.env.PAY0_CONFIG_UI_ROOT || path.resolve(__dirname, '../..'));
+const artifactRequire = artifactDirectory ? createRequire(path.join(artifactDirectory, 'package.json')) : null;
+const admin = artifactRequire ? artifactRequire('firebase-admin') : require('../../functions/node_modules/firebase-admin');
 admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
-const exportsObject = {};
-const source = fs.readFileSync(path.resolve(__dirname, '../../functions/src/modules/paymentApplications/complementAutomation.ts'), 'utf8');
-const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
-new Function('require', 'exports', js)(createRequire(path.resolve(__dirname, '../../functions/lib/modules/paymentApplications/complementAutomation.js')), exportsObject);
+const exportsObject = artifactRequire ? artifactRequire('./lib/modules/paymentApplications/complementAutomation.js') : {};
+if (!artifactRequire) {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../functions/src/modules/paymentApplications/complementAutomation.ts'), 'utf8');
+  const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('require', 'exports', js)(createRequire(path.resolve(__dirname, '../../functions/lib/modules/paymentApplications/complementAutomation.js')), exportsObject);
+}
 const configure = exportsObject.configurePaymentComplementAutomation;
 async function run() {
   const rootId = 'e1-admin-root', ref = db.doc(`paymentComplementConfigs/${rootId}`);
@@ -50,18 +56,28 @@ async function run() {
     const payloads = [];
     await page.exposeFunction('qaConfigure', data => { payloads.push(data); return call('first', data); });
     await page.exposeFunction('qaRead', async () => ({ rows: [], truncated: false, automation: (await ref.get()).data() }));
-    await page.route('http://localhost/e1-admin', route => route.fulfill({ contentType: 'text/html', body: '<html><body><div id="root"></div></body></html>' }));
+    await page.route('**/*', route => route.request().url() === 'http://localhost/e1-admin'
+      ? route.fulfill({ contentType: 'text/html', body: '<html><body><div id="root"></div></body></html>' }) : route.abort());
     await page.goto('http://localhost/e1-admin');
     await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react')), 'umd/react.development.js') });
     await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react-dom')), 'umd/react-dom.development.js') });
-    const component = 'import * as React from "react";\n' + fs.readFileSync(path.resolve(__dirname, '../../src/components/control-center/PaymentComplementFollowup.tsx'), 'utf8');
+    const component = 'import * as React from "react";\n' + fs.readFileSync(path.join(uiRoot, 'src/components/control-center/PaymentComplementFollowup.tsx'), 'utf8');
     const compiled = ts.transpileModule(component, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-    await page.evaluate(code => {
+    const service = fs.readFileSync(path.join(uiRoot, 'src/services/paymentComplements.ts'), 'utf8');
+    const serviceCode = ts.transpileModule(service, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+    await page.evaluate(({code, serviceCode}) => {
       window.confirm = () => true;
-      const services = { listPaymentComplementFollowup: () => window.qaRead(), configurePaymentComplementAutomation: data => window.qaConfigure(data) };
+      const services = {};
+      new Function('require', 'exports', serviceCode)(name => {
+        if (name === '@/lib/firebaseClient') return { functions: {} };
+        if (name === 'firebase/functions') return { httpsCallable: (_functions, callable) => async data => ({ data:
+          callable === 'listPaymentComplementFollowup' ? await window.qaRead() :
+          callable === 'configurePaymentComplementAutomation' ? await window.qaConfigure(data) : (() => { throw Error('Unexpected callable'); })() }) };
+        throw Error('Unexpected service dependency');
+      }, services);
       const exports = {}; new Function('require', 'exports', code)(name => name === 'react' ? window.React : services, exports);
       window.ReactDOM.createRoot(document.getElementById('root')).render(window.React.createElement(exports.default));
-    }, compiled);
+    }, {code: compiled, serviceCode});
     await expect(page.getByRole('button', { name: 'Facturama: pausado · activar' })).toBeVisible();
     await call('second', { provider: 'FACTURAMA', enabled: true, confirmation: 'AUTORIZO_REP_AUTOMATICO' });
     await page.getByRole('button', { name: 'IQ · nuevas solicitudes: pausado · activar' }).click();
@@ -73,6 +89,6 @@ async function run() {
     await page.screenshot({ path: path.join(process.env.TEMP, 'admin-provider-patch.png'), fullPage: true });
   } finally { await browser.close(); }
   assert.equal((await db.collection('paymentComplementJobs').get()).size, 0, 'configuration test cannot enqueue or emit financial operations');
-  console.log(JSON.stringify({ result: 'PASS', persistence: 'REAL_ISOLATED_FIRESTORE_EMULATOR', concurrentProviderPatches: 2, auditRecords: audit.size, financialJobsCreated: 0 }));
+  console.log(JSON.stringify({ result: 'PASS', persistence: 'REAL_ISOLATED_FIRESTORE_EMULATOR', backendMode: artifactDirectory ? 'EXACT_COMPILED_ARTIFACT' : 'CURRENT_SOURCE_TRANSPILED', uiMode: process.env.PAY0_CONFIG_UI_ROOT ? 'EXPLICIT_SOURCE_ROOT' : 'CURRENT_SOURCE', realServiceWrapper: true, concurrentProviderPatches: 2, auditRecords: audit.size, financialJobsCreated: 0 }));
 }
 run().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => db.terminate());
