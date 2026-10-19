@@ -8,7 +8,9 @@ assert.match(process.env.PAY0_R14_ARCHIVE_SHA || '', /^[a-f0-9]{64}$/);
 assert.match(process.env.GCLOUD_PROJECT || '', /^demo-pay0-e1-/);
 assert.match(process.env.FIRESTORE_EMULATOR_HOST || '', /^127\.0\.0\.1:\d+$/);
 const runtime = path.join(directory, 'runtime');
-const bytes = fs.readFileSync(path.join(directory, 'chat-r14.zip'));
+const archiveName = process.env.PAY0_R14_ARCHIVE_FILE || 'chat-r14.zip';
+assert.equal(path.basename(archiveName), archiveName, 'ARCHIVE_BASENAME_REQUIRED');
+const bytes = fs.readFileSync(path.join(directory, archiveName));
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 assert.equal(sha(bytes), process.env.PAY0_R14_ARCHIVE_SHA, 'ARCHIVE_CHANGED');
 (async () => {
