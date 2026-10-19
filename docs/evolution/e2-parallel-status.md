@@ -10,9 +10,9 @@ archivos modificados y no se escribe sobre ellos.
 | --- | --- | --- |
 | A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.3 publicado: chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Identidad/HTTP verificados; prueba funcional autenticada solicitada |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
-| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX publicado, uso real pendiente. Comparaciones R2: 69 regresiones integradas, 40 de artefacto y startup PASS; prepara input sobre R1.3 vigente, no publicado |
-| D | Regla supervisada persistida y enlazada al Core | Candidato D1 sobre R2 21eba53: 61 regresiones, 20 emulador, startup343 y typecheck PASS. Gate OFF; sin endpoint nuevo ni UI de revisión publicada |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores conservados en R1.3: backend 00008-des, SSR 00602-log y Hosting bf259a13a5d229c3; panel autenticado pendiente. Administración/MAT a335e195: build PASS, prepara SSR; dos endpoints nuevos siguen ausentes y pendientes de autorización |
+| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX publicado, uso real pendiente. Comparaciones R2: 69 regresiones integradas, 40 de artefacto y startup PASS; input exacto 42f359f3 preparado sobre R1.3 vigente; autorización solicitada, no publicado |
+| D | Regla supervisada persistida y enlazada al Core | Candidato D1 sobre R2 21eba53: 61 regresiones, 20 emulador, startup343 y typecheck PASS. Gate OFF; D2 añade revisión humana en el panel existente y está en pruebas. Planificación de consultas D2 PASS con índices actuales, sin leer documentos. Sin endpoint nuevo ni UI de revisión publicada |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores conservados en R1.3: backend 00008-des, SSR 00602-log y Hosting bf259a13a5d229c3; panel autenticado pendiente. Administración/MAT a335e195: build y SSR preparado; validación completa en curso tras corregir montaje QA sin contexto de sesión. Dos endpoints nuevos siguen pendientes de autorización |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
@@ -31,11 +31,11 @@ archivos modificados y no se escribe sobre ellos.
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
 | E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; publicación original 00008-des / 00600-hak / 9f48281b2df63e67, conservada por la UI R1.3 actual. Interacción autenticada pendiente |
-| E/I UI siguiente | Fuente a335e195; build e6e68107 | Build de 47 páginas y pruebas UI PASS; aún sin SSR preparado ni publicación. Requiere endpoints administrativos nuevos y conservar R1.3 |
+| E/I UI siguiente | Fuente a335e195; build e6e68107 | Build de 47 páginas y pruebas UI PASS; SSR f0e47ff8 preparado, input a58f0480. La primera verificación completa falló en un montaje QA sin contexto de autenticación; no se presenta como PASS. Repetición con fixture trazable en curso; sin publicación. Requiere endpoints administrativos nuevos y conserva R1.3 |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
-| R2 reportes | Commit 9204e90 / ZIP 83baf34e | Pruebas y startup PASS; prepara paquete de sólo chat sobre la base R1.3 ya publicada. Sin publicación |
+| R2 reportes | Commit 9204e90 / ZIP 83baf34e | Pruebas y startup PASS; input 42f359f3 y preflight de sólo chat sobre R1.3 documentados. Autorización específica pendiente; sin publicación |
 | D1 sobre R2 | Commit 21eba53 / ZIP 55c5c45a | Candidato local probado, no listo para desplegar: requiere R2 vigente, nuevo endpoint, configuración explícita del gate y revisión humana accesible |
 
 ## Integración de interfaz sin pérdida funcional
