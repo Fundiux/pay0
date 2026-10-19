@@ -99,7 +99,10 @@ test('ambiguous client is resolved by the next answer without changing the saved
   assert.equal(resolved.reportExport.rows.length, 1); assert.equal(resolved.reportExport.rows[0].clienteId, 'pc');
   assert.equal(resolved.reportExport.dateFrom, dates.dateFrom); assert.equal(session.modelCalls(), 0);
   const changedMonth = await session.send('octubre');
-  assert.equal(changedMonth.reportExport, undefined); assert.match(changedMonth.text, /fecha/i);
+  assert.equal(changedMonth.reportExport, undefined); assert.match(changedMonth.text, /no encontré una coincidencia/i);
+  assert.equal(session.state().pendingEarningsReport.dateFrom, '2026-10-01');
+  assert.equal(session.state().pendingEarningsReport.dateTo, '2026-10-31');
+  assert.equal(session.modelCalls(), 0);
   resetRows();
 });
 

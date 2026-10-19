@@ -55,7 +55,7 @@ export function reportConversationResetReply(message: string): string | null {
   return null;
 }
 
-export function pendingReportRequest(message: string, previous?: PendingEarningsReport): { intent: boolean; request: EarningsReportToolInput | null; clientQuery?: string; includeCompensated?: boolean; format?: ReportFileFormat; periodMonth?: number } {
+export function pendingReportRequest(message: string, previous?: PendingEarningsReport): { intent: boolean; request: EarningsReportToolInput | null; clientQuery?: string; includeCompensated?: boolean; format?: ReportFileFormat; periodMonth?: number; needsClient?: boolean; ambiguousClientPeriod?: boolean } {
   const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (reportConversationResetReply(message)) return { intent: false, request: null };
   const repeatedReport = !!previous && /\b(reporte|informe)\b/i.test(text) && /\b(nuevamente|otra vez|de nuevo|repite|repetir|regenera)\b/i.test(text);
@@ -68,23 +68,32 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
     !/^(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?[.!?]?$/i.test(unquotedMessage) &&
     !/\b(hola|gracias|reporte|informe|formato|pdf|excel|xlsx|explica|explicame|consulta|quiero|puedes|ayuda|ayudame|nuevamente|otro tema)\b/i.test(text);
   const monthPattern = reportMonths.join("|");
-  const monthMatch = text.match(new RegExp(`\\b(?:del?\\s+mes\\s+de|en\\s+el\\s+mes\\s+de|del)\\s+(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?\\b`, "i")) ||
+  const otherClient = !!previous && /^(?:ahora\s+)?(?:(?:ocupo|necesito|quiero|dame)\s+(?:uno\s+|el\s+reporte\s+)?(?:de\s+|para\s+)?otro\s+cliente|(?:cambia|cambiar)\s+(?:a\s+)?otro\s+cliente)[.!?]?$/i.test(text.trim());
+  const declaredClient = previous ? message.match(/^\s*(.+?)\s+es\s+el\s+nombre\s+del\s+cliente\b/i)?.[1] : undefined;
+  const ellipticalClient = previous ? message.match(/^(?:ahora\s+)?(?:dame|quiero|necesito|ocupo)\s+(?:uno|otro|el\s+mismo|lo\s+mismo)\s+(?:de|del|para)\s+(.+)/i)?.[1] : undefined;
+  const ellipticalMonth = ellipticalClient && !/\bcliente\b/i.test(ellipticalClient) ? text.match(new RegExp(`\\s+de\\s+(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?[.!?]?$`, "i")) : null;
+  const monthMatch = text.match(new RegExp(`\\b(?:del?\\s+mes\\s+de|(?:en\\s+|todo\\s+)?el\\s+mes\\s+de|del)\\s+(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?\\b`, "i")) ||
+    (previous ? text.trim().match(new RegExp(`^(?:ahora\\s+)?(?:(?:quiero|dame|necesito|ocupo)\\s+)?(?:el\\s+)?(?:reporte|informe)\\s+de\\s+(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?[.!?]?$`, "i")) : null) ||
     text.trim().match(new RegExp(`^(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?[.!?]?$`, "i"));
+  const ambiguousClientPeriod = !!ellipticalMonth && !monthMatch;
   const periodMonth = monthMatch ? reportMonths.indexOf(monthMatch[1].toLowerCase()) + 1 : !initial ? previous?.periodMonth : undefined;
   const yearReply = !initial && previous?.periodMonth && previous.stage === "DATES" ? text.trim().match(/^(?:del?\s+)?(?:a[nñ]o\s+)?([1-9]\d{3})[.!?]?$/i) : null;
-  const periodYear = monthMatch?.[2] || yearReply?.[1];
-  const continuation = !!previous && !/\b(pagos?|solicitudes?|dispersiones?|otro tema|cambiando de tema)\b/i.test(text) &&
-    (plainClientName || repeatedReport || yearReply || pdf || xlsx || /\bdescarg\w*\b|\b\d{4}-\d{2}-\d{2}\b|\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|descarga|descargar|archivo)\b/i.test(text));
+  const contextualYear = !initial && previous?.dateFrom && previous.dateTo && previous.dateFrom.slice(0, 4) === previous.dateTo.slice(0, 4) ? previous.dateFrom.slice(0, 4) : undefined;
+  const periodYear = monthMatch?.[2] || yearReply?.[1] || (monthMatch ? contextualYear : undefined);
+  const continuation = !!previous && !/\b(pagos?|solicitudes?|dispersiones?|otro tema|cambiando de tema|explica|explicame|ayuda|ayudame)\b/i.test(text) &&
+    (plainClientName || repeatedReport || yearReply || otherClient || declaredClient || ellipticalClient || pdf || xlsx || monthMatch || /\bdescarg\w*\b|\b\d{4}-\d{2}-\d{2}\b|^(?:descarga|descargar|archivo)[.!?]?$/i.test(text));
   if (!initial && !continuation) return { intent: false, request: null };
-  const capturedName = (message.match(/\bcliente\s+(.+)/i)?.[1] || message.match(/\b(?:reporte|informe|resumen)\s+(?:de\s+)?(?:utilidades|ganancias|honorarios)\s+(?:de|para)\s+(.+)/i)?.[1])
+  const capturedName = (declaredClient || message.match(/\bcliente\s+(.+)/i)?.[1] || ellipticalClient?.replace(/^(?:el\s+)?cliente\s+/i, "") || message.match(/\b(?:reporte|informe|resumen)\s+(?:de\s+)?(?:utilidades|ganancias|honorarios)\s+(?:de|para)\s+(.+)/i)?.[1])
     ?.trim().replace(/^[\s\u0022\u0027\u201c\u201d\u00ab\u00bb]+|[\s\u0022\u0027\u201c\u201d\u00ab\u00bb?.!,;:]+$/g, "")
     .replace(/\s+\d{4}-\d{2}-\d{2}[\s\S]*$/, "")
     .replace(/\s+(?:y\s+)?(?:lo\s+)?(?:quiero\s+)?en\s+(?:formato\s+)?(?:pdf|excel|xlsx|xls)\b[\s\S]*$/i, "")
     .replace(/\s+del\s+(?:mes\s+de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?\s*$/i, "")
+    .replace(ellipticalMonth ? new RegExp(`\\s+de\\s+(${monthPattern})(?:\\s+(?:de\\s+)?[1-9]\\d{3})?[.!?]?$`, "i") : /$^/, "")
     .replace(/\s+(?:incluye|incluir|sin|con|no incluyas)\s+(?:las\s+)?compensadas\b[\s\S]*$/i, "")
     .replace(/\s+(?:del?|desde|entre|al)\s*$/i, "").trim().replace(/^[\s\u0022\u0027\u201c\u201d\u00ab\u00bb]+|[\s\u0022\u0027\u201c\u201d\u00ab\u00bb?.!,;:]+$/g, "");
   const name = capturedName && !/^(?:del?|por|para|en|entre|desde|con|sin|incluye)\b/i.test(capturedName) ? capturedName : undefined;
-  const clientQuery = name || (!initial && plainClientName && !explicitFormat && !/\b\d{4}-\d{2}-\d{2}\b/.test(text) ? unquotedMessage.replace(/[?.!,;]+$/, "") : !initial ? previous?.clientQuery : undefined);
+  const clientQuery = otherClient || ambiguousClientPeriod ? undefined : name || (!initial && plainClientName && !explicitFormat && !/\b\d{4}-\d{2}-\d{2}\b/.test(text) ? unquotedMessage.replace(/[?.!,;]+$/, "") : !initial ? previous?.clientQuery : undefined);
+  const needsClient = otherClient || ambiguousClientPeriod || (!initial && previous?.stage === "CLIENT" && !clientQuery);
   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
   const priorDates = !initial && previous?.dateFrom && previous.dateTo ? `${previous.dateFrom} ${previous.dateTo}` : "";
   const calendarDates = periodMonth && periodYear ? `${periodYear}-${String(periodMonth).padStart(2, "0")}-01 ${new Date(Date.UTC(Number(periodYear), periodMonth, 0)).toISOString().slice(0, 10)}` : "";
@@ -92,14 +101,14 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
   const exclude = /\b(sin|excluye|excluir|no incluyas)\s+(?:las\s+)?compensadas\b/i.test(text);
   const includeCompensated = exclude ? false : /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text) ? true : !initial && previous?.includeCompensated === true;
   const candidate = monthOnly ? null : earningsReportRequest(calendarDates && !dates.length ? `reporte utilidades clientes ${calendarDates}` : initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
-  if (!candidate) return { intent: true, request: null, includeCompensated, ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+  if (!candidate) return { intent: true, request: null, includeCompensated, ...(needsClient ? { needsClient: true } : {}), ...(ambiguousClientPeriod ? { ambiguousClientPeriod: true } : {}), ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
   candidate.includeCompensated = includeCompensated;
   if (!initial && !dates.length && previous?.compareDateFrom && previous.compareDateTo) {
     candidate.compareDateFrom = previous.compareDateFrom; candidate.compareDateTo = previous.compareDateTo;
   }
   if (format) candidate.format = format;
   if (clientQuery) candidate.clientQuery = clientQuery.slice(0, 120);
-  return { intent: true, request: candidate, includeCompensated, ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+  return { intent: true, request: candidate, includeCompensated, ...(needsClient ? { needsClient: true } : {}), ...(ambiguousClientPeriod ? { ambiguousClientPeriod: true } : {}), ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
 }
 
 export function claimsUnexecutedReport(text: string, message: string): boolean {

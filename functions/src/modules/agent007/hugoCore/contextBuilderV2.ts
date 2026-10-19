@@ -57,17 +57,20 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
     if (pendingRequest.format) parsedReportRequest.format = pendingRequest.format;
     if (/\bpdf\b/i.test(input.message) && /\b(excel|xlsx|xls)\b/i.test(input.message)) delete parsedReportRequest.format;
   }
-  const reportRequest = parsedReportRequest?.format ? parsedReportRequest : null;
+  const reportRequest = parsedReportRequest?.format && !pendingRequest.needsClient ? parsedReportRequest : null;
   if (!reportIntent) delete resolution.state.pendingEarningsReport;
   if (reportIntent) {
-    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
+    if (pendingRequest.needsClient) delete resolution.state.lastEarningsReport;
+    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: pendingRequest.needsClient ? "CLIENT" : parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
       includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
       ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
       ...(pendingRequest.periodMonth ? { periodMonth: pendingRequest.periodMonth } : {}),
       ...(parsedReportRequest?.compareDateFrom ? { compareDateFrom: parsedReportRequest.compareDateFrom, compareDateTo: parsedReportRequest.compareDateTo } : {}),
       ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
     resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
-    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : reportPeriodClarification(pendingRequest.periodMonth, pendingRequest.format);
+    resolution.clarification = pendingRequest.needsClient ? pendingRequest.ambiguousClientPeriod ?
+      `Confirma el nombre completo del cliente: el mes podría formar parte de su nombre. Para cambiar el periodo, indica «del mes de ...».${parsedReportRequest ? ` Conservo el periodo del ${parsedReportRequest.dateFrom} al ${parsedReportRequest.dateTo}` : " Conservo el periodo indicado"} y el formato anterior.` :
+      "¿Cuál es el nombre completo del otro cliente? Conservaré el periodo y formato indicados." : reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : reportPeriodClarification(pendingRequest.periodMonth, pendingRequest.format);
   }
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
