@@ -17,13 +17,15 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'hugo-reports': Object.freeze(['sendAgent007Message', 'delegateHugoVoiceTurn', 'getEarningsByClientReport']),
   'hugo-chat-overlay': Object.freeze(['sendAgent007Message']),
   'hugo-voice-overlay': Object.freeze(['delegateHugoVoiceTurn']),
+  'document-generation-overlay': Object.freeze(['getAuthorizedDocumentDownloadUrl']),
 });
+const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay']);
 export function validateSourceIdentity(identity, group, sourceCommit) {
   if (identity === undefined) {
-    assert.ok(!['hugo-chat-overlay', 'hugo-voice-overlay'].includes(group), 'OVERLAY_IDENTITY_REQUIRED');
+    assert.ok(!OVERLAY_GROUPS.includes(group), 'OVERLAY_IDENTITY_REQUIRED');
     return;
   }
-  assert.ok(['hugo-chat-overlay', 'hugo-voice-overlay'].includes(group), 'OVERLAY_GROUP_REQUIRED');
+  assert.ok(OVERLAY_GROUPS.includes(group), 'OVERLAY_GROUP_REQUIRED');
   assert.deepEqual(Object.keys(identity).sort(), ['baseArchiveSha256', 'mode', 'patchCommit', 'patchSha256'].sort(), 'OVERLAY_IDENTITY_FIELDS');
   assert.equal(identity.mode, 'PRODUCTION_OVERLAY_V1', 'OVERLAY_MODE');
   assert.equal(identity.patchCommit, sourceCommit, 'OVERLAY_PATCH_COMMIT');

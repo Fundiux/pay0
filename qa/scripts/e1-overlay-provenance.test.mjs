@@ -27,6 +27,15 @@ test('artifact proof binds exact overlay base, patch, function scope and archive
   assert.throws(() => validateSourceIdentity({ ...identity, extra: true }, input.group, input.sourceCommit));
 });
 
+test('document generation overlay pins only the authorized download endpoint', () => {
+  const documentInput = { ...input, group: 'document-generation-overlay', functions: ['getAuthorizedDocumentDownloadUrl'] };
+  const proof = { status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256,
+    functions: documentInput.functions, unauthenticatedDenied: 1, sourceIdentity: identity };
+  assertArtifactProof(documentInput, proof);
+  assert.throws(() => assertArtifactProof({ ...documentInput, functions: ['listOperationalDocuments'] }, proof), /FUNCTION_SCOPE/);
+  assert.throws(() => validateSourceIdentity(undefined, documentInput.group, input.sourceCommit), /OVERLAY_IDENTITY_REQUIRED/);
+});
+
 test('a later full-checkout update does not retain stale overlay provenance', () => {
   const baseline = { ...resource, labels: { owner: 'retained', 'pay0-source-mode': 'production-overlay-v1', 'pay0-base-source': 'a'.repeat(40), 'pay0-patch-sha': 'c'.repeat(40) } };
   const patch = sourceOnlyPatch(baseline, source, input.sourceCommit, input.archiveSha256, 'hugo-reports');
