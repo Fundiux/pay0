@@ -2,6 +2,13 @@
 
 Fecha de actualización: 2026-10-19. R1 publicado con autorización explícita; pendiente de verificación funcional autenticada.
 
+Continuación E2: R1.1 sustituyó chat por `sendagent007message-00017-nup` y voz
+por `delegatehugovoiceturn-00010-caj` tras el error de persistencia reportado.
+GHK1 publicó descarga por generación en `getauthorizeddocumentdownloadurl-00007-yah`.
+Ambos paquetes están `DEPLOYED_NOT_VERIFIED`: configuración y denegación sin
+autenticar comprobadas; pendientes los flujos autenticados. El estado global
+y las entregas adicionales se mantienen en [e2-parallel-status.md](e2-parallel-status.md).
+
 ## Referencia productiva observada
 
 La consulta autenticada de metadatos encontró Hosting `d446c05b06cc4941` y el gateway con 100 % de tráfico en `hugo-voice-gateway-canary-astra-7dfcd8a`. No se infiere que un commit local esté publicado por pertenecer a main.

@@ -1,7 +1,9 @@
 # GHK1 — paquete mínimo de descarga por generación
 
-Estado: preparado localmente; no publicado. Requiere autorización explícita
-para desplegar. El paquete afecta exclusivamente
+Estado: **DEPLOYED_NOT_VERIFIED**. Autorización explícita recibida; publicado
+el 2026-10-19 en `getauthorizeddocumentdownloadurl-00007-yah`. Fuente, hash,
+runtime e IAM verificados, sin reversión. La petición sin autenticar devuelve
+HTTP 401. Falta comprobar una descarga autorizada real. El paquete afecta exclusivamente
 `getAuthorizedDocumentDownloadUrl`; no incluye gateway, interfaz, reglas ni
 otros endpoints.
 
@@ -54,8 +56,8 @@ una generación específica, evitando que una sobrescritura de la ruta cambie
 el documento de una URL ya entregada. No se cambian políticas de acceso,
 metadata documental, estados financieros, environment, secretos ni IAM.
 
-No se ejecutó una descarga productiva ni se comprobó una nueva revisión
-publicada. Si se autoriza el despliegue, el ejecutor debe volver a verificar
+No se ejecutó una descarga autenticada productiva. Para cualquier nueva
+publicación, el ejecutor debe volver a verificar
 que la revisión/fuente actual coincidan con el baseline y preservar el archivo
 original para rollback. Un fallo de esa comparación impide reutilizar este
 paquete sin reconciliar la nueva fuente.

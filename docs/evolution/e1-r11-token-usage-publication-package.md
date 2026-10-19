@@ -1,6 +1,8 @@
 # R1.1 — corrección de persistencia de métricas de María
 
-Estado: **PREPARED_NOT_DEPLOYED**. Requiere autorización nueva para los bytes indicados. No se ha ejecutado publicación ni escritura productiva.
+Estado: **DEPLOYED_NOT_VERIFIED**. Autorización específica recibida y publicación ejecutada el 2026-10-19. Revisión activa de chat: `sendagent007message-00017-nup`; revisión de voz: `delegatehugovoiceturn-00010-caj`. Fuente, hash, runtime e IAM verificados; ambas rechazan peticiones sin autenticar con HTTP 401. Falta repetir el flujo autenticado que producía INTERNAL.
+
+No hubo reversión. Un primer preflight terminó sin cambios porque la copia de rollback ya estaba preparada en la ruta que el ejecutor reserva. Se verificó su hash, se conservó como evidencia y se reintentó el mismo input autorizado. Los bytes publicados no cambiaron.
 
 ## Causa y alcance
 
