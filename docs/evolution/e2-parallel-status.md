@@ -9,13 +9,13 @@ archivos modificados y no se escribe sobre ellos.
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
 | A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 asignado sin detener otros frentes |
-| B | Chat/voz y entrega de resultados | XLSX en paquete UI; R1.3 añade selección de formato y PDF solicitados por el usuario. Voz y gateway conservan paquetes independientes |
-| C | Selección de cliente y reportes canónicos | R1.2 backend publicado; resuelve cliente autorizado antes del recorte, ambigüedad y ausencia no generan archivo. XLSX pendiente de interfaz |
+| B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
+| C | Selección de cliente y reportes canónicos | Reporte real R1.2 confirmado parcialmente; R1.3 añade formato PDF/XLSX y continuidad corregida. PDF de siete páginas validado con datos sintéticos, aún sin publicar |
 | D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador + 50 regresiones; aprobación/revocación y gate apagado; no publicado |
 | E | Revisión administrativa previa y ajustes concurrentes de proveedores | Paquete independiente de proveedores a334817: build, runtime, cinco rutas y componentes PASS, autorización solicitada. Revisión administrativa endurecida y compilada, aún sin publicar |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
-| H | Descargas autorizadas ligadas a generación Storage exacta | GHK1 publicado; usuario confirma descargas en solicitudes y pagos, sin certificar otros módulos |
+| H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
 | I | MAT reutiliza formularios y dominio existente | Guardas publicadas; fix del provider integrado y compilado con cinco pruebas UI. Formularios requieren sesión Firebase coincidente; no hay puente sólo Telegram |
 | J | Transporte Telegram y sesiones MAT | Autenticación HMAC real probada con claves sintéticas; sin envíos reales. Consumidor QR sigue sin localizar |
 | K | Homologación de artefactos y evaluación Next 16 aislada | Cierre transitivo y aislamiento real de módulos integrados; 28 pruebas del nuevo control PASS. Next 16 sigue aislado; producción permanece en Next 15 |
