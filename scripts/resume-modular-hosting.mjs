@@ -6,9 +6,9 @@ import { gzipSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { PROJECT, digest, getMetadata, tokenInMemory } from './capture-production-baseline.mjs';
 import { check, privateFile, sha, validateBaseline, assertFreshBaseline, assertHostingConfigPreserved } from './deploy-modular-hosting.mjs';
-import { createApi, assertRuntimeProof, assertSsrReady, assertOnlyTagAdded, assertTagPresent, releaseConfig, tagRequest, assertV1Metadata } from './deploy-modular-hosting-execute.mjs';
+import { createApi, assertRuntimeProof, assertSsrReady, assertOnlyTagAdded, assertTagPresent, releaseConfig, assertV1Metadata } from './deploy-modular-hosting-execute.mjs';
 
-export { tagRequest, assertV1Metadata };
+export { assertV1Metadata };
 
 const NAME = 'ssrpay0system';
 const RUN = 'https://run.googleapis.com/v1/projects/pay-0-system/locations/us-central1/services/ssrpay0system';
@@ -16,6 +16,25 @@ const HOSTING = 'https://firebasehosting.googleapis.com/v1beta1/';
 const row = state => state.functions[NAME];
 const latest = state => state.hosting.releases[0].version;
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+// Cloud Run resourceVersion is an opaque concurrency token, not an identifier.
+// Keep this recovery adapter independent of the original, pinned executor.
+export function tagRequest(before, revision, tag) {
+  assert.equal(before.apiVersion, 'serving.knative.dev/v1', 'V1_API');
+  assert.equal(before.kind, 'Service', 'V1_KIND');
+  assert.equal(before.metadata?.name, NAME, 'V1_SERVICE');
+  assert.ok(['751158244178', PROJECT].includes(before.metadata.namespace), 'V1_PROJECT');
+  const resourceVersion = before.metadata.resourceVersion;
+  assert.ok(typeof resourceVersion === 'string' && resourceVersion.length > 0
+    && resourceVersion.length <= 1024 && !/[\u0000-\u001f\u007f-\u009f]/u.test(resourceVersion), 'V1_RESOURCE_VERSION');
+  assert.equal(before.status?.latestReadyRevisionName, revision, 'V1_READY_REVISION');
+  assert.equal(before.status?.latestCreatedRevisionName, revision, 'V1_CREATED_REVISION');
+  assert.match(tag, /^fh-[a-f0-9]{8,64}$/);
+  assert.ok(!(before.spec.traffic || []).some(t => t.tag === tag), 'TAG_ALREADY_EXISTS');
+  const body = structuredClone(before);
+  delete body.status;
+  body.spec.traffic = [...(body.spec.traffic || []), { revisionName: revision, tag }];
+  return body;
+}
 function durableWrite(file, value, flags = 'w') {
   const descriptor = fs.openSync(file, flags, 0o600);
   try { fs.writeFileSync(descriptor, value); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
