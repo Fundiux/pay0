@@ -114,3 +114,13 @@ test('ambiguous or invalid report dates ask for a range before accessing data or
     assert.equal(queries, before);
   }
 });
+
+test('explicit exclusion of compensated operations is not treated as inclusion', async () => {
+  for (const phrase of ['no incluir compensadas', 'no incluye las compensadas', 'sin compensadas', 'excluir compensadas']) {
+    const parsed = earningsReportRequest(`Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19, ${phrase}`);
+    assert.equal(parsed.includeCompensated, false);
+    const result = await router().execute({ name: 'getEarningsByClientReport', input: parsed });
+    assert.equal(result.data.summary.totalEarningsAmount, 37.45);
+    assert.match(formatVoicePlatformResult('getEarningsByClientReport', result.data), /compensadas excluidas/);
+  }
+});

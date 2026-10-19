@@ -22,7 +22,8 @@ export function earningsReportRequest(message: string): EarningsReportToolInput 
   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
   // Relative or ambiguous periods require clarification, never silently all-time.
   if (dates.length !== 2) return null;
-  const includeCompensated = /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text);
+  const excludeCompensated = /\b(sin|excluye|excluir)\s+(?:las\s+)?compensadas\b|\bno\s+(?:incluyas|incluya|incluye|incluir)\s+(?:las\s+)?compensadas\b/i.test(text);
+  const includeCompensated = !excludeCompensated && /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text);
   const input = { dateFrom: dates[0], dateTo: dates[1], limit: 5000, includeCompensated };
   try { validateEarningsReportInput(input); } catch { return null; }
   return input;
