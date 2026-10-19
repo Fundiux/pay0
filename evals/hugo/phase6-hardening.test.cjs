@@ -74,6 +74,24 @@ test('quality eligibility never implies internal or external training permission
   assert.equal(internalTrainingAuthorization(reviewed).approved, true); assert.equal(externalProviderAuthorization(reviewed).approved, false);
 });
 
+test('revoked evidence or protected revisions cannot retain a cached training authorization', () => {
+  const record = { ...verified('revoked-governance'), governance: { use: 'TRAINING_ELIGIBLE_INTERNAL', externalProvider: 'APPROVED', reviewedBy: 'human', reviewedAt: at(5) } };
+  assert.equal(externalProviderAuthorization(record).approved, true);
+  const revoked = [
+    { ...record, split: 'HOLDOUT' },
+    { ...record, protectedCaseIds: ['protected-case'] },
+    { ...record, supersededById: 'new-revision' },
+    { ...record, state: 'REJECTED' },
+    { ...record, outcome: { ...record.outcome, verified: false } },
+    { ...record, evidenceReferences: [{ ...record.evidenceReferences[0], rootId: 'foreign-root' }] },
+  ];
+  for (const revision of revoked) {
+    assert.equal(revision.trainingEligibility.eligible, true, 'fixture intentionally keeps stale cached eligibility');
+    assert.deepEqual(internalTrainingAuthorization(revision), { approved: false, reason: 'QUALITY_INELIGIBLE' });
+    assert.deepEqual(externalProviderAuthorization(revision), { approved: false, reason: 'QUALITY_INELIGIBLE' });
+  }
+});
+
 test('structured claims require real scoped evidence and cannot contradict current facts', () => {
   const scope = { evidenceIds: ['fact_s61003'], entityFacts: [{ id: 'S61003', status: 'PENDIENTE' }], experienceIds: ['learning_duplicate-document'], allowedActions: [], rootAggregateComplete: false };
   const good = { answer: 'Verificar la versión.', claims: [{ text: 'La solicitud está pendiente.', evidenceIds: ['fact_s61003'], entityId: 'S61003', field: 'status', value: 'PENDIENTE' }],
