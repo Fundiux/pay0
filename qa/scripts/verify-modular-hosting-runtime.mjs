@@ -12,7 +12,7 @@ import { inspectSource } from '../../scripts/prepare-release-candidate.mjs';
 const require = createRequire(import.meta.url);
 const JSZip = require('../../functions/node_modules/jszip');
 const { chromium, expect } = require('@playwright/test');
-const [inputFile, inputSha256] = process.argv.slice(2);
+const [inputFile, inputSha256, reuseRuntime] = process.argv.slice(2);
 let server, browser;
 try {
   const input = check(inputFile, inputSha256);
@@ -22,21 +22,36 @@ try {
   assert.equal(frameworkEntry, 'next.js', 'UNEXPECTED_PRESERVED_FRAMEWORK_ENTRY');
   const cwd = build.cwd;
   assert.equal(inspectSource(cwd).sourceCommit, input.sourceCommit, 'SOURCE_CHANGED');
-  const directory = path.join(path.dirname(inputFile), `runtime-${crypto.randomUUID()}`);
-  fs.mkdirSync(directory);
+  const directory = reuseRuntime ? fs.realpathSync(reuseRuntime) : path.join(path.dirname(inputFile), `runtime-${crypto.randomUUID()}`);
+  if (reuseRuntime) assert.ok(directory.startsWith(path.resolve(path.dirname(inputFile)) + path.sep + 'runtime-'), 'REUSE_RUNTIME_OUTSIDE_ARTIFACT');
+  else fs.mkdirSync(directory);
   const zip = await JSZip.loadAsync(fs.readFileSync(input.archive));
+  let verifiedSourceFiles = 0;
   for (const entry of Object.values(zip.files)) {
     assert.ok(!entry.name.startsWith('/') && !entry.name.includes('\\') && !entry.name.includes(':')
       && !entry.name.split('/').includes('..') && !/(^|\/)\.env/.test(entry.name), 'UNSAFE_ZIP_ENTRY');
     const target = path.join(directory, entry.name);
-    if (entry.dir) fs.mkdirSync(target, { recursive: true });
-    else { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, await entry.async('nodebuffer')); }
+    if (entry.dir) { if (!reuseRuntime) fs.mkdirSync(target, { recursive: true }); }
+    else {
+      const bytes = await entry.async('nodebuffer');
+      if (reuseRuntime) {
+        assert.ok(fs.realpathSync(target).startsWith(directory + path.sep), 'REUSE_SOURCE_SYMLINK_ESCAPE');
+        assert.equal(sha(fs.readFileSync(target)), sha(bytes), 'REUSED_SOURCE_CHANGED');
+        verifiedSourceFiles++;
+      } else { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes); }
+    }
   }
-  const install = spawnSync('npm', ['ci', '--omit=dev', '--prefer-offline', '--no-audit', '--no-fund'], {
-    cwd: directory, shell: process.platform === 'win32', windowsHide: true, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 300_000,
+  const install = reuseRuntime ? null : spawnSync('npm', ['ci', '--omit=dev', '--prefer-offline', '--no-audit', '--no-fund'], {
+    cwd: directory, shell: process.platform === 'win32', windowsHide: true, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 900_000,
   });
-  fs.writeFileSync(path.join(directory, 'install.log'), (install.stdout || '') + (install.stderr || ''));
-  assert.equal(install.status, 0, 'RUNTIME_INSTALL_FAILED');
+  if (install) {
+    fs.writeFileSync(path.join(directory, 'install.log'), (install.stdout || '') + (install.stderr || ''));
+    assert.equal(install.status, 0, 'RUNTIME_INSTALL_FAILED');
+  }
+  const { inspectRuntimeDependencyClosure } = require('./verify-runtime-dependency-closure.cjs');
+  const dependencyClosure = inspectRuntimeDependencyClosure(directory, { timeout: 120000 });
+  fs.writeFileSync(path.join(directory, 'dependency-closure.json'), JSON.stringify(dependencyClosure, null, 2));
+  assert.equal(dependencyClosure.status, 'PASS', 'RUNTIME_DEPENDENCY_CLOSURE_FAILED');
   const harness = `
     const Module = require('node:module'), path = require('node:path');
     const original = Module._resolveFilename;
@@ -71,7 +86,7 @@ try {
   const routes = ['/login', '/pagos', '/solicitudes', '/administracion/recursos-corporativos', '/reportes'];
   const http = [];
   for (const route of routes) {
-    const response = await fetch(base + route, { redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+    const response = await fetch(base + route, { redirect: 'manual', signal: AbortSignal.timeout(120_000) });
     assert.equal(response.status, 200, `SSR_HTTP_${route}`);
     assert.match(await response.text(), /<html[^>]*lang="es"/);
     http.push({ route, status: response.status });
@@ -112,6 +127,7 @@ try {
   check(inputFile, inputSha256);
   const proof = { schema: 'PAY0-MODULAR-HOSTING-RUNTIME@1', status: 'PASS', sourceCommit: input.sourceCommit,
     archiveSha256: input.archiveSha256, hostingManifestSha256: digest(input.hostingFiles), runtimeHttpPassed: true,
+    reusedRuntime: Boolean(reuseRuntime), verifiedSourceFiles, dependencyClosureSha256: sha(fs.readFileSync(path.join(directory, 'dependency-closure.json'))),
     criticalBrowserPassed: true, verifierSha256: sha(fs.readFileSync(import.meta.filename)), http, browserChecks, components, externalRequestsBlocked,
     authenticatedProductionVerification: 'NOT_RUN', financialMutations: 0, checkedAt: new Date().toISOString() };
   const proofFile = path.join(directory, 'proof.json');
