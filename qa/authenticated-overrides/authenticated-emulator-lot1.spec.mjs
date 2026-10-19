@@ -30,6 +30,17 @@ function assertControlCenterSnapshot(snapshot) {
 
 assertControlCenterSnapshot(controlCenterSnapshot);
 
+function assertReportsDependenciesFixture() {
+  const engineering = { modules: [], assignees: [] };
+  const observations = { observations: [] };
+  const traces = { traces: [] };
+  if (!Array.isArray(engineering.modules) || !Array.isArray(engineering.assignees) || !Array.isArray(observations.observations) || !Array.isArray(traces.traces)) {
+    throw new Error("QA_REPORTES_DEPENDENCIES_FIXTURE_INVALID");
+  }
+}
+
+assertReportsDependenciesFixture();
+
 async function stubLocalCallables(page) {
   await page.route("http://127.0.0.1:5001/**", async (route) => {
     const operation = new URL(route.request().url()).pathname.split("/").pop();
@@ -61,6 +72,18 @@ async function stubLocalCallables(page) {
         incidentsTruncated: false,
         facetsTruncated: false,
       }
+      : operation === "getControlCenterEngineering" ? {
+        ok: true,
+        assignees: [],
+        assigneesTruncated: false,
+        schemaVersion: 1,
+        coverage: "CURATED",
+        modules: [],
+        release: { deployedVersion: null, certification: "UNKNOWN", productionVerification: "UNKNOWN", explanation: "QA synthetic fixture" },
+        engineeringAgents: { environment: "CODEX", names: [], explanation: "QA synthetic fixture" },
+      }
+      : operation === "listAgent007Observations" ? { ok: true, observations: [] }
+      : operation === "listAgent007Traces" ? { ok: true, traces: [], cursor: null, complete: true, scanned: 0 }
       : {};
     await route.fulfill({
       status: 200,
