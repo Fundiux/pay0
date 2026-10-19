@@ -1,6 +1,8 @@
 # R1.2 — Continuidad de reportes y descarga real
 
-Estado: **DEPLOYED_NOT_VERIFIED**. Publicado el 2026-10-19 con autorización específica en `sendagent007message-00018-sav`, sin reversión. Fuente, hash, runtime e IAM verificados; petición anónima HTTP 401 / UNAUTHENTICATED comprobada. Falta la consulta con sesión real. Commit de identidad: `f1ee85b3ec86310abcca573898a123f8021c2800`. La interfaz se prepara por separado desde su base publicada. Este backend es compatible con la interfaz actual y permite consultar el reporte real en texto; el botón XLSX no estará disponible hasta publicar la interfaz correspondiente.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado el 2026-10-19 con autorización específica en `sendagent007message-00018-sav`, sin reversión. Fuente, hash, runtime e IAM verificados; petición anónima HTTP 401 / UNAUTHENTICATED comprobada. El usuario confirmó una consulta real; falta validar el flujo completo corregido. Commit de identidad: `f1ee85b3ec86310abcca573898a123f8021c2800`. La interfaz se prepara por separado desde su base publicada. Este backend es compatible con la interfaz actual y permite consultar el reporte real en texto; el botón XLSX no estará disponible hasta publicar la interfaz correspondiente.
+
+Verificación posterior del usuario: el nombre simple del cliente produjo el reporte real. El flujo completo sigue fallando: comillas tipográficas/puntuación en la solicitud hicieron fallar la coincidencia; los saludos posteriores se interpretaron como respuestas de cliente y mantuvieron el bucle. Se solicitó además PDF y elección natural de formato. R1.3 corrige estos casos por separado; R1.2 no se declara COMPLETED. No se copian aquí importes ni datos financieros recibidos.
 
 ## Corrección
 

@@ -8,8 +8,8 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 backend publicado en 00018-sav; configuración y rechazo anónimo verificados, consulta real solicitada |
-| B | Chat/voz y entrega de resultados | R1.2 añade adjunto XLSX real en chat; pruebas de descarga y cancelación aprobadas. Voz y gateway conservan paquetes independientes |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 asignado sin detener otros frentes |
+| B | Chat/voz y entrega de resultados | XLSX en paquete UI; R1.3 añade selección de formato y PDF solicitados por el usuario. Voz y gateway conservan paquetes independientes |
 | C | Selección de cliente y reportes canónicos | R1.2 backend publicado; resuelve cliente autorizado antes del recorte, ambigüedad y ausencia no generan archivo. XLSX pendiente de interfaz |
 | D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador + 50 regresiones; aprobación/revocación y gate apagado; no publicado |
 | E | Revisión administrativa previa y ajustes concurrentes de proveedores | Backend exacto probado; interfaz mínima a334817 sobre producción c1738b4 compilada, runtime en verificación. CREATE independiente pasa 21 pruebas; no autorizado |
@@ -26,7 +26,7 @@ archivos modificados y no se escribe sobre ellos.
 | --- | --- | --- |
 | R1 | Revisiones chat 00016-zop y voz 00009-mez | Sustituido por R1.1 para corregir la incidencia reportada |
 | R1.1 | Parche `ac002ad`; chat 00017-nup, voz 00010-caj | Publicado; conversación aportada sin 500. R1 funcionalmente incompleto; voz no verificada |
-| R1.2 | Commit f1ee85b; chat 00018-sav | Backend DEPLOYED_NOT_VERIFIED; 21 pruebas de artefacto, 5 canónicas, emulador y builds PASS. Interfaz XLSX aún sin publicar |
+| R1.2 | Commit f1ee85b; chat 00018-sav | Reporte en texto confirmado con nombre simple; flujo completo incompleto y XLSX aún sin publicar. R1.3 corrige conversación/puntuación y añade formato PDF |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
 | E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | Integrado, compilado y probado conjuntamente; autorización productiva pendiente |
