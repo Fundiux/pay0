@@ -6,7 +6,7 @@ const { getEarningsByClientReportHandler } = require('../../functions/lib/module
 const { executeEarningsReportTool } = require(corePath + 'reportConnector');
 const { HugoToolRouter } = require(corePath + 'hugoCore/toolRouter');
 const { HugoConversationCore } = require(corePath + 'hugoCore/conversationCore');
-const { emptyConversationState } = require(corePath + 'hugoCore/conversationState');
+const { emptyConversationState, resolveConversationReference, advanceConversationState } = require(corePath + 'hugoCore/conversationState');
 const { formatVoicePlatformResult } = require(corePath + 'voiceDelegation');
 const { earningsReportRequest } = require(corePath + 'hugoCore/reportSemantics');
 
@@ -27,6 +27,7 @@ const rows = [
 const originalDoc = helpers.db.doc;
 const originalCollection = helpers.db.collection;
 let queries = 0;
+let afterQuery = null;
 before(() => {
   helpers.db.doc = path => {
     assert.match(path, /^(users|usuarios)\/[a-z-]+$/);
@@ -44,12 +45,12 @@ before(() => {
       },
       orderBy(field, direction) { assert.deepEqual([field, direction], ['createdAt', 'desc']); selected.sort((a, b) => b.createdAt - a.createdAt); return query; },
       limit(value) { selected = selected.slice(0, value); return query; },
-      async get() { return { docs: selected.map(row => ({ id: row.id, data: () => row })) }; },
+      async get() { const docs = selected.map(row => ({ id: row.id, data: () => row })); afterQuery?.(); return { docs }; },
     };
     return query;
   };
 });
-after(() => { helpers.db.doc = originalDoc; helpers.db.collection = originalCollection; });
+after(() => { helpers.db.doc = originalDoc; helpers.db.collection = originalCollection; afterQuery = null; });
 const input = { dateFrom: '2026-10-01', dateTo: '2026-10-19', limit: 5000 };
 const request = (uid = 'reviewer', data = input) => ({ auth: { uid, token: {} }, data });
 const identity = { uid: 'reviewer', rootId: 'fixture-root', role: 'superadmin' };
@@ -95,11 +96,70 @@ test('bounded reports disclose truncation and reject injected identity, malforme
   assert.equal(limited.completeness, 'PARTIAL');
   assert.equal(limited.data.mayBeTruncated, true);
   assert.match(formatVoicePlatformResult('getEarningsByClientReport', limited.data), /puede estar incompleto/);
-  for (const invalid of [{ rootId: 'foreign-root' }, { dateFrom: undefined }, { dateFrom: '2026-02-30' }, { dateTo: '2026-09-01' }, { limit: 5001 }, { limit: NaN }, { includeCompensated: 'true' }]) {
+  for (const invalid of [{ rootId: 'foreign-root' }, { dateFrom: undefined }, { dateFrom: '2026-02-30' }, { dateTo: '2026-09-01' }, { limit: 5001 }, { limit: NaN }, { includeCompensated: 'true' }, { compareDateFrom: '2026-09-01' }, { compareDateFrom: '2026-09-30', compareDateTo: '2026-09-01' }]) {
     await assert.rejects(() => router().execute({ name: 'getEarningsByClientReport', input: { ...input, ...invalid } }), /HUGO_TOOL_INVALID_INPUT/);
   }
   assert.equal(earningsReportRequest('reporte de utilidades por cliente del mes pasado'), null);
   assert.equal(earningsReportRequest('reporte de utilidades por cliente del 2026-02-30 al 2026-03-05'), null);
+});
+
+test('period comparison reads both canonical reports and labels the signed difference and truncation', async () => {
+  const parsed = earningsReportRequest('Compara el reporte de utilidades por cliente del 2026-10-01 al 2026-10-19 contra 2026-09-01 al 2026-09-30');
+  assert.equal(parsed.compareDateFrom, '2026-09-01');
+  assert.equal(earningsReportRequest('Compara el reporte de utilidades por cliente del 2026-10-01 al 2026-10-19 contra 2026-09-01 al 2026-09-30', { ...input, includeCompensated: true }).includeCompensated, false);
+  assert.equal(earningsReportRequest('Compáralo con 2026-09-01 al 2026-09-30', { ...input, includeCompensated: true }).includeCompensated, true);
+  const before = queries;
+  const result = await router().execute({ name: 'getEarningsByClientReport', input: parsed });
+  assert.equal(queries, before + 2);
+  assert.equal(result.data.summary.totalEarningsAmount, 37.45);
+  assert.equal(result.data.comparison.summary.totalEarningsAmount, 999);
+  assert.equal(result.data.comparison.difference.totalEarningsAmount, -961.55);
+  assert.equal(result.data.comparison.consistency, 'INDEPENDENT_READS');
+  assert.match(formatVoicePlatformResult('getEarningsByClientReport', result.data), /principal menos el comparado: -961\.55/);
+  const bounded = await router().execute({ name: 'getEarningsByClientReport', input: { ...parsed, limit: 1 } });
+  assert.equal(bounded.data.comparison.mayBeTruncated, true);
+  assert.match(formatVoicePlatformResult('getEarningsByClientReport', bounded.data), /periodo comparado.*incompleto/);
+});
+
+test('comparison refuses mixed authorization scopes if the profile changes between reads', async () => {
+  afterQuery = () => { afterQuery = null; users.reviewer.rootId = 'foreign-root'; };
+  try {
+    await assert.rejects(() => router().execute({ name: 'getEarningsByClientReport', input: { ...input, compareDateFrom: '2026-09-01', compareDateTo: '2026-09-30' } }), /HUGO_REPORT_FORBIDDEN_SCOPE_CHANGED/);
+  } finally { users.reviewer.rootId = 'fixture-root'; afterQuery = null; }
+});
+
+test('chained comparison keeps only fresh scoped filters and re-reads financial data', async () => {
+  const adapter = { generate: async () => { throw Error('UNEXPECTED_MODEL_CALL'); }, generateCanonical: async () => { throw Error('UNEXPECTED_MODEL_CALL'); } };
+  const core = new HugoConversationCore(router(), adapter);
+  const turn = (message, conversationState) => core.respond({ channel: 'WEB', identity, name: 'Fixture', conversationId: 'fixture-report-chain', message, conversationState, promptVersion: 'hugo-v2' });
+  const first = await turn('Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19');
+  assert.deepEqual(first.conversationState.lastEarningsReport.query, { ...input, includeCompensated: false });
+  assert.equal(JSON.stringify(first.conversationState).includes('summary'), false);
+  const original = rows[0].totalEarningsAmount;
+  try {
+    rows[0].totalEarningsAmount = 13.35;
+    const second = await turn('Compáralo con 2026-09-01 al 2026-09-30', first.conversationState);
+    assert.equal(second.toolsExecuted[0].data.summary.totalEarningsAmount, 38.45);
+    assert.equal(second.toolsExecuted[0].data.comparison.difference.totalEarningsAmount, -960.55);
+    assert.match(second.text, /38\.45/);
+    for (const context of [
+      { ...first.conversationState, rootId: 'foreign-root' },
+      { ...first.conversationState, turn: first.conversationState.turn + 5 },
+      { ...first.conversationState, lastEarningsReport: { ...first.conversationState.lastEarningsReport, resolvedAt: Date.now() - 31 * 60_000 } },
+      { ...first.conversationState, lastEarningsReport: { ...first.conversationState.lastEarningsReport, resolvedAt: Date.now() + 60_000 } },
+    ]) {
+      const before = queries;
+      const result = await turn('Compáralo con 2026-09-01 al 2026-09-30', context);
+      assert.equal(result.toolsExecuted.length, 0);
+      assert.equal(queries, before);
+      assert.match(result.text, /indica ambos periodos/);
+    }
+    const paymentContext = advanceConversationState(resolveConversationReference('P12345', first.conversationState, identity.rootId),
+      [{ system: 'PAY0', entityType: 'PAGO', entityId: 'fixture-payment', folio: 'P12345', rootId: identity.rootId, resolvedAt: Date.now(), resolvedTurn: 2, source: 'TEST', confidence: 1 }], identity.rootId);
+    assert.equal(paymentContext.lastEarningsReport, undefined);
+    const afterPayment = await turn('Compáralo con 2026-09-01 al 2026-09-30', paymentContext);
+    assert.equal(afterPayment.toolsExecuted.length, 0);
+  } finally { rows[0].totalEarningsAmount = original; }
 });
 
 test('ambiguous or invalid report dates ask for a range before accessing data or a model', async () => {

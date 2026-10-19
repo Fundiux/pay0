@@ -6,7 +6,7 @@ const core = '../../functions/lib/modules/agent007/hugoCore/';
 const { buildVerifiedExperience, withCorrection, buildDraftExperience, withOutcome } = require(core + 'experienceBuilder');
 const { selectLearningExperiences } = require(core + 'learningStore');
 const { applyHugoContextBudget, compactLearningExperience } = require(core + 'learningContextBudget');
-const { proposeRuleCandidates } = require(core + 'learningEvaluation');
+const { proposeRuleCandidates, decideWithoutModel, measureLearningEffect } = require(core + 'learningEvaluation');
 const { approveSyntheticRule, applyCompiledRule, invalidateCompiledRule } = require(core + 'compiledRule');
 const { internalTrainingAuthorization, externalProviderAuthorization } = require(core + 'learningGovernance');
 const { validateStructuredCandidate } = require(core + 'claimValidation');
@@ -65,6 +65,32 @@ test('two independent verified outcomes create one scoped candidate; approval an
   const invalidated = invalidateCompiledRule(rule, 'learning_contradiction');
   assert.equal(applyCompiledRule(invalidated, query), null); assert.equal(invalidated.invalidatedBy, 'learning_contradiction');
   assert.throws(() => approveSyntheticRule({ ...candidate, contradictoryIds: ['learning_contradiction'] }, rootId, 'reviewer', at(5)), /RULE_APPROVAL_UNSAFE/);
+});
+
+test('supervised correction improves a similar case and its approved rule can be deactivated', () => {
+  const examples = [verified('e1-correction-a'), verified('e1-correction-b')];
+  const task = { caseId: 'e1-similar-case', query, expectedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION', currentFacts: { documentStatus: 'UNVERIFIED' }, modelNecessity: 'MODEL_NOT_REQUIRED' };
+  const before = decideWithoutModel(task, []);
+  const selected = selectLearningExperiences(examples, query).selected;
+  const after = decideWithoutModel(task, selected);
+  const effect = measureLearningEffect({ task, experience: examples[0], before, after, modelAdapter: 'NONE', promptVersion: 'policy-v1', evidenceDigest: 'e1-controlled-evidence' });
+  assert.equal(before.behavior, 'ESCALATE_UNKNOWN');
+  assert.equal(after.behavior, task.expectedBehavior);
+  assert.equal(effect.improved, true);
+  assert.equal(effect.overgeneralized, false);
+  const [candidate] = proposeRuleCandidates(selected);
+  const active = approveSyntheticRule(candidate, rootId, 'supervised-reviewer', at(5));
+  assert.equal(active.approvedBy, 'supervised-reviewer');
+  assert.equal(applyCompiledRule(active, query), task.expectedBehavior);
+  const counterexample = verified('e1-reviewed-counterexample', 'CHECK_INVOICE_FIRST');
+  const [contradictedCandidate] = proposeRuleCandidates([...selected, counterexample]);
+  assert.ok(contradictedCandidate.contradictoryIds.includes(counterexample.experienceId));
+  assert.throws(() => approveSyntheticRule(contradictedCandidate, rootId, 'supervised-reviewer', at(5)), /RULE_APPROVAL_UNSAFE/);
+  const disabled = invalidateCompiledRule(active, counterexample.experienceId);
+  assert.equal(disabled.version, active.version + 1);
+  assert.equal(disabled.status, 'INVALIDATED');
+  assert.equal(applyCompiledRule(disabled, query), null);
+  assert.equal(applyCompiledRule(active, { ...query, rootId: 'foreign-root' }), null);
 });
 
 test('quality eligibility never implies internal or external training permission', () => {

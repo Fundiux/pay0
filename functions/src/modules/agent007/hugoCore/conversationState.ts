@@ -1,6 +1,9 @@
+import { EarningsReportToolInput, validateEarningsReportInput } from "./reportSemantics";
+
 export const CONVERSATION_STATE_VERSION = "conversation-state-v2";
+export type EarningsReportContext = { rootId: string; query: EarningsReportToolInput; resolvedAt: number; resolvedTurn: number };
 export type ConversationEntity = { system: "PAY0"; entityType: "SOLICITUD" | "PAGO"; entityId: string; folio: string; rootId: string; resolvedAt: number; resolvedTurn: number; source: string; confidence: number };
-export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null };
+export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; lastEarningsReport?: EarningsReportContext };
 export type ReferenceResolution = { folios: string[]; active: ConversationEntity | null; clarification: string | null; reason: string; intent: string; state: ConversationState };
 
 const distinct = <T>(items: T[]) => [...new Set(items)];
@@ -13,8 +16,15 @@ export function normalizeConversationState(raw: unknown, rootId: string, now = D
   const valid = (x: any): x is ConversationEntity => x?.rootId === rootId && x.system === "PAY0" && ["SOLICITUD", "PAGO"].includes(x.entityType) && typeof x.folio === "string" && /^[SP][A-Z0-9]{5,19}$/.test(x.folio) && Number.isFinite(x.resolvedAt) && x.resolvedAt <= now && Number.isInteger(x.resolvedTurn);
   const recentEntities = Array.isArray(row.recentEntities) ? row.recentEntities.filter(valid).slice(0, 6) : [];
   const activeEntity = valid(row.activeEntity) && fresh(row.activeEntity, { ...row, turn: Number(row.turn) || 0 } as ConversationState, now) ? row.activeEntity : null;
-  return { version: CONVERSATION_STATE_VERSION, rootId, turn: Math.min(Math.max(Number(row.turn) || 0, 0), 100000), activeEntity,
-    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null };
+  const turn = Math.min(Math.max(Number(row.turn) || 0, 0), 100000);
+  let lastEarningsReport: EarningsReportContext | undefined;
+  const report = row.lastEarningsReport;
+  if (report?.rootId === rootId && Number.isFinite(report.resolvedAt) && report.resolvedAt <= now && now - report.resolvedAt <= 30 * 60_000
+    && Number.isInteger(report.resolvedTurn) && report.resolvedTurn >= 0 && report.resolvedTurn <= turn && turn - report.resolvedTurn <= 4) {
+    try { validateEarningsReportInput(report.query); lastEarningsReport = { rootId, query: { ...report.query }, resolvedAt: report.resolvedAt, resolvedTurn: report.resolvedTurn }; } catch { /* Invalid saved filters cannot become tool inputs. */ }
+  }
+  return { version: CONVERSATION_STATE_VERSION, rootId, turn, activeEntity,
+    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(lastEarningsReport ? { lastEarningsReport } : {}) };
 }
 export function resolveConversationReference(message: string, previous: ConversationState, rootId: string, now = Date.now()): ReferenceResolution {
   const state = normalizeConversationState(previous, rootId, now);
@@ -43,8 +53,9 @@ export function resolveConversationReference(message: string, previous: Conversa
 export function advanceConversationState(resolution: ReferenceResolution, resolved: ConversationEntity[], rootId: string): ConversationState {
   const previous = resolution.state;
   const recent = [...resolved, ...previous.recentEntities.filter(old => !resolved.some(next => next.folio === old.folio))].slice(0, 6);
-  const activeEntity = resolution.reason === "TOPIC_SHIFT" || resolution.reason === "EXPLICIT_MULTIPLE" || resolution.reason === "COMPARISON_SET" || (resolution.reason === "EXPLICIT" && !resolved.length) ? null :
+  const activeEntity = resolution.reason === "TOPIC_SHIFT" || resolution.reason === "REPORT_QUERY" || resolution.reason === "EXPLICIT_MULTIPLE" || resolution.reason === "COMPARISON_SET" || (resolution.reason === "EXPLICIT" && !resolved.length) ? null :
     resolved.length === 1 ? resolved[0] : resolution.clarification ? null : resolution.active || previous.activeEntity;
   return { version: CONVERSATION_STATE_VERSION, rootId, turn: previous.turn + 1, activeEntity, recentEntities: recent,
-    pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent };
+    pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent,
+    ...(previous.lastEarningsReport && !resolved.length && !["TOPIC_SHIFT", "REPORT_QUERY", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { lastEarningsReport: previous.lastEarningsReport } : {}) };
 }

@@ -1,4 +1,4 @@
-import { earningsReportRequest, isEarningsReportQuestion } from "./reportSemantics";
+import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison } from "./reportSemantics";
 import { ToolRequest, ToolResult } from "./toolRouter";
 import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
 import { HugoDataStore } from "./dataStoreContract";
@@ -37,8 +37,14 @@ const compact = (value: unknown, max = 350) => String(value ?? "").replace(/\s+/
 export async function buildHugoContextV2(input: { message: string; rootId: string; conversationState: ConversationState; router: { execute(request: ToolRequest): Promise<ToolResult> }; dataStore?: HugoDataStore; now?: number }) {
   const now = input.now || Date.now();
   const resolution = resolveConversationReference(input.message, input.conversationState, input.rootId, now);
-  const reportRequest = earningsReportRequest(input.message);
-  if (isEarningsReportQuestion(input.message) && !reportRequest) resolution.clarification = "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente.";
+  const reportComparison = isEarningsReportComparison(input.message) && !resolution.folios.length && !/\b(pagos?|solicitudes?|folios?)\b/i.test(input.message)
+    && (!!resolution.state.lastEarningsReport || /\b\d{4}-\d{2}-\d{2}\b/.test(input.message));
+  const reportIntent = isEarningsReportQuestion(input.message) || reportComparison;
+  const reportRequest = reportIntent ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : null;
+  if (reportIntent) {
+    resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
+    resolution.clarification = reportRequest ? null : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
+  }
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
       folioConsultado: null, solicitudes: [] as any[], pagos: [] as any[], dudasPendientes: [] as any[], complementosPendientes: [] as any[], capacidadesIq: {} }, pieces: [] as ContextPiece[], toolResults: [] as ToolResult[],
@@ -91,6 +97,8 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
     resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
   const nextState = advanceConversationState(resolution, resolved, input.rootId);
+  if (reportRequest && by("getEarningsByClientReport").length) nextState.lastEarningsReport = { rootId: input.rootId,
+    query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true }, resolvedAt: now, resolvedTurn: nextState.turn };
   const relevantRefs = folios.length ? references : [];
   const retrieval = input.dataStore && relevantRefs.length ? await input.dataStore.retrieveMemory({ rootId: input.rootId, entityReferences: relevantRefs, intent: resolution.intent, limit: 4, now: new Date(now).toISOString() }) :
     { considered: 0, selected: [] as RetrievedMemory[], legacyObservationsConsidered: 0, legacyObservations: [] as any[] };

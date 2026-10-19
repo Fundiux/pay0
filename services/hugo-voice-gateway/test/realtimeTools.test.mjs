@@ -40,6 +40,9 @@ test("earnings report delegates explicit dates without allowing a model-provided
   assert.deepEqual(schema.required, ["dateFrom", "dateTo"]);
   assert.equal(schema.properties.limit.maximum, 5000);
   assert.equal(delegationForRealtimeTool("get_earnings_by_client_report", { dateFrom: "2026-10-01", dateTo: "2026-10-19", includeCompensated: true }).toolInput.includeCompensated, true);
+  const comparison = delegationForRealtimeTool("get_earnings_by_client_report", { dateFrom: "2026-10-01", dateTo: "2026-10-19", compareDateFrom: "2026-09-01", compareDateTo: "2026-09-30" });
+  assert.equal(comparison.toolInput.compareDateFrom, "2026-09-01");
+  assert.equal(comparison.toolInput.compareDateTo, "2026-09-30");
 });
 
 test("unknown Realtime tools fail closed", () => {
