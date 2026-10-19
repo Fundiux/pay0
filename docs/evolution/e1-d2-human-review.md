@@ -1,6 +1,6 @@
 # D2 — revisión humana desde el diagnóstico existente
 
-Estado: **LOCAL_VALIDATED_INTEGRATION_PENDING**. No hay endpoint, ruta, dependencia ni permiso nuevos. No se modificaron los artefactos congelados D1/R2 ni los clones de interfaz publicados. Los builds y pruebas locales pasaron; todavía no existe un paquete exacto autorizado de publicación.
+Estado: **DEPLOYMENT_PENDING**. D2 conserva la ruta y los permisos existentes; sus paquetes exactos de diagnostics y UI están preparados y probados localmente, sin autorización ni publicación. El endpoint de revisión D1 se prepara por separado con gate apagado. No se modificaron los artefactos congelados D1/R2 ni los clones de interfaz publicados.
 
 ## Contrato y alcance
 
@@ -42,10 +42,30 @@ El build aislado terminó con código 0 y estado PASS. Recibo: `.firebase/modula
 
 La QA ejecutó el componente y el servicio reales de ese clon mediante `PAY0_D2_UI_ROOT` y `PAY0_D2_UI_OUTPUT`, con transporte Firebase y perfiles sintéticos. Pasaron selección, confirmaciones, estados canónicos, paginación de ambas listas, aprobación denegada, respuestas obsoletas y conservación legacy. Recibo local: `.firebase/modular-release/d2-ui-qa/proof.json`, SHA256 `e5f9ceb7d5a7b44289cc7c5aa58c84e7db39217d3eb5c95d3a43b45567c43d1d`. No certifica una sesión autenticada ni acciones productivas.
 
-Estado de esta interfaz: **LOCAL_UI_VALIDATED_INTEGRATION_PENDING**. No se preparó SSR ni un input de publicación. El build se conserva para retomar la preparación contra la baseline correcta después de publicar el paquete admin/MAT autorizado. Para la revisión humana completa se necesitan además el contrato D2 de diagnostics y la creación/configuración autorizada de `reviewAgent007LearningRule`. Estos destinos son independientes de publicar R2; R2 sólo condiciona la composición de chat D1-after-R2. No se activó ningún gate.
+Estado de esta interfaz: **DEPLOYMENT_PENDING**. Después de publicar admin/MAT se preparó el SSR exacto sobre su baseline estable, preservando esa fuente. Para la revisión humana completa se necesitan además el contrato D2 de diagnostics, la creación/configuración autorizada de `reviewAgent007LearningRule`, el consumidor D1 en chat y una activación separada. El gate apagado permite instalar el código, pero no aprobar ni revocar reglas. No se activó ningún gate.
 
-Se necesita una base propia del endpoint `listAgent007LearningDiagnostics`: no usar el ZIP de chat como si fuera su fuente productiva. El trasplante debe limitarse al handler del diagnóstico y a `readReview`, su tipo e imports en el store. No copiar `callables.ts` integrado completo, que contiene cambios ajenos. El resto del dominio D1, los reportes R1.3/R2 y todos los exports deben preservarse y verificarse sobre cada artefacto final.
+El diagnóstico usa su base propia, no el ZIP de chat. Su overlay comprobado incorpora ocho fuentes y conserva el resto de los módulos y exports. El alcance y las pruebas sobre ese artefacto se detallan en [el paquete de diagnostics](e1-d2-diagnostics-overlay-package.md); no se copió `callables.ts` integrado completo.
 
-La base propia se capturó en `.firebase/modular-release/d2-diagnostics-baseline`: revisión `listagent007learningdiagnostics-00002-pin`, ZIP SHA256 `c50f0d7a95bb24caf156022ae1145503d34f2110f9c39df71921ee52a190db1f`, baseline SHA256 `e4cc7f600d8daed48fbf4b333373032815d2e2db6589807266a3e2abc377f2e8`. Carece de RuleStore y los dos helpers de evidencia; no basta reemplazar cuatro entradas como sobre D1. Esa captura no sustituye el cierre de dependencias ni las pruebas del futuro overlay. La creación de `reviewAgent007LearningRule`, el despliegue D1 y sus gates siguen siendo prerrequisitos separados. D2 no los crea ni los habilita.
+La base propia se capturó en `.firebase/modular-release/d2-diagnostics-baseline`: revisión `listagent007learningdiagnostics-00002-pin`, ZIP SHA256 `c50f0d7a95bb24caf156022ae1145503d34f2110f9c39df71921ee52a190db1f`. El refresco de sólo lectura y el input/plan exactos figuran en [el controlador dedicado](e1-d2-diagnostics-updater.md). El resultado comparativo es base 25/26 y candidato 25/26, con un fallo previo idéntico; no se declara PASS universal. La creación de `reviewAgent007LearningRule`, el consumidor D1 y sus gates siguen siendo prerrequisitos separados. El actualizador D2 no los crea ni los habilita.
 
 La interfaz futura debe conservar la base publicada R1.3 y otras correcciones aprobadas. Requiere diagnóstico D2 y revisión D1 realmente disponibles; un botón visible no prueba que estén desplegados. Activar los gates de chat/review requiere configuración y autorización separadas. La reversión de código debe restaurar la fuente propia de cada destino y la interfaz anterior, preservando reglas, experiencias, revisiones y ledger. No hay rollback de datos ni escrituras financieras en este cambio.
+
+## SSR exacto preparado sobre admin/MAT publicado
+
+Directorio: `.firebase/modular-release/hosting-a2cf5d1f3402-57d82bde-0458-4275-ae18-6211f023e2eb/`.
+
+| Elemento | SHA256 |
+| --- | --- |
+| `input.json` | `78203f56922c8cc603260ad4dae1847b45afb06d01fb2558cc2585593f6b08f0` |
+| `ssr.zip` | `58a69d097f032d27ba653371bd1fd7a447ef5eb3a4e3ab5781bea488bda77d38` |
+| Baseline admin/MAT estable | `d2d7725cf59c10739dcd12714ce121110ea7d71da9a9938fa31f9420eaa783e8` |
+| `runtime-2e2e7464-0722-4bb6-b986-2caeca13795d/proof-with-qa-override.json` | `c0dbca5687ab3c6306afb7185408c76864ec8b24d4ca79e95c2781bd1815b47c` |
+| Proof canónico original | `f58ddef94a1d3fc5eb7b29ce6a0f3f6d17183068e0303112f294cdd55f025cce` |
+
+La base publicada es Hosting `a340678f44840641`, SSR `ssrpay0system-00604-hov`, fuente `a335e195e8e70f889be1e60aa0df850e4d278585`, ZIP `f0e47ff8aae70da0b50836f23367a5c49ab641baf12c89af3a90edbb569ebf0f`. El input preserva esa identidad, configuración e IAM.
+
+Se extrajo un runtime nuevo desde el ZIP D2. Se copiaron únicamente dependencias de una instalación verificada después de comprobar igualdad exacta de `package.json` y lockfile; no se reutilizó como fuente el runtime de otro ZIP. El verificador canónico comprobó 484 archivos contra este archivo, realpaths y cierre de dependencias. Pasaron cinco rutas HTTP, login a 390/1440 px, redirección anónima de `/pagos`, ausencia de errores JS y cinco componentes. El proceso terminó exit 0 y el emulador se cerró.
+
+El proof declara un override de QA: el test antiguo de Ingeniería no suministraba el contexto de perfil ni el módulo real `RecoveryReview`. El preload sólo sustituye ese path y hash; conserva las aserciones originales y añade negativos sin sesión, rol incorrecto e inactividad. Original `35f5d7a…`, adaptación `593b8fd7…`, preload D2 `7f716750e8444d92b799bc07c590ee74f9ff2e41bc50b3cbe75a9575f8454cab`. El componente y el ZIP no se modificaron. No se presenta como ejecución sin cambios del test original.
+
+`assertRuntimeProof` acepta el proof anotado. Estas verificaciones usan fixtures y Firestore Emulator, no sesiones productivas ni reglas Firestore. El paquete integrado y sus etapas pendientes están en [la instalación D](e1-d-installation-package.md).
