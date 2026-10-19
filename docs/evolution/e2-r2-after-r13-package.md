@@ -1,6 +1,6 @@
 # R2 de reportes sobre R1.3 — candidato local
 
-Estado: **DEPLOYMENT_PENDING** — preparado para autorización, no publicado. R1.3 ya está publicado y el input exacto de R2 se preparó sobre su base capturada. El preflight de solo lectura aprobó Function, servicio e IAM. Estos bytes requieren autorización independiente y comprobar su vigencia nuevamente al ejecutar.
+Estado: **DEPLOYED_NOT_VERIFIED**. El usuario autorizó R2 y su reversión. Se publicó únicamente `sendAgent007Message`, conservando la UI y el resto de Functions. La identidad y el rechazo anónimo se verificaron; la funcionalidad autenticada sigue pendiente. La incidencia de lenguaje natural descrita abajo requiere R1.4 y no se presenta como corregida por R2.
 
 ## Alcance y procedencia
 
@@ -45,3 +45,11 @@ Evidencia privada: `candidate-final/manifest.json`, `regressions.log`, `typechec
 - `assertArtifactProof`, alcance y `sourceOnlyPatch`: PASS. No incluye D, voz, nuevas Functions ni cambios de configuración.
 - Preflight `2026-10-19T20:51:54.062Z`: PASS; Function, servicio e IAM coincidieron con la captura. Evidencia privada `release-after-r13/preflight.json`. Solo GET autenticados de metadatos; cero escrituras productivas.
 - Esta comprobación puntual debe repetirse al ejecutar; no sustituye autorización ni valida una conversación financiera real.
+
+## Publicación autorizada y resultado
+
+El ejecutor terminó con código 0. Verificación independiente del 2026-10-19 a las 21:41:50 UTC: revisión `sendagent007message-00020-faf`, ZIP productivo `83baf34e6e7c3f52c90d820ef18a555da8d2aba854bbb8dc552b72be44c36bfe`, rechazo HTTP 401 `UNAUTHENTICATED` sin sesión. No se ejecutó ninguna operación financiera ni fue necesaria reversión.
+
+La captura privada `r2-after-r13/published-baseline.json`, SHA256 `48bd4d5bf8a9ad42bec5ad7d27f0a5116272b7bff28cd76bafc694422559a1ab`, y `published-source.zip` fijan la base para la siguiente entrega. `post-publication-verification.json` conserva el recibo técnico; no equivale a una prueba funcional de usuario.
+
+El usuario comprobó R1.3 con «Dame un reporte de utilidades de pc directo del mes de septiembre» y después «en pdf». El reconocedor requiere la palabra «cliente», por lo que ese caso cae en conversación general y no activa el reporte. La misma limitación existe en R2. R1.4 se prepara como parche separado sobre esta base, sin alterar los bytes ya autorizados ni declarar cerrada la incidencia.

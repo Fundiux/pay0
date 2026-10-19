@@ -8,9 +8,9 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.3 publicado: chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Identidad/HTTP verificados; prueba funcional autenticada solicitada |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R2 publicado: chat 00020-faf, identidad/HTTP verificados. Usuario detectó que pedir utilidades sin la palabra «cliente» elude el reporte; R1.4 se prepara para ese diálogo y PDF, sin declarar resuelta la incidencia |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
-| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX publicado, uso real pendiente. Comparaciones R2: 69 regresiones integradas, 40 de artefacto y startup PASS; input exacto 42f359f3 preparado sobre R1.3 vigente; autorización solicitada, no publicado |
+| C | Selección de cliente y reportes canónicos | UI R1.3 PDF/XLSX conservada; R2 comparaciones publicado con ZIP83baf34e y revisión00020-faf. DEPLOYED_NOT_VERIFIED: falta prueba autenticada y sigue la limitación de lenguaje natural en reparación |
 | D | Regla supervisada persistida y enlazada al Core | D1 sobre R2 21eba53 probado; gate OFF. D2 con builds frontend/Functions, 69 regresiones, siete pruebas de emulador y UI PASS. Integración pendiente sobre diagnostics 00002-pin: su ZIP no contiene tres módulos requeridos; el endpoint de aprobación todavía no existe. Planificación de consultas PASS sin leer documentos. No publicado |
 | E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores conservados en R1.3: backend 00008-des, SSR 00602-log y Hosting bf259a13a5d229c3; panel autenticado pendiente. Administración/MAT a335e195: build y runtime completos PASS con override QA documentado; preflight de dos endpoints ausentes PASS. Autorización específica solicitada; sin publicación |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
@@ -27,7 +27,7 @@ archivos modificados y no se escribe sobre ellos.
 | R1 | Revisiones chat 00016-zop y voz 00009-mez | Sustituido por R1.1 para corregir la incidencia reportada |
 | R1.1 | Parche `ac002ad`; chat 00017-nup, voz 00010-caj | Publicado; conversación aportada sin 500. R1 funcionalmente incompleto; voz no verificada |
 | R1.2 | Commit f1ee85b; chat 00018-sav | Sustituido por R1.3; fuente anterior preservada para reversión |
-| R1.3 | Backend 0b17cfc / ZIP a33ed9ba; UI 13620b7 / ZIP 12fcc181 | DEPLOYED_NOT_VERIFIED; chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Fuente/configuración/IAM, HTTP401 anónimo y cinco rutas HTTP200 PASS; prueba de usuario pendiente |
+| R1.3 | Backend 0b17cfc / ZIP a33ed9ba; UI 13620b7 / ZIP 12fcc181 | Backend sustituido por R2; UI conservada hasta la entrega admin/MAT. La prueba del usuario reveló una solicitud sin «cliente» que no genera PDF; no se declara cierre funcional |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
 | E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; publicación original 00008-des / 00600-hak / 9f48281b2df63e67, conservada por la UI R1.3 actual. Interacción autenticada pendiente |
@@ -35,7 +35,8 @@ archivos modificados y no se escribe sobre ellos.
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
-| R2 reportes | Commit 9204e90 / ZIP 83baf34e | Pruebas y startup PASS; input 42f359f3 y preflight de sólo chat sobre R1.3 documentados. Autorización específica pendiente; sin publicación |
+| R2 reportes | Commit 9204e90 / ZIP 83baf34e | DEPLOYED_NOT_VERIFIED; autorizado y publicado, revisión00020-faf, ejecutor exit0 y fuente/HTTP401 anónimo PASS. Comparaciones y descarga requieren verificación autenticada |
+| R1.4 lenguaje natural | Base R2 publicada, revisión00020-faf | En desarrollo y pruebas: reconoce «utilidades de PC Directo» sin exigir «cliente», conserva mes/formato y pregunta el año cuando falta. Sin artefacto autorizado ni publicación |
 | D1 sobre R2 | Commit 21eba53 / ZIP 55c5c45a | Candidato local probado, no listo para desplegar: requiere R2 vigente, nuevo endpoint, configuración explícita del gate y revisión humana accesible |
 | D2 revisión humana | Diagnóstico base 00002-pin / ZIP c50f0d7a | LOCAL_VALIDATED_INTEGRATION_PENDING. Builds, 69 regresiones y siete pruebas de emulador PASS; conserva la vista anterior ante backend legacy. Falta cerrar dependencias sobre su propia base y preparar publicación conjunta con revisión D1; no usar el ZIP de chat ni copiar callables completo |
 
