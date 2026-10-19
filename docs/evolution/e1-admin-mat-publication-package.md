@@ -1,6 +1,6 @@
 # Paquete exacto — revisión administrativa y acceso MAT
 
-Estado: **DEPLOYMENT_PENDING** — autorización específica solicitada. Artefactos y runtime locales verificados; todavía no se crearon los endpoints ni se publicó esta UI. El paquete consta de dos Functions nuevas y una actualización conjunta Hosting/SSR. No incluye aprendizaje D, R2, Sentinel, conector WhatsApp, cambios de reglas ni dependencias nuevas.
+Estado: **PUBLICADO_VERIFICADO_T?CNICO**. Publicaci?n autorizada y completada; verificaci?n autenticada de negocio pendiente.
 
 ## Alcance y orden
 
@@ -74,3 +74,31 @@ Reversión, si se autoriza y el estado coincide con el journal: retirar únicame
 La revisi?n independiente detect? que una reanudaci?n confiaba en `uploadedSource` del journal antes de CREATE. Se corrigi? el creador E para volver a verificar scope, generaci?n y SHA del blob antes de cualquier creaci?n, y para persistir el inicio de cada mutaci?n CREATE/IAM/rollback. Un timeout conserva evidencia y bloqueo. Las suites de ambos creadores pasan **52/52** (23 E y 29 D1), incluyendo fuente alterada con cero POST y reanudaci?n con flag falso sin repetici?n.
 
 El nuevo `create-plan.json` fija tambi?n los hashes de su controlador y helpers. Su SHA256 es `046bf8f5db10343e1f6be3bb52a85fa4163631495cd5cad9a4f5223f433f0336`; controlador E `3dfd5811e967609903d8ed63e6f34c75e6ae8a5afae20e387c48dbbe1416a77f`. El plan previo `4966074d?` y sus proofs/input se preservan en `new-recovery-review/before-resume-hardening/`. Input `fe8bc6e?`, ZIP backend `6624acac?`, fuente/UI/SSR, runtime y sus pruebas mantienen exactamente sus bytes. S?lo cambia el contrato de ejecuci?n del creador; los artefactos siguen DEPLOYMENT_PENDING, sin publicaci?n ni nueva solicitud de autorizaci?n en este paso.
+
+## Publicaci?n autorizada y comprobaci?n posterior ? 2026-10-19
+
+Se ejecut? el orden aprobado: creaci?n de los dos endpoints primero, Hosting/SSR despu?s. Ambos ejecutores finalizaron exit 0, sin reversi?n y sin acciones de negocio.
+
+- `listOperationRecoveryReviews`: `listoperationrecoveryreviews-00001-yut`.
+- `acknowledgeOperationRecoveryReview`: `acknowledgeoperationrecoveryreview-00001-meq`.
+- Ambos conservaron el ZIP `6624acac?`, configuraci?n e IAM esperados, y rechazaron llamadas an?nimas vac?as con HTTP 401 / UNAUTHENTICATED. No se listaron ni reconocieron incidentes reales.
+- Hosting: `sites/pay-0-system/versions/a340678f44840641`; SSR: `ssrpay0system-00604-hov`, ZIP `f0e47ff8?`, fuente `a335e195?`. El ejecutor termin? RELEASE_VERIFIED.
+- Cinco GET p?blicos retornaron 200. Chromium nuevo y an?nimo en 390 y 1440 px comprob? controles de login visibles, ausencia de desbordamiento y errores JS, y redirecci?n de /pagos a /login. Se bloquearon m?todos distintos de GET/HEAD; no ocurri? ninguno.
+
+El primer harness de navegador fall? por exigir arbitrariamente m?s de 100 caracteres de texto en login. Su log se conserv?; la repetici?n sustituy? ese umbral por visibilidad expl?cita de usuario, contrase?a y bot?n de entrada y pas?. No se cambi? la UI publicada ni se presenta el intento inicial como PASS.
+
+La captura inicial no inclu?a a?n los dos contadores derivados de Hosting. Una captura posterior valid? `fileCount=171`, `versionBytes=4086647`, cero operaciones activas y el resto de recurso/servicio/IAM/Hosting id?ntico al snapshot propio. Baseline estable: `.firebase/modular-release/ui-admin-mat-stable-baseline.json`, SHA256 `d2d7725cf59c10739dcd12714ce121110ea7d71da9a9938fa31f9420eaa783e8`. La captura original y el snapshot de rollback permanecen intactos; una reversi?n posterior debe reconciliar esos contadores y cualquier deriva antes de ejecutarse.
+
+Evidencias privadas:
+
+| Evidencia | SHA256 |
+| --- | --- |
+| `output/admin-mat-ui/create-execution.log` | `e96327fc0317781b52669e348849a9f7ec1fa9f1641a546aa096f1071e568117` |
+| `created-functions-verification.json` | `2547a6f5ad2595a4a174d089bd4873efbbbd0500b31200b13a3720f056d8c0c2` |
+| `hosting-execution.log` | `13ff1870f3fd05f19a5bc27fbe90e03e03f1b973d4ce4d63d04cb185b87c71d8` |
+| `published-browser-proof.json` | `a6979a26942b44df31cc0788512785e7080aa01a617e2f64e33051133b9c67d4` |
+| `stable-verification.json` | `cdb475c8250df2d8ebc3ec5763293ed858456b90955d25473e0f1bf2d08c1e87` |
+
+La procedencia reutilizable est? en `.firebase/modular-release/ui-admin-mat-published-provenance.json`, SHA256 `c774a664adbfe865a44e4311aa5f4f686c916617aa5616441cfaa68c9c3ccec2`. La fuente candidata se conserva para futuras integraciones, sin reconstruir esta capacidad.
+
+Pendiente: una sesi?n Firebase real autorizada que confirme lista/reconocimiento administrativo y el acceso MAT seg?n el UID can?nico. La entrega est? verificada t?cnicamente; no se declara completada la operaci?n financiera ni un puente de identidad Telegram/Firebase.
