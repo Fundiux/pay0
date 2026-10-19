@@ -1,7 +1,6 @@
 # Evolución PAY0 — resultado local
 
-Fecha: 2026-10-19. Estado global: **PARTIAL**. Etapa 0: **E0_PASS**. Los siete entregables E0-01 a E0-07 y el certificado están en esta carpeta. Rama: 
-`feature/pay0-global-evolution-20261019`, creada desde `d5a46a9` para preservar los cambios acumulados. No hubo merge, push ni despliegue.
+Fecha: 2026-10-19. Estado global: **PARTIAL**. Etapa 0: **E0_PASS**. Los siete entregables E0-01 a E0-07 y el certificado están en esta carpeta. Rama: `feature/pay0-global-evolution-20261019`, creada desde `d5a46a9` para preservar los cambios acumulados. No hubo merge, push ni despliegue.
 
 ## Resultado por frente
 
