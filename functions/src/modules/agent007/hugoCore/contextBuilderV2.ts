@@ -52,12 +52,18 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const pendingRequest = pendingReportRequest(input.message, resolution.state.pendingEarningsReport);
   const reportIntent = isEarningsReportQuestion(input.message) || reportComparison || pendingRequest.intent;
   const parsedReportRequest = reportComparison ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : pendingRequest.request;
-  const reportRequest = parsedReportRequest && (parsedReportRequest.format || reportComparison) ? parsedReportRequest : null;
+  if (parsedReportRequest && reportComparison) {
+    if (pendingRequest.clientQuery) parsedReportRequest.clientQuery = pendingRequest.clientQuery;
+    if (pendingRequest.format) parsedReportRequest.format = pendingRequest.format;
+    if (/\bpdf\b/i.test(input.message) && /\b(excel|xlsx|xls)\b/i.test(input.message)) delete parsedReportRequest.format;
+  }
+  const reportRequest = parsedReportRequest?.format ? parsedReportRequest : null;
   if (!reportIntent) delete resolution.state.pendingEarningsReport;
   if (reportIntent) {
     resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
       includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
       ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
+      ...(parsedReportRequest?.compareDateFrom ? { compareDateFrom: parsedReportRequest.compareDateFrom, compareDateTo: parsedReportRequest.compareDateTo } : {}),
       ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
     resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
     resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
@@ -115,7 +121,7 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
     resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
   const nextState = advanceConversationState(resolution, resolved, input.rootId);
   if (reportRequest && by("getEarningsByClientReport").length) nextState.lastEarningsReport = { rootId: input.rootId,
-    query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true, ...(reportRequest.clientQuery ? { clientQuery: reportRequest.clientQuery } : {}) }, resolvedAt: now, resolvedTurn: nextState.turn };
+    query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true, ...(reportRequest.clientQuery ? { clientQuery: reportRequest.clientQuery } : {}), ...(reportRequest.format ? { format: reportRequest.format } : {}) }, resolvedAt: now, resolvedTurn: nextState.turn };
   if (reportRequest && by("getEarningsByClientReport").length && nextState.pendingEarningsReport) {
     nextState.pendingEarningsReport.stage = ["AMBIGUOUS", "NOT_FOUND"].includes(by("getEarningsByClientReport")[0].data?.clientResolution?.status) ? "CLIENT" : "READY";
   }

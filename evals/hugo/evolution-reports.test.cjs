@@ -133,7 +133,7 @@ test('chained comparison keeps only fresh scoped filters and re-reads financial 
   const core = new HugoConversationCore(router(), adapter);
   const turn = (message, conversationState) => core.respond({ channel: 'WEB', identity, name: 'Fixture', conversationId: 'fixture-report-chain', message, conversationState, promptVersion: 'hugo-v2' });
   const first = await turn('Reporte de utilidades por cliente del 2026-10-01 al 2026-10-19 en Excel');
-  assert.deepEqual(first.conversationState.lastEarningsReport.query, { ...input, includeCompensated: false });
+  assert.deepEqual(first.conversationState.lastEarningsReport.query, { ...input, includeCompensated: false, format: 'XLSX' });
   assert.equal(JSON.stringify(first.conversationState).includes('summary'), false);
   const original = rows[0].totalEarningsAmount;
   try {

@@ -3,7 +3,7 @@ export type ReportFileFormat = "PDF" | "XLSX";
 export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; limit?: number; includeCompensated?: boolean; clientQuery?: string; format?: ReportFileFormat };
 export type HugoReportExport = { version: 1; kind: "EARNINGS_BY_CLIENT"; format?: ReportFileFormat; fileName: string; dateFrom: string; dateTo: string; includeCompensated: boolean;
   docsScanned: number; scanLimit: number; matchedClients: number; exportedClients: number; truncatedByScan: boolean; truncatedByExport: boolean; rows: EarningsByClientReportRow[] };
-export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; includeCompensated: boolean; format?: ReportFileFormat;
+export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated: boolean; format?: ReportFileFormat;
   stage: "DATES" | "CLIENT" | "FORMAT" | "READY"; resolvedAt: number; resolvedTurn: number };
 
 export function validateEarningsReportInput(input: EarningsReportToolInput): void {
@@ -33,11 +33,11 @@ export function normalizePendingReport(raw: any, rootId: string, turn: number, n
     !Number.isInteger(raw.resolvedTurn) || raw.resolvedTurn < 0 || raw.resolvedTurn > turn || turn - raw.resolvedTurn > 4 || typeof raw.includeCompensated !== "boolean") return;
   if (raw.clientQuery !== undefined && (typeof raw.clientQuery !== "string" || !raw.clientQuery.trim() || raw.clientQuery.length > 120 || /[\x00-\x1f]/.test(raw.clientQuery))) return;
   if (raw.format !== undefined && !["PDF", "XLSX"].includes(raw.format)) return;
-  if (raw.dateFrom !== undefined || raw.dateTo !== undefined) {
-    try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo }); } catch { return; }
+  if (raw.dateFrom !== undefined || raw.dateTo !== undefined || raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined) {
+    try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo, ...(raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) }); } catch { return; }
   }
   return { rootId, stage: raw.stage, includeCompensated: raw.includeCompensated, resolvedAt: raw.resolvedAt, resolvedTurn: raw.resolvedTurn,
-    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}) };
+    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}), ...(raw.compareDateFrom ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) };
 }
 
 export function reportConversationResetReply(message: string): string | null {
@@ -78,6 +78,9 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
   const candidate = monthOnly ? null : earningsReportRequest(initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
   if (!candidate) return { intent: true, request: null, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
   candidate.includeCompensated = includeCompensated;
+  if (!dates.length && previous?.compareDateFrom && previous.compareDateTo) {
+    candidate.compareDateFrom = previous.compareDateFrom; candidate.compareDateTo = previous.compareDateTo;
+  }
   if (format) candidate.format = format;
   if (clientQuery) candidate.clientQuery = clientQuery.slice(0, 120);
   return { intent: true, request: candidate, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
@@ -102,7 +105,7 @@ export function earningsReportRequest(message: string, previous?: EarningsReport
   const explicitInclude = /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text);
   const includeCompensated = excludeCompensated ? false : explicitInclude ? true : comparison && dates.length === 2 && previous ? previous.includeCompensated === true : false;
   const input: EarningsReportToolInput = comparison && dates.length === 2
-    ? { dateFrom: previous!.dateFrom, dateTo: previous!.dateTo, compareDateFrom: dates[0], compareDateTo: dates[1], limit: previous!.limit ?? 5000, includeCompensated, ...(previous!.clientQuery ? { clientQuery: previous!.clientQuery } : {}) }
+    ? { dateFrom: previous!.dateFrom, dateTo: previous!.dateTo, compareDateFrom: dates[0], compareDateTo: dates[1], limit: previous!.limit ?? 5000, includeCompensated, ...(previous!.clientQuery ? { clientQuery: previous!.clientQuery } : {}), ...(previous!.format ? { format: previous!.format } : {}) }
     : { dateFrom: dates[0], dateTo: dates[1], ...(dates.length === 4 ? { compareDateFrom: dates[2], compareDateTo: dates[3] } : {}), limit: 5000, includeCompensated };
   try { validateEarningsReportInput(input); } catch { return null; }
   return input;

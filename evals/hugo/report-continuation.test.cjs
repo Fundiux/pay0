@@ -217,3 +217,62 @@ test('R1.3 a quoted client containing a month preserves the clarified period and
   assert.equal(selected.reportExport.format, 'PDF');
   resetRows();
 });
+
+
+test('R2 additive comparison preserves the explicit PDF and single-client scope', async () => {
+  const session = conversation();
+  const first = await session.send('reporte de utilidades del cliente PC Directo del 2026-09-01 al 2026-09-30 en formato PDF');
+  assert.equal(first.reportExport.format, 'PDF');
+  const compared = await session.send('compara con 2026-08-01 al 2026-08-31');
+  assert.equal(compared.reportExport.format, 'PDF');
+  assert.deepEqual(compared.reportExport.rows.map(row=>row.clienteId), ['pc']);
+  assert.match(compared.text, /Comparaci.n con 2026-08-01/);
+});
+test('R2 additive explicit comparison preserves the requested client', async () => {
+  const session = conversation();
+  const result = await session.send('compara reporte de utilidades del cliente PC Directo del 2026-09-01 al 2026-09-30 contra 2026-08-01 al 2026-08-31 en formato PDF');
+  assert.deepEqual(result.reportExport.rows.map(row=>row.clienteId), ['pc']);
+  assert.equal(result.reportExport.format, 'PDF');
+});
+test('R2 comparison keeps both periods and client while clarifying the file format', async () => {
+  const session = conversation();
+  const before = queries;
+  const clarification = await session.send('compara reporte de utilidades del cliente PC Directo del 2026-09-01 al 2026-09-30 contra 2026-08-01 al 2026-08-31');
+  assert.match(clarification.text, /PDF.*Excel/);
+  assert.equal(queries, before);
+  const result = await session.send('PDF');
+  assert.equal(queries, before + 2);
+  assert.equal(result.reportExport.format, 'PDF');
+  assert.deepEqual(result.reportExport.rows.map(row=>row.clienteId), ['pc']);
+  assert.match(result.text, /Comparaci.n con 2026-08-01/);
+});
+test('R2 malformed saved comparison filters cannot survive normalization', () => {
+  const state = emptyConversationState(identity.rootId);
+  state.pendingEarningsReport = { rootId: identity.rootId, stage: 'FORMAT', resolvedAt: Date.now(), resolvedTurn: 0, includeCompensated: false,
+    compareDateFrom: '2026-09-30', compareDateTo: '2026-09-01' };
+  assert.equal(normalizeConversationState(state, identity.rootId).pendingEarningsReport, undefined);
+  state.pendingEarningsReport.dateFrom = '2026-09-01'; state.pendingEarningsReport.dateTo = '2026-09-30';
+  assert.equal(normalizeConversationState(state, identity.rootId).pendingEarningsReport, undefined);
+});
+
+
+test('R2 greetings and a new conversation clear client, format and comparison context', async () => {
+  for (const reset of ['hola Maria', 'nueva conversacion']) {
+    const session = conversation();
+    const first = await session.send('reporte de utilidades del cliente PC Directo del 2026-09-01 al 2026-09-30 en formato PDF');
+    assert.equal(first.reportExport.format, 'PDF');
+    const before = queries;
+    await session.send(reset);
+    assert.equal(session.state().lastEarningsReport, undefined);
+    assert.equal(session.state().pendingEarningsReport, undefined);
+    const periodOnly = await session.send('2026-08-01 al 2026-08-31');
+    assert.equal(periodOnly.reportExport, undefined);
+    assert.equal(queries, before);
+    assert.match(periodOnly.text, /reporte|cliente/i);
+    const comparison = await session.send('comparalo con 2026-08-01 al 2026-08-31');
+    assert.equal(comparison.reportExport, undefined);
+    assert.equal(queries, before);
+    assert.equal(session.state().pendingEarningsReport?.clientQuery, undefined);
+    assert.equal(session.state().pendingEarningsReport?.format, undefined);
+  }
+});
