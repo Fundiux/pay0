@@ -135,6 +135,9 @@ export async function generateCotizacionForSolicitudCore(request: {
     if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const solicitud: any = solicitudSnap.data() || {};
     if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+    if (clean(solicitud.rootId, 128) !== rootId) {
+      throw new HttpsError("permission-denied", "La solicitud no pertenece a tu expediente.");
+    }
 
     const clientId = clean(solicitud.clienteId || solicitud.clientId, 128);
     if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
