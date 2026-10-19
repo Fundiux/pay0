@@ -53,3 +53,30 @@ pruebas satisfactoriamente. Se consultó la fuente productiva en modo lectura
 para construir un parche mínimo; no se cambió producción. Una publicación, si se autoriza después,
 requiere reconciliar el callable productivo y preparar su artefacto exacto;
 la presencia del contrato en una rama no demuestra que esté publicado.
+
+## Preparación contra fuente productiva real
+
+Lectura autorizada: revisión `getauthorizeddocumentdownloadurl-00006-koz`,
+Node 22, 30 segundos, 256 MiB. Su archivo fuente contiene JavaScript compilado,
+sin TypeScript ni mapa del módulo. El módulo completo, normalizado por AST,
+coincide con la compilación ES2017/CommonJS del código anterior a este cambio.
+En esa fuente no hay firma por generación.
+
+Se preparó un overlay de dos JavaScript sobre ese archivo, conservando todas
+las demás entradas. Se transpilaron únicamente el callable revisado y su nuevo
+helper, con las mismas opciones de módulo/target. La compilación Functions
+compartida pasó por separado. No se afirma una reconstrucción de fuentes
+productivas inexistentes ni un árbol Git completo.
+
+Fuente productiva SHA-256:
+`6615bb840530acf6dc31f2f86e988210f5505d2d17a0b4c05850c0c0eb2eb713`.
+Overlay preliminar SHA-256:
+`ddf1f8b0f206e5c4e58bcb58468f7f5716b94ff06100d5950e47dfea06ba5707`.
+Las 952 entradas restantes conservan CRC y tamaño. Los manifests y locks
+productivos son JSON idénticos a los de Functions, sin cambio de dependencias.
+
+La misma suite pasó 9/9 contra los JavaScript exactos del overlay mediante
+`PAY0_GENERATION_JS_DIR`, incluyendo el SDK y firma RSA reales con credenciales
+sintéticas y red bloqueada. El input final usa el commit `eae9d017a66eafe2fd9c0b172b0aa8831666bf87`;
+la prueba canónica de arranque del artefacto pasó con 354 endpoints cargados y
+denegación sin autenticación. Continúa pendiente la autorización de publicación.
