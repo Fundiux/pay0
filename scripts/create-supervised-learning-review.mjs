@@ -202,12 +202,15 @@ export async function executePlan({ input, plan, baseline, archive, journal, io 
     assert.equal(sha(await io.readSource(journal.uploadedSource)), input.archiveSha256, 'UPLOADED_SOURCE_MISMATCH');
     io.persist(journal);
   }
+  // A resumed journal is not evidence that these remote bytes are still approved.
+  assertUploadSource(journal.uploadedSource);
+  assert.equal(sha(await io.readSource(journal.uploadedSource)), input.archiveSha256, 'UPLOADED_SOURCE_MISMATCH');
   for (const target of plan.functions) {
     const name = target.functionId;
     let entry = journal.functions[name];
     if (!entry) {
       assert.equal(await io.read(functionUrl(name), true), null, 'FUNCTION_APPEARED_BEFORE_CREATE');
-      entry = journal.functions[name] = { phase: 'CREATE_DISPATCHING' }; io.persist(journal);
+      entry = journal.functions[name] = { phase: 'CREATE_DISPATCHING' }; journal.networkMutationStarted = true; io.persist(journal);
       const body = structuredClone(target.resourceTemplate); body.buildConfig.source = { storageSource: journal.uploadedSource };
       const operation = await io.mutate(`${baseUrl}/functions?functionId=${name}`, body);
       assertOperationScope(operation);
@@ -233,7 +236,7 @@ export async function executePlan({ input, plan, baseline, archive, journal, io 
     const bindings = target.iamProposal.bindings;
     if (digest(policy.bindings || []) !== digest(bindings)) {
       assert.deepEqual(policy.bindings || [], [], 'UNEXPECTED_NEW_SERVICE_IAM');
-      entry.phase = 'IAM_DISPATCHING'; entry.beforeIam = policy; io.persist(journal);
+      entry.phase = 'IAM_DISPATCHING'; entry.beforeIam = policy; journal.networkMutationStarted = true; io.persist(journal);
       await io.mutate(`${iamUrl}:setIamPolicy`, { policy: { ...policy, bindings }, updateMask: 'bindings,etag' });
     }
     const afterIam = await io.read(`${iamUrl}:getIamPolicy`);
@@ -266,7 +269,7 @@ export async function rollbackPlan({ input, plan, journal, io }) {
     targets.push({ target, saved, runUrl, iam, desired, alreadyRemoved });
   }
   for (const { saved, runUrl, iam, desired, alreadyRemoved } of targets) {
-    saved.rollbackBindings = desired; saved.phase = 'ROLLBACK_IAM_DISPATCHING'; io.persist(journal);
+    saved.rollbackBindings = desired; saved.phase = 'ROLLBACK_IAM_DISPATCHING'; journal.networkMutationStarted = true; io.persist(journal);
     if (!alreadyRemoved) await io.mutate(`${runUrl}:setIamPolicy`, { policy: { ...iam, bindings: desired }, updateMask: 'bindings,etag' });
     const after = await io.read(`${runUrl}:getIamPolicy`);
     assert.deepEqual(after.bindings || [], desired, 'ROLLBACK_IAM_POSTFLIGHT');

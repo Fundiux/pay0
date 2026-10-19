@@ -19,7 +19,7 @@ Directorio Functions: `.firebase/modular-release/new-recovery-review/`.
 | --- | --- |
 | `source.zip` | `6624acacb3939d846a528426cb39146d1175bdc6bedf18747426e994138844dd` |
 | `input.json` | `fe8bc6e77c0cf8e677b1af523e1e8994741dfff8bfaa8bf7b755628941a82b6f` |
-| `create-plan.json` | `4966074d4575a6995c4c0bf18050bd31c4faf28312041769c7c092200405dfb4` |
+| `create-plan.json` | `046bf8f5db10343e1f6be3bb52a85fa4163631495cd5cad9a4f5223f433f0336` |
 | `startup-verification.json` | `d7675c44ad7b2f678d23e876b605de13feba18bf69735c5758a5a3d8f730826f` |
 | `behavior-verification.json` | `5233536f0e26dd36db56aae16a0e1348972b84d110235e1d80fe8d1b24a3aa2e` |
 | `readonly-preflight.json` | `35decb03a7faec125ca0b67b84dcf5a2afbacd61c0448017f6ebeccc24e2211b` |
@@ -68,3 +68,9 @@ Preflight de creación actualizado a **2026-10-19 21:06:52 UTC**: los dos destin
 MAT sólo embebe formularios cuando existe sesión Firebase y su UID coincide con el UID canónico de Telegram; en otro caso navega al flujo web protegido. Este paquete **no** crea un puente Telegram→Firebase ni hace disponibles operaciones financieras con sólo Telegram. No activa proveedores, envía dinero, reintenta trabajos ni ejecuta acciones WhatsApp/IQ/Telegram.
 
 Reversión, si se autoriza y el estado coincide con el journal: retirar únicamente `allUsers` de `roles/run.invoker` en los dos nuevos endpoints, conservando Functions, otros bindings, revisiones, trabajos y auditoría. Restaurar Hosting/SSR juntos a la base R1.3 y ZIP previo indicados arriba. No usar la base E anterior ni sobrescribir una publicación posterior. Los controles de identidad/deriva y locks siguen siendo obligatorios; un resultado remoto incierto requiere reconciliación, no repetición ciega.
+
+## Plan de creaci?n endurecido antes de publicaci?n
+
+La revisi?n independiente detect? que una reanudaci?n confiaba en `uploadedSource` del journal antes de CREATE. Se corrigi? el creador E para volver a verificar scope, generaci?n y SHA del blob antes de cualquier creaci?n, y para persistir el inicio de cada mutaci?n CREATE/IAM/rollback. Un timeout conserva evidencia y bloqueo. Las suites de ambos creadores pasan **52/52** (23 E y 29 D1), incluyendo fuente alterada con cero POST y reanudaci?n con flag falso sin repetici?n.
+
+El nuevo `create-plan.json` fija tambi?n los hashes de su controlador y helpers. Su SHA256 es `046bf8f5db10343e1f6be3bb52a85fa4163631495cd5cad9a4f5223f433f0336`; controlador E `3dfd5811e967609903d8ed63e6f34c75e6ae8a5afae20e387c48dbbe1416a77f`. El plan previo `4966074d?` y sus proofs/input se preservan en `new-recovery-review/before-resume-hardening/`. Input `fe8bc6e?`, ZIP backend `6624acac?`, fuente/UI/SSR, runtime y sus pruebas mantienen exactamente sus bytes. S?lo cambia el contrato de ejecuci?n del creador; los artefactos siguen DEPLOYMENT_PENDING, sin publicaci?n ni nueva solicitud de autorizaci?n en este paso.

@@ -9,6 +9,7 @@ import { assertUploadSource, assertOperationScope } from './deploy-scoped-functi
 export const NAMES = Object.freeze(['listOperationRecoveryReviews', 'acknowledgeOperationRecoveryReview']);
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const pick = (source, keys) => Object.fromEntries(keys.filter(k => source[k] !== undefined).map(k => [k, structuredClone(source[k])]));
+const controllerPins = () => Object.fromEntries(['create-recovery-review-functions.mjs', 'capture-production-baseline.mjs', 'deploy-scoped-functions.mjs'].map(name => [name, sha(fs.readFileSync(path.join(import.meta.dirname, name)))]));
 export function privatePath(value, root = path.resolve('.firebase/modular-release')) {
   const target = path.resolve(value);
   assert(target.startsWith(root + path.sep), 'PRIVATE_PATH_REQUIRED');
@@ -55,7 +56,7 @@ export function buildCreatePlan(input, baseline) {
       sourceBinding: { requiresUploadOfSha256: input.archiveSha256, field: 'buildConfig.source.storageSource', status: 'NOT_UPLOADED' },
       iamProposal: { approved: false, resource: `projects/pay-0-system/locations/us-central1/services/${name.toLowerCase()}`, bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }], applicationAuthorization: 'Firebase Authentication + active superadmin + reportes/view + current root' } };
   });
-  return { schemaVersion: 1, state: 'PLAN_ONLY_REQUIRES_EXPLICIT_CREATE_AND_IAM_APPROVAL', archiveSha256: input.archiveSha256, functions,
+  return { schemaVersion: 1, state: 'PLAN_ONLY_REQUIRES_EXPLICIT_CREATE_AND_IAM_APPROVAL', archiveSha256: input.archiveSha256, functions, controllerPins: controllerPins(),
     rollbackProposal: { approved: false, action: 'Remove only the new services public invocation bindings and hide review UI; retain functions and all review/job/audit records.', dataDeletion: false },
     approvalRequiredFor: ['Create exactly these two Functions', 'Grant allUsers roles/run.invoker only on their new Cloud Run services', 'Upload the exact reviewed source archive'], productionWrites: 0 };
 }
@@ -112,6 +113,7 @@ export async function executePlan({ input, plan, baseline, archive, journal, io 
   assert.deepEqual(plan.functions.map(x => x.functionId), NAMES);
   const expectedPlan = buildCreatePlan(input, baseline);
   assert.deepEqual(plan.functions, expectedPlan.functions, 'CREATE_PLAN_DRIFT');
+  assert.deepEqual(plan.controllerPins, expectedPlan.controllerPins, 'CONTROLLER_CHANGED');
   const parent = baseline.functions.getControlCenterEngineering;
   const current = await io.read(functionUrl('getControlCenterEngineering'));
   assert.equal(digest(current), digest(parent.resource), 'PARENT_DRIFT');
@@ -136,12 +138,15 @@ export async function executePlan({ input, plan, baseline, archive, journal, io 
     assert.equal(sha(await io.readSource(journal.uploadedSource)), input.archiveSha256, 'UPLOADED_SOURCE_MISMATCH');
     io.persist(journal);
   }
+  // Revalidate persisted upload bytes on resume before creating a resource.
+  assertUploadSource(journal.uploadedSource);
+  assert.equal(sha(await io.readSource(journal.uploadedSource)), input.archiveSha256, 'UPLOADED_SOURCE_MISMATCH');
   for (const target of plan.functions) {
     const name = target.functionId;
     let entry = journal.functions[name];
     if (!entry) {
       assert.equal(await io.read(functionUrl(name), true), null, 'FUNCTION_APPEARED_BEFORE_CREATE');
-      entry = journal.functions[name] = { phase: 'CREATE_DISPATCHING' }; io.persist(journal);
+      entry = journal.functions[name] = { phase: 'CREATE_DISPATCHING' }; journal.networkMutationStarted = true; io.persist(journal);
       const body = structuredClone(target.resourceTemplate); body.buildConfig.source = { storageSource: journal.uploadedSource };
       const operation = await io.mutate(`${baseUrl}/functions?functionId=${name}`, body);
       assertOperationScope(operation);
@@ -167,7 +172,7 @@ export async function executePlan({ input, plan, baseline, archive, journal, io 
     const bindings = target.iamProposal.bindings;
     if (digest(policy.bindings || []) !== digest(bindings)) {
       assert.deepEqual(policy.bindings || [], [], 'UNEXPECTED_NEW_SERVICE_IAM');
-      entry.phase = 'IAM_DISPATCHING'; entry.beforeIam = policy; io.persist(journal);
+      entry.phase = 'IAM_DISPATCHING'; entry.beforeIam = policy; journal.networkMutationStarted = true; io.persist(journal);
       await io.mutate(`${iamUrl}:setIamPolicy`, { policy: { ...policy, bindings }, updateMask: 'bindings,etag' });
     }
     const afterIam = await io.read(`${iamUrl}:getIamPolicy`);
@@ -200,7 +205,7 @@ export async function rollbackPlan({ input, plan, journal, io }) {
     targets.push({ target, saved, runUrl, iam, desired, alreadyRemoved });
   }
   for (const { saved, runUrl, iam, desired, alreadyRemoved } of targets) {
-    saved.rollbackBindings = desired; saved.phase = 'ROLLBACK_IAM_DISPATCHING'; io.persist(journal);
+    saved.rollbackBindings = desired; saved.phase = 'ROLLBACK_IAM_DISPATCHING'; journal.networkMutationStarted = true; io.persist(journal);
     if (!alreadyRemoved) await io.mutate(`${runUrl}:setIamPolicy`, { policy: { ...iam, bindings: desired }, updateMask: 'bindings,etag' });
     const after = await io.read(`${runUrl}:getIamPolicy`);
     assert.deepEqual(after.bindings || [], desired, 'ROLLBACK_IAM_POSTFLIGHT');

@@ -39,7 +39,7 @@ Rollback del creador: revalidar que función/servicio/IAM coinciden con su journ
 
 ## Pruebas requeridas antes de implementar ejecución
 
-`node --test qa/scripts/supervised-learning-review-create.test.mjs qa/scripts/e1-operations-create-plan.test.mjs`: **48/48 PASS**, cero skips, de las cuales 27 corresponden al runner nuevo y 21 preservan el creador E. Prueban otro destino/duplicados, pins del ZIP/commit/patch, destino existente, deriva del padre, gate ON/ambiguo, secretos no revisados, política inesperada, ruta fuera de privado, junction, alteración de proof antes de parsearlo, identidad de proof distinta, pins del plan, concurrencia, respuesta incierta sin recreación, reanudación y rollback limitado. El caso positivo demuestra también que no se exige un recurso chat R2 para crear review apagado. Toda la red está sustituida por IO de prueba.
+`node --test qa/scripts/supervised-learning-review-create.test.mjs qa/scripts/e1-operations-create-plan.test.mjs`: **52/52 PASS**, cero skips, de las cuales 29 corresponden al runner nuevo y 23 preservan el creador E. Prueban otro destino/duplicados, pins del ZIP/commit/patch, destino existente, deriva del padre, gate ON/ambiguo, secretos no revisados, política inesperada, ruta fuera de privado, junction, alteración de proof antes de parsearlo, identidad de proof distinta, pins del plan, concurrencia, respuesta incierta sin recreación, reanudación y rollback limitado. El caso positivo demuestra también que no se exige un recurso chat R2 para crear review apagado. Toda la red está sustituida por IO de prueba.
 
 ## Paquete local preparado
 
@@ -49,7 +49,7 @@ Directorio privado: `.firebase/modular-release/learning-review-create/`. La capt
 | --- | --- |
 | `baseline.json` | `47e6cc83296861d0de288089a15263c83d72646b162ad5a3e682f419ac513866` |
 | `input.json` | `098b11dffbc8927b624e1733a359444a294e483c9bf4efffe4ebfd7bb1467143` |
-| `create-plan.json` | `a58252a5f24835cbaf49133074bd3800d02b4dc780e4b9e6202e362dec327bbb` |
+| `create-plan.json` | `4b6eb39cbddbccecb75b2704d506efccd24f311c27293a4e88ec8a6407959dca` |
 | `startup-verification.json` | `2e0f275f5c8fc3355726cb4525d1eb616e575c81ff9120a8a70077a1160e8c3b` |
 | `behavior-verification.json` | `b593f7994752c1fa6084e1c2b41ebc2547edacb74a1b1b7ee7fde5566c4b4e8d` |
 
@@ -58,3 +58,9 @@ Los dos proofs son envolturas locales de identidad de la evidencia original ya r
 `local-validation.json` confirma regeneración idéntica del plan, hashes de proofs, identidad, scope único y gate OFF; cero llamadas de red y escrituras productivas durante esa validación. La captura de metadatos anterior sí usó GET autenticados, sin leer documentos. El ejecutor repetirá las verificaciones de recursos y ausencia justo antes de cualquier mutación.
 
 Pendiente: revisión final del paquete y autorización específica de creación/IAM. Tener runner y plan no equivale a endpoint creado ni gate habilitado. La actualización posterior de chat D1 mantiene su precondición R2 y su aprobación independiente.
+
+## Endurecimiento de reanudaci?n
+
+Estado del componente preparado: **DEPLOYMENT_PENDING ? creaci?n con gate OFF**; la capacidad D global permanece INTEGRATION_PENDING. El controlador vuelve a verificar el scope y SHA de la fuente cargada antes de CREATE, incluso al reanudar. Marca y persiste el inicio de mutaci?n antes de CREATE, IAM y rollback, para conservar el bloqueo ante una respuesta incierta. Los negativos de fuente alterada y journal con flag falso pasan sin repetir la creaci?n.
+
+El plan anterior se preserv? en `before-resume-hardening/`; input, ZIP y proofs permanecen id?nticos. El nuevo plan fija el controlador SHA256 `722d4e9adeb3f3d532934bce162ccadcaf743106fb4215be06f9b7548d6ae807`. La validaci?n local regener? el plan y comprob? identidad, hashes y gate sin red. No se cre? ni habilit? el endpoint.
