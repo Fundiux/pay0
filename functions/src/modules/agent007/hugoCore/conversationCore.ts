@@ -54,7 +54,7 @@ function fallbackReply(message: string, name: string, context: any): string {
 }
 
 export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; routingSignals?: { intent: string; risk: "READ" | "WRITE" | "EXTERNAL_SIDE_EFFECT"; complexity: "LOW" | "MEDIUM" | "HIGH"; requiredCapabilities: string[] }; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
-export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
+export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean; appliedRuleId?: string }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
 
 export class HugoConversationCore {
   constructor(private readonly router: HugoToolRouter, private readonly model: HugoModelAdapter | null, private readonly dataStore?: HugoDataStore, private readonly learningStore?: HugoLearningStore) {}
@@ -97,6 +97,7 @@ export class HugoConversationCore {
     const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
     const learningContext = built.context as any;
     let learningUsage: ConversationOutput["learningUsage"];
+    let supervisedRuleReply: string | null = null;
     if (v2 && this.learningStore && !policyReply && learningContext.folioConsultado && learningContext.questionIntent === "REASON") {
       const isSolicitud = String(learningContext.folioConsultado).startsWith("S");
       const first = isSolicitud ? learningContext.solicitudes?.[0] : learningContext.pagos?.[0];
@@ -105,14 +106,20 @@ export class HugoConversationCore {
         const issueCode = typeof first.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(first.issueCode) ? first.issueCode :
           /\b(documentos? faltantes?|faltan? (los? )?documentos?|falta (el )?documento)\b/i.test(input.message) ? "DOCUMENT_MISSING" : null;
         try {
-          const retrieved = await this.learningStore.retrieve({ rootId: input.identity.rootId, domain: isSolicitud ? "SOLICITUDES" : "PAGOS", taskType: "REASON", entityType,
-            features: { entityType, ...(first.estado ? { status: String(first.estado).toUpperCase() } : {}), ...(issueCode ? { issueCode } : {}) }, limit: 2 });
+          const learningQuery = { rootId: input.identity.rootId, domain: isSolicitud ? "SOLICITUDES" : "PAGOS", taskType: "REASON", entityType,
+            features: { entityType, ...(first.estado ? { status: String(first.estado).toUpperCase() } : {}), ...(issueCode ? { issueCode } : {}) }, limit: 2 };
+          const retrieved = await this.learningStore.retrieve(learningQuery);
           const included = retrieved.selected.slice(0, 2);
           learningContext.learningExperiences = included.map(compactLearningExperience);
           learningUsage = { considered: retrieved.considered, selected: retrieved.selected.length,
             candidateIds: [...retrieved.selected.map(row => row.experienceId), ...retrieved.rejected.map(row => row.experienceId)].slice(0, 20),
             retrievedIds: retrieved.selected.map(row => row.experienceId), includedIds: included.map(row => row.experienceId),
             rejected: retrieved.rejected.slice(0, 10), conflict: retrieved.conflict, effectClassification: "NOT_EVALUATED" };
+          if (exactComplete && first.folio === learningContext.folioConsultado && this.learningStore.resolveSupervisedRule) {
+            const entityId = built.recentEntities.find(row => row.type === "SOLICITUD" && row.folio === first.folio)?.id || "";
+            const rule = await this.learningStore.resolveSupervisedRule(input.identity, learningQuery, entityId, first.folio);
+            if (rule && !retrieved.conflict) { supervisedRuleReply = rule.text; learningUsage.appliedRuleId = rule.ruleId; }
+          }
         } catch { learningUsage = { considered: 0, selected: 0, includedIds: [], rejected: [], error: "LEARNING_RETRIEVAL_UNAVAILABLE" }; }
       }
     }
@@ -121,7 +128,7 @@ export class HugoConversationCore {
     const budget = v2 ? applyHugoContextBudget(learningContext) : undefined;
     if (learningUsage) learningUsage.includedIds = (learningContext.learningExperiences || []).map((row: any) => row.id);
     const budgetReply = budget?.exceeded ? "El contexto excede el límite seguro. Puedo revisar un folio concreto con menos antecedentes." : null;
-    const skipModel = input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply;
+    const skipModel = input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply;
     let model: ModelOutput = skipModel ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: input.commandReply ? "COMMAND_HANDLED" : "POLICY_HANDLED" } :
       !this.model ? { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null, error: "MODEL_UNAVAILABLE" } :
         { text: null, model: "none", modelVersion: "none", promptVersion, tokenUsage: null };
@@ -140,8 +147,8 @@ export class HugoConversationCore {
     const modelFailureReply = v2 && model.error && !["COMMAND_HANDLED", "POLICY_HANDLED", "EMULATOR_DISABLED"].includes(model.error) ?
       model.error === "MAX_TOKENS" ? "No pude completar una respuesta verificable. Puedes pedirme revisar un folio concreto de nuevo." :
         "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana." : null;
-    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
-    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
+    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
+    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || supervisedRuleReply || budgetReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : supervisedRuleReply ? "SUPERVISED_DOCUMENT_REVIEW" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
       context: built.context, pieces: built.pieces,
       recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, conversationState: "conversationState" in built ? built.conversationState : undefined,
       memoryUsage: "memoryUsage" in built ? built.memoryUsage : undefined, composition: "composition" in built ? built.composition : undefined,

@@ -45,6 +45,13 @@ export async function supersedeAgent007LearningExperience(experienceId: string, 
   return (await httpsCallable<{ experienceId: string; replacementId: string }, { ok: boolean; id: string; state: string; revision: number; supersededById: string }>(functions, "supersedeAgent007LearningExperience")({ experienceId, replacementId })).data;
 }
 
+export type SupervisedLearningRuleReview =
+  | { action: "APPROVE"; supportingIds: string[] }
+  | { action: "REVOKE"; ruleId: string };
+export async function reviewAgent007LearningRule(input: SupervisedLearningRuleReview) {
+  return (await httpsCallable<SupervisedLearningRuleReview, { ok: boolean; ruleId: string; status: "ACTIVE" | "INVALIDATED"; version: number }>(functions, "reviewAgent007LearningRule")(input)).data;
+}
+
 export type HugoHumanReviewChoice = "A_BETTER" | "B_BETTER" | "EQUIVALENT" | "BOTH_ACCEPTABLE" | "BOTH_UNACCEPTABLE";
 export type HugoHumanReview = { reviewId: string; evalRunId: string; caseId: string; choice: HugoHumanReviewChoice | null; reasons: string[]; note: string | null; reviewerUid: string; reviewedAt: string; revision: number; status: "REVIEWED" | "SKIPPED" };
 export async function saveAgent007HumanReview(input: { evalRunId: string; caseId: string; status: "REVIEWED" | "SKIPPED"; choice?: HugoHumanReviewChoice; reasons: string[]; note?: string }) {

@@ -17,6 +17,7 @@ import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
 import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
+import { FirestoreHugoLearningRuleStore } from "./firestoreHugoLearningRuleStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
 import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
@@ -28,6 +29,19 @@ const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace
 const conversationIdFor = (rootId: string, uid: string, scope: "GLOBAL" | "PAY0" = "PAY0") => scope === "GLOBAL" ? `${rootId}_${uid}_global` : `${rootId}_${uid}`;
 const hugoData = new FirestoreHugoDataStore(db);
 const hugoLearning = new FirestoreHugoLearningStore(db);
+
+export const reviewAgent007LearningRule = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const data = request.data || {};
+    if (!["APPROVE", "REVOKE"].includes(data.action)) throw new HttpsError("invalid-argument", "Acción de revisión inválida.");
+    return { ok: true, ...await new FirestoreHugoLearningRuleStore(db).review({ uid, rootId }, {
+      action: data.action, ruleId: clean(data.ruleId, 160),
+      supportingIds: Array.isArray(data.supportingIds) ? data.supportingIds.map((id: unknown) => clean(id, 160)) : undefined,
+    }) };
+  },
+);
 
 function displayName(user: any): string {
   return clean(user?.displayName || user?.name || user?.nombre || user?.firstName || user?.email?.split?.("@")[0] || "", 80) || "usuario";

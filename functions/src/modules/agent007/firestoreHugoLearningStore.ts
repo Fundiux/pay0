@@ -3,6 +3,7 @@ import { sameEvidenceIdentity, observationEntity, canonicalEvidenceType } from "
 import { createHash } from "node:crypto";
 import { Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { FirestoreHugoLearningRuleStore } from "./firestoreHugoLearningRuleStore";
 import { buildDraftExperience, buildVerifiedExperience, withCorrection, withOutcome } from "./hugoCore/experienceBuilder";
 import { HugoLearningStore, selectLearningExperiences } from "./hugoCore/learningStore";
 import { LearningCorrection, LearningEffect, LearningEventType, LearningExperience, LearningLedgerEvent, LearningQuery, LearningRetrieval, LearningSplit, trainingEligibility } from "./hugoCore/learningContract";
@@ -12,6 +13,9 @@ const iso = (value: any) => value?.toDate?.()?.toISOString?.() || (typeof value 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40);
 export class FirestoreHugoLearningStore implements HugoLearningStore {
   constructor(private readonly db: Firestore) {}
+  resolveSupervisedRule(identity: { uid: string; rootId: string }, query: LearningQuery, entityId: string, folio: string) {
+    return new FirestoreHugoLearningRuleStore(this.db).resolve(identity, query, entityId, folio);
+  }
   private scope(rootId: string) { if (!validId(rootId)) throw new HttpsError("invalid-argument", "Ámbito de aprendizaje inválido."); return rootId; }
   private ref(id: string) { if (!validId(id)) throw new HttpsError("invalid-argument", "Experiencia inválida."); return this.db.collection("agent007LearningExperiences").doc(id); }
   private ledgerRef(id: string) { return this.db.collection("agent007LearningLedger").doc(id); }
