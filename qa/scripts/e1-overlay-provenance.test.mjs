@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity, assertRunRuntimePreserved } from '../../scripts/deploy-scoped-functions.mjs';
+import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity, assertRunRuntimePreserved, artifactProbeContract, assertRuntimePreserved } from '../../scripts/deploy-scoped-functions.mjs';
 
 const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'a'.repeat(64), patchCommit: 'b'.repeat(40), patchSha256: 'c'.repeat(64) };
 const input = { group: 'hugo-chat-overlay', functions: ['sendAgent007Message'], sourceCommit: identity.patchCommit, archiveSha256: 'd'.repeat(64), sourceIdentity: identity };
@@ -34,6 +34,29 @@ test('document generation overlay pins only the authorized download endpoint', (
   assertArtifactProof(documentInput, proof);
   assert.throws(() => assertArtifactProof({ ...documentInput, functions: ['listOperationalDocuments'] }, proof), /FUNCTION_SCOPE/);
   assert.throws(() => validateSourceIdentity(undefined, documentInput.group, input.sourceCommit), /OVERLAY_IDENTITY_REQUIRED/);
+});
+
+for (const [group, name] of [['operation-recovery-queue-overlay', 'queueOperationRecovery'], ['operation-recovery-reconcile-overlay', 'reconcileOperationRecovery']]) {
+  test(`${group} requires non-invoking registration proof and exact artifact behavior`, () => {
+    const backgroundInput = { ...input, group, functions: [name] };
+    const proof = { status: 'PASS', sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, sourceIdentity: identity,
+      functions: [name], registrationContract: artifactProbeContract(group), registeredFunctions: 1, invokedFunctions: 0,
+      behaviorVerification: { status: 'PASS', archiveSha256: input.archiveSha256, terminalPreserved: true, retryBudgetPreserved: true, scopedRootsPreserved: true } };
+    assertArtifactProof(backgroundInput, proof);
+    assert.throws(() => assertArtifactProof(backgroundInput, { ...proof, invokedFunctions: 1 }));
+    assert.throws(() => assertArtifactProof(backgroundInput, { ...proof, registrationContract: { kind: 'CALLABLE' }, unauthenticatedDenied: 1 }));
+    for (const field of ['terminalPreserved', 'retryBudgetPreserved', 'scopedRootsPreserved']) {
+      assert.throws(() => assertArtifactProof(backgroundInput, { ...proof, behaviorVerification: { ...proof.behaviorVerification, [field]: false } }));
+    }
+    assert.throws(() => assertArtifactProof(backgroundInput, { ...proof, behaviorVerification: { ...proof.behaviorVerification, archiveSha256: 'other' } }));
+  });
+}
+
+test('source-only verification never permits an event trigger change', () => {
+  const before = { serviceConfig: {}, buildConfig: {}, eventTrigger: { eventType: 'written', retryPolicy: 'RETRY_POLICY_RETRY' } };
+  assertRuntimePreserved(before, structuredClone(before));
+  const after = structuredClone(before); after.eventTrigger.retryPolicy = 'RETRY_POLICY_DO_NOT_RETRY';
+  assert.throws(() => assertRuntimePreserved(before, after), /EVENT_TRIGGER_CHANGED/);
 });
 
 test('a later full-checkout update does not retain stale overlay provenance', () => {

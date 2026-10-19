@@ -18,8 +18,15 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'hugo-chat-overlay': Object.freeze(['sendAgent007Message']),
   'hugo-voice-overlay': Object.freeze(['delegateHugoVoiceTurn']),
   'document-generation-overlay': Object.freeze(['getAuthorizedDocumentDownloadUrl']),
+  'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
+  'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
 });
-const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+export function artifactProbeContract(group) {
+  if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
+  if (group === 'operation-recovery-reconcile-overlay') return { kind: 'SCHEDULE', schedule: 'every 5 minutes' };
+  return { kind: 'CALLABLE' };
+}
 export function validateSourceIdentity(identity, group, sourceCommit) {
   if (identity === undefined) {
     assert.ok(!OVERLAY_GROUPS.includes(group), 'OVERLAY_IDENTITY_REQUIRED');
@@ -57,7 +64,17 @@ export function assertArtifactProof(input, proof) {
   assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
   assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
-  assert.equal(proof.unauthenticatedDenied, names.length, 'ARTIFACT_AUTH_NOT_VERIFIED');
+  const contract = artifactProbeContract(input.group);
+  if (contract.kind === 'CALLABLE') assert.equal(proof.unauthenticatedDenied, names.length, 'ARTIFACT_AUTH_NOT_VERIFIED');
+  else {
+    assert.deepEqual(proof.registrationContract, contract, 'ARTIFACT_REGISTRATION_MISMATCH');
+    assert.equal(proof.registeredFunctions, names.length, 'ARTIFACT_REGISTRATION_NOT_VERIFIED');
+    assert.equal(proof.invokedFunctions, 0, 'BACKGROUND_PROBE_MUST_NOT_INVOKE');
+    const behavior = proof.behaviorVerification;
+    assert.equal(behavior?.status, 'PASS', 'BACKGROUND_BEHAVIOR_NOT_VERIFIED');
+    assert.equal(behavior.archiveSha256, input.archiveSha256, 'BACKGROUND_BEHAVIOR_ARTIFACT_MISMATCH');
+    for (const key of ['terminalPreserved', 'retryBudgetPreserved', 'scopedRootsPreserved']) assert.equal(behavior[key], true, 'BACKGROUND_BEHAVIOR_INCOMPLETE');
+  }
   if (proof.functions !== undefined || input.group !== undefined) assert.deepEqual(proof.functions, [...names], 'ARTIFACT_PROOF_FUNCTIONS');
   if (input.buildMode !== undefined) assert.equal(proof.buildMode, input.buildMode, 'ARTIFACT_PROOF_MODE');
 }
@@ -115,6 +132,7 @@ export function assertRuntimePreserved(before, after) {
   assert.equal(after.buildConfig.runtime, before.buildConfig.runtime, 'RUNTIME_CHANGED');
   assert.equal(after.buildConfig.entryPoint, before.buildConfig.entryPoint, 'ENTRYPOINT_CHANGED');
   assert.deepEqual(after.buildConfig.environmentVariables, before.buildConfig.environmentVariables, 'BUILD_ENV_CHANGED');
+  assert.deepEqual(after.eventTrigger, before.eventTrigger, 'EVENT_TRIGGER_CHANGED');
 }
 export function assertRunRuntimePreserved(before, after, input) {
   // Google may add these identity annotations while replacing a revision.

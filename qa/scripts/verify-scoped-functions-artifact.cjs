@@ -10,8 +10,9 @@ const JSZip = require('../../functions/node_modules/jszip');
   const file = path.resolve(process.argv[2] || '');
   assert.ok(file.startsWith(base + path.sep), 'PRIVATE_INPUT_REQUIRED');
   const input = JSON.parse(fs.readFileSync(file));
-  const { deploymentScope } = await import('../../scripts/deploy-scoped-functions.mjs');
+  const { deploymentScope, artifactProbeContract, assertArtifactProof } = await import('../../scripts/deploy-scoped-functions.mjs');
   const { group, names, buildMode } = deploymentScope(input);
+  const contract = artifactProbeContract(group);
   assert.ok(path.resolve(input.archive).startsWith(path.dirname(file) + path.sep), 'ARTIFACT_SCOPE');
   const bytes = fs.readFileSync(input.archive);
   assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), input.archiveSha256);
@@ -39,11 +40,23 @@ const JSZip = require('../../functions/node_modules/jszip');
     const entry = require('./lib/index.js');
     (async () => {
       const names = ${JSON.stringify(names)};
+      const contract = ${JSON.stringify(contract)};
       for (const name of names) {
-        assert.equal(typeof entry[name]?.run, 'function');
-        await assert.rejects(entry[name].run({ data: {} }), e => e.code === 'unauthenticated');
+        if (contract.kind === 'CALLABLE') {
+          assert.equal(typeof entry[name]?.run, 'function');
+          await assert.rejects(entry[name].run({ data: {} }), e => e.code === 'unauthenticated');
+        } else {
+          assert.equal(typeof entry[name], 'function');
+          const endpoint = entry[name].__endpoint;
+          if (contract.kind === 'FIRESTORE') {
+            assert.equal(endpoint.eventTrigger.eventType, contract.eventType);
+            assert.equal(endpoint.eventTrigger.eventFilterPathPatterns.document, contract.document);
+            assert.equal(endpoint.eventTrigger.retry, contract.retry);
+          } else assert.equal(endpoint.scheduleTrigger.schedule, contract.schedule);
+        }
       }
-      log(JSON.stringify({ status: 'PASS', endpointsLoaded: Object.keys(entry).filter(k => entry[k]?.__endpoint).length, unauthenticatedDenied: names.length, functions: names }));
+      log(JSON.stringify({ status: 'PASS', endpointsLoaded: Object.keys(entry).filter(k => entry[k]?.__endpoint).length, functions: names,
+        ...(contract.kind === 'CALLABLE' ? { unauthenticatedDenied: names.length } : { registrationContract: contract, registeredFunctions: names.length, invokedFunctions: 0 }) }));
     })().catch(() => { process.exitCode = 1; });
   `;
   const runtime = spawnSync(process.execPath, ['-e', probe], { cwd: directory, encoding: 'utf8', windowsHide: true,
@@ -52,7 +65,10 @@ const JSZip = require('../../functions/node_modules/jszip');
     signal: runtime.signal || null, errorCode: runtime.error?.code || null }));
   assert.equal(runtime.status, 0, 'ARTIFACT_STARTUP_OR_AUTH_FAILED');
   const result = JSON.parse(runtime.stdout.trim());
-  assert.deepEqual(result.functions, [...names]); assert.equal(result.unauthenticatedDenied, names.length);
-  fs.writeFileSync(path.join(path.dirname(file), 'artifact-verification.json'), JSON.stringify({ ...result, group, buildMode, sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, ...(input.sourceIdentity ? { sourceIdentity: input.sourceIdentity } : {}), checkedAt: new Date().toISOString(), productionWrites: 0 }, null, 2));
+  assert.deepEqual(result.functions, [...names]);
+  const behavior = contract.kind === 'CALLABLE' ? {} : { behaviorVerification: JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'behavior-verification.json'))) };
+  const proof = { ...result, ...behavior, group, buildMode, sourceCommit: input.sourceCommit, archiveSha256: input.archiveSha256, ...(input.sourceIdentity ? { sourceIdentity: input.sourceIdentity } : {}), checkedAt: new Date().toISOString(), productionWrites: 0 };
+  assertArtifactProof(input, proof);
+  fs.writeFileSync(path.join(path.dirname(file), 'artifact-verification.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(result));
 })().catch(error => { const code = String(error.message).match(/^[A-Z_]+(?=\s|$)/)?.[0]; console.error(`ARTIFACT_VERIFICATION_FAILED ${code || 'detailsRedacted=true'}`); process.exitCode = 1; });
