@@ -75,6 +75,26 @@ async function screenshot(page, name) {
   await page.screenshot({ path: `test-results/authenticated-emulator/${name}-${page.viewportSize().width}.png`, fullPage: true });
 }
 
+async function logReportsHydration(page, browserDiagnostics, localTransport, stage) {
+  const state = await page.evaluate(async () => {
+    const databaseNames = typeof indexedDB.databases === "function"
+      ? (await indexedDB.databases()).map((database) => database.name).filter(Boolean).sort()
+      : [];
+    const resources = performance.getEntriesByType("resource")
+      .map((entry) => new URL(entry.name).pathname)
+      .filter((path) => path.startsWith("/_next/") || path.includes("identitytoolkit") || path.includes("firestore"))
+      .slice(-40);
+    return {
+      body: document.body.innerText.replace(/\s+/g, " ").slice(0, 1600),
+      online: navigator.onLine,
+      readyState: document.readyState,
+      databaseNames,
+      resources,
+    };
+  });
+  console.log(`QA_AUTH_REPORTES_HYDRATION stage=${stage} url=${page.url()} state=${JSON.stringify(state)} transport=${JSON.stringify(localTransport)} diagnostics=${JSON.stringify(browserDiagnostics)}`);
+}
+
 async function expectModalViewportAndKeyboard(page, dialog) {
   await expect(dialog).toBeVisible();
   const box = await dialog.boundingBox();
@@ -188,15 +208,24 @@ test("DateScopeBar es operable en Reportes en todos los anchos", async ({ page }
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const browserDiagnostics = [];
+    const localTransport = [];
     page.on("console", message => { if (["error", "warning"].includes(message.type())) browserDiagnostics.push(`${message.type()}:${message.text()}`); });
     page.on("pageerror", error => browserDiagnostics.push(`pageerror:${error.message}`));
+    page.on("request", request => {
+      const url = new URL(request.url());
+      if (url.hostname === "127.0.0.1" && ["8080", "9099", "5001"].includes(url.port)) localTransport.push(`${request.method()} ${url.port}${url.pathname}`);
+    });
     await page.goto("/reportes", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
-    const rendered = (await page.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 1600);
-    console.log(`QA_AUTH_REPORTES_STATE url=${page.url()} body=${JSON.stringify(rendered)} diagnostics=${JSON.stringify(browserDiagnostics)}`);
+    await logReportsHydration(page, browserDiagnostics, localTransport, "after-domcontentloaded");
     await expect(page.getByText("No tienes acceso a Reportes.")).toHaveCount(0);
     const month = page.getByRole("button", { name: "MES" });
-    await expect(month).toBeVisible();
+    try {
+      await expect(month).toBeVisible({ timeout: 24_000 });
+    } catch (error) {
+      await logReportsHydration(page, browserDiagnostics, localTransport, "month-unavailable");
+      throw error;
+    }
     await month.click();
     const calendar = page.getByRole("button", { name: "Seleccionar periodo personalizado" });
     await calendar.click();
