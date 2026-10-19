@@ -2,6 +2,7 @@
 set -eu
 # This is Firebase Auth Emulator's public test API key, never a production credential.
 export PAY0_FIREBASE_WEB_API_KEY=qa-emulator-only
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require=/opt/pay0/qa/authenticated-isolation/functions-config-trace.cjs --trace-uncaught"
 mkdir -p /tmp/.cache
 cp -r /opt/emulator-cache/firebase /tmp/.cache/firebase
 node /opt/pay0/qa/emulator-isolation/preflight.mjs
