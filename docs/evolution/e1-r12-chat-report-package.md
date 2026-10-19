@@ -1,4 +1,4 @@
-﻿# R1.2 — Continuidad de reportes y descarga real
+# R1.2 — Continuidad de reportes y descarga real
 
 Estado: paquete preparado; no publicado. El commit de identidad del parche y la autorización de nuevos bytes están pendientes. La interfaz se prepara por separado desde su base publicada.
 
@@ -39,6 +39,3 @@ node qa/scripts/build-r12-chat-overlay.mjs .firebase/modular-release/e1-2026-10-
 - Typecheck aislado `tsc --noEmit`: PASS. El build integrado final 45259 pasó y su lib final obtuvo 21/21 sin hook. Un build anterior había emitido reportSemantics antes del último sufijo; la prueba detectó ese desfase (20/21), corregido por el build final.
 
 La reversión debe restaurar el ZIP R1.1 capturado y su configuración vigente. No se han invocado proveedores, Telegram ni acciones financieras de producción. La comprobación funcional con la cuenta del usuario sigue pendiente de publicación autorizada.
-
-
-
