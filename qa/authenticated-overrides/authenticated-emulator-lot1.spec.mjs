@@ -14,6 +14,7 @@ async function stubLocalCallables(page) {
         truncated: false,
         automation: { iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false },
       }
+      : operation === "getControlCenterOverview" || operation === "refreshControlCenterOverview" ? { snapshot: { generatedAt: "2026-01-31T00:00:00.000Z", totals: {}, alerts: [] } }
       : operation === "getControlCenterAnalytics" ? {
         ok: true,
         from: "2026-01-01",
@@ -153,5 +154,24 @@ test("DateScopeBar es operable en todos los anchos", async ({ page }) => {
     await page.keyboard.press("Escape");
     await expect(calendar).toBeFocused();
     await screenshot(page, "activity-datescope");
+  }
+});
+test("DateScopeBar es operable en Reportes en todos los anchos", async ({ page }) => {
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/reportes", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("No tienes acceso a Reportes.")).toHaveCount(0);
+    const month = page.getByRole("button", { name: "MES" });
+    await expect(month).toBeVisible();
+    await month.click();
+    const calendar = page.getByRole("button", { name: "Seleccionar periodo personalizado" });
+    await calendar.click();
+    const calendarDialog = page.getByRole("dialog");
+    await expect(calendarDialog).toBeVisible();
+    await expect(calendarDialog).toHaveAttribute("aria-modal", "false");
+    await expect(page.getByRole("button", { name: /Mes anterior/ })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(calendar).toBeFocused();
+    await screenshot(page, "reportes-datescope");
   }
 });
