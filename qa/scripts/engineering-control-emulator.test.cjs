@@ -4,6 +4,7 @@ process.env.GCLOUD_PROJECT = "demo-pay0";
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error("Local emulator required");
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path");
+const sourceRoot = path.resolve(__dirname, "../..");
 const { chromium, expect } = require("@playwright/test");
 const ts = require("typescript");
 const candidateFixture = require("./fixtures/engineering-candidate.cjs");
@@ -92,14 +93,33 @@ async function run() {
     await page.goto("http://localhost/engineering-test");
     await page.addScriptTag({ path: path.join(path.dirname(require.resolve("react")), "umd/react.development.js") });
     await page.addScriptTag({ path: path.join(path.dirname(require.resolve("react-dom")), "umd/react-dom.development.js") });
-    const source = 'import * as React from "react";\n' + fs.readFileSync("src/components/control-center/EngineeringControl.tsx", "utf8");
+    const source = 'import * as React from "react";\n' + fs.readFileSync(path.join(sourceRoot, "src/components/control-center/EngineeringControl.tsx"), "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-    await page.evaluate(js => {
+    const recoverySource = 'import * as React from "react";\n' + fs.readFileSync(path.join(sourceRoot, "src/components/control-center/RecoveryReview.tsx"), "utf8");
+    const recoveryJs = ts.transpileModule(recoverySource, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
+    await page.evaluate(({js, recoveryJs, uid, rootId}) => {
+      window.qaIdentity = {profileUid:uid, loading:false, profile:{rootId,role:'superadmin',active:true}};
+      window.qaReviewCalls = 0;
       const services = Object.fromEntries(["getControlCenterEngineering", "listAgent007Observations", "listAgent007Traces", "recordAgent007Observation", "importControlCenterEngineeringEvidence", "assignControlCenterEngineeringTask", "reconcileAgent007RecommendationsNow"].map(name => [name, data => window.qaCall(name, data)]));
-      const require = name => name === "react" ? window.React : name === "next/link" ? { __esModule: true, default: props => window.React.createElement("a", props) } : services;
-      const exports = {}; new Function("require", "exports", js)(require, exports);
-      window.ReactDOM.createRoot(document.getElementById("root")).render(window.React.createElement(exports.default));
-    }, compiled);
+      Object.assign(services, {listOperationRecoveryReviews:async()=>{window.qaReviewCalls++;return {rows:[],truncated:false,nextCursor:null};},acknowledgeOperationRecoveryReview:async()=>{throw Error('NO_SYNTHETIC_ACK_EXPECTED');}});
+      const review = {}, exports = {};
+      new Function('require','exports',recoveryJs)(name=>name==='react'?window.React:services,review);
+      const require = name => name === 'react' ? window.React : name === '@/lib/useUserProfile' ? {useUserProfile:()=>window.qaIdentity} : name === './RecoveryReview' ? review : name === 'next/link' ? {__esModule:true,default:props=>window.React.createElement('a',props)} : services;
+      new Function('require','exports',js)(require,exports);
+      window.qaEngineeringRoot = window.ReactDOM.createRoot(document.getElementById('root'));
+      window.qaRenderEngineering = () => window.ReactDOM.flushSync(()=>window.qaEngineeringRoot.render(window.React.createElement(exports.default)));
+      window.qaRenderEngineering();
+    }, {js:compiled,recoveryJs,uid:root,rootId:root});
+    await expect(page.getByText('Revisión administrativa de recuperaciones',{exact:true})).toBeVisible();
+    await expect.poll(()=>page.evaluate(()=>window.qaReviewCalls)).toBe(1);
+    for(const denied of ['no-session','wrong-role','inactive']) {
+      await page.evaluate(({denied,uid,rootId})=>{window.qaIdentity=denied==='no-session'?{profileUid:null,profile:null,loading:false}:{profileUid:uid,loading:false,profile:{rootId,role:denied==='wrong-role'?'operador':'superadmin',active:denied!=='inactive'}};window.qaRenderEngineering();},{denied,uid:root,rootId:root});
+      await expect(page.getByText('Revisión administrativa de recuperaciones',{exact:true})).toHaveCount(0);
+      assert.equal(await page.evaluate(()=>window.qaReviewCalls),1,'Denied identity must not query recovery reviews');
+    }
+    await page.evaluate(({uid,rootId})=>{window.qaIdentity={profileUid:uid,loading:false,profile:{rootId,role:'superadmin',active:true}};window.qaRenderEngineering();},{uid:root,rootId:root});
+    await expect(page.getByText('Revisión administrativa de recuperaciones',{exact:true})).toBeVisible();
+    console.log('QA_FIXTURE_AUTH_CONTEXT_PASS no-session wrong-role inactive; RecoveryReview actual, review endpoints stubbed');
     await expect(page.getByText("Comprobante sintético", { exact: true })).toBeVisible();
     await page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Comprobante sintético", exact: true }) }).getByRole("button", { name: "Agregar avance" }).click();
     await page.getByLabel("Estado declarado").selectOption("Bloqueado");
