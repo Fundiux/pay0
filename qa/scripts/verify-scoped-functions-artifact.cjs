@@ -42,9 +42,9 @@ const JSZip = require('../../functions/node_modules/jszip');
       const names = ${JSON.stringify(names)};
       const contract = ${JSON.stringify(contract)};
       for (const name of names) {
-        if (contract.kind === 'CALLABLE') {
+        if (contract.kind === 'CALLABLE' || contract.kind === 'SIGNED_SESSION') {
           assert.equal(typeof entry[name]?.run, 'function');
-          await assert.rejects(entry[name].run({ data: {} }), e => e.code === 'unauthenticated');
+          await assert.rejects(entry[name].run({ data: {} }), e => e.code === (contract.kind === 'CALLABLE' ? 'unauthenticated' : contract.missingScopeError));
         } else {
           assert.equal(typeof entry[name], 'function');
           const endpoint = entry[name].__endpoint;
@@ -56,7 +56,7 @@ const JSZip = require('../../functions/node_modules/jszip');
         }
       }
       log(JSON.stringify({ status: 'PASS', endpointsLoaded: Object.keys(entry).filter(k => entry[k]?.__endpoint).length, functions: names,
-        ...(contract.kind === 'CALLABLE' ? { unauthenticatedDenied: names.length } : { registrationContract: contract, registeredFunctions: names.length, invokedFunctions: 0 }) }));
+        ...(contract.kind === 'CALLABLE' ? { unauthenticatedDenied: names.length } : contract.kind === 'SIGNED_SESSION' ? { sessionValidationContract: contract, invalidSessionDenied: names.length } : { registrationContract: contract, registeredFunctions: names.length, invokedFunctions: 0 }) }));
     })().catch(() => { process.exitCode = 1; });
   `;
   const runtime = spawnSync(process.execPath, ['-e', probe], { cwd: directory, encoding: 'utf8', windowsHide: true,

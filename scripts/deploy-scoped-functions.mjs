@@ -18,11 +18,16 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'hugo-chat-overlay': Object.freeze(['sendAgent007Message']),
   'hugo-voice-overlay': Object.freeze(['delegateHugoVoiceTurn']),
   'document-generation-overlay': Object.freeze(['getAuthorizedDocumentDownloadUrl']),
+  'complement-config-overlay': Object.freeze(['configurePaymentComplementAutomation']),
+  'mat-user-home-overlay': Object.freeze(['getMatUserHome']),
+  'mat-client-home-overlay': Object.freeze(['getMatClientHome']),
+  'mat-session-overlay': Object.freeze(['verifyTelegramMiniAppSession']),
   'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
   'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
 });
-const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
 export function artifactProbeContract(group) {
+  if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
   if (group === 'operation-recovery-reconcile-overlay') return { kind: 'SCHEDULE', schedule: 'every 5 minutes' };
   return { kind: 'CALLABLE' };
@@ -69,7 +74,14 @@ export function assertArtifactProof(input, proof) {
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
   const contract = artifactProbeContract(input.group);
   if (contract.kind === 'CALLABLE') assert.equal(proof.unauthenticatedDenied, names.length, 'ARTIFACT_AUTH_NOT_VERIFIED');
-  else {
+  else if (contract.kind === 'SIGNED_SESSION') {
+    assert.deepEqual(proof.sessionValidationContract, contract, 'ARTIFACT_SIGNED_SESSION_CONTRACT');
+    assert.equal(proof.invalidSessionDenied, names.length, 'ARTIFACT_SIGNED_SESSION_NOT_VERIFIED');
+    const behavior = proof.behaviorVerification;
+    assert.equal(behavior?.status, 'PASS', 'SIGNED_SESSION_BEHAVIOR_NOT_VERIFIED');
+    assert.equal(behavior.archiveSha256, input.archiveSha256, 'SIGNED_SESSION_ARTIFACT_MISMATCH');
+    for (const key of ['invalidSignatureRejected', 'expiredSignatureRejected', 'membershipRevocationRejected', 'foreignRootsIsolated', 'emptyScopeDenied', 'canonicalUidPreserved']) assert.equal(behavior[key], true, 'SIGNED_SESSION_BEHAVIOR_INCOMPLETE');
+  } else {
     assert.deepEqual(proof.registrationContract, contract, 'ARTIFACT_REGISTRATION_MISMATCH');
     assert.equal(proof.registeredFunctions, names.length, 'ARTIFACT_REGISTRATION_NOT_VERIFIED');
     assert.equal(proof.invokedFunctions, 0, 'BACKGROUND_PROBE_MUST_NOT_INVOKE');
@@ -125,6 +137,16 @@ export function sourceOnlyPatch(baseline, source, sourceCommit, archiveSha256, g
   return { name: baseline.name, buildConfig: { source: { storageSource: source } },
     labels };
 }
+function orderedEventTrigger(trigger) {
+  const result = structuredClone(trigger);
+  if (Array.isArray(result?.eventFilters)) result.eventFilters.sort((a, b) => digest(a).localeCompare(digest(b)));
+  return result;
+}
+export function functionMetadataDigest(resource) {
+  const copy = structuredClone(resource);
+  if (copy.eventTrigger) copy.eventTrigger = orderedEventTrigger(copy.eventTrigger);
+  return digest(copy);
+}
 export function assertRuntimePreserved(before, after) {
   const select = value => {
     const config = structuredClone(value.serviceConfig);
@@ -135,7 +157,7 @@ export function assertRuntimePreserved(before, after) {
   assert.equal(after.buildConfig.runtime, before.buildConfig.runtime, 'RUNTIME_CHANGED');
   assert.equal(after.buildConfig.entryPoint, before.buildConfig.entryPoint, 'ENTRYPOINT_CHANGED');
   assert.deepEqual(after.buildConfig.environmentVariables, before.buildConfig.environmentVariables, 'BUILD_ENV_CHANGED');
-  assert.deepEqual(after.eventTrigger, before.eventTrigger, 'EVENT_TRIGGER_CHANGED');
+  assert.deepEqual(orderedEventTrigger(after.eventTrigger), orderedEventTrigger(before.eventTrigger), 'EVENT_TRIGGER_CHANGED');
 }
 export function assertRunRuntimePreserved(before, after, input) {
   // Google may add these identity annotations while replacing a revision.
@@ -203,7 +225,7 @@ export function assertOperationMatchesGet(operationResource, getResource) {
     delete copy['@type']; delete copy.updateTime;
     return copy;
   };
-  assert.equal(digest(comparable(operationResource)), digest(comparable(getResource)), 'CONCURRENT_POSTFLIGHT_CHANGE');
+  assert.equal(functionMetadataDigest(comparable(operationResource)), functionMetadataDigest(comparable(getResource)), 'CONCURRENT_POSTFLIGHT_CHANGE');
 }
 export function previousSource(resource) {
   const source = resource.buildConfig?.sourceProvenance?.resolvedStorageSource || resource.buildConfig?.source?.storageSource;
@@ -233,7 +255,7 @@ async function readSourceBytes(source, token) {
 }
 async function assertCurrent(expected, name, token) {
   const resource = await getMetadata(`${base}/functions/${name}`, token);
-  assert.equal(digest(resource), digest(expected.resource), 'CONCURRENT_FUNCTION_CHANGE');
+  assert.equal(functionMetadataDigest(resource), functionMetadataDigest(expected.resource), 'CONCURRENT_FUNCTION_CHANGE');
   const service = await getMetadata(`https://run.googleapis.com/v2/${resource.serviceConfig.service}`, token);
   assert.equal(digest(service), digest(expected.service), 'CONCURRENT_RUN_CHANGE');
   const iam = await getMetadata(`https://run.googleapis.com/v2/${resource.serviceConfig.service}:getIamPolicy`, token);
