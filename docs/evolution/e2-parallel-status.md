@@ -8,15 +8,15 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 implementado y probado; prepara artefacto UI sobre E, sin detener otros frentes |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 preparado y probado sobre E; autorización específica solicitada |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
-| C | Selección de cliente y reportes canónicos | Reporte real R1.2 confirmado parcialmente; R1.3 añade formato PDF/XLSX y continuidad corregida. PDF de siete páginas validado con datos sintéticos, aún sin publicar |
+| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX y continuidad corregida: build, descargas reales, runtime y siete páginas PDF PASS. Comparaciones R2 corrigieron pérdida de cliente/formato en candidato posterior, todavía sin publicar |
 | D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador y 64 regresiones tras R1.3; aprobación/revocación y gate apagado; no publicado |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Paquete publicado: backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67; cinco rutas públicas HTTP200, panel autenticado pendiente. Revisión administrativa endurecida y compilada, aún sin publicar |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores publicados: backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67; cinco rutas públicas HTTP200, panel autenticado pendiente. Administración/MAT a335e195: build PASS; dos endpoints nuevos siguen ausentes y pendientes de autorización |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
-| I | MAT reutiliza formularios y dominio existente | Guardas publicadas; fix del provider integrado y compilado con cinco pruebas UI. Formularios requieren sesión Firebase coincidente; no hay puente sólo Telegram |
+| I | MAT reutiliza formularios y dominio existente | Guardas publicadas; candidato a335e195 con build PASS y cinco pruebas UI. Formularios requieren sesión Firebase coincidente; no hay puente sólo Telegram; UI sin publicar |
 | J | Transporte Telegram y sesiones MAT | Autenticación HMAC real probada con claves sintéticas; sin envíos reales. Consumidor QR sigue sin localizar |
 | K | Homologación de artefactos y evaluación Next 16 aislada | Cierre transitivo y aislamiento real de módulos integrados; 28 pruebas del nuevo control PASS. Next 16 sigue aislado; producción permanece en Next 15 |
 
@@ -27,10 +27,11 @@ archivos modificados y no se escribe sobre ellos.
 | R1 | Revisiones chat 00016-zop y voz 00009-mez | Sustituido por R1.1 para corregir la incidencia reportada |
 | R1.1 | Parche `ac002ad`; chat 00017-nup, voz 00010-caj | Publicado; conversación aportada sin 500. R1 funcionalmente incompleto; voz no verificada |
 | R1.2 | Commit f1ee85b; chat 00018-sav | Reporte en texto confirmado con nombre simple; flujo completo incompleto y XLSX aún sin publicar. R1.3 corrige conversación/puntuación y añade formato PDF |
+| R1.3 | Backend 0b17cfc / ZIP a33ed9ba; UI 13620b7 / ZIP 12fcc181 | DEPLOYMENT_PENDING; build, emulador, descargas y runtime exacto PASS. Input UI reconciliado 4c64964a y proof b53c5cac; autorización específica solicitada. No publicado |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
 | E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67 publicados. Cinco rutas públicas verificadas; interacción autenticada pendiente |
-| E/F/I mínimo | Revisión administrativa y MAT de `a280e72` | Contrato preparado; no equivale a ZIP desplegable ni a publicación |
+| E/I UI siguiente | Fuente a335e195; build e6e68107 | Build de 47 páginas y pruebas UI PASS; aún sin SSR preparado ni publicación. Requiere endpoints administrativos nuevos y conservar R1.3 |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
