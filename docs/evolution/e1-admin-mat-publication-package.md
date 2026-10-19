@@ -1,6 +1,6 @@
 # Paquete exacto — revisión administrativa y acceso MAT
 
-Estado: **PREPARED_NOT_RELEASE_AUTHORIZED**. Artefactos y runtime locales verificados; todavía no se crearon los endpoints ni se publicó esta UI. El paquete consta de dos Functions nuevas y una actualización conjunta Hosting/SSR. No incluye aprendizaje D, R2, Sentinel, conector WhatsApp, cambios de reglas ni dependencias nuevas.
+Estado: **DEPLOYMENT_PENDING** — autorización específica solicitada. Artefactos y runtime locales verificados; todavía no se crearon los endpoints ni se publicó esta UI. El paquete consta de dos Functions nuevas y una actualización conjunta Hosting/SSR. No incluye aprendizaje D, R2, Sentinel, conector WhatsApp, cambios de reglas ni dependencias nuevas.
 
 ## Alcance y orden
 

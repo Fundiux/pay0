@@ -1,6 +1,6 @@
 # R2 de reportes sobre R1.3 — candidato local
 
-Estado: **PREPARADO PARA AUTORIZACIÓN; NO PUBLICADO**. R1.3 ya está publicado y el input exacto de R2 se preparó sobre su base capturada. El preflight de solo lectura aprobó Function, servicio e IAM. Estos bytes requieren autorización independiente y comprobar su vigencia nuevamente al ejecutar.
+Estado: **DEPLOYMENT_PENDING** — preparado para autorización, no publicado. R1.3 ya está publicado y el input exacto de R2 se preparó sobre su base capturada. El preflight de solo lectura aprobó Function, servicio e IAM. Estos bytes requieren autorización independiente y comprobar su vigencia nuevamente al ejecutar.
 
 ## Alcance y procedencia
 
