@@ -1,6 +1,6 @@
 # R1.3 — cliente citado, reinicio conversacional y formato de reporte
 
-Estado: candidato local, no publicado. Debe publicarse primero la UI compatible con PDF, que conserva XLSX histórico; después el backend, tras validar ambos artefactos y obtener autorización. R1.2 permanece congelado.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado con autorización específica: Hosting `bf259a13a5d229c3`, SSR `ssrpay0system-00602-log` y backend `sendagent007message-00019-qon`. Fuente, configuración, IAM, cinco rutas públicas y rechazo anónimo del backend verificados. Falta la comprobación del reporte, descarga y reinicio de conversación por un usuario autorizado en PAY0.
 
 ## Comportamiento
 
@@ -50,7 +50,8 @@ La receta `qa/scripts/build-r13-chat-overlay.mjs` usa la fuente R1.2 aislada y v
 - Preflight backend a las 20:02:28 UTC: PASS, revisión `sendagent007message-00018-sav`, ZIP previo `4c28005eed1d3cd22dda824212aa136d979fe24ff91f79659999bb6eed2ef577` y configuración/IAM iguales. Evidencia privada: `.firebase/modular-release/r13-chat-report/release-sendAgent007Message/fresh-preflight.json`. Es una captura temporal; el ejecutor debe revalidarla.
 - UI PDF: el responsable frontend reporta PASS de ambas superficies, siete páginas, filas sin partir, nueve importes canónicos y cancelación por identidad. Esta comprobación no constituye publicación.
 - Build de integración frontend `85981`: PASS, con el helper PDF final y compatibilidad de historial XLSX.
-- Pendientes: autorización de los nuevos bytes y verificación funcional posterior a una publicación autorizada. Los preflights deben repetirse al publicar; R1.3 no está publicado.
+- Publicación: ambos preflights pasaron; UI primero y backend después. El ZIP productivo de chat coincide con `a33ed9badb033a48a061a38ddb8295fd20f0aa5dedb567b37e423e7c37d68496`; comprobación del 2026-10-19 20:50:36 UTC, HTTP 401 `UNAUTHENTICATED` sin sesión. La UI conserva el ZIP `12fcc18131b58621b2dd4409a56b847970fc30e1a8d6b23c6fe5df82d7e0fe0e` y sus cinco rutas devolvieron HTTP 200. No fue necesaria reversión.
+- Pendiente: verificar la funcionalidad real con sesión autorizada. Se solicitó recargar PAY0, pedir el reporte del cliente, elegir PDF, descargarlo y comprobar un saludo posterior. Esa respuesta aún no está confirmada.
 
 Logs privados: `tmp/r13-report-source-tests.log`, `tmp/r13-source-regressions.log`, `tmp/r13-exact-artifact-tests-final.log`, `tmp/r13-exact-emulator-final.log`, `tmp/r13-startup-final.log`, `tmp/r13-compiled-regressions-final.log` y `tmp/r13-compiled-emulator-final.log`. El preflight productivo debe comprobar nuevamente la revisión y fuente R1.2 antes de una actualización autorizada. La reversión restaura esa fuente y su configuración; no elimina mensajes ni auditoría. No se invocaron proveedores ni acciones financieras reales.
 

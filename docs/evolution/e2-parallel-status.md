@@ -8,16 +8,16 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 preparado y probado sobre E; autorización específica solicitada |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.3 publicado: chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Identidad/HTTP verificados; prueba funcional autenticada solicitada |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
-| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX y continuidad corregida: build, descargas reales, runtime y siete páginas PDF PASS. Comparaciones R2 corrigieron pérdida de cliente/formato en candidato posterior, todavía sin publicar |
-| D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador y 64 regresiones tras R1.3; aprobación/revocación y gate apagado; no publicado |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores publicados: backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67; cinco rutas públicas HTTP200, panel autenticado pendiente. Administración/MAT a335e195: build PASS; dos endpoints nuevos siguen ausentes y pendientes de autorización |
+| C | Selección de cliente y reportes canónicos | R1.3 PDF/XLSX publicado, uso real pendiente. Comparaciones R2: 69 regresiones integradas, 40 de artefacto y startup PASS; prepara input sobre R1.3 vigente, no publicado |
+| D | Regla supervisada persistida y enlazada al Core | Candidato D1 sobre R2 21eba53: 61 regresiones, 20 emulador, startup343 y typecheck PASS. Gate OFF; sin endpoint nuevo ni UI de revisión publicada |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores conservados en R1.3: backend 00008-des, SSR 00602-log y Hosting bf259a13a5d229c3; panel autenticado pendiente. Administración/MAT a335e195: build PASS, prepara SSR; dos endpoints nuevos siguen ausentes y pendientes de autorización |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
 | I | MAT reutiliza formularios y dominio existente | Guardas publicadas; candidato a335e195 con build PASS y cinco pruebas UI. Formularios requieren sesión Firebase coincidente; no hay puente sólo Telegram; UI sin publicar |
-| J | Transporte Telegram y sesiones MAT | Autenticación HMAC real probada con claves sintéticas; sin envíos reales. Consumidor QR sigue sin localizar |
+| J | Transporte Telegram, sesiones MAT y consumidor WhatsApp | HMAC probado con claves sintéticas, sin envíos reales. Consumidor QR recuperado en cuarentena: tres fallos de aislamiento reproducidos offline; requiere vínculo autorizado sesión→root antes de reactivación |
 | K | Homologación de artefactos y evaluación Next 16 aislada | Cierre transitivo y aislamiento real de módulos integrados; 28 pruebas del nuevo control PASS. Next 16 sigue aislado; producción permanece en Next 15 |
 
 ## Paquetes y estados de entrega
@@ -26,15 +26,17 @@ archivos modificados y no se escribe sobre ellos.
 | --- | --- | --- |
 | R1 | Revisiones chat 00016-zop y voz 00009-mez | Sustituido por R1.1 para corregir la incidencia reportada |
 | R1.1 | Parche `ac002ad`; chat 00017-nup, voz 00010-caj | Publicado; conversación aportada sin 500. R1 funcionalmente incompleto; voz no verificada |
-| R1.2 | Commit f1ee85b; chat 00018-sav | Reporte en texto confirmado con nombre simple; flujo completo incompleto y XLSX aún sin publicar. R1.3 corrige conversación/puntuación y añade formato PDF |
-| R1.3 | Backend 0b17cfc / ZIP a33ed9ba; UI 13620b7 / ZIP 12fcc181 | DEPLOYMENT_PENDING; build, emulador, descargas y runtime exacto PASS. Input UI reconciliado 4c64964a y proof b53c5cac; autorización específica solicitada. No publicado |
+| R1.2 | Commit f1ee85b; chat 00018-sav | Sustituido por R1.3; fuente anterior preservada para reversión |
+| R1.3 | Backend 0b17cfc / ZIP a33ed9ba; UI 13620b7 / ZIP 12fcc181 | DEPLOYED_NOT_VERIFIED; chat 00019-qon, SSR 00602-log y Hosting bf259a13a5d229c3. Fuente/configuración/IAM, HTTP401 anónimo y cinco rutas HTTP200 PASS; prueba de usuario pendiente |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
-| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67 publicados. Cinco rutas públicas verificadas; interacción autenticada pendiente |
+| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; publicación original 00008-des / 00600-hak / 9f48281b2df63e67, conservada por la UI R1.3 actual. Interacción autenticada pendiente |
 | E/I UI siguiente | Fuente a335e195; build e6e68107 | Build de 47 páginas y pruebas UI PASS; aún sin SSR preparado ni publicación. Requiere endpoints administrativos nuevos y conservar R1.3 |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
+| R2 reportes | Commit 9204e90 / ZIP 83baf34e | Pruebas y startup PASS; prepara paquete de sólo chat sobre la base R1.3 ya publicada. Sin publicación |
+| D1 sobre R2 | Commit 21eba53 / ZIP 55c5c45a | Candidato local probado, no listo para desplegar: requiere R2 vigente, nuevo endpoint, configuración explícita del gate y revisión humana accesible |
 
 ## Integración de interfaz sin pérdida funcional
 

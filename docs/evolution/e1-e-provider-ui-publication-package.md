@@ -2,6 +2,8 @@
 
 Estado: **DEPLOYED_NOT_VERIFIED**. Publicado con autorización específica: backend `configurepaymentcomplementautomation-00008-des`, SSR `ssrpay0system-00600-hak` y Hosting `9f48281b2df63e67`. Identidad, configuración, IAM y cinco rutas públicas verificados. Falta comprobar el panel con sesión autorizada; no se activaron proveedores ni se emitieron operaciones.
 
+La publicación posterior R1.3 sustituyó la revisión de interfaz por SSR `00602-log` y Hosting `bf259a13a5d229c3`, conservando íntegramente este cambio de proveedores. La verificación autenticada sigue pendiente: el usuario buscó en Solicitudes; se indicó la ruta correcta **Reportes → Centro de control → Complementos de pago · seguimiento actual**, disponible para Superadmin.
+
 Este paquete evita que dos administradores sobrescriban el estado del otro proveedor. Sólo actualiza `configurePaymentComplementAutomation` y dos líneas funcionales de interfaz/servicio en Hosting. Se publica independientemente de los cambios de conversación y PDF de María.
 
 ## Identidad exacta
