@@ -20,6 +20,7 @@ La revisión encontró y corrigió dos pérdidas de opciones en R2: una comparac
 
 - Runtime aislado: 40/40 pruebas de reportes canónicos, autorización, comparación, diálogo R1.3, formato, límites y persistencia de tokenUsage. Incluye cinco regresiones nuevas de conservación de cliente/PDF, aclaración de formato con ambos periodos, filtros inválidos y reinicio de contexto.
 - Typecheck completo de la copia aislada: PASS, sin escribir `functions/lib`.
+- Startup del ZIP exacto: PASS, 342 exports cargados y `sendAgent007Message` rechazó la llamada anónima. Se usó el mismo probe R1.3 (SHA256 `a1b39759cebf95003623a1c27fc863a5f29fa92ff990f9a2e3296efb91eea6cd`), con red bloqueada e instalación existente cuyo manifest y lock coinciden; no hubo instalación ni llamadas externas.
 - Reproduccion exacta del ZIP: PASS; la receta versionable reproduce el SHA256 candidato.
 - Firestore Emulator propio R2: 1/1 PASS, sin proveedores; cliente/PDF, ambos periodos, aclaracion, persistencia, reinicio, revocacion y cambio de root. El transcript R1.3 tambien paso 1/1 sobre el candidato. Cada prueba usa su cliente con cierre independiente.
 - Build NORMAL de Functions: PASS. La lib integrada, sin hooks ni redireccion de modulos, obtuvo 69/69 regresiones de consultas, reportes, contexto, aprendizaje/gobernanza D, tokenUsage y dialogo R1.3/R2. Este alcance incluye D y se informa separado del ZIP acotado.
@@ -31,5 +32,7 @@ Las dos fallas de `phase6-hardening` también se reprodujeron en el ZIP R1.3 bas
 Sólo se prepara `sendAgent007Message`. No se incluye `delegateHugoVoiceTurn`, el gateway ni su imagen; este paquete por sí solo no habilita R2 en voz. La comparación usa dos lecturas canónicas independientes y lo declara; no ofrece una instantánea transaccional entre periodos. La descarga PDF/XLSX conserva el reporte del periodo principal; la comparación se presenta en el texto, no como una tabla comparativa dentro del archivo.
 
 El siguiente paso es capturar la Function, revisión, fuente, configuración e IAM realmente vigentes después de R1.3 y preparar un input source-only contra esa identidad. La reversión debe restaurar ese ZIP R1.3 y conservar su configuración; no borra conversaciones ni auditoría. Cualquier cambio concurrente invalida el preflight. No se realizaron llamadas a modelos, proveedores, acciones financieras ni escrituras productivas.
+
+La preparación privada `r2-after-r13/readiness/` contiene un template con `readyForExecution:false` y baseline nula; no es un input ejecutable. La receta `prepare-input-after-r13.mjs` exige confirmación explícita del backend R1.3, baseline/hash y ZIP actual capturados, y comprueba sus identidades antes de generar un input nuevo. No se adelantó la captura productiva ni se autorizó R2 mediante la autorización de R1.3.
 
 Evidencia privada: `candidate-final/manifest.json`, `regressions.log`, `typecheck.log`, `emulator-final.log` y los resultados separados de `phase6` en el directorio padre.
