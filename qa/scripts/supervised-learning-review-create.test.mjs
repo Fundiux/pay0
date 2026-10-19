@@ -67,11 +67,12 @@ test('active executor lock excludes a concurrent resume too',()=>{const dir=fs.m
 test('private path rejects a symlink ancestor', t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pay0-create-path-'));const dest=path.join(dir,'real');const link=path.join(dir,'link');fs.mkdirSync(dest);try{try{fs.symlinkSync(dest,link,process.platform==='win32'?'junction':'dir');}catch(e){if(e.code==='EPERM'){t.skip('OS denies test symlink creation');return;}throw e;}assert.throws(()=>privatePath(path.join(link,'new.json'),dir),/PRIVATE_PATH_SYMLINK/);}finally{if(fs.existsSync(link))fs.rmdirSync(link);fs.rmdirSync(dest);fs.rmdirSync(dir);}});
 
 const pinnedInput = () => ({...structuredClone(input), archiveSha256:REVIEWED_ARCHIVE_SHA256,
-  sourceCommit:'21eba53611dde560b446b273f3a32562897e587e',
-  sourceIdentity:{mode:'D1_REVIEW_NEW_FROM_REVIEWED_ARCHIVE_V1',baseArchiveSha256:'83baf34e6e7c3f52c90d820ef18a555da8d2aba854bbb8dc552b72be44c36bfe',patchSha256:'744e16e5f5166acd3fbeb5a60d674a59245f4287db7cf01d318a17856418e9ae',patchCommit:'21eba53611dde560b446b273f3a32562897e587e'},
+  sourceCommit:'d26d856a479c57d5fd7c92add52e2c708dc398f7',
+  sourceIdentity:{mode:'D1_REVIEW_NEW_FROM_REVIEWED_ARCHIVE_V1',baseArchiveSha256:'21922d596a664b2916fa459c5c51b165388db5a5b4af897995f3bb85d89b06f9',patchSha256:'ecbcdb61ff78e31f1ff70c0130b36bc32722703faf2f7376d68de9883618dca3',patchCommit:'d26d856a479c57d5fd7c92add52e2c708dc398f7'},
   startupProofFile:path.resolve('.firebase/modular-release/future-d1/startup.json'),behaviorProofFile:path.resolve('.firebase/modular-release/future-d1/behavior.json')});
 test('CLI accepts only the reviewed D1 identity and exact one target',()=>{
   const valid=pinnedInput();assert.doesNotThrow(()=>validateReviewedInput(valid));
+  assert.throws(()=>validateReviewedInput({...valid,archiveSha256:'55c5c45aaab2a1603499a058605f4f38522e5092d2159957097566ac9b6dd077'}),/UNREVIEWED_D1_ARCHIVE/);
   for(const change of [{archiveSha256:'0'.repeat(64)},{sourceCommit:'0'.repeat(40)},{functions:['sendAgent007Message']},{gateMode:'ON'},{startupProofSha256:''}])assert.throws(()=>validateReviewedInput({...valid,...change}));
   for(const key of ['baseArchiveSha256','patchSha256','patchCommit']){const changed=structuredClone(valid);changed.sourceIdentity[key]='0'.repeat(key==='patchCommit'?40:64);assert.throws(()=>validateReviewedInput(changed));}
 });
@@ -96,9 +97,10 @@ test('proof hashes, source identity, confinement and symlinks are enforced befor
   try{
     const i=pinnedInput();i.startupProofFile=path.join(dir,'startup.json');i.behaviorProofFile=path.join(dir,'behavior.json');
     const startup={status:'PASS',archiveSha256:i.archiveSha256,productionWrites:0,sourceIdentity:i.sourceIdentity,functions:['sendAgent007Message','reviewAgent007LearningRule'],unauthenticatedDenied:2,endpointsLoaded:343,previousExportsPreserved:342,gate:'OFF',networkBlocked:true};
-    const behavior={status:'PASS',archiveSha256:i.archiveSha256,productionWrites:0,sourceIdentity:i.sourceIdentity,emulatorTests:20,emulatorExit:0,regressions:{status:'PASS',total:61},sourceMutations:0};
+    const behavior={status:'PASS',archiveSha256:i.archiveSha256,productionWrites:0,sourceIdentity:i.sourceIdentity,emulatorTests:20,emulatorExit:0,ruleEmulatorTests:7,ruleFixtureCommit:'b0545c2fdace63e8b366458d7abb0b7eecb98175',gateContract:'APPROVE_AND_RESOLVE_OFF_AUTHORIZED_REVOKE_AVAILABLE',regressions:{status:'PASS',total:61},sourceMutations:0};
     const write=()=>{fs.writeFileSync(i.startupProofFile,JSON.stringify(startup));fs.writeFileSync(i.behaviorProofFile,JSON.stringify(behavior));i.startupProofSha256=crypto.createHash('sha256').update(fs.readFileSync(i.startupProofFile)).digest('hex');i.behaviorProofSha256=crypto.createHash('sha256').update(fs.readFileSync(i.behaviorProofFile)).digest('hex');};
     write();assert.doesNotThrow(()=>readProofs(i));
+    behavior.gateContract='REVOKE_BLOCKED_WHILE_DISABLED';write();assert.throws(()=>readProofs(i));behavior.gateContract='APPROVE_AND_RESOLVE_OFF_AUTHORIZED_REVOKE_AVAILABLE';write();
     fs.appendFileSync(i.startupProofFile,' ');assert.throws(()=>readProofs(i),/PROOF_BYTES_CHANGED/);write();
     startup.sourceIdentity={...i.sourceIdentity,patchCommit:'f'.repeat(40)};write();assert.throws(()=>readProofs(i),/PROOF_SOURCE_IDENTITY/);startup.sourceIdentity=i.sourceIdentity;write();
     assert.throws(()=>readProofs({...i,startupProofFile:path.join(os.tmpdir(),'outside.json')}),/PRIVATE_PATH_REQUIRED/);

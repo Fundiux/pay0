@@ -1,66 +1,53 @@
-# D1 — propuesta de creador acotado para revisión supervisada
+# D1 — creador acotado para revisión supervisada con revocación OFF
 
-Estado: **PLAN_ONLY_REQUIRES_EXPLICIT_CREATE_AND_IAM_APPROVAL**. Se implementó un runner específico con pruebas simuladas y se prepararon baseline, input y plan locales. No se creó un endpoint, modificó IAM, activó el gate ni ejecutó un despliegue. No se modificó `create-recovery-review-functions.mjs` ni sus inputs.
+Estado: **DEPLOYMENT_PENDING — creación con gate OFF**. Paquete local reemitido tras corregir REVOKE; no se creó el endpoint, modificó IAM, activó el gate ni ejecutó un despliegue. El creador E y los controladores compartidos no se modificaron en esta reemisión. La capacidad D global permanece INTEGRATION_PENDING.
 
-## Artefacto y dependencia
+## Identidad y alcance
 
-Único destino del creador: `reviewAgent007LearningRule`, proyecto `pay-0-system`, región `us-central1`. No actualizará `sendAgent007Message`, voz, reglas o datos.
+Único destino: `reviewAgent007LearningRule`, proyecto `pay-0-system`, región `us-central1`. No actualiza chat, voz, diagnostics, UI, reglas o datos.
 
-Archivo existente `.firebase/modular-release/d1-after-r2-candidate/d1-after-r2.zip`: SHA256 `55c5c45aaab2a1603499a058605f4f38522e5092d2159957097566ac9b6dd077`. Procedencia: R2 `83baf34e6e7c3f52c90d820ef18a555da8d2aba854bbb8dc552b72be44c36bfe` más patch D1 `744e16e5f5166acd3fbeb5a60d674a59245f4287db7cf01d318a17856418e9ae`, commit `21eba53611dde560b446b273f3a32562897e587e`, `sourceTree:null`. No sustituir por las fuentes D2 actuales ni por el árbol integrado completo.
+- Archivo: `.firebase/modular-release/d1-after-r14-revoke-off/d1-after-r14-revoke-off.zip`.
+- SHA256: `c9a64571acecff5303afc99e79e17411bf3f3fdbcdfb9f6561705b74bb55280d`.
+- Base R1.4: `21922d596a664b2916fa459c5c51b165388db5a5b4af897995f3bb85d89b06f9`.
+- Patch completo: `ecbcdb61ff78e31f1ff70c0130b36bc32722703faf2f7376d68de9883618dca3`.
+- Commit: `d26d856a479c57d5fd7c92add52e2c708dc398f7`; `sourceTree:null`, modo `D1_REVIEW_NEW_FROM_REVIEWED_ARCHIVE_V1`.
 
-Evidencia existente del ZIP: startup 343 exports, conserva los 342 previos, rechazo anónimo en chat/revisión, gate OFF; 20 comprobaciones en emulador, 61 regresiones y typecheck. Estas pruebas no certifican configuración o IAM del endpoint todavía inexistente.
+El origen R1.4 identifica el archivo; crear sólo este endpoint no exige que chat permanezca en esa fuente. Una actualización posterior de chat necesita su base vigente y debe conservar cualquier publicación posterior, incluida R1.5 si corresponde. Este creador no realiza ese paso.
 
-Crear únicamente el endpoint de revisión con gate OFF **no depende de que R2 esté publicado**. Antes de preparar su input se necesita una baseline propia: padre de configuración listo y exacto, destino ausente y ninguna operación activa. El origen R2 del ZIP es procedencia, no una condición sobre el chat productivo. En cambio, actualizar después `sendAgent007Message` con el overlay D1-after-R2 sí exige que ese chat conserve la revisión y SHA de fuente R2 esperadas; ese paso pertenece a otro ejecutor/paquete.
+El ZIP anterior `55c5c45…`, input `098b11df…` y plan `4b6eb39c…` se conservan intactos bajo `learning-review-create/`, sólo como historia. El controlador vigente rechaza ese archivo porque carece de REVOKE con gate OFF. No se sustituyeron sus proofs ni se les atribuyó el fix nuevo.
 
-## Runner propuesto
+## Configuración y autorización
 
-Archivo independiente `scripts/create-supervised-learning-review.mjs`, con lista cerrada de **un** nombre y modo predeterminado de plan local. No importa ni modifica la función `buildCreatePlan` del creador E ni cambia su whitelist. Sus contratos de dos endpoints siguen rechazando este destino. El nuevo archivo conserva los mecanismos revisados de ese flujo en una implementación separada.
+La captura de sólo lectura de 2026-10-19 22:55:24 UTC confirmó padre `getControlCenterEngineering`, revisión `getcontrolcenterengineering-00001-cij`, destino ausente y cero operaciones activas. El runner exige Node22, callable sin trigger y servicio listo; rechaza secretos/volúmenes no vacíos y gates heredados ON o ambiguos.
 
-El runner verifica rutas privadas sin symlink, hashes de input/plan/archivo/baseline, subida con generación exacta, lock exclusivo, journal durable, reconciliación de creación incierta, postflight y rollback de invocación. El plan fija además hashes del controlador y de sus dos helpers; una modificación invalida el plan anterior. La preparación usa creación exclusiva del archivo de plan, sin sobrescribirlo.
+Objetivo: `entryPoint=reviewAgent007LearningRule`, 30 s, 256 MiB y `HUGO_SUPERVISED_RULES_ENABLED=false`. Conserva sólo los campos de configuración permitidos; no copia source, URL ni estado del padre ni introduce secretos.
 
-El input debe fijar el ZIP D1 exacto, commit/patch/base de su procedencia, `gateMode:OFF`, baseline propia y dos proofs. `startupProofFile`/`behaviorProofFile` deben estar bajo el directorio privado y `startupProofSha256`/`behaviorProofSha256` vinculan sus bytes al input/plan. Se comprueba cada SHA antes de parsear JSON, tanto en preparación como ejecución, y ambos proofs deben declarar la misma `sourceIdentity`. Los proofs históricos sin ese campo no se aceptan directamente: falta producir y revisar la evidencia de identidad correspondiente, conservando su procedencia. Los contadores declarados por sí solos no bastan.
+IAM propuesto: `allUsers` con `roles/run.invoker` sólo en el nuevo servicio `reviewagent007learningrule`, necesario para el transporte callable. La autorización lógica exige Firebase Auth, superadmin activo y root revalidado dentro de la transacción. No se copian permisos de reportes ni roles de proyecto.
 
-## Configuración e IAM
+Con gate OFF, APPROVE y aplicación siguen bloqueados; **REVOKE autenticado permanece disponible**. Crear el transporte no autoriza aprobar o revocar datos reales. Operación humana, consumidor de chat y activación requieren autorizaciones separadas.
 
-Plantilla explícita: `getControlCenterEngineering`, ya usada como origen de configuración en el paquete E. Antes de emplearla, recapturarla. El runner exige su nombre y servicio exactos, Node22, callable sin trigger, servicio listo y política de invocación observada. La configuración objetivo declara `entryPoint=reviewAgent007LearningRule`, timeout 30 s y memoria 256 MiB. Sólo conserva campos permitidos de identidad, red, escalado, runtime y build; omite estado, URL, revisión y source del padre. Rechaza referencias o volúmenes de secretos no vacíos en esa plantilla; no introduce secretos nuevos.
+## Paquete preparado
 
-El creador sólo permitirá el gate `HUGO_SUPERVISED_RULES_ENABLED` ausente o explícitamente `false`. Rechazará `true` y cualquier valor ambiguo. **La autorización para crear y dar invocación pública no incluye activar aprendizaje.** La actualización de código de chat y el cambio posterior de gate son operaciones separadas con sus propios artefactos/aprobaciones.
-
-IAM candidato: `roles/run.invoker` para `allUsers` sólo en `reviewagent007learningrule`, necesario para el transporte callable, con autorización lógica Firebase en el handler. El contrato lógico es usuario autenticado, superadmin vigente y root revalidado por servidor; no copiar del runner E la descripción `reportes/view`, que no corresponde a este handler. Rechazar políticas existentes inesperadas y no conceder roles de proyecto ni permisos a otros servicios.
-
-## Secuencia y reversión
-
-1. Verificar padre de configuración y ausencia del destino mediante lectura; preparar y revisar el plan completo sin mutaciones. No consultar ni exigir el estado de chat R2 para crear este endpoint apagado.
-2. Con autorización específica para crear el endpoint y su invocación pública, publicar el ZIP D1 exacto con gate OFF. Comprobar identidad/configuración/IAM, source hash, rechazo anónimo y gate apagado. No aprobar ninguna regla real.
-3. Actualizar chat con su paquete D1 separado y gate OFF, cuando corresponda; conservar R2. El creador no realiza este paso ni añade ese nombre a su scope.
-4. Sólo tras disponer de interfaz o procedimiento de revisión humana aprobado, datos legítimos y autorización de activación, preparar el cambio explícito de configuración de gate. D2 no se incluye implícitamente en este archivo D1.
-
-Rollback del creador: revalidar que función/servicio/IAM coinciden con su journal, retirar únicamente `allUsers` del binding de invocación que él agregó y verificar el resultado. Conservar endpoint, otros bindings y todos los documentos/ledger. No apagar el gate de chat ni revertir R2 desde este runner. Una respuesta incierta exige reconciliación, no repetir una creación ni borrar un destino existente.
-
-## Pruebas requeridas antes de implementar ejecución
-
-`node --test qa/scripts/supervised-learning-review-create.test.mjs qa/scripts/e1-operations-create-plan.test.mjs`: **52/52 PASS**, cero skips, de las cuales 29 corresponden al runner nuevo y 23 preservan el creador E. Prueban otro destino/duplicados, pins del ZIP/commit/patch, destino existente, deriva del padre, gate ON/ambiguo, secretos no revisados, política inesperada, ruta fuera de privado, junction, alteración de proof antes de parsearlo, identidad de proof distinta, pins del plan, concurrencia, respuesta incierta sin recreación, reanudación y rollback limitado. El caso positivo demuestra también que no se exige un recurso chat R2 para crear review apagado. Toda la red está sustituida por IO de prueba.
-
-## Paquete local preparado
-
-Directorio privado: `.firebase/modular-release/learning-review-create/`. La captura de sólo lectura confirmó padre `getcontrolcenterengineering-00001-cij`, destino ausente, cero operaciones activas, cero referencias/volúmenes de secretos y gate ausente. El plan nuevo fija el gate del destino a `false` y sólo propone `allUsers` como invoker del nuevo servicio.
+Directorio: `.firebase/modular-release/learning-review-create-revoke-off/`.
 
 | Archivo | SHA256 |
 | --- | --- |
-| `baseline.json` | `47e6cc83296861d0de288089a15263c83d72646b162ad5a3e682f419ac513866` |
-| `input.json` | `098b11dffbc8927b624e1733a359444a294e483c9bf4efffe4ebfd7bb1467143` |
-| `create-plan.json` | `4b6eb39cbddbccecb75b2704d506efccd24f311c27293a4e88ec8a6407959dca` |
-| `startup-verification.json` | `2e0f275f5c8fc3355726cb4525d1eb616e575c81ff9120a8a70077a1160e8c3b` |
-| `behavior-verification.json` | `b593f7994752c1fa6084e1c2b41ebc2547edacb74a1b1b7ee7fde5566c4b4e8d` |
+| `baseline.json` | `6d0ff4f2912457e05d581f160ddae23a912ec6509b050945545ccf7a5d71663e` |
+| `input.json` | `9ddac34f4ecd6c9c0152ede973f10f77f472a108baabc1082397b1d14100a0b1` |
+| `create-plan.json` | `b867ee0677e4542b21ba2d57659d0adcac770e5b9ea6b3126486854e1a3a15bb` |
+| `startup-verification.json` | `70d1adf6b81200f171dff3f5b3b94b859adc302dca38e0550aea175173ea2393` |
+| `behavior-verification.json` | `336c86ba93966c9fd366836923f5fb667b21a6e649608aded67e4509117d220f` |
 
-Los dos proofs son envolturas locales de identidad de la evidencia original ya revisada; no afirman una nueva ejecución de sus pruebas. Conservan todos los resultados y añaden `sourceIdentity` e `identityBinding`, con ruta y SHA del original. Antes de producirlas se verificaron el ZIP exacto `55c5…`, los originals `bfbe97c878bdb92c961aef09de70637e6a08fa9c5d04285e5ae30206438a04a2` (startup) y `61789ae49b7a5a6f02643a5402c80e42220e92e2df68e504707d12d4439541e4` (comportamiento). Los originales no se modificaron.
+El plan fija el controlador SHA256 `53dcdc2d5ef9e8a18539df5ffd5f91ee260d8c6ab7bca1ea64ec1de61381633f` y sus helpers. `prepare` comprueba hashes, rutas privadas sin symlinks, identidad, proofs y baseline. Los proofs están fijados en el input y se comprueban antes de parsearlos y otra vez al ejecutar; no bastan contadores autodeclarados.
 
-`local-validation.json` confirma regeneración idéntica del plan, hashes de proofs, identidad, scope único y gate OFF; cero llamadas de red y escrituras productivas durante esa validación. La captura de metadatos anterior sí usó GET autenticados, sin leer documentos. El ejecutor repetirá las verificaciones de recursos y ausencia justo antes de cualquier mutación.
+Las envolturas vinculan el original `d1-after-r14-revoke-off/behavior-verification.json`, SHA256 `2212bad48a3c1e4741673a4cae28ddda894dc081e5992f23040e8f141258b36b`, productor, logs y estructura por SHA. Normalizan sus campos sin afirmar pruebas nuevas (`testsRerun:false`). El ZIP y sus 802 archivos de runtime se cotejaron de nuevo de forma opaca. Los originales permanecieron intactos.
 
-Pendiente: revisión final del paquete y autorización específica de creación/IAM. Tener runner y plan no equivale a endpoint creado ni gate habilitado. La actualización posterior de chat D1 mantiene su precondición R2 y su aprobación independiente.
+## Pruebas, ejecución y reversión
 
-## Endurecimiento de reanudaci?n
+`node --test qa/scripts/supervised-learning-review-create.test.mjs qa/scripts/e1-operations-create-plan.test.mjs`: **52/52 PASS**, cero omisiones; 29 del creador dedicado y 23 de compatibilidad E. Incluye rechazo del ZIP histórico y del proof que bloqueaba REVOKE, pins alterados, scope ajeno, gate ON, deriva, fuente adulterada al reanudar, locks, resultado incierto sin recreación y rollback limitado. Toda la red de esos tests es IO sintético.
 
-Estado del componente preparado: **DEPLOYMENT_PENDING ? creaci?n con gate OFF**; la capacidad D global permanece INTEGRATION_PENDING. El controlador vuelve a verificar el scope y SHA de la fuente cargada antes de CREATE, incluso al reanudar. Marca y persiste el inicio de mutaci?n antes de CREATE, IAM y rollback, para conservar el bloqueo ante una respuesta incierta. Los negativos de fuente alterada y journal con flag falso pasan sin repetir la creaci?n.
+El artefacto exacto acredita startup343/previos342/dos rechazos anónimos, typecheck PASS, 20 pruebas de emulador —incluidas siete de reglas con fixture `b0545c2`—, 61 regresiones y 13 de lenguaje natural. Cubre REVOKE OFF autorizado, negativos de actor/root, ledger idempotente y ausencia de reaplicación tras ON. Conserva dos fallos heredados de `universalQueryContract`; no es PASS universal.
 
-El plan anterior se preserv? en `before-resume-hardening/`; input, ZIP y proofs permanecen id?nticos. El nuevo plan fija el controlador SHA256 `722d4e9adeb3f3d532934bce162ccadcaf743106fb4215be06f9b7548d6ae807`. La validaci?n local regener? el plan y comprob? identidad, hashes y gate sin red. No se cre? ni habilit? el endpoint.
+Antes de CREATE, incluso reanudando, se comprueban generación/scope y SHA de la fuente subida. Se persiste el inicio de CREATE/IAM/rollback y se usan locks compartidos y journal. Un resultado incierto exige reconciliación, nunca repetición ciega. El ejecutor releerá padre y ausencia antes de mutar. El paquete no constituye autorización de ejecución.
+
+Rollback futuro autorizado: comprobar función/servicio/IAM propios y retirar únicamente la invocación pública añadida. Conservar endpoint, experiencias, reglas, revisiones y ledger; no apagar chat ni restaurar código ajeno. Revocar una regla es una operación distinta del rollback de invocación.
