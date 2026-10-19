@@ -21,6 +21,7 @@ test('V1 request preserves complete metadata and spec, only removes status and a
 });
 test('opaque resource versions preserve exact bytes, identity and the original request contract', () => {
   const before = v1();
+  assert.equal(tagRequest, originalTagRequest, 'Resume must use the primary guard');
   assert.deepEqual(tagRequest(before, 'ssrpay0system-new', 'fh-abcdef12'), originalTagRequest(before, 'ssrpay0system-new', 'fh-abcdef12'));
   for (const token of ['synthetic/version+token==', ' leading and trailing ', 'x'.repeat(1024)]) {
     const source = v1(); source.metadata.resourceVersion = token;

@@ -25,7 +25,10 @@ export function tagRequest(before, revision, tag) {
   assert.equal(before.kind, 'Service', 'V1_KIND');
   assert.equal(before.metadata?.name, NAME, 'V1_SERVICE');
   assert.ok(['751158244178', PROJECT].includes(before.metadata.namespace), 'V1_PROJECT');
-  assert.match(before.metadata.resourceVersion || '', /^[A-Za-z0-9_-]{1,200}$/, 'V1_RESOURCE_VERSION');
+  // Cloud Run uses an opaque concurrency token; preserve its exact bytes.
+  const resourceVersion = before.metadata.resourceVersion;
+  assert.ok(typeof resourceVersion === 'string' && resourceVersion.length > 0
+    && resourceVersion.length <= 1024 && !/[\u0000-\u001f\u007f-\u009f]/u.test(resourceVersion), 'V1_RESOURCE_VERSION');
   assert.equal(before.status?.latestReadyRevisionName, revision, 'V1_READY_REVISION');
   assert.equal(before.status?.latestCreatedRevisionName, revision, 'V1_CREATED_REVISION');
   assert.match(tag, /^fh-[a-f0-9]{8,64}$/);

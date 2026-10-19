@@ -208,11 +208,11 @@ test('rollback rejects a release changed by another operator before any mutation
 });
 
 
-function tagV1Fixture(mode = '') {
+function tagV1Fixture(mode = '', resourceVersion = 'opaque-123') {
   const f = deploymentFixture(), state = clone(f.state), calls = [];
   const revision = state.functions.ssrpay0system.resource.serviceConfig.revision;
   let v1 = { apiVersion: 'serving.knative.dev/v1', kind: 'Service',
-    metadata: { name: 'ssrpay0system', namespace: '751158244178', resourceVersion: 'opaque-123', labels: { preserved: 'yes' }, annotations: { 'serving.knative.dev/lastModifier': 'old@example.test' } },
+    metadata: { name: 'ssrpay0system', namespace: '751158244178', resourceVersion, labels: { preserved: 'yes' }, annotations: { 'serving.knative.dev/lastModifier': 'old@example.test' } },
     spec: { template: { spec: { containers: [{ image: 'same-image' }] } }, traffic: [{ latestRevision: true, percent: 100 }] },
     status: { latestReadyRevisionName: revision, latestCreatedRevisionName: revision } };
   const initial = clone(v1);
@@ -248,6 +248,12 @@ test('primary Hosting tags through V1 dry-run and resourceVersion without changi
   await pinRevisionV1(f.args);
   assert.deepEqual(f.calls, ['dry-run', 'put']);
 });
+test('primary Hosting preserves opaque slash and base64 versions in dry-run and PUT', async () => {
+  const f = tagV1Fixture('', 'synthetic/version+token==');
+  await pinRevisionV1(f.args);
+  assert.deepEqual(f.calls, ['dry-run', 'put']);
+});
+
 test('V1 tag rejects dry-run drift, concurrent changes and server CAS conflict', async () => {
   for (const mode of ['dry-identity', 'dry-spec', 'dry-metadata', 'concurrent', 'iam-before', 'conflict']) {
     const f = tagV1Fixture(mode);
