@@ -1,17 +1,16 @@
 # E1 — reconciliación y entregas progresivas
 
-Fecha de actualización: 2026-10-19. R1 publicado con autorización explícita; pendiente de verificación funcional autenticada.
+Fecha de actualización: 2026-10-19. R1 sigue funcionalmente incompleto: el usuario ya no reportó INTERNAL, pero María no generó ni entregó el reporte. R1.2 está en preparación con continuidad y descarga real.
 
 Continuación E2: R1.1 sustituyó chat por `sendagent007message-00017-nup` y voz
 por `delegatehugovoiceturn-00010-caj` tras el error de persistencia reportado.
 GHK1 publicó descarga por generación en `getauthorizeddocumentdownloadurl-00007-yah`.
-Ambos paquetes están `DEPLOYED_NOT_VERIFIED`: configuración y denegación sin
-autenticar comprobadas; pendientes los flujos autenticados. El estado global
+GHK1 tiene confirmación del usuario para descargas de solicitudes y pagos, limitada a esos flujos. F y los tres parches de aislamiento MAT también están publicados y `DEPLOYED_NOT_VERIFIED`: configuración y controles previos comprobados; faltan flujos operativos reales. El estado global
 y las entregas adicionales se mantienen en [e2-parallel-status.md](e2-parallel-status.md).
 
 ## Referencia productiva observada
 
-La consulta autenticada de metadatos encontró Hosting `d446c05b06cc4941` y el gateway con 100 % de tráfico en `hugo-voice-gateway-canary-astra-7dfcd8a`. No se infiere que un commit local esté publicado por pertenecer a main.
+La consulta inicial encontró Hosting `d446c05b06cc4941`. Una publicación concurrente posterior lo sustituyó por `3beebe572c91f420`, SSR `ssrpay0system-00598-vuq`, fuente `c1738b4`. Las entregas nuevas de interfaz parten de esa fuente. El gateway mantiene 100 % de tráfico en `hugo-voice-gateway-canary-astra-7dfcd8a`. No se infiere que un commit local esté publicado por pertenecer a main.
 
 | Capacidad | Evidencia y estado |
 | --- | --- |
