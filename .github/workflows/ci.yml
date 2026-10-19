@@ -23,8 +23,14 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
+      - name: Verify technology contract before installation
+        run: |
+          npm run test:technology
+          npm run qa:technology
       - name: Install dependencies for public build fixture
         run: npm ci
+      - name: Verify installed frontend matches lockfile
+        run: npm ls --depth=0
       - name: Configure public build-only environment
         run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
       - name: Verify cumulative release baseline

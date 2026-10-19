@@ -76,7 +76,9 @@
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
     "qa:functions-discovery": "node qa/scripts/verify-functions-discovery-startup.cjs",
     "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs",
-    "qa:ecosystem-boundaries": "node qa/scripts/verify-ecosystem-boundaries.mjs"
+    "qa:ecosystem-boundaries": "node qa/scripts/verify-ecosystem-boundaries.mjs",
+    "qa:technology": "node scripts/verify-technology-baseline.mjs",
+    "test:technology": "node --test qa/scripts/technology-baseline.test.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
@@ -101,8 +103,7 @@
     "esbuild": "0.28.2",
     "postcss": "8.5.23",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.3",
-    "esbuild": "0.28.2"
+    "typescript": "^5.9.3"
   },
   "overrides": {
     "postcss": "8.5.23",

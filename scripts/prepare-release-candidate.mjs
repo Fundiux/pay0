@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { inspectIntegration, integrationSummary } from './inspect-modular-integration.mjs';
 
 export const CANDIDATE_GATES = [
+  ['technology-contract', 'node', ['scripts/verify-technology-baseline.mjs']],
+  ['technology-negative-tests', 'node', ['--test', 'qa/scripts/technology-baseline.test.mjs']],
   ['frontend-dependencies', 'npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']],
   ['functions-dependencies', 'npm', ['ci', '--prefix', 'functions', '--prefer-offline', '--no-audit', '--no-fund']],
   ['authorization-policy', 'node', ['scripts/verify-authorization-policy.mjs']],
