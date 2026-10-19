@@ -1,6 +1,6 @@
-# D: paquetes exactos de instalación y etapas pendientes
+# D: entrega parcial exacta de consulta y revocación autorizada
 
-Estado: **INTEGRATION_PENDING**. Diagnostics, UI y review corregido tienen paquetes preparados localmente. Todavía no se solicita autorización ni se ejecuta ninguno. Una instalación con gates apagados no equivale a revisión humana operativa ni aprendizaje activo. El consumidor D1 de chat debe conservar la base publicada vigente y el mecanismo de activación necesita preparación y autorización separadas.
+Estado: **DEPLOYMENT_PENDING — consulta/diagnóstico y revocación autorizada**. Los tres paquetes están preparados para solicitar autorización de esta entrega parcial. Permiten consultar experiencias/reglas mediante el diagnóstico existente y publicar el endpoint que admite REVOKE autenticado aun con gate OFF. APPROVE, aplicación de reglas y aprendizaje activo permanecen apagados. No se ejecutó ninguno de estos tres paquetes. D global sigue INTEGRATION_PENDING; esta entrega no espera ni incluye la activación o actualización de chat.
 
 ## 1. Componentes y vigencia, sin activar
 
@@ -24,18 +24,22 @@ La UI exacta usa el ZIP `58a69d097f032d27ba653371bd1fd7a447ef5eb3a4e3ab5781bea48
 
 ## 2. Consumidor de chat, fuera de estos tres inputs
 
-El código D1 de `sendAgent007Message` debe componerse sobre la fuente R1.4 **realmente publicada**, preservando sus reportes y lenguaje. Existe un candidato local D1-after-R1.4 probado, pero no forma parte de esta instalación ni autoriza modificar chat. La captura y comprobación de esa base se harán después de terminar la publicación R1.4; no se empleará el antiguo ZIP D1-after-R2 para reemplazarlo. [Candidato independiente](e1-d1-after-r14-package.md).
+R1.4 ya está publicada: revisión `sendagent007message-00021-koz`, ZIP `21922d596a664b2916fa459c5c51b165388db5a5b4af897995f3bb85d89b06f9`. D1 corregido, commit `d26d856a479c57d5fd7c92add52e2c708dc398f7` y ZIP `c9a64571…`, tiene input local exclusivo de chat `09299f42a92f7bb44112517ff125fb81660ee26b438efd897f2c2c8c6144839b` bajo `d1-revoke-off-r14-chat-release/`. No forma parte de estos tres inputs ni autoriza modificar chat. Si R1.5 entra antes, ese paquete deberá recomponerse y recapturar su base para conservar los reportes posteriores; no se publicará el overlay R1.4 encima de R1.5. Crear review no actualiza chat y sigue siendo una superficie independiente. [Composición corregida](e1-d1-revoke-off-package.md).
 
-## 3. Activación y operación humana, aún no preparadas
+## 3. Uso parcial y activación separada
 
-El archivo vigente de review permite revocación autorizada con gate OFF, pero sigue bloqueando APPROVE y aplicación. Diagnostics y UI son runtimes separados que no ejecutan ese método administrativo; sus paquetes no necesitan cambiar por este fix. El diagnóstico no prueba que chat/review estén activados: sus flags pertenecen a funciones distintas y los estados desconocidos siguen siendo desconocidos.
+El archivo vigente de review permite revocación autorizada con gate OFF, pero sigue bloqueando APPROVE y aplicación. Esa revocación durable es una capacidad útil de esta entrega, separada del aprendizaje activo: exige sesión Firebase, superadmin activo, root validado y regla canónica del mismo ámbito. La UI conserva confirmación explícita, lectura posterior de estado y errores controlados; no debe anunciar éxito ante rechazo. Diagnostics y UI son runtimes separados que no ejecutan ese método administrativo; sus paquetes no necesitan cambiar por este fix. Sus flags no prueban activación global.
 
-Falta revisar un cambio de configuración acotado a las identidades y versiones exactas de cada función que deba habilitarse. La activación necesitará autorización explícita, preflight de código/configuración/IAM, reversión a los valores propios anteriores y pruebas con una identidad humana autorizada. No se activará automáticamente al instalar código, ni se crearán experiencias, reglas o datos reales para aparentar funcionalidad. Por ello no se solicita todavía autorización de una instalación aislada como si completara D.
+La autorización de esta instalación es independiente de la del aprendizaje. Habilitar APPROVE o aplicación requerirá un cambio de configuración acotado, identidades exactas, autorización explícita, preflight y reversión propios. No se activará automáticamente al instalar código, ni se crearán experiencias/reglas reales para aparentar funcionalidad. La comprobación productiva autenticada de consulta y del flujo humano sigue pendiente; las pruebas locales no la sustituyen. Una revocación real requiere una acción deliberada y confirmada del usuario autorizado sobre una regla concreta; ninguna se ejecutará como smoke test ni por instalar este paquete.
 
-## Orden y reversión si se aprueba un paquete posterior
+## Orden y reversión de esta entrega parcial
 
 Revalidar los tres inputs, sus pruebas y baselines; crear review con gate OFF; actualizar diagnostics; publicar la UI compatible. La actualización de chat y la activación tendrán sus propios pasos aprobados. Los ejecutores usan locks compartidos: nunca corren en paralelo ni se repite una mutación de resultado incierto.
 
 Rollback de review: retirar únicamente la invocación pública añadida al nuevo servicio, conservando endpoint, experiencias, reglas y ledger. Rollback de diagnostics: restaurar el ZIP `c50f0d7a95bb24caf156022ae1145503d34f2110f9c39df71921ee52a190db1f` y labels propios sólo si el estado coincide con el journal. Rollback de UI: restaurar juntos Hosting/SSR a admin/MAT `a340678f44840641` / `ssrpay0system-00604-hov`, ZIP `f0e47ff8aae70da0b50836f23367a5c49ab641baf12c89af3a90edbb569ebf0f`, sin sobrescribir publicaciones posteriores. Ningún rollback elimina datos ni modifica reglas Firestore.
 
 Las referencias anteriores describen paquetes y límites; no son una autorización de ejecución. La capacidad D global permanece incompleta hasta verificar consumidor, activación y flujo humano de extremo a extremo.
+
+## Pregunta exacta de autorización propuesta
+
+¿Autorizas publicar esta entrega parcial con los tres inputs exactos de la tabla —review `9ddac34f…`, diagnostics `f58c9ef8…` y UI `78203f56…`—, incluida la creación de `reviewAgent007LearningRule` y `allUsers / roles/run.invoker` únicamente en su nuevo servicio callable, manteniendo APPROVE y aplicación OFF, sin actualizar chat ni ejecutar escrituras de aprendizaje reales, y autorizar la reversión acotada anterior si falla la verificación? La entrega habilita consulta/diagnóstico y revocación autorizada; no declara D completo ni autoriza su activación.
