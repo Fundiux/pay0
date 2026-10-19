@@ -159,7 +159,13 @@ test("DateScopeBar es operable en todos los anchos", async ({ page }) => {
 test("DateScopeBar es operable en Reportes en todos los anchos", async ({ page }) => {
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    const browserDiagnostics = [];
+    page.on("console", message => { if (["error", "warning"].includes(message.type())) browserDiagnostics.push(`${message.type()}:${message.text()}`); });
+    page.on("pageerror", error => browserDiagnostics.push(`pageerror:${error.message}`));
     await page.goto("/reportes", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1500);
+    const rendered = (await page.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 1600);
+    console.log(`QA_AUTH_REPORTES_STATE url=${page.url()} body=${JSON.stringify(rendered)} diagnostics=${JSON.stringify(browserDiagnostics)}`);
     await expect(page.getByText("No tienes acceso a Reportes.")).toHaveCount(0);
     const month = page.getByRole("button", { name: "MES" });
     await expect(month).toBeVisible();
