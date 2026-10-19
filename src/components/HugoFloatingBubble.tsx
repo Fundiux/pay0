@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { listAgent007Messages, listAgent007Recommendations, markAgent007MessagesRead, sendAgent007Message, type Agent007Message, type Agent007Recommendation } from "@/services/agent007";
+import HugoReportAttachment from "@/components/hugo/HugoReportAttachment";
 
 function messageTime(value: any) {
   const date = value?.toDate?.() || (value?.seconds ? new Date(value.seconds * 1000) : null);
@@ -13,9 +14,13 @@ function messageTime(value: any) {
 }
 
 export default function HugoFloatingBubble() {
+  const { profile, profileUid } = useUserProfile();
+  return <HugoFloatingBubbleContent key={JSON.stringify([profileUid, profile?.rootId, profile?.role, profile?.active])} profile={profile} />;
+}
+
+function HugoFloatingBubbleContent({ profile }: { profile: any }) {
   const pathname = usePathname();
-  const { profile } = useUserProfile();
-  const allowed = profile?.role === "superadmin";
+  const allowed = profile?.role === "superadmin" && profile?.active !== false;
   const { canAccess: canCreateClient } = useModuleAccess(profile, "clientes", "create");
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -92,7 +97,7 @@ export default function HugoFloatingBubble() {
       <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-3"><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-full bg-violet-500/15 text-violet-300"><Bot size={19} /></span><div><h3 className="font-semibold text-white">María</h3><p className="text-[11px] text-emerald-300">Asistente interno · solo superadmin</p></div></div><button type="button" aria-label="Cerrar María" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={16} /></button></header>
       <div ref={listRef} onScroll={(event) => { const node = event.currentTarget; const close = node.scrollHeight - node.scrollTop - node.clientHeight < 80; setNearBottom(close); if (close) setNewBelow(false); }} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {!messages.length && <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-sm text-slate-300">Hola. Estoy listo para revisar contigo lo que ocurra en PAY0. Puedes preguntarme por una solicitud, pago, factura o decirme qué debo aprender.</div>}
-        {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-800 bg-slate-900 text-slate-200"}`}><p className="whitespace-pre-wrap">{message.text}</p><div className={`mt-1 flex gap-2 text-[10px] ${message.role === "user" ? "text-blue-100" : "text-slate-500"}`}><span>{message.role === "assistant" ? "María" : "Tú"}</span><span>{messageTime(message.createdAt)}</span></div></div></div>)}
+        {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-800 bg-slate-900 text-slate-200"}`}><p className="whitespace-pre-wrap">{message.text}</p><HugoReportAttachment message={message} /><div className={`mt-1 flex gap-2 text-[10px] ${message.role === "user" ? "text-blue-100" : "text-slate-500"}`}><span>{message.role === "assistant" ? "María" : "Tú"}</span><span>{messageTime(message.createdAt)}</span></div></div></div>)}
         {sending && <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 className="animate-spin" size={14} /> María está revisando el sistema…</div>}
         {newBelow && <button type="button" onClick={() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); setNearBottom(true); setNewBelow(false); }} className="sticky bottom-2 mx-auto flex items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-xs text-white shadow-xl"><ArrowDown size={13}/> Ir al mensaje más reciente</button>}
       </div>

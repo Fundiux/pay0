@@ -166,8 +166,10 @@ export async function downloadSpreadsheetFile(
   sheetName: string,
   rows: Record<string, unknown>[],
   columnWidths?: number[],
+  signal?: AbortSignal,
 ): Promise<void> {
   const ExcelJS = await import("exceljs");
+  if (signal?.aborted) return;
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName.slice(0, 31));
   const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
@@ -180,6 +182,7 @@ export async function downloadSpreadsheetFile(
   rows.forEach((row) => worksheet.addRow(row));
 
   const data = await workbook.xlsx.writeBuffer();
+  if (signal?.aborted) return;
   const url = URL.createObjectURL(new Blob([data], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   }));

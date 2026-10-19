@@ -1,9 +1,9 @@
-import { EarningsReportToolInput, validateEarningsReportInput } from "./reportSemantics";
+import { EarningsReportToolInput, PendingEarningsReport, normalizePendingReport, validateEarningsReportInput } from "./reportSemantics";
 
 export const CONVERSATION_STATE_VERSION = "conversation-state-v2";
 export type EarningsReportContext = { rootId: string; query: EarningsReportToolInput; resolvedAt: number; resolvedTurn: number };
 export type ConversationEntity = { system: "PAY0"; entityType: "SOLICITUD" | "PAGO"; entityId: string; folio: string; rootId: string; resolvedAt: number; resolvedTurn: number; source: string; confidence: number };
-export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; lastEarningsReport?: EarningsReportContext };
+export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; lastEarningsReport?: EarningsReportContext; pendingEarningsReport?: PendingEarningsReport };
 export type ReferenceResolution = { folios: string[]; active: ConversationEntity | null; clarification: string | null; reason: string; intent: string; state: ConversationState };
 
 const distinct = <T>(items: T[]) => [...new Set(items)];
@@ -17,6 +17,7 @@ export function normalizeConversationState(raw: unknown, rootId: string, now = D
   const recentEntities = Array.isArray(row.recentEntities) ? row.recentEntities.filter(valid).slice(0, 6) : [];
   const activeEntity = valid(row.activeEntity) && fresh(row.activeEntity, { ...row, turn: Number(row.turn) || 0 } as ConversationState, now) ? row.activeEntity : null;
   const turn = Math.min(Math.max(Number(row.turn) || 0, 0), 100000);
+  const pendingEarningsReport = normalizePendingReport(row.pendingEarningsReport, rootId, turn, now);
   let lastEarningsReport: EarningsReportContext | undefined;
   const report = row.lastEarningsReport;
   if (report?.rootId === rootId && Number.isFinite(report.resolvedAt) && report.resolvedAt <= now && now - report.resolvedAt <= 30 * 60_000
@@ -24,7 +25,7 @@ export function normalizeConversationState(raw: unknown, rootId: string, now = D
     try { validateEarningsReportInput(report.query); lastEarningsReport = { rootId, query: { ...report.query }, resolvedAt: report.resolvedAt, resolvedTurn: report.resolvedTurn }; } catch { /* Invalid saved filters cannot become tool inputs. */ }
   }
   return { version: CONVERSATION_STATE_VERSION, rootId, turn, activeEntity,
-    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(lastEarningsReport ? { lastEarningsReport } : {}) };
+    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(lastEarningsReport ? { lastEarningsReport } : {}), ...(pendingEarningsReport ? { pendingEarningsReport } : {}) };
 }
 export function resolveConversationReference(message: string, previous: ConversationState, rootId: string, now = Date.now()): ReferenceResolution {
   const state = normalizeConversationState(previous, rootId, now);
@@ -57,5 +58,6 @@ export function advanceConversationState(resolution: ReferenceResolution, resolv
     resolved.length === 1 ? resolved[0] : resolution.clarification ? null : resolution.active || previous.activeEntity;
   return { version: CONVERSATION_STATE_VERSION, rootId, turn: previous.turn + 1, activeEntity, recentEntities: recent,
     pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent,
+    ...(previous.pendingEarningsReport && !resolved.length && !["TOPIC_SHIFT", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { pendingEarningsReport: previous.pendingEarningsReport } : {}),
     ...(previous.lastEarningsReport && !resolved.length && !["TOPIC_SHIFT", "REPORT_QUERY", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { lastEarningsReport: previous.lastEarningsReport } : {}) };
 }

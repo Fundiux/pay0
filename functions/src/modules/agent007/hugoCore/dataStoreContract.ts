@@ -1,10 +1,11 @@
+import type { HugoReportExport } from "./reportSemantics";
 import { HugoMemory, RecentEntity } from "./contextBuilder";
 import { ConversationState } from "./conversationState";
 import { MemoryQuery, MemoryRetrieval, HugoMemoryKind, HugoMemoryRecord } from "./memoryContract";
 
 export type HugoConversationState = { history: any[]; memory: HugoMemory; recentEntities: RecentEntity[]; conversationState?: ConversationState };
 export type HugoTraceFilter = { conversationId?: string; resultStatus?: string; tool?: string; sourceSystem?: string; completeness?: string; errorOnly?: boolean; from?: Date; to?: Date; cursor?: string; limit?: number };
-export type HugoTurnInput = { rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
+export type HugoTurnInput = { reportExport?: HugoReportExport; rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
 export interface HugoDataStore {
   loadConversationState(identity: { uid: string; rootId: string }, conversationId: string): Promise<HugoConversationState>;
   listObservations(rootId: string, limit?: number): Promise<any[]>;

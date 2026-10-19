@@ -1,11 +1,13 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
+import type { EarningsByClientReportRow } from "@/services/reports";
 
 export type Agent007Observation = { id: string; caseType: string; caseId: string; intent: string; humanDecision: string; outcome: string; source?: string; sourceEvent?: string; createdAt?: any };
 export type Agent007Recommendation = { id: string; kind: string; caseType: string; caseId: string; proposal: string; title?: string; explanation?: string; actionPrompt?: string | null; requiresHumanDecision?: boolean; confidence: number; status: string; resolutionReason?: string | null; resolvedByEvent?: string | null; supersededBy?: string | null; resolvedAt?: any; evidence?: Record<string, string | null>; createdAt?: any };
 export type HugoScope = "GLOBAL" | "PAY0";
 export type HugoProfile = "OPERATOR" | "PROGRAMMER";
-export type Agent007Message = { id: string; role: "user" | "assistant"; text: string; source?: "USER" | "VERTEX_AI" | "OPENAI" | "HUGO_ENGINE" | "SYSTEM_EVENT"; scope?: HugoScope; profile?: HugoProfile; read?: boolean; relatedCaseType?: string; relatedCaseId?: string; createdAt?: any };
+export type Agent007ReportExport = { version: 1; kind: "EARNINGS_BY_CLIENT"; fileName: string; dateFrom: string; dateTo: string; includeCompensated: boolean; docsScanned: number; scanLimit: number; matchedClients: number; exportedClients: number; truncatedByScan: boolean; truncatedByExport: boolean; rows: EarningsByClientReportRow[] };
+export type Agent007Message = { id: string; role: "user" | "assistant"; text: string; source?: "USER" | "VERTEX_AI" | "OPENAI" | "HUGO_ENGINE" | "SYSTEM_EVENT"; scope?: HugoScope; profile?: HugoProfile; read?: boolean; relatedCaseType?: string; relatedCaseId?: string; reportExport?: Agent007ReportExport; createdAt?: any };
 export type HugoVoiceSession = { id: string; sessionId: string; gatewayCallId?: string | null; status: "ACTIVE" | "COMPLETED" | "FAILED"; startedAt?: any; endedAt?: any; durationMs: number; modality: "VOICE"; system: "HUGO"; context: string; transcriptPolicy: string; audioStored: false; model?: string; voice?: string; gateway?: Record<string, string | null>; realtime?: Record<string, any>; costs?: Record<string, number | null> };
 export type HugoVoiceTurn = { id: string; sessionId: string; turnId: string; responseId: string | null; speaker: "USER" | "HUGO"; text: string; timestampMs: number; durationMs: number; interrupted: boolean; status: string; transcriptionStatus: string; transcriptionConfidence?: number | null };
 export type HugoVoiceEvent = { id: string; eventId: string; type: string; turnId: string | null; responseId: string | null; timestampMs: number; detail?: string | null };
