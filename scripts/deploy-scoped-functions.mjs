@@ -114,7 +114,7 @@ export function assertRuntimePreserved(before, after) {
   assert.equal(after.buildConfig.entryPoint, before.buildConfig.entryPoint, 'ENTRYPOINT_CHANGED');
   assert.deepEqual(after.buildConfig.environmentVariables, before.buildConfig.environmentVariables, 'BUILD_ENV_CHANGED');
 }
-export function assertRunRuntimePreserved(before, after) {
+export function assertRunRuntimePreserved(before, after, input) {
   // Google may add these identity annotations while replacing a revision.
   // Normalize only additions absent in the baseline, and only canonical identity.
   const normalizedAfter = structuredClone(after);
@@ -135,6 +135,17 @@ export function assertRunRuntimePreserved(before, after) {
   normalizeAddedIdentity(before.annotations, normalizedAfter.annotations, 'cloudfunctions.googleapis.com/function-id', functionId => functionId);
   if (before.annotations === undefined && normalizedAfter.annotations && !Object.keys(normalizedAfter.annotations).length) delete normalizedAfter.annotations;
   if (before.template?.labels === undefined && normalizedAfter.template?.labels && !Object.keys(normalizedAfter.template.labels).length) delete normalizedAfter.template.labels;
+  const overlayLabels = input?.sourceIdentity ? {
+    'pay0-source-mode': 'production-overlay-v1',
+    'pay0-base-source': input.sourceIdentity.baseArchiveSha256.slice(0, 40),
+    'pay0-patch-sha': input.sourceIdentity.patchSha256.slice(0, 40),
+  } : null;
+  if (overlayLabels) {
+    validateSourceIdentity(input.sourceIdentity, input.group, input.sourceCommit);
+    for (const target of [after, after.template]) for (const [key, value] of Object.entries(overlayLabels)) {
+      assert.equal(target?.labels?.[key], value, 'RUN_OVERLAY_PROVENANCE_CHANGED');
+    }
+  }
   const comparable = value => {
     const copy = structuredClone(value);
     const latest = copy.latestReadyRevision;
@@ -142,6 +153,7 @@ export function assertRunRuntimePreserved(before, after) {
     const labels = target => {
       if (!target?.labels) return;
       delete target.labels['pay0-source-commit']; delete target.labels['firebase-functions-hash'];
+      if (overlayLabels) for (const key of Object.keys(overlayLabels)) delete target.labels[key];
     };
     labels(copy); labels(copy.template);
     if (copy.template) {
@@ -298,7 +310,7 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
         const operation = JSON.parse(fs.readFileSync(path.join(path.dirname(inputFile), `${name}-operation.json`)));
         assertOperationMatchesGet(operation, current);
         assertRuntimePreserved(expected.resource, current);
-        assertRunRuntimePreserved(expected.service, saved.service);
+        assertRunRuntimePreserved(expected.service, saved.service, input);
         assert.equal(current.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
         assertPublishedIdentity(current, input);
         assert.equal(sha(await readSourceBytes(previousSource(current), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
@@ -347,7 +359,7 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
       assertOperationMatchesGet(completed, after);
       assert.equal(after.state, 'ACTIVE', 'POSTFLIGHT_NOT_ACTIVE');
       assertRuntimePreserved(fresh, after);
-      assertRunRuntimePreserved(expected.service, afterService);
+      assertRunRuntimePreserved(expected.service, afterService, input);
       assertPublishedIdentity(after, input);
       assert.equal(sha(await readSourceBytes(previousSource(after), token)), input.archiveSha256, 'POSTFLIGHT_ARTIFACT_BYTES');
       const iam = await getMetadata(`https://run.googleapis.com/v2/${after.serviceConfig.service}:getIamPolicy`, token);
@@ -382,7 +394,7 @@ async function rollbackInternal(inputFile, inputSha256, name) {
     const token = tokenInMemory();
     await assertCurrent(expected, name, token);
     assertRuntimePreserved(before.resource, expected.resource);
-    assertRunRuntimePreserved(before.service, expected.service);
+    assertRunRuntimePreserved(before.service, expected.service, input);
     unresolved = true;
     fs.writeFileSync(lockPath, JSON.stringify({ inputFile, inputSha256, function: name, state: 'ROLLBACK_DISPATCHING' }));
     const operation = await mutation(`${base}/functions/${name}?updateMask=buildConfig.source,labels`, token,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity } from '../../scripts/deploy-scoped-functions.mjs';
+import { sourceOnlyPatch, assertArtifactProof, assertPublishedIdentity, validateSourceIdentity, assertRunRuntimePreserved } from '../../scripts/deploy-scoped-functions.mjs';
 
 const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'a'.repeat(64), patchCommit: 'b'.repeat(40), patchSha256: 'c'.repeat(64) };
 const input = { group: 'hugo-chat-overlay', functions: ['sendAgent007Message'], sourceCommit: identity.patchCommit, archiveSha256: 'd'.repeat(64), sourceIdentity: identity };
@@ -32,4 +32,19 @@ test('a later full-checkout update does not retain stale overlay provenance', ()
   const patch = sourceOnlyPatch(baseline, source, input.sourceCommit, input.archiveSha256, 'hugo-reports');
   assert.equal(patch.labels['pay0-source-mode'], undefined);
   assert.equal(patch.labels['pay0-base-source'], undefined);
+});
+
+test('Run comparison accepts only exact approved overlay labels and still rejects configuration drift', () => {
+  const before = { labels: { owner: 'retained' }, template: { labels: { owner: 'retained' }, containers: [{ image: 'old', env: [{ name: 'SETTING', value: 'retained' }] }] }, terminalCondition: { state: 'CONDITION_SUCCEEDED' } };
+  const after = structuredClone(before);
+  const labels = { 'pay0-source-mode': 'production-overlay-v1', 'pay0-base-source': identity.baseArchiveSha256.slice(0, 40), 'pay0-patch-sha': identity.patchSha256.slice(0, 40) };
+  Object.assign(after.labels, labels); Object.assign(after.template.labels, labels);
+  assertRunRuntimePreserved(before, after, input);
+  assert.throws(() => assertRunRuntimePreserved(before, after));
+  for (const key of Object.keys(labels)) {
+    const wrong = structuredClone(after); wrong.template.labels[key] = 'wrong';
+    assert.throws(() => assertRunRuntimePreserved(before, wrong, input), /RUN_OVERLAY_PROVENANCE_CHANGED/);
+  }
+  const changed = structuredClone(after); changed.template.containers[0].env[0].value = 'changed';
+  assert.throws(() => assertRunRuntimePreserved(before, changed, input), /RUN_CONFIGURATION_CHANGED/);
 });
