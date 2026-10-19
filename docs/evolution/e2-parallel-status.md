@@ -16,9 +16,9 @@ archivos modificados y no se escribe sobre ellos.
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Ambos artefactos autorizados y publicados; configuración verificada, operación real pendiente |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Descargas autorizadas ligadas a generación Storage exacta | GHK1 publicado; usuario confirma descargas en solicitudes y pagos, sin certificar otros módulos |
-| I | MAT reutiliza formularios y dominio existente | Tres overlays de aislamiento y sesión firmada listos; 8 pruebas por artefacto, autorización solicitada |
+| I | MAT reutiliza formularios y dominio existente | Tres overlays de aislamiento y sesión firmada publicados; configuración y rechazo sin scope verificados, flujo Telegram real pendiente |
 | J | Transporte Telegram y sesiones MAT | Autenticación HMAC real probada con claves sintéticas; sin envíos reales. Consumidor QR sigue sin localizar |
-| K | Homologación de artefactos y evaluación Next 16 aislada | Build, cinco pruebas de navegador y cuatro suites UI aprobados; runtime activo permanece en Next 15 |
+| K | Homologación de artefactos y evaluación Next 16 aislada | Next 16 probado aisladamente; verificación transitiva offline añadida como QA independiente. Producción permanece en Next 15 |
 
 ## Paquetes y estados de entrega
 
@@ -32,7 +32,7 @@ archivos modificados y no se escribe sobre ellos.
 | E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | Integrado, compilado y probado conjuntamente; autorización productiva pendiente |
 | E/F/I mínimo | Revisión administrativa y MAT de `a280e72` | Contrato preparado; no equivale a ZIP desplegable ni a publicación |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
-| MAT: aislamiento y sesión | Tres overlays de `5b0db91` | DEPLOYMENT_PENDING; hashes y reversión preparados, autorización solicitada |
+| MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |
 | R2 gateway | Fuente `0a783d0`, ZIP `049e1ab1417551dfa52b0f01c37f2994768e3fe322698dd90b344dd66983be9c` | Fuente probada; no hay imagen ni autorización productiva |
 
 ## Integración de interfaz sin pérdida funcional
