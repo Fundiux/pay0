@@ -162,7 +162,7 @@ export class FirestoreHugoLearningRuleStore {
       metadata: { ruleId: rule.ruleId, version: rule.version, reason } });
   }
   async review(identity: Identity, input: { action: "APPROVE" | "REVOKE"; supportingIds?: string[]; ruleId?: string }) {
-    if (!enabled()) throw new HttpsError("failed-precondition", "Las reglas supervisadas están deshabilitadas.");
+    if (!enabled() && input.action !== "REVOKE") throw new HttpsError("failed-precondition", "Las reglas supervisadas están deshabilitadas.");
     return this.db.runTransaction(async tx => {
       await this.actor(tx, identity);
       if (input.action === "REVOKE") {

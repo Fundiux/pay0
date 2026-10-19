@@ -71,9 +71,28 @@ test('persisted supervised rule is evaluated, approved, used by Core and revoked
     assert.equal(reply.model.model, 'none');
     assert.deepEqual((await db.doc('solicitudes/current-case').get()).data(), originalCase);
   });
-  await t.test('explicit human revocation persists and stops subsequent use', async () => {
+  await t.test('gate OFF allows only authorized durable revocation and never resolves a rule', async () => {
+    delete process.env.HUGO_SUPERVISED_RULES_ENABLED;
+    const before = (await db.doc(`agent007LearnedRules/${ruleId}`).get()).data();
+    assert.equal(await rules().resolve(identity, query, 'current-case', 'S123456'), null);
+    await assert.rejects(review({ action: 'APPROVE', supportingIds: support }), e => e.code === 'failed-precondition');
+    await assert.rejects(callables.reviewAgent007LearningRule.run({ data: { action: 'REVOKE', ruleId } }), e => e.code === 'unauthenticated');
+    await assert.rejects(review({ action: 'UNKNOWN', ruleId }), e => e.code === 'invalid-argument');
+    await assert.rejects(rules().review(identity, { action: 'UNKNOWN', ruleId }), e => e.code === 'failed-precondition');
+    await db.doc('users/off-foreign').set({ rootId: 'foreign-root', role: 'superadmin', active: true });
+    await assert.rejects(invoke('reviewAgent007LearningRule', { action: 'REVOKE', ruleId }, 'off-foreign'), e => e.code === 'not-found');
+    await db.doc(`users/${uid}`).update({ role: 'cliente' });
+    await assert.rejects(review({ action: 'REVOKE', ruleId }), e => e.code === 'permission-denied');
+    await assert.rejects(rules().review(identity, { action: 'REVOKE', ruleId }), e => e.code === 'permission-denied');
+    await db.doc(`users/${uid}`).update({ role: 'superadmin' });
+    await assert.rejects(review({ action: 'REVOKE', ruleId: 'does-not-exist' }), e => e.code === 'not-found');
+    await assert.rejects(rules().review({ uid, rootId: 'foreign-root' }, { action: 'REVOKE', ruleId }), e => e.code === 'permission-denied');
+    assert.deepEqual((await db.doc(`agent007LearnedRules/${ruleId}`).get()).data(), before);
     assert.equal((await review({ action: 'REVOKE', ruleId })).status, 'INVALIDATED');
     assert.equal((await review({ action: 'REVOKE', ruleId })).version, 2);
+    assert.equal((await db.doc(`agent007LearningLedger/${ruleId}_2_RULE_REVOKED`).get()).get('actorUid'), uid);
+    assert.equal((await db.collection('agent007LearningLedger').where('type', '==', 'RULE_REVOKED').get()).size, 1);
+    process.env.HUGO_SUPERVISED_RULES_ENABLED = 'true';
     assert.notEqual((await coreResponse()).responsePolicy, 'SUPERVISED_DOCUMENT_REVIEW');
     assert.equal((await db.doc(`agent007LearnedRules/${ruleId}`).get()).get('invalidatedBy'), 'HUMAN_REVOKED');
   });
