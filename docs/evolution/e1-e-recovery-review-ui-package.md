@@ -1,6 +1,6 @@
 # E — revisión administrativa: delta de UI
 
-Estado: candidato local verificado, sin publicación ni build completo en esta etapa. Requiere autorización y disponibilidad de ambos callables de revisión antes de publicar la interfaz.
+Estado: candidato combinado admin/MAT con build completo PASS, sin preparación SSR ni publicación. Requiere autorización y disponibilidad de ambos callables de revisión antes de publicar la interfaz.
 
 ## Bases y alcance
 
@@ -21,7 +21,7 @@ La ruta existente es `/reportes`, pestaña Control Center, sección Ingeniería 
 1. Crear y verificar, con autorización separada, `listOperationRecoveryReviews` y `acknowledgeOperationRecoveryReview`. La preparación del backend está documentada en `e1-e-recovery-review-create-package.md`; este delta no los crea ni publica.
 2. Mantener los controles backend: sesión Firebase, superadmin vigente, módulo reportes/view y root propio; paginación root/NEEDS_REVIEW/ID; acuse idempotente y auditoría. No abrir reglas de Firestore: los wrappers llaman al backend.
 3. Conservar la configuración e índices requeridos por esa consulta. Las pruebas de UI con dobles no certifican índices productivos; usar la evidencia de preparación backend y comprobación autorizada.
-4. Construir el frontend candidato con su configuración productiva verificada y dependencias originales, preservando los cambios EUI y R1.2 de 80a5; obtener nueva identidad y artefacto. No se ejecutó npm ci ni build grande aquí.
+4. El candidato combinado ya tiene build completo con configuración pública preservada y dependencias originales; conserva EUI y R1.3/PDF. Falta preparar/verificar SSR sobre una nueva línea base productiva después de publicar R1.3; este build no autoriza ni prepara el despliegue.
 5. Publicar backend antes de esta UI y efectuar la prueba manual autorizada del flujo administrativo. Un acuse sólo registra revisión; no reintenta, no modifica el trabajo de recuperación y no declara éxito financiero.
 
 La UI consulta al montarse; publicarla antes de disponer de ambos endpoints produciría errores. La reversión de UI consiste en volver al candidato base verificado; no eliminar trabajos, revisiones ni auditoría.
@@ -31,3 +31,13 @@ La UI consulta al montarse; publicarla antes de disponer de ambos endpoints prod
 `qa/scripts/e1-recovery-review-ui.test.cjs` ejecuta el componente y el montaje real en Chromium headless, con servicios sintéticos. El candidato y el árbol integrado obtuvieron 3/3 cada uno: wrappers exactos, paginación/acuse/error recuperable y aislamiento de uid/root con carga/acuse pendientes e inactivación. El componente anterior falló la prueba de cambio de root: conservaba la instancia y no consultaba el nuevo ámbito. Logs: `tmp/e-recovery-review-ui-final.log` y `tmp/e-recovery-review-baseline-context.log` y `tmp/e-recovery-review-root-final.log`.
 
 Estas pruebas no certifican Firebase Auth, rules, índices ni despliegue. No se invocaron proveedores, callables productivos ni acciones financieras.
+
+## Candidato combinado congelado y build
+
+El clon independiente `.firebase/modular-release/admin-mat-ui-source`, rama `release/admin-mat-ui-integration`, parte de R1.3 UI `13620b74516843b232747904b606b34d0747f986`. Commit `a335e195e8e70f889be1e60aa0df850e4d278585`, árbol `035110ae1587af8111877b2d6b36892ed16df627`. Se aplicaron los parches versionados de revisión administrativa (tres archivos) y MAT (dos archivos), sin solapamiento: exactamente cinco archivos cambian. El resto del árbol base permanece idéntico, incluidos PDF/R1.3, cambios E de proveedores, manifiestos y locks.
+
+QA del candidato exacto: revisión administrativa **3/3 PASS** y MAT **5/5 PASS**, usando los overrides de fuente de los verificadores existentes. Build aislado mediante `build()` de `scripts/deploy-modular-hosting.mjs`: **PASS**, 457 dependencias fijadas, guard de entorno 7/7, Next 15.5.27, compilación/lint/tipos y 47 páginas. Fuente limpia y huella de configuración verificada antes/después.
+
+Recibo privado: `.firebase/modular-release/hosting-a335e195e8e7-80cd6688-809e-48d4-85be-6dc109aaf0be/build.json`, SHA256 `e6e681076650d628fb9886fd8667b73b2dbbd07ab392723206032cebf27c6d0a`. Build ID `hCQThzHoo0tmK4eygfaNb`; huella de entorno público `876b2564ca82eab5a6039013fa04ce502884511cf3d251c779282ac6650b03d4`. No se preparó SSR ni se publicó este candidato.
+
+Preflight de los dos endpoints nuevos, exclusivamente de lectura: **PASS**. Input `fe8bc6e77c0cf8e677b1af523e1e8994741dfff8bfaa8bf7b755628941a82b6f`, plan `4966074d4575a6995c4c0bf18050bd31c4faf28312041769c7c092200405dfb4`. Padre `getcontrolcenterengineering-00001-cij` conserva recurso, servicio e IAM exactos; ambos destinos siguen ausentes. Prueba privada `new-recovery-review/readonly-preflight.json`, SHA256 `cf4736db7cb3e19eac1ff4daa0fbccb727c3676b932c98b043a6c3ab43f25392`. Esa observación no reserva estado remoto ni sustituye la revalidación al ejecutar. Ambos endpoints siguen pendientes de autorización; la UI no está funcionalmente completa en producción mientras no existan.
