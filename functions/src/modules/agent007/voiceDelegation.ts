@@ -1,4 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { executeEarningsReportTool } from "./reportConnector";
+import { formatEarningsReport } from "./hugoCore/reportSemantics";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -16,9 +18,9 @@ import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolic
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
 const learningStore = new FirestoreHugoLearningStore(db);
-const VOICE_PLATFORM_TOOLS = new Set(["getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "getLatestSolicitudForUser", "getLatestPagoForUser", "countClientsForCurrentUser", "getLatestSolicitud", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
+const VOICE_PLATFORM_TOOLS = new Set(["getEarningsByClientReport", "getAuthorizedCapabilities", "getSystemCatalog", "countClientsForUser", "getLatestSolicitudForUser", "getLatestPagoForUser", "countClientsForCurrentUser", "getLatestSolicitud", "searchReceivedPagos", "getPagoById", "getPaymentComplementStatus", "getSessionContext", "getLastOperationDiagnostic"]);
 
-type VoiceDirectTool = "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "getLatestSolicitudForUser" | "getLatestPagoForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
+type VoiceDirectTool = "getEarningsByClientReport" | "getAuthorizedCapabilities" | "getSystemCatalog" | "countClientsForUser" | "getLatestSolicitudForUser" | "getLatestPagoForUser" | "countClientsForCurrentUser" | "getLatestSolicitud" | "searchReceivedPagos" | "getPagoById" | "getPaymentComplementStatus" | "getSessionContext" | "getLastOperationDiagnostic";
 const paymentStatusesConciliated = new Set(["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]);
 const money = (value: unknown, currency = "MXN") => Number(value || 0).toLocaleString("es-MX", { style: "currency", currency });
 const actorRef = (uid: string) => createHash("sha256").update(`hugo-voice:${uid}`).digest("hex").slice(0, 24);
@@ -46,6 +48,7 @@ async function executeReadWithOneRetry(router: HugoToolRouter, request: { name: 
 }
 
 function formatVoicePlatformResultRaw(tool: string, data: any) {
+  if (tool === "getEarningsByClientReport") return formatEarningsReport(data);
   if (tool === "countClientsForUser") {
     if (data?.matchStatus === "EXACT") return `${data.user?.displayName || "El usuario"} tiene ${Number(data.clientCount || 0)} clientes activos visibles en PAY0.`;
     if (data?.matchStatus === "CONFIRM_CURRENT_USER") return `¿Te refieres a ${data.suggestedDisplayName || "tu usuario actual"}, tu usuario actual?`;
@@ -142,6 +145,7 @@ export const delegateHugoVoiceTurn = onCall(
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
+      getEarningsByClientReport: input => executeEarningsReportTool(request, input),
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),

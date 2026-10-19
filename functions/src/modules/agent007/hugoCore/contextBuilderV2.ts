@@ -1,3 +1,4 @@
+import { earningsReportRequest, isEarningsReportQuestion } from "./reportSemantics";
 import { ToolRequest, ToolResult } from "./toolRouter";
 import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
 import { HugoDataStore } from "./dataStoreContract";
@@ -36,6 +37,8 @@ const compact = (value: unknown, max = 350) => String(value ?? "").replace(/\s+/
 export async function buildHugoContextV2(input: { message: string; rootId: string; conversationState: ConversationState; router: { execute(request: ToolRequest): Promise<ToolResult> }; dataStore?: HugoDataStore; now?: number }) {
   const now = input.now || Date.now();
   const resolution = resolveConversationReference(input.message, input.conversationState, input.rootId, now);
+  const reportRequest = earningsReportRequest(input.message);
+  if (isEarningsReportQuestion(input.message) && !reportRequest) resolution.clarification = "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente.";
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
       folioConsultado: null, solicitudes: [] as any[], pagos: [] as any[], dudasPendientes: [] as any[], complementosPendientes: [] as any[], capacidadesIq: {} }, pieces: [] as ContextPiece[], toolResults: [] as ToolResult[],
@@ -73,7 +76,7 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
     || normalizedMessage.match(/^\s*([^?.,]{2,80}?)\s+cuantos?\s+clientes?\s+tiene\b/i)?.[1]?.trim()
     || normalizedMessage.match(/\bcuantos?\s+clientes?\s+tiene\s+(?:registrados?\s+)?([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bcuantos?\s+usuarios?\s+tiene\s+([^?.,]{2,80})/i)?.[1]?.trim();
-  const requests: ToolRequest[] = currentUserClientQuestion ? [{ name: "countClientsForCurrentUser", input: {} }] : userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : latestSolicitudQuestion ? [{ name: "getLatestSolicitud", input: {} }] : assetsQuestion ? [{ name: "getSystemCatalog", input: {} }, { name: "getAuthorizedCapabilities", input: {} }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }, { name: "getLastOperationDiagnostic", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : previousPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: 1, beforePaymentId: resolution.state.activeEntity!.entityId, position: "PREVIOUS" } }] : latestPaymentQuestion || listPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: requestedPaymentLimit, position: "LATEST" } }] : paymentDetailFollowup ? [{ name: "getPagoById", input: { paymentId: resolution.state.activeEntity!.entityId } }] : paymentComplementFollowup ? [{ name: "getPaymentComplementStatus", input: { folio: resolution.state.activeEntity!.folio } }] : folios.length ? [
+  const requests: ToolRequest[] = reportRequest ? [{ name: "getEarningsByClientReport", input: reportRequest }] : currentUserClientQuestion ? [{ name: "countClientsForCurrentUser", input: {} }] : userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : latestSolicitudQuestion ? [{ name: "getLatestSolicitud", input: {} }] : assetsQuestion ? [{ name: "getSystemCatalog", input: {} }, { name: "getAuthorizedCapabilities", input: {} }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }, { name: "getLastOperationDiagnostic", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : previousPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: 1, beforePaymentId: resolution.state.activeEntity!.entityId, position: "PREVIOUS" } }] : latestPaymentQuestion || listPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: requestedPaymentLimit, position: "LATEST" } }] : paymentDetailFollowup ? [{ name: "getPagoById", input: { paymentId: resolution.state.activeEntity!.entityId } }] : paymentComplementFollowup ? [{ name: "getPaymentComplementStatus", input: { folio: resolution.state.activeEntity!.folio } }] : folios.length ? [
     ...folios.filter(x => x.startsWith("S")).map(folio => ({ name: "getSolicitud" as const, input: { folio } })),
     ...folios.filter(x => x.startsWith("P")).map(folio => ({ name: "getPago" as const, input: { folio } })),
     { name: "getPaymentComplementStatus", input: folios.length === 1 ? { folio: folios[0] } : {} }, { name: "getIqCapabilities", input: {} },
@@ -118,7 +121,7 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const boundaries = { solicitudes: scopeFor(solicitudResults, "RECENT_SAMPLE"), pagos: pagoResults.map(row => boundary(row.completeness, row.tool === "searchReceivedPagos" ? "ORDERED_WINDOW" : row.tool.startsWith("get") ? "EXACT_FOLIO" : "RECENT_SAMPLE")),
     complementos: by("getPaymentComplementStatus").map(row => boundary(row.completeness, "RECENT_SAMPLE")), capacidadesIq: by("getIqCapabilities").map(row => boundary(row.completeness, "CONFIGURATION")) };
   const context = { schemaVersion: CONTEXT_BUILDER_VERSION, questionIntent: resolution.intent, referenceResolution: resolution.reason, folioConsultado: folios.length === 1 ? folios[0] : null,
-    platformFacts: { clientCount: by("countClientsForUser")[0]?.data || by("countClientsForCurrentUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null,
+    platformFacts: { earningsReport: by("getEarningsByClientReport")[0]?.data || null, clientCount: by("countClientsForUser")[0]?.data || by("countClientsForCurrentUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null,
       latestSolicitud: by("getLatestSolicitud")[0]?.data || null, lastDiagnostic: by("getLastOperationDiagnostic")[0]?.data || null },
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),

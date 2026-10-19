@@ -1,3 +1,4 @@
+import { formatEarningsReport } from "./reportSemantics";
 import { buildHugoContext, HugoMemory, RecentEntity } from "./contextBuilder";
 import { HugoToolRouter, ToolRequest, ToolResult } from "./toolRouter";
 import { HugoModelAdapter, ModelOutput, canonicalModelRequest } from "./modelContract";
@@ -14,6 +15,7 @@ import { formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalo
 function fallbackReply(message: string, name: string, context: any): string {
   const normalized = message.toLocaleLowerCase("es-MX");
   const platform = context.platformFacts || {};
+  if (platform.earningsReport) return formatEarningsReport(platform.earningsReport);
   if (platform.clientCount?.matchStatus === "CURRENT_USER") return `${Number(platform.clientCount.clientCount || 0)}.`;
   if (platform.clientCount?.matchStatus === "EXACT") return `${platform.clientCount.user?.displayName || "El usuario"} tiene ${Number(platform.clientCount.clientCount || 0)} clientes activos visibles dentro del alcance autorizado.`;
   if (platform.clientCount?.matchStatus === "CONFIRM_CURRENT_USER") return `¿Te refieres a ${platform.clientCount.suggestedDisplayName || "tu usuario actual"}, tu usuario actual?`;
@@ -90,7 +92,7 @@ export class HugoConversationCore {
         `El estado actual de ${exactRow.folio} en PAY0 es ${exactRow.estado}.` :
         !/\b(comparar?|mayor|menor)\b/i.test(input.message) && /\b(cu[aá]nto|monto|importe)\b/i.test(input.message) && exactRow.monto != null && exactRow.monto !== "" && Number.isFinite(Number(exactRow.monto)) ?
           `El monto registrado de ${exactRow.folio} en PAY0 es ${Number(exactRow.monto).toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.` : null : null;
-    const deterministicOperationalReply = v2 && !policyReply && !input.commandReply && requested.some(row => ["searchReceivedPagos", "getPagoById", "countClientsForCurrentUser", "countClientsForUser", "getLatestSolicitud", "getSystemCatalog", "getAuthorizedCapabilities", "getLastOperationDiagnostic"].includes(row.name))
+    const deterministicOperationalReply = v2 && !policyReply && !input.commandReply && requested.some(row => ["getEarningsByClientReport", "searchReceivedPagos", "getPagoById", "countClientsForCurrentUser", "countClientsForUser", "getLatestSolicitud", "getSystemCatalog", "getAuthorizedCapabilities", "getLastOperationDiagnostic"].includes(row.name))
       ? fallbackReply(input.message, input.name, built.context) : null;
     const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
     const learningContext = built.context as any;

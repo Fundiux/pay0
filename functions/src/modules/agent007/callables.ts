@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { executeEarningsReportTool } from "./reportConnector";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity, logActivityBatch } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
@@ -208,6 +209,7 @@ export const sendAgent007Message = onCall(
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
+      getEarningsByClientReport: input => executeEarningsReportTool(request, input),
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),

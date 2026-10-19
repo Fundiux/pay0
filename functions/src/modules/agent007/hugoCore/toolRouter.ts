@@ -1,4 +1,7 @@
+import { validateEarningsReportInput } from "./reportSemantics";
+
 export const HUGO_READ_TOOLS = {
+  getEarningsByClientReport: { description: "Reporte canónico de utilidades por cliente en el alcance autorizado", input: "earningsReport", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getSolicitud: { description: "Consulta una solicitud por folio", input: "folio", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   searchSolicitudes: { description: "Muestra solicitudes recientes", input: "limit", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
   getLatestSolicitud: { description: "Obtiene la solicitud mas reciente por createdAt dentro de la raiz autorizada", input: "none", output: "Pay0ToolResult", owner: "PAY0", permission: "READ", sideEffect: "NONE" },
@@ -21,7 +24,7 @@ export const HUGO_READ_TOOLS = {
 export type HugoToolName = keyof typeof HUGO_READ_TOOLS;
 export type ToolResult = { sourceSystem: string; tool: string; retrievedAt: string; scope: { rootId: string }; completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; evidence: Array<{ entityType: string; entityId: string; kind: string; sourceSystem: string; completeness: string }>; data: any; trace: { latencyMs: number; result: string; error?: string } };
 export type ToolIdentity = { uid: string; rootId: string; role: string };
-export type ToolRequest = { name: HugoToolName; input?: { folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
+export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; includeCompensated?: boolean; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
 
 export class HugoToolRouter {
   constructor(private readonly identity: ToolIdentity, private readonly tools: Partial<Record<HugoToolName, (input: any) => Promise<ToolResult>>>, private readonly onResult?: (request: ToolRequest, result?: ToolResult, error?: unknown) => void) {
@@ -36,9 +39,10 @@ export class HugoToolRouter {
     if (!tool) throw Error("HUGO_TOOL_NOT_ALLOWED");
     const input = request.input || {};
     const schema = HUGO_READ_TOOLS[request.name].input;
+    if (schema === "earningsReport") validateEarningsReportInput(input);
     const allowedKeys = schema === "folio" || schema === "folio?" ? ["folio"] : schema === "limit" ? ["limit"] : schema === "query" ? ["query"] : schema === "creatorQuery" ? ["query", "period", "limit"] : schema === "paymentId" ? ["paymentId"] : schema === "receivedPaymentQuery" ? ["limit", "beforePaymentId", "position"] : [];
-    if (Object.keys(input).some(key => !allowedKeys.includes(key)) || (input.folio !== undefined && !/^[SP][A-Z0-9]{5,19}$/.test(input.folio)) ||
-      (input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50)) ||
+    if ((schema !== "earningsReport" && Object.keys(input).some(key => !allowedKeys.includes(key))) || (input.folio !== undefined && !/^[SP][A-Z0-9]{5,19}$/.test(input.folio)) ||
+      (schema !== "earningsReport" && input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50)) ||
       (input.query !== undefined && (!String(input.query).trim() || String(input.query).length > 120)) ||
       (input.paymentId !== undefined && (!String(input.paymentId).trim() || String(input.paymentId).length > 160 || String(input.paymentId).includes("/"))) ||
       (input.beforePaymentId !== undefined && (!String(input.beforePaymentId).trim() || String(input.beforePaymentId).length > 160 || String(input.beforePaymentId).includes("/")))) throw Error("HUGO_TOOL_INVALID_INPUT");
