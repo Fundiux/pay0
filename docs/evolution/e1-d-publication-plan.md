@@ -8,7 +8,7 @@ Fuente D: `5d07dc02edef7e24fb1619b1c34d5db6298c323f`. Los módulos nuevos de reg
 
 El ZIP R1.3 preservado, SHA256 `a33ed9badb033a48a061a38ddb8295fd20f0aa5dedb567b37e423e7c37d68496`, no contiene `firestoreHugoLearningRuleStore.js`, `reviewAgent007LearningRule` ni `resolveSupervisedRule`. Eso es una exclusión deliberada, no una capacidad publicada que deba reconstruirse.
 
-Se generó el parche D exacto de siete fuentes desde el commit original: `output/d-publication-plan/d-only-source.patch`, SHA256 `16fa7cefb97937784659861ec0ef377faa93bff753c84f85ec0ff098fc6884e4`. `git apply --check -p2` pasó sobre `.firebase/modular-release/r13-chat-report/source` sin modificarla. Es prueba de compatibilidad de contexto, no un artefacto compilado ni una prueba de comportamiento sobre ese overlay.
+Se generó el parche D exacto de siete fuentes desde el commit original: `output/d-publication-plan/d-only-source.patch`, SHA256 `16fa7cefb97937784659861ec0ef377faa93bff753c84f85ec0ff098fc6884e4`. La comprobación correcta desde raíz con `git apply --check -p2 --directory=.firebase/modular-release/r13-chat-report/source` **falla en `conversationCore.ts:54`**. La primera ejecución desde un subdirectorio no validó correctamente el destino y se descarta. Hace falta adaptar únicamente el contexto del hunk y revalidar todas las declaraciones ajenas; no copiar el Core integrado completo. No se modificó la fuente R1.3 ni se acredita compatibilidad del parche aún.
 
 | Fuente | Cambio D permitido |
 | --- | --- |
@@ -20,7 +20,7 @@ Se generó el parche D exacto de siete fuentes desde el commit original: `output
 | `src/modules/agent007/hugoCore/learningContract.ts` | Tipos de eventos de activación/revocación/invalidación |
 | `src/modules/agent007/hugoCore/learningStore.ts` | Método opcional del contrato |
 
-Los imports reutilizan `experienceBuilder`, `learningEvaluation`, `learningStore`, `observationEvidence`, `authGuard`, Firebase y módulos Node existentes. No hay nuevas dependencias ni secretos. Antes de firmar un artefacto deben probarse estos consumidores con las versiones transitivas de la fuente productiva capturada; las pruebas del árbol integrado no certifican esas versiones.
+Los imports requieren `experienceBuilder`, `learningEvaluation`, `learningStore`, `observationEvidence`, `authGuard`, Firebase y módulos Node. La revisión de inteligencia identificó que `observationEvidence.ts` no está en la fuente R1.3 y que `buildVerifiedExperience` no es equivalente al integrado. Por ello el parche de siete fuentes aún no cierra sus dependencias: operaciones debe reconciliar los prerrequisitos exactos, delimitar su delta y probarlos, sin copiar transitivos completos del árbol integrado. No hay nuevas dependencias npm ni secretos propuestos. Las pruebas del árbol integrado no certifican las versiones transitivas del futuro overlay.
 
 ## Estado remoto observado, no supuesto
 
