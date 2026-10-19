@@ -3,7 +3,7 @@ export type ReportFileFormat = "PDF" | "XLSX";
 export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; limit?: number; includeCompensated?: boolean; clientQuery?: string; format?: ReportFileFormat };
 export type HugoReportExport = { version: 1; kind: "EARNINGS_BY_CLIENT"; format?: ReportFileFormat; fileName: string; dateFrom: string; dateTo: string; includeCompensated: boolean;
   docsScanned: number; scanLimit: number; matchedClients: number; exportedClients: number; truncatedByScan: boolean; truncatedByExport: boolean; rows: EarningsByClientReportRow[] };
-export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated: boolean; format?: ReportFileFormat;
+export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated: boolean; format?: ReportFileFormat; periodMonth?: number;
   stage: "DATES" | "CLIENT" | "FORMAT" | "READY"; resolvedAt: number; resolvedTurn: number };
 
 export function validateEarningsReportInput(input: EarningsReportToolInput): void {
@@ -23,7 +23,7 @@ export function validateEarningsReportInput(input: EarningsReportToolInput): voi
 
 export function isEarningsReportQuestion(message: string): boolean {
   const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return /\b(reporte|informe|resumen)\b/i.test(text) && /\b(utilidades|ganancias|honorarios)\b/i.test(text) && /\bclientes?\b/i.test(text);
+  return /\b(reporte|informe|resumen)\b/i.test(text) && /\b(utilidades|ganancias|honorarios)\b/i.test(text);
 }
 
 export const isEarningsReportComparison = (message: string) => /\b(compara|comparalo|comparala|comparar|comparacion|comparado|comparada)\b/i.test(message.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
@@ -33,11 +33,19 @@ export function normalizePendingReport(raw: any, rootId: string, turn: number, n
     !Number.isInteger(raw.resolvedTurn) || raw.resolvedTurn < 0 || raw.resolvedTurn > turn || turn - raw.resolvedTurn > 4 || typeof raw.includeCompensated !== "boolean") return;
   if (raw.clientQuery !== undefined && (typeof raw.clientQuery !== "string" || !raw.clientQuery.trim() || raw.clientQuery.length > 120 || /[\x00-\x1f]/.test(raw.clientQuery))) return;
   if (raw.format !== undefined && !["PDF", "XLSX"].includes(raw.format)) return;
+  if (raw.periodMonth !== undefined && (!Number.isInteger(raw.periodMonth) || raw.periodMonth < 1 || raw.periodMonth > 12)) return;
   if (raw.dateFrom !== undefined || raw.dateTo !== undefined || raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined) {
     try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo, ...(raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) }); } catch { return; }
   }
   return { rootId, stage: raw.stage, includeCompensated: raw.includeCompensated, resolvedAt: raw.resolvedAt, resolvedTurn: raw.resolvedTurn,
-    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}), ...(raw.compareDateFrom ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) };
+    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.periodMonth ? { periodMonth: raw.periodMonth } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}), ...(raw.compareDateFrom ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) };
+}
+
+const reportMonths = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+export function reportPeriodClarification(periodMonth?: number, format?: ReportFileFormat): string {
+  const acknowledgement = format ? `De acuerdo, en ${format === "PDF" ? "PDF" : "Excel (XLSX)"}. ` : "";
+  return acknowledgement + (periodMonth ? `¿De qué año necesitas el reporte de ${reportMonths[periodMonth - 1]}? También puedes indicar fecha inicial y final en formato AAAA-MM-DD.` :
+    "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.");
 }
 
 export function reportConversationResetReply(message: string): string | null {
@@ -47,11 +55,11 @@ export function reportConversationResetReply(message: string): string | null {
   return null;
 }
 
-export function pendingReportRequest(message: string, previous?: PendingEarningsReport): { intent: boolean; request: EarningsReportToolInput | null; clientQuery?: string; includeCompensated?: boolean; format?: ReportFileFormat } {
+export function pendingReportRequest(message: string, previous?: PendingEarningsReport): { intent: boolean; request: EarningsReportToolInput | null; clientQuery?: string; includeCompensated?: boolean; format?: ReportFileFormat; periodMonth?: number } {
   const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (reportConversationResetReply(message)) return { intent: false, request: null };
-  const initial = isEarningsReportQuestion(message);
-  const repeatedReport = !!previous && /\b(reporte|informe)\b/i.test(text) && /\b(utilidades|ganancias|honorarios|nuevamente|otra vez)\b/i.test(text);
+  const repeatedReport = !!previous && /\b(reporte|informe)\b/i.test(text) && /\b(nuevamente|otra vez|de nuevo|repite|repetir|regenera)\b/i.test(text);
+  const initial = isEarningsReportQuestion(message) && !repeatedReport;
   const pdf = /\bpdf\b/i.test(text), xlsx = /\b(excel|xlsx|xls)\b/i.test(text);
   const explicitFormat: ReportFileFormat | undefined = pdf !== xlsx ? pdf ? "PDF" : "XLSX" : undefined;
   const format = pdf && xlsx ? undefined : explicitFormat || (!initial ? previous?.format || (previous?.stage === "READY" ? "XLSX" : undefined) : undefined);
@@ -59,11 +67,18 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
   const plainClientName = previous?.stage === "CLIENT" && /^[\p{L}\p{N}][\p{L}\p{N}\s&.'\u2019,\-]{0,119}$/u.test(unquotedMessage) &&
     !/^(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?[.!?]?$/i.test(unquotedMessage) &&
     !/\b(hola|gracias|reporte|informe|formato|pdf|excel|xlsx|explica|explicame|consulta|quiero|puedes|ayuda|ayudame|nuevamente|otro tema)\b/i.test(text);
+  const monthPattern = reportMonths.join("|");
+  const monthMatch = text.match(new RegExp(`\\b(?:del?\\s+mes\\s+de|en\\s+el\\s+mes\\s+de|del)\\s+(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?\\b`, "i")) ||
+    text.trim().match(new RegExp(`^(${monthPattern})(?:\\s+(?:de\\s+)?([1-9]\\d{3}))?[.!?]?$`, "i"));
+  const periodMonth = monthMatch ? reportMonths.indexOf(monthMatch[1].toLowerCase()) + 1 : !initial ? previous?.periodMonth : undefined;
+  const yearReply = !initial && previous?.periodMonth && previous.stage === "DATES" ? text.trim().match(/^(?:del?\s+)?(?:a[nñ]o\s+)?([1-9]\d{3})[.!?]?$/i) : null;
+  const periodYear = monthMatch?.[2] || yearReply?.[1];
   const continuation = !!previous && !/\b(pagos?|solicitudes?|dispersiones?|otro tema|cambiando de tema)\b/i.test(text) &&
-    (plainClientName || repeatedReport || pdf || xlsx || /\bdescarg\w*\b|\b\d{4}-\d{2}-\d{2}\b|\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|descarga|descargar|archivo)\b/i.test(text));
+    (plainClientName || repeatedReport || yearReply || pdf || xlsx || /\bdescarg\w*\b|\b\d{4}-\d{2}-\d{2}\b|\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|descarga|descargar|archivo)\b/i.test(text));
   if (!initial && !continuation) return { intent: false, request: null };
-  const capturedName = message.match(/\bcliente\s+(.+)/i)?.[1]
-    ?.replace(/\s+\d{4}-\d{2}-\d{2}[\s\S]*$/, "")
+  const capturedName = (message.match(/\bcliente\s+(.+)/i)?.[1] || message.match(/\b(?:reporte|informe|resumen)\s+(?:de\s+)?(?:utilidades|ganancias|honorarios)\s+(?:de|para)\s+(.+)/i)?.[1])
+    ?.trim().replace(/^[\s\u0022\u0027\u201c\u201d\u00ab\u00bb]+|[\s\u0022\u0027\u201c\u201d\u00ab\u00bb?.!,;:]+$/g, "")
+    .replace(/\s+\d{4}-\d{2}-\d{2}[\s\S]*$/, "")
     .replace(/\s+(?:y\s+)?(?:lo\s+)?(?:quiero\s+)?en\s+(?:formato\s+)?(?:pdf|excel|xlsx|xls)\b[\s\S]*$/i, "")
     .replace(/\s+del\s+(?:mes\s+de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?\s*$/i, "")
     .replace(/\s+(?:incluye|incluir|sin|con|no incluyas)\s+(?:las\s+)?compensadas\b[\s\S]*$/i, "")
@@ -72,18 +87,19 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
   const clientQuery = name || (!initial && plainClientName && !explicitFormat && !/\b\d{4}-\d{2}-\d{2}\b/.test(text) ? unquotedMessage.replace(/[?.!,;]+$/, "") : !initial ? previous?.clientQuery : undefined);
   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
   const priorDates = !initial && previous?.dateFrom && previous.dateTo ? `${previous.dateFrom} ${previous.dateTo}` : "";
-  const monthOnly = !plainClientName && !dates.length && /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(text);
+  const calendarDates = periodMonth && periodYear ? `${periodYear}-${String(periodMonth).padStart(2, "0")}-01 ${new Date(Date.UTC(Number(periodYear), periodMonth, 0)).toISOString().slice(0, 10)}` : "";
+  const monthOnly = !!monthMatch && !dates.length && !calendarDates;
   const exclude = /\b(sin|excluye|excluir|no incluyas)\s+(?:las\s+)?compensadas\b/i.test(text);
   const includeCompensated = exclude ? false : /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text) ? true : !initial && previous?.includeCompensated === true;
-  const candidate = monthOnly ? null : earningsReportRequest(initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
-  if (!candidate) return { intent: true, request: null, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+  const candidate = monthOnly ? null : earningsReportRequest(calendarDates && !dates.length ? `reporte utilidades clientes ${calendarDates}` : initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
+  if (!candidate) return { intent: true, request: null, includeCompensated, ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
   candidate.includeCompensated = includeCompensated;
-  if (!dates.length && previous?.compareDateFrom && previous.compareDateTo) {
+  if (!initial && !dates.length && previous?.compareDateFrom && previous.compareDateTo) {
     candidate.compareDateFrom = previous.compareDateFrom; candidate.compareDateTo = previous.compareDateTo;
   }
   if (format) candidate.format = format;
   if (clientQuery) candidate.clientQuery = clientQuery.slice(0, 120);
-  return { intent: true, request: candidate, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+  return { intent: true, request: candidate, includeCompensated, ...(periodMonth ? { periodMonth } : {}), ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
 }
 
 export function claimsUnexecutedReport(text: string, message: string): boolean {

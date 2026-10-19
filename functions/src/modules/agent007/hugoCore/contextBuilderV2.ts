@@ -1,4 +1,4 @@
-import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest, reportConversationResetReply } from "./reportSemantics";
+import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest, reportConversationResetReply, reportPeriodClarification } from "./reportSemantics";
 import { ToolRequest, ToolResult } from "./toolRouter";
 import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
 import { HugoDataStore } from "./dataStoreContract";
@@ -63,10 +63,11 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
     resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
       includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
       ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
+      ...(pendingRequest.periodMonth ? { periodMonth: pendingRequest.periodMonth } : {}),
       ...(parsedReportRequest?.compareDateFrom ? { compareDateFrom: parsedReportRequest.compareDateFrom, compareDateTo: parsedReportRequest.compareDateTo } : {}),
       ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
     resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
-    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
+    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : reportPeriodClarification(pendingRequest.periodMonth, pendingRequest.format);
   }
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
