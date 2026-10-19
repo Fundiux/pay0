@@ -8,11 +8,11 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 asignado sin detener otros frentes |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.2 devuelve reporte real con nombre simple; usuario detectó bucle ante saludos y puntuación. R1.3 implementado y probado; prepara artefacto UI sobre E, sin detener otros frentes |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
 | C | Selección de cliente y reportes canónicos | Reporte real R1.2 confirmado parcialmente; R1.3 añade formato PDF/XLSX y continuidad corregida. PDF de siete páginas validado con datos sintéticos, aún sin publicar |
-| D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador + 50 regresiones; aprobación/revocación y gate apagado; no publicado |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Paquete independiente de proveedores a334817: build, runtime, cinco rutas y componentes PASS, autorización solicitada. Revisión administrativa endurecida y compilada, aún sin publicar |
+| D | Regla supervisada persistida y enlazada al Core, commit `5d07dc0` | 7 pruebas de emulador y 64 regresiones tras R1.3; aprobación/revocación y gate apagado; no publicado |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Paquete publicado: backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67; cinco rutas públicas HTTP200, panel autenticado pendiente. Revisión administrativa endurecida y compilada, aún sin publicar |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
 | G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
 | H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
@@ -29,7 +29,7 @@ archivos modificados y no se escribe sobre ellos.
 | R1.2 | Commit f1ee85b; chat 00018-sav | Reporte en texto confirmado con nombre simple; flujo completo incompleto y XLSX aún sin publicar. R1.3 corrige conversación/puntuación y añade formato PDF |
 | GHK1 | Parche `eae9d01`; revisión 00007-yah | Publicado y confirmado por usuario para solicitudes/pagos; verificación limitada a esos flujos |
 | UI preservada | Integración `327bf1b`; copia de entrega `9e6b823` sobre fuente anterior `6309830` | Build acumulativo aprobado; candidato aislado excluido de publicación al detectar nueva versión productiva concurrente |
-| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | Paquete exacto y preflight fresco PASS; autorización específica solicitada, independiente de R1.3 |
+| E: proveedores concurrentes | Backend `8e9487b`; UI `a334817` | DEPLOYED_NOT_VERIFIED; backend 00008-des, SSR 00600-hak y Hosting 9f48281b2df63e67 publicados. Cinco rutas públicas verificadas; interacción autenticada pendiente |
 | E/F/I mínimo | Revisión administrativa y MAT de `a280e72` | Contrato preparado; no equivale a ZIP desplegable ni a publicación |
 | F: workers de recuperación | Guarda `5b0db91`; queue 00007-dov, reconcile 00008-xim | DEPLOYED_NOT_VERIFIED; artefactos, runtime, trigger, agenda e IAM verificados; sin prueba financiera fabricada |
 | MAT: aislamiento y sesión | User 00016-bel, client 00016-cew, session 00017-fur | DEPLOYED_NOT_VERIFIED; publicación autorizada, configuración e INVALID_ARGUMENT sin scope comprobados; flujo autenticado pendiente |

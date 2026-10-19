@@ -1,6 +1,6 @@
 # E — publicación independiente de configuración de proveedores
 
-Estado: **DEPLOYMENT_PENDING**. Pruebas funcionales, build, runtime SSR y aislamiento aprobados; no autorizado ni publicado.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado con autorización específica: backend `configurepaymentcomplementautomation-00008-des`, SSR `ssrpay0system-00600-hak` y Hosting `9f48281b2df63e67`. Identidad, configuración, IAM y cinco rutas públicas verificados. Falta comprobar el panel con sesión autorizada; no se activaron proveedores ni se emitieron operaciones.
 
 Este paquete evita que dos administradores sobrescriban el estado del otro proveedor. Sólo actualiza `configurePaymentComplementAutomation` y dos líneas funcionales de interfaz/servicio en Hosting. Se publica independientemente de los cambios de conversación y PDF de María.
 
@@ -30,3 +30,9 @@ El input `input-realpaths.json` conserva el ZIP y el baseline originales; sólo 
 Reversión: restaurar la Function al ZIP `9d23ea9fd3e22f4c023a5f126d11a7f4cac240d65367454eeb4ccbe2748f3d41` y Hosting/SSR a `c1738b4`, ZIP `fe97daf3df3f395d3812125fc8d4b0906c55a513cc68c80f2f9a4f05bce74a2f`. Conservar datos y auditoría. No modifica ni revierte el backend R1.2 ya publicado.
 
 El [paquete backend](e1-complement-config-publication-package.md) detalla preservación, exclusión de `.env` ya cubierta por configuración y 17 hallazgos heredados del lock. No se certifican dependencias libres de vulnerabilidades. Estado final tras despliegue: `DEPLOYED_NOT_VERIFIED` hasta la comprobación funcional real.
+
+## Resultado de publicación
+
+El ejecutor se detuvo después de verificar SSR porque su validación de `resourceVersion` no admitía `/` en un token opaco válido de Cloud Run. No hubo deriva de fuentes, configuración, IAM ni Hosting. El adaptador de reanudación `b740d2c` preservó el token exacto y pasó 26 pruebas; el dry-run confirmó el cuerpo sin mutación. La reanudación verificó la propiedad del checkpoint, fijó la revisión y publicó el mismo manifiesto y ZIP aprobados. No cambió el input ni los artefactos; no se necesitó reversión.
+
+La comprobación posterior a las 19:58 UTC del 2026-10-19 obtuvo HTTP 200 en `/login`, `/pagos`, `/solicitudes`, `/administracion/recursos-corporativos` y `/reportes`. Son comprobaciones públicas sin sesión: no certifican la interacción autenticada ni la concurrencia de administradores. La baseline privada posterior y el hash de fuente coinciden con el paquete.

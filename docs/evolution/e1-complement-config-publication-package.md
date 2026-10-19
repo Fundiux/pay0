@@ -1,8 +1,8 @@
 # E — paquete de configuración de complementos
 
-Estado: **preparado y probado localmente; no publicado**. Único endpoint: `configurePaymentComplementAutomation`. Grupo: `complement-config-overlay`.
+Estado: **DEPLOYED_NOT_VERIFIED**. Publicado con autorización específica en `configurepaymentcomplementautomation-00008-des`; fuente, configuración e IAM verificados. Hosting `9f48281b2df63e67` y SSR `ssrpay0system-00600-hak` también publicados; falta verificar el flujo productivo autenticado. Único endpoint: `configurePaymentComplementAutomation`. Grupo: `complement-config-overlay`.
 
-El backend admite ahora `{provider: "IQ" | "FACTURAMA", enabled: boolean}`: sólo modifica el proveedor indicado y obtiene el otro flag dentro de la transacción. Preserva el contrato anterior de dos flags. La interfaz productiva antigua todavía puede enviar ambos flags desde estado desactualizado; publicar este backend por sí solo **no resuelve ese comportamiento de la UI**. El cliente posterior debe usar el contrato parcial.
+El backend admite ahora `{provider: "IQ" | "FACTURAMA", enabled: boolean}`: sólo modifica el proveedor indicado y obtiene el otro flag dentro de la transacción. Preserva el contrato anterior de dos flags. La interfaz publicada en el paquete E utiliza el contrato parcial. La evidencia automática cubre la concurrencia en emulador; queda pendiente verificar su uso autenticado en producción.
 
 ## Procedencia exacta
 
