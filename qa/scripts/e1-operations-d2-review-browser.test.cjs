@@ -1,7 +1,11 @@
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
 const esbuild = require('../../functions/node_modules/esbuild');
 const { chromium, expect } = require('@playwright/test');
-const root = path.resolve(__dirname, '../..'), output = path.join(root, 'tmp/d2-review-browser');
+const workspace = path.resolve(__dirname, '../..');
+const root = process.env.PAY0_D2_UI_ROOT ? path.resolve(process.env.PAY0_D2_UI_ROOT) : workspace;
+const output = process.env.PAY0_D2_UI_OUTPUT ? path.resolve(process.env.PAY0_D2_UI_OUTPUT) : path.join(workspace, 'tmp/d2-review-browser');
+assert.ok(root === workspace || root.startsWith(workspace + path.sep), 'UI source must be in the workspace');
+assert.ok(output.startsWith(workspace + path.sep), 'QA output must be in the workspace');
 fs.mkdirSync(output, { recursive: true });
 const mocks = {
   '@/lib/useUserProfile': 'export const useUserProfile=()=>({profileUid:window.profile.uid,profile:{rootId:window.profile.rootId,role:window.profile.role,active:window.profile.active}});',

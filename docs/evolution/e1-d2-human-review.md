@@ -34,6 +34,16 @@ El wrapper valida modo, arrays y estructura del estado de configuración antes d
 
 ## Publicación futura y reversión
 
+### Candidato de interfaz aislado
+
+La rama local `release/d2-human-review`, commit `a2cf5d1f3402079b37b2b7e006fb6c91501ff505`, parte de admin/MAT `a335e195e8e70f889be1e60aa0df850e4d278585`. Sólo cambia `src/components/HugoLearningDiagnostics.tsx` y `src/services/agent007.ts`; conserva R1.3 PDF/XLSX, E y admin/MAT. El servicio incorpora el contrato D2 y el wrapper de revisión D1 que necesita el panel, sin afirmar que ese endpoint ya exista en producción.
+
+El build aislado terminó con código 0 y estado PASS. Recibo: `.firebase/modular-release/hosting-a2cf5d1f3402-57d82bde-0458-4275-ae18-6211f023e2eb/build.json`, SHA256 `2efdeac5bce512783a2cb377c3499ac03c415ab0b8848118f9fe77778c0ceaa6`. El helper instaló el lockfile del clon, validó las siete variables públicas requeridas y completó compilación, tipos y generación de las 47 páginas. La instalación manual anterior no se usa como prueba del runtime.
+
+La QA ejecutó el componente y el servicio reales de ese clon mediante `PAY0_D2_UI_ROOT` y `PAY0_D2_UI_OUTPUT`, con transporte Firebase y perfiles sintéticos. Pasaron selección, confirmaciones, estados canónicos, paginación de ambas listas, aprobación denegada, respuestas obsoletas y conservación legacy. Recibo local: `.firebase/modular-release/d2-ui-qa/proof.json`, SHA256 `e5f9ceb7d5a7b44289cc7c5aa58c84e7db39217d3eb5c95d3a43b45567c43d1d`. No certifica una sesión autenticada ni acciones productivas.
+
+Estado de esta interfaz: **LOCAL_UI_VALIDATED_INTEGRATION_PENDING**. No se preparó SSR ni un input de publicación. El build se conserva para retomar la preparación contra la baseline correcta después de publicar el paquete admin/MAT autorizado. Para la revisión humana completa se necesitan además el contrato D2 de diagnostics y la creación/configuración autorizada de `reviewAgent007LearningRule`. Estos destinos son independientes de publicar R2; R2 sólo condiciona la composición de chat D1-after-R2. No se activó ningún gate.
+
 Se necesita una base propia del endpoint `listAgent007LearningDiagnostics`: no usar el ZIP de chat como si fuera su fuente productiva. El trasplante debe limitarse al handler del diagnóstico y a `readReview`, su tipo e imports en el store. No copiar `callables.ts` integrado completo, que contiene cambios ajenos. El resto del dominio D1, los reportes R1.3/R2 y todos los exports deben preservarse y verificarse sobre cada artefacto final.
 
 La base propia se capturó en `.firebase/modular-release/d2-diagnostics-baseline`: revisión `listagent007learningdiagnostics-00002-pin`, ZIP SHA256 `c50f0d7a95bb24caf156022ae1145503d34f2110f9c39df71921ee52a190db1f`, baseline SHA256 `e4cc7f600d8daed48fbf4b333373032815d2e2db6589807266a3e2abc377f2e8`. Carece de RuleStore y los dos helpers de evidencia; no basta reemplazar cuatro entradas como sobre D1. Esa captura no sustituye el cierre de dependencias ni las pruebas del futuro overlay. La creación de `reviewAgent007LearningRule`, el despliegue D1 y sus gates siguen siendo prerrequisitos separados. D2 no los crea ni los habilita.
