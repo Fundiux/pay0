@@ -32,7 +32,8 @@ function fixture(file, commit) {
   relocated.push({ file, commit, originalSha256: sha(original), relocatedSha256: sha(Buffer.from(text)) });
   return target;
 }
-for (const name of fixtures) fixture(`evals/hugo/${name}.test.cjs`, '0b17cfc6423ab4005c6d30087e50aa90ddd5e748');
+for (const name of fixtures) fixture(`evals/hugo/${name}.test.cjs`, name === 'report-continuation' && process.env.PAY0_D1_R15_TESTS === 'true'
+  ? '397035caa23ddd56fff0dedcf62158b7df129d4a' : '0b17cfc6423ab4005c6d30087e50aa90ddd5e748');
 fixture('evals/hugo/evolution-reports.test.cjs', '9204e901efc3a1c49eb0e2d71e6d6a5f2c93307b');
 fs.mkdirSync(path.join(qa, 'learning'), { recursive: true });
 fs.writeFileSync(path.join(qa, 'learning/export.cjs'), execFileSync('git', ['show', '0b17cfc:evals/hugo/learning/export.cjs'], { cwd: root }));

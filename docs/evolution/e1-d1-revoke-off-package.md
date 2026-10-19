@@ -1,6 +1,6 @@
 # D1 sobre R1.4: revocación humana con aplicación pausada
 
-Estado: **LOCAL_CANDIDATE_TESTED_NOT_DEPLOY_READY**. Sustituye los candidatos locales D1 `a6f29085` y `55c5c45`. No se ha creado un input vigente ni desplegado este paquete. La base R1.4 está publicada; aún hacen falta identidad final, baseline/preflight frescos y autorización del paquete D1.
+Estado: **SUPERSEDED_LOCAL** para la futura entrega de chat por [D1 sobre R1.5](e1-d1-after-r15-package.md). Se preserva este paquete probado como antecedente; no contiene la corrección R1.5 y no debe usarse después de publicarla. No se desplegó este paquete D1.
 
 ## Cambio y procedencia
 
