@@ -1,8 +1,13 @@
+FROM eclipse-temurin:21-jre-jammy AS java
+
 FROM node:22.18.0-bookworm-slim
 
 ARG FIREBASE_TOOLS_VERSION=15.3.1
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH=/opt/java/openjdk/bin:$PATH
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless ca-certificates \
+COPY --from=java /opt/java/openjdk /opt/java/openjdk
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/pay0
 COPY package.json package-lock.json ./
