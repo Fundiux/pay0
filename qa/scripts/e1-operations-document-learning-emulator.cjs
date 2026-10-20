@@ -16,7 +16,7 @@ for(const name of ['receiptPdfCallables','receiptLearning','receiptSemantics','r
  assert.equal(actual,emitted,'COMPILED_RECEIPT_SOURCE_MISMATCH:'+name);matched.push({name,sourceSha256:sha(fs.readFileSync(source)),compiledSha256:sha(Buffer.from(actual))});
 }
 const admin=load('firebase-admin');admin.initializeApp({projectId:process.env.GCLOUD_PROJECT});const db=admin.firestore();
-const calls=load('./lib/modules/pagos/receiptPdfCallables');
+const packageMain=JSON.parse(fs.readFileSync(path.join(functionsRoot,'package.json'),'utf8')).main;assert.equal(packageMain,'lib/index.js');const calls=load('./'+packageMain);const actualModule=load('./lib/modules/pagos/receiptPdfCallables');for(const name of ['parsePagoReceiptPdf','correctPagoReceiptSemanticField'])assert.equal(calls[name],actualModule[name],'INDEX_MUST_USE_PATCHED_HANDLER');
 const {jsPDF}=require('jspdf');
 function pdf(label){const doc=new jsPDF();doc.text(['BBVA','Comprobante de transferencia','Fecha: 10/09/2026','Importe de transferencia: $12.34','Concepto: '+label,'Referencia: DEMO123','Beneficiario: DEMO DESTINO','Ordenante: DEMO ORIGEN'],10,20);return Buffer.from(doc.output('arraybuffer'))}
 const rootId='document-learning-root',uid='document-actor',other='document-other',foreign='document-foreign';let checks=0;
@@ -52,6 +52,6 @@ async function parse(actor,bytes){return invoke('parsePagoReceiptPdf',actor,{ori
  await assert.rejects(invoke('correctPagoReceiptSemanticField',other,{...legacyInput,correctedValue:'NO-STALE',expectedCorrectionVersion:0}),e=>e.code==='aborted');checks++;
  await assert.rejects(invoke('correctPagoReceiptSemanticField',foreign,legacyInput),e=>e.code==='not-found');checks++;
  assert.equal((await db.collection('pagos').get()).empty,true);checks++;
- await verifyArchive();const proof={status:'PASS',archiveSha256,checks,surface:'REAL_CALLABLE_REAL_TEXT_PDF_REAL_FIRESTORE',legacyCallerFixture:'FOUR_IDENTIFIERS_OMITTED_VERSION_CONCURRENT_RETRY',providerCalls:0,financialWrites:0,compiledSource:matched};
+ await verifyArchive();const proof={status:'PASS',archiveSha256,checks,surface:'PACKAGE_MAIN_REAL_CALLABLE_REAL_TEXT_PDF_REAL_FIRESTORE',legacyCallerFixture:'FOUR_IDENTIFIERS_OMITTED_VERSION_CONCURRENT_RETRY',providerCalls:0,financialWrites:0,compiledSource:matched};
  const output=path.resolve(process.env.PAY0_DOCUMENT_PROOF_FILE||path.join(workspace,'tmp/document-learning-emulator-proof.json'));assert.ok(output.startsWith(workspace+path.sep));fs.writeFileSync(output,JSON.stringify(proof,null,2));console.log(JSON.stringify(proof));await admin.app().delete();
 })().catch(error=>{console.error(error);process.exitCode=1});

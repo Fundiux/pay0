@@ -280,3 +280,26 @@ index ea4dd98..0218710 100644
        finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" } };
    },
  );
+diff --git a/.firebase/modular-release/document-learning-candidate/patch-source/src/receiptLearningEntry.ts b/src/receiptLearningEntry.ts
+new file mode 100644
+index 0000000..463f5dc
+--- /dev/null
++++ b/src/receiptLearningEntry.ts
+@@ -0,0 +1,17 @@
++export {};
++
++const original = require("./receipt-learning-baseline-index");
++const patched = require("./modules/pagos/receiptPdfCallables");
++const descriptors = Object.getOwnPropertyDescriptors(original);
++for (const name of ["parsePagoReceiptPdf", "correctPagoReceiptSemanticField"] as const) {
++  if (!Object.prototype.hasOwnProperty.call(descriptors, name) || typeof patched[name] !== "function") {
++    throw new Error("RECEIPT_EXPORT_CONTRACT");
++  }
++  descriptors[name] = {
++    enumerable: descriptors[name].enumerable,
++    configurable: descriptors[name].configurable,
++    writable: false,
++    value: patched[name],
++  };
++}
++module.exports = Object.defineProperties({}, descriptors);
