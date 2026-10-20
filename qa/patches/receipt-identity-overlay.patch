@@ -1,8 +1,8 @@
 diff --git a/src/modules/pagos/receiptIdentificationDomain.ts b/src/modules/pagos/receiptIdentificationDomain.ts
-index 99f95f9..490a4d2 100644
+index 99f95f9..99be979 100644
 --- a/src/modules/pagos/receiptIdentificationDomain.ts
 +++ b/src/modules/pagos/receiptIdentificationDomain.ts
-@@ -20,23 +20,48 @@ const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonS
+@@ -20,23 +20,51 @@ const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonS
  const rfcs = (item: ReceiptCatalogItem) => [item.rfc, item.RFC, item.taxId, item.taxID].map(rfc).filter(validRfc);
  const accounts = (item: ReceiptCatalogItem) => [item.clabe, item.CLABE, item.bankClabe, item.cuenta, item.account, item.accountNumber, ...(Array.isArray(item.depositClabes) ? item.depositClabes : [])].map(fullReceiptAccount).filter(Boolean);
  
@@ -58,7 +58,10 @@ index 99f95f9..490a4d2 100644
 +  const assessed = assessIdentity(items, signals, options);
 +  const automatic = matchReceiptIdentity(items, signals, options);
 +  const candidates = [...assessed].sort((a, b) => Number(b.nameExact) - Number(a.nameExact) || Number(b.rfcExact) - Number(a.rfcExact) || a.item.id.localeCompare(b.item.id)).map(row => row.item);
-+  if (!selectedId) return { match: automatic, candidates };
++  if (!selectedId) {
++    const requiresSelection = automatic.status === "EXACT" && !automatic.evidence.some(value => value === "RFC_EXACT" || value === "FULL_ACCOUNT_EXACT");
++    return { match: requiresSelection ? { ...automatic, status: "REQUIRES_REVIEW" as const, reasons: ["SELECTION_REQUIRED"] } : automatic, candidates };
++  }
 +  const selected = assessed.find(row => row.item.id === selectedId);
 +  if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
 +  return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };
@@ -66,7 +69,7 @@ index 99f95f9..490a4d2 100644
  
  export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {
 diff --git a/src/modules/pagos/receiptIdentification.ts b/src/modules/pagos/receiptIdentification.ts
-index 079dcbe..1450057 100644
+index 079dcbe..8bfbf81 100644
 --- a/src/modules/pagos/receiptIdentification.ts
 +++ b/src/modules/pagos/receiptIdentification.ts
 @@ -1,9 +1,9 @@
@@ -101,7 +104,7 @@ index 079dcbe..1450057 100644
    const { db, actor, receipt } = input;
    const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
    if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
-@@ -39,17 +43,39 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+@@ -39,21 +43,46 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
      db.collection("clients").where("rootId", "==", actor.rootId).limit(501).get(),
      db.collection("companies").where("rootId", "==", actor.rootId).limit(501).get(),
    ]);
@@ -150,7 +153,14 @@ index 079dcbe..1450057 100644
    if (operationTypeKey) {
      const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();
      if (!operation.exists || operation.get("active") === false) reasons.push("OPERATION_TYPE_REQUIRES_REVIEW");
-@@ -88,16 +114,16 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+   }
++  // Older open tabs automatically create every READY proposal. Name-only
++  // suggestions retain verifiedMatches, but must never expose a create payload
++  // until the caller explicitly selects each identity lacking strong evidence.
+   const ready = reasons.length === 0 && !!client && !!company;
+   const createPayload = ready ? {
+     clienteId: client!.id, companyId: company!.id, despachoId: clean(company!.despachoId),
+@@ -88,16 +117,16 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
          pago?.get("operationTypeKey") === existing.get("createPayload.operationTypeKey") &&
          (!operationTypeKey || pago?.get("operationTypeKey") === operationTypeKey);
        return { id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
