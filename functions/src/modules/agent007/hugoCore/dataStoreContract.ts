@@ -3,11 +3,13 @@ import { HugoMemory, RecentEntity } from "./contextBuilder";
 import { ConversationState } from "./conversationState";
 import { MemoryQuery, MemoryRetrieval, HugoMemoryKind, HugoMemoryRecord } from "./memoryContract";
 
-export type HugoConversationState = { history: any[]; memory: HugoMemory; recentEntities: RecentEntity[]; conversationState?: ConversationState };
+export type ConversationCorrectionContext = { id: string; content: string; sourceId: string; turnId: string; sourceQuestion?: string; topic?: { kind: "CLIENT" | "TOPIC"; id: string; label: string }; authority: "USER_STATEMENT_NOT_FACT" };
+export type HugoConversationState = { history: any[]; memory: HugoMemory; recentEntities: RecentEntity[]; conversationState?: ConversationState; conversationCorrections?: ConversationCorrectionContext[] };
 export type HugoTraceFilter = { conversationId?: string; resultStatus?: string; tool?: string; sourceSystem?: string; completeness?: string; errorOnly?: boolean; from?: Date; to?: Date; cursor?: string; limit?: number };
-export type HugoTurnInput = { reportExport?: HugoReportExport; rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
+export type HugoTurnInput = { correctionChoices?: ConversationCorrectionContext[]; reportExport?: HugoReportExport; rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
 export interface HugoDataStore {
   loadConversationState(identity: { uid: string; rootId: string }, conversationId: string): Promise<HugoConversationState>;
+  loadTopicCorrections?(identity: { uid: string; rootId: string }, topics: Array<{ kind: "CLIENT" | "TOPIC"; id: string; label: string }>): Promise<ConversationCorrectionContext[]>;
   listObservations(rootId: string, limit?: number): Promise<any[]>;
   listRecommendations(rootId: string, limit?: number): Promise<any[]>;
   recordObservation(rootId: string, payload: Record<string, any>): Promise<string>;
@@ -18,7 +20,7 @@ export interface HugoDataStore {
   listTraces(rootId: string, filter: HugoTraceFilter): Promise<{ traces: any[]; cursor: string | null; complete: boolean; scanned: number }>;
   getTrace(rootId: string, id: string): Promise<any>;
   retrieveMemory(query: MemoryQuery): Promise<MemoryRetrieval>;
-  listMemoryDiagnostics(rootId: string, limit?: number): Promise<HugoMemoryRecord[]>;
+  listMemoryDiagnostics(rootId: string, limit?: number, ownerUid?: string): Promise<HugoMemoryRecord[]>;
   createMemoryCandidate(input: { rootId: string; actorUid: string; kind: HugoMemoryKind; content: string; entityReference?: { sourceSystem: string; entityType: string; entityId: string; displayReference?: string } }): Promise<{ id: string; created: boolean }>;
   reviewMemoryCandidate(rootId: string, actorUid: string, id: string, decision: "CONFIRM" | "REJECT", supersedesId?: string): Promise<{ changed: boolean }>;
   linkVerifiedExperience(rootId: string, observationId: string, decisionId: string, outcomeId: string): Promise<{ id: string; created: boolean }>;

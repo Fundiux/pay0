@@ -212,6 +212,8 @@ export const sendAgent007Message = onCall(
     if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para María.");
     const startedAt = Date.now();
     const scope = normalizeHugoScope(request.data?.scope);
+    const correctionTopic = request.data?.correctionTopic;
+    if (correctionTopic !== undefined && (typeof correctionTopic !== "string" || !correctionTopic.trim() || correctionTopic.length > 80 || /[\x00-\x1f]/.test(correctionTopic))) throw new HttpsError("invalid-argument", "Confirma un tema específico antes de reutilizar correcciones.");
     const profile = classifyHugoProfile(text);
     const routingSignals = classifyHugoRoutingSignals(text, profile);
     const conversationId = conversationIdFor(rootId, uid, scope);
@@ -236,7 +238,7 @@ export const sendAgent007Message = onCall(
     });
     const modelRouter = new HugoModelRouter();
     const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, ...(correctionTopic ? { correctionTopic } : {}), routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
       modelCapability: profile === "PROGRAMMER" ? "STRONG_EXTERNAL" as const : "FAST_EXTERNAL" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
@@ -250,14 +252,14 @@ export const sendAgent007Message = onCall(
     });
     const reply = result.text;
     const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     for (const experienceId of result.learningUsage?.includedIds || []) {
       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
     }
-    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), source, scope, profile, createdAt: saved.createdAt } };
+    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), source, scope, profile, createdAt: saved.createdAt } };
   },
 );
 
@@ -325,8 +327,8 @@ export const getAgent007Trace = onCall(
 export const listAgent007MemoryDiagnostics = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
-    const { rootId } = await actor(request);
-    return { ok: true, memories: await hugoData.listMemoryDiagnostics(rootId) };
+    const { uid, rootId } = await actor(request);
+    return { ok: true, memories: await hugoData.listMemoryDiagnostics(rootId, 50, uid) };
   },
 );
 
@@ -336,6 +338,13 @@ export const createAgent007MemoryCandidate = onCall(
     const { uid, user, rootId } = await actor(request);
     const kind = clean(request.data?.kind, 30);
     const content = clean(request.data?.content, 1000);
+    if (request.data?.responseCorrection !== undefined) {
+      const correction = request.data.responseCorrection;
+      if (kind !== "CONVERSATION_CORRECTION" || correction?.confirm !== true || !["PAY0", "GLOBAL"].includes(correction.scope) || typeof request.data.content !== "string" || request.data.content.length > 1000 || typeof correction.messageId !== "string") throw new HttpsError("invalid-argument", "Confirma la corrección de esta respuesta.");
+      if (typeof correction.expectedText !== "string" || correction.expectedText.length > 64000) throw new HttpsError("invalid-argument", "Respuesta original inválida.");
+      const result = await hugoData.correctResponse({ rootId, uid, messageId: correction.messageId, scope: correction.scope, content: request.data.content, expectedVersion: correction.expectedVersion, expectedText: correction.expectedText, ...(correction.rememberFor ? { rememberFor: correction.rememberFor } : {}) });
+      return { ok: true, ...result, status: "CONFIRMED", acknowledgement: "Corrección guardada para esta conversación como declaración tuya; no cambia datos ni reglas financieras." };
+    }
     if (!["USER_STATEMENT", "PREFERENCE", "DECISION", "EXPERIENCE"].includes(kind) || !content) throw new HttpsError("invalid-argument", "Tipo o contenido de memoria inválido.");
     const raw = request.data?.entityReference;
     const entityReference = raw ? { sourceSystem: clean(raw.sourceSystem, 40), entityType: clean(raw.entityType, 40), entityId: clean(raw.entityId, 160), displayReference: clean(raw.displayReference, 80) || undefined } : undefined;
