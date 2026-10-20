@@ -2872,7 +2872,7 @@ export default function PagosPage() {
               <div className="grid grid-cols-1 gap-3">
                 {receiptBatchItems.map((item) => {
                   const parsed = item.parsed || {};
-                  const serverPayload = automaticReceiptPayload(parsed.identification, operationTypeKey);
+                  const serverPayload = automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || ""));
                   const verified = parsed.identification?.verifiedMatches;
                   const clientName = verified?.client?.name || "Sin cliente verificado";
                   const companyName = verified?.company?.name || "Sin empresa verificada";
