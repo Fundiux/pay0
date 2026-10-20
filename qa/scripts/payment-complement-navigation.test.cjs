@@ -6,7 +6,9 @@ const { createRequire } = require("node:module");
 const ts = require("../../functions/node_modules/typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
-const root = path.resolve(__dirname, "../..");
+const workspace = path.resolve(__dirname, "../..");
+const root = process.env.PAY0_COMPLEMENT_UI_ROOT ? fs.realpathSync(process.env.PAY0_COMPLEMENT_UI_ROOT) : workspace;
+assert(root === workspace || root.startsWith(workspace + path.sep), "UI source must remain inside the workspace");
 const parse = p => ts.createSourceFile(p, fs.readFileSync(path.join(root, p), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const solicitudes = parse("src/app/solicitudes/page.tsx"), reportes = parse("src/app/reportes/page.tsx");
 function find(sf, predicate) { let found; function visit(n) { if (predicate(n)) found = n; ts.forEachChild(n, visit); } visit(sf); assert(found, "Expected navigation source contract"); return found; }
