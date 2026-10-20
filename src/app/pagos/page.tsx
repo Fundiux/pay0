@@ -906,7 +906,7 @@ export default function PagosPage() {
       return;
     }
 
-    const initialItems = accepted.map((file, index) => ({
+    const initialItems: Array<{ key: string; file: File; status: string; parsed: any; operationTypeKey: string; error: string; selectedClientId?: string; selectedCompanyId?: string }> = accepted.map((file, index) => ({
       key: receiptBatchKey(file, index),
       file,
       status: "PENDING",
