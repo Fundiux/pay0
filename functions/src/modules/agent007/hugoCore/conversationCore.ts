@@ -11,7 +11,7 @@ import { HUGO_V2_CONFIG } from "./intelligenceConfig";
 import { checkExhaustiveness } from "./exhaustivenessPolicy";
 import { HugoLearningStore } from "./learningStore";
 import { applyHugoContextBudget, compactLearningExperience, HugoBudgetReport } from "./learningContextBudget";
-import { formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./interactionSemantics";
+import { formatAuthorizedCapabilities, formatLatestSolicitud, formatSolicitudDetails, formatPaymentClients, formatRecordedAmount, formatSystemCatalog, normalizePay0Brand, receiptReadingLocationReply } from "./interactionSemantics";
 
 function fallbackReply(message: string, name: string, context: any): string {
   const normalized = message.toLocaleLowerCase("es-MX");
@@ -29,12 +29,14 @@ function fallbackReply(message: string, name: string, context: any): string {
   if (Array.isArray(platform.systems)) return formatSystemCatalog(platform.systems, message);
   if (platform.latestSolicitud) return formatLatestSolicitud(platform.latestSolicitud);
   const payments = Array.isArray(context.pagos) ? context.pagos : [];
+  if (payments.length && /\b(banco|banca|remitente)\b/i.test(normalized) && /\b(no|d[oó]nde|sacaste|dato|fuente)\b/i.test(normalized)) return `${formatPaymentClients(payments)} Banco, remitente del comprobante y cliente son datos distintos; un nombre bancario no demuestra quién es el cliente.`;
+  if (payments.length && /\bclientes?\b/i.test(normalized)) return formatPaymentClients(payments);
   if (payments.length && /\b(ultimo|último|reciente|recibido|anterior|previo)\b/i.test(normalized)) {
-    const row = payments[0], amount = Number(row.monto || 0).toLocaleString("es-MX", { style: "currency", currency: row.moneda || "MXN" });
+    const row = payments[0], amount = formatRecordedAmount(row.monto, row.moneda);
     return `${/\b(anterior|previo)\b/i.test(normalized) ? "El pago recibido anterior" : "El pago recibido más reciente"} es ${row.folio || "sin folio visible"}, por ${amount}, de ${row.pagador || "pagador no registrado"}, con estado ${row.estado || "no registrado"}.`;
   }
-  if (payments.length > 1 && /\b(muestra|muéstrame|lista|ultimos|últimos)\b/i.test(normalized)) return payments.map((row: any, index: number) => `${index + 1}. ${row.folio || "sin folio"}, ${Number(row.monto || 0).toLocaleString("es-MX", { style: "currency", currency: row.moneda || "MXN" })}, ${row.estado || "sin estado"}`).join(" ");
-  if (payments.length === 1 && /\b(cuanto|cuánto|monto|importe)\b/i.test(normalized)) return `${Number(payments[0].monto || 0).toLocaleString("es-MX", { style: "currency", currency: payments[0].moneda || "MXN" })}.`;
+  if (payments.length > 1 && /\b(muestra|muéstrame|lista|ultimos|últimos)\b/i.test(normalized)) return payments.map((row: any, index: number) => `${index + 1}. ${row.folio || "sin folio"}, ${formatRecordedAmount(row.monto, row.moneda)}, ${row.estado || "sin estado"}`).join(" ");
+  if (payments.length === 1 && /\b(cuanto|cuánto|monto|importe)\b/i.test(normalized)) return `${formatRecordedAmount(payments[0].monto, payments[0].moneda)}.`;
   if (payments.length === 1 && /\b(quien|quién|hizo|pagador)\b/i.test(normalized)) return payments[0].pagador ? `${payments[0].pagador}.` : "El pagador no está registrado en PAY0 para ese pago.";
   if (payments.length === 1 && /\b(conciliad)\b/i.test(normalized)) return payments[0].conciliado ? "Sí, está conciliado." : `No. Su estado actual es ${payments[0].estado || "no registrado"}.`;
   if (/^(hola|buen(os|as)?\s+(dias|tardes|noches)|qué tal|que tal)[!.\s]*$/.test(normalized)) {
@@ -94,7 +96,7 @@ export class HugoConversationCore {
       (built.context as any).conversationCorrections = [...durable.filter(row => !ambiguous.has(row.id)), ...(state?.conversationCorrections || [])].slice(0, 6);
     }
     const correctionClarification = correctionChoices.length && !executed.some(row => ["getEarningsByClientReport", "getSolicitud", "getPago"].includes(row.tool)) ? "Tienes varias correcciones distintas para este tema. Revisa las declaraciones que aparecen abajo y retira las que ya no correspondan; no elegiré una por ti. Los datos y permisos de PAY0 siguen vigentes." : null;
-    const policyReply = v2 && !input.commandReply ? (correctionClarification || ("clarification" in built && built.clarification ? built.clarification :
+    const policyReply = v2 && !input.commandReply ? (receiptReadingLocationReply(input.message) || correctionClarification || ("clarification" in built && built.clarification ? built.clarification :
       isGlobalCountQuestion(input.message) && "evidenceBoundaries" in built.context && !canStateGlobalTotalForMessage(input.message, built.context.evidenceBoundaries as any)
         ? "La evidencia disponible es una muestra parcial o insuficiente; no puedo establecer el total para toda tu raíz con estos datos." : null)) : null;
     const factContext = built.context as any;
@@ -104,8 +106,10 @@ export class HugoConversationCore {
     const exactFactReply = v2 && !policyReply && !input.commandReply && exactComplete && exactRow && exactRow.folio === factContext.folioConsultado ?
       !/\b(comparar?|mayor|menor)\b/i.test(input.message) && /\b(estado|estatus)\b/i.test(input.message) && exactRow.estado ?
         `El estado actual de ${exactRow.folio} en PAY0 es ${exactRow.estado}.` :
-        !/\b(comparar?|mayor|menor)\b/i.test(input.message) && /\b(cu[aá]nto|monto|importe)\b/i.test(input.message) && exactRow.monto != null && exactRow.monto !== "" && Number.isFinite(Number(exactRow.monto)) ?
-          `El monto registrado de ${exactRow.folio} en PAY0 es ${Number(exactRow.monto).toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.` : null : null;
+        !/\b(comparar?|mayor|menor|cliente|nombre|ppd|pue|tipo)\b/i.test(input.message) && /\b(cu[aá]nto|monto|importe)\b/i.test(input.message) && exactRow.monto != null && exactRow.monto !== "" && Number.isFinite(Number(exactRow.monto)) ?
+          `El monto registrado de ${exactRow.folio} en PAY0 es ${Number(exactRow.monto).toLocaleString("es-MX", { style: "currency", currency: "MXN" })}.` :
+        !/\b(comparar?|mayor|menor)\b/i.test(input.message) && /\b(cliente|nombre|ppd|pue|tipo)\b/i.test(input.message) ?
+          exactDomain === "solicitudes" ? formatSolicitudDetails(exactRow) : formatPaymentClients([exactRow]) : null : null;
     const deterministicOperationalReply = v2 && !policyReply && !input.commandReply && requested.some(row => ["getEarningsByClientReport", "searchReceivedPagos", "getPagoById", "countClientsForCurrentUser", "countClientsForUser", "getLatestSolicitud", "getSystemCatalog", "getAuthorizedCapabilities", "getLastOperationDiagnostic"].includes(row.name))
       ? fallbackReply(input.message, input.name, built.context) : null;
     const promptVersion = v2 ? HUGO_V2_CONFIG.promptVersion : HUGO_PROMPT_VERSION;
