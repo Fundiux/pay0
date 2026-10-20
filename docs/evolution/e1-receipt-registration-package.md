@@ -1,6 +1,6 @@
 # Registro documental antes de conciliación
 
-Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó expresamente la publicación de dos Functions y su rollback f88; ejecutor raíz exit 0. Verificación técnica independiente PASS; recorrido autenticado pendiente. No cambia frontend, createPago, reglas, permisos ni IAM.
+Estado: DEPLOYED_NOT_VERIFIED. Usuario confirmó que desaparecieron las dos barreras por amountVerified/executionConfirmed. El registro completo sigue INCOMPLETE por CLIENT/COMPANY_INSUFFICIENT_IDENTITY_SIGNALS, identificado como bloqueo distinto. Publicación autorizada y verificación técnica independiente PASS; no se afirma registro completo ni conciliación verificados.
 
 ## Comportamiento
 
@@ -49,3 +49,7 @@ Después de publicar: verificar fuente exacta, ACTIVE/revisiones, configuración
 2026-10-20T18:04:54Z: parse `parsepagoreceiptpdf-00017-wev`, correct `correctpagoreceiptsemanticfield-00006-jol`, ambos ACTIVE. Dos fuentes descargadas iguales al ZIP 6e0 completo; runtime/Run/IAM preservados, generaciones observadas, revisiones listas, dos HTTP 401 UNAUTHENTICATED y cero operaciones activas. Cero documentos de negocio leídos y cero mutaciones por el verificador.
 
 Proof `575e0c6fd18ad2700416b434ead92344ce74fa41f7c5ebf8e9f42002c8d3f6b1`; baseline publicada `8fa3903aba4d64d86e0396d9dc1402048ee181df0759c7b107a60561c6e6ed49`; provenance `7c1c7a257abcd9f205ed5babbf3c72a71c1f99aec89ed7e92a4fb4e90dc1e6b7`; summary `86b93469e8fa1f709f1105e5477daf66f1608c7fe197b70e359b27b97a292356`. Directorio privado: `release/independent-post-publication-6eefc6b8-96d9-4f5f-bb5e-f12371079168/`. Sigue pendiente el recorrido autenticado de registro y conciliación; no se certifican IQ ni banco por estas comprobaciones.
+
+## Seguimiento de identidad
+
+El usuario confirmó la ausencia de las dos causas retiradas; permanece un bloqueo independiente de identidad de cliente/empresa. No se copian datos del comprobante. La fuente integrada tiene selección explícita de candidatos que el ZIP 6e0 no incluía: `receiptIdentificationDomain`, `receiptIdentification` y dos hunks de `receiptPdfCallables`. La selección existente exige candidato corroborado y no resuelve por sí sola ausencia de señales. La siguiente entrega necesita un contrato de identidad seguro y pruebas propias; no forma parte de la publicación aquí certificada. Deberá preservar policy3, correcciones por actor, validaciones monetarias y ausencia de las dos barreras anteriores. No se preparó ni publicó otro artefacto como parte de este seguimiento.
