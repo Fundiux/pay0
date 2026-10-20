@@ -15,6 +15,8 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'conversation-memory-review-overlay': Object.freeze(['listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']),
   'conversation-memory-create-overlay': Object.freeze(['createAgent007MemoryCandidate']),
   'receipt-workflow': Object.freeze(['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
+  'payment-create-overlay': Object.freeze(['createPago']),
+  'payment-create-safe-recovery-overlay': Object.freeze(['createPago']),
   'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
   'engineering-action': Object.freeze(['reconcileAgent007RecommendationsNow']),
   'hugo-reports': Object.freeze(['sendAgent007Message', 'delegateHugoVoiceTurn', 'getEarningsByClientReport']),
@@ -28,7 +30,7 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
   'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
 });
-const OVERLAY_GROUPS = Object.freeze(['receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['payment-create-safe-recovery-overlay', 'payment-create-overlay', 'receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
 export function artifactProbeContract(group) {
   if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
@@ -92,6 +94,23 @@ export function assertArtifactProof(input, proof) {
     assert.equal(behavior?.status, 'PASS', 'BACKGROUND_BEHAVIOR_NOT_VERIFIED');
     assert.equal(behavior.archiveSha256, input.archiveSha256, 'BACKGROUND_BEHAVIOR_ARTIFACT_MISMATCH');
     for (const key of ['terminalPreserved', 'retryBudgetPreserved', 'scopedRootsPreserved']) assert.equal(behavior[key], true, 'BACKGROUND_BEHAVIOR_INCOMPLETE');
+  }
+  if (input.group === 'payment-create-safe-recovery-overlay') {
+    const behavior = proof.behaviorVerification;
+    assert.equal(behavior?.status, 'PASS', 'PAYMENT_RECOVERY_NOT_VERIFIED');
+    assert.equal(behavior.archiveSha256, input.archiveSha256, 'PAYMENT_RECOVERY_ARTIFACT_MISMATCH');
+    for (const key of ['automaticReceiptClosed', 'permissions', 'manualPath', 'rollbackCompatibility'])
+      assert.equal(behavior[key], true, 'PAYMENT_RECOVERY_INCOMPLETE');
+  }
+  if (input.group === 'payment-create-overlay') {
+    const behavior = proof.behaviorVerification;
+    assert.equal(behavior?.status, 'PASS', 'PAYMENT_BEHAVIOR_NOT_VERIFIED');
+    assert.equal(behavior.archiveSha256, input.archiveSha256, 'PAYMENT_BEHAVIOR_ARTIFACT_MISMATCH');
+    assert.match(input.safeRecoveryArchiveSha256 || '', /^[a-f0-9]{64}$/, 'PAYMENT_SAFE_RECOVERY_HASH_REQUIRED');
+    assert.equal(behavior.rollbackArchiveSha256, input.safeRecoveryArchiveSha256, 'PAYMENT_SAFE_RECOVERY_MISMATCH');
+    assert.equal(behavior.automaticReceiptRecoveryClosed, true, 'PAYMENT_SAFE_RECOVERY_NOT_TESTED');
+    for (const key of ['concurrency', 'duplicates', 'permissions', 'atomicFailure', 'sequence', 'manualPath', 'rollbackCompatibility'])
+      assert.equal(behavior[key], true, 'PAYMENT_BEHAVIOR_INCOMPLETE');
   }
   if (proof.functions !== undefined || input.group !== undefined) assert.deepEqual(proof.functions, [...names], 'ARTIFACT_PROOF_FUNCTIONS');
   if (input.buildMode !== undefined) assert.equal(proof.buildMode, input.buildMode, 'ARTIFACT_PROOF_MODE');
@@ -330,6 +349,15 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
   const archive = fs.readFileSync(privatePath(input.archive)); assert.equal(sha(archive), input.archiveSha256, 'ARTIFACT_CHANGED');
   const proof = JSON.parse(fs.readFileSync(privatePath(path.join(path.dirname(inputFile), 'artifact-verification.json'))));
   assertArtifactProof(input, proof);
+  if (group === 'payment-create-overlay') {
+    const recoveryBytes = fs.readFileSync(privatePath(input.safeRecoveryInputFile));
+    assert.equal(sha(recoveryBytes), input.safeRecoveryInputSha256, 'PAYMENT_RECOVERY_INPUT_CHANGED');
+    const recoveryInput = JSON.parse(recoveryBytes);
+    assert.equal(recoveryInput.group, 'payment-create-safe-recovery-overlay', 'PAYMENT_RECOVERY_SCOPE');
+    assert.equal(recoveryInput.archiveSha256, input.safeRecoveryArchiveSha256, 'PAYMENT_RECOVERY_HASH');
+    assert.equal(sha(fs.readFileSync(privatePath(recoveryInput.archive))), recoveryInput.archiveSha256, 'PAYMENT_RECOVERY_BYTES_CHANGED');
+    assertArtifactProof(recoveryInput, JSON.parse(fs.readFileSync(privatePath(path.join(path.dirname(input.safeRecoveryInputFile), 'artifact-verification.json')))));
+  }
   const receiptFile = privatePath(path.join(path.dirname(inputFile), 'deployment.jsonl'));
   const receipt = fs.openSync(receiptFile, resume ? 'a' : 'wx');
   const emit = value => { fs.writeSync(receipt, JSON.stringify({ at: new Date().toISOString(), ...value }) + '\n'); console.log(JSON.stringify(value)); };
