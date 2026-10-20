@@ -1,6 +1,6 @@
 # D1 sobre R1.5: aprendizaje sin perder el cambio de cliente
 
-Estado: **DEPLOYMENT_PENDING**, pendiente de autorización específica para chat D1. R1.5 está publicada; el input pasó validación pura y preflight GET de Function, servicio e IAM. No se ejecutó este update. La autorización de consulta/revocación D no incluye chat D1 ni activación de aprendizaje.
+Estado: **DEPLOYED_NOT_VERIFIED** funcionalmente. El usuario autorizó expresamente D1 y su reversión; se publicó sólo `sendAgent007Message`, revisión `sendagent007message-00023-gaz`. Fuente exacta, configuración, servicio e IAM verificados; rechazo anónimo HTTP401. La aprobación y aplicación de reglas permanecen OFF. Esta publicación no completa el aprendizaje interactivo solicitado.
 
 ## Fuente y composición
 
@@ -38,3 +38,9 @@ Un futuro update selecciona sólo `sendAgent007Message`, conserva su gate OFF y 
 Esta entrega prepara el consumidor de experiencias legítimas y conserva los flujos de registro del dominio probados localmente; no despliega por este scope los otros endpoints de creación de experiencias ni promete registro automático nuevo desde chat. Con gate OFF no se aplican reglas supervisadas. Se preservan cambio de cliente, PDF y saludo de R1.5.
 
 Los inputs D1 basados en R1.4 no representan esta composición y no deben utilizarse después de publicar R1.5. La reversión debe preservar R1.5 y cambios posteriores autorizados; no borrar reglas, experiencias, conversaciones ni ledger. No hubo activaciones ni escrituras financieras.
+
+## Resultado de publicación autorizada
+
+Comprobación independiente el 2026-10-20 a las 05:14:24 UTC (19 de octubre en Ciudad de México): fuente descargada por generación exacta SHA256 `763134cfafb9854ef2f1b24c25ada58b59d0d95e848c5070f3ad27d045abfc62`, revisión `00023-gaz`, Function ACTIVE y acceso anónimo UNAUTHENTICATED. El ejecutor confirmó preservación de configuración; el gate sigue ausente/OFF. Baseline privada `d1-after-r15-chat-release/published-baseline.json`, SHA256 `7aa7eb136c9b7177f1991340624e6eb83815530915d4461293c35ed8d38fe880`; fuente y recibo preservados junto a ella. No se ejercitaron conversaciones autenticadas ni datos financieros.
+
+El usuario confirmó que el panel D carga, pero señaló que sus botones y alcance no permiten el ciclo de aprendizaje esperado. Se conserva esta limitación: faltan corrección interactiva de comprobantes, respuesta por texto y corrección durante voz con confirmación y reutilización acotada. D1 prepara el consumidor; no declara esas capacidades terminadas ni activa reglas.
