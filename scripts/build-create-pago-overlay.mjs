@@ -34,7 +34,7 @@ zip.file('lib/index.js',patched);zip.file('lib/createPagoReceiptCorrectionState.
 const authorityFiles=['modules/pagos/createPagoAuthority','modules/clientDelegations/access','modules/clientDelegations/policy'];
 for(const name of authorityFiles){const source=fs.readFileSync(path.join(root,'functions/src',name+'.ts'),'utf8');const js=ts.transpileModule(source,{compilerOptions:{...options,sourceMap:false}}).outputText;zip.file('lib/'+name+'.js',js);}
 const names=Object.keys(zip.files).filter(n=>!zip.files[n].dir);assert(!names.some(n=>/(^|\/)\.env(?:\.|$)/.test(n)),'ENV_IN_ARCHIVE');
-for(const name of names){assert(!name.includes('..')&&!name.includes('\\')&&!name.startsWith('/')&&!name.includes(':'),'ZIP_PATH');zip.files[name].date=new Date('2026-01-01T00:00:00Z');}
+for(const name of Object.keys(zip.files)){assert(!name.includes('..')&&!name.includes('\\')&&!name.startsWith('/')&&!name.includes(':'),'ZIP_PATH');zip.files[name].date=new Date('2026-01-01T00:00:00Z');}
 const final=await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE',compressionOptions:{level:6}}),finalPath=path.join(output,'functions.zip');fs.writeFileSync(finalPath,final,{flag:'wx'});
 const original=await JSZip.loadAsync(bytes),updated=await JSZip.loadAsync(final);let preserved=0;for(const name of Object.keys(original.files).filter(n=>!original.files[n].dir&&n!=='lib/index.js'&&!['modules/pagos/createPagoAuthority','modules/clientDelegations/access','modules/clientDelegations/policy'].some(f=>n==='lib/'+f+'.js'))){assert.deepEqual(await original.file(name).async('nodebuffer'),await updated.file(name).async('nodebuffer'),'UNRELATED_ARTIFACT_CHANGED:'+name);preserved++;}
 const commit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
