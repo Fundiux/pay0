@@ -946,7 +946,7 @@ export default function PagosPage() {
 
         try {
           const operationTypeKey = item.operationTypeKey;
-          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey });
+          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey, selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
 
           const analyzed = { ...item, parsed, operationTypeKey,
             status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
@@ -995,7 +995,7 @@ export default function PagosPage() {
     return missing;
   }
 
-  async function revalidateReceiptItem(item: any) {
+  async function revalidateReceiptItem(item: any, _registerAfterValidation = false) {
     if (receiptBatchBusy || receiptBatchCreating || !item.file) return;
     setReceiptBatchBusy(true);
     setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row));
@@ -2832,12 +2832,12 @@ export default function PagosPage() {
                                   return <div key={kind}>
                                     <div className="text-slate-500">{label}</div>
                                     <div className="text-slate-100">{kind === "client" ? clientName : companyName}</div>
-                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">Identidad verificada por el servidor</div>}
-                                    {(candidates.length > 1 || (!verified?.[kind] && candidates.length > 0)) && <select aria-label={`Seleccionar ${label.toLowerCase()}`} disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
+                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : "Coincidencia determinada por el servidor"}</div>}
+                                    {candidates.length > 0 && <select aria-label={`Seleccionar ${label.toLowerCase()}`} disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
                                       value={item[selectedKey] || verified?.[kind]?.id || ""}
-                                      onChange={event => { const value = event.target.value; setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, [selectedKey]: value, parsed: { ...row.parsed, identification: undefined } } : row)); void revalidateReceiptItem({ ...item, [selectedKey]: value }); }}
+                                      onChange={event => { const value = event.target.value; setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, [selectedKey]: value, status: "ANALYZING", parsed: { ...row.parsed, identification: undefined } } : row)); void revalidateReceiptItem({ ...item, [selectedKey]: value }, false); }}
                                       className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs">
-                                      <option value="">Selecciona una coincidencia</option>
+                                      <option value="">Selecciona {label.toLowerCase()}</option>
                                       {candidates.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
                                     </select>}
                                   </div>;
