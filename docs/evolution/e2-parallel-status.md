@@ -1,6 +1,6 @@
 # E2 — ejecución paralela e integración permanente
 
-Continuación del 2026-10-19, sin repetir E0. La rama acumulativa parte de
+Continuación del 2026-10-19 y 2026-10-20, sin repetir E0. La rama acumulativa parte de
 `bf64cde`; los worktrees anteriores se conservan. El Lote 1 mantiene sus tres
 archivos modificados y no se escribe sobre ellos.
 
@@ -11,12 +11,12 @@ archivos modificados y no se escribe sobre ellos.
 | A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | Usuario confirmó cambio de cliente, PDF y saludo de R1.5: COMPLETED para ese recorrido. Sus módulos se conservan exactamente en D1 publicado, chat00023-gaz/ZIP763134cf; fuente/configuración/IAM verificados. Verificación funcional posterior de D1 pendiente |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway mantiene sus pruebas, pendiente de imagen y publicación independiente |
 | C | Selección de cliente y reportes canónicos | R1.5 conserva los reportes canónicos y corrige continuidad del cliente; usuario confirmó cambio, descarga PDF y saludo en producción. Recorrido verificado COMPLETED; comparaciones/Excel y cobertura general no se certifican por esa prueba |
-| D | Aprendizaje supervisado e interacción | Consulta/revocación publicada: review00001-sil, diagnostics00003-god, SSR00606-pep/Hosting4d9ffe161d463f87. Usuario confirmó carga del panel, pero interacción insuficiente. D1chat903e031/ZIP763134cf publicado en 00023-gaz; fuente/configuración/IAM y rechazo anónimo verificados: DEPLOYED_NOT_VERIFIED funcionalmente. Aprobación/aplicación OFF. Equipos de texto, comprobantes y voz desarrollan corrección interactiva sobre capacidades existentes |
-| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Proveedores backend00008-des y administración00001-yut/00001-meq conservados en UI D2 actual SSR00606-pep/Hosting4d9ffe161d463f87. Fuente/IAM y cinco rutas HTTP200 comprobados; interacción autenticada de proveedores pendiente |
+| D | Aprendizaje supervisado e interacción | Review00001-sil y diagnostics00003-god preservados en UI b14/SSR00608-tag. D1chat00023-gaz sigue DEPLOYED_NOT_VERIFIED funcionalmente, gates OFF. Backend documental f88 publicado y verificado técnicamente: parse00016-qoc/correct00005-qej; ciclo con nueva UI pendiente. Recuerdo personal por cliente/tema integrado en0382, emulador real y builds PASS; artefactos chat763 y memoriaC50 se preparan por separado. Voz aún local |
+| E | Revisión administrativa previa y ajustes concurrentes de proveedores | Backend00008-des y administración00001-yut/00001-meq conservados por UI b14/SSR00608-tag. Enlace desde Solicitudes publicado y usuario confirmó acceso al panel IQ/Facturama: COMPLETED sólo navegación/visibilidad. Automatización y concurrencia productiva de proveedores no certificadas |
 | F | Guardas de recuperación sin reiniciar presupuesto ni reactivar terminales | Publicados; trigger y agenda ejecutándose con 20 HTTP204 y cinco HTTP200 observados, sin ERROR/5xx. Resultado de negocio aún sin certificar |
-| G | Registro canónico y protección acumulativa; accesibilidad recuperada | 4 componentes de interfaz integrados con pruebas de navegador, preservando acciones existentes |
+| G | Registro canónico y protección acumulativa; accesibilidad recuperada | Cuatro componentes de interfaz preservados. Navegación E/G publicada Hostingb830ace6f78b96f9/SSR00608-tag y verificada por usuario. Nueva UI de aprendizaje se compone sobre esa base sin sustituir capacidades |
 | H | Sentinel | Receptor productivo reconciliado: 22 archivos idénticos, sin rebuild. Ingesta deshabilitada, trust vacío; metadata KMS del productor pendiente por 403. No hay activación end-to-end |
-| I | MAT reutiliza formularios y dominio existente | Guardas publicadas y formularios a335e195 preservados por UI D2 a2cf5d1/SSR00606-pep. Requieren sesión Firebase coincidente; no hay puente sólo Telegram. Flujo autenticado real pendiente |
+| I | MAT reutiliza formularios y dominio existente | Guardas publicadas y formularios a335e195 preservados por UI b14/SSR00608-tag. Requieren sesión Firebase coincidente; no hay puente sólo Telegram. Flujo autenticado real pendiente |
 | J | Transporte Telegram, sesiones MAT y consumidor WhatsApp | HMAC probado con claves sintéticas, sin envíos reales. Consumidor QR recuperado en cuarentena: tres fallos de aislamiento reproducidos offline; requiere vínculo autorizado sesión→root antes de reactivación |
 | K | Homologación de artefactos y evaluación Next 16 aislada | Cierre transitivo y aislamiento real de módulos integrados; 28 pruebas del nuevo control PASS. Next 16 sigue aislado; producción permanece en Next 15 |
 
@@ -46,9 +46,11 @@ archivos modificados y no se escribe sobre ellos.
 
 ## Integración de interfaz sin pérdida funcional
 
-Continuación de aprendizaje interactivo: el usuario pidió corregir la lectura de comprobantes y respuestas por texto/voz. Confirmó que la memoria futura debe quedar para su usuario y reutilizarse sólo con el mismo cliente o tema. La base conversacional temporal pasó Functions NORMAL, emulador real ALL 8/8 y UI 8/8; no se considera solución durable ni paquete definitivo. El build integrado Next.js 15.5.27 pasó 47 rutas tras corregir el tipo opcional `patternKey` al payload real de comprobantes.
+Continuación de aprendizaje interactivo: el usuario pidió corregir la lectura de comprobantes y respuestas por texto/voz. Confirmó que la memoria futura debe quedar para su usuario y reutilizarse sólo con el mismo cliente o tema. TEXTO `0382fcc` pasó Functions NORMAL, Next 47 rutas, emulador ALL 8/8, revisión independiente de ámbito 10/10, regresiones seleccionadas 69/69 y UI 13 grupos. Sus paquetes exactos aún se certifican; la base temporal anterior no se presenta como solución durable. El guard documental posterior `0b20ab0` mantiene lectura sin edición si el backend no aporta versión; UI 8/8, build final integrado PASS (47 rutas).
 
-Comprobantes: la captura dirigida encontró parse00015-faf/correct00004-fam, ambos ZIP6615bb84, sin el contrato de corrección durable ya existente en la fuente local. Se prepara overlay mínimo sobre esa base; publicar sólo la nueva interfaz no completa el ciclo. Navegación E/G commit48b50e4, cinco pruebas y autorización PASS: su paquete de interfaz se prepara por separado para no depender del aprendizaje. Voz conserva pruebas locales de gateway57/57 y adaptador5/5, sin activación ni verificación de audio productivo.
+Comprobantes: publicado con autorización exacta, input `c6fce02d`, fuente `1cad290`, ZIP `f88b88d7`. Conserva el bundle anterior y modifica sólo sus dos entradas públicas; 33 comprobaciones desde package.main y verificador canónico PASS. Verificación productiva técnica independiente `33f2ecf1`: parse00016-qoc/correct00005-qej, fuentes exactas, Run/IAM/configuración preservados y dos rechazos anónimos; nueva UI y recorrido autenticado pendientes. El candidato anterior de módulos sin entrada activa quedó SUPERSEDED.
+
+Navegación E/G publicada: fuente `b14c4900`, input `fc45defd`, ZIP `b273a696`, Hosting `b830ace6f78b96f9`, SSR `00608-tag`; identidad/runtime y acceso anónimo verificados. Usuario confirmó que el enlace abre el panel y muestra ambos controles: COMPLETED sólo para ese recorrido. Baseline estable `83388428`, procedencia `437ffda7`; fuente previa preservada para reversión. Voz conserva pruebas locales de gateway57/57 y adaptador5/5, sin activación ni verificación de audio productivo.
 
 Se reutilizaron los cambios revisados de Modal, UiSelect y DateScopeBar del
 Lote 1. Para Clientes se recuperó la confirmación de `5d1f21d`, anterior a la
