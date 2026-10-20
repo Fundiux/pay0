@@ -1,6 +1,6 @@
 # Registro documental antes de conciliación
 
-Estado: DEPLOYMENT_PENDING. Paquete exacto listo para autorización específica de dos Functions; sin despliegue. No cambia frontend, createPago, conciliación, aplicación, reglas, permisos ni configuración/IAM.
+Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó expresamente la publicación de dos Functions y su rollback f88; ejecutor raíz exit 0. Verificación técnica independiente PASS; recorrido autenticado pendiente. No cambia frontend, createPago, reglas, permisos ni IAM.
 
 ## Comportamiento
 
@@ -43,3 +43,9 @@ No requiere publicar UI nueva ni crear Functions. Usar únicamente el controlado
 Reversión: restaurar sólo los dos destinos a sus fuentes f88 preservadas y configuración/IAM anteriores mediante sus recibos individuales. No revertir Hosting, chat, MEMORY ni borrar pagos, análisis o correcciones. Un rollback parcial puede volver a bloquear propuestas hasta restaurar ambos endpoints. El parser f88 reconoce política 2; registros V3 quedan conservados y una lectura tras rollback puede reextraer el documento, incluido posible OCR. No se degrada el dato V3 para aparentar cacheHit ni se promete el mismo coste de lectura anterior.
 
 Después de publicar: verificar fuente exacta, ACTIVE/revisiones, configuración/Run/IAM y rechazo anónimo. El usuario deberá comprobar el registro pendiente y la conciliación real por los flujos autorizados. Publicado sin ese recorrido significa DEPLOYED_NOT_VERIFIED; las pruebas sintéticas no certifican IQ, banco ni datos productivos.
+
+## Publicación verificada
+
+2026-10-20T18:04:54Z: parse `parsepagoreceiptpdf-00017-wev`, correct `correctpagoreceiptsemanticfield-00006-jol`, ambos ACTIVE. Dos fuentes descargadas iguales al ZIP 6e0 completo; runtime/Run/IAM preservados, generaciones observadas, revisiones listas, dos HTTP 401 UNAUTHENTICATED y cero operaciones activas. Cero documentos de negocio leídos y cero mutaciones por el verificador.
+
+Proof `575e0c6fd18ad2700416b434ead92344ce74fa41f7c5ebf8e9f42002c8d3f6b1`; baseline publicada `8fa3903aba4d64d86e0396d9dc1402048ee181df0759c7b107a60561c6e6ed49`; provenance `7c1c7a257abcd9f205ed5babbf3c72a71c1f99aec89ed7e92a4fb4e90dc1e6b7`; summary `86b93469e8fa1f709f1105e5477daf66f1608c7fe197b70e359b27b97a292356`. Directorio privado: `release/independent-post-publication-6eefc6b8-96d9-4f5f-bb5e-f12371079168/`. Sigue pendiente el recorrido autenticado de registro y conciliación; no se certifican IQ ni banco por estas comprobaciones.
