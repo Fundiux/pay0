@@ -5,7 +5,7 @@ function load(file,deps={}){const exports={};const source=ts.transpileModule(fs.
 const domain=load('functions/src/modules/pagos/receiptIdentificationDomain.ts');
 class HttpsError extends Error{constructor(code,message){super(message);this.code=code;}}
 const unexpected=()=>{throw Error('UNEXPECTED_IDENTIFICATION_SIDE_EFFECT');};
-const identification=load('functions/src/modules/pagos/receiptIdentification.ts',{'node:crypto':require('node:crypto'),'firebase-admin/firestore':{FieldValue:{serverTimestamp:()=> 'SYNTHETIC_TIME'}},'firebase-functions/v2/https':{HttpsError},'../clientDelegations/access':{requireClientOperationalAccess:unexpected},'./receiptLearning':{getReceiptActorCorrectionState:unexpected},'./receiptIdentificationDomain':domain});
+const identification=load('functions/src/modules/pagos/receiptIdentification.ts',{'node:crypto':require('node:crypto'),'firebase-admin/firestore':{FieldValue:{serverTimestamp:()=> 'SYNTHETIC_TIME'}},'firebase-functions/v2/https':{HttpsError},'../clientDelegations/access':{requireClientOperationalAccess:unexpected},'./receiptLearning':{getReceiptActorCorrectionState:unexpected},'./receiptIdentificationDomain':domain,'./receiptOperationType':{resolveReceiptOperationType:unexpected}});
 const body=amount=>['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo',amount,'Fecha de operación: 2026-10-16','Referencia: DEMO1234','Estado: Pendiente'].join('\n');
 
 for (const label of ['Saldo total', 'Comisión total']) test(label+' cannot match the generic total amount label', () => {

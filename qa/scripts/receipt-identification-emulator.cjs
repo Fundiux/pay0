@@ -61,11 +61,13 @@ async function main() {
   check(parsed.amount === 1000.5 && receiptRegistrationReasons(parsed, operation).length === 0, 'Confirmed explicit receipt eligible');
   for (const [replace, expected] of [['$1,000', 1000], ['$1.000,50', 1000.5], ['$1,000.50', 1000.5], ['$100', 100]])
     check(parseReceiptText(body.replace('$1,000.50', replace)).amount === expected, 'Thousand and decimal formats retain magnitude');
+  const mexicanDate = parseReceiptText(body.replace('2026-09-27', '04/05/2026'));
+  check(mexicanDate.date === '2026-05-04' && mexicanDate.dateVerified === true && !receiptRegistrationReasons(mexicanDate, operation).includes('DATE_REQUIRES_REVIEW'), 'Mexican day/month date accepted without extra confirmation');
   for (const [text, reason] of [
     [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'INVALID_AMOUNT'],
     [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'INVALID_AMOUNT'],
     [body.replace('$1,000.50', '$1,00.50'), 'INVALID_AMOUNT'],
-    [body.replace('2026-09-27', '04/05/2026'), 'DATE_REQUIRES_REVIEW'],
+    [body.replace('Fecha: 2026-09-27', 'Fecha de operacion: 2026-09-27') + '\nFecha de operacion: 2026-09-28', 'DATE_REQUIRES_REVIEW'],
     [body.replace('2026-09-27', '2026-02-31'), 'MISSING_DATE'],
     [body.replace('SPEI MXN', 'SPEI USD MXN'), 'UNSUPPORTED_CURRENCY'],
     [body + '\nRFC ordenante: GHI030303EF3', 'CONFLICTING_RFC'],
@@ -90,8 +92,18 @@ async function main() {
   ]) check((await identify(overrides)).reasons.includes(reason), reason);
   check((await identify({ amountVerified: false, executionConfirmed: false })).status === 'READY', 'Both advisory flags can remain false with exact authorized identities');
   const nameOnly = await identify({ payerRfc: '', account: '****1234', beneficiaryRfc: '', destinationAccount: '' });
-  check(nameOnly.status === 'REQUIRES_REVIEW' && !nameOnly.createPayload && nameOnly.reasons.includes('CLIENT_SELECTION_REQUIRED') && nameOnly.reasons.includes('COMPANY_SELECTION_REQUIRED'), 'Old clients cannot automatically create name-only proposals');
+  check(nameOnly.status === 'READY' && !!nameOnly.createPayload, 'Unique authorized names automatically propose registration without RFC or full account');
   check(nameOnly.verifiedMatches.client.id === clientId && nameOnly.verifiedMatches.company.id === companyId, 'Name-only suggestions remain visible for explicit selection');
+  const legalClient = `${prefix}-legal-name-client`;
+  await db.doc(`clients/${legalClient}`).set({ rootId: root, active: true, razonSocial: 'Comercial Demo S. de R.L. de C.V.', clienteNombre: 'Nombre Legacy Demo' });
+  for (const senderName of ['Comercial Demo S de RL de CV', 'Nombre Legacy Demo']) {
+    const legal = await identify({ senderName, payerRfc: '', account: '' });
+    check(legal.status === 'READY' && legal.createPayload.clienteId === legalClient, 'Exact authorized legal suffix or legacy name resolves without invented RFC/account');
+  }
+  await db.doc(`clients/${legalClient}`).delete();
+  const noName = await identify({ senderName: 'Unknown Ordering Party', payerRfc: '', account: '' });
+  check(noName.status === 'REQUIRES_REVIEW' && !noName.createPayload, 'Unknown name still requires manual selection, never first catalog item');
+
   check(nameOnly.evidence.client.includes('NORMALIZED_NAME_EXACT') && !nameOnly.evidence.client.includes('RFC_EXACT'), 'Name-only evidence never claims RFC equality');
   const unknownNames = { ...parsed, senderName: 'Unknown Ordering Party', beneficiaryName: 'Unknown Beneficiary', payerRfc: '', beneficiaryRfc: '', account: '', destinationAccount: '' };
   const manual = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-catalog`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: companyId });
@@ -133,7 +145,7 @@ async function main() {
   check(!reviewUi.exports.automaticPaymentReviewMessage({ status: 'REQUIRES_REVIEW', reason: 'internal-private-id' }).includes('internal-private-id'), 'Unknown internal identifiers never reach the badge');
   check(ready.verifiedMatches.client.id === clientId && ready.verifiedMatches.company.id === companyId, 'Authorized catalog identities prefilled');
   const incomplete = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-incomplete` });
-  check(incomplete.status === 'REQUIRES_REVIEW' && incomplete.verifiedMatches.client.id === clientId, 'Missing operation does not discard verified identities');
+  check(incomplete.status === 'READY' && incomplete.resolvedOperationTypeKey === operation && incomplete.createPayload.operationTypeKey === operation, 'Unique active own catalog operation resolves automatically without inventing a default');
   const duplicateClient = `${prefix}-duplicate-client`;
   await db.doc(`clients/${duplicateClient}`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
   const ambiguous = await identify({}, actors[0], `${sha}-ambiguous`);

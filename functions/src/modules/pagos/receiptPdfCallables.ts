@@ -351,7 +351,49 @@ function parseDateValue(value: string): string {
     if (mm) return `${yyyy}-${mm}-${dd}`;
   }
 
+  const monthFirst = normalized.match(/\b([a-z]+)\s+(\d{1,2}),?\s+(20\d{2})\b/);
+  if (monthFirst && months[monthFirst[1]]) return `${monthFirst[3]}-${months[monthFirst[1]]}-${monthFirst[2].padStart(2, "0")}`;
+
   return "";
+}
+
+/** Mexican receipts use day/month/year unless the document states otherwise. */
+function resolveReceiptDate(lines: string[], text: string): { raw: string; value: string; verified: boolean } {
+  const operationLabels = [/^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*(.+)$/i];
+  const genericLabels = [/^fecha\s*(?:\/\s*hora|y\s+hora)?\s*[:\-]\s*(.+)$/i];
+  const captureLabels = [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i];
+  const collect = (labels: RegExp[]) => lines.flatMap((line, index) => {
+    const value = extractLabeled([line, lines[index + 1] || ""], labels);
+    return value ? [value] : [];
+  });
+  const operation = collect(operationLabels), generic = collect(genericLabels), capture = collect(captureLabels);
+  const labelled = operation.length ? operation : generic.length ? generic : capture;
+  const patterns = [
+    /\b20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}\b/g,
+    /\b\d{1,2}[-\/]\d{1,2}[-\/]20\d{2}\b/g,
+    /\b\d{1,2}[\s\-\/.]+[a-z]+[\s\-\/.]+20\d{2}\b/g,
+    /\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de|del)\s+20\d{2}\b/g,
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+20\d{2}\b/g,
+  ];
+  const tokens = (value: string) => [...new Set(patterns.flatMap(pattern => [...normalize(value).matchAll(pattern)].map(match => match[0])))];
+  const monthFirst = /\bmm[\/-]dd[\/-](?:yyyy|aaaa)\b/i.test(text);
+  const dayFirst = /\bdd[\/-]mm[\/-](?:yyyy|aaaa)\b/i.test(text);
+  const parse = (value: string) => {
+    const numeric = value.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})$/);
+    if (numeric && (monthFirst || (!dayFirst && Number(numeric[2]) > 12 && Number(numeric[1]) <= 12))) return `${numeric[3]}-${numeric[1].padStart(2, "0")}-${numeric[2].padStart(2, "0")}`;
+    return parseDateValue(value);
+  };
+  const candidates = labelled.length ? labelled.flatMap(value => {
+    const found = tokens(value);
+    return found.length ? found : [value];
+  }) : tokens(text);
+  const dates = candidates.map(parse);
+  const calendarValid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  const validDates = [...new Set(dates.filter(calendarValid))];
+  const verified = candidates.length > 0 && dates.every(calendarValid) && validDates.length === 1 && !(monthFirst && dayFirst);
+  // Do not invent a date or choose between conflicting dates. The original
+  // extraction remains visible for review when it cannot be resolved uniquely.
+  return { raw: labelled[0] || candidates[0] || "", value: validDates.length === 1 ? validDates[0] : "", verified };
 }
 
 function parseTimeValue(value: string): string {
@@ -581,32 +623,15 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const declaredStates = lines.map(normalize).filter(line => /^(?:estado|resultado)\b.*[:\-]/.test(line));
   const executionConfirmed = !blockedExecution && positiveExecution.test(normalizedText) && declaredStates.every(line => positiveExecution.test(line));
 
-  const dateLabels = [
-      /^fecha\s*(?:\/\s*hora)?\s*[:\-]\s*(.+)$/i,
-      /^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:operacion|transferencia|pago|ejecucion)\s*[:\-]\s*(.+)$/i,
-  ];
-  const executionDates = lines.flatMap((line, index) => {
-    const value = extractLabeled([line, lines[index + 1] || ""], dateLabels);
-    return value ? [value] : [];
-  });
-  const dateRaw = executionDates[0] || extractLabeled(lines, [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i]) ||
-    firstMatch(normalize(text), [
-      /\b(\d{1,2}[-\/]\d{1,2}[-\/]20\d{2})\b/,
-      /\b(20\d{2}[-\/]\d{1,2}[-\/]\d{1,2})\b/,
-      /\b(\d{1,2}[\s\-\/.]+[a-z]+[\s\-\/.]+20\d{2})\b/i,
-      /\b(\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de|del)\s+20\d{2})\b/i,
-    ]);
+  const resolvedDate = resolveReceiptDate(lines, text);
+  const dateRaw = resolvedDate.raw;
   const time = parseTimeValue(dateRaw) || parseTimeValue(extractLabeled(lines, [
     /^hora\s*(?:de\s+)?(?:operacion|transferencia|pago)?\s*[:\-]\s*(.+)$/i,
   ]));
-  const unambiguousDate = (value: string) => {
-    const short = value.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
-    return !short || Number(short[1]) > 12 || short[1] === short[2];
-  };
-  const parsedDate = parseDateValue(dateRaw);
+  const parsedDate = resolvedDate.value;
   const calendarTime = Date.parse(parsedDate);
   const validDate = Number.isFinite(calendarTime) && new Date(calendarTime).toISOString().slice(0, 10) === parsedDate;
-  const dateVerified = executionDates.length > 0 && validDate && executionDates.every(value => parseDateValue(value) === parsedDate && unambiguousDate(value));
+  const dateVerified = resolvedDate.verified && validDate;
 
   const reference =
     extractLabeled(lines, [
@@ -748,7 +773,7 @@ export const parsePagoReceiptPdf = onCall(
     let semanticReceipt: ReturnType<typeof buildSemanticReceipt>;
     let cacheHit = false;
 
-    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 3) {
+    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 4) {
       receipt = cached.get("receipt") as ReceiptData;
       semanticReceipt = cached.get("semanticReceipt") as ReturnType<typeof buildSemanticReceipt>;
       textSource = clean(cached.get("textSource"));
@@ -802,11 +827,11 @@ export const parsePagoReceiptPdf = onCall(
     semanticReceipt = buildSemanticReceipt(text, receipt);
     await db.runTransaction(async tx => {
     const existing = await tx.get(analysisRef);
-    if (existing.exists && existing.get("processingPolicyVersion") === 3 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
+    if (existing.exists && existing.get("processingPolicyVersion") === 4 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
     // Re-read old extraction policy under the same document identity. Merge only
     // original extraction fields: all actor corrections and versions survive.
     tx.set(analysisRef, {
-      schemaVersion: 1, processingPolicyVersion: 3, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
+      schemaVersion: 1, processingPolicyVersion: 4, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
       ...(!existing.exists ? { createdAt: new Date() } : {}), updatedAt: new Date(),

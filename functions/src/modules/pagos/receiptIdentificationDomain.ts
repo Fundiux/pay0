@@ -6,7 +6,10 @@ export type ReceiptSignals = {
 };
 export type ReceiptCatalogItem = { id: string; [key: string]: any };
 export type IdentityMatch = { status: "EXACT" | "REQUIRES_REVIEW"; id: string | null; reasons: string[]; evidence: string[]; candidateCount: number };
-export const normalizeReceiptName = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9&]+/g, " ").trim().replace(/\s+/g, " ");
+/** Only punctuation/spacing variants of complete legal suffixes are equivalent. */
+export const normalizeReceiptName = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9&]+/g, " ").trim().replace(/\s+/g, " ")
+  .replace(/\bS\s+DE\s+R\s*L\s+DE\s+C\s*V$/, "S DE RL DE CV")
+  .replace(/\bS\s*A\s+DE\s+C\s*V$/, "SA DE CV");
 export const normalizeReceiptReference = (value: unknown) => String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const rfc = (value: unknown) => String(value ?? "").toUpperCase().replace(/[\s.-]/g, "");
 const validRfc = (value: string) => /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(value) && !/^XAXX|^XEXX/.test(value);
@@ -16,7 +19,7 @@ export function fullReceiptAccount(value: unknown) {
   const digits = raw.replace(/\D/g, "");
   return digits.length >= 10 && digits.length <= 18 ? digits : "";
 }
-const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonSocial, item.businessName, item.legalName, item.commercialName, item.nombreComercial, item.displayName, item.companyName, item.clientName, item.alias, item.depositAlias].map(normalizeReceiptName).filter(Boolean);
+const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonSocial, item.businessName, item.legalName, item.commercialName, item.nombreComercial, item.displayName, item.companyName, item.clientName, item.clienteNombre, item.alias, item.depositAlias].map(normalizeReceiptName).filter(Boolean);
 const rfcs = (item: ReceiptCatalogItem) => [item.rfc, item.RFC, item.taxId, item.taxID].map(rfc).filter(validRfc);
 const accounts = (item: ReceiptCatalogItem) => [item.clabe, item.CLABE, item.bankClabe, item.cuenta, item.account, item.accountNumber, ...(Array.isArray(item.depositClabes) ? item.depositClabes : [])].map(fullReceiptAccount).filter(Boolean);
 
@@ -58,10 +61,7 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: Iden
   const assessed = assessIdentity(items, signals, options);
   const automatic = matchReceiptIdentity(items, signals, options);
   const candidates = [...assessed].sort((a, b) => Number(b.nameExact) - Number(a.nameExact) || Number(b.rfcExact) - Number(a.rfcExact) || a.item.id.localeCompare(b.item.id)).map(row => row.item);
-  if (!selectedId) {
-    const requiresSelection = automatic.status === "EXACT" && !automatic.evidence.some(value => value === "RFC_EXACT" || value === "FULL_ACCOUNT_EXACT");
-    return { match: requiresSelection ? { ...automatic, status: "REQUIRES_REVIEW" as const, reasons: ["SELECTION_REQUIRED"] } : automatic, candidates };
-  }
+  if (!selectedId) return { match: automatic, candidates };
   const selected = assessed.find(row => row.item.id === selectedId);
   if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
   return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };

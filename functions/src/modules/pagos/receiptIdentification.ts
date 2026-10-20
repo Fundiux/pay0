@@ -3,6 +3,7 @@ import { FieldValue, type Firestore, type DocumentSnapshot } from "firebase-admi
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { getReceiptActorCorrectionState } from "./receiptLearning";
+import { resolveReceiptOperationType } from "./receiptOperationType";
 import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
 
 type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
@@ -12,6 +13,7 @@ export type ReceiptIdentificationResult = {
   reasons: string[]; evidence: { client: string[]; company: string[] };
   createPayload: Record<string, any> | null; pagoId: string | null;
   receiptPending?: boolean;
+  resolvedOperationTypeKey?: string;
   verifiedMatches?: { client: ReceiptIdentityOption | null; company: ReceiptIdentityOption | null };
   candidates?: { client: ReceiptIdentityOption[]; company: ReceiptIdentityOption[] };
 };
@@ -35,8 +37,9 @@ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatal
 /** Called only with bytes and parsed signals obtained by the server parser. */
 export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown>; selectedClientId?: string; selectedCompanyId?: string; correctionVersion?: number }): Promise<ReceiptIdentificationResult> {
   const { db, actor, receipt } = input;
-  const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
-  if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
+  const operationResolution = await resolveReceiptOperationType({ db, rootId: actor.rootId, operationTypeKey: input.operationTypeKey });
+  const operationTypeKey = operationResolution.key;
+  const resolvedOperation = operationTypeKey && !operationResolution.reason ? { resolvedOperationTypeKey: operationTypeKey } : {};
   const id = createHash("sha256").update([actor.rootId, actor.uid, input.contentSha256].join("|")).digest("hex");
   const ref = db.doc(`pagoReceiptIdentifications/${id}`);
   const [clients, companies] = await Promise.all([
@@ -65,24 +68,20 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
   const clientMatch = clientSelection.match, companyMatch = companySelection.match;
   const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
   if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
+  if (operationResolution.reason && !reasons.includes(operationResolution.reason)) reasons.push(operationResolution.reason);
   const client = authorizedClients.find(item => item.id === clientMatch.id);
   const company = authorizedCompanies.find(item => item.id === companyMatch.id);
   if (clientMatch.id && !client) reasons.push("CLIENT_ACCESS_REQUIRES_REVIEW");
   if (companyMatch.id && !company) reasons.push("COMPANY_ACCESS_REQUIRES_REVIEW");
   const option = (item: ReceiptCatalogItem, kind: "client" | "company"): ReceiptIdentityOption => ({
-    id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.displayName),
+    id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.nombreComercial || item.clienteNombre || item.displayName || item.businessName || item.legalName || item.commercialName || item.companyName || item.clientName || item.alias || item.depositAlias),
     ...(kind === "company" ? { despachoId: clean(item.despachoId) } : {}),
     evidence: [...new Set(["AUTHORIZED_CATALOG_ENTRY", ...(kind === "client" && clientMatch.id === item.id ? clientMatch.evidence : kind === "company" && companyMatch.id === item.id ? companyMatch.evidence : matchReceiptIdentity([item], kind === "client" ? clientSignals : companySignals, { party: kind === "client" ? "CLIENT" : "COMPANY" }).evidence)])],
   });
   const candidates = { client: clientSelection.candidates.map(item => option(item, "client")), company: companySelection.candidates.map(item => option(item, "company")) };
   const verifiedMatches = { client: client ? option(client, "client") : null, company: company ? option(company, "company") : null };
-  if (operationTypeKey) {
-    const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();
-    if (!operation.exists || operation.get("active") === false) reasons.push("OPERATION_TYPE_REQUIRES_REVIEW");
-  }
-  // Older open tabs automatically create every READY proposal. Name-only
-  // suggestions retain verifiedMatches, but must never expose a create payload
-  // until the caller explicitly selects each identity lacking strong evidence.
+  // A unique exact authorized identity is sufficient for pending registration;
+  // reconciliation and canonical creation validations remain separate.
   const ready = reasons.length === 0 && !!client && !!company;
   const createPayload = ready ? {
     clienteId: client!.id, companyId: company!.id, despachoId: clean(company!.despachoId),
@@ -116,7 +115,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
         pago?.get("clienteId") === client?.id && pago?.get("companyId") === company?.id &&
         pago?.get("operationTypeKey") === existing.get("createPayload.operationTypeKey") &&
         (!operationTypeKey || pago?.get("operationTypeKey") === operationTypeKey);
-      return { id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
+      return { ...resolvedOperation, id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
         verifiedMatches, candidates, createPayload: null, pagoId: pagoId || null, receiptPending: !!receiptPending };
     }
     const status = ready ? "READY" : "REQUIRES_REVIEW";
@@ -126,7 +125,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
       updatedAt: FieldValue.serverTimestamp(), ...(!existing.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
       attempts: FieldValue.increment(1), metricDetected: true, metricIdentifiedAutomatically: ready, metricRequiresReview: !ready,
     }, { merge: true });
-    return { id, status, reasons, evidence, verifiedMatches, candidates, createPayload, pagoId: null };
+    return { ...resolvedOperation, id, status, reasons, evidence, verifiedMatches, candidates, createPayload, pagoId: null };
   });
 }
 

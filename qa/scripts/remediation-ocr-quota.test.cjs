@@ -185,7 +185,7 @@ test('legacy policy2 extraction refreshes once without changing analysis identit
   assert.equal(refreshed.receipt.amount, 125.5); assert.equal(refreshed.receipt.executionConfirmed, false);
   assert.equal(refreshed.semanticReceipt.fields.transferAmount.provenance, 'HUMAN_CORRECTION');
   assert.equal(refreshed.semanticReceipt.reviewRequired, false); assert.deepEqual(refreshed.semanticReceipt.reviewReasons, []);
-  assert.equal(persisted.processingPolicyVersion, 3); assert.equal(persisted.receipt.amount, 100);
+  assert.equal(persisted.processingPolicyVersion, 4); assert.equal(persisted.receipt.amount, 100);
   assert.equal(persisted.createdAt, 'LEGACY_CREATED_AT'); assert.equal(persisted.customTrace, 'KEEP_TRACE');
   assert.deepEqual(persisted.humanCorrectionsByActor, before.humanCorrectionsByActor);
   assert.deepEqual(persisted.correctionVersionsByActor, before.correctionVersionsByActor);
@@ -323,7 +323,7 @@ test('legacy memory fallback reads only same root and scoped candidate takes pre
   const pattern = learning.receiptPattern({ readerVersion, bankName: 'Banco', evidenceLabel: 'Referencia', fromField: 'reference', toField: 'folio' });
   for (const memoryRoot of ['r1', 'foreign']) {
     const db = database({ 'users/u1': profile() });
-    db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion, processingPolicyVersion: 3, receipt: { amount: 100 }, textSource: 'PDF_TEXT', semanticReceipt: { readerVersion, fields: { reference: { label: 'Referencia', value: '12345' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } } } });
+    db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion, processingPolicyVersion: 4, receipt: { amount: 100 }, textSource: 'PDF_TEXT', semanticReceipt: { readerVersion, fields: { reference: { label: 'Referencia', value: '12345' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } } } });
     db.docs.set(`agent007Memory/receipt_${pattern.key}`, { rootId: memoryRoot, status: 'CANDIDATE', content: 'legacy', receiptLearning: { key: pattern.key } });
     const handler = receiptHandler(db, { pdf: 0, vision: 0 });
     const input = { auth: { uid: 'u1' }, data: { base64: bytes.toString('base64'), contentType: 'application/pdf' } };
