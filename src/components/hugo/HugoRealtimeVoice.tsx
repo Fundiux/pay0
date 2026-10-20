@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { auth } from "@/lib/firebaseClient";
 import { saveHugoVoiceHistory } from "@/services/agent007";
+import { withVoiceStartupAbort } from "@/lib/hugoVoiceStartup";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "FINALIZING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -22,6 +23,7 @@ type VoiceHistoryStatus = "ACTIVE" | "COMPLETED" | "FAILED";
 type VoiceHistoryDraft = { sessionId: string; gatewayCallId: string; model: string; voice: string; gateway: Record<string, string | null>; realtime: Record<string, any>; startedAt: number; audioUsage: { input: number; cachedInput: number; output: number }; turns: Map<string, VoiceTurnDraft>; events: Map<string, VoiceEventDraft>; pendingTurns: Map<string, VoiceTurnDraft>; pendingEvents: Map<string, VoiceEventDraft>; persistChain: Promise<void>; acceptingEvents: boolean; finalization: Promise<void> | null };
 
 const FINALIZATION_TIMEOUT_MS = 8000;
+const STARTUP_TIMEOUT_MS = 45000;
 
 export async function withVoiceFinalizationTimeout(operation: Promise<void>, timeoutMs = FINALIZATION_TIMEOUT_MS) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -51,6 +53,9 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const gatewayRef = useRef<WebSocket | null>(null);
   const startingRef = useRef(false);
   const generationRef = useRef(0);
+  const startupRef = useRef<AbortController | null>(null);
+  const startupTimerRef = useRef<number | null>(null);
+  const gatewayTimerRef = useRef<number | null>(null);
   const historyRef = useRef<VoiceHistoryDraft | null>(null);
   const frontendCommit = process.env.NEXT_PUBLIC_PAY0_BUILD_COMMIT || "unverified";
   const gatewayRevision = gatewayRuntime?.revision || "sin metadatos";
@@ -104,6 +109,12 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const cleanup = () => {
     generationRef.current += 1;
     startingRef.current = false;
+    startupRef.current?.abort();
+    startupRef.current = null;
+    if (startupTimerRef.current !== null) window.clearTimeout(startupTimerRef.current);
+    if (gatewayTimerRef.current !== null) window.clearTimeout(gatewayTimerRef.current);
+    startupTimerRef.current = null;
+    gatewayTimerRef.current = null;
     const channel = channelRef.current;
     const gateway = gatewayRef.current;
     if (gateway) {
@@ -175,17 +186,26 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     setState("CONNECTING");
     setError("");
     setGatewayRuntime(null);
+    const startup = new AbortController();
+    startupRef.current = startup;
+    startup.signal.addEventListener("abort", () => {
+      if (generationRef.current !== generation || startup.signal.reason?.message !== "VOICE_STARTUP_TIMEOUT") return;
+      cleanup();
+      setError("La conexión de voz excedió el tiempo de espera. Revisa la sesión y el permiso del micrófono e inténtalo de nuevo.");
+      setState("ERROR");
+    }, { once: true });
+    startupTimerRef.current = window.setTimeout(() => startup.abort(new Error("VOICE_STARTUP_TIMEOUT")), STARTUP_TIMEOUT_MS);
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
       const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
       if (!gatewayUrl) throw new Error("El gateway server-side de María no esta configurado en esta version.");
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
-      const idToken = await currentUser.getIdToken();
+      const idToken = await withVoiceStartupAbort(() => currentUser.getIdToken(), startup.signal);
       if (generationRef.current !== generation) return;
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await withVoiceStartupAbort(() => navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      }), startup.signal, lateStream => lateStream.getTracks().forEach(track => track.stop()));
       if (generationRef.current !== generation) {
         stream.getTracks().forEach(track => track.stop());
         return;
@@ -312,6 +332,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
         trace("peer.connection_state", { state: peer.connectionState });
         if (generationRef.current !== generation) return;
         if (peer.connectionState === "connected") {
+          if (startupTimerRef.current !== null) window.clearTimeout(startupTimerRef.current);
+          startupTimerRef.current = null;
           startingRef.current = false;
           setState("LISTENING");
         }
@@ -328,12 +350,13 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       audioRef.current = audio;
       channelRef.current = channel;
 
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      const answer = await new Promise<{ sdp: string; sessionId: string; model: string; voice: string; runtime?: any }>((resolve, reject) => {
+      const offer = await withVoiceStartupAbort(() => peer.createOffer(), startup.signal);
+      await withVoiceStartupAbort(() => peer.setLocalDescription(offer), startup.signal);
+      const answer = await withVoiceStartupAbort(() => new Promise<{ sdp: string; sessionId: string; model: string; voice: string; runtime?: any }>((resolve, reject) => {
         const gateway = new WebSocket(gatewayUrl!);
         gatewayRef.current = gateway;
         const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
+        gatewayTimerRef.current = timeout;
         gateway.onopen = () => gateway.send(JSON.stringify({ type: "authenticate", idToken }));
         gateway.onerror = () => { window.clearTimeout(timeout); reject(new Error("No se pudo conectar con el gateway de voz.")); };
         gateway.onmessage = incoming => {
@@ -354,7 +377,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
             trace("gateway.interruption_confirmed", event);
           }
         };
-      });
+      }), startup.signal);
       if (generationRef.current !== generation) return;
       sessionId = answer.sessionId;
       expectedVoice = answer.voice;
@@ -362,9 +385,11 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
         ? { revision: String(answer.runtime.revision), commit: String(answer.runtime.commit) }
         : null);
       if (historyRef.current) { historyRef.current.gatewayCallId = answer.sessionId; historyRef.current.model = answer.model; historyRef.current.voice = answer.voice; historyRef.current.gateway = { service: answer.runtime?.service || null, revision: answer.runtime?.revision || null, commit: answer.runtime?.commit || null, branch: answer.runtime?.branch || null, version: answer.runtime?.version || null }; historyRef.current.realtime = { vad: answer.runtime?.vad || {}, transcription: answer.runtime?.transcription || {} }; }
-      await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+      await withVoiceStartupAbort(() => peer.setRemoteDescription({ type: "answer", sdp: answer.sdp }), startup.signal);
     } catch (cause: any) {
+      if (generationRef.current !== generation) return;
       await finalizeHistory("FAILED", "START_ERROR").catch(() => undefined);
+      if (generationRef.current !== generation) return;
       cleanup();
       setState("ERROR");
       setError(cause?.message || "No se pudo iniciar la conversacion por voz.");
@@ -387,6 +412,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
         <button type="button" onClick={toggleMute} aria-label={muted ? "Activar microfono" : "Silenciar microfono"} className="rounded-xl border border-slate-700 p-2.5 text-slate-200 hover:bg-slate-800">{muted ? <MicOff size={17}/> : <Mic size={17}/>}</button>
         <button type="button" onClick={() => void stop()} aria-label="Terminar conversacion" className="rounded-xl bg-rose-600 p-2.5 text-white hover:bg-rose-500"><PhoneOff size={17}/></button>
       </>}
+      {state === "CONNECTING" && <button type="button" onClick={() => { cleanup(); setMuted(false); setError(""); setState("IDLE"); }} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Cancelar conexión</button>}
     </div>
     {error && <p role="alert" className="max-w-sm text-right text-xs text-rose-300">{error}</p>}
   </div>;

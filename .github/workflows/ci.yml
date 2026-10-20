@@ -43,6 +43,11 @@ jobs:
         run: npm run qa:release-baseline
       - name: Validate committed source candidate
         run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
+      - name: Verify cancellable voice startup and compiled gateway contract
+        run: |
+          node --test qa/scripts/voice-startup-lifecycle.test.cjs
+          node qa/scripts/verify-hugo-voice-runtime-contract.cjs
+          node qa/scripts/verify-hugo-voice-build-artifact.mjs
       - name: Preserve candidate evidence
         if: always()
         uses: actions/upload-artifact@v4

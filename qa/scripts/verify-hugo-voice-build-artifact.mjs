@@ -38,6 +38,7 @@ for (const asset of assets) {
 }
 const source = fs.readFileSync("src/components/hugo/HugoRealtimeVoice.tsx", "utf8");
 const guard = source.indexOf("if (!gatewayUrl) throw new Error(");
-assert.ok(guard >= 0 && guard < source.indexOf("const stream = await navigator.mediaDevices.getUserMedia("), "Fuente sin fail-closed antes del microfono");
+const microphone = source.indexOf("() => navigator.mediaDevices.getUserMedia(");
+assert.ok(guard >= 0 && microphone > guard, "Fuente sin fail-closed antes del microfono");
 assert.ok(guard < source.indexOf("new WebSocket(gatewayUrl"), "Fuente sin fail-closed antes de conectar");
 console.log(JSON.stringify({ ok: true, manifestAssets: assets.length, pageAsset, sha256: crypto.createHash("sha256").update(compiled).digest("hex"), canonicalGatewayEmbedded: true, webSocketRoutes: sockets.length, legacyAbsent: true, sourceFailsClosed: true, externalActions: 0 }));
