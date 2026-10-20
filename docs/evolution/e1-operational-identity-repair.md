@@ -1,6 +1,6 @@
 # Corrección de consultas operativas y confirmación documental
 
-Estado: backend O1 DEPLOYED_NOT_VERIFIED; interfaz documental DEPLOYMENT_PENDING en paquete independiente. O1 se publicó con la autorización específica del usuario y pasó la verificación técnica independiente. Falta repetir el recorrido funcional con su sesión. «Parece que sí» no acredita guardado y relectura documental.
+Estado: O1 COMPLETED sólo para el recorrido confirmado de última solicitud (cliente, método e importe) → último pago → cliente asociado. Los casos adicionales de O1 siguen DEPLOYED_NOT_VERIFIED. La interfaz documental está publicada con autorización específica: Hosting `18cb9743dfc01c50`, SSR `00612-yuq`. Su verificación técnica independiente pasó; el ciclo autenticado sigue DEPLOYED_NOT_VERIFIED. «Parece que sí» no acredita guardado y relectura.
 
 ## Fallos reproducidos
 
@@ -34,7 +34,7 @@ La UI documental exige acuse real del análisis, ID de corrección, siguiente ve
 
 La publicación requerirá paquete exacto, pruebas del ZIP, bases productivas frescas, identidad y reversión. Las aprobaciones anteriores de aprendizaje personal no cubren estos artefactos. El backend y la UI pueden prepararse como paquetes independientes; ninguno se declara COMPLETED sin publicación y comprobación real.
 
-La UI ya tiene artefacto aislado validado: [paquete documental independiente](e1-document-confirmation-ui-package.md), input `4f6a110d`, ZIP `39e00880`, fuente `28924fbb`; root cotejó hashes y ejecutó `assertRuntimeProof` sobre el recibo `292cf193`: PASS. Aún no se ha autorizado ni publicado esa interfaz. No se confundirá el backend O1 publicado con esa entrega de Hosting/SSR.
+La UI tiene artefacto aislado validado y publicado: [paquete documental independiente](e1-document-confirmation-ui-package.md), input `4f6a110d`, ZIP `39e00880`, fuente `28924fbb`; root cotejó hashes y ejecutó `assertRuntimeProof` sobre el recibo `292cf193`: PASS. Tras autorización específica, la verificación productiva independiente pasó: recibo `690dd7f4`, baseline `b51bf266`, configuración/IAM conservados, cinco rutas HTTP200 y cero operaciones pendientes. No hubo reversión ni operaciones financieras de prueba. Falta la confirmación autenticada de guardado y relectura.
 
 ## Identidad y pruebas del paquete O1 de backend
 
@@ -65,4 +65,6 @@ Verificación productiva: fuente descargada exacta, ACTIVE/revisión, configurac
 
 Ejecutor scoped exit 0; revisión `sendagent007message-00025-gok` ACTIVE sobre base `00024-noh`. Verificación independiente PASS: ZIP descargado exacto `9f95197e`, configuración/Run/IAM preservados, gate supervisado OFF y HTTP 401 UNAUTHENTICATED para llamada sin sesión. No se consultaron datos de negocio, proveedores ni sesiones autenticadas. Fuente previa `22cbdbd9` preservada, sin reversión aplicada.
 
-Recibo independiente SHA `0dec35291d1c52d187b20935c1a506785e39fb0781ff0f46ce78b0575ffd152e`; baseline publicada SHA `d3ac299fb8b8129c727ef8562455a0e3d68908d436a824739138d75bb9ac223b`. Archivos privados dentro de `operational-identity-repair-release/independent-post-publication-44e09fb3-2237-4499-b828-b2116cc0fd9c`. Se pidió al usuario repetir el cambio de dominio y los nombres; respuesta pendiente. No se declara COMPLETED.
+Recibo independiente SHA `0dec35291d1c52d187b20935c1a506785e39fb0781ff0f46ce78b0575ffd152e`; baseline publicada SHA `d3ac299fb8b8129c727ef8562455a0e3d68908d436a824739138d75bb9ac223b`. Archivos privados dentro de `operational-identity-repair-release/independent-post-publication-44e09fb3-2237-4499-b828-b2116cc0fd9c`. La entrega técnica inicial pidió repetir el cambio de dominio y los nombres, sin declarar cierre por los resultados técnicos solamente.
+
+Verificación funcional posterior: el usuario aportó la secuencia real y confirmó que la última solicitud devuelve nombre de cliente, método PUE e importe; después el último pago y la pregunta por su cliente devuelven el cliente asociado. No se copian aquí nombres, folios ni importes. Ese recorrido queda COMPLETED. El retorno posterior a solicitud, la objeción sobre origen bancario y la ubicación del lector no aparecen en esa comprobación y no reciben certificación funcional por extensión.
