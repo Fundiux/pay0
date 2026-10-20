@@ -1,6 +1,6 @@
 # E/G — Acceso directo a proveedores y complementos
 
-Estado: **DEPLOYMENT_PENDING**. Preparación y verificación local completas; no publicado. Requiere autorización específica de Hosting/SSR. No depende de los nuevos flujos de corrección por texto, voz o documentos.
+Estado: **COMPLETED**, limitado al acceso al panel y la visibilidad de ambos controles. Hosting/SSR publicados con autorización específica, verificación técnica independiente PASS y confirmación autenticada del usuario: «El enlace abre el panel y veo ambos controles». No certifica ejecución ni automatización de proveedores. No depende de los nuevos flujos de corrección por texto, voz o documentos.
 
 ## Resultado y alcance
 
@@ -36,6 +36,20 @@ Preflight remoto final de sólo lectura PASS después del runtime; recurso SSR, 
 
 ## Autorización y reversión
 
-La autorización a solicitar se limita a publicar este Hosting/SSR y revertir exactamente esa entrega si falla. No incluye Functions de texto/documentos, gateway, gates, IAM nuevo ni acciones de negocio. La receta privada está en `.firebase/modular-release/provider-controls-navigation-execution-recipe.md`.
+La autorización recibida se limita a publicar este Hosting/SSR y revertir exactamente esa entrega si falla. No incluye Functions de texto/documentos, gateway, gates, IAM nuevo ni acciones de negocio. La receta privada está en `.firebase/modular-release/provider-controls-navigation-execution-recipe.md`.
 
-Reversión: Hosting `4d9ffe161d463f87`, SSR `ssrpay0system-00606-pep`, ZIP anterior `58a69d097f032d27ba653371bd1fd7a447ef5eb3a4e3ab5781bea488bda77d38`. Sólo procede contra el estado propio exacto de esta publicación; conserva datos y los demás servicios. Ante resultado incierto, reconciliar la operación y el journal, sin replay ni borrar locks manualmente. Después de publicar, la comprobación autenticada será abrir el enlace y consultar el panel, sin pulsar controles de proveedor como prueba.
+Reversión: Hosting `4d9ffe161d463f87`, SSR `ssrpay0system-00606-pep`, ZIP anterior `58a69d097f032d27ba653371bd1fd7a447ef5eb3a4e3ab5781bea488bda77d38`. Sólo procede contra el estado propio exacto de esta publicación; conserva datos y los demás servicios. Ante resultado incierto, reconciliar la operación y el journal, sin replay ni borrar locks manualmente. El usuario ya comprobó el enlace y la presencia de ambos controles; no se pulsaron controles de proveedor como smoke test.
+
+## Publicación y comprobación independiente
+
+El coordinador ejecutó el paquete autorizado: salida 0 y `RELEASE_VERIFIED`. Hosting `b830ace6f78b96f9`, SSR `ssrpay0system-00608-tag`, fuente ZIP `b273a696…` idéntica al paquete aprobado. Se cotejaron recurso y Run completos contra el snapshot propio; serviceConfig salvo revisión, runtime/entrypoint, configuración real del contenedor salvo imagen, variables, recursos, escalado, red, cuenta de servicio y timeout permanecen iguales a la base. IAM no cambió.
+
+Cinco rutas públicas HTTP 200. Chromium anónimo en 390/1440 px: login renderizado sin overflow, `/pagos`, `/hugo`, `/solicitudes` y `/reportes#complementos-pago` redirigen a login; cero errores JavaScript y cero solicitudes no GET/HEAD. El verificador no hizo escrituras productivas ni acciones financieras. Posteriormente el usuario confirmó el recorrido con su sesión autenticada y la presencia de ambos controles; el proof técnico conserva su límite histórico de ejecución anónima.
+
+Baseline estable `.firebase/modular-release/ui-provider-controls-navigation-stable-baseline.json`, SHA-256 `833884284cf19ed6b48138606d852bd20c5a3ae48d4ec9d25cb0601f954cbb46`, cero operaciones activas, 171 archivos y 4.091.136 bytes. Procedencia nueva `.firebase/modular-release/ui-provider-controls-navigation-published-provenance.json`, SHA-256 `437ffda768cf350602914e634a9fec8bed4210d850487476375d7824cf3f0072`.
+
+Pruebas privadas: `output/provider-controls-navigation/published-verification.json`, SHA-256 `244714bc07e0c82de476db050c8b99ced6f931474fbb84dc47b7a53ef6ef5f5e`; navegador `published-browser-proof.json`, SHA-256 `f173b1aa5da4f8e6b6f28d5c81aff1a5be5dc8dc8d73061a0236cf18f11ff92f`.
+
+Los contadores derivados de Hosting llegaron después del recibo. Se preservó `latest-own-state-before-derived-counts.json`, SHA-256 `7d0420c0e1e87f44326680ae9ad4a379cece67f0a3cc4b43dc366109afba1081`, y se reconciliaron localmente sólo `fileCount` y `versionBytes`, con igualdad profunda del resto. Nuevo own-state SHA-256 `822a1c5064fba812f68ace19a83acc410a89ed9d2834866ca5d664e993ff4880`; prueba `rollback-metadata-reconciliation.json`, SHA-256 `a1063e0a465945d33294e7407c29da80f751088dc31cff6bee2b425b22045c70`. No hubo escrituras cloud en esa reconciliación.
+
+El controlador exacto `deploy-scoped-functions.mjs` queda preservado en el directorio privado del paquete, `controller-snapshot/`, SHA-256 `5d3c799cfa218a1c2d717f2e55a87f685269ad6289eb2771e3329c59aff44d22`, igual al pin del input. Si una integración posterior cambia ese archivo, el protocolo privado exige detener escritores/runners, preservar bytes nuevos, restaurar temporalmente los bytes fijados para la reversión autorizada y reponer después la versión nueva. No se restauraron controladores durante esta entrega ni se alteraron inputs, pins o historial Git.

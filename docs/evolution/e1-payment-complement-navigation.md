@@ -1,6 +1,6 @@
 # Acceso a proveedores y complementos de pago
 
-Estado: DEPLOYMENT_PENDING. Candidato independiente de navegación preparado y probado; pendiente de autorización específica para Hosting/SSR.
+Estado: COMPLETED, limitado a navegación y visibilidad de los controles. Hosting/SSR publicados con autorización específica; el usuario confirmó: «El enlace abre el panel y veo ambos controles». No acredita automatización ni acciones reales de proveedor.
 
 En **Solicitudes**, un usuario superadmin verá el enlace **Proveedores y complementos de pago**. Abre `/reportes#complementos-pago`, selecciona la pestaña **Centro de control** y enfoca la sección existente **Complementos de pago · seguimiento actual**. La llegada diferida del perfil y el cambio de pestaña no provocan un bucle ni impiden visitar después otros reportes.
 
