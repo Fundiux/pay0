@@ -2,6 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 
 export type ReceiptIdentification = {
+  resolvedOperationTypeKey?: string;
   verifiedMatches?: { client: ReceiptIdentityMatch | null; company: ReceiptIdentityMatch | null };
   candidates?: { client: ReceiptIdentityMatch[]; company: ReceiptIdentityMatch[] };
   id: string;
@@ -14,7 +15,16 @@ export type ReceiptIdentification = {
 };
 export type ReceiptIdentityMatch = { id: string; name: string; despachoId?: string; evidence: string[] };
 export type ReceiptCorrectionField = "transferAmount" | "executionDate" | "executionTime" | "senderName" | "beneficiaryName" | "sourceBankName" | "destinationBankName" | "bankName" | "sourceAccount" | "destinationAccount" | "concept" | "reference" | "trackingKey" | "folio" | "transactionId";
-export type ReceiptParseOptions = { operationTypeKey?: string; selectedClientId?: string; selectedCompanyId?: string };
+export type ReceiptParseOptions = { operationTypeKey?: string; selectedClientId?: string; selectedCompanyId?: string; assertContext?: () => void };
+
+/** Use only a server-resolved operation when the user has not chosen one. */
+export function receiptResolvedOperationTypeKey(selected: string | undefined, identification?: Pick<ReceiptIdentification, "resolvedOperationTypeKey" | "createPayload"> | null): string {
+  const chosen = typeof selected === "string" ? selected.trim() : "";
+  const resolved = typeof identification?.resolvedOperationTypeKey === "string" ? identification.resolvedOperationTypeKey.trim() : "";
+  const payloadKey = typeof identification?.createPayload?.operationTypeKey === "string" ? identification.createPayload.operationTypeKey.trim() : "";
+  if ((resolved && payloadKey && resolved !== payloadKey) || (chosen && resolved && chosen !== resolved)) return "";
+  return chosen || resolved || payloadKey;
+}
 
 export function receiptHasStrongAutomaticIdentity(identification?: Pick<ReceiptIdentification, "verifiedMatches" | "evidence" | "createPayload"> | null): boolean {
   const hasMatches = !!identification && Object.prototype.hasOwnProperty.call(identification, "verifiedMatches");
@@ -86,6 +96,7 @@ export type ParsedPagoReceipt = {
 };
 
 export async function parsePagoReceiptPdfFile(file: File, options: ReceiptParseOptions = {}): Promise<ParsedPagoReceipt> {
+  options.assertContext?.();
   const t0 = performance.now();
 
   const buffer = await file.arrayBuffer();
@@ -104,6 +115,7 @@ export async function parsePagoReceiptPdfFile(file: File, options: ReceiptParseO
   const t2 = performance.now();
 
   const callable = httpsCallable(functions, "parsePagoReceiptPdf");
+  options.assertContext?.();
   const response = await callable({
     originalName: file.name,
     contentType: file.type || "application/pdf",
@@ -114,6 +126,7 @@ export async function parsePagoReceiptPdfFile(file: File, options: ReceiptParseO
     selectedCompanyId: options.selectedCompanyId,
   });
 
+  options.assertContext?.();
   const t3 = performance.now();
 
   console.log("[PAY0 RECEIPT TIMING]", {
@@ -162,7 +175,10 @@ export async function parsePagoReceiptPdfFile(file: File, options: ReceiptParseO
 }
 
 export async function correctPagoReceiptSemanticField(input: ReceiptParseOptions & { analysisId: string; field: ReceiptCorrectionField; correctedField: ReceiptCorrectionField; correctedValue: string; expectedCorrectionVersion?: number }) {
+  input.assertContext?.();
   const callable = httpsCallable(functions, "correctPagoReceiptSemanticField");
-  const response = await callable(input);
+  const { assertContext, ...payload } = input;
+  const response = await callable(payload);
+  assertContext?.();
   return response.data as { ok: true; correctionId: string; observationId: string; memoryId: string; patternKey: string; learningContext: Array<{ id: string; status: string; content: string; advisory: boolean }>; finalResult: { field: string; value: string; source: string }; receipt: ParsedPagoReceipt; semanticReceipt: ParsedPagoReceipt["semanticReceipt"]; identification: ReceiptIdentification; correctionVersion: number };
 }

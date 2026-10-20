@@ -3,6 +3,8 @@ import type { ReceiptIdentification } from "@/services/pagoReceipt";
 const messages: Record<string, string> = {
   CLIENT_INVALID_SELECTION: "el cliente seleccionado no coincide con la evidencia autorizada",
   COMPANY_INVALID_SELECTION: "la empresa seleccionada no coincide con la evidencia autorizada",
+  CLIENT_SELECTION_REQUIRED: "selecciona el cliente autorizado",
+  COMPANY_SELECTION_REQUIRED: "selecciona la empresa autorizada",
   INVALID_AMOUNT: "monto inválido", MISSING_DATE: "fecha incompleta o inválida", MISSING_REFERENCE: "referencia insuficiente",
   UNSUPPORTED_CURRENCY: "moneda sin confirmar", PAYMENT_FORM_REQUIRES_REVIEW: "forma o resultado de pago sin confirmar",
   MISSING_OPERATION_TYPE: "tipo de operación pendiente", OPERATION_TYPE_REQUIRES_REVIEW: "tipo de operación no disponible",
@@ -14,7 +16,7 @@ const messages: Record<string, string> = {
 };
 const identityMessages: Record<string, string> = {
   CONFLICTING_SIGNALS: "datos contradictorios", MULTIPLE_CANDIDATES: "varias coincidencias", NO_CANDIDATE: "sin coincidencia exacta",
-  INSUFFICIENT_IDENTITY_SIGNALS: "RFC o cuenta completa insuficientes", IDENTITY_NOT_CORROBORATED: "identidad sin corroborar",
+  INSUFFICIENT_IDENTITY_SIGNALS: "datos insuficientes para una coincidencia única", IDENTITY_NOT_CORROBORATED: "identidad sin corroborar",
 };
 export function receiptReviewReason(code: string): string {
   if (messages[code]) return messages[code];
@@ -28,6 +30,8 @@ export function automaticReceiptPayload(identification: ReceiptIdentification | 
   const payload = identification?.createPayload;
   return identification?.status === "READY" && identification.reasons.length === 0 && payload &&
     /^[a-f0-9]{64}$/.test(identification.id) && payload.receiptIdentificationId === identification.id &&
+    typeof payload.clienteId === "string" && !!payload.clienteId.trim() && typeof payload.companyId === "string" && !!payload.companyId.trim() &&
+    typeof operationTypeKey === "string" && !!operationTypeKey.trim() &&
     payload.operationTypeKey === operationTypeKey ? payload : null;
 }
 

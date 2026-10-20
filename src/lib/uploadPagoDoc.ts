@@ -13,6 +13,7 @@ export type UploadPagoDocOptions = {
   customDocumentTypeLabel?: string;
   file: File;
   onProgress?: (pct: number) => void;
+  assertContext?: () => void;
 };
 
 async function computeFileSha256(file: File): Promise<string> {
@@ -32,6 +33,7 @@ type InitPagoDocResp = {
 
 export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
   const { pagoId, documentType, customDocumentTypeLabel, file, onProgress } = opts;
+  opts.assertContext?.();
 
   if (!pagoId) {
     throw new Error("pagoId requerido.");
@@ -42,6 +44,7 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
   }
 
   const sha256 = await computeFileSha256(file);
+  opts.assertContext?.();
 
   const init = httpsCallable(functions, CALLABLES.initPagoDocumentUpload);
   const initRes = await init({
@@ -53,6 +56,7 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
     sizeBytes: file.size,
     sha256,
   });
+  opts.assertContext?.();
 
   const { uploadId, storagePath } = (initRes.data as any) as InitPagoDocResp;
 
@@ -61,6 +65,7 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
   }
 
   const storageRef = ref(storage, storagePath);
+  opts.assertContext?.();
   const task = uploadBytesResumable(storageRef, file, {
     contentType: file.type || "application/octet-stream",
     customMetadata: {
@@ -77,6 +82,7 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
     task.on(
       "state_changed",
       (snap) => {
+        try { opts.assertContext?.(); } catch (error) { task.cancel(); reject(error); return; }
         const pct = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
         onProgress?.(pct);
       },
@@ -84,9 +90,11 @@ export async function uploadPagoDoc(opts: UploadPagoDocOptions) {
       () => resolve()
     );
   });
+  opts.assertContext?.();
 
   const finalize = httpsCallable(functions, CALLABLES.finalizePagoDocumentUpload);
   const finalizeRes = await finalize({ uploadId, storagePath });
+  opts.assertContext?.();
 
   return {
     ...(finalizeRes.data as any),

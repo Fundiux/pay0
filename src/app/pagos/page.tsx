@@ -6,8 +6,9 @@ import { beginOperationTiming } from "@/lib/operationTiming";
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile, receiptHasStrongAutomaticIdentity, receiptCanResumeRegisteredUpload, receiptCanReviewRegisteredIdentity, receiptIdentitySelections, type ReceiptCorrectionField } from "@/services/pagoReceipt";
+import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile, receiptResolvedOperationTypeKey, receiptCanResumeRegisteredUpload, receiptCanReviewRegisteredIdentity, receiptIdentitySelections, type ReceiptCorrectionField } from "@/services/pagoReceipt";
 import { automaticReceiptPayload, automaticReceiptMissing } from "@/lib/receiptAutomaticRegistration";
+import { receiptOperationPreferenceKey, receiptOperationChoices, validReceiptOperationPreference, assertReceiptActorContext, type ReceiptActorContext } from "@/lib/receiptOperationPreference";
 import { automaticPaymentReviewMessage } from "@/lib/automaticPaymentReview";
 import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
 import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
@@ -27,7 +28,7 @@ import {
   X,
 } from "lucide-react";
 
-import { db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebaseClient";
 import { usePagoNotes, pagoNoteDisplayDate } from "@/lib/usePagoNotes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -383,6 +384,25 @@ export default function PagosPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedOperationTypeKey, setSelectedOperationTypeKey] = useState("");
   const [operationTypes, setOperationTypes] = useState<any[]>([]);
+  const [operationTypesLoaded, setOperationTypesLoaded] = useState(false);
+  const [receiptDefault, setReceiptDefault] = useState({ scope: "", key: "" });
+  const receiptPreferenceScope = receiptOperationPreferenceKey(String(rootId || ""), myUid);
+  const receiptContextRef = useRef<ReceiptActorContext>({ scope: receiptPreferenceScope, uid: myUid, epoch: 0 });
+  if (receiptContextRef.current.scope !== receiptPreferenceScope || receiptContextRef.current.uid !== myUid)
+    receiptContextRef.current = { scope: receiptPreferenceScope, uid: myUid, epoch: receiptContextRef.current.epoch + 1 };
+  const receiptContextEpoch = receiptContextRef.current.epoch;
+  const receiptTypeChoices = receiptOperationChoices(operationTypes, String(rootId || ""));
+  const receiptDefaultKey = operationTypesLoaded && receiptDefault.scope === receiptPreferenceScope ? validReceiptOperationPreference(receiptDefault.key, receiptTypeChoices) : "";
+  useEffect(() => {
+    setReceiptDefault({ scope: receiptPreferenceScope, key: "" });
+    if (!receiptPreferenceScope || !operationTypesLoaded) return;
+    try {
+      const saved = localStorage.getItem(receiptPreferenceScope);
+      const key = validReceiptOperationPreference(saved, receiptOperationChoices(operationTypes, String(rootId || "")));
+      if (saved && !key) localStorage.removeItem(receiptPreferenceScope);
+      setReceiptDefault({ scope: receiptPreferenceScope, key });
+    } catch { /* Browser storage may be unavailable; no implicit default. */ }
+  }, [receiptPreferenceScope, operationTypesLoaded, operationTypes, rootId]);
   const [montoTotal, setMontoTotal] = useState("");
   const [isMontoTotalFocused, setIsMontoTotalFocused] = useState(false);
   const [fechaPago, setFechaPago] = useState(() => getTodayDateInputValue());
@@ -398,6 +418,9 @@ export default function PagosPage() {
   const [receiptBatchBusy, setReceiptBatchBusy] = useState(false);
   const [receiptBatchCreating, setReceiptBatchCreating] = useState(false);
   const [receiptBatchItems, setReceiptBatchItems] = useState<any[]>([]);
+  useEffect(() => { setReceiptBatchItems([]); setReceiptBatchOpen(false); setReceiptBatchBusy(false); setReceiptBatchCreating(false); setIsPagoPageDragging(false); }, [receiptContextEpoch]);
+  function assertReceiptItemCurrent(item: any) { assertReceiptActorContext(item?.receiptContext, receiptContextRef.current, auth.currentUser?.uid); }
+  function receiptItemIsCurrent(item: any) { try { assertReceiptItemCurrent(item); return true; } catch { return false; } }
   const clientesRef = useRef<any[]>([]);
 
   const [saving, setSaving] = useState(false);
@@ -892,6 +915,8 @@ export default function PagosPage() {
   }
 
   async function analyzeReceiptBatch(files: File[]) {
+    const batchContext = { ...receiptContextRef.current };
+    if (!receiptItemIsCurrent({ receiptContext: batchContext })) return;
     const valid = files.filter(isPagoQuickPdf);
     const rejectedTypeCount = files.length - valid.length;
     const oversized = valid.filter((file) => file.size > 1 * 1024 * 1024);
@@ -906,12 +931,13 @@ export default function PagosPage() {
       return;
     }
 
-    const initialItems: Array<{ key: string; file: File; status: string; parsed: any; operationTypeKey: string; error: string; selectedClientId?: string; selectedCompanyId?: string }> = accepted.map((file, index) => ({
+    const initialItems: Array<{ key: string; file: File; status: string; parsed: any; operationTypeKey: string; error: string; selectedClientId?: string; selectedCompanyId?: string; receiptContext: ReceiptActorContext }> = accepted.map((file, index) => ({
       key: receiptBatchKey(file, index),
       file,
       status: "PENDING",
       parsed: null,
-      operationTypeKey: selectedOperationTypeKey || "",
+      operationTypeKey: receiptDefaultKey || "",
+      receiptContext: { ...receiptContextRef.current },
       error: "",
     }));
 
@@ -935,27 +961,32 @@ export default function PagosPage() {
         if (currentIndex >= queue.length) return;
 
         const item = queue[currentIndex];
+        if (!receiptItemIsCurrent(item)) return;
 
         setReceiptBatchItems((current) =>
-          current.map((row) =>
+          receiptItemIsCurrent(item) ? (current.map((row) =>
             row.key === item.key
               ? { ...row, status: "ANALYZING" }
               : row,
-          ),
+          )) : current,
         );
 
         try {
-          const operationTypeKey = item.operationTypeKey;
-          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey, selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+          const requestedOperationTypeKey = item.operationTypeKey;
+          const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: requestedOperationTypeKey, selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+          assertReceiptItemCurrent(item);
+          const operationTypeKey = receiptResolvedOperationTypeKey(requestedOperationTypeKey, parsed.identification);
 
           const analyzed = { ...item, parsed, operationTypeKey,
             status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
             error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
-          setReceiptBatchItems(current => current.map(row => row.key === item.key ? analyzed : row));
+          setReceiptBatchItems(current => receiptItemIsCurrent(item) ? (current.map(row => row.key === item.key ? analyzed : row)) : current);
+          if (receiptCanResumeRegisteredUpload(parsed.identification) || automaticReceiptPayload(parsed.identification, operationTypeKey)) await registerReceiptItem(analyzed);
 
         } catch (error: any) {
+          if (!receiptItemIsCurrent(item)) return;
           setReceiptBatchItems((current) =>
-            current.map((row) =>
+            receiptItemIsCurrent(item) ? (current.map((row) =>
               row.key === item.key
                 ? {
                     ...row,
@@ -965,13 +996,14 @@ export default function PagosPage() {
                       "No se pudo analizar este comprobante.",
                   }
                 : row,
-            ),
+            )) : current,
           );
         }
       }
     }
 
     await Promise.all([worker(), worker(), worker()]);
+    if (!receiptItemIsCurrent({ receiptContext: batchContext })) return;
     setReceiptBatchBusy(false);
     setPageMsg("Lote analizado. Revisa los datos y confirma los pagos que deseas registrar.");
   }
@@ -996,40 +1028,49 @@ export default function PagosPage() {
   }
 
   async function revalidateReceiptItem(item: any, registerAfterValidation = false) {
+    if (!receiptItemIsCurrent(item)) return;
     if (receiptBatchBusy || receiptBatchCreating || !item.file) return;
     setReceiptBatchBusy(true);
-    setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row));
+    setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row)) : rows);
     try {
       const selections = receiptIdentitySelections(item, item.parsed?.identification, registerAfterValidation);
-      const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || ""), ...selections });
-      const analyzed = { ...item, ...selections, parsed, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
+      const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: String(item.operationTypeKey || ""), ...selections });
+      const operationTypeKey = receiptResolvedOperationTypeKey(String(item.operationTypeKey || ""), parsed.identification);
+      const analyzed = { ...item, ...selections, parsed, operationTypeKey, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
         error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? analyzed : row));
-
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? analyzed : row)) : rows);
+      if (registerAfterValidation && (automaticReceiptPayload(parsed.identification, operationTypeKey) || receiptCanResumeRegisteredUpload(parsed.identification))) await registerReceiptItem(analyzed);
     } catch (error: any) {
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row));
-    } finally { setReceiptBatchBusy(false); }
+      if (!receiptItemIsCurrent(item)) return;
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row)) : rows);
+    } finally { if (receiptItemIsCurrent(item)) setReceiptBatchBusy(false); }
   }
 
   async function correctReceiptField(item: any, field: ReceiptCorrectionField, value: string, correctedField: ReceiptCorrectionField = field) {
+    if (!receiptItemIsCurrent(item)) return;
     const parsed = item.parsed;
     if (!parsed?.analysisId || receiptBatchBusy || receiptBatchCreating) throw new Error("Espera a que termine la operación actual.");
     setReceiptBatchBusy(true);
     try {
-      const result = await correctPagoReceiptSemanticField({ analysisId: parsed.analysisId, field, correctedField, correctedValue: value,
+      const result = await correctPagoReceiptSemanticField({ assertContext: () => assertReceiptItemCurrent(item), analysisId: parsed.analysisId, field, correctedField, correctedValue: value,
         expectedCorrectionVersion: parsed.correctionVersion, operationTypeKey: String(item.operationTypeKey || ""),
         selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
       if (!result.receipt || !result.semanticReceipt || !result.identification) throw new Error("La corrección requiere una nueva validación del servidor.");
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row,
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row,
+        operationTypeKey: receiptResolvedOperationTypeKey(item.operationTypeKey, result.identification),
         parsed: { ...parsed, ...result.receipt, semanticReceipt: result.semanticReceipt, identification: result.identification, correctionVersion: result.correctionVersion },
-        status: result.identification.status === "REGISTERED" ? "DUPLICATE" : "READY", error: "" } : row));
-    } finally { setReceiptBatchBusy(false); }
+        status: result.identification.status === "REGISTERED" ? "DUPLICATE" : "READY", error: "" } : row)) : rows);
+    } finally { if (receiptItemIsCurrent(item)) setReceiptBatchBusy(false); }
   }
 
   async function confirmReceiptItem(item: any) {
+    if (!receiptItemIsCurrent(item)) return;
     if (receiptBatchBusy || receiptBatchCreating || !canCreatePagos || item.editingReceipt || item.status === "CREATED") return;
     setReceiptBatchCreating(true);
-    try { await registerReceiptItem(item); } finally { setReceiptBatchCreating(false); }
+    try { await registerReceiptItem(item); } finally { if (receiptItemIsCurrent(item)) setReceiptBatchCreating(false); }
   }
 
   const receiptBatchCreationSummary = useMemo(() => {
@@ -1082,12 +1123,15 @@ export default function PagosPage() {
   }
 
   async function registerReceiptItem(item: any) {
-    const update = (patch: Record<string, unknown>) => setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, ...patch } : row));
+    if (!receiptItemIsCurrent(item)) return false;
+    const update = (patch: Record<string, unknown>) => setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? rows.map(row => row.key === item.key ? { ...row, ...patch } : row) : rows);
     let createdPagoId = "";
     const uploadExisting = async (pagoId: string) => {
+      assertReceiptItemCurrent(item);
       createdPagoId = pagoId;
       update({ status: "UPLOADING", createdPagoId: pagoId, error: "" });
-      await uploadPagoDoc({ pagoId, documentType: "COMPROBANTE_PAGO", customDocumentTypeLabel: "", file: item.file, onProgress: () => undefined });
+      await uploadPagoDoc({ assertContext: () => assertReceiptItemCurrent(item), pagoId, documentType: "COMPROBANTE_PAGO", customDocumentTypeLabel: "", file: item.file, onProgress: () => undefined });
+      assertReceiptItemCurrent(item);
       return pagoId;
     };
     try {
@@ -1100,22 +1144,25 @@ export default function PagosPage() {
       } else {
         if (!payload) throw new Error("El comprobante requiere revisión antes del registro.");
         try {
-          pagoId = await createPagoWithReceipt({ ...payload, file: item.file, onPagoCreated: id => {
+          pagoId = await createPagoWithReceipt({ ...payload, assertContext: () => assertReceiptItemCurrent(item), file: item.file, onPagoCreated: id => {
             createdPagoId = id; update({ status: "UPLOADING", createdPagoId: id });
           } });
         } catch (error: any) {
+          if (!receiptItemIsCurrent(item)) return false;
           const code = String(error?.details?.code || error?.code || "").toUpperCase();
           if (createdPagoId || (!code.includes("ALREADY-EXISTS") && !code.includes("PAGO_RECEIPT_DUPLICATE"))) throw error;
           // A concurrent worker may have created this exact payment. Re-parse to obtain server-authorized recovery.
-          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || ""), selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
-          update({ parsed });
+          const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: String(item.operationTypeKey || ""), selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+          update({ parsed, operationTypeKey: receiptResolvedOperationTypeKey(item.operationTypeKey, parsed.identification) });
           if (!receiptCanResumeRegisteredUpload(parsed.identification)) throw error;
           pagoId = await uploadExisting(parsed.identification.pagoId);
         }
       }
+      assertReceiptItemCurrent(item);
       update({ status: "CREATED", createdPagoId: pagoId, error: "" });
       return true;
     } catch (error: any) {
+      if (!receiptItemIsCurrent(item)) return false;
       const code = String(error?.details?.code || error?.code || "").toUpperCase();
       update({ status: createdPagoId ? "UPLOAD_ERROR" : code.includes("ALREADY-EXISTS") || code.includes("PAGO_RECEIPT_DUPLICATE") ? "DUPLICATE" : "CREATE_ERROR",
         ...(createdPagoId ? { createdPagoId } : {}), error: error?.message || "No se pudo registrar el comprobante." });
@@ -1126,10 +1173,10 @@ export default function PagosPage() {
   async function createReadyReceiptBatch() {
     if (!canCreatePagos || receiptBatchBusy || receiptBatchCreating) return;
     const rows = receiptBatchCreationSummary.readyToCreate;
-    if (!rows.length) return;
+    if (!rows.length || !receiptItemIsCurrent(rows[0])) return;
     setReceiptBatchCreating(true);
-    try { for (const item of rows) await registerReceiptItem(item); }
-    finally { setReceiptBatchCreating(false); }
+    try { for (const item of rows) { if (!receiptItemIsCurrent(item)) return; await registerReceiptItem(item); } }
+    finally { if (receiptItemIsCurrent(rows[0])) setReceiptBatchCreating(false); }
   }
 
   function closeNewPagoModal() {
@@ -1442,14 +1489,17 @@ export default function PagosPage() {
   useEffect(() => {
     if (!canViewPagos || !myUid) {
       setOperationTypes([]);
+      setOperationTypesLoaded(false);
       return;
     }
 
+    setOperationTypesLoaded(false);
     const qy = query(collection(db, "operationTypes"), orderBy("name"));
 
     return onSnapshot(
       qy,
       (snap) => {
+        setOperationTypesLoaded(true);
         setOperationTypes(
           snap.docs
             .map((d) => ({ id: d.id, ...d.data() }))
@@ -1463,6 +1513,7 @@ export default function PagosPage() {
       },
       (error) => {
         console.error("No se pudieron cargar operationTypes.", error);
+        setOperationTypesLoaded(false);
         setOperationTypes([]);
       },
     );
@@ -1657,6 +1708,7 @@ export default function PagosPage() {
     operatorSelectedAccount?: string;
     file: File;
     onPagoCreated?: (pagoId: string) => void;
+    assertContext?: () => void;
   }) {
     const requestSeq = pagosRequestSeq.current;
     const createPayload = {
@@ -1687,7 +1739,9 @@ export default function PagosPage() {
 
     let createdPago: any;
     try {
+      input.assertContext?.();
       createdPago = await createPago(createPayload);
+      input.assertContext?.();
     } catch (error: any) {
       const details = error?.details || error?.customData?.details || {};
       if (input.receiptIdentificationId || String(details?.code || "") !== "PAGO_RECEIPT_RFC_MISMATCH") throw error;
@@ -1706,7 +1760,9 @@ export default function PagosPage() {
         ].join("\n\n"),
       );
       if (!accepted) throw error;
+      input.assertContext?.();
       createdPago = await createPago({ ...createPayload, acceptRfcMismatch: true });
+      input.assertContext?.();
     }
 
     const createdPagoId = String(
@@ -1727,15 +1783,18 @@ export default function PagosPage() {
       );
     }
 
+    input.assertContext?.();
     input.onPagoCreated?.(createdPagoId);
 
     // Publish only the new row; its document listener handles subsequent IQ writes.
     void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
+      input.assertContext?.();
       if (requestSeq !== pagosRequestSeq.current || !snapshot.exists()) return;
       const row = { ...snapshot.data(), id: snapshot.id };
       if (!operationBelongsToScope(row, "pagos", { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
       setPagos((current) => current.some((item) => item.id === row.id) ? current : [row, ...current]);
     }).catch(() => {
+      try { input.assertContext?.(); } catch { return; }
       if (requestSeq === pagosRequestSeq.current) {
         setPageMsg("Pago creado; no se pudo mostrar la fila. Revisa tu conexión y permisos.");
       }
@@ -1743,6 +1802,7 @@ export default function PagosPage() {
 
     const uploadReceipt = () =>
       uploadPagoDoc({
+        assertContext: input.assertContext,
         pagoId: createdPagoId,
         documentType: "COMPROBANTE_PAGO",
         customDocumentTypeLabel: "",
@@ -2367,6 +2427,18 @@ export default function PagosPage() {
         </div>
       ) : null}
 
+      {canCreatePagos && <label className="mb-2 block text-xs text-slate-300">
+        Tipo predeterminado para comprobantes (recordar en este navegador)
+        <select aria-label="Tipo predeterminado para comprobantes" value={receiptDefaultKey} disabled={!operationTypesLoaded}
+          className="ml-2 rounded border border-white/10 bg-[#161d2b] px-2 py-1"
+          onChange={event => {
+            const key = validReceiptOperationPreference(event.target.value, receiptTypeChoices);
+            setReceiptDefault({ scope: receiptPreferenceScope, key });
+            if (!receiptPreferenceScope) return;
+            try { if (key) localStorage.setItem(receiptPreferenceScope, key); else localStorage.removeItem(receiptPreferenceScope); } catch { /* Session-only choice if storage is unavailable. */ }
+          }}><option value="">Sin predeterminado; resolver en el servidor</option>{receiptTypeChoices.map(row => <option key={row.key} value={row.key}>{row.name}</option>)}</select>
+      </label>}
+
       <header className="mb-2 grid min-w-0 grid-cols-1 gap-1.5 2xl:grid-cols-[380px_minmax(0,1fr)_auto] 2xl:items-center">
         <div className="relative w-full min-w-0 2xl:w-[380px]">
           <Search className="absolute left-3 top-2.5 text-slate-500" size={14} />
@@ -2800,7 +2872,7 @@ export default function PagosPage() {
               <div className="grid grid-cols-1 gap-3">
                 {receiptBatchItems.map((item) => {
                   const parsed = item.parsed || {};
-                  const serverPayload = automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || ""));
+                  const serverPayload = automaticReceiptPayload(parsed.identification, operationTypeKey);
                   const verified = parsed.identification?.verifiedMatches;
                   const clientName = verified?.client?.name || "Sin cliente verificado";
                   const companyName = verified?.company?.name || "Sin empresa verificada";
@@ -2844,7 +2916,7 @@ export default function PagosPage() {
                                   </div>;
                                 })}
                               </div>
-                              {!receiptHasStrongAutomaticIdentity(parsed.identification) && (parsed.identification?.status === "READY" || parsed.identification?.reasons?.some((reason: string) => reason === "CLIENT_SELECTION_REQUIRED" || reason === "COMPANY_SELECTION_REQUIRED")) && <p className="md:col-span-3 text-xs text-amber-200">Revisa o selecciona cliente y empresa antes de registrar.</p>}
+                              {parsed.identification?.status === "REQUIRES_REVIEW" && <p className="md:col-span-3 text-xs text-amber-200">Revisa o selecciona cliente y empresa antes de registrar.</p>}
                               {parsed.semanticReceipt && <div className="md:col-span-3">
                                 <ReceiptEvidenceSummary receipt={parsed.semanticReceipt} disabled={receiptBatchBusy || receiptBatchCreating}
                                   onCorrect={parsed.analysisId ? (field, value, correctedField) => correctReceiptField(item, field, value, correctedField) : undefined}

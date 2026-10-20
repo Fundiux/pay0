@@ -2,7 +2,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const root=path.resolve(process.env.PAY0_RECEIPT_IDENTITY_UI_ROOT||'.');assert(root.startsWith(path.resolve('.')+path.sep)||root===path.resolve('.'));
 const pageFile=path.join(root,'src/app/pagos/page.tsx'),page=fs.readFileSync(pageFile,'utf8'),ast=ts.createSourceFile(pageFile,page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 function declaration(name){let found;function visit(n){if(ts.isFunctionDeclaration(n)&&n.name?.text===name)found=n;ts.forEachChild(n,visit);}visit(ast);assert(found,name);return found.getText(ast);}
-function emit(source){return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React}}).outputText;}
+// These fixtures keep one stable actor; real actor-switch races are covered separately.
+function emit(source){const stable=source.includes('receiptItemIsCurrent')?'const receiptItemIsCurrent=()=>true;const assertReceiptItemCurrent=()=>{};\n':'';return stable+ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React}}).outputText;}
 const calls=[];let result={identification:{id:'server',status:'REQUIRES_REVIEW',reasons:[],createPayload:null}};
 const serviceFile=path.join(root,'src/services/pagoReceipt.ts'),service=new Module(serviceFile,module);service.filename=serviceFile;service.paths=Module._nodeModulePaths(root);service.require=name=>{
   if(name==='firebase/functions')return{httpsCallable:(_f,name)=>async payload=>{calls.push({name,payload});return{data:result};}};
@@ -20,8 +21,8 @@ test('Real parse/correct wrappers preserve both selected IDs without deriving a 
 test('Actual revalidation handler preserves selection and cannot create when selection requests parse-only',async()=>{
   const item={key:'row',file:{},operationTypeKey:'op',selectedClientId:'client-b',selectedCompanyId:'company-b',parsed:{identification:{status:'READY',createPayload:{clienteId:'old'}}}};
   let rows=[item],registered=0,options;
-  const fn=new Function('parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
-    async(_file,opts)=>{options=opts;return{identification:{id:'a'.repeat(64),status:'READY',reasons:[],createPayload:{receiptIdentificationId:'a'.repeat(64),operationTypeKey:'op',clienteId:'client-b',companyId:'company-b'}}};},service.exports.receiptIdentitySelections,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,async()=>{registered++;},()=>{},update=>{rows=update(rows);},false,false);
+  const fn=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],    async(_file,opts)=>{options=opts;return{identification:{id:'a'.repeat(64),status:'READY',reasons:[],createPayload:{receiptIdentificationId:'a'.repeat(64),operationTypeKey:'op',clienteId:'client-b',companyId:'company-b'}}};},service.exports.receiptIdentitySelections,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,async()=>{registered++;},()=>{},update=>{rows=update(rows);},false,false);
   await fn(item,false);assert.equal(registered,0);assert.equal(options.selectedClientId,'client-b');assert.equal(options.selectedCompanyId,'company-b');assert.equal(rows[0].selectedClientId,'client-b');assert.equal(rows[0].selectedCompanyId,'company-b');assert.equal(rows[0].parsed.identification.createPayload.clienteId,'client-b');
   if(page.includes('async function confirmReceiptItem(')) {
     const explicit=new Function('receiptBatchBusy','receiptBatchCreating','canCreatePagos','setReceiptBatchCreating','registerReceiptItem',emit(declaration('confirmReceiptItem'))+';return confirmReceiptItem;')(false,false,true,()=>{},async()=>{registered++;});
@@ -41,10 +42,10 @@ test('Only the explicit action accepts visible server suggestions and registers 
   for(const ready of [true,false]) {
     let rows=[{key:'r',file:{},operationTypeKey:'op',parsed:{identification:{status:'REQUIRES_REVIEW',...source}}}],request;
     const creates=[];
-    const register=new Function('uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
-      ()=>{throw Error('UNEXPECTED_EXISTING_UPLOAD');},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async input=>{creates.push(input);return 'synthetic-created';},()=>{throw Error('UNEXPECTED_RETRY');},update=>{rows=update(rows);});
-    const revalidate=new Function('parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
-      async(_file,options)=>{request=options;return{identification:{id:'a'.repeat(64),status:ready?'READY':'REQUIRES_REVIEW',reasons:ready?[]:['CLIENT_SELECTION_REQUIRED'],...source,createPayload:ready?{receiptIdentificationId:'a'.repeat(64),operationTypeKey:'op',clienteId:'visible-client',companyId:'visible-company'}:null}};},selection,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,register,()=>{},update=>{rows=update(rows);},false,false);
+    const register=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],      ()=>{throw Error('UNEXPECTED_EXISTING_UPLOAD');},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async input=>{creates.push(input);return 'synthetic-created';},()=>{throw Error('UNEXPECTED_RETRY');},update=>{rows=update(rows);});
+    const revalidate=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],      async(_file,options)=>{request=options;return{identification:{id:'a'.repeat(64),status:ready?'READY':'REQUIRES_REVIEW',reasons:ready?[]:['CLIENT_SELECTION_REQUIRED'],...source,createPayload:ready?{receiptIdentificationId:'a'.repeat(64),operationTypeKey:'op',clienteId:'visible-client',companyId:'visible-company'}:null}};},selection,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,register,()=>{},update=>{rows=update(rows);},false,false);
     await revalidate(rows[0],true);
     if(page.includes('async function confirmReceiptItem(')) {
       const confirm=new Function('receiptBatchBusy','receiptBatchCreating','canCreatePagos','setReceiptBatchCreating','registerReceiptItem',emit(declaration('confirmReceiptItem'))+';return confirmReceiptItem;')(false,false,true,()=>{},register);await confirm(rows[0]);
@@ -65,26 +66,18 @@ test('UI distinguishes manual authorized catalog selection and exposes all serve
   assert(page.includes('Selecciona {label.toLowerCase()}'));assert(!page.includes('Identidad verificada por el servidor'));
   assert(!/candidates\s*\[\s*0\s*\]/.test(page));
 });
-test('Both legacy strong identities retain auto while name/manual identities require explicit registration',async()=>{
-  const policy=service.exports.receiptHasStrongAutomaticIdentity;assert.equal(typeof policy,'function');
-  const identity=(a,b)=>({status:'READY',verifiedMatches:{client:{id:'client',name:'Client',evidence:a},company:{id:'company',name:'Company',evidence:b}},createPayload:{clienteId:'client',companyId:'company'}});
-  const strong=identity(['RFC_EXACT'],['FULL_ACCOUNT_EXACT']),name=identity(['NORMALIZED_NAME_EXACT'],['NORMALIZED_NAME_EXACT']),manual=identity(['RFC_EXACT','USER_SELECTED_AUTHORIZED_CATALOG_ENTRY'],['FULL_ACCOUNT_EXACT']);
-  assert.equal(policy(strong),true);assert.equal(policy(identity(['FULL_ACCOUNT_EXACT'],['RFC_EXACT'])),true);assert.equal(policy(name),false);assert.equal(policy(manual),false);assert.equal(policy(identity(['RFC_EXACT'],['NORMALIZED_NAME_EXACT'])),false);assert.equal(policy(undefined),false);
-  const legacy={status:'READY',evidence:{client:['RFC_EXACT'],company:['FULL_ACCOUNT_EXACT']},createPayload:{clienteId:'client',companyId:'company'}};
-  assert.equal(policy(legacy),true,'LIVE6e0 legacy evidence must retain strong auto');
-  assert.equal(policy({...legacy,evidence:{client:['NORMALIZED_NAME_EXACT'],company:['NORMALIZED_NAME_EXACT']}}),false);
-  assert.equal(policy({...legacy,evidence:{client:['RFC_EXACT','USER_SELECTED_AUTHORIZED_CATALOG_ENTRY'],company:['FULL_ACCOUNT_EXACT']}}),false);
-  assert.equal(policy({...legacy,evidence:{client:['RFC_EXACT','USER_SELECTED_VERIFIED_CANDIDATE'],company:['FULL_ACCOUNT_EXACT']}}),false);
-  assert.equal(policy({...legacy,createPayload:{clienteId:'client'}}),false);
-  for(const verifiedMatches of [undefined,null,{}, {client:{id:'client',evidence:['RFC_EXACT']},company:null}])assert.equal(policy({...legacy,verifiedMatches}),false,'Present but incomplete matches must not fall back to legacy evidence');
-  const worker=declaration('worker');const hasBaselineAuto=worker.includes('registerReceiptItem(analyzed)');
-  for(const [identification,expected] of [[strong,hasBaselineAuto?1:0],[name,0],[manual,0]]) {
-    let registered=0,rows=[];
-    const fn=new Function('item','parsePagoReceiptPdfFile','receiptHasStrongAutomaticIdentity','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchItems','findUniqueReceiptCatalogMatch','clientes','companies','let cursor=0;const queue=[item];'+emit(worker)+';return worker();');
-    await fn({key:'r',file:{},operationTypeKey:'op'},async()=>({identification}),policy,service.exports.receiptCanResumeRegisteredUpload,()=>({}),async()=>{registered++;},update=>{rows=update(rows);},()=>null,[],[]);
+test('Drop worker automatically registers only canonical READY, including unique name, and preserves recovery',async()=>{
+  const id='a'.repeat(64),payload={receiptIdentificationId:id,operationTypeKey:'op',clienteId:'client',companyId:'company'};
+  const strong={id,status:'READY',reasons:[],evidence:{client:['RFC_EXACT'],company:['FULL_ACCOUNT_EXACT']},createPayload:payload};
+  const name={...strong,verifiedMatches:{client:{id:'client',name:'Client',evidence:['NORMALIZED_NAME_EXACT']},company:{id:'company',name:'Company',evidence:['NORMALIZED_NAME_EXACT']}}};
+  for(const [identification,expected] of [[strong,1],[name,1],[{...name,status:'REQUIRES_REVIEW',reasons:['CLIENT_MULTIPLE_CANDIDATES'],createPayload:null},0],[{...name,id:'browser'},0],[{...name,createPayload:{...payload,clienteId:''}},0],[{...name,createPayload:{...payload,companyId:undefined}},0],[{...name,reasons:['DATE_REQUIRES_REVIEW']},0],[{status:'REGISTERED',receiptPending:true,pagoId:'existing'},1],[{status:'REGISTERED',receiptPending:false,pagoId:'existing'},0]]) {
+    let registered=0;
+    const fn=new Function('item','receiptResolvedOperationTypeKey','receiptTypeChoices','parsePagoReceiptPdfFile','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchItems','findUniqueReceiptCatalogMatch','clientes','companies','let cursor=0;const queue=[item];'+emit(declaration('worker'))+';return worker();');
+    await fn({key:'r',file:{},operationTypeKey:'op'},service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],async()=>({identification}),service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,async()=>{registered++;},()=>{},()=>null,[],[]);
     assert.equal(registered,expected);
   }
 });
+
 test('Actual registered receipt recovery only uploads to the server payment and never creates a payment',async()=>{
   for(const identification of [
     {status:'REGISTERED',receiptPending:true,pagoId:'server-existing-payment',createPayload:null},
@@ -95,8 +88,8 @@ test('Actual registered receipt recovery only uploads to the server payment and 
     {status:'READY',receiptPending:true,pagoId:'server-existing-payment',createPayload:null}
   ]) {
     let creates=0;const uploads=[],rows=[{key:'r',file:{},parsed:{identification}}];
-    const fn=new Function('uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
-      async input=>{uploads.push(input.pagoId);},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async()=>{creates++;return 'unexpected-new-payment';},()=>{throw Error('UNEXPECTED_PARSE');},update=>{update(rows);});
+    const fn=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],      async input=>{uploads.push(input.pagoId);},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async()=>{creates++;return 'unexpected-new-payment';},()=>{throw Error('UNEXPECTED_PARSE');},update=>{update(rows);});
     const ok=await fn(rows[0]);assert.equal(creates,0);const valid=identification.status==='REGISTERED'&&identification.receiptPending===true&&identification.pagoId==='server-existing-payment';assert.deepEqual(uploads,valid?['server-existing-payment']:[]);assert.equal(ok,valid);
   }
 });
@@ -109,10 +102,10 @@ test('Registered partial receipts can explicitly revalidate visible IDs; only fr
   assert(page.includes('item.status === "DUPLICATE" && receiptCanReviewRegisteredIdentity(parsed.identification)'));
   for(const pending of [true,false]){
     let rows=[{key:'r',file:{},operationTypeKey:'op',parsed:{identification:first}}],creates=0,request;const uploads=[];
-    const register=new Function('uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
-      async input=>{uploads.push(input.pagoId);},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async()=>{creates++;return 'unexpected-new';},()=>{throw Error('UNEXPECTED_PARSE');},update=>{rows=update(rows);});
-    const revalidate=new Function('parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
-      async(_file,options)=>{request=options;return{identification:{...first,receiptPending:pending}};},service.exports.receiptIdentitySelections,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,register,()=>{},update=>{rows=update(rows);},false,false);
+    const register=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','uploadPagoDoc','automaticReceiptPayload','receiptCanResumeRegisteredUpload','createPagoWithReceipt','parsePagoReceiptPdfFile','setReceiptBatchItems',emit(declaration('registerReceiptItem'))+';return registerReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],      async input=>{uploads.push(input.pagoId);},automaticModule.exports.automaticReceiptPayload,service.exports.receiptCanResumeRegisteredUpload,async()=>{creates++;return 'unexpected-new';},()=>{throw Error('UNEXPECTED_PARSE');},update=>{rows=update(rows);});
+    const revalidate=new Function('receiptResolvedOperationTypeKey','receiptTypeChoices','parsePagoReceiptPdfFile','receiptIdentitySelections','receiptCanResumeRegisteredUpload','automaticReceiptPayload','registerReceiptItem','setReceiptBatchBusy','setReceiptBatchItems','receiptBatchBusy','receiptBatchCreating',emit(declaration('revalidateReceiptItem'))+';return revalidateReceiptItem;')(
+    service.exports.receiptResolvedOperationTypeKey,[{key:'op'}],      async(_file,options)=>{request=options;return{identification:{...first,receiptPending:pending}};},service.exports.receiptIdentitySelections,service.exports.receiptCanResumeRegisteredUpload,automaticModule.exports.automaticReceiptPayload,register,()=>{},update=>{rows=update(rows);},false,false);
     await revalidate(rows[0],true);
     if(page.includes('async function confirmReceiptItem(')){const confirm=new Function('receiptBatchBusy','receiptBatchCreating','canCreatePagos','setReceiptBatchCreating','registerReceiptItem',emit(declaration('confirmReceiptItem'))+';return confirmReceiptItem;')(false,false,true,()=>{},register);await confirm(rows[0]);}
     assert.equal(request.selectedClientId,'client');assert.equal(request.selectedCompanyId,'company');assert.equal(creates,0);assert.deepEqual(uploads,pending?['server-existing']:[]);
