@@ -1,6 +1,6 @@
 # Corrección de consultas operativas y confirmación documental
 
-Estado: backend O1 DEPLOYMENT_PENDING; interfaz documental IMPLEMENTED_VALIDATION_PENDING. Sin publicación ni autorización productiva para estos nuevos bytes. La respuesta del usuario no verifica el ciclo de aprendizaje: «parece que sí» no acredita guardado y relectura.
+Estado: backend O1 DEPLOYED_NOT_VERIFIED; interfaz documental DEPLOYMENT_PENDING en paquete independiente. O1 se publicó con la autorización específica del usuario y pasó la verificación técnica independiente. Falta repetir el recorrido funcional con su sesión. «Parece que sí» no acredita guardado y relectura documental.
 
 ## Fallos reproducidos
 
@@ -30,11 +30,13 @@ La UI documental exige acuse real del análisis, ID de corrección, siguiente ve
 - Política de autorización: PASS, sin cambios de roles ni reglas.
 - Build NORMAL final de `6ab526d` PASS y comparación exacta de los seis emisores con la fuente cerrada PASS. El build anterior con un emisor desactualizado fue rechazado, sin usarlo para acreditar el paquete final.
 - Receta de overlay sobre ZIP productivo chat `22cbdbd9`: seis módulos permitidos, resto preservado; artefacto final O1 probado y pendiente de autorización.
-- UI aislada de confirmación: fuente privada `28924fb` sobre la interfaz productiva `3b6602d`, sólo un componente de producto. Instalación propia cancelada deliberadamente para serializar carga; logs y archivos parciales preservados. No es un build aprobado ni una regresión de producto demostrada.
+- UI aislada de confirmación: fuente privada `28924fb` sobre `3b6602d`, sólo un componente. El primer intento se canceló para serializar carga, con logs/archivos parciales preservados; no se contó como aprobado. El build y runtime posteriores terminaron PASS, documentados en el paquete UI independiente.
 
 La publicación requerirá paquete exacto, pruebas del ZIP, bases productivas frescas, identidad y reversión. Las aprobaciones anteriores de aprendizaje personal no cubren estos artefactos. El backend y la UI pueden prepararse como paquetes independientes; ninguno se declara COMPLETED sin publicación y comprobación real.
 
-## Paquete O1 de backend listo para autorización
+La UI ya tiene artefacto aislado validado: [paquete documental independiente](e1-document-confirmation-ui-package.md), input `4f6a110d`, ZIP `39e00880`, fuente `28924fbb`; root cotejó hashes y ejecutó `assertRuntimeProof` sobre el recibo `292cf193`: PASS. Aún no se ha autorizado ni publicado esa interfaz. No se confundirá el backend O1 publicado con esa entrega de Hosting/SSR.
+
+## Identidad y pruebas del paquete O1 de backend
 
 Actualiza únicamente `sendAgent007Message`. No incluye Hosting/SSR, voz, otros endpoints, permisos, reglas, activación de aprendizaje ni operaciones financieras. Corrige la selección de solicitud/pago, nombres de clientes y método/importe; conserva el aprendizaje privado y orienta al panel documental ya existente. La confirmación visual documental nueva permanece fuera de este paquete.
 
@@ -58,3 +60,9 @@ Preflight GET PASS: revisión productiva `00024-noh`, configuración/Run/IAM sin
 Reversión autorizable: preservar fuente y configuración anteriores, revertir sólo `sendAgent007Message` al ZIP `22cbdbd9` si falla. No revertir lectores/review ni productor de recuerdos privados; no borrar recuerdos. La UI actual y el backend documental siguen intactos. No cambiar el input ni repetir una operación incierta sin reconciliar su recibo.
 
 Verificación productiva: fuente descargada exacta, ACTIVE/revisión, configuración/Run/IAM, gate supervisado OFF y rechazo anónimo. Después, con sesión propia, repetir la consulta de última solicitud (nombre, PPD/PUE y monto), consultar último pago y preguntar de qué cliente, volver a solicitud y preguntar dónde leer un comprobante. No compartir importes ni documentos. Estado posterior a despliegue: DEPLOYED_NOT_VERIFIED hasta confirmar el recorrido real.
+
+## Publicación autorizada O1 — 20 de octubre de 2026
+
+Ejecutor scoped exit 0; revisión `sendagent007message-00025-gok` ACTIVE sobre base `00024-noh`. Verificación independiente PASS: ZIP descargado exacto `9f95197e`, configuración/Run/IAM preservados, gate supervisado OFF y HTTP 401 UNAUTHENTICATED para llamada sin sesión. No se consultaron datos de negocio, proveedores ni sesiones autenticadas. Fuente previa `22cbdbd9` preservada, sin reversión aplicada.
+
+Recibo independiente SHA `0dec35291d1c52d187b20935c1a506785e39fb0781ff0f46ce78b0575ffd152e`; baseline publicada SHA `d3ac299fb8b8129c727ef8562455a0e3d68908d436a824739138d75bb9ac223b`. Archivos privados dentro de `operational-identity-repair-release/independent-post-publication-44e09fb3-2237-4499-b828-b2116cc0fd9c`. Se pidió al usuario repetir el cambio de dominio y los nombres; respuesta pendiente. No se declara COMPLETED.

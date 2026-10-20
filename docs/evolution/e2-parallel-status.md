@@ -8,7 +8,7 @@ archivos modificados y no se escribe sobre ellos.
 
 | Frente | Trabajo concreto | Estado y próxima verificación |
 | --- | --- | --- |
-| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | Usuario confirmó cambio de cliente, PDF y saludo de R1.5: COMPLETED para ese recorrido. Módulos canónicos preservados en chat00024-noh/ZIP22cbdbd9; identidad/configuración/IAM verificados. Nuevo ciclo de correcciones pendiente de prueba real |
+| A | Diagnóstico del INTERNAL 500 y seguimiento del reporte de María | R1.5 conserva su verificación acotada de cambio de cliente/PDF/saludo. O1 publicado en chat00025-gok/ZIP9f95197e corrige consultas operativas y procedencia de nombres; verificación técnica PASS, nueva prueba funcional pendiente |
 | B | Voz | Delegación R1.1 publicada, sin verificación real de voz. R2 gateway pendiente de imagen/publicación. Correcciones de sesión f328eea integradas localmente, 62/62 pruebas; no publicadas ni presentadas como memoria durable |
 | C | Selección de cliente y reportes canónicos | R1.5 conserva los reportes canónicos y corrige continuidad del cliente; usuario confirmó cambio, descarga PDF y saludo en producción. Recorrido verificado COMPLETED; comparaciones/Excel y cobertura general no se certifican por esa prueba |
 | D | Aprendizaje supervisado e interacción | Aprendizaje personal publicado: lectores00003-faq/review00003-jur, chat00024-noh, productor00003-miz, Hosting22d8f9eff1f18abe/SSR00610-xed. Backend y UI independientes PASS. DOC parse00016-qoc/correct00005-qej y UI de revisión/corrección publicados. DEPLOYED_NOT_VERIFIED hasta ciclo autenticado; reglas globales OFF, voz local |
@@ -75,6 +75,8 @@ reconciliar esa decisión. Se conserva el trabajo local, sin sobrescribir la
 publicación externa ni su worktree.
 
 ## Límites de las pruebas
+
+O1 recibió autorización específica y ya está publicado como chat `00025-gok`, ZIP `9f95197e`: fuente/configuración/Run/IAM y HTTP401 sin sesión verificados independientemente, gate supervisado OFF. Recibo `0dec3529`, baseline `d3ac299f`; DEPLOYED_NOT_VERIFIED hasta prueba real de solicitud/pago/cliente/PPD-PUE/ubicación de comprobantes. La UI de confirmación documental terminó su paquete exacto separado `28924fbb`/ZIP `39e00880`/input `4f6a110d`, root revisó su proof `292cf193`; DEPLOYMENT_PENDING, aún sin autorización ni publicación. La nota de preparación O1 siguiente conserva el historial previo y queda sustituida por estas revisiones publicadas.
 
 Nueva evidencia funcional del usuario: confusión de solicitudes/pagos, bancos presentados al pedir clientes y confirmación documental incierta. No verifica aprendizaje ni se considera resuelto en producción. [Reparación O1](e1-operational-identity-repair.md): backend `6ab526d`/ZIP `9f95197e`/input `0e95643a`, DEPLOYMENT_PENDING; 14 pruebas de diálogo/formato, 66 regresiones seleccionadas y ocho de persistencia real del ZIP PASS. Build NORMAL final, seis emisores exactos y siete pruebas de frontera PASS; verificador canónico y preflight sin deriva PASS. Conserva 792 archivos y el resumen de comprobante exclusivo de producción. Dos fallos heredados universales fuera del flujo siguen declarados. UI documental `65accf` (12 pruebas y Next47 PASS) se prepara en paquete independiente; su build aislado `28924fb` sigue en curso, sin publicación. A/C requieren esta corrección adicional; D continúa DEPLOYED_NOT_VERIFIED; B local, E/G navegación verificada, F/H/I pendientes funcionales, J sin envíos y K con control de artefactos.
 
