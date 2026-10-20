@@ -1,0 +1,194 @@
+diff --git a/src/modules/pagos/receiptIdentificationDomain.ts b/src/modules/pagos/receiptIdentificationDomain.ts
+index 99f95f9..490a4d2 100644
+--- a/src/modules/pagos/receiptIdentificationDomain.ts
++++ b/src/modules/pagos/receiptIdentificationDomain.ts
+@@ -20,23 +20,48 @@ const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonS
+ const rfcs = (item: ReceiptCatalogItem) => [item.rfc, item.RFC, item.taxId, item.taxID].map(rfc).filter(validRfc);
+ const accounts = (item: ReceiptCatalogItem) => [item.clabe, item.CLABE, item.bankClabe, item.cuenta, item.account, item.accountNumber, ...(Array.isArray(item.depositClabes) ? item.depositClabes : [])].map(fullReceiptAccount).filter(Boolean);
+ 
+-/** No fuzzy scores or suffix account matches authorize a financial creation. */
+-export function matchReceiptIdentity(items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }): IdentityMatch {
++type IdentitySignals = { name?: string; rfc?: string; account?: string };
++type IdentityOptions = { party?: "CLIENT" | "COMPANY" };
++function assessIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, options: IdentityOptions) {
+   const wantedName = normalizeReceiptName(signals.name), wantedRfc = rfc(signals.rfc), wantedAccount = fullReceiptAccount(signals.account);
+-  const strong = items.filter(item => item.active !== false && item.isActive !== false).map(item => {
++  return items.filter(item => item.active !== false && item.isActive !== false).map(item => {
+     const itemRfcs = rfcs(item), itemAccounts = accounts(item);
+-    const rfcExact = validRfc(wantedRfc) && itemRfcs.includes(wantedRfc), accountExact = !!wantedAccount && itemAccounts.includes(wantedAccount);
++    const rfcExact = validRfc(wantedRfc) && itemRfcs.includes(wantedRfc);
++    const accountExact = !!wantedAccount && itemAccounts.includes(wantedAccount);
+     const nameExact = !!wantedName && names(item).includes(wantedName);
+-    const conflict = (validRfc(wantedRfc) && itemRfcs.length > 0 && !rfcExact) || (!!wantedAccount && itemAccounts.length > 0 && !accountExact);
+-    return { id: item.id, rfcExact, accountExact, nameExact, conflict };
+-  }).filter(item => item.rfcExact || item.accountExact);
+-  if (strong.some(item => item.conflict)) return { status: "REQUIRES_REVIEW", id: null, reasons: ["CONFLICTING_SIGNALS"], evidence: [], candidateCount: strong.length };
+-  if (strong.length > 1) return { status: "REQUIRES_REVIEW", id: null, reasons: ["MULTIPLE_CANDIDATES"], evidence: [], candidateCount: strong.length };
+-  const candidate = strong[0];
+-  if (!candidate) return { status: "REQUIRES_REVIEW", id: null, reasons: [wantedAccount || validRfc(wantedRfc) ? "NO_CANDIDATE" : "INSUFFICIENT_IDENTITY_SIGNALS"], evidence: [], candidateCount: 0 };
+-  const evidence = [candidate.rfcExact ? "RFC_EXACT" : "", candidate.accountExact ? "FULL_ACCOUNT_EXACT" : "", candidate.nameExact ? "NORMALIZED_NAME_EXACT" : ""].filter(Boolean);
+-  if (!candidate.nameExact && !(candidate.rfcExact && candidate.accountExact)) return { status: "REQUIRES_REVIEW", id: null, reasons: ["IDENTITY_NOT_CORROBORATED"], evidence, candidateCount: 1 };
+-  return { status: "EXACT", id: candidate.id, reasons: [], evidence, candidateCount: 1 };
++    // The ordering party may pay on behalf of a different client.
++    const conflict = (validRfc(wantedRfc) && itemRfcs.length > 0 && !rfcExact) ||
++      (options.party !== "CLIENT" && !!wantedAccount && itemAccounts.length > 0 && !accountExact);
++    const evidence = [rfcExact ? "RFC_EXACT" : "", accountExact ? "FULL_ACCOUNT_EXACT" : "", nameExact ? "NORMALIZED_NAME_EXACT" : ""].filter(Boolean);
++    return { item, rfcExact, accountExact, nameExact, conflict, evidence };
++  });
++}
++
++/** Exact names can identify; missing metadata is not contradictory evidence. */
++export function matchReceiptIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, options: IdentityOptions = {}): IdentityMatch {
++  const assessed = assessIdentity(items, signals, options);
++  const named = assessed.filter(row => row.nameExact);
++  const strong = assessed.filter(row => row.rfcExact || row.accountExact);
++  const candidates = named.length ? named : strong;
++  const review = (reason: string, evidence: string[] = []): IdentityMatch => ({ status: "REQUIRES_REVIEW", id: null, reasons: [reason], evidence, candidateCount: candidates.length });
++  if (candidates.some(row => row.conflict)) return review("CONFLICTING_SIGNALS");
++  if (candidates.length > 1) return review("MULTIPLE_CANDIDATES");
++  const candidate = candidates[0];
++  if (!candidate) return review("INSUFFICIENT_IDENTITY_SIGNALS");
++  if (candidate.conflict || (named.length && strong.some(row => row.item.id !== candidate.item.id && (options.party !== "CLIENT" || row.rfcExact)))) return review("CONFLICTING_SIGNALS", candidate.evidence);
++  if (!candidate.nameExact && !(candidate.rfcExact && candidate.accountExact)) return review("IDENTITY_NOT_CORROBORATED", candidate.evidence);
++  return { status: "EXACT", id: candidate.item.id, reasons: [], evidence: candidate.evidence, candidateCount: 1 };
++}
++
++/** Caller supplies only the active, authorized catalog. A human choice is not OCR proof. */
++export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, selectedId?: string, options: IdentityOptions = {}) {
++  const assessed = assessIdentity(items, signals, options);
++  const automatic = matchReceiptIdentity(items, signals, options);
++  const candidates = [...assessed].sort((a, b) => Number(b.nameExact) - Number(a.nameExact) || Number(b.rfcExact) - Number(a.rfcExact) || a.item.id.localeCompare(b.item.id)).map(row => row.item);
++  if (!selectedId) return { match: automatic, candidates };
++  const selected = assessed.find(row => row.item.id === selectedId);
++  if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
++  return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };
+ }
+ 
+ export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {
+diff --git a/src/modules/pagos/receiptIdentification.ts b/src/modules/pagos/receiptIdentification.ts
+index 079dcbe..1450057 100644
+--- a/src/modules/pagos/receiptIdentification.ts
++++ b/src/modules/pagos/receiptIdentification.ts
+@@ -1,9 +1,9 @@
+ import { createHash } from "node:crypto";
+-import { getReceiptActorCorrectionState } from "./receiptLearning";
+ import { FieldValue, type Firestore, type DocumentSnapshot } from "firebase-admin/firestore";
+ import { HttpsError } from "firebase-functions/v2/https";
+ import { requireClientOperationalAccess } from "../clientDelegations/access";
+-import { matchReceiptIdentity, normalizeReceiptReference, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
++import { getReceiptActorCorrectionState } from "./receiptLearning";
++import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
+ 
+ type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
+ const clean = (value: unknown) => String(value ?? "").trim();
+@@ -12,6 +12,10 @@ export type ReceiptIdentificationResult = {
+   reasons: string[]; evidence: { client: string[]; company: string[] };
+   createPayload: Record<string, any> | null; pagoId: string | null;
+   receiptPending?: boolean;
++  verifiedMatches?: { client: ReceiptIdentityOption | null; company: ReceiptIdentityOption | null };
++  candidates?: { client: ReceiptIdentityOption[]; company: ReceiptIdentityOption[] };
++};
++type ReceiptIdentityOption = { id: string; name: string; despachoId?: string; evidence: string[]
+ };
+ 
+ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatalogItem) {
+@@ -29,7 +33,7 @@ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatal
+ }
+ 
+ /** Called only with bytes and parsed signals obtained by the server parser. */
+-export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown>; correctionVersion?: number }): Promise<ReceiptIdentificationResult> {
++export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown>; selectedClientId?: string; selectedCompanyId?: string; correctionVersion?: number }): Promise<ReceiptIdentificationResult> {
+   const { db, actor, receipt } = input;
+   const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
+   if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
+@@ -39,17 +43,39 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+     db.collection("clients").where("rootId", "==", actor.rootId).limit(501).get(),
+     db.collection("companies").where("rootId", "==", actor.rootId).limit(501).get(),
+   ]);
+-  const clientMatch = matchReceiptIdentity(clients.docs.map(doc => ({ ...doc.data(), id: doc.id })), { name: receipt.senderName, rfc: receipt.payerRfc, account: receipt.account });
+-  const companyMatch = matchReceiptIdentity(companies.docs.map(doc => ({ ...doc.data(), id: doc.id })), { name: receipt.beneficiaryName, rfc: receipt.beneficiaryRfc, account: receipt.destinationAccount });
++  const clientItems: ReceiptCatalogItem[] = clients.docs.map(doc => ({ ...doc.data(), id: doc.id }));
++  const companyItems: ReceiptCatalogItem[] = companies.docs.map(doc => ({ ...doc.data(), id: doc.id }));
++  const clientSignals = { name: receipt.senderName, rfc: receipt.payerRfc, account: receipt.account };
++  const companySignals = { name: receipt.beneficiaryName, rfc: receipt.beneficiaryRfc, account: receipt.destinationAccount };
++  // Authorize the entire offered catalog before either matching or exposing names.
++  const authorizedClients: ReceiptCatalogItem[] = [];
++  for (const candidate of clientItems) {
++    if (candidate.rootId !== actor.rootId || candidate.active === false || candidate.isActive === false) continue;
++    try {
++      await requireClientOperationalAccess({ ...actor, clientId: candidate.id, client: candidate, permission: "operatePagos" });
++      authorizedClients.push(candidate);
++    } catch (error: any) { if (error?.code !== "permission-denied") throw error; }
++  }
++  const authorizedCompanies: ReceiptCatalogItem[] = [];
++  for (const candidate of companyItems) {
++    if (candidate.isActive !== false && await allowedCompany(db, actor, candidate)) authorizedCompanies.push(candidate);
++  }
++  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, clean(input.selectedClientId), { party: "CLIENT" });
++  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, clean(input.selectedCompanyId), { party: "COMPANY" });
++  const clientMatch = clientSelection.match, companyMatch = companySelection.match;
+   const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
+   if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
+-  const client = clients.docs.find(doc => doc.id === clientMatch.id), companyDoc = companies.docs.find(doc => doc.id === companyMatch.id);
+-  const company = companyDoc ? { ...companyDoc.data(), id: companyDoc.id } as ReceiptCatalogItem : null;
+-  if (client) {
+-    try { await requireClientOperationalAccess({ ...actor, clientId: client.id, client: client.data(), permission: "operatePagos" }); }
+-    catch (error: any) { if (error?.code !== "permission-denied") throw error; reasons.push("CLIENT_ACCESS_REQUIRES_REVIEW"); }
+-  }
+-  if (company && !await allowedCompany(db, actor, company)) reasons.push("COMPANY_ACCESS_REQUIRES_REVIEW");
++  const client = authorizedClients.find(item => item.id === clientMatch.id);
++  const company = authorizedCompanies.find(item => item.id === companyMatch.id);
++  if (clientMatch.id && !client) reasons.push("CLIENT_ACCESS_REQUIRES_REVIEW");
++  if (companyMatch.id && !company) reasons.push("COMPANY_ACCESS_REQUIRES_REVIEW");
++  const option = (item: ReceiptCatalogItem, kind: "client" | "company"): ReceiptIdentityOption => ({
++    id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.displayName),
++    ...(kind === "company" ? { despachoId: clean(item.despachoId) } : {}),
++    evidence: [...new Set(["AUTHORIZED_CATALOG_ENTRY", ...(kind === "client" && clientMatch.id === item.id ? clientMatch.evidence : kind === "company" && companyMatch.id === item.id ? companyMatch.evidence : matchReceiptIdentity([item], kind === "client" ? clientSignals : companySignals, { party: kind === "client" ? "CLIENT" : "COMPANY" }).evidence)])],
++  });
++  const candidates = { client: clientSelection.candidates.map(item => option(item, "client")), company: companySelection.candidates.map(item => option(item, "company")) };
++  const verifiedMatches = { client: client ? option(client, "client") : null, company: company ? option(company, "company") : null };
+   if (operationTypeKey) {
+     const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();
+     if (!operation.exists || operation.get("active") === false) reasons.push("OPERATION_TYPE_REQUIRES_REVIEW");
+@@ -88,16 +114,16 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+         pago?.get("operationTypeKey") === existing.get("createPayload.operationTypeKey") &&
+         (!operationTypeKey || pago?.get("operationTypeKey") === operationTypeKey);
+       return { id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
+-        createPayload: null, pagoId: pagoId || null, receiptPending: !!receiptPending };
++        verifiedMatches, candidates, createPayload: null, pagoId: pagoId || null, receiptPending: !!receiptPending };
+     }
+     const status = ready ? "READY" : "REQUIRES_REVIEW";
+     tx.set(ref, { schemaVersion: 1, rootId: actor.rootId, actorUid: actor.uid, source: "RECEIPT", contentSha256: input.contentSha256,
+-      status, reasons, evidence, createPayload, stage: ready ? "IDENTIFIED" : "REQUIRES_REVIEW",
++      status, reasons, evidence, verifiedMatches, candidates, correctionVersion: input.correctionVersion ?? 0, createPayload, stage: ready ? "IDENTIFIED" : "REQUIRES_REVIEW",
+       analysisId: clean(input.analysisId) || null, readerVersion: clean(input.readerVersion) || null,
+       updatedAt: FieldValue.serverTimestamp(), ...(!existing.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+       attempts: FieldValue.increment(1), metricDetected: true, metricIdentifiedAutomatically: ready, metricRequiresReview: !ready,
+     }, { merge: true });
+-    return { id, status, reasons, evidence, createPayload, pagoId: null };
++    return { id, status, reasons, evidence, verifiedMatches, candidates, createPayload, pagoId: null };
+   });
+ }
+ 
+diff --git a/src/modules/pagos/receiptPdfCallables.ts b/src/modules/pagos/receiptPdfCallables.ts
+index 8920907..570f167 100644
+--- a/src/modules/pagos/receiptPdfCallables.ts
++++ b/src/modules/pagos/receiptPdfCallables.ts
+@@ -823,7 +823,7 @@ export const parsePagoReceiptPdf = onCall(
+       actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
+       receipt, contentSha256, operationTypeKey: clean(data.operationTypeKey), analysisId,
+       readerVersion: RECEIPT_READER_VERSION, semanticReceipt, correctionVersion,
+-      
++      selectedClientId: clean(data.selectedClientId), selectedCompanyId: clean(data.selectedCompanyId),
+     });
+     const learningContext = await retrieveReceiptLearningContext(rootId, latestAnalysis.get("semanticReceipt") || semanticReceipt, semanticReceipt);
+ 
+@@ -910,7 +910,7 @@ export const correctPagoReceiptSemanticField = onCall(
+       actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
+       receipt, semanticReceipt, contentSha256: clean(latestAnalysis.get("contentSha256")), analysisId,
+       readerVersion: clean(latestAnalysis.get("readerVersion")), correctionVersion,
+-      operationTypeKey: clean(request.data?.operationTypeKey), 
++      operationTypeKey: clean(request.data?.operationTypeKey), selectedClientId: clean(request.data?.selectedClientId), selectedCompanyId: clean(request.data?.selectedCompanyId),
+     });
+     return { ok: true, receipt, semanticReceipt, identification, correctionVersion, analysisId, correctionId, observationId: observationRef.id, memoryId: memoryRef.id, patternKey: pattern.key, learningContext,
+       finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" } };
