@@ -43,8 +43,8 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     db.collection("clients").where("rootId", "==", actor.rootId).limit(501).get(),
     db.collection("companies").where("rootId", "==", actor.rootId).limit(501).get(),
   ]);
-  const clientItems = clients.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-  const companyItems = companies.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+  const clientItems: ReceiptCatalogItem[] = clients.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+  const companyItems: ReceiptCatalogItem[] = companies.docs.map(doc => ({ ...doc.data(), id: doc.id }));
   const clientSignals = { name: receipt.senderName, rfc: receipt.payerRfc, account: receipt.account };
   const companySignals = { name: receipt.beneficiaryName, rfc: receipt.beneficiaryRfc, account: receipt.destinationAccount };
   // Authorize the entire offered catalog before either matching or exposing names.
