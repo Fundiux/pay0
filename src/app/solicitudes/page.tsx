@@ -1515,6 +1515,13 @@ export default function SolicitudesPage() {
           </div>
         </div>
       ) : null}
+      {isSuperAdmin(role) ? (
+        <div className="mb-3 flex justify-end">
+          <a href="/reportes#complementos-pago" className="rounded-xl border border-sky-400/30 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+            Proveedores y complementos de pago
+          </a>
+        </div>
+      ) : null}
       <header className="mb-2 grid min-w-0 grid-cols-1 gap-1.5 2xl:grid-cols-[380px_minmax(0,1fr)_auto] 2xl:items-center">
         <div className="relative w-full min-w-0 2xl:w-[380px]">
           <Search className="absolute left-3 top-2.5 text-slate-500" size={14} />
