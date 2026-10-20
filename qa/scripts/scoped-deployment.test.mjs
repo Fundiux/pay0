@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceOnlyPatch, assertRuntimePreserved, previousSource, assertOperationMatchesGet, DEPLOYMENT_GROUPS, deploymentScope, assertArtifactProof, assertUploadSource, assertOperationScope, assertRunRuntimePreserved, assertPreservedSource } from '../../scripts/deploy-scoped-functions.mjs';
+import { sourceOnlyPatch, assertRuntimePreserved, previousSource, assertOperationMatchesGet, DEPLOYMENT_GROUPS, deploymentScope, assertArtifactProof, assertUploadSource, assertOperationScope, assertRunRuntimePreserved, assertPreservedSource, validateSourceIdentity } from '../../scripts/deploy-scoped-functions.mjs';
 import { createHash } from 'node:crypto';
 import { digest } from '../../scripts/capture-production-baseline.mjs';
 const resource = () => ({ name: 'projects/pay-0-system/locations/us-central1/functions/parsePagoReceiptPdf', state: 'ACTIVE',
@@ -9,6 +9,28 @@ const resource = () => ({ name: 'projects/pay-0-system/locations/us-central1/fun
   serviceConfig: { service: 'projects/pay-0-system/locations/us-central1/services/parsepagoreceiptpdf', revision: 'previous', uri: 'https://example.invalid',
     environmentVariables: { SECRET_TEST: 'retained-only-in-memory' }, maxInstanceCount: 4, availableMemory: '512Mi' } });
 const upload = { bucket: 'gcf-v2-uploads-751158244178.us-central1.cloudfunctions.appspot.com', object: 'generated/archive.zip', generation: '234' };
+
+test('learning overlays require exact endpoint sets and pinned overlay provenance', () => {
+  const commit = 'a'.repeat(40);
+  const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'b'.repeat(64), patchSha256: 'c'.repeat(64), patchCommit: commit };
+  for (const [group, functions] of [
+    ['receipt-learning-overlay', ['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']],
+    ['conversation-correction-overlay', ['sendAgent007Message', 'createAgent007MemoryCandidate', 'listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']],
+  ]) {
+    assert.deepEqual(deploymentScope({ group, functions }).names, functions);
+    assert.throws(() => deploymentScope({ group, functions: [...functions, 'createPago'] }));
+    assert.throws(() => deploymentScope({ group, functions: functions.slice(1) }));
+    assert.throws(() => validateSourceIdentity(undefined, group, commit), /OVERLAY_IDENTITY_REQUIRED/);
+    assert.doesNotThrow(() => validateSourceIdentity(identity, group, commit));
+    assert.throws(() => validateSourceIdentity({ ...identity, patchCommit: 'd'.repeat(40) }, group, commit), /OVERLAY_PATCH_COMMIT/);
+    const before = resource();
+    before.name = before.name.replace('parsePagoReceiptPdf', functions[0]);
+    before.buildConfig.entryPoint = functions[0];
+    const patch = sourceOnlyPatch(before, upload, commit, 'e'.repeat(64), group, identity);
+    assert.deepEqual(Object.keys(patch.buildConfig), ['source']);
+    assert.equal(patch.labels['pay0-source-mode'], 'production-overlay-v1');
+  }
+});
 test('patch changes only source and additive provenance labels without copying environment', () => {
   const before = resource();
   const patch = sourceOnlyPatch(before, upload, 'a'.repeat(40), 'b'.repeat(64));

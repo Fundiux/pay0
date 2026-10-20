@@ -11,6 +11,8 @@ import { PROJECT, REGION, tokenInMemory, getMetadata, digest } from './capture-p
 
 export const DEPLOYMENT_GROUPS = Object.freeze({
   receipts: Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
+  'receipt-learning-overlay': Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
+  'conversation-correction-overlay': Object.freeze(['sendAgent007Message', 'createAgent007MemoryCandidate', 'listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']),
   'receipt-workflow': Object.freeze(['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
   'engineering-action': Object.freeze(['reconcileAgent007RecommendationsNow']),
@@ -25,7 +27,7 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
   'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
 });
-const OVERLAY_GROUPS = Object.freeze(['hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['receipt-learning-overlay', 'conversation-correction-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
 export function artifactProbeContract(group) {
   if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
