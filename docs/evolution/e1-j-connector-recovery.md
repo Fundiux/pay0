@@ -2,6 +2,18 @@
 
 Estado: **INCOMPLETE**; fuente recuperada en cuarentena, sin activar. Búsqueda dirigida de rutas y código, sin restaurar worktrees, instalar paquetes, cargar el módulo ni ejecutar WhatsApp. No se abrieron `.env`, credenciales, sesiones ni logs.
 
+## Revalidación dirigida del 20 de octubre
+
+El bloqueo de autoridad continúa en los recursos concretos revisados. `enqueueWhatsAppConnectorCommand` acredita al solicitante mediante `requireSuperadminUser`, fija su `rootId` y `requestedByUid`, pero dirige ambos comandos a `connectorId: "default"`. Para `SYNC_CHATS` comprueba el estado `CONNECTED`; no acredita que la sesión WhatsApp pertenezca a ese usuario o raíz. El consumidor obtiene `CONNECTOR_ID` y `AUTH_CLIENT_ID` de configuración local y su propio heartbeat escribe esos identificadores en el documento del conector. Ese estado autodeclarado no constituye un registro servidor autorizado de propiedad de sesión.
+
+Se repitió únicamente la caracterización de `syncChatsOnce` extraída por AST, con Firestore fake y WhatsApp stub: **tres fallos reproducidos**, chat nuevo sin raíz, desactivación de un chat sintético de otra raíz y pruning filtrado sólo por conector. Evidencia privada nueva: `.firebase/modular-release/whatsapp-connector-recovery/baseline-contract-probe-recheck-20261020.json`; la evidencia anterior se conserva. `node --check` del consumidor preservado pasa; no se cargó su entrypoint, no se inició el worker ni se abrió una sesión.
+
+No se implementó un parche que tomara el root del payload, del último comando, del primer chat o de un nuevo valor de entorno. La recuperación permanece cerrada mediante cuarentena y ausencia de activación; esto **no** significa que el consumidor histórico esté corregido. Se conservan intactas las capacidades de envío, `SYNC_CHATS`, `NEW_QR`, heartbeat y los bytes recuperados. No se borraron sesiones, locks ni comandos.
+
+La entrega ejecutable sigue pendiente de identificar un vínculo servidor verificable entre sesión, conector, usuario y raíz, con autoridad explícita de registro/revocación, y de acordar el mapeo de chats históricos sin raíz. Después podrá aplicarse el mismo vínculo a sync inicial, timer, comandos, escrituras, colisiones y pruning, con los negativos offline ya especificados. Esta revisión no consultó datos ni metadatos productivos y no acredita la ubicación o versión de un worker activo.
+
+Identidades de esta revalidación: productor fuente SHA256 `842ec708d0fae7f3636337f52bef7e8841a09ed9e4884414ce0c6e75faede53e`; consumidor recuperado `d413df48bc2ff218f655915ac1497a0a36a3029f9ee593f0ec3cfa8ac7f31c8c`; prueba offline `cd025fe6432bac899c5725ade7a91db477b67a53d1b4640c93ca4801a0b11303`. Son identidades locales de código y fixtures, no versiones productivas verificadas.
+
 El productor existente `functions/src/modules/documentDelivery/whatsappQrCallables.ts` usa `enqueueWhatsAppConnectorCommand` para escribir `SYNC_CHATS` y `NEW_QR` en `whatsappQrConnectorCommands`. Se encontró su consumidor en `__untracked_archive/tools/whatsapp-qr-connector/connector.cjs`: `processConnectorCommandsOnce` (línea 918), consulta (925), ramas `SYNC_CHATS` (997) y `NEW_QR` (1039), `startControlPolling` (1157) y heartbeat (841). El `package.json` declara `node connector.cjs`. La ubicación activa `tools/whatsapp-qr-connector` sólo contiene un directorio de sesión, que no se inspeccionó.
 
 ## Preservación exacta
