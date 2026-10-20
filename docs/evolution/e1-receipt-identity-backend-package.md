@@ -1,6 +1,6 @@
 ﻿# Identidad documental: backend de registro
 
-Estado: LOCAL_VALIDATED_CANONICAL_PENDING. Artefacto provisional; sin input listo, autorización ni publicación. La fuente final incluye una corrección de tipado pendiente de identificación definitiva. No confundir con el paquete de registro anterior ya publicado.
+Estado: DEPLOYMENT_PENDING. Artefacto provisional; Paquete exacto listo para autorización específica; sin publicación. La fuente final incluye una corrección de tipado pendiente de identificación definitiva. No confundir con el paquete de registro anterior ya publicado.
 
 ## Superficie y compatibilidad
 
@@ -16,7 +16,7 @@ La UI publicada SSR00612/ZIP39e no envía estas selecciones documentales. El bac
 
 `qa/scripts/receipt-identity-startup.cjs` carga package.main, comprueba354 exports/352 referencias originales y dos rechazos anónimos, con red bloqueada antes de importar. La copia privada de dependencias certificadas y sus pruebas de rutas/cierre son evidencia adicional; no sustituyen el npm ci literal del verificador canónico.
 
-Pendientes antes de DEPLOYMENT_PENDING: fuente final/build NORMAL, patch final y reproducción; pruebas exactas de selección/autorización y regresiones de P3/importes, startup, verificador canónico literal, input con procedencia final y preflight GET fresco. Sin datos productivos ni proveedores.
+Las comprobaciones backend requeridas están terminadas. Falta autorización específica antes de cualquier despliegue y prueba funcional autenticada posterior. La entrega Hosting es independiente y deberá verificar su contrato contra esta API. No se usaron datos productivos ni proveedores.
 
 ## Identidades locales
 
@@ -29,3 +29,15 @@ Arranque exacto PASS: 354 exports/endpoints, 352 referencias preservadas, dos re
 Package.main real y Firestore demo PASS, launcher exit0 y emulador cerrado: nombres sin RFC/cuenta llegan READY; desconocidos requieren selección autorizada de ambos; opciones ajenas/inactivas son rechazadas; cambio tras auto y corrección conservan IDs seleccionados. Se conservan 33 comprobaciones documentales, ocho casos monetarios, migración P3, correcciones/versiones privadas y flags false. Cero proveedores o escrituras financieras. Proof `ded7ff27b44c8365fa0104095cdfb6b28692662c4335fcb4498d17d78c26e49e`.
 
 Limitación de métrica heredada: metricIdentifiedAutomatically cuenta READY también cuando la elección fue manual; no es una medida fiable de automatismo. La evidencia distingue USER_SELECTED_AUTHORIZED_CATALOG_ENTRY y no afirma corroboración OCR. No se modifica esa métrica en este paquete. La evidencia fuente raíz es separada: NORMAL final PASS, identificación97 y creación33 PASS; el launcher PowerShell1 por stderr deprecación se conserva y no se presenta como exit0, mientras los scripts/emulador informaron0.
+
+## Input, canónico y preflight
+
+Commit de receta/patch/QA `061ea6c72e750a0712fc8009d1c679f14cb1c803`, sourceTree=null; origen de reglas `9f153b0903f06582c5a52ae16d03700520c9be19`. Input privado `receipt-identity-candidate-v2/release/input.json`, SHA `29dc108183025eafd60c09a448572d4134195ab35bd0962e294fd7ff3e387c41`. Base/rollback6e0 y patch completo aa760 anteriores. Baseline publicada `8fa3903aba4d64d86e0396d9dc1402048ee181df0759c7b107a60561c6e6ed49`. Destinos exclusivamente parsePagoReceiptPdf/correctPagoReceiptSemanticField; BUNDLED_V1, grupo receipt-learning-overlay.
+
+Verificador canónico inmutable PASS exit0: npm ci --omit=dev literal en runtime privado nuevo, 354 endpoints y dos denegaciones sin autenticación. Proof `002780c825e3876ccd2170dafb6afa1cd3178d0d602dfae9fd4b39b1b7cb4265`, archivo release/artifact-verification.json. Sin interceptar instalación; la reutilización adicional del startup anterior no sustituye este paso.
+
+Preflight GET 2026-10-20T18:46:11Z PASS, fuente descargada6e0, revisiones previas00017-wev/00006-jol, configuración/Run/IAM iguales a baseline, cero operaciones activas y cero lecturas de negocio/mutaciones. Proof `ac9f758c2e28d5946993f1e866cf468702e7c76aeb18228927ba79a56bc28a7e`, release/fresh-preflight-bb0614f2-7ac5-4d3d-9504-6b15eba797a3.json. El ejecutor debe repetir frescura antes de mutar; este recibo no autoriza publicación ni garantiza ausencia futura de drift.
+
+Reversión backend: restaurar sólo ambos destinos al ZIP6e0 y configuración/IAM previos conservados en baseline/recibos. No tocar datos, corregir flags, borrar análisis ni revertir chat/MEMORY. Si Hosting de selección ya está publicado, revertir primero esa UI a SSR00612 y luego ambos endpoints; si sólo backend está publicado, no requiere rollback Hosting. Conservar y reconciliar operaciones inciertas antes de reanudar; nunca repetir PATCH sin conocer su resultado.
+
+Límite de creación financiera: este paquete resuelve ausencia de RFC/cuenta y selección de catálogo autorizado. createPago permanece intacto y rechaza un RFC detectado presente que contradice al cliente/empresa mediante PAGO_RECEIPT_RFC_MISMATCH. Una selección puede producir identificación READY sin garantizar que la creación final sea aceptada. No se ofrece bypass de contradicciones, aceptación de mismatch ni éxito financiero por READY. La UI de selección sigue pendiente como paquete Hosting independiente; la autorización de este dossier sólo comprende dos Functions.
