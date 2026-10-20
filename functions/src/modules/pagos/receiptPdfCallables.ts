@@ -478,6 +478,9 @@ export async function extractVisionOcrText(buffer: Buffer, contentType: string, 
 }
 
 function extractReceiptAmount(lines: string[], text: string): string {
+  const nonTransferLabel = /\b(?:saldo|comision|iva|cargo por)\b/;
+  const transferLines = lines.filter((line, index) => !nonTransferLabel.test(normalize(line)) &&
+    !(index > 0 && nonTransferLabel.test(normalize(lines[index - 1])) && !/\d/.test(lines[index - 1])));
   const priorityPatterns: RegExp[] = [
     /importe\s+total\s+del?\s*deposito[^0-9]*\$?\s*([\d,.]+)/i,
     /importe\s+total\s+(?:mxp|mxn|m\.n\.)[^0-9]*\$?\s*([\d,.]+)/i,
@@ -487,7 +490,7 @@ function extractReceiptAmount(lines: string[], text: string): string {
     /cheques\s+otros\s+bancos[^0-9]*\$?\s*([\d,.]+)/i,
   ];
 
-  for (const lineRaw of lines) {
+  for (const lineRaw of transferLines) {
     const line = normalize(lineRaw);
 
     for (const pattern of priorityPatterns) {
@@ -498,15 +501,13 @@ function extractReceiptAmount(lines: string[], text: string): string {
     }
   }
 
-  const labelled = firstMatch(text, [
+  const labelled = firstMatch(transferLines.join("\n"), [
     /(?:importe|monto\s+(?:pagado|transferido|de\s+la\s+operacion)|monto|total)\s*[:$ ]+\s*(?:mxn|mxp|m\.n\.)?\s*\$?\s*([\d,.]+)/i,
   ]);
   if (labelled) return labelled;
   // A balance or bank fee is not the transfer amount. Accept a single monetary
   // suggestion, never the first of several different amounts.
-  const nonTransferLabel = /\b(?:saldo|comision|iva|cargo por)\b/;
-  const candidates = lines.filter((line, index) => !nonTransferLabel.test(normalize(line)) &&
-    !(index > 0 && nonTransferLabel.test(normalize(lines[index - 1])) && !/\d/.test(lines[index - 1])))
+  const candidates = transferLines
     .flatMap(line => [...line.matchAll(/\$\s*(\d[\d,.]*)/g)].map(match => match[1]));
   const values = [...new Set(candidates.map(parseMoney).filter(value => value > 0))];
   return values.length === 1 ? candidates.find(value => parseMoney(value) === values[0]) || "" : "";

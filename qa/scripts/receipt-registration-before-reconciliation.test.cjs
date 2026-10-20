@@ -7,6 +7,12 @@ class HttpsError extends Error{constructor(code,message){super(message);this.cod
 const unexpected=()=>{throw Error('UNEXPECTED_IDENTIFICATION_SIDE_EFFECT');};
 const identification=load('functions/src/modules/pagos/receiptIdentification.ts',{'node:crypto':require('node:crypto'),'firebase-admin/firestore':{FieldValue:{serverTimestamp:()=> 'SYNTHETIC_TIME'}},'firebase-functions/v2/https':{HttpsError},'../clientDelegations/access':{requireClientOperationalAccess:unexpected},'./receiptLearning':{getReceiptActorCorrectionState:unexpected},'./receiptIdentificationDomain':domain});
 const body=amount=>['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo',amount,'Fecha de operación: 2026-10-16','Referencia: DEMO1234','Estado: Pendiente'].join('\n');
+
+for (const label of ['Saldo total', 'Comisión total']) test(label+' cannot match the generic total amount label', () => {
+  const receipt=reader.parse(body(`${label}: $9999.00`));
+  assert.equal(receipt.amount,0);
+  assert(domain.receiptRegistrationReasons(receipt,'OP_DEMO').includes('INVALID_AMOUNT'));
+});
 test('valid unique amount and unconfirmed execution can be registered without falsifying either flag',()=>{
   const receipt=reader.parse(body('$100.00 MXN')),before=structuredClone(receipt);
   assert.equal(receipt.amount,100);assert.equal(receipt.amountVerified,false);assert.equal(receipt.executionConfirmed,false);
