@@ -76,6 +76,8 @@ publicación externa ni su worktree.
 
 ## Límites de las pruebas
 
+Paquete de aprendizaje personal listo, DEPLOYMENT_PENDING: [identidades, pruebas y reversión](e1-personal-learning-publication-package.md). Incluye lectores/review MEMORY, chat, productor privado y UI de correcciones/documentos; tres ZIP Functions verificados con dependencias productivas y preflights GET sin deriva, UI exacta con cinco rutas/componentes y dos overrides QA declarados PASS. Los ZIP MEMORY finales excluyen un archivo de entorno heredado; candidatos previos preservados como SUPERSEDED. VOICE `f328eea` quedó integrado localmente con 62/62 pruebas, fuera del paquete productivo.
+
 La extensión integrada `40bf096` añade notas personales CLIENT sin modificar el texto financiero ni el archivo canónico. Pasaron nueve pruebas de emulador, diez de ámbito, 69 regresiones, quince grupos UI y los builds Functions/Next (47 rutas). La certificación de los artefactos exactos de chat, memoria e interfaz continúa por separado; todavía no se han autorizado ni publicado esas nuevas capacidades.
 
 Los builds de frontend y Functions pasan. Las pruebas en emulador usan datos
