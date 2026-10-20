@@ -18,13 +18,14 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
   const [receipt, setReceipt] = useState<ParsedPagoReceipt | null>(null);
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState(""), [error, setError] = useState("");
+  const [confirmation, setConfirmation] = useState<{ field: ReceiptCorrectionField; value: string | number; version: number; reread: boolean } | null>(null);
   const alive = useRef(true), generation = useRef(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = (version: number) => alive.current && version === generation.current;
 
   function selectFile(next: File | null) {
     generation.current++;
-    setFile(next); setReceipt(null); setNotice(""); setError(""); setBusy(false); setEditing(false);
+    setFile(next); setReceipt(null); setConfirmation(null); setNotice(""); setError(""); setBusy(false); setEditing(false);
   }
 
   async function analyze() {
@@ -39,6 +40,13 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
       if (!result.semanticReceipt?.fields || typeof result.semanticReceipt.fields !== "object")
         throw new Error("La lectura no devolvió evidencia revisable. Intenta de nuevo.");
       setReceipt(result);
+      if (confirmation) {
+        const field = result.semanticReceipt.fields[confirmation.field];
+        const verified = Number.isSafeInteger(result.correctionVersion) && result.correctionVersion! >= confirmation.version &&
+          field?.provenance === "HUMAN_CORRECTION" && field.value === confirmation.value;
+        setConfirmation({ ...confirmation, reread: verified });
+        if (!verified) setError("La nueva lectura no confirmó la corrección anterior. Revisa el campo antes de continuar.");
+      }
       const restored = Object.values(result.semanticReceipt.fields).some(field => field?.provenance === "HUMAN_CORRECTION");
       setNotice(restored ? "Comprobante analizado. Se recuperaron tus correcciones guardadas para este documento." : "Comprobante analizado. Revisa lo que María entendió y corrige los campos que lo necesiten.");
     } catch (cause) {
@@ -55,12 +63,17 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
       const result = await correctPagoReceiptSemanticField({ analysisId: previous.analysisId!, field, correctedField,
         correctedValue: value, expectedCorrectionVersion: previous.correctionVersion });
       if (!current(version)) throw new Error("La sesión o el documento cambiaron. Vuelve a analizarlo.");
-      if (result.ok !== true || !result.semanticReceipt?.fields || !Number.isSafeInteger(result.correctionVersion))
+      const corrected = result.semanticReceipt?.fields?.[correctedField];
+      if (result.ok !== true || result.correctionVersion !== previous.correctionVersion! + 1 ||
+          typeof result.correctionId !== "string" || !result.correctionId ||
+          result.finalResult?.field !== correctedField || result.finalResult?.value !== value.trim() ||
+          result.finalResult?.source !== "HUMAN_CONFIRMED" || corrected?.provenance !== "HUMAN_CORRECTION" || corrected.value == null)
         throw new Error("No se pudo confirmar que la corrección quedara guardada. Vuelve a analizar el documento.");
       setReceipt({ ...previous, ...result.receipt, analysisId: previous.analysisId, contentSha256: previous.contentSha256,
         semanticReceipt: result.semanticReceipt, correctionVersion: result.correctionVersion,
         learningContext: result.learningContext, identification: result.identification });
       setNotice("Corrección guardada y lectura actualizada. Se conservará al volver a analizar este documento con tu usuario.");
+      setConfirmation({ field: correctedField, value: corrected.value, version: result.correctionVersion, reread: false });
     } catch (cause) {
       if (current(version)) setError(cause instanceof Error ? cause.message : "No se pudo guardar la corrección.");
       throw cause;
@@ -70,7 +83,7 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
   const canCorrect = !!receipt?.analysisId && Number.isSafeInteger(receipt?.correctionVersion);
   return <section aria-label="Aprender de un comprobante" className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
     <div><h2 className="font-semibold text-white">Revisar un comprobante con María</h2>
-      <p className="mt-1 text-sm text-slate-400">Selecciona un PDF o imagen, revisa la lectura y guarda tus correcciones. El análisis conserva evidencia y no registra un pago.</p></div>
+      <p className="mt-1 text-sm text-slate-400">Aquí, en el panel de comprobantes de /hugo, selecciona un PDF o imagen y pulsa Analizar comprobante. Después puedes editar los campos. El análisis conserva evidencia y no registra un pago.</p></div>
     {!allowed ? <p className="text-sm text-amber-200">Inicia una sesión autorizada para analizar y corregir comprobantes.</p> : <>
       <label className="block text-sm text-slate-300">Comprobante (PDF, JPG, PNG o WEBP; hasta 1 MB)
         <input aria-label="Seleccionar comprobante para María" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" disabled={busy || editing}
@@ -84,6 +97,11 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
       </div>
       {notice && <p role="status" className="text-sm text-emerald-200">{notice}</p>}
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+      {confirmation && <div role="status" aria-label="Confirmación de corrección documental" className="rounded-lg border border-sky-500/40 p-3 text-sm text-sky-100">
+        <p>Guardado confirmado por el servidor · versión {confirmation.version}.</p>
+        <p className="break-words">Valor guardado: {String(confirmation.value)}</p>
+        <p>{confirmation.reread ? "Verificado al volver a analizar: el documento recuperó esta corrección." : "Pulsa Volver a analizar para comprobar que se recupera la corrección."}</p>
+      </div>}
       {receipt?.semanticReceipt && <>
         <ReceiptEvidenceSummary key={receipt.analysisId || "readonly"} receipt={receipt.semanticReceipt} disabled={busy}
           onCorrect={canCorrect ? correct : undefined} onEditingChange={setEditing} />

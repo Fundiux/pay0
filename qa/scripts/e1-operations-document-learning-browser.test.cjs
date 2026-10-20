@@ -43,7 +43,7 @@ const mocks = {
         if(name==='correctPagoReceiptSemanticField'){
           if(window.reject) throw Error('Version obsoleta');
           if(window.holdCorrection)return new Promise(resolve=>window.finishCorrection=()=>resolve({data:{ok:true,semanticReceipt:window.semantic(),correctionVersion:2,receipt:{}}}));
-          window.saved=true;return{data:{ok:true,receipt:{concept:'DEMO CORREGIDO'},semanticReceipt:window.semantic(),correctionVersion:1,learningContext:[]}};
+          if(window.invalidAck)return{data:{ok:true,correctionId:'correction-demo',finalResult:{field:'concept',value:'DEMO CORREGIDO',source:'HUMAN_CONFIRMED'},semanticReceipt:window.semantic(),correctionVersion:window.invalidAck==='stale'?0:1,receipt:{}}};window.saved=true;return{data:{ok:true,correctionId:'correction-demo',finalResult:{field:'concept',value:'DEMO CORREGIDO',source:'HUMAN_CONFIRMED'},receipt:{concept:'DEMO CORREGIDO'},semanticReceipt:window.semantic(),correctionVersion:1,learningContext:[]}};
         }
         throw Error('Unexpected endpoint '+name);
       };
@@ -57,9 +57,10 @@ const mocks = {
     await page.getByRole('button',{name:'Corregir Concepto'}).click();await page.getByRole('textbox',{name:'Concepto',exact:true}).fill('DEMO CORREGIDO');
     await page.evaluate(()=>window.reject=true);await page.getByRole('button',{name:'Guardar',exact:true}).click();
     await expect(page.getByRole('alert')).toContainText('Version obsoleta');await expect(page.getByText(/guardada y lectura actualizada\./)).toHaveCount(0);
-    await page.evaluate(()=>window.reject=false);await page.getByRole('button',{name:'Guardar',exact:true}).click();
+    await page.evaluate(()=>{window.reject=false;window.invalidAck='stale'});await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.getByLabel(/documental/)).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('No se pudo confirmar');await page.evaluate(()=>window.invalidAck='provenance');await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.getByLabel(/documental/)).toHaveCount(0);await page.evaluate(()=>window.invalidAck=false);await page.getByRole('button',{name:'Guardar',exact:true}).click();
     await expect(page.getByText('DEMO CORREGIDO',{exact:true})).toBeVisible();await expect(page.getByText(/guardada y lectura actualizada\./)).toBeVisible();
-    await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();await expect(page.getByText('Se recuperaron tus correcciones',{exact:false})).toBeVisible();
+    await expect(page.getByLabel(/documental/)).toContainText(/versi.n 1/);await expect(page.getByLabel(/documental/)).toContainText('DEMO CORREGIDO');await expect(page.getByLabel(/documental/)).toContainText('Pulsa Volver');await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();await expect(page.getByText('Se recuperaron tus correcciones',{exact:false})).toBeVisible();await expect(page.getByLabel(/documental/)).toContainText('Verificado al volver');
+    await page.evaluate(()=>window.saved=false);await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();await expect(page.getByRole('alert')).toContainText('La nueva lectura no');await expect(page.getByLabel(/documental/)).not.toContainText('Verificado al volver');await page.evaluate(()=>window.saved=true);await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();await expect(page.getByLabel(/documental/)).toContainText('Verificado al volver');
     const correction=await page.evaluate(()=>window.calls.find(c=>c.name==='correctPagoReceiptSemanticField'));
     assert.equal(correction.input.expectedCorrectionVersion,0);assert.equal(correction.input.analysisId,'analysis-demo');
     await page.getByRole('button',{name:'Corregir Concepto'}).click();await page.getByRole('textbox',{name:'Concepto',exact:true}).fill('OTRO CAMBIO');
@@ -77,6 +78,6 @@ const mocks = {
     await page.evaluate(p=>window.renderProfile(p),{...profile,role:'cliente'});await expect(page.locator('input[type=file]')).toHaveCount(0);
     assert.deepEqual([...new Set(await page.evaluate(()=>window.calls.map(c=>c.name)))].sort(),['correctPagoReceiptSemanticField','parsePagoReceiptPdf']);
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({status:'PASS',transport:'SYNTHETIC',component:'HugoReceiptLearning',checks:8}));
+    console.log(JSON.stringify({status:'PASS',transport:'SYNTHETIC',component:'HugoReceiptLearning',checks:12}));
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
