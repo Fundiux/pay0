@@ -47,22 +47,24 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
   const companyItems = companies.docs.map(doc => ({ ...doc.data(), id: doc.id }));
   const clientSignals = { name: receipt.senderName, rfc: receipt.payerRfc, account: receipt.account };
   const companySignals = { name: receipt.beneficiaryName, rfc: receipt.beneficiaryRfc, account: receipt.destinationAccount };
-  const clientSelection = selectReceiptIdentity(clientItems, clientSignals, clean(input.selectedClientId));
-  const companySelection = selectReceiptIdentity(companyItems, companySignals, clean(input.selectedCompanyId));
-  const clientMatch = clientSelection.match, companyMatch = companySelection.match;
-  const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
-  if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
+  // Authorize the entire offered catalog before either matching or exposing names.
   const authorizedClients: ReceiptCatalogItem[] = [];
-  for (const candidate of clientSelection.candidates) {
+  for (const candidate of clientItems) {
+    if (candidate.rootId !== actor.rootId || candidate.active === false || candidate.isActive === false) continue;
     try {
       await requireClientOperationalAccess({ ...actor, clientId: candidate.id, client: candidate, permission: "operatePagos" });
       authorizedClients.push(candidate);
     } catch (error: any) { if (error?.code !== "permission-denied") throw error; }
   }
   const authorizedCompanies: ReceiptCatalogItem[] = [];
-  for (const candidate of companySelection.candidates) {
-    if (await allowedCompany(db, actor, candidate)) authorizedCompanies.push(candidate);
+  for (const candidate of companyItems) {
+    if (candidate.isActive !== false && await allowedCompany(db, actor, candidate)) authorizedCompanies.push(candidate);
   }
+  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, clean(input.selectedClientId), { party: "CLIENT" });
+  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, clean(input.selectedCompanyId), { party: "COMPANY" });
+  const clientMatch = clientSelection.match, companyMatch = companySelection.match;
+  const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
+  if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
   const client = authorizedClients.find(item => item.id === clientMatch.id);
   const company = authorizedCompanies.find(item => item.id === companyMatch.id);
   if (clientMatch.id && !client) reasons.push("CLIENT_ACCESS_REQUIRES_REVIEW");
@@ -70,9 +72,9 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
   const option = (item: ReceiptCatalogItem, kind: "client" | "company"): ReceiptIdentityOption => ({
     id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.displayName),
     ...(kind === "company" ? { despachoId: clean(item.despachoId) } : {}),
-    evidence: matchReceiptIdentity([item], kind === "client" ? clientSignals : companySignals).evidence,
+    evidence: [...new Set(["AUTHORIZED_CATALOG_ENTRY", ...(kind === "client" && clientMatch.id === item.id ? clientMatch.evidence : kind === "company" && companyMatch.id === item.id ? companyMatch.evidence : matchReceiptIdentity([item], kind === "client" ? clientSignals : companySignals, { party: kind === "client" ? "CLIENT" : "COMPANY" }).evidence)])],
   });
-  const candidates = { client: authorizedClients.map(item => option(item, "client")), company: authorizedCompanies.map(item => option(item, "company")) };
+  const candidates = { client: clientSelection.candidates.map(item => option(item, "client")), company: companySelection.candidates.map(item => option(item, "company")) };
   const verifiedMatches = { client: client ? option(client, "client") : null, company: company ? option(company, "company") : null };
   if (operationTypeKey) {
     const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();

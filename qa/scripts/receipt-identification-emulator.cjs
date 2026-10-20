@@ -85,11 +85,20 @@ async function main() {
     check(result.status === 'READY' && result.createPayload.clienteId === clientId && result.createPayload.companyId === companyId, `${actor.role} exact authorized identity`);
   }
   for (const [overrides, reason] of [
-    [{ payerRfc: '', account: '****1234' }, 'CLIENT_INSUFFICIENT_IDENTITY_SIGNALS'],
     [{ senderName: 'Cliente Parecido', payerRfc: 'ABC010101AB1' }, 'CLIENT_IDENTITY_NOT_CORROBORATED'],
     [{ beneficiaryName: 'Empresa Parecida', beneficiaryRfc: '' }, 'COMPANY_INSUFFICIENT_IDENTITY_SIGNALS'],
   ]) check((await identify(overrides)).reasons.includes(reason), reason);
   check((await identify({ amountVerified: false, executionConfirmed: false })).status === 'READY', 'Both advisory flags can remain false with exact authorized identities');
+  const nameOnly = await identify({ payerRfc: '', account: '****1234', beneficiaryRfc: '', destinationAccount: '' });
+  check(nameOnly.status === 'READY', 'Unique exact catalog names identify without RFC or full account');
+  check(nameOnly.evidence.client.includes('NORMALIZED_NAME_EXACT') && !nameOnly.evidence.client.includes('RFC_EXACT'), 'Name-only evidence never claims RFC equality');
+  const unknownNames = { ...parsed, senderName: 'Unknown Ordering Party', beneficiaryName: 'Unknown Beneficiary', payerRfc: '', beneficiaryRfc: '', account: '', destinationAccount: '' };
+  const manual = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-catalog`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: companyId });
+  check(manual.status === 'READY' && manual.createPayload.clienteId === clientId && manual.createPayload.companyId === companyId, 'Authorized manual catalog choice resolves absent OCR match');
+  check(manual.evidence.client.includes('USER_SELECTED_AUTHORIZED_CATALOG_ENTRY') && !manual.evidence.client.includes('RFC_EXACT') && !manual.evidence.company.includes('FULL_ACCOUNT_EXACT'), 'Manual selection evidence stays honest');
+  const deniedManualCompany = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-forged-company`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: 'foreign-company' });
+  check(deniedManualCompany.reasons.includes('COMPANY_INVALID_SELECTION') && !deniedManualCompany.createPayload, 'Foreign or forged company selection rejected');
+
   await db.doc(`clients/${clientId}-duplicate`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
   check((await identify()).reasons.includes('CLIENT_MULTIPLE_CANDIDATES'), 'Duplicate catalog identity never auto selects');
   await db.doc(`clients/${clientId}-duplicate`).delete();
@@ -97,7 +106,7 @@ async function main() {
   check((await identify()).status === 'REQUIRES_REVIEW', 'Inactive client excluded');
   await db.doc(`clients/${clientId}`).update({ active: true });
   await db.doc(`userCompanyAccess/${actors[1].uid}/companies/${companyId}`).update({ active: false });
-  check((await identify({}, actors[1])).reasons.includes('COMPANY_ACCESS_REQUIRES_REVIEW'), 'Revoked company access reviewed');
+  check(!(await identify({}, actors[1])).candidates.company.some(row => row.id === companyId), 'Revoked company access excluded before matching');
   await db.doc(`userCompanyAccess/${actors[1].uid}/companies/${companyId}`).update({ active: true });
   check((await identify({}, { ...actors[0], rootId: foreignRoot })).status === 'REQUIRES_REVIEW', 'Foreign root cannot match local identities');
   await denied(() => parsePagoReceiptPdf.run({ data: {} }), 'Anonymous parser rejected');
