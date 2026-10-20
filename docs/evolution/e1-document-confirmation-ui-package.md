@@ -1,6 +1,6 @@
 # Confirmación documental: paquete UI independiente
 
-Estado: DEPLOYMENT_PENDING. Artefacto local exacto validado; sin publicación ni autorización implícita. Se requiere preflight fresco antes de cualquier ejecución. El ciclo documental autenticado permanece DEPLOYED_NOT_VERIFIED.
+Estado: DEPLOYED_NOT_VERIFIED. Publicación específicamente autorizada y verificada técnicamente; el ciclo documental autenticado permanece pendiente.
 
 ## Cambio y preservación
 
@@ -33,7 +33,7 @@ Raíz cotejó independientemente proof, hashes de paquete/fuente/build/base/ZIP 
 
 La auditoría de provenance confirmó que sólo cambian el vocabulario de status y cuatro campos de trazabilidad; todos los campos originales restantes son idénticos. Original 6b529… intacto; copia derivada SHA `2d51588b686f58320c5aea938949d5a2d9b7453119c65e6de5d685f338ac446c`. Ningún helper fue modificado.
 
-Receta privada no ejecutada: `output/document-confirmation-ui/deployment-recipe.md`, SHA `8ef9ddb38f9ac71c2913253cd86476d15eae20d7ddf179feb8d92bf9257f2847`. Verificador independiente posterior, sólo lectura y condicionado al cierre de raíz: `output/document-confirmation-ui/verify-published.mjs`, SHA `5fe16ed99e345caf90c4fd05299a4d258639d51e4eaf23c14b794d1f3db2225b`, sintaxis PASS. No se ha desplegado la UI ni ejecutado ese verificador posterior.
+Receta privada revisada antes de publicar: `output/document-confirmation-ui/deployment-recipe.md`, SHA `8ef9ddb38f9ac71c2913253cd86476d15eae20d7ddf179feb8d92bf9257f2847`. Verificador independiente posterior, sólo lectura y condicionado al cierre de raíz: `output/document-confirmation-ui/verify-published.mjs`, SHA `5fe16ed99e345caf90c4fd05299a4d258639d51e4eaf23c14b794d1f3db2225b`, sintaxis PASS. Ejecución y resultados posteriores se registran abajo.
 
 ## Dependencias y reversión
 
@@ -41,4 +41,14 @@ No requiere publicar backend nuevo. Reutiliza los dos destinos documentales ya p
 
 Si se autoriza y publica este paquete, revertir únicamente Hosting/SSR a su ZIP anterior 952… mediante el controlador y recibo propios, preservando configuración/IAM. No revertir los lectores protegidos MEMORY ni borrar correcciones: esta entrega no los modifica y la UI anterior ya es compatible con esos registros. No hay rollback de datos ni activación de reglas/VOZ.
 
-Queda pendiente la publicación específicamente autorizada y la comprobación del usuario con su sesión: analizar, corregir, observar valor/versión confirmados, volver a analizar y comprobar recuperación. No se usaron datos de negocio, proveedores ni operaciones productivas para esta validación.
+Queda pendiente la comprobación del usuario con su sesión: analizar, corregir, observar valor/versión confirmados, volver a analizar y comprobar recuperación. No se usaron datos de negocio ni proveedores para la validación independiente.
+
+## Publicación y comprobación independiente
+
+Raíz ejecutó la publicación específicamente autorizada en sesión 67943, exit 0 y RELEASE_VERIFIED: Hosting `18cb9743dfc01c50`, SSR `00612-yuq`, ZIP 39e008… exacto. La primera comprobación independiente se detuvo porque Hosting completó sus contadores derivados: fileCount ausente→172 y versionBytes ausente→4098861. Fuente, recurso, Run e IAM eran idénticos al recibo propio; el resto de Hosting también. Se preservaron original/propuesta y raíz confirmó independientemente que sólo cambiaban esos dos campos.
+
+Únicamente tras aprobación de raíz se reconciliaron esos campos en el archivo own local, sin operación cloud. Original SHA `7991166b86a45eb4e1fe6ce978d799200700d8dab381a0b462e8b9810ecbb7b9`, propuesta aplicada `a77d79c0af17288e917889ead94701178bef3845704ec0bd18d2d442507e8584`; recibo local SHA `4f8d040bdec9393bcecdbaea5edd8319cd1c5c981b1177172bfe63bbbbc10d26`. No se borró ni sobrescribió el original preservado.
+
+Repetición del verificador original, sólo GET: PASS el 2026-10-20T16:35:31Z, exit 0. Fuente descargada exacta, configuración/Run/IAM preservados, cero operaciones activas y cinco rutas HTTP 200. Recibo `690dd7f48d7ae9cac78f67b4663dcdd9dc78beb16b0f508e64acbaca96dddda7`, en `independent-post-publication-32ae41be-f4f4-43a5-85a3-d9182822da8f/verification.json` dentro del directorio del input. Su campo countersReconciledLocally=false indica que ya no había diferencia en esa repetición; la derivación previa queda en el recibo local separado.
+
+Baseline privada estable `ui-document-confirmation-stable-baseline.json`, SHA `b51bf266e584499f417fa368792a1904a4dfc78c2a393807991d91fe37cdfdb4`; provenance nueva `ui-document-confirmation-published-provenance.json`, SHA `ff0bf26c576f2d728ce14879dc4dc8364645d36769252b1638a9dff2f988c24c`, ambas bajo `.firebase/modular-release`. Resumen independiente SHA `1bb7af2c0baed3d2b0e3645b31907ba3a0703b536b0e81094ad51b29c5869f5f`. Cero llamadas autenticadas de negocio, lecturas de documentos, proveedores o mutaciones cloud del verificador. Publicación técnica no acredita todavía la corrección/relectura con la sesión del usuario.
