@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),{EventEmitter}=require('node:events');
 const ts=require(require.resolve('typescript',{paths:[path.resolve(__dirname,'../../functions'),path.resolve(__dirname,'../../../../functions')]}));
 const source=fs.readFileSync(path.resolve(__dirname,'../../functions/src/modules/telegram/service.ts'),'utf8');
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const compiled=process.env.PAY0_TELEGRAM_TRANSPORT_ARTIFACT ? fs.readFileSync(path.resolve(process.env.PAY0_TELEGRAM_TRANSPORT_ARTIFACT),'utf8') : ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const secret='SYNTHETIC_TOKEN_CHAT_BODY';
 function fixture(){let requestCount=0,fetchCount=0,req,res,callback,fetchOptions,fetchAction,payload;const https={request(_url,_opts,cb){requestCount++;callback=cb;req=new EventEmitter();req.destroyed=false;req.destroy=()=>{req.destroyed=true;};req.write=value=>{payload=value;};req.end=()=>{};return req;}};
  const module={exports:{}};vm.runInNewContext(compiled,{module,exports:module.exports,require:n=>{assert.equal(n,'https');return https;},Buffer,Error,Date,fetch:async(_url,opts)=>{fetchCount++;fetchOptions=opts;return fetchAction(opts);}});
