@@ -1,6 +1,6 @@
 # D1 sobre R1.5: aprendizaje sin perder el cambio de cliente
 
-Estado: **LOCAL_CANDIDATE_TESTED_NOT_DEPLOY_READY**. No hay input productivo ni despliegue. Antes de preparar una publicación de chat hay que confirmar R1.5 publicada y capturar su baseline efectiva.
+Estado: **LOCAL_INPUT_VALIDATED_PREFLIGHT_PENDING**. R1.5 está publicada y el input local D1 pasó validación pura; no se ejecutó este update. El preflight queda pendiente mientras termina la entrega D independiente en curso. La autorización de consulta/revocación D no incluye chat D1 ni activación de aprendizaje.
 
 ## Fuente y composición
 
@@ -27,6 +27,12 @@ La selección no declara PASS universal: el módulo `universalQueryContract` con
 
 ## Publicación y reversión
 
-Un futuro update selecciona sólo `sendAgent007Message`, conserva su gate OFF y toda la configuración/IAM/secretos/tráfico. El export `reviewAgent007LearningRule` en el ZIP no autoriza crear ese recurso; creación de review, diagnostics, UI y sus gates son superficies separadas. El consumidor de chat espera a una baseline R1.5 publicada, pero esa espera no impone una dependencia artificial a los paquetes independientes de revisión/diagnóstico.
+R1.5 se verificó publicada como `sendagent007message-00022-nev`, con ZIP base `45e8233d`. Baseline local: `.firebase/modular-release/r15-client-continuity/published-baseline.json`, SHA256 `c2a4b6cddcb70e65d67f98be8e15d89956822ad00d6261a91b19e71c0cbd3fe8`.
+
+Input local nuevo: `.firebase/modular-release/d1-after-r15-chat-release/input.json`, SHA256 `db4867123a6f5a915b437a6e9170bb6c206531da8478e5ad3eafae3ccc4b953e`. Proof: `artifact-verification.json`, SHA256 `694dd1001c6766dab2c59e8f2c3b04b5a1e0dee0604081e4806a3a337844d445`. sourceCommit/patchCommit: `903e0318f5709ebae722147e515986b79d361a93`, con base R1.5, patch completo y sourceTree null. Hashes, rechazo anónimo del target y construcción pura sourceOnlyPatch: PASS; gate de la baseline ausente/OFF.
+
+No se consultó ni modificó producción para preparar ese input. Tras terminar la entrega D en curso se necesita preflight GET de este target, servicio e IAM y autorización separada antes de ejecutar. No se exige que todas las operaciones globales sean cero para consultar metadatos, ni se interpreta otra entrega como permiso para publicar chat.
+
+Un futuro update selecciona sólo `sendAgent007Message`, conserva su gate OFF y toda la configuración/IAM/secretos/tráfico. El export `reviewAgent007LearningRule` en el ZIP no autoriza crear ese recurso; creación de review, diagnostics, UI y sus gates son superficies separadas. La baseline R1.5 se usa sólo para el consumidor de chat y no impone una dependencia artificial a los paquetes independientes de revisión/diagnóstico.
 
 Los inputs D1 basados en R1.4 no representan esta composición y no deben utilizarse después de publicar R1.5. La reversión debe preservar R1.5 y cambios posteriores autorizados; no borrar reglas, experiencias, conversaciones ni ledger. No hubo activaciones ni escrituras financieras.
