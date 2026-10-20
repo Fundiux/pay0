@@ -7,6 +7,11 @@ const out={};new Function('exports',ts.transpileModule(functions,{compilerOption
 const parse=date=>out.parseReceiptText(['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo','Monto: $100.00','Referencia: DEMO1234',date].join('\n'));
 for(const [label,expected] of [
  ['Fecha: 05/06/2026','2026-06-05'],
+ ['Fecha de operacion:\n05/06/2026','2026-06-05'],
+ ['Fecha de operacion y hora:\n05/06/2026 10:25:46','2026-06-05'],
+ ['Fecha:\n05/06/2026','2026-06-05'],
+ ['Fecha\n05/06/2026','2026-06-05'],
+ ['Fecha y hora de captura:\n05/06/2026','2026-06-05'],
  ['Fecha: 2026-06-05','2026-06-05'],
  ['Fecha de operacion: 20-Oct-2026 10:25:46','2026-10-20'],
  ['Fecha de la transferencia\n5 de junio del 2026','2026-06-05'],
@@ -21,6 +26,9 @@ for(const [label,expected] of [
 ]) test('resolves document date '+label.replaceAll('\n',' / '),()=>{const r=parse(label);assert.equal(r.date,expected);assert.equal(r.dateVerified,true);assert(!r.warnings.some(w=>w.includes('ambiguo')));});
 for(const label of [
  'Fecha de operacion: 31/02/2026',
+ 'Fecha de operacion:\nReferencia: 05/06/2026\nFecha y hora de captura: 2026-06-05',
+ 'Fecha de operacion:\nReferencia 05/06/2026\nFecha y hora de captura: 2026-06-05',
+ 'Fecha de operacion y hora:\nFecha y hora de captura: 2026-06-05',
  'Fecha de operacion: pendiente\nFecha y hora de captura: 2026-06-05',
  'Fecha de operacion: 2026-06-05\nFecha de pago: 2026-06-06',
  '2026-06-05\n2026-06-06',

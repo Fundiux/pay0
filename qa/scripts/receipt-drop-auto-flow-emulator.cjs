@@ -17,7 +17,7 @@ async function main(){
  await db.doc('operationTypes/'+operation).set({rootId:root,active:true,category:'OPERACION',name:'Synthetic automatic operation'});
  await db.doc(`clients/${clientId}/costos/${dispatchId}__${operation}`).set({active:true,assignedCost:5,pricingMode:'PERCENT',calculationBaseType:'TOTAL'});
  await db.doc(`despachos/${dispatchId}/costos/${operation}`).set({active:true,baseCost:2,pricingMode:'PERCENT',calculationBaseType:'TOTAL'});
- const {jsPDF}=require('jspdf'),pdf=new jsPDF();pdf.text(['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo S. de R.L. de C.V.','Monto: $100.00','Fecha: 05/06/2026','Referencia: SYNTHETIC-DROP-1234','Concepto: synthetic fixture'],10,20);
+ const {jsPDF}=require('jspdf'),pdf=new jsPDF();pdf.text(['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo S. de R.L. de C.V.','Monto: $100.00','Fecha de operacion:','05/06/2026','Referencia: SYNTHETIC-DROP-1234','Concepto: synthetic fixture'],10,20);
  const bytes=Buffer.from(pdf.output('arraybuffer')),sha=createHash('sha256').update(bytes).digest('hex'),request={originalName:'synthetic-drop.pdf',contentType:'application/pdf',sizeBytes:bytes.length,base64:bytes.toString('base64')};
  const parsed=await call('parsePagoReceiptPdf',request),id=parsed.identification;
  check(parsed.providerCalls===0,'Actual text PDF requires no OCR provider');check(parsed.receipt.date==='2026-06-05'&&parsed.receipt.dateVerified===true,'Mexican document date resolves without confirmation');

@@ -362,11 +362,19 @@ function resolveReceiptDate(lines: string[], text: string): { raw: string; value
   const operationLabels = [/^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*(.+)$/i];
   const genericLabels = [/^fecha\s*(?:\/\s*hora|y\s+hora)?\s*[:\-]\s*(.+)$/i];
   const captureLabels = [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i];
-  const collect = (labels: RegExp[]) => lines.flatMap((line, index) => {
-    const value = extractLabeled([line, lines[index + 1] || ""], labels);
+  const operationBare = /^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*$/i;
+  const genericBare = /^fecha(?:\s*(?:\/\s*hora|y\s+hora))?\s*[:\-]?\s*$/i;
+  const captureBare = /^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]?\s*$/i;
+  const collect = (labels: RegExp[], bareLabel: RegExp) => lines.flatMap((line, index) => {
+    if (bareLabel.test(normalize(line))) {
+      const next = (lines[index + 1] || "").trim();
+      const nextIsField = /^[a-z][^:]{0,79}:/i.test(normalize(next)) || /^(?:fecha|hora|referencia|folio|rastreo|clave de rastreo|concepto|ordenante|beneficiario|cuenta|clabe|banco|monto|importe)\b/i.test(normalize(next));
+      return [nextIsField ? "" : next];
+    }
+    const value = extractLabeled([line], labels);
     return value ? [value] : [];
   });
-  const operation = collect(operationLabels), generic = collect(genericLabels), capture = collect(captureLabels);
+  const operation = collect(operationLabels, operationBare), generic = collect(genericLabels, genericBare), capture = collect(captureLabels, captureBare);
   const labelled = operation.length ? operation : generic.length ? generic : capture;
   const patterns = [
     /\b20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}\b/g,
