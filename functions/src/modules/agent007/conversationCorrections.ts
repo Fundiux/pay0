@@ -11,6 +11,28 @@ export function explicitCorrectionTopic(label: unknown): CorrectionTopic {
   const normalized = label.trim().replace(/\s+/g, " ").normalize("NFC").toLocaleLowerCase("es-MX");
   return { kind: "TOPIC", id: hash(normalized), label: label.trim().replace(/\s+/g, " ") };
 }
+/** Server-owned confirmation proof only; never construct this from model arguments. */
+export type VoiceTopicConfirmation = {
+  sessionId: string; correctionTurnId: string; confirmationTurnId: string;
+  rootId: string; ownerUid: string; label: string; confirmed: boolean;
+  transcriptAuthority: "CLIENT_TRANSCRIPT_NOT_FACT";
+};
+/** Preparation seam only. No persistence caller currently enables this gate. */
+export function validateVoicePersonalTopic(input: {
+  rootId: string; uid: string; sessionId: string; correctionTurnId: string;
+  rememberFor: { kind: "TOPIC"; label: string };
+}, proof: VoiceTopicConfirmation, enabled = false): CorrectionTopic {
+  if (enabled !== true) throw new HttpsError("failed-precondition", "Los temas personales de voz todavía no están habilitados.");
+  if (!input || input.rememberFor?.kind !== "TOPIC" || !valid(input.rootId) || !valid(input.uid) || !valid(input.sessionId) || !valid(input.correctionTurnId))
+    throw new HttpsError("invalid-argument", "Confirma un tema específico para esta sesión de voz.");
+  const requested = explicitCorrectionTopic(input.rememberFor.label);
+  if (!proof || proof.confirmed !== true || proof.rootId !== input.rootId || proof.ownerUid !== input.uid || proof.sessionId !== input.sessionId ||
+      proof.correctionTurnId !== input.correctionTurnId || (!valid(proof.confirmationTurnId) || proof.confirmationTurnId === input.correctionTurnId) || proof.transcriptAuthority !== "CLIENT_TRANSCRIPT_NOT_FACT")
+    throw new HttpsError("permission-denied", "La confirmación del tema no pertenece a esta sesión.");
+  const confirmed = explicitCorrectionTopic(proof.label);
+  if (confirmed.id !== requested.id) throw new HttpsError("failed-precondition", "Confirma el mismo tema antes de guardar el recuerdo.");
+  return requested;
+}
 export type ConversationCorrectionInput = { uid: string; rootId: string; conversationId: string; sourceKind: "TEXT" | "VOICE"; sourceId: string; sessionId?: string; content: string; expectedVersion: number; rememberFor?: { kind: "CLIENT" } | { kind: "TOPIC"; label: string } };
 export type ConversationCorrectionSource = { ref: DocumentReference; data: { rootId: string; ownerUid: string; conversationId: string; sourceKind: "TEXT" | "VOICE"; sourceId: string; turnId: string; sourceText: string; sessionId?: string; responseCorrection?: { memoryId: string; version: number } };
   clientTopic?: CorrectionTopic; sourceQuestion?: string; provenance?: { sessionId: string; responseId: string; correctionTurnId: string; transcriptAuthority: "CLIENT_TRANSCRIPT_NOT_FACT" } };
