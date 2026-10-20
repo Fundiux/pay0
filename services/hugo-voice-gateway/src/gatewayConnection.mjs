@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ToolCallRegistry } from "./toolCallRegistry.mjs";
 import { ResponseContinuationRegistry } from "./responseContinuationRegistry.mjs";
 import { delegationForRealtimeTool, realtimeToolNames } from "./realtimeTools.mjs";
+import { createVoiceSessionCorrection } from "./voiceSessionCorrection.mjs";
 
 export const ConnectionState = Object.freeze({ NEW: "NEW", AUTHENTICATING: "AUTHENTICATING", AUTHORIZED: "AUTHORIZED", REALTIME_STARTING: "REALTIME_STARTING", REALTIME_ACTIVE: "REALTIME_ACTIVE", REJECTED: "REJECTED", CLOSED: "CLOSED" });
 const safeErrorCodes = new Set(["CANARY_NOT_ALLOWED", "UNAUTHENTICATED", "AUTHENTICATION_TIMEOUT", "AUTHENTICATION_CANCELLED", "AUTHENTICATION_FAILED", "AUTHORIZATION_SCOPE_INVALID", "PERMISSION_DENIED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "HUGO_VOICE_FORBIDDEN", "DUPLICATE_AUTHENTICATION", "OFFER_NOT_AUTHORIZED", "INVALID_OFFER", "INVALID_MESSAGE", "GATEWAY_BUILD_METADATA_MISSING", "REALTIME_SECRET_FAILED", "REALTIME_CALL_FAILED", "SIDEBAND_TIMEOUT", "SIDEBAND_CONNECT_FAILED"]);
@@ -17,6 +18,9 @@ export function classifyRequestError(error) {
 }
 
 export function safeToolFailure(error) {
+  if (error?.message === "VOICE_CORRECTION_TOO_LONG") return { errorCategory: "VALIDATION", errorCode: "VOICE_CORRECTION_TOO_LONG", retryable: false };
+  if (error?.message === "VOICE_CORRECTION_ORIGIN_UNAVAILABLE") return { errorCategory: "NOT_READY", errorCode: "VOICE_CORRECTION_ORIGIN_UNAVAILABLE", retryable: true };
+  if (error?.message === "VOICE_CORRECTION_NOT_PERSISTED") return { errorCategory: "INTERNAL", errorCode: "VOICE_CORRECTION_NOT_PERSISTED", retryable: false };
   const code = classifyRequestError(error);
   if (code === "PERMISSION_DENIED") return { errorCategory: "PERMISSION_DENIED", errorCode: code, retryable: false };
   if (code === "DEADLINE_EXCEEDED") return { errorCategory: "TIMEOUT", errorCode: code, retryable: true };
@@ -25,6 +29,9 @@ export function safeToolFailure(error) {
 }
 
 export function safeVoiceToolFailureOutput(failure) {
+  if (failure?.errorCode === "VOICE_CORRECTION_TOO_LONG") return { status: "INVALID_INPUT", text: "La corrección supera los 1.000 caracteres. Dícela más breve; no la guardé." };
+  if (failure?.errorCode === "VOICE_CORRECTION_ORIGIN_UNAVAILABLE") return { status: "NOT_READY", text: "Aún no tengo un turno de voz completo al que vincular la corrección. No la guardé." };
+  if (failure?.errorCode === "VOICE_CORRECTION_NOT_PERSISTED") return { status: "ERROR", text: "No pude confirmar el guardado de esa corrección. No asumiré que quedó guardada." };
   if (failure?.errorCategory === "PERMISSION_DENIED") return { status: "BLOCKED", text: "Esta consulta está fuera del alcance autorizado de tu sesión." };
   if (failure?.errorCategory === "ENTITY_NOT_FOUND") return { status: "NOT_FOUND", text: "No encontré información que coincida con esa consulta." };
   return { status: "ERROR", text: failure?.retryable ? "No pude completar la consulta en este momento. Puedes reintentarla." : "No pude completar esa consulta." };
@@ -37,6 +44,8 @@ function withTimeout(operation, timeoutMs, code) {
 
 // Every invocation owns its state. No browser-supplied context or session identifier is trusted.
 export function attachGatewayConnection(browser, { verifyIdToken, authorize, canaryUids, openRealtime, createSideband, callable, log, model, voice, runtimeMetadata = null, authenticationTimeoutMs = 10000, sidebandTimeoutMs = 10000, interruptionConfirmationMs = 300 }) {
+  const voiceCorrections = createVoiceSessionCorrection();
+  let nativeSessionId = "";
   const socketBinding = Object.freeze({ socket: browser, gatewaySessionId: randomUUID() });
   const allowedUids = new Set(canaryUids);
   let state = ConnectionState.NEW, authorizedContext = null, token = "", sideband = null, sessionId = "", turnId = "", responseId = "";
@@ -111,9 +120,13 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
     if (!active()) return;
     try {
       const item = JSON.parse(message.toString()), type = String(item.type || "");
+      if (["session.created", "session.updated"].includes(type) && typeof item.session?.id === "string") nativeSessionId = item.session.id;
+      if (type === "conversation.item.input_audio_transcription.completed") voiceCorrections.observeUser({ turnId: item.item_id, transcript: item.transcript });
       if (["conversation.item.created", "conversation.item.added", "conversation.item.done"].includes(type) && item.item?.type === "message" && item.item?.role === "user") {
         const recognizedTurnId = item.item.id || turnId || randomUUID();
         if (recognizedTurnId !== turnId) { turnId = recognizedTurnId; log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT" }); }
+        const transcript = (item.item.content || []).map(part => part.text || part.transcript || "").join(" ").trim();
+        if (transcript) voiceCorrections.observeUser({ turnId: recognizedTurnId, transcript });
       }
       if (type === "input_audio_buffer.speech_started") {
         const previousTurnId = turnId, candidateTurnId = item.item_id || randomUUID(), speechStartedAt = Date.now();
@@ -166,8 +179,14 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
         log("gateway.output_audio_done", { sessionId, turnId: activeResponse.turnId, responseId: activeResponse.id, audioDurationMs: activeResponse.firstAudioAt ? audioEndedAt - activeResponse.firstAudioAt : null });
         send({ type: "gateway.output_audio_done", eventId: randomUUID(), turnId: activeResponse.turnId, responseId: activeResponse.id, durationMs: activeResponse.firstAudioAt ? audioEndedAt - activeResponse.firstAudioAt : null });
       }
+      if (type === "response.output_audio_transcript.done" && activeResponse?.id === item.response_id) {
+        voiceCorrections.observeAssistant({ turnId: activeResponse.turnId, responseId: activeResponse.id, transcript: item.transcript, completed: false });
+      }
       if (type === "response.done") {
         const doneResponseId = item.response?.id || responseId;
+        if (activeResponse?.id === doneResponseId) voiceCorrections.observeAssistant({ turnId: activeResponse.turnId, responseId: doneResponseId,
+          transcript: (item.response?.output || []).flatMap(output => output.content || []).map(part => part.transcript || part.text || "").join(" ").trim(),
+          completed: item.response?.status === "completed" });
         const toolCallIds = (item.response?.output || []).filter(output => output.type === "function_call").map(output => output.call_id).filter(Boolean);
         log("gateway.response_done", { sessionId, turnId: activeResponse?.id === doneResponseId ? activeResponse.turnId : turnId, responseId: doneResponseId, status: item.response?.status || null, usage: item.response?.usage || null });
         if (continuations.observeDone(doneResponseId, toolCallIds)) sideband.send(JSON.stringify({ type: "response.create" }));
@@ -179,8 +198,8 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
         if (!turnId) { turnId = `turn_${callResponseId || item.call_id || randomUUID()}`; log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT_FALLBACK" }); }
         const toolCallId = String(item.call_id || item.item_id || ""), started = registry.begin(toolCallId, turnId); if (!started.accepted) { log("gateway.tool_duplicate", { sessionId, turnId, responseId: callResponseId, toolCallId }); return; }
         const controller = new AbortController(); controllers.set(toolCallId, controller); registry.running(toolCallId);
-        try { const args = JSON.parse(item.arguments || "{}"), delegation = delegationForRealtimeTool(item.name, args), toolStartedAt = Date.now(); log("gateway.tool_started", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name }); send({ type: "gateway.tool_started", eventId: randomUUID(), turnId, responseId: callResponseId, toolCallId, tool: item.name }); const result = await callable(token, { ...delegation, sessionId, turnId, responseId: callResponseId, delegationId: toolCallId, toolCallId }, controller.signal); if (!active() || controller.signal.aborted) return; registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
-          sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ route: result.route, text: result.text }) } }));
+        try { const args = JSON.parse(item.arguments || "{}"), delegation = delegationForRealtimeTool(item.name, args), toolStartedAt = Date.now(); log("gateway.tool_started", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name }); send({ type: "gateway.tool_started", eventId: randomUUID(), turnId, responseId: callResponseId, toolCallId, tool: item.name }); const correctionOrigin = delegation.recordResponseCorrection ? voiceCorrections.prepare({ sessionId: nativeSessionId, turnId }) : null; const result = await callable(token, { ...delegation, ...(correctionOrigin ? { responseCorrection: correctionOrigin } : {}), sessionId, turnId, responseId: callResponseId, delegationId: toolCallId, toolCallId }, controller.signal); if (!active() || controller.signal.aborted) return; if (correctionOrigin) voiceCorrections.acknowledge(correctionOrigin, result); registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
+          sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId, output: JSON.stringify({ route: result.route, text: result.text, ...(correctionOrigin ? { userCorrection: { authority: "USER_STATEMENT_NOT_FACT", scope: "SESSION", content: result.correction?.content }, persisted: true } : {}) }) } }));
           log("gateway.tool_output_sent", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null });
           if (continuations.outputDelivered(callResponseId, toolCallId)) sideband.send(JSON.stringify({ type: "response.create" }));
           log("gateway.tool_completed", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null, latencyMs: Date.now() - toolStartedAt, cost: result.cost || null });
@@ -230,6 +249,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
   });
   browser.on("error", () => reject(Error("GATEWAY_REQUEST_FAILED")));
   browser.on("close", () => {
+    voiceCorrections.clear(); nativeSessionId = "";
     state = ConnectionState.CLOSED;
     clearContext();
     log("gateway.session_closed", { gatewaySessionId: socketBinding.gatewaySessionId, activeMs: Date.now() - connectedAt, realtimeCreationAttempts });

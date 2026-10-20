@@ -11,6 +11,7 @@ import { HugoConversationCore } from "./hugoCore/conversationCore";
 import { HugoModelRouter } from "./hugoModelRouter";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
+import { persistVoiceConversationCorrection } from "./voiceConversationCorrections";
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
 import { PlatformReadConnector } from "./platformReadConnector";
 import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./hugoCore/interactionSemantics";
@@ -135,6 +136,16 @@ export const delegateHugoVoiceTurn = onCall(
     const responseId = clean(request.data?.responseId, 180), delegationId = clean(request.data?.delegationId, 180);
     const toolCallId = clean(request.data?.toolCallId || delegationId, 180);
     if (!message || !sessionId || !turnId || !delegationId) throw new HttpsError("invalid-argument", "Delegacion de voz incompleta.");
+    if (request.data?.recordResponseCorrection === true) {
+      if (requestedTool) throw new HttpsError("invalid-argument", "La corrección no puede ejecutar una consulta.");
+      const origin = request.data?.responseCorrection || {};
+      const correction = await persistVoiceConversationCorrection(db, { uid, rootId, gatewayCallId: sessionId,
+        sessionId: origin.sessionId, turnId: origin.turnId, responseId: origin.responseId,
+        correctionTurnId: turnId, correction: origin.correction, expectedVersion: origin.expectedVersion });
+      return { ok: true, delegationId, route: "SESSION_CORRECTION", ...correction,
+        text: "Guardé tu corrección para esta sesión. La usaré como indicación tuya, sin cambiar datos ni permisos.",
+        cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
+    }
     if (requestedTool && !directTool) { await recordSecurityBlock(uid, requestedTool, "TOOL_ALLOWLIST", "TOOL_NOT_ALLOWED").catch(() => undefined); throw new HttpsError("invalid-argument", "Herramienta de voz no permitida."); }
     const classified = classifyVoiceRoute(message);
     const { profile, signals } = classified, route = directTool ? "DETERMINISTIC_TOOL" : classified.route;

@@ -28,7 +28,7 @@ test("payment list limits are bounded and tool schemas remain fail closed", () =
   assert.equal(delegationForRealtimeTool("query_received_payments", { operation: "UNKNOWN" }).toolInput.limit, 1);
   assert.ok(realtimeToolNames.includes("query_received_payments"));
   assert.ok(realtimeToolNames.includes("explain_last_operation"));
-  assert.equal(realtimeToolNames.length, 14);
+  assert.equal(realtimeToolNames.length, 15);
   assert.match(realtimeTools.find(tool => tool.name === "query_received_payments").description, /Nunca interpretes movimiento/);
 });
 

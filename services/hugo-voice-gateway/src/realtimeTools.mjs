@@ -96,11 +96,15 @@ export const realtimeTools = [
       required: ["request"],
     },
   },
+  { type: "function", name: "correct_current_voice_response",
+    description: "Guarda una corrección explícita que el usuario acaba de dictar sobre la respuesta anterior de esta sesión. No crea reglas globales ni cambia datos. Sólo confirma que quedó guardada si la herramienta devuelve persisted true.",
+    parameters: { type: "object", additionalProperties: false, properties: {}, required: [] } },
 ];
 
 export const realtimeToolNames = realtimeTools.map(tool => tool.name);
 
 export function delegationForRealtimeTool(name, args = {}) {
+  if (name === "correct_current_voice_response") return { request: "Registrar la corrección explícita del turno de voz.", recordResponseCorrection: true };
   if (name === "get_earnings_by_client_report") return { request: "Consulta el reporte de utilidades por cliente.", toolName: "getEarningsByClientReport", toolInput: { dateFrom: args.dateFrom, dateTo: args.dateTo, limit: args.limit ?? 5000, ...(args.includeCompensated !== undefined ? { includeCompensated: args.includeCompensated } : {}), ...(args.compareDateFrom !== undefined ? { compareDateFrom: args.compareDateFrom } : {}), ...(args.compareDateTo !== undefined ? { compareDateTo: args.compareDateTo } : {}) } };
   if (name === "get_authorized_capabilities") return { request: "¿A qué tengo acceso?", toolName: "getAuthorizedCapabilities", toolInput: {} };
   if (name === "get_system_catalog") return { request: "¿Cuáles son los sistemas disponibles?", toolName: "getSystemCatalog", toolInput: {} };

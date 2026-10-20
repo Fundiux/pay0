@@ -10,6 +10,10 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 test("tool failures expose only the stable operational taxonomy", () => {
+  const tooLong = safeToolFailure(Error("VOICE_CORRECTION_TOO_LONG"));
+  assert.equal(tooLong.retryable, false);
+  assert.match(safeVoiceToolFailureOutput(tooLong).text, /1.000 caracteres/);
+  assert.match(safeVoiceToolFailureOutput(safeToolFailure(Error("VOICE_CORRECTION_NOT_PERSISTED"))).text, /No pude confirmar/);
   assert.deepEqual(safeToolFailure(Object.assign(Error("secret"), { code: "permission-denied" })), { errorCategory: "PERMISSION_DENIED", errorCode: "PERMISSION_DENIED", retryable: false });
   assert.deepEqual(safeToolFailure(Error("DEADLINE_EXCEEDED")), { errorCategory: "TIMEOUT", errorCode: "DEADLINE_EXCEEDED", retryable: true });
   assert.deepEqual(safeToolFailure(Error("UNAVAILABLE")), { errorCategory: "CONNECTOR_ERROR", errorCode: "UNAVAILABLE", retryable: true });
@@ -53,6 +57,55 @@ function assertCleared(h, expectedRealtime = 0) {
   assert.equal(snapshot.realtimeCreationAttempts, expectedRealtime);
   assert.equal(h.counts.realtime, expectedRealtime);
 }
+
+async function correctionTurn(h) {
+  await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "session.created", session: { id: "sess1" } });
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn1", type: "message", role: "user" } });
+  await sideband.receive({ type: "response.created", response: { id: "response1" } });
+  await sideband.receive({ type: "response.output_audio_transcript.done", response_id: "response1", transcript: "Respuesta anterior" });
+  await sideband.receive({ type: "response.done", response: { id: "response1", status: "completed", output: [] } });
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn2", type: "message", role: "user" } });
+  await sideband.receive({ type: "conversation.item.input_audio_transcription.completed", item_id: "turn2", transcript: "Prefiero el periodo antes del total." });
+  await sideband.receive({ type: "response.created", response: { id: "response2" } });
+  return sideband;
+}
+
+test("voice correction confirms only after matching persisted ACK in the same session", async () => {
+  const pending = deferred(); let sent;
+  const h = harness({ callable: async (_token, input) => { sent = input; return pending.promise; } });
+  const sideband = await correctionTurn(h);
+  const running = sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "correction_tool", response_id: "response2", arguments: JSON.stringify({ sessionId: "foreign", correction: "invented", rootId: "foreign" }) });
+  await flush();
+  assert.equal(sideband.sent.filter(event => event.type === "conversation.item.create").length, 0);
+  assert.equal(sent.responseCorrection.sessionId, "sess1");
+  assert.equal(sent.responseCorrection.responseId, "response1");
+  assert.equal(sent.responseCorrection.correction, "Prefiero el periodo antes del total.");
+  pending.resolve({ ...sent.responseCorrection, persisted: true, scope: "SESSION", correctionId: "correction1", version: 1,
+    correction: { content: sent.responseCorrection.correction }, route: "SESSION_CORRECTION", text: "Guardé tu corrección para esta sesión." });
+  await running;
+  const output = JSON.parse(sideband.sent.find(event => event.type === "conversation.item.create").item.output);
+  assert.equal(output.persisted, true);
+  assert.equal(output.userCorrection.authority, "USER_STATEMENT_NOT_FACT");
+  assert.equal(output.userCorrection.content, sent.responseCorrection.correction);
+  assert(!JSON.stringify(h.logs).includes(sent.responseCorrection.correction));
+  await sideband.receive({ type: "response.done", response: { id: "response2", status: "completed", output: [{ type: "function_call", call_id: "correction_tool" }] } });
+  assert.equal(sideband.sent.filter(event => event.type === "response.create").length, 1);
+  h.browser.close();
+});
+
+test("stale voice correction ACK cannot emit a persisted success", async () => {
+  const h = harness({ callable: async (_token, input) => ({ ...input.responseCorrection, correctionId: "correction1", version: 2,
+    correction: { content: input.responseCorrection.correction }, persisted: true, scope: "SESSION", text: "Guardado" }) });
+  const sideband = await correctionTurn(h);
+  await sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "correction_tool", response_id: "response2", arguments: "{}" });
+  const outputs = sideband.sent.filter(event => event.type === "conversation.item.create").map(event => JSON.parse(event.item.output));
+  assert.equal(outputs.length, 1);
+  assert(outputs.every(output => output.persisted !== true && !output.userCorrection));
+  assert(!h.logs.some(event => event.type === "gateway.tool_completed"));
+  h.browser.close();
+});
 
 async function assertRejectedThenCannotRecover(h) {
   await h.browser.receive(offer);
