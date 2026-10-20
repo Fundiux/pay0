@@ -16,6 +16,14 @@ Una corrección nueva es `USER_STATEMENT/CONFIRMED`, vinculada al autor y a `HUG
 
 El chat 763 genera consultas de memoria para referencias PAY0 SOLICITUD/PAGO y clave nula. No consulta claves HUGO CONVERSATION en el flujo admitido. Aunque el historial interno puede conservar metadatos de corrección, el adaptador de prompt anterior serializa rol/texto; no se afirma que el objeto interno carezca de esos metadatos.
 
+## Precondición de publicación
+
+La integración `40bf096` añade notas personales CLIENT al chat/UI; no sustituye la procedencia `0382fcc97a42ed6064e3528c8d99faaca9f753f3` de los overlays MEMORY citados. Su inclusión en un artefacto final requiere evidencia propia: los hashes anteriores no certifican automáticamente un nuevo ZIP de chat o UI.
+
+Publicar y verificar primero ambos lectores protegidos, antes de habilitar cualquier productor de correcciones privadas, incluido VOZ si forma parte de la entrega. Después verificar el chat compatible y publicar el productor TEXT al final; habilitar el flujo de UI sólo cuando todos sus destinos estén verificados. Ocultar el botón no sustituye esta dependencia de servidor. Cada recurso conserva su propia base, configuración/IAM y recibo. Si ya se publicó un productor o su resultado es incierto, asumir que hay datos privados y retener los lectores, aunque después se revierta ese productor.
+
+Las notas CLIENT son declaraciones privadas recuperadas para el mismo cliente canónico; no alteran texto financiero ni archivo. Su retirada y presentación en UI requieren el contrato nuevo de acuse, no basta `ok:true,changed:false` de un endpoint antiguo. La reversión de chat/UI puede retirar esa presentación sin retirar físicamente el recuerdo; no debe anunciar que se borró ni degradar privacidad para recuperarlo.
+
 ## Orden de reversión
 
 1. Revertir sólo `createAgent007MemoryCandidate` a su fuente/configuración/IAM anteriores preservados por su recibo exacto. Detener primero la producción de nuevos registros.
