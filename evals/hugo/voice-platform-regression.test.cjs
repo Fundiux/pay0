@@ -5,6 +5,26 @@ const { normalizeConversationState } = require('../../functions/lib/modules/agen
 const { formatVoicePlatformResult } = require('../../functions/lib/modules/agent007/voiceDelegation');
 const { PlatformReadConnector } = require('../../functions/lib/modules/agent007/platformReadConnector');
 const { HUGO_SYSTEM_CATALOG } = require('../../functions/lib/modules/agent007/systemCatalog');
+const { before, after } = require('node:test');
+const { db: canonicalDb } = require('../../functions/lib/modules/sharedCallables/helpers');
+const originalDoc = canonicalDb.doc;
+const profiles = {
+  actor: { rootId: 'root-a', role: 'superadmin', active: true },
+  'super-a': { rootId: 'root-a', role: 'superadmin', active: true },
+  'admin-a': { rootId: 'root-a', role: 'admin', active: true },
+  'operator-a': { rootId: 'root-a', role: 'operador', active: true, parentUserId: 'admin-a' },
+};
+// Client authorization deliberately re-loads profiles through the shared store.
+// Keep that real policy path hermetic instead of reaching application credentials.
+before(() => {
+  canonicalDb.doc = path => {
+    assert.match(path, /^users\/[a-z-]+$/);
+    const profile = profiles[path.slice('users/'.length)];
+    assert.ok(profile, `Missing synthetic profile: ${path}`);
+    return { get: async () => ({ exists: true, data: () => ({ ...profile }) }) };
+  };
+});
+after(() => { canonicalDb.doc = originalDoc; });
 
 function result(tool, data) { return { sourceSystem: 'PAY0', tool, retrievedAt: new Date().toISOString(), scope: { rootId: 'root-a' }, completeness: 'COMPLETE', evidence: [], data, trace: { latencyMs: 0, result: 'OK' } }; }
 async function context(message, data) {
@@ -89,11 +109,11 @@ test('superadmin consulta clientes activos y operaciones de admin y operador sol
       { id: 'client-foreign', rootId: 'root-b', active: true, operadorId: 'operator-b' },
     ],
     solicitudes: [
-      { id: 'request-old', rootId: 'root-a', clientId: 'client-admin', folio: 'S-OLD', createdAt: { toMillis: () => 10 } },
-      { id: 'request-new', rootId: 'root-a', clientId: 'client-admin', folio: 'S-NEW', createdAt: { toMillis: () => 20 } },
-      { id: 'request-foreign', rootId: 'root-b', clientId: 'client-foreign', folio: 'S-FOREIGN', createdAt: { toMillis: () => 30 } },
+      { id: 'request-old', rootId: 'root-a', createdBy: 'admin-a', clientId: 'client-admin', folio: 'S-OLD', createdAt: { toMillis: () => 10 } },
+      { id: 'request-new', rootId: 'root-a', createdBy: 'admin-a', clientId: 'client-admin', folio: 'S-NEW', createdAt: { toMillis: () => 20 } },
+      { id: 'request-foreign', rootId: 'root-b', createdBy: 'operator-b', clientId: 'client-foreign', folio: 'S-FOREIGN', createdAt: { toMillis: () => 30 } },
     ],
-    pagos: [{ id: 'payment-operator', rootId: 'root-a', clientId: 'client-operator', folio: 'P-NEW', createdAt: { toMillis: () => 40 } }],
+    pagos: [{ id: 'payment-operator', rootId: 'root-a', createdBy: 'operator-a', clientId: 'client-operator', folio: 'P-NEW', createdAt: { toMillis: () => 40 } }],
   });
   const actor = { uid: 'super-a' };
   const user = { role: 'superadmin', active: true };

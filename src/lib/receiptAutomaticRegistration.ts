@@ -1,6 +1,8 @@
 import type { ReceiptIdentification } from "@/services/pagoReceipt";
 
 const messages: Record<string, string> = {
+  CLIENT_INVALID_SELECTION: "el cliente seleccionado no coincide con la evidencia autorizada",
+  COMPANY_INVALID_SELECTION: "la empresa seleccionada no coincide con la evidencia autorizada",
   INVALID_AMOUNT: "monto inválido", MISSING_DATE: "fecha incompleta o inválida", MISSING_REFERENCE: "referencia insuficiente",
   UNSUPPORTED_CURRENCY: "moneda sin confirmar", PAYMENT_FORM_REQUIRES_REVIEW: "forma o resultado de pago sin confirmar",
   MISSING_OPERATION_TYPE: "tipo de operación pendiente", OPERATION_TYPE_REQUIRES_REVIEW: "tipo de operación no disponible",

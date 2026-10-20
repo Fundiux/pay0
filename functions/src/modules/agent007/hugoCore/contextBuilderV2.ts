@@ -1,3 +1,4 @@
+import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest, reportConversationResetReply, reportPeriodClarification } from "./reportSemantics";
 import { ToolRequest, ToolResult } from "./toolRouter";
 import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
 import { HugoDataStore } from "./dataStoreContract";
@@ -36,6 +37,41 @@ const compact = (value: unknown, max = 350) => String(value ?? "").replace(/\s+/
 export async function buildHugoContextV2(input: { message: string; rootId: string; conversationState: ConversationState; router: { execute(request: ToolRequest): Promise<ToolResult> }; dataStore?: HugoDataStore; now?: number }) {
   const now = input.now || Date.now();
   const resolution = resolveConversationReference(input.message, input.conversationState, input.rootId, now);
+  const reportResetReply = reportConversationResetReply(input.message);
+  if (reportResetReply) {
+    delete resolution.state.pendingEarningsReport;
+    delete resolution.state.lastEarningsReport;
+    resolution.folios = []; resolution.active = null; resolution.reason = "TOPIC_SHIFT";
+    resolution.clarification = reportResetReply;
+  }
+  if (!reportResetReply && !resolution.state.pendingEarningsReport && /^\s*\d{4}-\d{2}-\d{2}\s+(?:al|a|hasta)\s+\d{4}-\d{2}-\d{2}\s*[.!?]?\s*$/i.test(input.message)) {
+    resolution.clarification = "Indicaste un periodo. ¿Qué reporte quieres consultar y para qué cliente?";
+  }
+  const reportComparison = isEarningsReportComparison(input.message) && !resolution.folios.length && !/\b(pagos?|solicitudes?|folios?)\b/i.test(input.message)
+    && (!!resolution.state.lastEarningsReport || /\b\d{4}-\d{2}-\d{2}\b/.test(input.message));
+  const pendingRequest = pendingReportRequest(input.message, resolution.state.pendingEarningsReport);
+  const reportIntent = isEarningsReportQuestion(input.message) || reportComparison || pendingRequest.intent;
+  const parsedReportRequest = reportComparison ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : pendingRequest.request;
+  if (parsedReportRequest && reportComparison) {
+    if (pendingRequest.clientQuery) parsedReportRequest.clientQuery = pendingRequest.clientQuery;
+    if (pendingRequest.format) parsedReportRequest.format = pendingRequest.format;
+    if (/\bpdf\b/i.test(input.message) && /\b(excel|xlsx|xls)\b/i.test(input.message)) delete parsedReportRequest.format;
+  }
+  const reportRequest = parsedReportRequest?.format && !pendingRequest.needsClient ? parsedReportRequest : null;
+  if (!reportIntent) delete resolution.state.pendingEarningsReport;
+  if (reportIntent) {
+    if (pendingRequest.needsClient) delete resolution.state.lastEarningsReport;
+    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: pendingRequest.needsClient ? "CLIENT" : parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
+      includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
+      ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
+      ...(pendingRequest.periodMonth ? { periodMonth: pendingRequest.periodMonth } : {}),
+      ...(parsedReportRequest?.compareDateFrom ? { compareDateFrom: parsedReportRequest.compareDateFrom, compareDateTo: parsedReportRequest.compareDateTo } : {}),
+      ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
+    resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
+    resolution.clarification = pendingRequest.needsClient ? pendingRequest.ambiguousClientPeriod ?
+      `Confirma el nombre completo del cliente: el mes podría formar parte de su nombre. Para cambiar el periodo, indica «del mes de ...».${parsedReportRequest ? ` Conservo el periodo del ${parsedReportRequest.dateFrom} al ${parsedReportRequest.dateTo}` : " Conservo el periodo indicado"} y el formato anterior.` :
+      "¿Cuál es el nombre completo del otro cliente? Conservaré el periodo y formato indicados." : reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : reportPeriodClarification(pendingRequest.periodMonth, pendingRequest.format);
+  }
   if (resolution.clarification) {
     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
       folioConsultado: null, solicitudes: [] as any[], pagos: [] as any[], dudasPendientes: [] as any[], complementosPendientes: [] as any[], capacidadesIq: {} }, pieces: [] as ContextPiece[], toolResults: [] as ToolResult[],
@@ -60,20 +96,22 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const assetsQuestion = /\bassets\b/i.test(normalizedMessage);
   const currentUserClientQuestion = /\bclientes?\b/i.test(normalizedMessage) && /\b(cuantos?|total)\b/i.test(normalizedMessage) && /\b(puedo ver|tengo|mi usuario|mi cuenta|mi sesion|mios?)\b/i.test(normalizedMessage);
   const paymentQuestion = /\bpagos?\b/i.test(normalizedMessage);
-  const latestSolicitudQuestion = /\b(?:ultima|mas reciente)\s+solicitud\b|\bsolicitud\s+mas\s+reciente\b/i.test(normalizedMessage);
-  const previousPaymentQuestion = /\b(anterior|previo)\b/i.test(normalizedMessage) && resolution.state.activeEntity?.entityType === "PAGO";
+  const solicitudQuestion = /\bsolicitud(?:es)?\b/i.test(normalizedMessage);
+  const latestSolicitudQuestion = !folios.length && solicitudQuestion && !paymentQuestion && /\b(ultim[oa]s?|mas reciente)\b/i.test(normalizedMessage);
+  const previousPaymentQuestion = !solicitudQuestion && /\b(anterior|previo)\b/i.test(normalizedMessage) && resolution.state.activeEntity?.entityType === "PAGO";
   const latestPaymentQuestion = paymentQuestion && /\b(ultimo|reciente|recibido)\b/i.test(normalizedMessage);
   const listPaymentQuestion = paymentQuestion && /\b(ultimos?|muestra|muestrame|lista)\b/i.test(normalizedMessage);
   const requestedPaymentLimit = Math.min(Math.max(Number(normalizedMessage.match(/\b([1-5])\b/)?.[1] || (listPaymentQuestion ? 5 : 1)), 1), 5);
-  const paymentDetailFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(cuanto|monto|importe|quien|hizo|pagador|conciliad|estado|estatus)\b/i.test(normalizedMessage);
-  const paymentComplementFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(complemento|rep)\b/i.test(normalizedMessage);
+  const paymentSourceChallenge = /\b(bancos?|bancas?|remitente)\b/i.test(normalizedMessage) && /\b(no|donde|sacaste|dato|fuente|remitente)\b/i.test(normalizedMessage);
+  const paymentDetailFollowup = !solicitudQuestion && resolution.state.activeEntity?.entityType === "PAGO" && (paymentSourceChallenge || /\b(cuanto|monto|importe|quien|hizo|pagador|conciliad|estado|estatus|clientes?|nombre)\b/i.test(normalizedMessage));
+  const paymentComplementFollowup = !solicitudQuestion && resolution.state.activeEntity?.entityType === "PAGO" && /\b(complemento|rep)\b/i.test(normalizedMessage);
   const userQuery = normalizedMessage.match(/\b(?:usuario|usuaria)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bclientes?\s+(?:asignados?\s+)?(?:a|de)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bclientes?\s+(?:activos?\s+)?visibles?\s+(?:para|por|tiene)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/^\s*([^?.,]{2,80}?)\s+cuantos?\s+clientes?\s+tiene\b/i)?.[1]?.trim()
     || normalizedMessage.match(/\bcuantos?\s+clientes?\s+tiene\s+(?:registrados?\s+)?([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bcuantos?\s+usuarios?\s+tiene\s+([^?.,]{2,80})/i)?.[1]?.trim();
-  const requests: ToolRequest[] = currentUserClientQuestion ? [{ name: "countClientsForCurrentUser", input: {} }] : userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : latestSolicitudQuestion ? [{ name: "getLatestSolicitud", input: {} }] : assetsQuestion ? [{ name: "getSystemCatalog", input: {} }, { name: "getAuthorizedCapabilities", input: {} }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }, { name: "getLastOperationDiagnostic", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : previousPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: 1, beforePaymentId: resolution.state.activeEntity!.entityId, position: "PREVIOUS" } }] : latestPaymentQuestion || listPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: requestedPaymentLimit, position: "LATEST" } }] : paymentDetailFollowup ? [{ name: "getPagoById", input: { paymentId: resolution.state.activeEntity!.entityId } }] : paymentComplementFollowup ? [{ name: "getPaymentComplementStatus", input: { folio: resolution.state.activeEntity!.folio } }] : folios.length ? [
+  const requests: ToolRequest[] = reportRequest ? [{ name: "getEarningsByClientReport", input: reportRequest }] : currentUserClientQuestion ? [{ name: "countClientsForCurrentUser", input: {} }] : userClientQuestion && userQuery ? [{ name: "countClientsForUser", input: { query: userQuery } }] : latestSolicitudQuestion ? [{ name: "getLatestSolicitud", input: {} }] : assetsQuestion ? [{ name: "getSystemCatalog", input: {} }, { name: "getAuthorizedCapabilities", input: {} }] : accessQuestion ? [{ name: "getAuthorizedCapabilities", input: {} }, { name: "getLastOperationDiagnostic", input: {} }] : systemsQuestion ? [{ name: "getSystemCatalog", input: {} }] : previousPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: 1, beforePaymentId: resolution.state.activeEntity!.entityId, position: "PREVIOUS" } }] : latestPaymentQuestion || listPaymentQuestion ? [{ name: "searchReceivedPagos", input: { limit: requestedPaymentLimit, position: "LATEST" } }] : paymentDetailFollowup ? [{ name: "getPagoById", input: { paymentId: resolution.state.activeEntity!.entityId } }] : paymentComplementFollowup ? [{ name: "getPaymentComplementStatus", input: { folio: resolution.state.activeEntity!.folio } }] : folios.length ? [
     ...folios.filter(x => x.startsWith("S")).map(folio => ({ name: "getSolicitud" as const, input: { folio } })),
     ...folios.filter(x => x.startsWith("P")).map(folio => ({ name: "getPago" as const, input: { folio } })),
     { name: "getPaymentComplementStatus", input: folios.length === 1 ? { folio: folios[0] } : {} }, { name: "getIqCapabilities", input: {} },
@@ -85,9 +123,14 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const pagos = pagoResults.flatMap(row => row.tool === "searchReceivedPagos" ? asRows(row.data?.items) : asRows(row.data)).slice(0, 6);
   const references: HugoEntityReference[] = [...solicitudes.map(row => ({ sourceSystem: "PAY0", entityType: "SOLICITUD", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) })),
     ...pagos.map(row => ({ sourceSystem: "PAY0", entityType: "PAGO", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) }))].filter(row => row.entityId && row.displayReference).slice(0, folios.length ? 3 : 2);
-  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
-    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
+  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (by("getLatestSolicitud").some(result => result.completeness === "COMPLETE") && row.entityType === "SOLICITUD" && row.entityId === solicitudes[0]?.id) || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
+    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: !folios.length && (row.entityType === "PAGO" || latestSolicitudQuestion) ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
   const nextState = advanceConversationState(resolution, resolved, input.rootId);
+  if (reportRequest && by("getEarningsByClientReport").length) nextState.lastEarningsReport = { rootId: input.rootId,
+    query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true, ...(reportRequest.clientQuery ? { clientQuery: reportRequest.clientQuery } : {}), ...(reportRequest.format ? { format: reportRequest.format } : {}) }, resolvedAt: now, resolvedTurn: nextState.turn };
+  if (reportRequest && by("getEarningsByClientReport").length && nextState.pendingEarningsReport) {
+    nextState.pendingEarningsReport.stage = ["AMBIGUOUS", "NOT_FOUND"].includes(by("getEarningsByClientReport")[0].data?.clientResolution?.status) ? "CLIENT" : "READY";
+  }
   const relevantRefs = folios.length ? references : [];
   const retrieval = input.dataStore && relevantRefs.length ? await input.dataStore.retrieveMemory({ rootId: input.rootId, entityReferences: relevantRefs, intent: resolution.intent, limit: 4, now: new Date(now).toISOString() }) :
     { considered: 0, selected: [] as RetrievedMemory[], legacyObservationsConsidered: 0, legacyObservations: [] as any[] };
@@ -118,13 +161,15 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const boundaries = { solicitudes: scopeFor(solicitudResults, "RECENT_SAMPLE"), pagos: pagoResults.map(row => boundary(row.completeness, row.tool === "searchReceivedPagos" ? "ORDERED_WINDOW" : row.tool.startsWith("get") ? "EXACT_FOLIO" : "RECENT_SAMPLE")),
     complementos: by("getPaymentComplementStatus").map(row => boundary(row.completeness, "RECENT_SAMPLE")), capacidadesIq: by("getIqCapabilities").map(row => boundary(row.completeness, "CONFIGURATION")) };
   const context = { schemaVersion: CONTEXT_BUILDER_VERSION, questionIntent: resolution.intent, referenceResolution: resolution.reason, folioConsultado: folios.length === 1 ? folios[0] : null,
-    platformFacts: { clientCount: by("countClientsForUser")[0]?.data || by("countClientsForCurrentUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null,
+    platformFacts: { earningsReport: by("getEarningsByClientReport")[0]?.data || null, clientCount: by("countClientsForUser")[0]?.data || by("countClientsForCurrentUser")[0]?.data || null, authorizedCapabilities: by("getAuthorizedCapabilities")[0]?.data || null, systems: by("getSystemCatalog")[0]?.data || null,
       latestSolicitud: by("getLatestSolicitud")[0]?.data || null, lastDiagnostic: by("getLastOperationDiagnostic")[0]?.data || null },
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),
     solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus,
+      cliente: row.cliente ?? null, clienteId: row.clienteId ?? null, clienteFuente: row.clienteFuente ?? null, metodoPago: row.metodoPago ?? null, moneda: row.moneda ?? null,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     pagos: pagos.map(row => ({ id: row.id, folio: row.folio, monto: row.monto, moneda: row.moneda, estado: row.estado, pagador: row.pagador, pagadorFuente: row.pagadorFuente, conciliado: row.conciliado, recibidoAt: row.recibidoAt, registradoAt: row.registradoAt,
+      cliente: row.cliente ?? null, clienteId: row.clienteId ?? null, clienteFuente: row.clienteFuente ?? null,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     complementosPendientes: asRows(by("getPaymentComplementStatus")[0]?.data).filter(row => row.status !== "RECEIVED" && row.status !== "VOIDED").slice(0, 6).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.status, enviadoAlProveedor: row.externalRequestSent === true })),
     capacidadesIq: by("getIqCapabilities")[0]?.data || {}, memoriasHistoricas: memoryContext, observacionesHistoricasNoVerificadas: observationContext, memoryConflicts,

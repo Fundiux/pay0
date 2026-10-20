@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { listAgent007Messages, listAgent007Recommendations, markAgent007MessagesRead, sendAgent007Message, type Agent007Message, type Agent007Recommendation } from "@/services/agent007";
+import HugoReportAttachment from "@/components/hugo/HugoReportAttachment";
+import HugoResponseCorrection, { HugoCorrectionTopic } from "@/components/hugo/HugoResponseCorrection";
 
 function messageTime(value: any) {
   const date = value?.toDate?.() || (value?.seconds ? new Date(value.seconds * 1000) : null);
@@ -13,13 +15,20 @@ function messageTime(value: any) {
 }
 
 export default function HugoFloatingBubble() {
+  const { profile, profileUid } = useUserProfile();
+  return <HugoFloatingBubbleContent key={JSON.stringify([profileUid, profile?.rootId, profile?.role, profile?.active, profile?.disabled])} profile={profile} />;
+}
+
+function HugoFloatingBubbleContent({ profile }: { profile: any }) {
   const pathname = usePathname();
-  const { profile } = useUserProfile();
-  const allowed = profile?.role === "superadmin";
+  const allowed = profile?.role === "superadmin" && profile?.active !== false && profile?.disabled !== true;
   const { canAccess: canCreateClient } = useModuleAccess(profile, "clientes", "create");
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [items, setItems] = useState<Agent007Recommendation[]>([]);
+  const [correctionTopic, setCorrectionTopic] = useState("");
+  const correctionTopicVersion = useRef(0);
+  const changeCorrectionTopic = (value: string) => { correctionTopicVersion.current++; setCorrectionTopic(value); };
   const [messages, setMessages] = useState<Agent007Message[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -65,12 +74,14 @@ export default function HugoFloatingBubble() {
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
+    const topicVersion = correctionTopicVersion.current;
     const optimisticId = `local-${Date.now()}`;
     setMessages((current) => [...current, { id: optimisticId, role: "user", text: value, source: "USER", read: true }]);
     setText(""); setSending(true); setError("");
     try {
       setNearBottom(true);
-      const result = await sendAgent007Message(value, "PAY0");
+      const result = await sendAgent007Message(value, "PAY0", correctionTopic || undefined);
+      if (topicVersion !== correctionTopicVersion.current) { setMessages(current => current.filter(row => row.id !== optimisticId)); return; }
       setMessages((current) => [...current.filter((message) => message.id !== optimisticId), { id: `${optimisticId}-user`, role: "user", text: value, source: "USER", read: true }, result.message]);
     } catch (cause: any) {
       setMessages((current) => current.filter((message) => message.id !== optimisticId));
@@ -92,12 +103,12 @@ export default function HugoFloatingBubble() {
       <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-3"><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-full bg-violet-500/15 text-violet-300"><Bot size={19} /></span><div><h3 className="font-semibold text-white">María</h3><p className="text-[11px] text-emerald-300">Asistente interno · solo superadmin</p></div></div><button type="button" aria-label="Cerrar María" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={16} /></button></header>
       <div ref={listRef} onScroll={(event) => { const node = event.currentTarget; const close = node.scrollHeight - node.scrollTop - node.clientHeight < 80; setNearBottom(close); if (close) setNewBelow(false); }} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {!messages.length && <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-sm text-slate-300">Hola. Estoy listo para revisar contigo lo que ocurra en PAY0. Puedes preguntarme por una solicitud, pago, factura o decirme qué debo aprender.</div>}
-        {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-800 bg-slate-900 text-slate-200"}`}><p className="whitespace-pre-wrap">{message.text}</p><div className={`mt-1 flex gap-2 text-[10px] ${message.role === "user" ? "text-blue-100" : "text-slate-500"}`}><span>{message.role === "assistant" ? "María" : "Tú"}</span><span>{messageTime(message.createdAt)}</span></div></div></div>)}
+        {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-800 bg-slate-900 text-slate-200"}`}><p className="whitespace-pre-wrap">{message.text}</p><HugoReportAttachment message={message} /><HugoResponseCorrection message={message} scope="PAY0" onTopicSelected={changeCorrectionTopic} onSaved={correction => setMessages(current => current.map(row => row.id === message.id ? { ...row, responseCorrection: correction } : row))} /><div className={`mt-1 flex gap-2 text-[10px] ${message.role === "user" ? "text-blue-100" : "text-slate-500"}`}><span>{message.role === "assistant" ? "María" : "Tú"}</span><span>{messageTime(message.createdAt)}</span></div></div></div>)}
         {sending && <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 className="animate-spin" size={14} /> María está revisando el sistema…</div>}
         {newBelow && <button type="button" onClick={() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); setNearBottom(true); setNewBelow(false); }} className="sticky bottom-2 mx-auto flex items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-xs text-white shadow-xl"><ArrowDown size={13}/> Ir al mensaje más reciente</button>}
       </div>
       {error && <p className="mx-4 mb-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
-      <footer className="border-t border-slate-800 p-3"><a href="/hugo#attention" className="mb-2 block text-[11px] text-amber-300">{pending.length ? `${pending.length} asunto(s) requieren atención · Ver en María` : "Sin asuntos que requieran atención"}</a><div className="flex items-end gap-2"><textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} placeholder="Escribe a María…" className="max-h-28 min-h-10 min-w-0 flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400" /><button type="button" aria-label="Enviar mensaje" disabled={!text.trim() || sending} onClick={() => void send()} className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500 text-white disabled:cursor-not-allowed disabled:opacity-40"><Send size={16} /></button></div><p className="mt-2 text-[10px] text-slate-600">María puede observar y proponer; no ejecuta movimientos financieros.</p></footer>
+      <footer className="border-t border-slate-800 p-3"><HugoCorrectionTopic value={correctionTopic} onChange={changeCorrectionTopic}/><a href="/hugo#attention" className="mb-2 block text-[11px] text-amber-300">{pending.length ? `${pending.length} asunto(s) requieren atención · Ver en María` : "Sin asuntos que requieran atención"}</a><div className="flex items-end gap-2"><textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} placeholder="Escribe a María…" className="max-h-28 min-h-10 min-w-0 flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400" /><button type="button" aria-label="Enviar mensaje" disabled={!text.trim() || sending} onClick={() => void send()} className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500 text-white disabled:cursor-not-allowed disabled:opacity-40"><Send size={16} /></button></div><p className="mt-2 text-[10px] text-slate-600">María puede observar y proponer; no ejecuta movimientos financieros.</p></footer>
     </aside>}
   </>;
 }

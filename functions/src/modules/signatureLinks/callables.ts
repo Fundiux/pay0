@@ -90,19 +90,23 @@ export const createSolicitudSignatureLink = onCall(
     const token = randomBytes(32).toString("base64url");
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 1000 * 60 * 60 * 24 * 7);
 
-    await db.collection("signatureRequests").doc(token).set({
-      rootId,
-      solicitudId,
-      solicitudFolio: solicitud.folio || null,
-      clienteId: solicitud.clienteId || solicitud.clientId || null,
-      clienteNombre: solicitud.clienteNombre || solicitud.clientName || null,
-      companyId: solicitud.companyId || null,
-      status: "PENDING",
-      createdBy: uid,
-      createdUsername: username(user, uid),
-      createdAt: FieldValue.serverTimestamp(),
-      expiresAt,
-      usedAt: null,
+    await db.runTransaction(async tx => {
+      const source = await tx.get(solicitudSnap.ref);
+      if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+      tx.set(db.collection("signatureRequests").doc(token), {
+        rootId,
+        solicitudId,
+        solicitudFolio: solicitud.folio || null,
+        clienteId: solicitud.clienteId || solicitud.clientId || null,
+        clienteNombre: solicitud.clienteNombre || solicitud.clientName || null,
+        companyId: solicitud.companyId || null,
+        status: "PENDING",
+        createdBy: uid,
+        createdUsername: username(user, uid),
+        createdAt: FieldValue.serverTimestamp(),
+        expiresAt,
+        usedAt: null,
+      });
     });
 
     const origin = clean(request.data?.origin, 240);

@@ -22,7 +22,7 @@ export type LearningExperience = {
   sourceVersions: { core: string; context: string; memory: string; prompt: string | null };
   createdAt: string; finalizedAt: string | null; supersedesId: string | null; supersededById?: string | null;
 };
-export type LearningEventType = "EXPERIENCE_CREATED" | "CORRECTION_RECORDED" | "OUTCOME_LINKED" | "EXPERIENCE_VERIFIED" | "EXPERIENCE_REJECTED" | "EXPERIENCE_RETRIEVED" | "EXPERIENCE_SUPERSEDED" | "LEARNING_EFFECT_MEASURED" | "RULE_CANDIDATE_CREATED" | "SPLIT_ASSIGNED";
+export type LearningEventType = "EXPERIENCE_CREATED" | "CORRECTION_RECORDED" | "OUTCOME_LINKED" | "EXPERIENCE_VERIFIED" | "EXPERIENCE_REJECTED" | "EXPERIENCE_RETRIEVED" | "EXPERIENCE_SUPERSEDED" | "LEARNING_EFFECT_MEASURED" | "RULE_CANDIDATE_CREATED" | "SPLIT_ASSIGNED" | "RULE_ACTIVATED" | "RULE_REVOKED" | "RULE_INVALIDATED";
 export type LearningLedgerEvent = { eventId: string; rootId: string; experienceId: string; type: LearningEventType; at: string; actorUid: string | null; references: LearningReference[]; metadata: Record<string, string | number | boolean | null> };
 export type LearningQuery = { rootId: string; domain: string; taskType: string; entityType: string; features: Record<string, string>; limit?: number };
 export type LearningRetrieval = { considered: number; selected: LearningExperience[]; rejected: Array<{ experienceId: string; reason: string }>; conflict?: boolean };

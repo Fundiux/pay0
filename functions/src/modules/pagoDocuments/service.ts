@@ -1,3 +1,4 @@
+import { operationTiming } from "../../utils/operationTiming";
 import { manualNoteAuthor, systemNoteAuthor } from "../notes/domain";
 import * as admin from "firebase-admin";
 import { createHash } from "node:crypto";
@@ -630,6 +631,9 @@ export async function finalizePagoDocumentUploadCore(
     if (Object.keys(iqAutoQueuePatchH4D62B).length > 0) {
       tx.set(pagoRefH4D58H, iqAutoQueuePatchH4D62B, { merge: true });
     }
+    if (documentType === "COMPROBANTE_PAGO") {
+      tx.set(pagoRefH4D58H, { iqApplicable: Boolean(iqDispatchEnabled) }, { merge: true });
+    }
     // H4_D62B_PAGO_DOC_COMPROBANTE_AUTO_QUEUE_WRITE
     logActivityTx(tx, db, {
       event: "DOCUMENTO_PAGO_SUBIDO",
@@ -659,6 +663,12 @@ export async function finalizePagoDocumentUploadCore(
       },
     });
   });
+
+  operationTiming("document_finalized_at", pagoId);
+
+  // The durable QUEUED transition is dispatched by
+  // dispatchQueuedPagoIqCreation. Finalization returns after READY instead of
+  // waiting for Cloud Tasks; Eventarc retries and the scheduler remain backups.
 
   if (terminalUnlockAppliedH4D64A6) {
     const terminalFolio = terminalContextH4D64A6.iqId || "sin folio";

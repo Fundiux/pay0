@@ -12,4 +12,3 @@ assert.equal(nextDateKey("2024-02-29"), "2024-03-01");
 assert.throws(() => hugoDayBounds("2026-02-30"), /INVALID_DATE_KEY/);
 
 console.log(JSON.stringify({ ok: true, timezone: HUGO_TIME_ZONE, rollover: true, historicalDst: true }));
-

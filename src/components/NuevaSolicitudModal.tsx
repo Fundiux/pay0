@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import UiSelect, { UiSelectOption } from "@/components/UiSelect";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
@@ -10,6 +10,7 @@ function isPermissionDeniedError(e: any) {
   const message = String(e?.message || "").toLowerCase();
   return code.includes("permission-denied") || message.includes("permission-denied");
 }
+import { beginOperationTiming } from "@/lib/operationTiming";
 import { createSolicitud } from "@/services/solicitudes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -31,7 +32,13 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
   const [clientes, setClientes] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [operationTypes, setOperationTypes] = useState<any[]>([]);
-const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submission = useRef<{ solicitudId: string; folio: string } | null>(null);
+  const saving = useRef(false);
+  const [saveError, setSaveError] = useState("");
+  const [sourceCompanyWarning, setSourceCompanyWarning] = useState("");
+  const [sourceCompanyConfirmed, setSourceCompanyConfirmed] = useState(false);
+  const parseSequence = useRef(0);
   const [ordenCompraFile, setOrdenCompraFile] = useState<File | null>(null);
   const [facturaXmlFile, setFacturaXmlFile] = useState<File | null>(null);
   const [ordenCompraDragging, setOrdenCompraDragging] = useState(false);
@@ -107,7 +114,20 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     []
   );
 
+  useEffect(() => {
+    const warnPending = (event: BeforeUnloadEvent) => {
+      if (!saving.current && !submission.current) return;
+      event.preventDefault(); event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnPending);
+    return () => window.removeEventListener("beforeunload", warnPending);
+  }, []);
+
   const resetForm = () => {
+    parseSequence.current++;
+    setSourceCompanyWarning("");
+    submission.current = null;
+    setSaveError("");
     setFormData(initialFormData);
     setOrdenCompraFile(null);
     setFacturaXmlFile(null);
@@ -299,15 +319,20 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo Orden de Compra...");
 
+    setSourceCompanyConfirmed(false);
+    const sequence = ++parseSequence.current;
     try {
       const parsed = await parseOrdenCompraFile(file);
+      if (sequence !== parseSequence.current) return;
       setOrdenCompraParsed(parsed);
 
       const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
+      setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value
+        ? `Empresa seleccionada: ${formData.companyName}. El documento corresponde a ${matchedCompany.label}; el formulario cambio a la empresa del documento. Verifica antes de crear.` : "");
 
-      const filled: string[] = [];
+      const filled: string[] = [matchedClient && "cliente", matchedCompany && "empresa", matchedOperation && "tipo de operacion", parsed.montoSolicitud > 0 && "monto total", parsed.tipoFactura && "tipo factura"].filter(Boolean) as string[];
 
       setFormData((prev) => {
         const next = {
@@ -326,19 +351,16 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         if (matchedClient) {
           next.clientId = matchedClient.value;
           next.clientName = matchedClient.label;
-          filled.push("cliente");
         }
 
         if (matchedCompany) {
           next.companyId = matchedCompany.value;
           next.companyName = matchedCompany.label;
-          filled.push("empresa");
         }
 
         if (matchedOperation) {
           next.operationTypeKey = matchedOperation.value;
           next.operationTypeName = matchedOperation.label;
-          filled.push("tipo de operacion");
         }
 
         if (parsed.montoSolicitud > 0) {
@@ -346,12 +368,10 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           });
-          filled.push("monto total OC");
         }
 
         if (parsed.tipoFactura === "PUE" || parsed.tipoFactura === "PPD") {
           next.tipoFactura = parsed.tipoFactura;
-          filled.push("tipo factura");
         }
 
         const note = [
@@ -385,10 +405,11 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         setOrdenCompraParseMsg("OC cargada. No pude autollenar campos; corrige el archivo o catalogos.");
       }
     } catch (err: any) {
+      if (sequence !== parseSequence.current) return;
       console.error("[NuevaSolicitudModal] OC parse error", err);
       setOrdenCompraParseMsg("OC cargada. No se pudo leer para autollenado.");
     } finally {
-      setOrdenCompraParseBusy(false);
+      if (sequence === parseSequence.current) setOrdenCompraParseBusy(false);
     }
   };
 
@@ -396,15 +417,20 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo XML de factura...");
 
+    setSourceCompanyConfirmed(false);
+    const sequence = ++parseSequence.current;
     try {
       const parsed = await parseFacturaXmlFile(file);
+      if (sequence !== parseSequence.current) return;
       setFacturaXmlParsed(parsed);
 
       const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
+      setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value
+        ? `Empresa seleccionada: ${formData.companyName}. El documento corresponde a ${matchedCompany.label}; el formulario cambio a la empresa del documento. Verifica antes de crear.` : "");
 
-      const filled: string[] = [];
+      const filled: string[] = [matchedClient && "cliente", matchedCompany && "empresa", matchedOperation && "tipo de operacion", parsed.montoSolicitud > 0 && "monto total", parsed.tipoFactura && "tipo factura"].filter(Boolean) as string[];
 
       setFormData((prev) => {
         const next = {
@@ -423,19 +449,16 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         if (matchedClient) {
           next.clientId = matchedClient.value;
           next.clientName = matchedClient.label;
-          filled.push("cliente");
         }
 
         if (matchedCompany) {
           next.companyId = matchedCompany.value;
           next.companyName = matchedCompany.label;
-          filled.push("empresa");
         }
 
         if (matchedOperation) {
           next.operationTypeKey = matchedOperation.value;
           next.operationTypeName = matchedOperation.label;
-          filled.push("tipo de operacion");
         }
 
         if (parsed.montoSolicitud > 0) {
@@ -443,12 +466,10 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           });
-          filled.push("monto total XML");
         }
 
         if (parsed.tipoFactura === "PUE" || parsed.tipoFactura === "PPD") {
           next.tipoFactura = parsed.tipoFactura;
-          filled.push("tipo factura");
         }
 
         const note = [
@@ -484,10 +505,11 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         setOrdenCompraParseMsg("XML cargado. No pude autollenar campos; corrige el archivo o catalogos.");
       }
     } catch (err: any) {
+      if (sequence !== parseSequence.current) return;
       console.error("[NuevaSolicitudModal] XML parse error", err);
       setOrdenCompraParseMsg(err?.message || "XML cargado. No se pudo leer para autollenado.");
     } finally {
-      setOrdenCompraParseBusy(false);
+      if (sequence === parseSequence.current) setOrdenCompraParseBusy(false);
     }
   };
 
@@ -504,7 +526,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
   };
 
   const setSolicitudSourceFromFile = (file: File | null) => {
-    if (!file) return;
+    if (!file || submission.current || saving.current) return;
 
     if (!isOrdenCompraFile(file) && !isFacturaXmlFile(file)) {
       alert("El archivo debe ser Orden de Compra Excel o Factura XML.");
@@ -534,7 +556,13 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     void applyOrdenCompraAutofill(file);
   };
   const handleSave = async (e: React.FormEvent) => {
+    const releaseTiming = beginOperationTiming();
     e.preventDefault();
+    if (saving.current) return;
+    if (sourceCompanyWarning && !sourceCompanyConfirmed) {
+      setSaveError("Confirma o corrige la empresa detectada en el documento antes de crear.");
+      return;
+    }
     const numMonto = parseFloat(String(formData.monto).replace(/,/g, ""));
 
     if (!isSolicitudFormComplete) {
@@ -570,9 +598,11 @@ const [isSubmitting, setIsSubmitting] = useState(false);
       return alert("La empresa seleccionada no tiene despacho asignado. Corrige la empresa antes de crear la solicitud.");
     }
 
+    saving.current = true;
     setIsSubmitting(true);
+    setSaveError("");
     try {
-      const createResult: any = await createSolicitud({
+      const createResult: any = submission.current || await createSolicitud({
         clienteId: formData.clientId,
         companyId: formData.companyId,
         despachoId: String(selectedCompany?.despachoId || "").trim(),
@@ -584,64 +614,31 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         empresaNombre: formData.companyName,
       });
 
-      // A54-A6-R1 PUBLICAR_FOLIO_INMEDIATO
-      // La solicitud y su folio PAY0 ya existen; cerramos la captura
-      // antes del upload/finalize para no bloquear la experiencia visible.
-      const __a54SolicitudId = String(createResult?.solicitudId || "").trim();
-      const __a54Folio = String(createResult?.folio || "").trim();
-      if (!__a54SolicitudId || !__a54Folio) {
+      const solicitudId = String(createResult?.solicitudId || "").trim();
+      const folio = String(createResult?.folio || "").trim();
+      if (!solicitudId || !folio) {
         throw new Error("createSolicitud no devolvio solicitudId/folio canonicos.");
       }
-      console.info("[PAY0_SOLICITUD_PUBLICADA]", {
-        solicitudId: __a54SolicitudId,
-        folio: __a54Folio,
-        backendPerf: createResult?._perf || null,
+      // Keep the persisted identity and File until the source is finalized.
+      // A failed upload retries this same operation, never createSolicitud again.
+      submission.current = { solicitudId, folio };
+      window.dispatchEvent(new CustomEvent("PAY0_SOLICITUD_CREATED_LOCAL", {
+        detail: { solicitudId, folio },
+      }));
+      await uploadSolicitudDoc({
+        solicitudId, documentType: sourceDocumentType, file: sourceFile,
+        onProgress: setOrdenCompraUploadPct,
       });
-      // A54-A9 PUBLICACION LOCAL INMEDIATA
-      window.dispatchEvent(
-        new CustomEvent("PAY0_SOLICITUD_CREATED_LOCAL", {
-          detail: {
-            solicitudId: __a54SolicitudId,
-            folio: __a54Folio,
-          },
-        })
-      );
+      // Finalize enqueues IQ; this does not wait for the IQ worker/HTTP response.
       onClose();
-
-
-      // A54-A10-R2 POST_CREATE_ASYNC
-      // El folio PAY0 y la fila ya fueron publicados.
-      // La OC continua sin bloquear el flujo visible.
-      const createdSolicitudId = __a54SolicitudId;
-
-      void (async () => {
-        try {
-          await uploadSolicitudDoc({
-            solicitudId: createdSolicitudId,
-            documentType: sourceDocumentType,
-            file: sourceFile,
-          });
-
-          console.info("[PAY0_SOLICITUD_DOCUMENTO_ASYNC_OK]", {
-            solicitudId: createdSolicitudId,
-            folio: __a54Folio,
-            documentType: sourceDocumentType,
-          });
-        } catch (postCreateError) {
-          console.error("[PAY0_SOLICITUD_POST_CREATE_ERROR]", {
-            solicitudId: createdSolicitudId,
-            folio: __a54Folio,
-            documentType: sourceDocumentType,
-            error: postCreateError,
-          });
-        }
-      })();
+      releaseTiming(solicitudId);
 
       resetForm();
       return;
     } catch (err: any) {
-      alert(err.message);
+      setSaveError(`${submission.current ? `Solicitud ${submission.current.folio} guardada; archivo pendiente. ` : ""}${err.message || "No se pudo guardar."}`);
     } finally {
+      saving.current = false;
       setIsSubmitting(false);
     }
   };
@@ -668,7 +665,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     Number.isFinite(solicitudMontoNumber) &&
     solicitudMontoNumber > 0;
   const closeModal = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || submission.current) return;
     resetForm();
     onClose();
   };
@@ -726,6 +723,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
               if (sourceDocumentLock) return;
 
               const company = empresas.find((e) => String(e.id || "") === String(value || ""));
+              setSourceCompanyConfirmed(false);
               setFormData({
                 ...formData,
                 companyId: value,
@@ -824,7 +822,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
                 type="file"
                 className="hidden"
                 accept=".xlsx,.csv,.xml,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/xml,application/xml"
-                disabled={isSubmitting}
+                disabled={isSubmitting || Boolean(submission.current)}
                 onChange={(e) => {
                   setSolicitudSourceFromFile(e.target.files?.[0] || null);
                   e.currentTarget.value = "";
@@ -875,6 +873,8 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             className="min-h-[82px] w-full resize-none rounded-xl border border-white/10 bg-[#0b1220] px-4 py-2 text-[13px] text-slate-300 outline-none transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-70"
           />
 
+          {sourceCompanyWarning && <div className="text-sm text-amber-200"><p role="alert">{sourceCompanyWarning}</p><label className="flex gap-2"><input type="checkbox" checked={sourceCompanyConfirmed} disabled={isSubmitting} onChange={e => setSourceCompanyConfirmed(e.target.checked)} />Confirmo que la empresa y el documento corresponden a esta solicitud.</label></div>}
+          {saveError && <p role="alert" className="text-sm text-amber-200">{saveError} Conservamos el archivo para reintentar sin crear otra solicitud.</p>}
           <button
             type="submit"
             disabled={isSubmitting || !isSolicitudFormComplete}
@@ -885,7 +885,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             }
             title={isSolicitudFormComplete ? "" : "Campos incompletos o archivo faltante"}
           >
-            {isSubmitting ? "Guardando solicitud y archivo..." : ordenCompraParseBusy ? "Leyendo archivo..." : isSolicitudFormComplete ? "Crear solicitud" : "Campos incompletos"}
+            {isSubmitting ? "Guardando solicitud y archivo..." : ordenCompraParseBusy ? "Leyendo archivo..." : submission.current ? "Reintentar archivo de esta solicitud" : isSolicitudFormComplete ? "Crear solicitud" : "Campos incompletos"}
           </button>
         </form>
       </div>

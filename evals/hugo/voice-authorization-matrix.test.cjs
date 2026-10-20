@@ -30,7 +30,7 @@ test("browser source never owns Hugo tool execution", () => {
   const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../src/components/hugo/HugoRealtimeVoice.tsx"), "utf8");
   assert.equal(source.includes("delegateHugoVoiceTurn"), false);
   assert.equal(source.includes("response.function_call_arguments.done"), false);
-  assert.equal(source.includes('if (!gatewayUrl) throw new Error("El gateway server-side de Hugo no esta configurado en esta version.")'), true);
+  assert.match(source, /if \(!gatewayUrl\) throw new Error\("El gateway server-side de [^"\n]+ no esta configurado en esta version\."\)/);
   assert.equal(source.includes("new WebSocket(gatewayUrl!)"), true);
   assert.equal(source.includes("hugoVoiceCanary"), false);
 });

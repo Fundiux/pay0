@@ -44,7 +44,15 @@ async function main() {
   await db.doc(`operationTypes/${operation}`).set({ active: true, name: 'Operación sintética' });
   await db.doc(`clients/${clientId}/costos/${dispatchId}__${operation}`).set({ active: true, assignedCost: 5, pricingMode: 'PERCENT', calculationBaseType: 'TOTAL' });
   await db.doc(`despachos/${dispatchId}/costos/${operation}`).set({ active: true, baseCost: 2, pricingMode: 'PERCENT', calculationBaseType: 'TOTAL' });
-  const identified = await identify(), payload = identified.createPayload;
+  const analysisId = createHash('sha256').update(`${root}-analysis`).digest('hex');
+  const analysisRef = db.doc(`pagoReceiptAnalyses/${analysisId}`);
+  await analysisRef.set({ rootId: root, correctionVersionsByActor: { [root]: 0 } });
+  const identified = await identifyParsedReceipt({ db, actor: { uid: root, role: 'superadmin', rootId: root }, receipt: parseReceiptText(body), contentSha256: sha, operationTypeKey: operation, analysisId, correctionVersion: 0 });
+  const payload = identified.createPayload;
+  await analysisRef.set({ correctionVersionsByActor: { [root]: 1 } }, { merge: true });
+  await denied(() => call(createPago, root, payload), 'failed-precondition');
+  check((await db.collection('pagos').where('rootId', '==', root).get()).empty, 'Correction race creates no stale payment');
+  await analysisRef.set({ correctionVersionsByActor: { [root]: 0 } }, { merge: true });
   check(identified.status === 'READY' && payload, 'Server identifies explicit receipt');
   await denied(() => call(createPago, root, { ...payload, montoTotal: 10000 }), 'failed-precondition');
   await denied(() => call(createPago, second, payload), 'permission-denied');
@@ -68,6 +76,17 @@ async function main() {
   check((await idRef.get()).get('pagoId') === result.pagoId && (await idRef.get()).get('stage') === 'REGISTERED_AWAITING_RECEIPT', 'Payment and receipt claim commit atomically');
   const secondIdentity = await identify(second);
   await denied(() => call(createPago, second, secondIdentity.createPayload), 'already-exists');
+  const alteredIdentity = await identifyParsedReceipt({ db, actor: { uid: second, role: 'superadmin', rootId: root },
+    receipt: { ...parseReceiptText(body), date: '2026-09-28', reference: 'CORRECTED-REFERENCE' }, contentSha256: sha, operationTypeKey: operation });
+  check(alteredIdentity.status === 'READY', 'Another actor may review their own corrected data');
+  await denied(() => call(createPago, second, alteredIdentity.createPayload), 'already-exists');
+  const contentClaim = db.doc(`pagoReceiptDedup/content_${createHash('sha256').update(JSON.stringify([root, sha])).digest('hex')}`);
+  check((await contentClaim.get()).get('pagoId') === result.pagoId, 'File fingerprint is claimed with the canonical payment');
+  await contentClaim.update({ clienteId: 'another-client' });
+  await assert.rejects(() => call(createPago, second, alteredIdentity.createPayload), error => error.code === 'already-exists' && error.details.pagoId === null); checks++;
+  // Simulate an older registration with no content claim; its identification still protects it.
+  await contentClaim.delete();
+  await denied(() => call(createPago, second, alteredIdentity.createPayload), 'already-exists');
   const upload = await docs.initPagoDocumentUploadCore({ auth: { uid: root }, data: { pagoId: result.pagoId, documentType: 'COMPROBANTE_PAGO', originalName: 'synthetic.txt', contentType: 'text/plain', sizeBytes: bytes.length, sha256: sha } });
   await bucket.file(upload.storagePath).save(bytes);
   await docs.finalizePagoDocumentUploadCore({ auth: { uid: root }, data: upload });
@@ -76,6 +95,38 @@ async function main() {
   const activities = await db.collection(activityCollectionForSystem('PAY0')).where('rootId', '==', root).get();
   check(activities.docs.filter(doc => doc.get('event') === 'PAGO_CREADO').length === 1, 'One creation audit event');
   check((await db.collection('pagoAplicaciones').where('rootId', '==', root).get()).empty, 'Registration alone cannot apply unreconciled money');
+  // Exercise the actual canonical create boundary with a previously READY delegated receipt.
+  const delegateUid = `${root}-delegate`;
+  const grantRef = db.doc(`userClientAccess/${delegateUid}/clients/${clientId}`);
+  await db.doc(`users/${delegateUid}`).set({ rootId: root, role: 'operador', active: true, adminId: root, userNumber: 9 });
+  await db.doc(`userCompanyAccess/${delegateUid}/companies/${companyId}`).set({ active: true });
+  const validGrant = { rootId: root, clientId, active: true, grantedBy: root, createdBy: root,
+    permissions: { view: true, operatePagos: true, operateSolicitudes: true },
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 3600000) };
+  await grantRef.set(validGrant);
+  const delegatedBody = body.replace('0123-abc-456', 'DELEGATED-9876');
+  const delegatedHash = createHash('sha256').update(delegatedBody).digest('hex');
+  const delegatedIdentity = await identifyParsedReceipt({ db, actor: { uid: delegateUid, role: 'operador', rootId: root },
+    receipt: parseReceiptText(delegatedBody), contentSha256: delegatedHash, operationTypeKey: operation });
+  check(delegatedIdentity.status === 'READY' && delegatedIdentity.createPayload, 'Valid delegate obtains a verified READY receipt');
+  const delegatedPayload = delegatedIdentity.createPayload;
+  await grantRef.update({ active: false });
+  await denied(() => call(createPago, delegateUid, delegatedPayload), 'permission-denied');
+  await grantRef.set({ ...validGrant, expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() - 1000) });
+  await denied(() => call(createPago, delegateUid, delegatedPayload), 'permission-denied');
+  await grantRef.set(validGrant);
+  await db.doc(`users/${delegateUid}`).update({ disabled: true });
+  await denied(() => call(createPago, delegateUid, delegatedPayload), 'permission-denied');
+  await db.doc(`users/${delegateUid}`).update({ disabled: false });
+  await db.doc(`users/${root}`).update({ disabled: true });
+  await denied(() => call(createPago, delegateUid, delegatedPayload), 'permission-denied');
+  await db.doc(`users/${root}`).update({ disabled: false });
+  check((await db.collection('pagos').where('rootId', '==', root).get()).size === 1, 'Revoked, expired and blocked actors cannot consume a stale READY identity');
+  const delegatedResult = await call(createPago, delegateUid, delegatedPayload);
+  const delegatedPago = await db.doc(`pagos/${delegatedResult.pagoId}`).get();
+  check(delegatedPago.get('actorUid') === delegateUid && delegatedPago.get('accessSource') === 'DELEGATED', 'Valid delegated create preserves actor and delegation provenance');
+  check(delegatedResult.folio.includes('C7U3E5'), 'Delegated create retains original client owner in canonical folio');
+  check((await db.collection('pagos').where('rootId', '==', root).get()).size === 2, 'Exactly one additional valid delegated payment is created');
   console.log(JSON.stringify({ test: 'receipt-canonical-create', checks, result: 'PASS', externalActions: 0 }));
 }
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { await db.terminate(); await admin.app().delete(); });

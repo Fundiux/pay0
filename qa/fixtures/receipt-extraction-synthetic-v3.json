@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "kind": "SYNTHETIC",
+  "description": "Invented fixtures for parser regression only; not real bank receipt accuracy.",
+  "samples": [
+    {"id":"split-amount","bank":"GENERIC","format":"PDF_TEXT","text":"Monto transferido\n$ 1,234.56 MXN","expected":{"amount":1234.56,"amountVerified":true}},
+    {"id":"comma-decimal","bank":"GENERIC","format":"IMAGE_OCR_TEXT","text":"Importe: 1.234,56 MXN","expected":{"amount":1234.56,"amountVerified":true}},
+    {"id":"space-thousands","bank":"GENERIC","format":"PDF_TEXT","text":"Importe: 1 234.56 MXN","expected":{"amount":1234.56,"amountVerified":true}},
+    {"id":"invalid-grouping","bank":"GENERIC","format":"IMAGE_OCR_TEXT","text":"Monto: 12 34.56 MXN","expected":{"amountVerified":false}},
+    {"id":"conflicting-amount","bank":"GENERIC","format":"PDF_TEXT","text":"Monto: 100 MXN\nMonto transferido\n200 MXN","expected":{"amountVerified":false}},
+    {"id":"accented-execution-date","bank":"GENERIC","format":"PDF_TEXT","text":"Fecha de operación:\n16 de octubre de 2026 13:45:30","expected":{"date":"2026-10-16","dateVerified":true,"time":"13:45:30"}},
+    {"id":"invalid-calendar","bank":"GENERIC","format":"PDF_TEXT","text":"Fecha: 2026-02-31","expected":{"date":"","dateVerified":false}},
+    {"id":"ambiguous-calendar","bank":"GENERIC","format":"PDF_TEXT","text":"Fecha: 01/02/2026","expected":{"dateVerified":false}},
+    {"id":"capture-not-execution","bank":"GENERIC","format":"PDF_TEXT","text":"Fecha y hora de captura: 2026-10-16 13:45:30","expected":{"date":"2026-10-16","dateVerified":false}},
+    {"id":"unlabelled-calendar","bank":"GENERIC","format":"PDF_TEXT","text":"2026-10-16","expected":{"dateVerified":false}},
+    {"id":"conflicting-dates","bank":"GENERIC","format":"PDF_TEXT","text":"Fecha de operación: 2026-10-16\nFecha de pago: 2026-10-17","expected":{"dateVerified":false}},
+    {"id":"explicit-bank-parties","bank":"MULTIBANK","format":"PDF_TEXT","text":"Banco emisor: BANCO ALFA\nInstitución receptora: BANCO BETA\nBanco receptor: BANCO BETA","expected":{"sourceBankName":"BANCO ALFA","destinationBankName":"BANCO BETA","bankName":"BANCO BETA"}},
+    {"id":"explicit-account-parties","bank":"GENERIC","format":"PDF_TEXT","text":"CLABE origen: 012 345 678901234567\nCuenta de depósito: 987-654-321098765432","expected":{"account":"012345678901234567","destinationAccount":"987654321098765432"}},
+    {"id":"unspecified-account","bank":"GENERIC","format":"PDF_TEXT","text":"Cuenta: 012345678901234567","expected":{"account":"","destinationAccount":""}},
+    {"id":"masked-account","bank":"GENERIC","format":"IMAGE_OCR_TEXT","text":"Cuenta origen: ****-1234","expected":{"account":"****1234"}},
+    {"id":"original-party-spelling","bank":"GENERIC","format":"PDF_TEXT","text":"Ordenante: José Núñez\nBeneficiario: Compañía Álamo","expected":{"senderName":"José Núñez","beneficiaryName":"Compañía Álamo"}},
+    {"id":"accented-reference","bank":"GENERIC","format":"PDF_TEXT","text":"Referencia numérica: 001234\nDescripción: Operación de prueba","expected":{"reference":"001234","concept":"Operación de prueba"}},
+    {"id":"no-source-to-destination","bank":"GENERIC","format":"PDF_TEXT","text":"CLABE origen: 012345678901234567","expected":{"account":"012345678901234567","semantic.destinationAccount":null}}
+  ]
+}

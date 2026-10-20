@@ -36,4 +36,3 @@ export function hugoDayBounds(dateKey: string): { from: Date; to: Date } {
   for (let index = 0; index < 3; index += 1) nextGuess += nextDesired - localPartsMillis(new Date(nextGuess));
   return { from: new Date(guess), to: new Date(nextGuess) };
 }
-

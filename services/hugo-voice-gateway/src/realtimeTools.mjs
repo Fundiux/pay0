@@ -1,4 +1,8 @@
 export const realtimeTools = [
+  { type: "function", name: "get_earnings_by_client_report",
+    description: "Consulta el reporte canónico de utilidades por cliente. Pide fechas explícitas antes de usarla; sólo lectura, alcance de la sesión autenticada. Devuelve resumen y hasta 25 clientes, con advertencia si se alcanza el límite.",
+    parameters: { type: "object", additionalProperties: false, properties: { dateFrom: { type: "string", description: "Fecha inicial AAAA-MM-DD." }, dateTo: { type: "string", description: "Fecha final AAAA-MM-DD." }, compareDateFrom: { type: "string", description: "Inicio del periodo a comparar AAAA-MM-DD; requiere compareDateTo." }, compareDateTo: { type: "string", description: "Fin del periodo a comparar AAAA-MM-DD; requiere compareDateFrom." }, includeCompensated: { type: "boolean", description: "Incluir operaciones compensadas sólo si el usuario lo pide explícitamente; false por defecto." }, limit: { type: "integer", minimum: 1, maximum: 5000 } }, required: ["dateFrom", "dateTo"] }
+  },
   {
     type: "function",
     name: "get_authorized_capabilities",
@@ -92,11 +96,16 @@ export const realtimeTools = [
       required: ["request"],
     },
   },
+  { type: "function", name: "correct_current_voice_response",
+    description: "Guarda una corrección explícita que el usuario acaba de dictar sobre la respuesta anterior de esta sesión. No crea reglas globales ni cambia datos. Sólo confirma que quedó guardada si la herramienta devuelve persisted true.",
+    parameters: { type: "object", additionalProperties: false, properties: {}, required: [] } },
 ];
 
 export const realtimeToolNames = realtimeTools.map(tool => tool.name);
 
 export function delegationForRealtimeTool(name, args = {}) {
+  if (name === "correct_current_voice_response") return { request: "Registrar la corrección explícita del turno de voz.", recordResponseCorrection: true };
+  if (name === "get_earnings_by_client_report") return { request: "Consulta el reporte de utilidades por cliente.", toolName: "getEarningsByClientReport", toolInput: { dateFrom: args.dateFrom, dateTo: args.dateTo, limit: args.limit ?? 5000, ...(args.includeCompensated !== undefined ? { includeCompensated: args.includeCompensated } : {}), ...(args.compareDateFrom !== undefined ? { compareDateFrom: args.compareDateFrom } : {}), ...(args.compareDateTo !== undefined ? { compareDateTo: args.compareDateTo } : {}) } };
   if (name === "get_authorized_capabilities") return { request: "¿A qué tengo acceso?", toolName: "getAuthorizedCapabilities", toolInput: {} };
   if (name === "get_system_catalog") return { request: "¿Cuáles son los sistemas disponibles?", toolName: "getSystemCatalog", toolInput: {} };
   if (name === "count_clients_for_user") return { request: `¿Cuántos clientes tiene el usuario ${String(args.query || "").trim()}?`, toolName: "countClientsForUser", toolInput: { query: String(args.query || "").trim() } };

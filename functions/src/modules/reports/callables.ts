@@ -1,4 +1,4 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import {
   db,
   getMyUser,
@@ -302,9 +302,7 @@ function addIssueToSummary(summary: PaymentsFinancialPostingIssuesReportSummary,
   }
 }
 
-export const getEarningsByClientReport = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
-  async (request): Promise<EarningsByClientReportResult> => {
+export async function getEarningsByClientReportHandler(request: CallableRequest<EarningsByClientReportInput>): Promise<EarningsByClientReportResult> {
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
 
@@ -427,7 +425,11 @@ export const getEarningsByClientReport = onCall(
       rows,
       summary,
     };
-  }
+}
+
+export const getEarningsByClientReport = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  getEarningsByClientReportHandler,
 );
 
 export const getOperationalMetricsReport = onCall(

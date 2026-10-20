@@ -3,6 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess, type ClientAccessPermissionKey } from "../clientDelegations/access";
 import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
+import { signGenerationBoundDownload } from "./generationBoundDownload";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -55,16 +56,8 @@ function inferFamily(upload: Record<string, any>): DocumentFamily | null {
 
 export async function getAuthorizedDocumentDownloadUrlCore(
   request: any,
-  signUrl: (storagePath: string) => Promise<string> = async (storagePath) => {
-    const file = admin.storage().bucket().file(storagePath);
-    const [exists] = await file.exists();
-    if (!exists) throw new HttpsError("not-found", "Archivo no encontrado.");
-    const [url] = await file.getSignedUrl({
-      action: "read",
-      expires: Date.now() + 5 * 60 * 1000,
-    });
-    return url;
-  },
+  signUrl: (storagePath: string, expectedGeneration?: unknown) => Promise<string> =
+    (storagePath, expectedGeneration) => signGenerationBoundDownload(admin.storage().bucket(), storagePath, expectedGeneration),
 ) {
     const uid = clean(request.auth?.uid);
     const uploadId = clean(request.data?.uploadId);
@@ -132,7 +125,8 @@ export async function getAuthorizedDocumentDownloadUrlCore(
 
     let url: string;
     try {
-      url = await signUrl(storagePath);
+      // Generation comes only from the authorized upload, never request.data.
+      url = await signUrl(storagePath, upload.storageGeneration ?? null);
     } catch (error: any) {
       if (error instanceof HttpsError) throw error;
       if (Number(error?.code) === 404 || Number(error?.statusCode) === 404) {

@@ -492,6 +492,7 @@ export async function resolveClientCsfContinuationAction(params: {
   uid: string;
   rootId: string;
   allowFinalizedCreate?: boolean;
+  readDocument?: (path: string) => Promise<FirebaseFirestore.DocumentSnapshot>;
 }): Promise<"create" | "edit"> {
   const intakeId = clean(params.intakeId);
   const clientId = clean(params.clientId);
@@ -499,9 +500,10 @@ export async function resolveClientCsfContinuationAction(params: {
     throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");
   }
 
+  const read = params.readDocument || ((path: string) => db.doc(path).get());
   const [intakeSnap, clientSnap] = await Promise.all([
-    db.doc(`clientCsfIntakes/${intakeId}`).get(),
-    db.doc(`clients/${clientId}`).get(),
+    read(`clientCsfIntakes/${intakeId}`),
+    read(`clients/${clientId}`),
   ]);
   if (!intakeSnap.exists || !clientSnap.exists) {
     throw new HttpsError("permission-denied", "Continuacion CSF fuera del contexto autorizado.");

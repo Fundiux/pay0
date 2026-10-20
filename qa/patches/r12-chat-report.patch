@@ -1,0 +1,297 @@
+--- a/src/modules/agent007/callables.ts
++++ b/src/modules/agent007/callables.ts
+@@ -225,14 +225,14 @@
+     });
+     const reply = result.text;
+     const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
+-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
++    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
+       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
+       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
+     for (const experienceId of result.learningUsage?.includedIds || []) {
+       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
+     }
+-    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, source, scope, profile, createdAt: saved.createdAt } };
++    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), source, scope, profile, createdAt: saved.createdAt } };
+   },
+ );
+ 
+--- a/src/modules/agent007/firestoreHugoDataStore.ts
++++ b/src/modules/agent007/firestoreHugoDataStore.ts
+@@ -69,7 +69,7 @@
+     batch.set(this.db.collection("agent007Conversations").doc(input.conversationId), { rootId: input.rootId, ownerUid: input.uid, participantUids: [input.uid], status: "ACTIVE", lastMessage: input.reply,
+       lastMessageAt: now, updatedAt: now, recentEntities: input.recentEntities, ...(input.conversationState ? { conversationState: input.conversationState } : {}), createdAt: FieldValue.serverTimestamp() }, { merge: true });
+     batch.create(userMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "user", text: input.text, senderUid: input.uid, source: "USER", visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, createdAt: now });
+-    batch.create(assistantMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "assistant", text: input.reply, recipientUid: input.uid, source: input.source,
++    batch.create(assistantMessage, { rootId: input.rootId, conversationId: input.conversationId, role: "assistant", text: input.reply, ...(input.reportExport ? { reportExport: input.reportExport } : {}), recipientUid: input.uid, source: input.source,
+       visibility: "CONVERSATION", scope: input.scope || "PAY0", profile: input.profile || "OPERATOR", read: true, capability: input.capability || null, capabilityExecuted: input.capabilityExecuted, contextSummary: input.contextSummary, createdAt: Timestamp.fromMillis(now.toMillis() + 1) });
+     batch.create(this.db.collection("agent007Traces").doc(input.traceId), { ...input.trace, rootId: input.rootId, actorUid: input.uid, conversationId: input.conversationId });
+     await batch.commit();
+--- a/src/modules/agent007/reportConnector.ts
++++ b/src/modules/agent007/reportConnector.ts
+@@ -1,7 +1,7 @@
+ import type { CallableRequest } from "firebase-functions/v2/https";
+ import { getEarningsByClientReportHandler } from "../reports/callables";
+ import type { ToolResult } from "./hugoCore/toolRouter";
+-import { EarningsReportToolInput, validateEarningsReportInput } from "./hugoCore/reportSemantics";
++import { EarningsReportToolInput, HugoReportExport, validateEarningsReportInput } from "./hugoCore/reportSemantics";
+ 
+ export async function executeEarningsReportTool(request: CallableRequest, input: EarningsReportToolInput): Promise<ToolResult> {
+   validateEarningsReportInput(input);
+@@ -9,9 +9,41 @@
+   const scanLimit = input.limit ?? 5000;
+   // The same handler re-loads the current profile and enforces report permission,
+   // role and root scope. A model cannot provide an identity or bypass those checks.
+-  const report = await getEarningsByClientReportHandler({ ...request, data: { ...input, limit: scanLimit } });
++  const filters = { dateFrom: input.dateFrom, dateTo: input.dateTo, includeCompensated: input.includeCompensated, limit: scanLimit };
++  let report = await getEarningsByClientReportHandler({ ...request, data: filters });
++  let clientResolution: Record<string, unknown> | undefined;
++  if (input.clientQuery) {
++    const normalized = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
++    const query = normalized(input.clientQuery);
++    const exact = report.rows.filter(row => normalized(row.clienteNombre || row.clienteId) === query);
++    const matches = exact.length ? exact : report.rows.filter(row => normalized(row.clienteNombre || "").includes(query));
++    if (matches.length !== 1) return { sourceSystem: "PAY0", tool: "getEarningsByClientReport", retrievedAt: new Date().toISOString(), scope: { rootId: report.rootId },
++      completeness: "PARTIAL", evidence: [], data: { dateFrom: report.dateFrom, dateTo: report.dateTo, rows: [], summary: null,
++        docsScanned: report.docsScanned, scanLimit, mayBeTruncated: report.docsScanned >= scanLimit,
++        clientResolution: { status: matches.length ? "AMBIGUOUS" : "NOT_FOUND", candidates: matches.slice(0, 5).map(row => (row.clienteNombre || row.clienteId).slice(0, 200)) } },
++      trace: { latencyMs: Date.now() - started, result: "OK" } };
++    const row = matches[0];
++    // Reuse the canonical per-client totals without recomputing any financial formula.
++    const { clienteId, clienteNombre, lastCreatedAt, ...totals } = row;
++    report = { ...report, rows: [row], summary: { ...totals, clientsCount: 1 } };
++
++    clientResolution = { status: "RESOLVED", clientId: clienteId, clientName: (clienteNombre || clienteId).slice(0, 200) };
++  }
++  const exportRows = report.rows.slice(0, 250).map(row => ({ ...row, clienteId: row.clienteId, clienteNombre: row.clienteNombre === null ? null : String(row.clienteNombre).slice(0, 200) }));
++  const numericKeys = ["operationsCount", "grossAmount", "baseAmount", "despachoCostAmount", "superadminEarningAmount", "adminEarningAmount", "operadorEarningAmount", "totalEarningsAmount", "clientChargeAmount", "clientNetAmount"] as const;
++  const exportValid = exportRows.every(row => row.clienteId.length <= 160 && numericKeys.every(key => typeof row[key] === "number" && Number.isFinite(row[key])));
++  let reportExport: HugoReportExport | undefined = exportRows.length && exportValid ? { version: 1, kind: "EARNINGS_BY_CLIENT", fileName: `pay0-utilidades-${input.dateFrom}-a-${input.dateTo}.xlsx`,
++    dateFrom: input.dateFrom!, dateTo: input.dateTo!, includeCompensated: report.includeCompensated, docsScanned: report.docsScanned, scanLimit,
++    matchedClients: report.rows.length, exportedClients: Math.min(report.rows.length, 250), truncatedByScan: report.docsScanned >= scanLimit,
++    truncatedByExport: report.rows.length > 250 || report.rows.some(row => (row.clienteNombre || "").length > 200), rows: exportRows } : undefined;
++  // Reserve ample headroom below Firestore's 1 MiB document limit for message metadata.
++  while (reportExport && Buffer.byteLength(JSON.stringify(reportExport), "utf8") > 350_000 && reportExport.rows.length) {
++    reportExport.rows.pop(); reportExport.exportedClients = reportExport.rows.length; reportExport.truncatedByExport = true;
++  }
++  if (reportExport && !reportExport.rows.length) reportExport = undefined;
+   return { sourceSystem: "PAY0", tool: "getEarningsByClientReport", retrievedAt: new Date().toISOString(), scope: { rootId: report.rootId },
+     completeness: "PARTIAL", evidence: [{ entityType: "report", entityId: "earningsByClient", kind: "CANONICAL_REPORT", sourceSystem: "PAY0", completeness: "PARTIAL" }],
+-    data: { ...report, rows: report.rows.slice(0, 25), displayedClients: Math.min(report.rows.length, 25), scanLimit, mayBeTruncated: report.docsScanned >= scanLimit },
++    data: { ...report, rows: report.rows.slice(0, 25), displayedClients: Math.min(report.rows.length, 25), scanLimit, mayBeTruncated: report.docsScanned >= scanLimit,
++      ...(clientResolution ? { clientResolution } : {}), ...(reportExport ? { reportExport } : {}) },
+     trace: { latencyMs: Date.now() - started, result: "OK" } };
+ }
+--- a/src/modules/agent007/hugoCore/reportSemantics.ts
++++ b/src/modules/agent007/hugoCore/reportSemantics.ts
+@@ -1,8 +1,14 @@
+-export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; limit?: number; includeCompensated?: boolean };
++import type { EarningsByClientReportRow } from "../../reports/types";
++export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; limit?: number; includeCompensated?: boolean; clientQuery?: string };
++export type HugoReportExport = { version: 1; kind: "EARNINGS_BY_CLIENT"; fileName: string; dateFrom: string; dateTo: string; includeCompensated: boolean;
++  docsScanned: number; scanLimit: number; matchedClients: number; exportedClients: number; truncatedByScan: boolean; truncatedByExport: boolean; rows: EarningsByClientReportRow[] };
++export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; includeCompensated: boolean;
++  stage: "DATES" | "CLIENT" | "READY"; resolvedAt: number; resolvedTurn: number };
+ 
+ export function validateEarningsReportInput(input: EarningsReportToolInput): void {
+   if (!input.dateFrom || !input.dateTo) throw Error("HUGO_TOOL_INVALID_INPUT");
+-  if (Object.keys(input).some(key => !["dateFrom", "dateTo", "limit", "includeCompensated"].includes(key))) throw Error("HUGO_TOOL_INVALID_INPUT");
++  if (Object.keys(input).some(key => !["dateFrom", "dateTo", "limit", "includeCompensated", "clientQuery"].includes(key))) throw Error("HUGO_TOOL_INVALID_INPUT");
++  if (input.clientQuery !== undefined && (typeof input.clientQuery !== "string" || !input.clientQuery.trim() || input.clientQuery.length > 120 || /[\x00-\x1f]/.test(input.clientQuery))) throw Error("HUGO_TOOL_INVALID_INPUT");
+   for (const date of [input.dateFrom, input.dateTo]) {
+     if (date !== undefined && (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw Error("HUGO_TOOL_INVALID_INPUT");
+   }
+@@ -14,6 +20,49 @@
+ export function isEarningsReportQuestion(message: string): boolean {
+   const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+   return /\b(reporte|informe|resumen)\b/i.test(text) && /\b(utilidades|ganancias|honorarios)\b/i.test(text) && /\bclientes?\b/i.test(text);
++}
++
++export function normalizePendingReport(raw: any, rootId: string, turn: number, now: number): PendingEarningsReport | undefined {
++  if (!raw || raw.rootId !== rootId || !["DATES", "CLIENT", "READY"].includes(raw.stage) || !Number.isFinite(raw.resolvedAt) || raw.resolvedAt > now || now - raw.resolvedAt > 30 * 60_000 ||
++    !Number.isInteger(raw.resolvedTurn) || raw.resolvedTurn < 0 || raw.resolvedTurn > turn || turn - raw.resolvedTurn > 4 || typeof raw.includeCompensated !== "boolean") return;
++  if (raw.clientQuery !== undefined && (typeof raw.clientQuery !== "string" || !raw.clientQuery.trim() || raw.clientQuery.length > 120 || /[\x00-\x1f]/.test(raw.clientQuery))) return;
++  if (raw.dateFrom !== undefined || raw.dateTo !== undefined) {
++    try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo }); } catch { return; }
++  }
++  return { rootId, stage: raw.stage, includeCompensated: raw.includeCompensated, resolvedAt: raw.resolvedAt, resolvedTurn: raw.resolvedTurn,
++    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}) };
++}
++
++export function pendingReportRequest(message: string, previous?: PendingEarningsReport): { intent: boolean; request: EarningsReportToolInput | null; clientQuery?: string; includeCompensated?: boolean } {
++  const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
++  const initial = isEarningsReportQuestion(message);
++  const continuation = !!previous && !/\b(pagos?|solicitudes?|dispersiones?|otro tema|cambiando de tema)\b/i.test(text) &&
++    (previous.stage === "CLIENT" || /\bdescarg\w*\b|\b\d{4}-\d{2}-\d{2}\b|\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|descarga|descargar|archivo|excel|reporte)\b/i.test(text));
++  if (!initial && !continuation) return { intent: false, request: null };
++  const capturedName = message.match(/\bcliente\s+(.+)/i)?.[1]
++    ?.replace(/\s+\d{4}-\d{2}-\d{2}[\s\S]*$/, "")
++    .replace(/\s+del\s+(?:mes\s+de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?\s*$/i, "")
++    .replace(/\s+(?:incluye|incluir|sin|con|no incluyas)\s+(?:las\s+)?compensadas\b[\s\S]*$/i, "")
++    .replace(/\s+(?:del?|desde|entre|al)$/i, "").trim().replace(/[?.!,;]+$/, "");
++  const name = capturedName && !/^(?:del?|por|para|en|entre|desde|con|sin|incluye)\b/i.test(capturedName) ? capturedName : undefined;
++  const clientQuery = name || (!initial && previous?.stage === "CLIENT" && !/\b\d{4}-\d{2}-\d{2}\b/.test(text) ? message.trim().replace(/[?.!,;]+$/, "") : !initial ? previous?.clientQuery : undefined);
++  const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
++  const priorDates = !initial && previous?.dateFrom && previous.dateTo ? `${previous.dateFrom} ${previous.dateTo}` : "";
++  const monthOnly = !dates.length && /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(text);
++  const exclude = /\b(sin|excluye|excluir|no incluyas)\s+(?:las\s+)?compensadas\b/i.test(text);
++  const includeCompensated = exclude ? false : /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text) ? true : !initial && previous?.includeCompensated === true;
++  const candidate = monthOnly ? null : earningsReportRequest(initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
++  if (!candidate) return { intent: true, request: null, includeCompensated, ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
++  candidate.includeCompensated = includeCompensated;
++  if (clientQuery) candidate.clientQuery = clientQuery.slice(0, 120);
++  return { intent: true, request: candidate, includeCompensated, ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
++}
++
++export function claimsUnexecutedReport(text: string, message: string): boolean {
++  const normalized = `${message} ${text}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
++  const answer = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
++  return /\b(reporte|informe|archivo|excel)\b/.test(normalized) &&
++    /\b(generad[oa]s?|generare|generando|preparad[oa]s?|preparare|preparando|adjunt[oa]|list[oa]|descargar|descarga)\b|\b(voy|vamos)\s+a\s+(generar|preparar|crear|entregar)\b/.test(answer);
+ }
+ 
+ export function earningsReportRequest(message: string): EarningsReportToolInput | null {
+@@ -30,6 +79,9 @@
+ }
+ 
+ export function formatEarningsReport(data: any): string {
++  if (data.clientResolution?.status === "AMBIGUOUS") return `Encontré varios clientes autorizados que coinciden: ${data.clientResolution.candidates.join(", ")}. Indica el nombre completo del cliente; todavía no he generado un reporte ni un archivo para uno de ellos.`;
++  if (data.clientResolution?.status === "NOT_FOUND") return `No encontré una coincidencia para ese cliente entre las operaciones autorizadas del periodo.${data.mayBeTruncated ? " La búsqueda puede estar incompleta por el límite de registros." : ""} Confirma el nombre completo; esto no demuestra que el cliente no exista.`;
+   const amount = (value: unknown) => Number(value || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+-  return `Reporte de utilidades por cliente del ${data.dateFrom || "inicio disponible"} al ${data.dateTo || "último registro disponible"}: ${data.summary.operationsCount} operaciones de ${data.summary.clientsCount} clientes; utilidades registradas ${amount(data.summary.totalEarningsAmount)}. Operaciones compensadas ${data.includeCompensated ? "incluidas" : "excluidas"}. Se revisaron ${data.docsScanned} registros, con límite de ${data.scanLimit}. ${data.mayBeTruncated ? "Se alcanzó el límite; el reporte puede estar incompleto." : "El resumen corresponde al rango y alcance autorizados."} Importes según el reporte canónico de PAY0, sin conversión adicional de monedas.`;
++  const base = `Reporte de utilidades${data.clientResolution?.status === "RESOLVED" ? ` de ${data.clientResolution.clientName}` : " por cliente"} del ${data.dateFrom || "inicio disponible"} al ${data.dateTo || "último registro disponible"}: ${data.summary.operationsCount} operaciones de ${data.summary.clientsCount} clientes; utilidades registradas ${amount(data.summary.totalEarningsAmount)}. Operaciones compensadas ${data.includeCompensated ? "incluidas" : "excluidas"}. Se revisaron ${data.docsScanned} registros, con límite de ${data.scanLimit}. ${data.mayBeTruncated ? "Se alcanzó el límite; el reporte puede estar incompleto." : "El resumen corresponde al rango y alcance autorizados."} Importes según el reporte canónico de PAY0, sin conversión adicional de monedas.`;
++  return base;
+ }
+--- a/src/modules/agent007/hugoCore/conversationState.ts
++++ b/src/modules/agent007/hugoCore/conversationState.ts
+@@ -1,6 +1,8 @@
++import { PendingEarningsReport, normalizePendingReport } from "./reportSemantics";
++
+ export const CONVERSATION_STATE_VERSION = "conversation-state-v2";
+ export type ConversationEntity = { system: "PAY0"; entityType: "SOLICITUD" | "PAGO"; entityId: string; folio: string; rootId: string; resolvedAt: number; resolvedTurn: number; source: string; confidence: number };
+-export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null };
++export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; pendingEarningsReport?: PendingEarningsReport };
+ export type ReferenceResolution = { folios: string[]; active: ConversationEntity | null; clarification: string | null; reason: string; intent: string; state: ConversationState };
+ 
+ const distinct = <T>(items: T[]) => [...new Set(items)];
+@@ -13,8 +15,10 @@
+   const valid = (x: any): x is ConversationEntity => x?.rootId === rootId && x.system === "PAY0" && ["SOLICITUD", "PAGO"].includes(x.entityType) && typeof x.folio === "string" && /^[SP][A-Z0-9]{5,19}$/.test(x.folio) && Number.isFinite(x.resolvedAt) && x.resolvedAt <= now && Number.isInteger(x.resolvedTurn);
+   const recentEntities = Array.isArray(row.recentEntities) ? row.recentEntities.filter(valid).slice(0, 6) : [];
+   const activeEntity = valid(row.activeEntity) && fresh(row.activeEntity, { ...row, turn: Number(row.turn) || 0 } as ConversationState, now) ? row.activeEntity : null;
+-  return { version: CONVERSATION_STATE_VERSION, rootId, turn: Math.min(Math.max(Number(row.turn) || 0, 0), 100000), activeEntity,
+-    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null };
++  const turn = Math.min(Math.max(Number(row.turn) || 0, 0), 100000);
++  const pendingEarningsReport = normalizePendingReport(row.pendingEarningsReport, rootId, turn, now);
++  return { version: CONVERSATION_STATE_VERSION, rootId, turn, activeEntity,
++    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(pendingEarningsReport ? { pendingEarningsReport } : {}) };
+ }
+ export function resolveConversationReference(message: string, previous: ConversationState, rootId: string, now = Date.now()): ReferenceResolution {
+   const state = normalizeConversationState(previous, rootId, now);
+@@ -43,8 +47,9 @@
+ export function advanceConversationState(resolution: ReferenceResolution, resolved: ConversationEntity[], rootId: string): ConversationState {
+   const previous = resolution.state;
+   const recent = [...resolved, ...previous.recentEntities.filter(old => !resolved.some(next => next.folio === old.folio))].slice(0, 6);
+-  const activeEntity = resolution.reason === "TOPIC_SHIFT" || resolution.reason === "EXPLICIT_MULTIPLE" || resolution.reason === "COMPARISON_SET" || (resolution.reason === "EXPLICIT" && !resolved.length) ? null :
++  const activeEntity = resolution.reason === "TOPIC_SHIFT" || resolution.reason === "REPORT_QUERY" || resolution.reason === "EXPLICIT_MULTIPLE" || resolution.reason === "COMPARISON_SET" || (resolution.reason === "EXPLICIT" && !resolved.length) ? null :
+     resolved.length === 1 ? resolved[0] : resolution.clarification ? null : resolution.active || previous.activeEntity;
+   return { version: CONVERSATION_STATE_VERSION, rootId, turn: previous.turn + 1, activeEntity, recentEntities: recent,
+-    pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent };
++    pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent,
++    ...(previous.pendingEarningsReport && !resolved.length && !["TOPIC_SHIFT", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { pendingEarningsReport: previous.pendingEarningsReport } : {}) };
+ }
+--- a/src/modules/agent007/hugoCore/contextBuilderV2.ts
++++ b/src/modules/agent007/hugoCore/contextBuilderV2.ts
+@@ -1,4 +1,4 @@
+-import { earningsReportRequest, isEarningsReportQuestion } from "./reportSemantics";
++import { pendingReportRequest } from "./reportSemantics";
+ import { ToolRequest, ToolResult } from "./toolRouter";
+ import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
+ import { HugoDataStore } from "./dataStoreContract";
+@@ -37,8 +37,17 @@
+ export async function buildHugoContextV2(input: { message: string; rootId: string; conversationState: ConversationState; router: { execute(request: ToolRequest): Promise<ToolResult> }; dataStore?: HugoDataStore; now?: number }) {
+   const now = input.now || Date.now();
+   const resolution = resolveConversationReference(input.message, input.conversationState, input.rootId, now);
+-  const reportRequest = earningsReportRequest(input.message);
+-  if (isEarningsReportQuestion(input.message) && !reportRequest) resolution.clarification = "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente.";
++  const pendingRequest = pendingReportRequest(input.message, resolution.state.pendingEarningsReport);
++  const reportRequest = pendingRequest.request;
++  if (!pendingRequest.intent) delete resolution.state.pendingEarningsReport;
++  if (pendingRequest.intent) {
++    resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
++      includeCompensated: reportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false,
++      ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
++      ...(reportRequest ? { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo } : {}) };
++    resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
++    resolution.clarification = reportRequest ? null : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente.";
++  }
+   if (resolution.clarification) {
+     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
+       folioConsultado: null, solicitudes: [] as any[], pagos: [] as any[], dudasPendientes: [] as any[], complementosPendientes: [] as any[], capacidadesIq: {} }, pieces: [] as ContextPiece[], toolResults: [] as ToolResult[],
+@@ -91,6 +100,7 @@
+   const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
+     resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
+   const nextState = advanceConversationState(resolution, resolved, input.rootId);
++  if (reportRequest && by("getEarningsByClientReport").length && nextState.pendingEarningsReport) nextState.pendingEarningsReport.stage = ["AMBIGUOUS", "NOT_FOUND"].includes(by("getEarningsByClientReport")[0].data?.clientResolution?.status) ? "CLIENT" : "READY";
+   const relevantRefs = folios.length ? references : [];
+   const retrieval = input.dataStore && relevantRefs.length ? await input.dataStore.retrieveMemory({ rootId: input.rootId, entityReferences: relevantRefs, intent: resolution.intent, limit: 4, now: new Date(now).toISOString() }) :
+     { considered: 0, selected: [] as RetrievedMemory[], legacyObservationsConsidered: 0, legacyObservations: [] as any[] };
+--- a/src/modules/agent007/hugoCore/toolRouter.ts
++++ b/src/modules/agent007/hugoCore/toolRouter.ts
+@@ -24,7 +24,7 @@
+ export type HugoToolName = keyof typeof HUGO_READ_TOOLS;
+ export type ToolResult = { sourceSystem: string; tool: string; retrievedAt: string; scope: { rootId: string }; completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; evidence: Array<{ entityType: string; entityId: string; kind: string; sourceSystem: string; completeness: string }>; data: any; trace: { latencyMs: number; result: string; error?: string } };
+ export type ToolIdentity = { uid: string; rootId: string; role: string };
+-export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; includeCompensated?: boolean; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
++export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; includeCompensated?: boolean; clientQuery?: string; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
+ 
+ export class HugoToolRouter {
+   constructor(private readonly identity: ToolIdentity, private readonly tools: Partial<Record<HugoToolName, (input: any) => Promise<ToolResult>>>, private readonly onResult?: (request: ToolRequest, result?: ToolResult, error?: unknown) => void) {
+--- a/src/modules/agent007/hugoCore/conversationCore.ts
++++ b/src/modules/agent007/hugoCore/conversationCore.ts
+@@ -1,4 +1,4 @@
+-import { formatEarningsReport } from "./reportSemantics";
++import { formatEarningsReport, HugoReportExport, claimsUnexecutedReport } from "./reportSemantics";
+ import { buildHugoContext, HugoMemory, RecentEntity } from "./contextBuilder";
+ import { HugoToolRouter, ToolRequest, ToolResult } from "./toolRouter";
+ import { HugoModelAdapter, ModelOutput, canonicalModelRequest } from "./modelContract";
+@@ -54,7 +54,7 @@
+ }
+ 
+ export type ConversationInput = { channel: string; conversationId: string; identity: { uid: string; rootId: string; role: string }; name: string; message: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; routingSignals?: { intent: string; risk: "READ" | "WRITE" | "EXTERNAL_SIDE_EFFECT"; complexity: "LOW" | "MEDIUM" | "HIGH"; requiredCapabilities: string[] }; history?: any[]; memory?: HugoMemory; recentEntities?: RecentEntity[]; conversationState?: ConversationState; commandReply?: string; promptVersion?: "legacy-v1" | "hugo-v2"; modelCapability?: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" };
+-export type ConversationOutput = { text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
++export type ConversationOutput = { reportExport?: HugoReportExport; text: string; source: "MODEL_RESPONSE" | "DETERMINISTIC_FALLBACK" | "POLICY_RESPONSE"; responsePolicy?: string | null; context: any; pieces: any[]; recentEntities: RecentEntity[]; conversationState?: ConversationState; memoryUsage?: MemoryUsage; learningUsage?: { considered: number; selected: number; candidateIds?: string[]; retrievedIds?: string[]; includedIds: string[]; referencedByModel?: string[]; effectClassification?: "NOT_EVALUATED"; rejected: Array<{ experienceId: string; reason: string }>; error?: string; conflict?: boolean }; budget?: HugoBudgetReport; composition?: Record<string, number>; intelligenceConfig?: typeof HUGO_V2_CONFIG; toolsRequested: ToolRequest[]; toolsExecuted: ToolResult[]; model: ModelOutput; promptVersion: string };
+ 
+ export class HugoConversationCore {
+   constructor(private readonly router: HugoToolRouter, private readonly model: HugoModelAdapter | null, private readonly dataStore?: HugoDataStore, private readonly learningStore?: HugoLearningStore) {}
+@@ -140,9 +140,12 @@
+     const modelFailureReply = v2 && model.error && !["COMMAND_HANDLED", "POLICY_HANDLED", "EMULATOR_DISABLED"].includes(model.error) ?
+       model.error === "MAX_TOKENS" ? "No pude completar una respuesta verificable. Puedes pedirme revisar un folio concreto de nuevo." :
+         "El razonamiento generativo no está disponible por ahora. Puedo consultar hechos concretos de PAY0 o pedir una revisión humana." : null;
+-    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
+-    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
+-      context: built.context, pieces: built.pieces,
++    const reportExport = executed.find(row => row.tool === "getEarningsByClientReport")?.data?.reportExport as HugoReportExport | undefined;
++    const unbackedReportReply = !executed.some(row => row.tool === "getEarningsByClientReport") && model.text && claimsUnexecutedReport(model.text, input.message)
++      ? "No he ejecutado un reporte ni creado un archivo en este turno. Indica el reporte y las fechas exactas para consultar los datos autorizados." : null;
++    const text = normalizePay0Brand(input.commandReply || policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || unbackedReportReply || (!checked.allowed ? "La evidencia disponible no permite afirmar un total o una ausencia global. Puedo revisar un folio concreto." : null) || redactedModelText || modelFailureReply || fallbackReply(input.message, input.name, built.context));
++    return { text, source: policyReply || exactFactReply || deterministicOperationalReply || learningUnavailableReply || conflictReply || budgetReply || unbackedReportReply || !checked.allowed || internalReferenceRedacted ? "POLICY_RESPONSE" : model.text ? "MODEL_RESPONSE" : "DETERMINISTIC_FALLBACK", responsePolicy: learningUnavailableReply ? "LEARNING_RETRIEVAL_UNAVAILABLE" : conflictReply ? "LEARNING_CONFLICT" : budgetReply ? "CONTEXT_BUDGET_EXCEEDED" : unbackedReportReply ? "UNBACKED_REPORT_CLAIM" : exactFactReply ? "EXACT_FACT" : deterministicOperationalReply ? "DETERMINISTIC_OPERATION" : policyReply ? "PARTIAL_TOTAL_OR_CLARIFICATION" : internalReferenceRedacted ? "INTERNAL_EXPERIENCE_REFERENCE_REDACTED" : checked.reason,
++      ...(reportExport ? { reportExport } : {}), context: built.context, pieces: built.pieces,
+       recentEntities: built.recentEntities.length ? built.recentEntities : recentEntities, conversationState: "conversationState" in built ? built.conversationState : undefined,
+       memoryUsage: "memoryUsage" in built ? built.memoryUsage : undefined, composition: "composition" in built ? built.composition : undefined,
+       learningUsage, budget,
+--- a/src/modules/agent007/hugoCore/dataStoreContract.ts
++++ b/src/modules/agent007/hugoCore/dataStoreContract.ts
+@@ -1,10 +1,11 @@
++import type { HugoReportExport } from "./reportSemantics";
+ import { HugoMemory, RecentEntity } from "./contextBuilder";
+ import { ConversationState } from "./conversationState";
+ import { MemoryQuery, MemoryRetrieval, HugoMemoryKind, HugoMemoryRecord } from "./memoryContract";
+ 
+ export type HugoConversationState = { history: any[]; memory: HugoMemory; recentEntities: RecentEntity[]; conversationState?: ConversationState };
+ export type HugoTraceFilter = { conversationId?: string; resultStatus?: string; tool?: string; sourceSystem?: string; completeness?: string; errorOnly?: boolean; from?: Date; to?: Date; cursor?: string; limit?: number };
+-export type HugoTurnInput = { rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
++export type HugoTurnInput = { reportExport?: HugoReportExport; rootId: string; uid: string; conversationId: string; text: string; reply: string; source: string; scope?: "GLOBAL" | "PAY0"; profile?: "OPERATOR" | "PROGRAMMER"; capability?: string | null; capabilityExecuted: boolean; contextSummary: any; recentEntities: RecentEntity[]; conversationState?: ConversationState; trace: Record<string, any>; traceId: string };
+ export interface HugoDataStore {
+   loadConversationState(identity: { uid: string; rootId: string }, conversationId: string): Promise<HugoConversationState>;
+   listObservations(rootId: string, limit?: number): Promise<any[]>;

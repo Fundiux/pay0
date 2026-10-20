@@ -1,3 +1,4 @@
+import { isIqHistoricalImport } from "../iq/historicalImportGuard";
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -6,6 +7,7 @@ import { db } from "../sharedCallables/helpers";
 import { logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 
 export const RECOVERY_FIELDS = {
   MATERIALITY: "materialitySyncStatus",
@@ -14,17 +16,26 @@ export const RECOVERY_FIELDS = {
   CERTIFICATE: "constanciaAutoGenerateStatus",
 } as const;
 export type RecoveryKind = keyof typeof RECOVERY_FIELDS;
+export function recoverySourceIsTerminal(row: any): boolean {
+  return !row || Boolean(row.isDeleted || row.deletedAt) ||
+    ["ELIMINADA", "CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO"].includes(String(row.status || "").toUpperCase());
+}
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 
 // Queue entries come only from trusted backend triggers. Execution rechecks the
 // original actor's current scope and each domain service's authorization.
 export async function enqueueRecovery(solicitudId: string, row: any, kind: RecoveryKind) {
   if (!row.rootId || !row.createdBy) return;
+  if (kind === "DRAFT" && !belongsToPay0Dispatch(row.rootId, row.despachoId)) return;
   const generation = String(row.ocFiscalMetadataUploadId || "initial");
   const ref = db.collection("operationRecoveryJobs").doc(hash(`${row.rootId}:${solicitudId}:${kind}:${generation}`));
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
-    if (existing.exists && !["COMPLETED", "RESOLVED_EXTERNALLY", "SUPERSEDED"].includes(existing.data()?.status)) return;
+    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
+    if (!source.exists || recoverySourceIsTerminal(source.data()) || source.get("rootId") !== row.rootId ||
+        String(source.get("ocFiscalMetadataUploadId") || "initial") !== generation || source.get(RECOVERY_FIELDS[kind]) !== "ERROR") return;
+    // A generation is attempted once; repeated trigger delivery must not reset its budget.
+    if (existing.exists) return;
     const automatic = kind === "DRAFT" || kind === "MATERIALITY";
     tx.set(ref, {
       rootId: row.rootId, solicitudId, actorUid: row.createdBy, kind, generation,
@@ -40,7 +51,7 @@ export const queueOperationRecovery = onDocumentWritten({
 }, async event => {
   if (!event.data?.after.exists) return;
   const row = (await db.doc(`solicitudes/${event.params.documentId}`).get()).data();
-  if (!row) return;
+  if (!row || isIqHistoricalImport(row) || row.isDeleted || row.deletedAt || row.status === "ELIMINADA") return;
   await reconcileRecoverySource(event.params.documentId, row);
   for (const kind of Object.keys(RECOVERY_FIELDS) as RecoveryKind[]) {
     if (row[RECOVERY_FIELDS[kind]] === "ERROR") await enqueueRecovery(event.params.documentId, row, kind);
@@ -57,7 +68,7 @@ export async function reconcileRecoverySource(solicitudId: string, row: any) {
     await db.runTransaction(async tx => {
       const current = await tx.get(snapshot.ref);
       const source = (await tx.get(db.doc(`solicitudes/${solicitudId}`))).data();
-      if (!source || source.rootId !== job.rootId || current.data()?.status === "RUNNING") return;
+      if (!source || source.rootId !== job.rootId || !["PENDING", "NEEDS_REVIEW"].includes(current.data()?.status)) return;
       const obsolete = job.generation !== String(source.ocFiscalMetadataUploadId || "initial");
       if (!obsolete && source[field] === "ERROR") return;
       tx.update(snapshot.ref, { status: obsolete ? "SUPERSEDED" : "RESOLVED_EXTERNALLY", nextAttemptAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
@@ -74,7 +85,8 @@ export async function executeRecovery(job: any) {
     throw new Error("RECOVERY_SCOPE_DENIED");
   }
   const row = source.data()!;
-  if (["CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO"].includes(row.status) || row.isDeleted) return;
+  if (recoverySourceIsTerminal(row)) return;
+  if (job.kind === "DRAFT" && !belongsToPay0Dispatch(job.rootId, row.despachoId)) return;
   const field = RECOVERY_FIELDS[job.kind as RecoveryKind];
   if (!field) throw new Error("RECOVERY_KIND_INVALID");
   if (row[field] !== "ERROR") return;
@@ -116,7 +128,7 @@ export async function executeRecovery(job: any) {
   // Do not overwrite a newer failure or source version while this task ran.
   await db.runTransaction(async tx => {
     const latest = await tx.get(source.ref);
-    if (latest.data()?.[field] === "ERROR" && String(latest.data()?.ocFiscalMetadataUploadId || "initial") === job.generation &&
+    if (!recoverySourceIsTerminal(latest.data()) && latest.data()?.[field] === "ERROR" && String(latest.data()?.ocFiscalMetadataUploadId || "initial") === job.generation &&
         latest.data()?.[field.replace(/Status$/, "LastError")] === row[field.replace(/Status$/, "LastError")]) {
       tx.update(source.ref, { [field]: "RECOVERED", recoveryUpdatedAt: FieldValue.serverTimestamp() });
     }

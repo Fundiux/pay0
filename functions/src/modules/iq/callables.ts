@@ -251,6 +251,8 @@ function sanitizeProfileForAdmin(id: string, data: FirebaseFirestore.DocumentDat
     alias: String(data.alias ?? ""),
     username,
     usernameMasked: maskUsername(username),
+    associatedName: String(data.associatedName ?? ""),
+    associatedNameConfigured: String(data.associatedName ?? "").trim().length > 0,
     erpUrl: String(data.erpUrl ?? DEFAULT_IQ_ERP_URL),
     active: data.active === true,
     hasPassword: data.hasPassword === true,
@@ -299,11 +301,12 @@ export const createIqCredentialProfile = onCall(callableWithIqSecret, async (req
 
   const alias = readString(data, "alias");
   const username = readString(data, "username");
+  const associatedName = readString(data, "associatedName");
   const password = readString(data, "password");
   const erpUrl = normalizeErpUrl(readString(data, "erpUrl"));
 
-  if (!alias || !username) {
-    throw new HttpsError("invalid-argument", "Alias y usuario IQ son requeridos.");
+  if (!alias || !username || !associatedName) {
+    throw new HttpsError("invalid-argument", "Alias, usuario IQ y Asociado IQ son requeridos.");
   }
 
   const db = getDb();
@@ -330,6 +333,7 @@ export const createIqCredentialProfile = onCall(callableWithIqSecret, async (req
     rootId: auth.rootId,
     alias,
     username,
+    associatedName,
     erpUrl,
     active: true,
     hasPassword: encrypted?.hasPassword === true,
@@ -368,6 +372,7 @@ export const updateIqCredentialProfile = onCall(callableWithIqSecret, async (req
 
   const alias = readString(data, "alias");
   const username = readString(data, "username");
+  const associatedName = readString(data, "associatedName");
   const password = readString(data, "password");
   const erpUrl = normalizeErpUrl(readString(data, "erpUrl"));
 
@@ -377,6 +382,13 @@ export const updateIqCredentialProfile = onCall(callableWithIqSecret, async (req
 
   if (username) {
     patch.username = username;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, "associatedName")) {
+    if (!associatedName) {
+      throw new HttpsError("invalid-argument", "El Asociado IQ es requerido.");
+    }
+    patch.associatedName = associatedName;
   }
 
   if (typeof data.active === "boolean") {
@@ -707,6 +719,11 @@ export const testIqConnection = onCall(
       const now = FieldValue.serverTimestamp();
       const status = "IQ_AUTHENTICATED";
       const message = "Sesion IQ confirmada por HTTP directo.";
+      const associatedName = access.associatedName || null;
+      const operationalReady = Boolean(associatedName);
+      const operatorMessage = operationalReady
+        ? `Autenticacion IQ: correcta. Asociado IQ: ${associatedName}. Conexion ERP: correcta.`
+        : "Autenticacion IQ: correcta. Asociado IQ: pendiente de configurar. Conexion ERP: correcta.";
 
       await getDb().collection("iqConnectionTests").add({
         rootId: auth.rootId,
@@ -719,6 +736,8 @@ export const testIqConnection = onCall(
         transport: "HTTP_DIRECT",
         httpAuthEndpoint: "/users/sessions",
         authenticated: true,
+        associatedName,
+        operationalReady,
         userId: session.userId || null,
         userType: session.userType || null,
         role: session.role || null,
@@ -735,7 +754,7 @@ export const testIqConnection = onCall(
           erpUrl: access.erpUrl,
           lastTestAt: now,
           lastTestStatus: status,
-          lastTestMessage: message,
+          lastTestMessage: operatorMessage,
           updatedAt: now,
           updatedBy: auth.uid,
         },
@@ -747,10 +766,13 @@ export const testIqConnection = onCall(
         data: {
           ok: true,
           message,
+          operatorMessage,
           mode: "HTTP_DIRECT",
           transport: "HTTP_DIRECT",
           status,
           authenticated: true,
+          associatedName,
+          operationalReady,
           httpAuthEndpoint: "/users/sessions",
           permissionsCount: session.permissions.length,
           branchName: session.branchName || null,

@@ -1,0 +1,266 @@
+diff --git a/src/modules/agent007/hugoCore/contextBuilderV2.ts b/src/modules/agent007/hugoCore/contextBuilderV2.ts
+index 40897c1..33396f0 100644
+--- a/src/modules/agent007/hugoCore/contextBuilderV2.ts
++++ b/src/modules/agent007/hugoCore/contextBuilderV2.ts
+@@ -1,4 +1,4 @@
+-import { pendingReportRequest, reportConversationResetReply } from "./reportSemantics";
++import { earningsReportRequest, isEarningsReportQuestion, isEarningsReportComparison, pendingReportRequest, reportConversationResetReply } from "./reportSemantics";
+ import { ToolRequest, ToolResult } from "./toolRouter";
+ import { advanceConversationState, ConversationEntity, ConversationState, resolveConversationReference } from "./conversationState";
+ import { HugoDataStore } from "./dataStoreContract";
+@@ -40,25 +40,33 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
+   const reportResetReply = reportConversationResetReply(input.message);
+   if (reportResetReply) {
+     delete resolution.state.pendingEarningsReport;
++    delete resolution.state.lastEarningsReport;
+     resolution.folios = []; resolution.active = null; resolution.reason = "TOPIC_SHIFT";
+     resolution.clarification = reportResetReply;
+   }
+   if (!reportResetReply && !resolution.state.pendingEarningsReport && /^\s*\d{4}-\d{2}-\d{2}\s+(?:al|a|hasta)\s+\d{4}-\d{2}-\d{2}\s*[.!?]?\s*$/i.test(input.message)) {
+     resolution.clarification = "Indicaste un periodo. ¿Qué reporte quieres consultar y para qué cliente?";
+   }
+-
++  const reportComparison = isEarningsReportComparison(input.message) && !resolution.folios.length && !/\b(pagos?|solicitudes?|folios?)\b/i.test(input.message)
++    && (!!resolution.state.lastEarningsReport || /\b\d{4}-\d{2}-\d{2}\b/.test(input.message));
+   const pendingRequest = pendingReportRequest(input.message, resolution.state.pendingEarningsReport);
+-  const parsedReportRequest = pendingRequest.request;
++  const reportIntent = isEarningsReportQuestion(input.message) || reportComparison || pendingRequest.intent;
++  const parsedReportRequest = reportComparison ? earningsReportRequest(input.message, resolution.state.lastEarningsReport?.query) : pendingRequest.request;
++  if (parsedReportRequest && reportComparison) {
++    if (pendingRequest.clientQuery) parsedReportRequest.clientQuery = pendingRequest.clientQuery;
++    if (pendingRequest.format) parsedReportRequest.format = pendingRequest.format;
++    if (/\bpdf\b/i.test(input.message) && /\b(excel|xlsx|xls)\b/i.test(input.message)) delete parsedReportRequest.format;
++  }
+   const reportRequest = parsedReportRequest?.format ? parsedReportRequest : null;
+-  if (!pendingRequest.intent) delete resolution.state.pendingEarningsReport;
+-  if (pendingRequest.intent) {
++  if (!reportIntent) delete resolution.state.pendingEarningsReport;
++  if (reportIntent) {
+     resolution.state.pendingEarningsReport = { rootId: input.rootId, stage: parsedReportRequest && !reportRequest ? "FORMAT" : "DATES", resolvedAt: now, resolvedTurn: resolution.state.turn + 1,
+-      includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false,
+-      ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
++      includeCompensated: parsedReportRequest?.includeCompensated ?? pendingRequest.includeCompensated ?? false, ...(pendingRequest.clientQuery ? { clientQuery: pendingRequest.clientQuery } : {}),
+       ...(pendingRequest.format ? { format: pendingRequest.format } : {}),
++      ...(parsedReportRequest?.compareDateFrom ? { compareDateFrom: parsedReportRequest.compareDateFrom, compareDateTo: parsedReportRequest.compareDateTo } : {}),
+       ...(parsedReportRequest ? { dateFrom: parsedReportRequest.dateFrom, dateTo: parsedReportRequest.dateTo } : {}) };
+     resolution.folios = []; resolution.active = null; resolution.reason = "REPORT_QUERY"; resolution.intent = "REPORT";
+-    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente.";
++    resolution.clarification = reportRequest ? null : parsedReportRequest ? "¿Lo quieres en PDF o Excel (XLSX)?" : "Indica fecha inicial y final en formato AAAA-MM-DD para el reporte de utilidades por cliente; para comparar, indica ambos periodos o parte de un reporte reciente.";
+   }
+   if (resolution.clarification) {
+     return { context: { schemaVersion: CONTEXT_BUILDER_VERSION, clarificationNeeded: resolution.clarification, evidenceBoundaries: {}, activeEntity: null,
+@@ -112,7 +120,11 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
+   const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
+     resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
+   const nextState = advanceConversationState(resolution, resolved, input.rootId);
+-  if (reportRequest && by("getEarningsByClientReport").length && nextState.pendingEarningsReport) nextState.pendingEarningsReport.stage = ["AMBIGUOUS", "NOT_FOUND"].includes(by("getEarningsByClientReport")[0].data?.clientResolution?.status) ? "CLIENT" : "READY";
++  if (reportRequest && by("getEarningsByClientReport").length) nextState.lastEarningsReport = { rootId: input.rootId,
++    query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true, ...(reportRequest.clientQuery ? { clientQuery: reportRequest.clientQuery } : {}), ...(reportRequest.format ? { format: reportRequest.format } : {}) }, resolvedAt: now, resolvedTurn: nextState.turn };
++  if (reportRequest && by("getEarningsByClientReport").length && nextState.pendingEarningsReport) {
++    nextState.pendingEarningsReport.stage = ["AMBIGUOUS", "NOT_FOUND"].includes(by("getEarningsByClientReport")[0].data?.clientResolution?.status) ? "CLIENT" : "READY";
++  }
+   const relevantRefs = folios.length ? references : [];
+   const retrieval = input.dataStore && relevantRefs.length ? await input.dataStore.retrieveMemory({ rootId: input.rootId, entityReferences: relevantRefs, intent: resolution.intent, limit: 4, now: new Date(now).toISOString() }) :
+     { considered: 0, selected: [] as RetrievedMemory[], legacyObservationsConsidered: 0, legacyObservations: [] as any[] };
+diff --git a/src/modules/agent007/hugoCore/conversationState.ts b/src/modules/agent007/hugoCore/conversationState.ts
+index f4d438a..d306520 100644
+--- a/src/modules/agent007/hugoCore/conversationState.ts
++++ b/src/modules/agent007/hugoCore/conversationState.ts
+@@ -1,8 +1,9 @@
+-import { PendingEarningsReport, normalizePendingReport } from "./reportSemantics";
++import { EarningsReportToolInput, PendingEarningsReport, normalizePendingReport, validateEarningsReportInput } from "./reportSemantics";
+ 
+ export const CONVERSATION_STATE_VERSION = "conversation-state-v2";
++export type EarningsReportContext = { rootId: string; query: EarningsReportToolInput; resolvedAt: number; resolvedTurn: number };
+ export type ConversationEntity = { system: "PAY0"; entityType: "SOLICITUD" | "PAGO"; entityId: string; folio: string; rootId: string; resolvedAt: number; resolvedTurn: number; source: string; confidence: number };
+-export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; pendingEarningsReport?: PendingEarningsReport };
++export type ConversationState = { version: typeof CONVERSATION_STATE_VERSION; rootId: string; turn: number; activeEntity: ConversationEntity | null; recentEntities: ConversationEntity[]; pendingAmbiguity: ConversationEntity[]; lastIntent: string | null; lastEarningsReport?: EarningsReportContext; pendingEarningsReport?: PendingEarningsReport };
+ export type ReferenceResolution = { folios: string[]; active: ConversationEntity | null; clarification: string | null; reason: string; intent: string; state: ConversationState };
+ 
+ const distinct = <T>(items: T[]) => [...new Set(items)];
+@@ -17,8 +18,14 @@ export function normalizeConversationState(raw: unknown, rootId: string, now = D
+   const activeEntity = valid(row.activeEntity) && fresh(row.activeEntity, { ...row, turn: Number(row.turn) || 0 } as ConversationState, now) ? row.activeEntity : null;
+   const turn = Math.min(Math.max(Number(row.turn) || 0, 0), 100000);
+   const pendingEarningsReport = normalizePendingReport(row.pendingEarningsReport, rootId, turn, now);
++  let lastEarningsReport: EarningsReportContext | undefined;
++  const report = row.lastEarningsReport;
++  if (report?.rootId === rootId && Number.isFinite(report.resolvedAt) && report.resolvedAt <= now && now - report.resolvedAt <= 30 * 60_000
++    && Number.isInteger(report.resolvedTurn) && report.resolvedTurn >= 0 && report.resolvedTurn <= turn && turn - report.resolvedTurn <= 4) {
++    try { validateEarningsReportInput(report.query); lastEarningsReport = { rootId, query: { ...report.query }, resolvedAt: report.resolvedAt, resolvedTurn: report.resolvedTurn }; } catch { /* Invalid saved filters cannot become tool inputs. */ }
++  }
+   return { version: CONVERSATION_STATE_VERSION, rootId, turn, activeEntity,
+-    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(pendingEarningsReport ? { pendingEarningsReport } : {}) };
++    recentEntities, pendingAmbiguity: Array.isArray(row.pendingAmbiguity) ? row.pendingAmbiguity.filter(valid).slice(0, 3) : [], lastIntent: typeof row.lastIntent === "string" ? row.lastIntent.slice(0, 60) : null, ...(lastEarningsReport ? { lastEarningsReport } : {}), ...(pendingEarningsReport ? { pendingEarningsReport } : {}) };
+ }
+ export function resolveConversationReference(message: string, previous: ConversationState, rootId: string, now = Date.now()): ReferenceResolution {
+   const state = normalizeConversationState(previous, rootId, now);
+@@ -51,5 +58,6 @@ export function advanceConversationState(resolution: ReferenceResolution, resolv
+     resolved.length === 1 ? resolved[0] : resolution.clarification ? null : resolution.active || previous.activeEntity;
+   return { version: CONVERSATION_STATE_VERSION, rootId, turn: previous.turn + 1, activeEntity, recentEntities: recent,
+     pendingAmbiguity: resolution.clarification ? recent.slice(0, 3) : [], lastIntent: resolution.intent,
+-    ...(previous.pendingEarningsReport && !resolved.length && !["TOPIC_SHIFT", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { pendingEarningsReport: previous.pendingEarningsReport } : {}) };
++    ...(previous.pendingEarningsReport && !resolved.length && !["TOPIC_SHIFT", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { pendingEarningsReport: previous.pendingEarningsReport } : {}),
++    ...(previous.lastEarningsReport && !resolved.length && !["TOPIC_SHIFT", "REPORT_QUERY", "EXPLICIT", "EXPLICIT_MULTIPLE", "COMPARISON_SET"].includes(resolution.reason) ? { lastEarningsReport: previous.lastEarningsReport } : {}) };
+ }
+diff --git a/src/modules/agent007/hugoCore/reportSemantics.ts b/src/modules/agent007/hugoCore/reportSemantics.ts
+index 0f919ab..1df332e 100644
+--- a/src/modules/agent007/hugoCore/reportSemantics.ts
++++ b/src/modules/agent007/hugoCore/reportSemantics.ts
+@@ -1,20 +1,22 @@
+ import type { EarningsByClientReportRow } from "../../reports/types";
+ export type ReportFileFormat = "PDF" | "XLSX";
+-export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; limit?: number; includeCompensated?: boolean; clientQuery?: string; format?: ReportFileFormat };
++export type EarningsReportToolInput = { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; limit?: number; includeCompensated?: boolean; clientQuery?: string; format?: ReportFileFormat };
+ export type HugoReportExport = { version: 1; kind: "EARNINGS_BY_CLIENT"; format?: ReportFileFormat; fileName: string; dateFrom: string; dateTo: string; includeCompensated: boolean;
+   docsScanned: number; scanLimit: number; matchedClients: number; exportedClients: number; truncatedByScan: boolean; truncatedByExport: boolean; rows: EarningsByClientReportRow[] };
+-export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; includeCompensated: boolean; format?: ReportFileFormat;
++export type PendingEarningsReport = { rootId: string; clientQuery?: string; dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated: boolean; format?: ReportFileFormat;
+   stage: "DATES" | "CLIENT" | "FORMAT" | "READY"; resolvedAt: number; resolvedTurn: number };
+ 
+ export function validateEarningsReportInput(input: EarningsReportToolInput): void {
+   if (!input.dateFrom || !input.dateTo) throw Error("HUGO_TOOL_INVALID_INPUT");
+-  if (Object.keys(input).some(key => !["dateFrom", "dateTo", "limit", "includeCompensated", "clientQuery", "format"].includes(key))) throw Error("HUGO_TOOL_INVALID_INPUT");
++  if (Object.keys(input).some(key => !["dateFrom", "dateTo", "compareDateFrom", "compareDateTo", "limit", "includeCompensated", "clientQuery", "format"].includes(key))) throw Error("HUGO_TOOL_INVALID_INPUT");
+   if (input.format !== undefined && !["PDF", "XLSX"].includes(input.format)) throw Error("HUGO_TOOL_INVALID_INPUT");
+   if (input.clientQuery !== undefined && (typeof input.clientQuery !== "string" || !input.clientQuery.trim() || input.clientQuery.length > 120 || /[\x00-\x1f]/.test(input.clientQuery))) throw Error("HUGO_TOOL_INVALID_INPUT");
+-  for (const date of [input.dateFrom, input.dateTo]) {
++  if ((input.compareDateFrom !== undefined) !== (input.compareDateTo !== undefined)) throw Error("HUGO_TOOL_INVALID_INPUT");
++  for (const date of [input.dateFrom, input.dateTo, input.compareDateFrom, input.compareDateTo]) {
+     if (date !== undefined && (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw Error("HUGO_TOOL_INVALID_INPUT");
+   }
+   if (input.dateFrom && input.dateTo && input.dateFrom > input.dateTo) throw Error("HUGO_TOOL_INVALID_INPUT");
++  if (input.compareDateFrom && input.compareDateTo && input.compareDateFrom > input.compareDateTo) throw Error("HUGO_TOOL_INVALID_INPUT");
+   if (input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 5000)) throw Error("HUGO_TOOL_INVALID_INPUT");
+   if (input.includeCompensated !== undefined && typeof input.includeCompensated !== "boolean") throw Error("HUGO_TOOL_INVALID_INPUT");
+ }
+@@ -24,17 +26,18 @@ export function isEarningsReportQuestion(message: string): boolean {
+   return /\b(reporte|informe|resumen)\b/i.test(text) && /\b(utilidades|ganancias|honorarios)\b/i.test(text) && /\bclientes?\b/i.test(text);
+ }
+ 
++export const isEarningsReportComparison = (message: string) => /\b(compara|comparalo|comparala|comparar|comparacion|comparado|comparada)\b/i.test(message.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+ 
+ export function normalizePendingReport(raw: any, rootId: string, turn: number, now: number): PendingEarningsReport | undefined {
+   if (!raw || raw.rootId !== rootId || !["DATES", "CLIENT", "FORMAT", "READY"].includes(raw.stage) || !Number.isFinite(raw.resolvedAt) || raw.resolvedAt > now || now - raw.resolvedAt > 30 * 60_000 ||
+     !Number.isInteger(raw.resolvedTurn) || raw.resolvedTurn < 0 || raw.resolvedTurn > turn || turn - raw.resolvedTurn > 4 || typeof raw.includeCompensated !== "boolean") return;
+   if (raw.clientQuery !== undefined && (typeof raw.clientQuery !== "string" || !raw.clientQuery.trim() || raw.clientQuery.length > 120 || /[\x00-\x1f]/.test(raw.clientQuery))) return;
+   if (raw.format !== undefined && !["PDF", "XLSX"].includes(raw.format)) return;
+-  if (raw.dateFrom !== undefined || raw.dateTo !== undefined) {
+-    try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo }); } catch { return; }
++  if (raw.dateFrom !== undefined || raw.dateTo !== undefined || raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined) {
++    try { validateEarningsReportInput({ dateFrom: raw.dateFrom, dateTo: raw.dateTo, ...(raw.compareDateFrom !== undefined || raw.compareDateTo !== undefined ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) }); } catch { return; }
+   }
+   return { rootId, stage: raw.stage, includeCompensated: raw.includeCompensated, resolvedAt: raw.resolvedAt, resolvedTurn: raw.resolvedTurn,
+-    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}) };
++    ...(raw.clientQuery ? { clientQuery: raw.clientQuery.trim() } : {}), ...(raw.format ? { format: raw.format } : {}), ...(raw.dateFrom ? { dateFrom: raw.dateFrom, dateTo: raw.dateTo } : {}), ...(raw.compareDateFrom ? { compareDateFrom: raw.compareDateFrom, compareDateTo: raw.compareDateTo } : {}) };
+ }
+ 
+ export function reportConversationResetReply(message: string): string | null {
+@@ -75,6 +78,9 @@ export function pendingReportRequest(message: string, previous?: PendingEarnings
+   const candidate = monthOnly ? null : earningsReportRequest(initial ? message : `reporte utilidades clientes ${dates.length ? message : priorDates}`);
+   if (!candidate) return { intent: true, request: null, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+   candidate.includeCompensated = includeCompensated;
++  if (!dates.length && previous?.compareDateFrom && previous.compareDateTo) {
++    candidate.compareDateFrom = previous.compareDateFrom; candidate.compareDateTo = previous.compareDateTo;
++  }
+   if (format) candidate.format = format;
+   if (clientQuery) candidate.clientQuery = clientQuery.slice(0, 120);
+   return { intent: true, request: candidate, includeCompensated, ...(format ? { format } : {}), ...(clientQuery ? { clientQuery: clientQuery.slice(0, 120) } : {}) };
+@@ -87,15 +93,20 @@ export function claimsUnexecutedReport(text: string, message: string): boolean {
+     /\b(generad[oa]s?|genere|generare|generando|preparad[oa]s?|prepare|preparare|preparando|cread[oa]s?|adjunt[oa]|list[oa]|descargar|descarga)\b|\b(voy|vamos)\s+a\s+(generar|preparar|crear|entregar)\b/.test(answer);
+ }
+ 
+-export function earningsReportRequest(message: string): EarningsReportToolInput | null {
++export function earningsReportRequest(message: string, previous?: EarningsReportToolInput): EarningsReportToolInput | null {
+   const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+-  if (!isEarningsReportQuestion(message)) return null;
++  const comparison = isEarningsReportComparison(message);
++  if (!isEarningsReportQuestion(message) && !(previous && comparison)) return null;
+   const dates = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
+   // Relative or ambiguous periods require clarification, never silently all-time.
+-  if (dates.length !== 2) return null;
++  if (dates.length !== 2 && !(comparison && dates.length === 4)) return null;
++  if (comparison && dates.length === 2 && !previous) return null;
+   const excludeCompensated = /\b(sin|excluye|excluir)\s+(?:las\s+)?compensadas\b|\bno\s+(?:incluyas|incluya|incluye|incluir)\s+(?:las\s+)?compensadas\b/i.test(text);
+-  const includeCompensated = !excludeCompensated && /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text);
+-  const input = { dateFrom: dates[0], dateTo: dates[1], limit: 5000, includeCompensated };
++  const explicitInclude = /\b(incluye|incluir|con)\s+(?:las\s+)?compensadas\b/i.test(text);
++  const includeCompensated = excludeCompensated ? false : explicitInclude ? true : comparison && dates.length === 2 && previous ? previous.includeCompensated === true : false;
++  const input: EarningsReportToolInput = comparison && dates.length === 2
++    ? { dateFrom: previous!.dateFrom, dateTo: previous!.dateTo, compareDateFrom: dates[0], compareDateTo: dates[1], limit: previous!.limit ?? 5000, includeCompensated, ...(previous!.clientQuery ? { clientQuery: previous!.clientQuery } : {}), ...(previous!.format ? { format: previous!.format } : {}) }
++    : { dateFrom: dates[0], dateTo: dates[1], ...(dates.length === 4 ? { compareDateFrom: dates[2], compareDateTo: dates[3] } : {}), limit: 5000, includeCompensated };
+   try { validateEarningsReportInput(input); } catch { return null; }
+   return input;
+ }
+@@ -105,5 +116,7 @@ export function formatEarningsReport(data: any): string {
+   if (data.clientResolution?.status === "NOT_FOUND") return `No encontré una coincidencia para ese cliente entre las operaciones autorizadas del periodo.${data.mayBeTruncated ? " La búsqueda puede estar incompleta por el límite de registros." : ""} Confirma el nombre completo; esto no demuestra que el cliente no exista.`;
+   const amount = (value: unknown) => Number(value || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+   const base = `Reporte de utilidades${data.clientResolution?.status === "RESOLVED" ? ` de ${data.clientResolution.clientName}` : " por cliente"} del ${data.dateFrom || "inicio disponible"} al ${data.dateTo || "último registro disponible"}: ${data.summary.operationsCount} operaciones de ${data.summary.clientsCount} clientes; utilidades registradas ${amount(data.summary.totalEarningsAmount)}. Operaciones compensadas ${data.includeCompensated ? "incluidas" : "excluidas"}. Se revisaron ${data.docsScanned} registros, con límite de ${data.scanLimit}. ${data.mayBeTruncated ? "Se alcanzó el límite; el reporte puede estar incompleto." : "El resumen corresponde al rango y alcance autorizados."} Importes según el reporte canónico de PAY0, sin conversión adicional de monedas.`;
+-  return base;
++  if (!data.comparison) return base;
++  const comparison = data.comparison;
++  return `${base} Comparación con ${comparison.dateFrom} al ${comparison.dateTo}: ${comparison.summary.operationsCount} operaciones de ${comparison.summary.clientsCount} clientes; utilidades registradas ${amount(comparison.summary.totalEarningsAmount)}. Diferencia del periodo principal menos el comparado: ${amount(comparison.difference.totalEarningsAmount)} en utilidades y ${comparison.difference.operationsCount} operaciones. ${comparison.mayBeTruncated ? "El periodo comparado también puede estar incompleto por el límite de registros." : "Ambos periodos usan los mismos filtros de compensadas y alcance autorizado."}`;
+ }
+diff --git a/src/modules/agent007/hugoCore/toolRouter.ts b/src/modules/agent007/hugoCore/toolRouter.ts
+index 58efed1..f81de7a 100644
+--- a/src/modules/agent007/hugoCore/toolRouter.ts
++++ b/src/modules/agent007/hugoCore/toolRouter.ts
+@@ -24,7 +24,7 @@ export const HUGO_READ_TOOLS = {
+ export type HugoToolName = keyof typeof HUGO_READ_TOOLS;
+ export type ToolResult = { sourceSystem: string; tool: string; retrievedAt: string; scope: { rootId: string }; completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"; evidence: Array<{ entityType: string; entityId: string; kind: string; sourceSystem: string; completeness: string }>; data: any; trace: { latencyMs: number; result: string; error?: string } };
+ export type ToolIdentity = { uid: string; rootId: string; role: string };
+-export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; includeCompensated?: boolean; clientQuery?: string; format?: "PDF" | "XLSX"; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
++export type ToolRequest = { name: HugoToolName; input?: { dateFrom?: string; dateTo?: string; compareDateFrom?: string; compareDateTo?: string; includeCompensated?: boolean; clientQuery?: string; format?: "PDF" | "XLSX"; folio?: string; limit?: number; query?: string; paymentId?: string; beforePaymentId?: string; position?: "LATEST" | "PREVIOUS"; period?: "ALL" | "TODAY" | "YESTERDAY" | "THIS_WEEK" | "PREVIOUS_WEEK" | "THIS_MONTH" | "PREVIOUS_MONTH" } };
+ 
+ export class HugoToolRouter {
+   constructor(private readonly identity: ToolIdentity, private readonly tools: Partial<Record<HugoToolName, (input: any) => Promise<ToolResult>>>, private readonly onResult?: (request: ToolRequest, result?: ToolResult, error?: unknown) => void) {
+diff --git a/src/modules/agent007/reportConnector.ts b/src/modules/agent007/reportConnector.ts
+index 952996e..f62046f 100644
+--- a/src/modules/agent007/reportConnector.ts
++++ b/src/modules/agent007/reportConnector.ts
+@@ -1,5 +1,6 @@
+ import type { CallableRequest } from "firebase-functions/v2/https";
+ import { getEarningsByClientReportHandler } from "../reports/callables";
++import { toSafeMoneyNumber } from "../sharedCallables/helpers";
+ import type { ToolResult } from "./hugoCore/toolRouter";
+ import { EarningsReportToolInput, HugoReportExport, validateEarningsReportInput } from "./hugoCore/reportSemantics";
+ 
+@@ -11,6 +12,10 @@ export async function executeEarningsReportTool(request: CallableRequest, input:
+   // role and root scope. A model cannot provide an identity or bypass those checks.
+   const filters = { dateFrom: input.dateFrom, dateTo: input.dateTo, includeCompensated: input.includeCompensated, limit: scanLimit };
+   let report = await getEarningsByClientReportHandler({ ...request, data: filters });
++  let compared = input.compareDateFrom && input.compareDateTo
++    ? await getEarningsByClientReportHandler({ ...request, data: { ...filters, dateFrom: input.compareDateFrom, dateTo: input.compareDateTo } })
++    : null;
++  if (compared && (compared.rootId !== report.rootId || compared.scopeRole !== report.scopeRole)) throw Error("HUGO_REPORT_FORBIDDEN_SCOPE_CHANGED");
+   let clientResolution: Record<string, unknown> | undefined;
+   if (input.clientQuery) {
+     const normalized = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+@@ -26,9 +31,19 @@ export async function executeEarningsReportTool(request: CallableRequest, input:
+     // Reuse the canonical per-client totals without recomputing any financial formula.
+     const { clienteId, clienteNombre, lastCreatedAt, ...totals } = row;
+     report = { ...report, rows: [row], summary: { ...totals, clientsCount: 1 } };
+-
++    if (compared) {
++      const comparisonRow = compared.rows.find(item => item.clienteId === clienteId);
++      if (comparisonRow) {
++        const { clienteId: ignoredId, clienteNombre: ignoredName, lastCreatedAt: ignoredDate, ...comparisonTotals } = comparisonRow;
++        compared = { ...compared, rows: [comparisonRow], summary: { ...comparisonTotals, clientsCount: 1 } };
++      } else compared = { ...compared, rows: [], summary: { clientsCount: 0, operationsCount: 0, grossAmount: 0, baseAmount: 0, despachoCostAmount: 0, superadminEarningAmount: 0,
++        adminEarningAmount: 0, operadorEarningAmount: 0, totalEarningsAmount: 0, clientChargeAmount: 0, clientNetAmount: 0 } };
++    }
+     clientResolution = { status: "RESOLVED", clientId: clienteId, clientName: (clienteNombre || clienteId).slice(0, 200) };
+   }
++  const comparison = compared ? { dateFrom: compared.dateFrom, dateTo: compared.dateTo, summary: compared.summary, docsScanned: compared.docsScanned,
++    mayBeTruncated: compared.docsScanned >= scanLimit, consistency: "INDEPENDENT_READS",
++    difference: { totalEarningsAmount: toSafeMoneyNumber(report.summary.totalEarningsAmount - compared.summary.totalEarningsAmount), operationsCount: report.summary.operationsCount - compared.summary.operationsCount } } : null;
+   const exportRows = report.rows.slice(0, 250).map(row => ({ ...row, clienteId: row.clienteId, clienteNombre: row.clienteNombre === null ? null : String(row.clienteNombre).slice(0, 200) }));
+   const numericKeys = ["operationsCount", "grossAmount", "baseAmount", "despachoCostAmount", "superadminEarningAmount", "adminEarningAmount", "operadorEarningAmount", "totalEarningsAmount", "clientChargeAmount", "clientNetAmount"] as const;
+   const exportValid = exportRows.every(row => row.clienteId.length <= 160 && numericKeys.every(key => typeof row[key] === "number" && Number.isFinite(row[key])));
+@@ -45,6 +60,6 @@ export async function executeEarningsReportTool(request: CallableRequest, input:
+   return { sourceSystem: "PAY0", tool: "getEarningsByClientReport", retrievedAt: new Date().toISOString(), scope: { rootId: report.rootId },
+     completeness: "PARTIAL", evidence: [{ entityType: "report", entityId: "earningsByClient", kind: "CANONICAL_REPORT", sourceSystem: "PAY0", completeness: "PARTIAL" }],
+     data: { ...report, rows: report.rows.slice(0, 25), displayedClients: Math.min(report.rows.length, 25), scanLimit, mayBeTruncated: report.docsScanned >= scanLimit,
+-      ...(clientResolution ? { clientResolution } : {}), ...(reportExport ? { reportExport } : {}) },
++      ...(clientResolution ? { clientResolution } : {}), ...(reportExport ? { reportExport } : {}), ...(comparison ? { comparison } : {}) },
+     trace: { latencyMs: Date.now() - started, result: "OK" } };
+ }

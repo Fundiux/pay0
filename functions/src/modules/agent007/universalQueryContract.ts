@@ -61,13 +61,26 @@ const stable = (value: unknown): string => {
 };
 const digest = (value: unknown) => createHash("sha256").update(stable(value)).digest("hex");
 
+const validField = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(value) && value.length <= 128;
+const validScalar = (value: unknown) => value === null || typeof value === "boolean" || (typeof value === "string" && value.length <= 4096) || (typeof value === "number" && Number.isFinite(value));
+
 export function validateUniversalQuery(input: HugoUniversalQuery) {
   if (input?.schemaVersion !== HUGO_UNIVERSAL_QUERY_VERSION) throw Error("HUGO_QUERY_VERSION_INVALID");
   if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(input.domain) || !/^[A-Za-z][A-Za-z0-9_.-]{1,127}$/.test(input.source)) throw Error("HUGO_QUERY_SOURCE_INVALID");
   if (!["LIST", "SUMMARY", "COMPARE", "AGGREGATE"].includes(input.operation)) throw Error("HUGO_QUERY_OPERATION_INVALID");
   if (!Array.isArray(input.filters) || input.filters.length > 30 || !Array.isArray(input.columns) || input.columns.length > 100 || !Array.isArray(input.groupBy) || input.groupBy.length > 20 || !Array.isArray(input.orderBy) || input.orderBy.length > 10) throw Error("HUGO_QUERY_SHAPE_INVALID");
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 10_000) throw Error("HUGO_QUERY_LIMIT_INVALID");
-  return Object.freeze({ ...input, filters: Object.freeze([...input.filters]), columns: Object.freeze([...input.columns]), groupBy: Object.freeze([...input.groupBy]), orderBy: Object.freeze([...input.orderBy]) });
+  if (![...input.columns, ...input.groupBy].every(validField) || input.orderBy.some(order => !order || !validField(order.field) || !["ASC", "DESC"].includes(order.direction))) throw Error("HUGO_QUERY_FIELD_INVALID");
+  const filters = input.filters.map(filter => {
+    if (!filter || !validField(filter.field) || !["EQ", "IN", "GT", "GTE", "LT", "LTE", "BETWEEN"].includes(filter.operator)) throw Error("HUGO_QUERY_FILTER_INVALID");
+    const multiple = filter.operator === "IN" || filter.operator === "BETWEEN";
+    if (multiple ? !Array.isArray(filter.value) || filter.value.length < 1 || filter.value.length > 30 || (filter.operator === "BETWEEN" && filter.value.length !== 2) || !filter.value.every(validScalar) : !validScalar(filter.value)) throw Error("HUGO_QUERY_FILTER_VALUE_INVALID");
+    return Object.freeze({ field: filter.field, operator: filter.operator, value: multiple ? Object.freeze([...(filter.value as unknown[])]) : filter.value });
+  });
+  // Detach nested inputs so later caller mutations cannot change a validated query.
+  return Object.freeze({ schemaVersion: input.schemaVersion, domain: input.domain, source: input.source, operation: input.operation, limit: input.limit,
+    filters: Object.freeze(filters), columns: Object.freeze([...input.columns]), groupBy: Object.freeze([...input.groupBy]),
+    orderBy: Object.freeze(input.orderBy.map(order => Object.freeze({ field: order.field, direction: order.direction }))) });
 }
 
 export const queryDigest = (query: HugoUniversalQuery) => digest(validateUniversalQuery(query));

@@ -1,13 +1,14 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import { getUserRole } from "../../utils/authGuard";
+import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 
 if (!getApps().length) {
   initializeApp();
 }
 
 export const db = getFirestore();
+const profileIdentities = new WeakMap<object, string>();
 
 export function requireAuth(request: any): string {
   if (!request.auth?.uid) {
@@ -32,13 +33,16 @@ export async function getMyUser(uid: string): Promise<any> {
   const userSnap = await db.doc(`users/${uid}`).get();
 
   if (userSnap.exists) {
-    return userSnap.data() as any;
+    const user = userSnap.data() as any;
+    assertAuthorized({ uid }, user);
+    profileIdentities.set(user, uid);
+    return user;
   }
 
   const legacySnap = await db.doc(`usuarios/${uid}`).get();
 
   if (legacySnap.exists) {
-    return legacySnap.data() as any;
+    throw new HttpsError("permission-denied", "Se requiere un perfil PAY0 vigente.");
   }
 
   return null;
@@ -48,7 +52,8 @@ export function requireRole(
   user: any,
   roles: Array<"superadmin" | "admin" | "operador">
 ): string {
-  const role = getUserRole(user);
+  const uid = user && typeof user === "object" ? profileIdentities.get(user) : undefined;
+  const role = assertAuthorized({ uid }, user, { allowedRoles: roles });
 
   if (!roles.includes(role as any)) {
     throw new HttpsError("permission-denied", "No autorizado.");

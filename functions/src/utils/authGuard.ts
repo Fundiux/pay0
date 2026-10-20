@@ -1,4 +1,4 @@
-﻿import * as functions from "firebase-functions";
+import * as functions from "firebase-functions";
 import {
   decideUserAuthorization,
   normalizeCanonicalRole,
@@ -37,9 +37,13 @@ export function assertAuthorized(
 
   if (!decision.allowed) {
     const unauthenticated = decision.reason === "UNAUTHENTICATED";
+    const restricted = decision.reason === "USER_RESTRICTED" || decision.reason === "USER_RESTRICTION_INVALID";
     throw new functions.https.HttpsError(
       unauthenticated ? "unauthenticated" : "permission-denied",
-      unauthenticated ? "Debes iniciar sesión." : "No tienes permisos para realizar esta acción."
+      unauthenticated ? "Debes iniciar sesión." : restricted
+        ? "Tu cuenta requiere revisión de seguridad. Contacta a soporte."
+        : "No tienes permisos para realizar esta acción.",
+      restricted ? { reason: "ACCOUNT_RESTRICTED", recovery: "CONTACT_SUPPORT" } : undefined
     );
   }
 

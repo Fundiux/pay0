@@ -1,0 +1,180 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const { PassThrough, Writable } = require('node:stream');
+const ts = require('../../functions/node_modules/typescript');
+const root = path.resolve(__dirname, '../..');
+function load(file, dependencies, environment = {}) {
+  const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  const module = {exports:{}};
+  vm.runInNewContext(code, {module,exports:module.exports,require:(name)=>dependencies[name] || require(name),process:{env:environment},Buffer,console,setTimeout,clearTimeout}, {filename:file});
+  return module.exports;
+}
+const policy = load('functions/src/modules/telegram/downloadTokenPolicy.ts', {});
+const time = n => ({toMillis:()=>n});
+const active = () => ({status:'ACTIVE',actionType:'DOWNLOAD_DOCUMENT',createdAt:time(Date.now()),expiresAt:time(Date.now()+899000),storageGeneration:'7',uid:'u',rootId:'r',entityType:'solicitud',entityId:'s',documentId:'d',storagePath:'roots/r/solicitudes/s/docs/PDF/a.pdf',fileName:'a.pdf',attempts:0});
+function harness(environment = {}) {
+  const rows = new Map([
+    ['telegramActionTokens/'+'a'.repeat(43), active()], ['users/u',{role:'admin',active:true,rootId:'r'}],
+    ['solicitudes/s',{rootId:'r',adminId:'u',clienteId:'c'}], ['clients/c',{rootId:'r'}],
+    ['uploads/d',{rootId:'r',active:true,solicitudId:'s',storagePath:active().storagePath}],
+    ['userClientAccess/u/clients/c',{active:true,permissions:{operateSolicitudes:true}}],
+  ]);
+  const deleted = Symbol('delete'); const logs=[]; const streams=[]; const generations=[]; const accessTransactions=[];
+  let metadataHook=()=>{}; let chain=Promise.resolve(); let disabled=false; let roleAllowed=true; let delegationAllowed=true;
+  const ref = p => ({path:p,get:async()=>({exists:rows.has(p),data:()=>rows.get(p)}), create:async value=>rows.set(p,value),set:async(value,options)=>rows.set(p,options?.merge?{...rows.get(p),...value}:value)});
+  const transaction = {get:async r=>({data:()=>rows.get(r.path)}),update:(r,patch)=>{const row=rows.get(r.path); for(const [k,v] of Object.entries(patch)){ if(v===deleted) delete row[k]; else row[k]=v; }}};
+  const db = {collection:c=>({doc:id=>ref(c+'/'+id)}),doc:ref,runTransaction:fn=>{const result=chain.then(()=>fn(transaction));chain=result.catch(()=>{});return result;}};
+  const firestore = ()=>db;
+  firestore.FieldValue={delete:()=>deleted,serverTimestamp:()=>time(Date.now())};
+  firestore.Timestamp={fromDate:d=>time(d.getTime()),fromMillis:time};
+  const admin={apps:[{}],firestore,auth:()=>({getUser:async()=>({disabled})}),storage:()=>({bucket:()=>({file:(p,options)=>{generations.push(options?.generation);return {exists:async()=>[true],getMetadata:async()=>{await metadataHook();return [{generation:'7',contentType:'application/pdf'}];},createReadStream:()=>{const s=new PassThrough();streams.push(s);return s;}};}})})};
+  const app=load('functions/src/modules/telegram/actionTokens.ts', {
+    'firebase-admin':admin,'firebase-functions':{logger:{error:(...args)=>logs.push(args)}},
+    'firebase-functions/v2/https':{onRequest:(_opts,handler)=>handler},
+    '../../utils/authGuard':{assertAuthorized:(_auth,user)=>{if(!roleAllowed||!user||user.active===false)throw Object.assign(Error('PRIVATE_BEARER'),{code:'permission-denied'});return user.role;}},
+    '../clientDelegations/access':{requireClientOperationalAccess:async input=>{accessTransactions.push(input.transaction);if(!delegationAllowed)throw Object.assign(Error('denied'),{code:'permission-denied'});return {source:'DELEGATED'};},normalizeClientAccessPermissions:p=>p||{}},
+    '../clientDelegations/policy':{delegationIsCurrent:g=>!!g?.active&&!g.revokedAt&&(!g.expiresAt||g.expiresAt.toMillis()>Date.now())},
+    './downloadTokenPolicy':policy,
+  }, environment);
+  const response=()=>{const r=new Writable({write(_chunk,_encoding,cb){r.headersSent=true;cb();}});r.headersSent=false;r.statusCode=200;r.headers={};r.setHeader=(k,v)=>r.headers[k]=v;r.status=s=>{r.statusCode=s;return r;};r.send=body=>{r.end(body);return r;};return r;};
+  const request=()=>({method:'GET',headers:{},query:{token:'a'.repeat(43)}});
+  const legacy = () => load('qa/scripts/fixtures/remediation-telegram-legacy-actionTokens.ts.fixture', {
+    'firebase-admin':admin,'crypto':require('node:crypto'),'firebase-functions':{logger:{error:(...args)=>logs.push(args)}},
+    'firebase-functions/v2/https':{onRequest:(_opts,handler)=>handler},
+  });
+  return {app,legacy,rows,logs,streams,generations,response,request,transaction,accessTransactions,setMetadataHook:fn=>metadataHook=fn,setDisabled:v=>disabled=v,setDelegation:v=>delegationAllowed=v};
+}
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+async function waitStream(h,n=1){for(let i=0;i<30&&h.streams.length<n;i++)await tick();assert.equal(h.streams.length,n);}
+
+test('TTL boundary, revoked, legacy, exhausted, leased and consumed tokens deny',()=>{
+  const row=active(); assert.doesNotThrow(()=>policy.assertDownloadAvailable(row,Date.now()));
+  for(const patch of [{expiresAt:time(100)},{revokedAt:time(1)},{storageGeneration:null},{attempts:3},{leaseUntil:time(Date.now()+99999)},{status:'CONSUMED'}]) assert.throws(()=>policy.assertDownloadAvailable({...row,...patch},100));
+  for(const ttl of [0,16,Infinity,NaN,'15'])assert.throws(()=>policy.downloadTtlMinutes(ttl));
+  assert.equal(policy.downloadTtlMinutes(undefined),15);
+});
+test('parallel requests acquire one lease, pin generation and consume successful transfer',async()=>{
+ const h=harness(),a=h.response(),b=h.response();const pa=h.app.telegramDownloadAction(h.request(),a);await waitStream(h);
+ await h.app.telegramDownloadAction(h.request(),b);assert.equal(b.statusCode,409);assert.equal(h.streams.length,1);
+ h.streams[0].end('PDF');await pa;assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status,'CONSUMED');assert.equal(h.generations[0],'7');
+ const c=h.response();await h.app.telegramDownloadAction(h.request(),c);assert.equal(c.statusCode,403);
+});
+test('interrupted transfer retries at most three times and logs no raw error or token',async()=>{
+ const h=harness();
+ for(let i=1;i<=3;i++){const res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);await waitStream(h,i);h.streams[i-1].destroy(Error('PRIVATE_BEARER '+ 'a'.repeat(43)));await p;}
+ const res=h.response();await h.app.telegramDownloadAction(h.request(),res);assert.equal(res.statusCode,410);assert.equal(h.streams.length,3);
+ assert.ok(!JSON.stringify(h.logs).includes('PRIVATE_BEARER'));assert.ok(!JSON.stringify(h.logs).includes('a'.repeat(43)));
+});
+test('disabled identity, wrong object, root or inactive upload cannot stream',async()=>{
+ for(const mutate of [h=>h.setDisabled(true),h=>h.rows.get('uploads/d').storagePath='other',h=>h.rows.get('solicitudes/s').rootId='other',h=>h.rows.get('uploads/d').active=false,h=>h.rows.get('users/u').active=false]){
+ const h=harness();mutate(h);const res=h.response();await h.app.telegramDownloadAction(h.request(),res);assert.equal(res.statusCode,403);assert.equal(h.streams.length,0);
+ }
+});
+test('current delegated user can download; revoked or expired delegation denies',async()=>{
+ for(const state of ['current','revoked','expired']){const h=harness();h.rows.get('solicitudes/s').adminId='other';const grant=h.rows.get('userClientAccess/u/clients/c');if(state==='revoked')grant.revokedAt=time(1);if(state==='expired')grant.expiresAt=time(1);
+ const res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);if(state==='current'){await waitStream(h);assert.ok(h.accessTransactions.includes(h.transaction), 'grant ancestry must share lease transaction');h.streams[0].end('PDF');}await p;assert.equal(res.statusCode,state==='current'?200:403);}
+});
+test('revocation during stream is never overwritten by settlement',async()=>{
+ const h=harness(),res=h.response();const p=h.app.telegramDownloadAction(h.request(),res);await waitStream(h);h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status='REVOKED';h.streams[0].end('PDF');await p;assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).status,'REVOKED');
+});
+
+test('POST body transport and exact CORS preflight never put bearer in URL',async()=>{
+ const h=harness(); const headers={origin:policy.DOWNLOAD_APP_ORIGIN,'content-type':'application/json'};
+ const req={method:'POST',headers,query:{},body:{token:'a'.repeat(43)}};
+ const res=h.response();const p=h.app.telegramDownloadAction(req,res);await waitStream(h);h.streams[0].end('PDF');await p;
+ assert.equal(res.statusCode,200);assert.equal(res.headers['Access-Control-Allow-Origin'],policy.DOWNLOAD_APP_ORIGIN);
+ assert.equal(res.headers['Access-Control-Expose-Headers'],'Content-Disposition');
+ for(const origin of [policy.DOWNLOAD_APP_ORIGIN,'https://evil.example',policy.DOWNLOAD_APP_ORIGIN+'.evil.example']){
+   const r=h.response();await h.app.telegramDownloadAction({method:'OPTIONS',headers:{origin,'access-control-request-method':'POST','access-control-request-headers':'content-type'},query:{}},r);
+   assert.equal(r.statusCode,origin===policy.DOWNLOAD_APP_ORIGIN?204:403);
+ }
+});
+
+test('malformed body, URL query on POST, content type and foreign origin fail before streaming',async()=>{
+ const headers={origin:policy.DOWNLOAD_APP_ORIGIN,'content-type':'application/json'};
+ for(const patch of [{body:null},{body:'a'.repeat(43)},{body:[]},{body:{token:['a'.repeat(43)]}},{body:{token:'a'.repeat(43),rootId:'r'}},{query:{token:'a'.repeat(43)}},{headers:{...headers,'content-type':'text/plain'}},{headers:{...headers,origin:'https://evil.example'}},{headers:{'content-type':'application/json'}}]){
+  const h=harness(),res=h.response();await h.app.telegramDownloadAction({method:'POST',headers,query:{},body:{token:'a'.repeat(43)},...patch},res);
+  assert.ok([400,403].includes(res.statusCode));assert.equal(h.streams.length,0);assert.equal(h.rows.get('telegramActionTokens/'+'a'.repeat(43)).attempts,0);
+ }
+});
+
+test('new issuance returns only fragment URL and version2 cannot use legacy GET',async()=>{
+ const h=harness();const result=await h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15});
+ const link=new URL(result.url);assert.equal(link.origin,policy.DOWNLOAD_APP_ORIGIN);assert.equal(link.pathname,'/descarga/documento');assert.equal(link.search,'');assert.equal(link.hash,'#token='+result.token);
+ assert.equal(h.rows.get('telegramActionTokens/'+result.token).transportVersion,2);
+ h.rows.get('telegramActionTokens/'+'a'.repeat(43)).transportVersion=2;
+ const res=h.response();await h.app.telegramDownloadAction(h.request(),res);assert.equal(res.statusCode,410);assert.equal(h.streams.length,0);
+});
+
+test('legacy GET compatibility is bounded by original server issuance and TTL, never extended',()=>{
+ const now=1800000000000;const row={createdAt:time(now-1000),expiresAt:time(now+899000)};
+ assert.doesNotThrow(()=>policy.assertDownloadTransport(row,'GET',now));
+ for(const bad of [{...row,transportVersion:2},{...row,createdAt:null},{...row,createdAt:time(now+1)},{...row,expiresAt:time(now+899001)},{...row,createdAt:time(now-900000),expiresAt:time(now)}])assert.throws(()=>policy.assertDownloadTransport(bad,'GET',now));
+ assert.throws(()=>policy.assertDownloadTransport(row,'GET',now+899000));
+});
+
+
+test('bridge issuance pins generation, caps deadline, and works with bounded v1 GET', async()=>{
+ const now=Date.now();const deadline=now+120000;
+ const environment={TELEGRAM_DOWNLOAD_TRANSPORT_MODE:'LEGACY_BRIDGE',TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:new Date(now-1000).toISOString(),TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:new Date(deadline).toISOString()};
+ const h=harness(environment);const issued=await h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15});
+ const stored=h.rows.get('telegramActionTokens/'+issued.token);
+ assert.equal(new URL(issued.url).searchParams.get('token'),issued.token);assert.equal(new URL(issued.url).hash,'');
+ assert.equal(stored.storageGeneration,'7');assert.equal(stored.transportVersion,1);assert.equal(stored.expiresAt.toMillis(),deadline);
+ assert.doesNotThrow(()=>policy.assertDownloadAvailable(stored,Date.now()));assert.doesNotThrow(()=>policy.assertDownloadTransport(stored,'GET',Date.now()));
+ const res=h.response();const p=h.app.telegramDownloadAction({...h.request(),query:{token:issued.token}},res);await waitStream(h);h.streams[0].end('PDF');await p;assert.equal(res.statusCode,200);
+});
+
+test('bridge server config fails closed and never extends by restart or expired window', async()=>{
+ const now=Date.now();const start=new Date(now-1000).toISOString();const deadline=new Date(now+1000).toISOString();
+ const env={TELEGRAM_DOWNLOAD_TRANSPORT_MODE:'LEGACY_BRIDGE',TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:start,TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:deadline};
+ for(const bad of [{...env,TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:undefined},{...env,TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:'bad'},
+ {...env,TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:new Date(now+3600000).toISOString()}, {...env,TELEGRAM_DOWNLOAD_TRANSPORT_MODE:'typo'},
+ {...env,TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:new Date(now+100).toISOString()}])assert.throws(()=>policy.downloadIssuance(bad,now,15));
+ assert.throws(()=>policy.downloadIssuance(env,now+1000,15));assert.throws(()=>policy.downloadIssuance(env,now+3600000,15));
+ const h=harness({...env,TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:new Date(now-1).toISOString()});
+ await assert.rejects(()=>h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT'}));assert.equal(h.generations.length,0);
+ assert.equal(policy.downloadIssuance({},now,15).transportVersion,2);
+});
+
+test('v1 malformed windows or after deadline deny; no implicit upgrade of legacy lacking generation',()=>{
+ const now=Date.now();const row={...active(),transportVersion:1,createdAt:time(now-1000),expiresAt:time(now+1000),legacyBridgeStartedAt:time(now-2000),legacyBridgeDeadline:time(now+2000)};
+ assert.doesNotThrow(()=>policy.assertDownloadTransport(row,'GET',now));
+ for(const patch of [{legacyBridgeDeadline:null},{legacyBridgeStartedAt:null},{legacyBridgeDeadline:time(now-1)},
+ {legacyBridgeStartedAt:time(now)},{expiresAt:time(now+3000)},{legacyBridgeDeadline:time(now+3600000)}, {transportVersion:2}])assert.throws(()=>policy.assertDownloadTransport({...row,...patch},'GET',now));
+ assert.throws(()=>policy.assertDownloadAvailable({...active(),storageGeneration:undefined},now),e=>e.status===403);
+});
+
+
+test('real frozen old producer confirms new consumer denies unpinned tokens while old TTL is valid',async()=>{
+ const h=harness();const issued=await h.legacy().createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15});
+ const row=h.rows.get('telegramActionTokens/'+issued.token);assert.equal(row.storageGeneration,undefined);assert.equal(row.transportVersion,undefined);
+ assert.ok(row.expiresAt.toMillis()>Date.now());assert.equal(typeof row.createdAt.toMillis,'function');
+ const res=h.response();await h.app.telegramDownloadAction({...h.request(),query:{token:issued.token}},res);
+ assert.equal(res.statusCode,403);assert.equal(h.streams.length,0);
+});
+
+test('real frozen old GET consumer accepts bridge-issued tokens without changing their pinned metadata',async()=>{
+ const now=Date.now();const h=harness({TELEGRAM_DOWNLOAD_TRANSPORT_MODE:'LEGACY_BRIDGE',
+ TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:new Date(now-1000).toISOString(),TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:new Date(now+600000).toISOString()});
+ const issued=await h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15});
+ const original=h.rows.get('telegramActionTokens/'+issued.token);assert.equal(original.storageGeneration,'7');assert.equal(original.transportVersion,1);
+ const res=h.response();await h.legacy().telegramDownloadAction({...h.request(),query:{token:issued.token}},res);await waitStream(h);
+ h.streams[0].end('SYNTHETIC PDF');await tick();assert.equal(res.statusCode,200);assert.equal(res.writableFinished,true);
+ const final=h.rows.get('telegramActionTokens/'+issued.token);assert.equal(final.storageGeneration,'7');assert.equal(final.expiresAt,original.expiresAt);
+ // Old consumer ignores generation; bridge issuance does not claim its old reader pins content.
+ assert.equal(h.generations.at(-1),undefined);assert.equal(h.logs.length,0);
+});
+
+
+test('deadline is revalidated after object metadata and before token create',async()=>{
+ const now=Date.now();const env={TELEGRAM_DOWNLOAD_TRANSPORT_MODE:'LEGACY_BRIDGE',
+ TELEGRAM_DOWNLOAD_LEGACY_STARTED_AT:new Date(now-1000).toISOString(),TELEGRAM_DOWNLOAD_LEGACY_DEADLINE:new Date(now+1000).toISOString()};
+ const h=harness(env);const count=h.rows.size;
+ h.setMetadataHook(()=>{env.TELEGRAM_DOWNLOAD_LEGACY_DEADLINE=new Date(Date.now()-1).toISOString();});
+ await assert.rejects(()=>h.app.createTelegramActionToken({...active(),actionType:'DOWNLOAD_DOCUMENT',expiresInMinutes:15}),error=>error.status===503);
+ assert.equal(h.rows.size,count);
+});

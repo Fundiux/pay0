@@ -1,5 +1,8 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
+import { assertAuthorized } from "../../utils/authGuard";
+import { operationTiming } from "../../utils/operationTiming";
 import { DEFAULT_IQ_ERP_URL } from "./config";
-import { resolveIqAssociatedName } from "./associatedName";
+import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
 import * as crypto from "crypto";
 import * as os from "os";
@@ -23,7 +26,7 @@ import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
 
-import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -718,9 +721,8 @@ async function getAuthContext(request: {
   }
 
   const user = asRecord(userSnap.data());
-  const token = asRecord(request.auth?.token);
-  const role = cleanText(token.role ?? token.userRole ?? user.role).toLowerCase();
-  const rootId = cleanText(token.rootId ?? token.root_id ?? user.rootId ?? uid);
+  const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
+  const rootId = cleanText(user.rootId ?? uid);
 
   return { uid, role, rootId: rootId || uid, user };
 }
@@ -994,7 +996,7 @@ async function prepareSolicitudForIqQueue(input: {
     profileAlias: cleanText(profile.alias),
     erpUrl: normalizeErpUrl(cleanText(profile.erpUrl)),
     username,
-    associatedName: resolveIqAssociatedName(username, profile.associatedName),
+    associatedName: requireIqAssociatedName(profile.associatedName),
     clientId,
     clientName,
     iqClientId,
@@ -1037,6 +1039,7 @@ async function reserveQueuedJob(input: {
     }
 
     const solicitud = asRecord(solicitudSnap.data());
+    if (solicitud.isDeleted || solicitud.deletedAt || ["ELIMINADA","ELIMINADO"].includes(cleanUpper(solicitud.status))) throw new HttpsError("failed-precondition", "Solicitud eliminada.");
     const existingIqId = cleanText(solicitud.iqId ?? solicitud.iqFolio);
     if (existingIqId) {
       return { jobId, batchId, reused: true };
@@ -1163,6 +1166,7 @@ export async function enqueueIqCreationForSolicitud(input: {
       source: input.source || "AUTO",
       batchId: input.batchId,
     });
+    operationTiming("iq_job_queued_at", input.solicitudId);
 
     await safeLogActivity({
       event: reservation.reused ? "IQ_SOLICITUD_COLA_REUTILIZADA" : "IQ_SOLICITUD_ENCOLADA",
@@ -1205,6 +1209,7 @@ export async function enqueueIqCreationForSolicitud(input: {
         dispatchDeadlineSeconds: 540,
       });
       taskId = task.taskId;
+      operationTiming("task_enqueued_at", input.solicitudId);
     } catch (error) {
       taskEnqueueError = safeErrorMessage(error);
       // La cola programada conserva el trabajo como respaldo cuando Cloud Tasks
@@ -1272,6 +1277,7 @@ export const processIqCreateOnDemandTask = onTaskDispatched(
     const data = asRecord(request.data);
     const jobId = cleanText(data.jobId);
     if (!jobId) return;
+    operationTiming("worker_started_at", jobId);
 
     const snap = await db.collection("iqCreateJobs").doc(jobId).get();
     if (!snap.exists) return;
@@ -1282,7 +1288,7 @@ export const processIqCreateOnDemandTask = onTaskDispatched(
     const source = cleanUpper(data.source);
     const isExplicitManualRequest = ["MANUAL_QUEUE", "MASS_UPLOAD"].includes(source);
     if (!isExplicitManualRequest) {
-      const enabledRoots = await loadEnabledIqAutomationRoots({
+      const enabledRoots = await readEnabledIqAutomationRoots({
         process: "solicitudCreate",
         purpose: "CREATION",
         respectWindow: false,
@@ -1411,22 +1417,26 @@ async function loadQueuedJobs(): Promise<IqCreateJob[]> {
   });
 }
 
-async function markJobProcessing(job: IqCreateJob): Promise<number> {
-  const attemptCount = job.attemptCount + 1;
-  await job.ref.set({
-    status: "PROCESSING",
-    attemptCount,
-    processingStartedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  await db.collection("solicitudes").doc(job.solicitudId).set({
-    iqCreationStatus: "PROCESSING",
-    iqCreateQueueStatus: "PROCESSING",
-    iqCreationAttemptCount: attemptCount,
-    iqCreationStartedAt: FieldValue.serverTimestamp(),
-    iqSyncUpdatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return attemptCount;
+async function markJobProcessing(job: IqCreateJob): Promise<number | null> {
+  // A worker may have read QUEUED before another worker acquired the profile
+  // lease. Recheck under a transaction before allowing any external request.
+  return db.runTransaction(async (tx) => {
+    const current = await tx.get(job.ref);
+    const source = await tx.get(db.collection("solicitudes").doc(job.solicitudId));
+    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || ["ELIMINADA","ELIMINADO"].includes(cleanUpper(source.get("status")))) return null;
+    if (!current.exists || !["QUEUED", "FAILED_RETRYABLE"].includes(cleanUpper(current.get("status")))) return null;
+    const attemptCount = (Number(current.get("attemptCount")) || 0) + 1;
+    tx.set(job.ref, {
+      status: "PROCESSING", attemptCount,
+      processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.set(db.collection("solicitudes").doc(job.solicitudId), {
+      iqCreationStatus: "PROCESSING", iqCreateQueueStatus: "PROCESSING",
+      iqCreationAttemptCount: attemptCount, iqCreationStartedAt: FieldValue.serverTimestamp(),
+      iqSyncUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return attemptCount;
+  });
 }
 
 async function finalizeJobFromResult(input: {
@@ -1465,7 +1475,7 @@ async function finalizeJobFromResult(input: {
       ? "CREATED"
       : submitted
         ? "PENDING_RECONCILIATION"
-        : "FAILED_RETRYABLE";
+        : input.result.status === "AUTH_STOPPED" ? "AUTH_STOPPED" : "FAILED_RETRYABLE";
 
     tx.set(input.job.ref, {
       status: jobStatus,
@@ -1491,7 +1501,7 @@ async function finalizeJobFromResult(input: {
       rootId: input.job.rootId,
       solicitudId: input.job.solicitudId,
       solicitudFolio: input.job.solicitudFolio || null,
-      status: iqId ? "SUCCEEDED" : submitted ? "OUTCOME_UNKNOWN" : "FAILED_RETRYABLE",
+      status: iqId ? "SUCCEEDED" : submitted ? "OUTCOME_UNKNOWN" : jobStatus,
       source: "QUEUE",
       batchId: input.batchId,
       version: IQ_QUEUE_VERSION,
@@ -1514,7 +1524,7 @@ async function finalizeJobFromResult(input: {
 
     const solicitudPatch: Record<string, unknown> = {
       iqCreateQueueStatus: jobStatus,
-      iqCreationStatus: iqId ? "CREATED" : submitted ? "OUTCOME_UNKNOWN" : "FAILED_RETRYABLE",
+      iqCreationStatus: iqId ? "CREATED" : submitted ? "OUTCOME_UNKNOWN" : jobStatus,
       iqCreationAttemptCount: input.attemptCount,
       iqCreationFinishedAt: now,
       iqCreationDurationMs: input.durationMs,
@@ -1605,6 +1615,7 @@ async function finalizeJobFromResult(input: {
     }, { merge: true });
   });
 
+  operationTiming("firestore_iq_update_at", input.job.solicitudId);
   const attemptRef = db
     .collection("solicitudes")
     .doc(input.job.solicitudId)
@@ -1785,6 +1796,14 @@ async function publishSuperadminQueueSummary(input: {
   }
 }
 
+async function authorizeSolicitudJob(job: IqCreateJob) {
+  const source = (await db.doc(`solicitudes/${job.solicitudId}`).get()).data();
+  if (!source || source.rootId !== job.rootId || isIqTerminalOrOmittedSolicitud(source)) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+  await authorizeDeferredIntent({ uid: job.requestedBy, rootId: job.rootId, module: "solicitudes", action: "create",
+    clientId: cleanText(source.clienteId || source.clientId), permission: "operateSolicitudes" });
+  if (!(await verifyDespachoAccess(job.requestedBy, cleanText(source.despachoId)))) throw new HttpsError("permission-denied", "AUTH_DISPATCH_CHANGED");
+}
+
 async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promise<{
   total: number;
   linked: number;
@@ -1807,6 +1826,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
       throw new Error("Cuenta IQ no encontrada.");
     }
     const profile = asRecord(profileSnap.data());
+    for (const job of jobs.slice(0, MAX_JOBS_PER_PROFILE)) await authorizeSolicitudJob(job);
     const password = decryptSecret(profile);
     const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
     const username = cleanText(profile.username);
@@ -1821,13 +1841,14 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
       for (const job of limitedJobs) {
         const attemptCount = await markJobProcessing(job);
+        if (attemptCount === null) continue;
         const temporaryFilePath = path.join(tempDir, `${job.id}-${safeTemporaryFileName(job.orderFileName)}`);
         await admin.storage().bucket().file(job.orderStoragePath).download({
           destination: temporaryFilePath,
         });
         items.push({
           key: job.id,
-          associatedName: resolveIqAssociatedName(job.username, job.associatedName),
+          associatedName: requireIqAssociatedName(job.associatedName),
           clientName: job.clientName,
           iqClientId: job.iqClientId,
           companyName: job.companyName,
@@ -1844,6 +1865,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
 
       // Desde este punto una excepciÃƒÂ³n no demuestra que el botÃƒÂ³n Crear
       // no haya sido pulsado. El lote queda bloqueado para lectura.
+      if (items.length === 0) return { total: 0, linked: 0, uncertain: 0, failed: 0 };
       browserBatchStarted = true;
 
       const batchResult = await runIqCreateInvoiceBatchHttpA53({
@@ -1853,6 +1875,7 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         timeZone,
         items,
         lookupMaxPages: 20,
+        authorizeBeforePost: key => authorizeSolicitudJob(jobByKey.get(key)!.job),
       });
 
       let linked = 0;
@@ -2011,9 +2034,9 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         tx.set(
           job.ref,
           {
-            status: "FAILED_RETRYABLE",
+            status: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
             error: message,
-            nextRunAt: Timestamp.fromMillis(
+            nextRunAt: (error as any)?.code === "permission-denied" ? null : Timestamp.fromMillis(
               Date.now() + RETRYABLE_DELAY_MS,
             ),
             updatedAt: FieldValue.serverTimestamp(),
@@ -2024,8 +2047,8 @@ async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promi
         tx.set(
           solicitudRef,
           {
-            iqCreateQueueStatus: "FAILED_RETRYABLE",
-            iqCreationStatus: "FAILED_RETRYABLE",
+            iqCreateQueueStatus: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
+            iqCreationStatus: (error as any)?.code === "permission-denied" ? "AUTH_STOPPED" : "FAILED_RETRYABLE",
             iqCreationLastError: message,
             iqSyncUpdatedAt: FieldValue.serverTimestamp(),
           },

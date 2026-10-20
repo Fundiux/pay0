@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "name": "Ingeniería interna y lectura de comprobantes",
+  "modules": [
+    "controlCenter",
+    "agent007",
+    "pagos",
+    "canonicalCenter",
+    "users"
+  ],
+  "dependencies": [
+    "Firebase Authentication",
+    "Firestore",
+    "Hugo observations and activity log",
+    "Existing receipt identification and OCR"
+  ],
+  "publication": {
+    "requiresExplicitApproval": true,
+    "functions": [
+      "getControlCenterEngineering",
+      "importControlCenterEngineeringEvidence",
+      "listOperationalDocuments",
+      "parsePagoReceiptPdf",
+      "correctPagoReceiptSemanticField",
+      "assignControlCenterEngineeringTask",
+      "getAuthorizedOperationalRecord",
+      "listAuthorizedRelatedRecords",
+      "listClientsCanonical",
+      "getClientCanonical",
+      "listPagos",
+      "listSolicitudes",
+      "listScopedClientDispersions",
+      "listPagoNotes",
+      "listSolicitudNotes",
+      "listClientDispersionNotes",
+      "getAuthorizedDocumentDownloadUrl",
+      "reconcileAgent007RecommendationsNow"
+    ],
+    "hosting": true,
+    "rules": true,
+    "rulesScope": {
+      "storage.rules": "PUBLISHED_EXACT_CERTIFIED_SOURCE_AUTHENTICATED_FLOW_PENDING",
+      "firestore.rules": "PUBLISHED_EXACT_CERTIFIED_SOURCE_AUTHENTICATED_FLOW_PENDING"
+    },
+    "dataMigration": false,
+    "sequence": [
+      "Validate candidate and security evidence against the approved integration base",
+      "Record previously deployed Hosting release, rules and Functions source revision",
+      "Obtain explicit approval for the selected publication scope",
+      "Publish selected Functions before their consuming Hosting release",
+      "Publish only separately certified rules",
+      "Verify access, dossier downloads, engineering evidence and authorized receipt examples"
+    ]
+  },
+  "regressionRisks": [
+    "Unrecognized receipt layouts must remain subject to human review",
+    "Reader version V3 invalidates analysis cache and can cause fresh OCR calls; financial duplicate keys remain independent of reader version",
+    "Engineering history is a filtered sample of the last 50 Hugo observations",
+    "Operational dossier lists available uploads and pending metadata in the authorized parent scope; external files not incorporated into PAY0 are not inventoried",
+    "Imported engineering evidence is human supplied, not independent verification of CI, model identity or publication",
+    "Delegated direct Storage downloads are denied; operational downloads must use the existing authorized callable",
+    "Direct delegated SDK reads are denied; publish and verify canonical server readers and migrated consumers before publishing Firestore rules",
+    "Recommendation reconciliation code is shared with background triggers; publishing the manual callable does not certify or update those trigger revisions"
+  ],
+  "rollback": {
+    "requiresExplicitApproval": true,
+    "previousProductionRevision": "Hosting d7d8084792e16fb6 / SSR ssrpay0system-00594-tag; per-function previous archives and original rulesets retained in private release journals",
+    "steps": [
+      "Restore the recorded previous Hosting release",
+      "Redeploy affected Functions from their recorded previous production revision",
+      "Do not restore unsafe delegated Storage reads; review any rules rollback separately",
+      "Verify existing payment identification and authorized report access"
+    ],
+    "dataPolicy": "Preserve observations, audit events, payments and analyses; no deletion or financial reversal"
+  },
+  "blockingFindings": [
+    {
+      "code": "AUTHENTICATED_PRODUCTION_WORKFLOWS_PENDING",
+      "result": "Canonical readers, migrated Hosting consumers and both certified rulesets are published; local authorization matrices passed, but no authenticated production session was available",
+      "scope": "Claims of completed production security and user-visible business workflow verification",
+      "requiredAction": "Verify authorized and denied owner/delegated flows, real authorized dossier download and init/upload/finalize with consented production identities; do not equate anonymous checks with authenticated functional certification"
+    },
+    {
+      "code": "REAL_RECEIPT_VALIDATION_PENDING",
+      "result": "18 synthetic extracted-text samples, 32 exact fields; real anonymized corpus NOT_EVALUATED",
+      "scope": "Productive receipt accuracy claims; independent engineering and dossier changes remain locally validated",
+      "requiredAction": "Identify authorized documents through the native dossier, anonymize and review expected fields before real evaluation"
+    },
+    {
+      "code": "OTHER_FINANCIAL_AND_BACKGROUND_REVISIONS_NOT_CERTIFIED_BY_THIS_BATCH",
+      "result": "The scoped release updates 18 selected callables; independent financial mutation callables and background triggers were not updated or certified by this batch",
+      "scope": "Claims of system-wide security closure or agent automation",
+      "requiredAction": "Keep subsequent changes scoped and validate their own dependencies and transaction contracts before publishing"
+    }
+  ],
+  "productionVerification": "PARTIAL: 18 Functions, Hosting and Firestore/Storage rules published from 6309830; exact artifacts, preserved runtime/IAM, 18 anonymous HTTP 401 checks, 5 public routes/assets and mobile/desktop browser checks passed; authenticated workflows and real receipt corpus pending",
+  "historicalReceiptEvaluation": "NOT_RUN",
+  "publishedBatch": {
+    "sourceCommit": "63098307c390135b4d3ddbfaf9fa02fa74f598ef",
+    "sourceArchiveSha256": "6615bb840530acf6dc31f2f86e988210f5505d2d17a0b4c05850c0c0eb2eb713",
+    "functions": [
+      {
+        "name": "getControlCenterEngineering",
+        "revision": "getcontrolcenterengineering-00001-cij",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "importControlCenterEngineeringEvidence",
+        "revision": "importcontrolcenterengineeringevidence-00001-luc",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "assignControlCenterEngineeringTask",
+        "revision": "assigncontrolcenterengineeringtask-00001-seh",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listOperationalDocuments",
+        "revision": "listoperationaldocuments-00001-qip",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "getAuthorizedOperationalRecord",
+        "revision": "getauthorizedoperationalrecord-00001-zic",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listAuthorizedRelatedRecords",
+        "revision": "listauthorizedrelatedrecords-00001-jin",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listClientsCanonical",
+        "revision": "listclientscanonical-00007-zat",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "getClientCanonical",
+        "revision": "getclientcanonical-00008-mif",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listPagos",
+        "revision": "listpagos-00010-miz",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listSolicitudes",
+        "revision": "listsolicitudes-00009-nuz",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listScopedClientDispersions",
+        "revision": "listscopedclientdispersions-00005-dis",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listPagoNotes",
+        "revision": "listpagonotes-00002-sav",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listSolicitudNotes",
+        "revision": "listsolicitudnotes-00003-cew",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "listClientDispersionNotes",
+        "revision": "listclientdispersionnotes-00005-deq",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "getAuthorizedDocumentDownloadUrl",
+        "revision": "getauthorizeddocumentdownloadurl-00006-koz",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "reconcileAgent007RecommendationsNow",
+        "revision": "reconcileagent007recommendationsnow-00003-xuf",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "parsePagoReceiptPdf",
+        "revision": "parsepagoreceiptpdf-00015-faf",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      },
+      {
+        "name": "correctPagoReceiptSemanticField",
+        "revision": "correctpagoreceiptsemanticfield-00004-fam",
+        "state": "ACTIVE",
+        "anonymousStatus": 401
+      }
+    ],
+    "hosting": {
+      "version": "sites/pay-0-system/versions/d446c05b06cc4941",
+      "revision": "ssrpay0system-00596-civ",
+      "archiveSha256": "33e1059500abf9be7c85692632e4ef760cc4ae8d812263ce5429ff7074411ed0",
+      "publicRoutesVerified": 5,
+      "publicAssetsVerified": 5,
+      "anonymousBrowserChecks": 3
+    },
+    "rules": [
+      {
+        "name": "firestore",
+        "release": "projects/pay-0-system/releases/cloud.firestore",
+        "ruleset": "projects/pay-0-system/rulesets/feab10c5-5cb3-4497-aa72-4ab02f195739",
+        "updateTime": "2026-10-16T09:49:05.197017Z",
+        "sha256": "a8295beda9d62ee6c13270682f8ff4e73b6b7eaa1841e4c671aaa361a0aa41b7",
+        "status": "EXACT_CERTIFIED_SOURCE"
+      },
+      {
+        "name": "storage",
+        "release": "projects/pay-0-system/releases/firebase.storage/pay-0-system.firebasestorage.app",
+        "ruleset": "projects/pay-0-system/rulesets/f2151f62-6deb-4877-8b15-8c1102522833",
+        "updateTime": "2026-10-16T09:49:43.915782Z",
+        "sha256": "f74c37cfc073603f3170b590aea2b702ee90ceba9658f7f30eb0cba64a484d06",
+        "status": "EXACT_CERTIFIED_SOURCE"
+      }
+    ],
+    "verifiedAt": "2026-10-16T09:50:00.851Z",
+    "verificationScope": "Exact deployed artifacts, preserved runtime/IAM, anonymous access rejection and public browser checks; authenticated business flows remain unverified",
+    "localCertification": {
+      "frontendBuild": "PASS",
+      "functionsBuild": "PASS",
+      "authorizationPolicy": "PASS",
+      "rulesMatrices": {
+        "main": 707,
+        "representative": 41,
+        "regression": 518,
+        "ownerRoot": 63
+      },
+      "exactFunctionsArchive": {
+        "authorizationChecks": 543,
+        "categories": 45,
+        "dossierTests": 2,
+        "engineering": "PASS"
+      },
+      "receiptTests": 44,
+      "hostingComponentSuites": 5,
+      "deploymentGuardTests": 45,
+      "hostingResumeCombinedTests": 17,
+      "realReceiptCorpus": "NOT_EVALUATED"
+    }
+  }
+}

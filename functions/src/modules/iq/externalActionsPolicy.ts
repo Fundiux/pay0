@@ -1,3 +1,5 @@
+import { reserveProtectedRequest, observeProtectedResponse } from "../automationSafety/runtime";
+
 /** Staging never reaches a real IQ/financial provider, including authentication or reads. */
 export type ExternalActionsEnvironment = Record<string, string | undefined>;
 
@@ -26,5 +28,8 @@ export function assertExternalActionsAllowed(environment: ExternalActionsEnviron
 /** No logging of URLs, headers, credentials or provider payloads. */
 export async function fetchIqExternal(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   assertExternalActionsAllowed();
-  return globalThis.fetch(input, init);
+  await reserveProtectedRequest();
+  const response = await globalThis.fetch(input, init);
+  await observeProtectedResponse(response.status);
+  return response;
 }
