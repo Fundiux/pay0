@@ -34,6 +34,11 @@ export function resolveConversationReference(message: string, previous: Conversa
   const intent = /cu[aá]l|compara|comparar/i.test(message) ? "COMPARE" : /cu[aá]nto|monto|importe/i.test(message) ? "AMOUNT" : /por\s+qu[eé]|motivo|raz[oó]n/i.test(message) ? "REASON" : "STATUS";
   if (folios.length > 1) return { folios, active: null, clarification: null, reason: "EXPLICIT_MULTIPLE", intent, state };
   if (folios.length === 1) return { folios, active: null, clarification: null, reason: "EXPLICIT", intent, state };
+  const domainMessage = normalized.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // An explicitly ordered solicitud query starts a fresh lookup, never a payment follow-up.
+  if (/\bsolicitud(?:es)?\b/.test(domainMessage) && /\b(ultim[oa]s?|mas reciente)\b/.test(domainMessage) && !/\bpagos?\b/.test(domainMessage)) {
+    return { folios: [], active: null, clarification: null, reason: "LATEST_SOLICITUD_QUERY", intent, state: { ...state, activeEntity: null } };
+  }
   if (/\b(otro|otra)\b/i.test(message) && state.recentEntities.length > 1) return { folios: [], active: null, clarification: `¿Te refieres a ${state.recentEntities.slice(0, 3).map(x => x.folio).join(" o ")}?`, reason: "AMBIGUOUS_OTHER", intent, state };
   if (/\b(otro|otra)\b/i.test(message)) return { folios: [], active: null, clarification: "¿A qué folio te refieres?", reason: "UNRESOLVED_OTHER", intent, state };
   if (intent === "COMPARE" && /\b(mayor|menor|compara|comparar)\b/i.test(message) && state.recentEntities.length === 2 && state.recentEntities.every(x => fresh(x, state, now))) {
@@ -46,6 +51,8 @@ export function resolveConversationReference(message: string, previous: Conversa
   const type = /solicitud/i.test(message) ? "SOLICITUD" : /pago/i.test(message) ? "PAGO" : null;
   const candidates = state.recentEntities.filter(x => fresh(x, state, now) && (!type || x.entityType === type));
   const active = state.activeEntity && fresh(state.activeEntity, state, now) && (!type || state.activeEntity.entityType === type) ? state.activeEntity : null;
+  const clientFollowup = /\b(de que cliente|nombre del cliente|quien (?:es|fue) el cliente)\b/.test(domainMessage);
+  if (clientFollowup && active) return { folios: [active.folio], active, clarification: null, reason: "ACTIVE_ENTITY", intent, state };
   if (looksFollowup && active && candidates.length === 1) return { folios: [active.folio], active, clarification: null, reason: "ACTIVE_ENTITY", intent, state };
   if (looksFollowup && candidates.length > 1) return { folios: [], active: null, clarification: `¿Te refieres a ${candidates.slice(0, 3).map(x => x.folio).join(" o ")}?`, reason: "AMBIGUOUS_REFERENCE", intent, state };
   if (looksFollowup && active) return { folios: [active.folio], active, clarification: null, reason: "ACTIVE_ENTITY", intent, state };

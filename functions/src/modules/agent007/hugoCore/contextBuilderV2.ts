@@ -96,13 +96,15 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const assetsQuestion = /\bassets\b/i.test(normalizedMessage);
   const currentUserClientQuestion = /\bclientes?\b/i.test(normalizedMessage) && /\b(cuantos?|total)\b/i.test(normalizedMessage) && /\b(puedo ver|tengo|mi usuario|mi cuenta|mi sesion|mios?)\b/i.test(normalizedMessage);
   const paymentQuestion = /\bpagos?\b/i.test(normalizedMessage);
-  const latestSolicitudQuestion = /\b(?:ultima|mas reciente)\s+solicitud\b|\bsolicitud\s+mas\s+reciente\b/i.test(normalizedMessage);
-  const previousPaymentQuestion = /\b(anterior|previo)\b/i.test(normalizedMessage) && resolution.state.activeEntity?.entityType === "PAGO";
+  const solicitudQuestion = /\bsolicitud(?:es)?\b/i.test(normalizedMessage);
+  const latestSolicitudQuestion = !folios.length && solicitudQuestion && !paymentQuestion && /\b(ultim[oa]s?|mas reciente)\b/i.test(normalizedMessage);
+  const previousPaymentQuestion = !solicitudQuestion && /\b(anterior|previo)\b/i.test(normalizedMessage) && resolution.state.activeEntity?.entityType === "PAGO";
   const latestPaymentQuestion = paymentQuestion && /\b(ultimo|reciente|recibido)\b/i.test(normalizedMessage);
   const listPaymentQuestion = paymentQuestion && /\b(ultimos?|muestra|muestrame|lista)\b/i.test(normalizedMessage);
   const requestedPaymentLimit = Math.min(Math.max(Number(normalizedMessage.match(/\b([1-5])\b/)?.[1] || (listPaymentQuestion ? 5 : 1)), 1), 5);
-  const paymentDetailFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(cuanto|monto|importe|quien|hizo|pagador|conciliad|estado|estatus)\b/i.test(normalizedMessage);
-  const paymentComplementFollowup = resolution.state.activeEntity?.entityType === "PAGO" && /\b(complemento|rep)\b/i.test(normalizedMessage);
+  const paymentSourceChallenge = /\b(bancos?|bancas?|remitente)\b/i.test(normalizedMessage) && /\b(no|donde|sacaste|dato|fuente|remitente)\b/i.test(normalizedMessage);
+  const paymentDetailFollowup = !solicitudQuestion && resolution.state.activeEntity?.entityType === "PAGO" && (paymentSourceChallenge || /\b(cuanto|monto|importe|quien|hizo|pagador|conciliad|estado|estatus|clientes?|nombre)\b/i.test(normalizedMessage));
+  const paymentComplementFollowup = !solicitudQuestion && resolution.state.activeEntity?.entityType === "PAGO" && /\b(complemento|rep)\b/i.test(normalizedMessage);
   const userQuery = normalizedMessage.match(/\b(?:usuario|usuaria)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bclientes?\s+(?:asignados?\s+)?(?:a|de)\s+([^?.,]{2,80})/i)?.[1]?.trim()
     || normalizedMessage.match(/\bclientes?\s+(?:activos?\s+)?visibles?\s+(?:para|por|tiene)\s+([^?.,]{2,80})/i)?.[1]?.trim()
@@ -121,8 +123,8 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
   const pagos = pagoResults.flatMap(row => row.tool === "searchReceivedPagos" ? asRows(row.data?.items) : asRows(row.data)).slice(0, 6);
   const references: HugoEntityReference[] = [...solicitudes.map(row => ({ sourceSystem: "PAY0", entityType: "SOLICITUD", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) })),
     ...pagos.map(row => ({ sourceSystem: "PAY0", entityType: "PAGO", entityId: compact(row.id, 160), displayReference: compact(row.folio, 40) }))].filter(row => row.entityId && row.displayReference).slice(0, folios.length ? 3 : 2);
-  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
-    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: row.entityType === "PAGO" && !folios.length ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
+  const resolved: ConversationEntity[] = references.filter(row => folios.includes(row.displayReference || "") || (by("getLatestSolicitud").some(result => result.completeness === "COMPLETE") && row.entityType === "SOLICITUD" && row.entityId === solicitudes[0]?.id) || (pagoResults.some(result => ["searchReceivedPagos", "getPagoById"].includes(result.tool)) && row.entityType === "PAGO" && row.entityId === pagos[0]?.id)).map(row => ({ system: "PAY0", entityType: row.entityType as "SOLICITUD" | "PAGO", entityId: row.entityId, folio: row.displayReference || "", rootId: input.rootId,
+    resolvedAt: now, resolvedTurn: resolution.state.turn + 1, source: !folios.length && (row.entityType === "PAGO" || latestSolicitudQuestion) ? "PAY0_ORDERED_TOOL" : "PAY0_EXACT_TOOL", confidence: 1 }));
   const nextState = advanceConversationState(resolution, resolved, input.rootId);
   if (reportRequest && by("getEarningsByClientReport").length) nextState.lastEarningsReport = { rootId: input.rootId,
     query: { dateFrom: reportRequest.dateFrom, dateTo: reportRequest.dateTo, limit: reportRequest.limit, includeCompensated: reportRequest.includeCompensated === true, ...(reportRequest.clientQuery ? { clientQuery: reportRequest.clientQuery } : {}), ...(reportRequest.format ? { format: reportRequest.format } : {}) }, resolvedAt: now, resolvedTurn: nextState.turn };
@@ -164,8 +166,10 @@ export async function buildHugoContextV2(input: { message: string; rootId: strin
     dudasPendientes: [] as any[], activeEntity: nextState.activeEntity ? { type: nextState.activeEntity.entityType, folio: nextState.activeEntity.folio } : null,
     evidenceBoundaries: boundaries, totalGlobalAllowed: canStateGlobalTotalForMessage(input.message, boundaries),
     solicitudes: solicitudes.map(row => ({ folio: row.folio, monto: row.monto, estado: row.estado, factura: row.factura, facturamaStatus: row.facturamaStatus,
+      cliente: row.cliente ?? null, clienteId: row.clienteId ?? null, clienteFuente: row.clienteFuente ?? null, metodoPago: row.metodoPago ?? null, moneda: row.moneda ?? null,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     pagos: pagos.map(row => ({ id: row.id, folio: row.folio, monto: row.monto, moneda: row.moneda, estado: row.estado, pagador: row.pagador, pagadorFuente: row.pagadorFuente, conciliado: row.conciliado, recibidoAt: row.recibidoAt, registradoAt: row.registradoAt,
+      cliente: row.cliente ?? null, clienteId: row.clienteId ?? null, clienteFuente: row.clienteFuente ?? null,
       ...(typeof row.issueCode === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(row.issueCode) ? { issueCode: row.issueCode } : {}) })),
     complementosPendientes: asRows(by("getPaymentComplementStatus")[0]?.data).filter(row => row.status !== "RECEIVED" && row.status !== "VOIDED").slice(0, 6).map(row => ({ solicitud: row.solicitudFolio, pago: row.pagoFolio, estado: row.status, enviadoAlProveedor: row.externalRequestSent === true })),
     capacidadesIq: by("getIqCapabilities")[0]?.data || {}, memoriasHistoricas: memoryContext, observacionesHistoricasNoVerificadas: observationContext, memoryConflicts,
