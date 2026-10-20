@@ -21,7 +21,7 @@ createPago ya registra CONCILIACION_PENDIENTE, posting PENDING, saldo disponible
 - Patch completo tres TS: `d40b6930a212ba9237ea965bdd3db5a75f77f9af443ec37da1bc957ab3be73e7`.
 - ZIP candidato: `6e0dffaa8af33582f09c7caa0f1a071f751cf1529e616f56e1dbd795c49224d0`.
 - Input: `4f4a803363069833a5c33f7eaa828aad699c3daebf20bd079d1972b03076318b`.
-- Baseline actual: `778f5e158c26a95c67f6ad77cee3be0447752cafb46eacaf02e3d0e004d4cf18`.
+- Baseline previa a publicaci?n: `778f5e158c26a95c67f6ad77cee3be0447752cafb46eacaf02e3d0e004d4cf18`.
 
 Input privado: `.firebase/modular-release/receipt-registration-candidate-v2/release/input.json`. Estado esperado previo: parse `00016-qoc`, correct `00005-qej`. Conserva orden y conjunto de 1176 entradas, cambia sólo tres JS, preserva 951 archivos byte a byte y no añade entradas. index shim, bundle original, manifests/lock y otros 352 exports permanecen intactos. No se copiaron fuentes raíz completas con cambios ajenos de selección de identidades. Tres emisores baseline coinciden antes de aplicar hunks. Reproducción independiente de la receta dio el mismo ZIP; raíz cotejó preservación y un revisor independiente cotejó los tres TS/hunks.
 
