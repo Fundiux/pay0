@@ -7,7 +7,10 @@ const tools = fs.readFileSync("services/hugo-voice-gateway/src/realtimeTools.mjs
 const history = fs.readFileSync("functions/src/modules/agent007/voiceHistory.ts", "utf8");
 
 assert.match(component, /NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL/);
-assert.match(component, /const idToken = await currentUser\.getIdToken\(\)/);
+assert.match(component, /const idToken = await withVoiceStartupAbort\(\(\) => currentUser\.getIdToken\(\), startup\.signal\)/);
+assert.match(component, /lateStream => lateStream\.getTracks\(\)\.forEach\(track => track\.stop\(\)\)/);
+assert.match(component, /STARTUP_TIMEOUT_MS = 45000/);
+assert.match(component, /Cancelar conexión/);
 assert.match(component, /new WebSocket\(gatewayUrl!\)/);
 assert.doesNotMatch(component, /createHugoRealtimeSession/);
 assert.doesNotMatch(component, /api\.openai\.com\/v1\/realtime\/calls/);
