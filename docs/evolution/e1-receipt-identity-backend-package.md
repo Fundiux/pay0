@@ -1,6 +1,6 @@
 # Identidad documental: backend de registro
 
-Estado: DEPLOYMENT_PENDING. Paquete exacto v3 probado, con input y preflight propios; requiere nueva autorización específica. No desplegado. Input29dc/ZIPeaff anterior fue autorizado pero quedó SUPERSEDED_NOT_DEPLOYED; sus recibos se conservan y no se reutiliza esa autorización.
+Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó expresamente input80/ZIP78 y reversión. Backend publicado y verificado técnicamente; recorrido autenticado end-to-end del usuario PENDING. Input29dc/ZIPeaff queda SUPERSEDED_NOT_DEPLOYED y no se ejecutó.
 
 ## Comportamiento y alcance
 
@@ -24,7 +24,7 @@ Startup y QA exactos v3 PASS; sin claims heredados de eaff. qa/scripts/receipt-i
 
 qa/scripts/receipt-identity-artifact.cjs exige ZIP/runtime iguales antes/después y Firestore demo. Casos previstos: name-only noREADY/nullpayload con sugerencias, IDs autorizados READY, desconocidos/ajenos/inactivos, cambio tras auto y corrección con IDs;33 regresiones documentales,8 monetarios, P3 y correcciones privadas/flagsfalse. Sin proveedores, datos reales ni escrituras financieras.
 
-Comprobaciones backend terminadas; pendiente nueva aprobación específica y prueba autenticada tras publicar. La autorización histórica29 no se transfiere.
+Comprobaciones backend y publicación autorizada terminadas; pendiente prueba autenticada del usuario. La autorización histórica29 no se transfiere.
 
 ## UI y reversión
 
@@ -43,3 +43,11 @@ Verificador canónico inmutable PASS exit0, con npm ci --omit=dev literal en run
 GET preflight2026-10-20T19:19:43Z PASS exit0: source6e0 descargada para ambos destinos, revisiones00017-wev/00006-jol, configuración/Run/IAM preservados, driftfalse,0operaciones,0negocio y0mutaciones. Proof088518c1eb85c55f27d5895ecf4b7e783a966342e8b9018a0bc6a8523202a071, release/fresh-preflight-3a60a8f6-8715-428a-8417-96b6551ceb00.json. La frescura se revalida en el ejecutor; este recibo no garantiza ausencia futura de cambios ni autoriza desplegar.
 
 La publicación backend v3 es independiente y segura antes de Hosting: el servidor exige selección explícita para nombre/manual y las pestañas antiguas quedan pendientes sin payload. La UI de selección sigue siendo otra entrega con aprobación propia, no requisito artificial para solicitar aprobación de las dos Functions. No usar input29dc/ZIPeaff ni su autorización histórica.
+
+## Publicación autorizada y verificación independiente
+
+Ejecutor raíz50086 terminó EXIT0, ambos CONFIGURATION_VERIFIED: parsepagoreceiptpdf-00018-zab y correctpagoreceiptsemanticfield-00007-qud. Input80ebcd01d86fc713fcd280d5fad2fe47c0c9f8fafb02562a2cf2816f8167ed64/ZIP78f7403fa7011069eafc1a99bd01c4388bc40e075d450d224e4c8a7dff79056b publicados tras autorización específica. Rollback6e0 preservado y NO utilizado; sin cambios financieros ni borrado de datos.
+
+Postverificador independiente EXIT0/PASS2026-10-20T21:37:11Z: ambas fuentes descargadas iguales al ZIP78, ACTIVE, revisiones listas/generaciones observadas, runtime/Run/IAM preservados, dos HTTP401 UNAUTHENTICATED y cero operaciones activas. Cero lecturas de negocio y cero mutaciones del verificador. Proof7aaaab44f1e6167108b738a7f1834ef681d434a1701f147e1b4df26caa9d9f0d; baseline publicada7933ff5e48ba642500a7fca48cfdbd928b10928387b4003babb5e6b8aae19efb. Directorio privado release/independent-post-publication-7badb878-d2d2-417c-907b-09b2e9fbbe11, archivos verification.json y published-baseline.json; fuentes exactas preservadas por destino.
+
+Esta evidencia certifica publicación y contrato técnico, no el recorrido productivo del usuario. La prueba end-to-end de selección/registro sigue PENDING; no se certifican conciliación real, IQ ni banco por las pruebas sintéticas o por rechazos anónimos. Hosting es otro paquete y no se atribuye su estado a este dossier.
