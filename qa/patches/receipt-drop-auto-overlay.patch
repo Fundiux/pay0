@@ -1,0 +1,276 @@
+diff --git a/src/modules/pagos/receiptIdentificationDomain.ts b/src/modules/pagos/receiptIdentificationDomain.ts
+index 99be979..71c77a9 100644
+--- a/src/modules/pagos/receiptIdentificationDomain.ts
++++ b/src/modules/pagos/receiptIdentificationDomain.ts
+@@ -6,7 +6,10 @@ export type ReceiptSignals = {
+ };
+ export type ReceiptCatalogItem = { id: string; [key: string]: any };
+ export type IdentityMatch = { status: "EXACT" | "REQUIRES_REVIEW"; id: string | null; reasons: string[]; evidence: string[]; candidateCount: number };
+-export const normalizeReceiptName = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9&]+/g, " ").trim().replace(/\s+/g, " ");
++/** Only punctuation/spacing variants of complete legal suffixes are equivalent. */
++export const normalizeReceiptName = (value: unknown) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9&]+/g, " ").trim().replace(/\s+/g, " ")
++  .replace(/\bS\s+DE\s+R\s*L\s+DE\s+C\s*V$/, "S DE RL DE CV")
++  .replace(/\bS\s*A\s+DE\s+C\s*V$/, "SA DE CV");
+ export const normalizeReceiptReference = (value: unknown) => String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+ const rfc = (value: unknown) => String(value ?? "").toUpperCase().replace(/[\s.-]/g, "");
+ const validRfc = (value: string) => /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(value) && !/^XAXX|^XEXX/.test(value);
+@@ -16,7 +19,7 @@ export function fullReceiptAccount(value: unknown) {
+   const digits = raw.replace(/\D/g, "");
+   return digits.length >= 10 && digits.length <= 18 ? digits : "";
+ }
+-const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonSocial, item.businessName, item.legalName, item.commercialName, item.nombreComercial, item.displayName, item.companyName, item.clientName, item.alias, item.depositAlias].map(normalizeReceiptName).filter(Boolean);
++const names = (item: ReceiptCatalogItem) => [item.name, item.nombre, item.razonSocial, item.businessName, item.legalName, item.commercialName, item.nombreComercial, item.displayName, item.companyName, item.clientName, item.clienteNombre, item.alias, item.depositAlias].map(normalizeReceiptName).filter(Boolean);
+ const rfcs = (item: ReceiptCatalogItem) => [item.rfc, item.RFC, item.taxId, item.taxID].map(rfc).filter(validRfc);
+ const accounts = (item: ReceiptCatalogItem) => [item.clabe, item.CLABE, item.bankClabe, item.cuenta, item.account, item.accountNumber, ...(Array.isArray(item.depositClabes) ? item.depositClabes : [])].map(fullReceiptAccount).filter(Boolean);
+ 
+@@ -58,10 +61,7 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: Iden
+   const assessed = assessIdentity(items, signals, options);
+   const automatic = matchReceiptIdentity(items, signals, options);
+   const candidates = [...assessed].sort((a, b) => Number(b.nameExact) - Number(a.nameExact) || Number(b.rfcExact) - Number(a.rfcExact) || a.item.id.localeCompare(b.item.id)).map(row => row.item);
+-  if (!selectedId) {
+-    const requiresSelection = automatic.status === "EXACT" && !automatic.evidence.some(value => value === "RFC_EXACT" || value === "FULL_ACCOUNT_EXACT");
+-    return { match: requiresSelection ? { ...automatic, status: "REQUIRES_REVIEW" as const, reasons: ["SELECTION_REQUIRED"] } : automatic, candidates };
+-  }
++  if (!selectedId) return { match: automatic, candidates };
+   const selected = assessed.find(row => row.item.id === selectedId);
+   if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
+   return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };
+diff --git a/src/modules/pagos/receiptIdentification.ts b/src/modules/pagos/receiptIdentification.ts
+index 8bfbf81..ef64842 100644
+--- a/src/modules/pagos/receiptIdentification.ts
++++ b/src/modules/pagos/receiptIdentification.ts
+@@ -3,6 +3,7 @@ import { FieldValue, type Firestore, type DocumentSnapshot } from "firebase-admi
+ import { HttpsError } from "firebase-functions/v2/https";
+ import { requireClientOperationalAccess } from "../clientDelegations/access";
+ import { getReceiptActorCorrectionState } from "./receiptLearning";
++import { resolveReceiptOperationType } from "./receiptOperationType";
+ import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
+ 
+ type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
+@@ -12,6 +13,7 @@ export type ReceiptIdentificationResult = {
+   reasons: string[]; evidence: { client: string[]; company: string[] };
+   createPayload: Record<string, any> | null; pagoId: string | null;
+   receiptPending?: boolean;
++  resolvedOperationTypeKey?: string;
+   verifiedMatches?: { client: ReceiptIdentityOption | null; company: ReceiptIdentityOption | null };
+   candidates?: { client: ReceiptIdentityOption[]; company: ReceiptIdentityOption[] };
+ };
+@@ -35,8 +37,9 @@ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatal
+ /** Called only with bytes and parsed signals obtained by the server parser. */
+ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown>; selectedClientId?: string; selectedCompanyId?: string; correctionVersion?: number }): Promise<ReceiptIdentificationResult> {
+   const { db, actor, receipt } = input;
+-  const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
+-  if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
++  const operationResolution = await resolveReceiptOperationType({ db, rootId: actor.rootId, operationTypeKey: input.operationTypeKey });
++  const operationTypeKey = operationResolution.key;
++  const resolvedOperation = operationTypeKey && !operationResolution.reason ? { resolvedOperationTypeKey: operationTypeKey } : {};
+   const id = createHash("sha256").update([actor.rootId, actor.uid, input.contentSha256].join("|")).digest("hex");
+   const ref = db.doc(`pagoReceiptIdentifications/${id}`);
+   const [clients, companies] = await Promise.all([
+@@ -65,24 +68,20 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+   const clientMatch = clientSelection.match, companyMatch = companySelection.match;
+   const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
+   if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
++  if (operationResolution.reason && !reasons.includes(operationResolution.reason)) reasons.push(operationResolution.reason);
+   const client = authorizedClients.find(item => item.id === clientMatch.id);
+   const company = authorizedCompanies.find(item => item.id === companyMatch.id);
+   if (clientMatch.id && !client) reasons.push("CLIENT_ACCESS_REQUIRES_REVIEW");
+   if (companyMatch.id && !company) reasons.push("COMPANY_ACCESS_REQUIRES_REVIEW");
+   const option = (item: ReceiptCatalogItem, kind: "client" | "company"): ReceiptIdentityOption => ({
+-    id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.displayName),
++    id: item.id, name: clean(item.razonSocial || item.name || item.nombre || item.nombreComercial || item.clienteNombre || item.displayName || item.businessName || item.legalName || item.commercialName || item.companyName || item.clientName || item.alias || item.depositAlias),
+     ...(kind === "company" ? { despachoId: clean(item.despachoId) } : {}),
+     evidence: [...new Set(["AUTHORIZED_CATALOG_ENTRY", ...(kind === "client" && clientMatch.id === item.id ? clientMatch.evidence : kind === "company" && companyMatch.id === item.id ? companyMatch.evidence : matchReceiptIdentity([item], kind === "client" ? clientSignals : companySignals, { party: kind === "client" ? "CLIENT" : "COMPANY" }).evidence)])],
+   });
+   const candidates = { client: clientSelection.candidates.map(item => option(item, "client")), company: companySelection.candidates.map(item => option(item, "company")) };
+   const verifiedMatches = { client: client ? option(client, "client") : null, company: company ? option(company, "company") : null };
+-  if (operationTypeKey) {
+-    const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();
+-    if (!operation.exists || operation.get("active") === false) reasons.push("OPERATION_TYPE_REQUIRES_REVIEW");
+-  }
+-  // Older open tabs automatically create every READY proposal. Name-only
+-  // suggestions retain verifiedMatches, but must never expose a create payload
+-  // until the caller explicitly selects each identity lacking strong evidence.
++  // A unique exact authorized identity is sufficient for pending registration;
++  // reconciliation and canonical creation validations remain separate.
+   const ready = reasons.length === 0 && !!client && !!company;
+   const createPayload = ready ? {
+     clienteId: client!.id, companyId: company!.id, despachoId: clean(company!.despachoId),
+@@ -116,7 +115,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+         pago?.get("clienteId") === client?.id && pago?.get("companyId") === company?.id &&
+         pago?.get("operationTypeKey") === existing.get("createPayload.operationTypeKey") &&
+         (!operationTypeKey || pago?.get("operationTypeKey") === operationTypeKey);
+-      return { id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
++      return { ...resolvedOperation, id, status: "REGISTERED", reasons: [receiptPending ? "RECEIPT_UPLOAD_PENDING" : "DUPLICATE"], evidence,
+         verifiedMatches, candidates, createPayload: null, pagoId: pagoId || null, receiptPending: !!receiptPending };
+     }
+     const status = ready ? "READY" : "REQUIRES_REVIEW";
+@@ -126,7 +125,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+       updatedAt: FieldValue.serverTimestamp(), ...(!existing.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+       attempts: FieldValue.increment(1), metricDetected: true, metricIdentifiedAutomatically: ready, metricRequiresReview: !ready,
+     }, { merge: true });
+-    return { id, status, reasons, evidence, verifiedMatches, candidates, createPayload, pagoId: null };
++    return { ...resolvedOperation, id, status, reasons, evidence, verifiedMatches, candidates, createPayload, pagoId: null };
+   });
+ }
+ 
+diff --git a/src/modules/pagos/receiptPdfCallables.ts b/src/modules/pagos/receiptPdfCallables.ts
+index 570f167..81f6d09 100644
+--- a/src/modules/pagos/receiptPdfCallables.ts
++++ b/src/modules/pagos/receiptPdfCallables.ts
+@@ -351,9 +351,51 @@ function parseDateValue(value: string): string {
+     if (mm) return `${yyyy}-${mm}-${dd}`;
+   }
+ 
++  const monthFirst = normalized.match(/\b([a-z]+)\s+(\d{1,2}),?\s+(20\d{2})\b/);
++  if (monthFirst && months[monthFirst[1]]) return `${monthFirst[3]}-${months[monthFirst[1]]}-${monthFirst[2].padStart(2, "0")}`;
++
+   return "";
+ }
+ 
++/** Mexican receipts use day/month/year unless the document states otherwise. */
++function resolveReceiptDate(lines: string[], text: string): { raw: string; value: string; verified: boolean } {
++  const operationLabels = [/^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*(.+)$/i];
++  const genericLabels = [/^fecha\s*(?:\/\s*hora|y\s+hora)?\s*[:\-]\s*(.+)$/i];
++  const captureLabels = [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i];
++  const collect = (labels: RegExp[]) => lines.flatMap((line, index) => {
++    const value = extractLabeled([line, lines[index + 1] || ""], labels);
++    return value ? [value] : [];
++  });
++  const operation = collect(operationLabels), generic = collect(genericLabels), capture = collect(captureLabels);
++  const labelled = operation.length ? operation : generic.length ? generic : capture;
++  const patterns = [
++    /\b20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}\b/g,
++    /\b\d{1,2}[-\/]\d{1,2}[-\/]20\d{2}\b/g,
++    /\b\d{1,2}[\s\-\/.]+[a-z]+[\s\-\/.]+20\d{2}\b/g,
++    /\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de|del)\s+20\d{2}\b/g,
++    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+20\d{2}\b/g,
++  ];
++  const tokens = (value: string) => [...new Set(patterns.flatMap(pattern => [...normalize(value).matchAll(pattern)].map(match => match[0])))];
++  const monthFirst = /\bmm[\/-]dd[\/-](?:yyyy|aaaa)\b/i.test(text);
++  const dayFirst = /\bdd[\/-]mm[\/-](?:yyyy|aaaa)\b/i.test(text);
++  const parse = (value: string) => {
++    const numeric = value.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})$/);
++    if (numeric && (monthFirst || (!dayFirst && Number(numeric[2]) > 12 && Number(numeric[1]) <= 12))) return `${numeric[3]}-${numeric[1].padStart(2, "0")}-${numeric[2].padStart(2, "0")}`;
++    return parseDateValue(value);
++  };
++  const candidates = labelled.length ? labelled.flatMap(value => {
++    const found = tokens(value);
++    return found.length ? found : [value];
++  }) : tokens(text);
++  const dates = candidates.map(parse);
++  const calendarValid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
++  const validDates = [...new Set(dates.filter(calendarValid))];
++  const verified = candidates.length > 0 && dates.every(calendarValid) && validDates.length === 1 && !(monthFirst && dayFirst);
++  // Do not invent a date or choose between conflicting dates. The original
++  // extraction remains visible for review when it cannot be resolved uniquely.
++  return { raw: labelled[0] || candidates[0] || "", value: validDates.length === 1 ? validDates[0] : "", verified };
++}
++
+ function parseTimeValue(value: string): string {
+   const raw = clean(value);
+   const match = raw.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\b/i);
+@@ -581,32 +623,15 @@ export function parseReceiptText(textRaw: string): ReceiptData {
+   const declaredStates = lines.map(normalize).filter(line => /^(?:estado|resultado)\b.*[:\-]/.test(line));
+   const executionConfirmed = !blockedExecution && positiveExecution.test(normalizedText) && declaredStates.every(line => positiveExecution.test(line));
+ 
+-  const dateLabels = [
+-      /^fecha\s*(?:\/\s*hora)?\s*[:\-]\s*(.+)$/i,
+-      /^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:operacion|transferencia|pago|ejecucion)\s*[:\-]\s*(.+)$/i,
+-  ];
+-  const executionDates = lines.flatMap((line, index) => {
+-    const value = extractLabeled([line, lines[index + 1] || ""], dateLabels);
+-    return value ? [value] : [];
+-  });
+-  const dateRaw = executionDates[0] || extractLabeled(lines, [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i]) ||
+-    firstMatch(normalize(text), [
+-      /\b(\d{1,2}[-\/]\d{1,2}[-\/]20\d{2})\b/,
+-      /\b(20\d{2}[-\/]\d{1,2}[-\/]\d{1,2})\b/,
+-      /\b(\d{1,2}[\s\-\/.]+[a-z]+[\s\-\/.]+20\d{2})\b/i,
+-      /\b(\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de|del)\s+20\d{2})\b/i,
+-    ]);
++  const resolvedDate = resolveReceiptDate(lines, text);
++  const dateRaw = resolvedDate.raw;
+   const time = parseTimeValue(dateRaw) || parseTimeValue(extractLabeled(lines, [
+     /^hora\s*(?:de\s+)?(?:operacion|transferencia|pago)?\s*[:\-]\s*(.+)$/i,
+   ]));
+-  const unambiguousDate = (value: string) => {
+-    const short = value.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
+-    return !short || Number(short[1]) > 12 || short[1] === short[2];
+-  };
+-  const parsedDate = parseDateValue(dateRaw);
++  const parsedDate = resolvedDate.value;
+   const calendarTime = Date.parse(parsedDate);
+   const validDate = Number.isFinite(calendarTime) && new Date(calendarTime).toISOString().slice(0, 10) === parsedDate;
+-  const dateVerified = executionDates.length > 0 && validDate && executionDates.every(value => parseDateValue(value) === parsedDate && unambiguousDate(value));
++  const dateVerified = resolvedDate.verified && validDate;
+ 
+   const reference =
+     extractLabeled(lines, [
+@@ -748,7 +773,7 @@ export const parsePagoReceiptPdf = onCall(
+     let semanticReceipt: ReturnType<typeof buildSemanticReceipt>;
+     let cacheHit = false;
+ 
+-    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 3) {
++    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 4) {
+       receipt = cached.get("receipt") as ReceiptData;
+       semanticReceipt = cached.get("semanticReceipt") as ReturnType<typeof buildSemanticReceipt>;
+       textSource = clean(cached.get("textSource"));
+@@ -802,11 +827,11 @@ export const parsePagoReceiptPdf = onCall(
+     semanticReceipt = buildSemanticReceipt(text, receipt);
+     await db.runTransaction(async tx => {
+     const existing = await tx.get(analysisRef);
+-    if (existing.exists && existing.get("processingPolicyVersion") === 3 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
++    if (existing.exists && existing.get("processingPolicyVersion") === 4 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
+     // Re-read old extraction policy under the same document identity. Merge only
+     // original extraction fields: all actor corrections and versions survive.
+     tx.set(analysisRef, {
+-      schemaVersion: 1, processingPolicyVersion: 3, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
++      schemaVersion: 1, processingPolicyVersion: 4, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
+       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
+       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
+       ...(!existing.exists ? { createdAt: new Date() } : {}), updatedAt: new Date(),
+diff --git a/src/modules/pagos/receiptOperationType.ts b/src/modules/pagos/receiptOperationType.ts
+new file mode 100644
+index 0000000..23b7cc1
+--- /dev/null
++++ b/src/modules/pagos/receiptOperationType.ts
+@@ -0,0 +1,38 @@
++﻿import type { Firestore } from "firebase-admin/firestore";
++import { HttpsError } from "firebase-functions/v2/https";
++
++export type ReceiptOperationTypeResolution = {
++  key: string;
++  source: "EXPLICIT" | "UNIQUE_CATALOG" | "MISSING";
++  reason?: "MISSING_OPERATION_TYPE" | "OPERATION_TYPE_REQUIRES_REVIEW" | "OPERATION_TYPE_CATALOG_REQUIRES_REVIEW";
++};
++
++/** Resolve a catalog identity, never infer a financial operation from PDF wording. */
++export async function resolveReceiptOperationType(input: {
++  db: Firestore; rootId: string; operationTypeKey?: unknown;
++}): Promise<ReceiptOperationTypeResolution> {
++  const key = String(input.operationTypeKey ?? "").trim().toUpperCase();
++  if (key.includes("/") || key.length > 100) throw new HttpsError("invalid-argument", "Tipo de operacion invalido.");
++  if (key) {
++    // Explicit choices retain the existing exists/active contract and global catalog scope.
++    const snapshot = await input.db.doc(`operationTypes/${key}`).get();
++    return snapshot.exists && snapshot.get("active") !== false
++      ? { key, source: "EXPLICIT" }
++      : { key, source: "EXPLICIT", reason: "OPERATION_TYPE_REQUIRES_REVIEW" };
++  }
++  const rootId = String(input.rootId || "").trim();
++  if (!rootId) return { key: "", source: "MISSING", reason: "MISSING_OPERATION_TYPE" };
++  const snapshot = await input.db.collection("operationTypes").limit(501).get();
++  if (snapshot.size > 500) return { key: "", source: "MISSING", reason: "OPERATION_TYPE_CATALOG_REQUIRES_REVIEW" };
++  const candidates = snapshot.docs.filter(doc => {
++    const data = doc.data() || {};
++    const owner = String(data.rootId || "").trim();
++    return data.active !== false && String(data.category || "OPERACION").trim().toUpperCase() === "OPERACION" && (!owner || owner === rootId);
++  });
++  if (candidates.length !== 1) return { key: "", source: "MISSING", reason: "MISSING_OPERATION_TYPE" };
++  const id = candidates[0].id;
++  if (!id || id !== id.trim().toUpperCase() || id.includes("/") || id.length > 100) {
++    return { key: "", source: "MISSING", reason: "OPERATION_TYPE_CATALOG_REQUIRES_REVIEW" };
++  }
++  return { key: id, source: "UNIQUE_CATALOG" };
++}
