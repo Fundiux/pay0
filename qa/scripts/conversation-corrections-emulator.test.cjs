@@ -4,7 +4,7 @@ const path = require('node:path'), { createRequire } = require('node:module');
 const workspace = path.resolve(__dirname, '../..');
 const runtimeLib = path.resolve(workspace, process.env.PAY0_CORRECTIONS_LIB || 'functions/lib');
 assert.ok(runtimeLib.startsWith(workspace + path.sep), 'WORKSPACE_RUNTIME_REQUIRED');
-const scope = process.env.PAY0_CORRECTIONS_SCOPE || 'ALL'; assert.ok(['ALL', 'TEXT'].includes(scope));
+const scope = process.env.PAY0_CORRECTIONS_SCOPE || 'TEXT'; assert.ok(['ALL', 'TEXT'].includes(scope));
 const load = createRequire(path.join(runtimeLib, '../package.json'));
 const admin = load('firebase-admin');
 admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
@@ -158,6 +158,27 @@ test('text correction persists, reloads, remains owned and expires without factu
     assert.deepEqual((await db.doc(`agent007ConversationCorrectionBindings/${orderedLink.bindingId}`).get()).get('memoryIds'), ordered.slice(1).reverse().map(row => row.id));
     const identical = await core.respond({ ...input, correctionTopic: 'Orden privado', message: 'Describe cómo presentarás la explicación.' });
     assert.equal(identical.correctionChoices, undefined); assert.equal(captured.intelligence.conversationCorrections.length, 3);
+  });
+  await t.test('CLIENT note is visible and persisted on the canonical report only; exports stay unchanged and retirement is real', async () => {
+    for (const [id, name, amount] of [['notes-alfa', 'Alfa Demo', 12.34], ['notes-beta', 'Beta Demo', 56.78]]) {
+      await db.doc(`earningsDistributions/${id}`).set({ rootId, clienteId: id, clienteNombre: name, totalEarningsAmount: amount, createdAt: admin.firestore.Timestamp.fromDate(new Date('2026-09-10T12:00:00Z')) });
+    }
+    const request = name => `reporte utilidades cliente ${name} 2026-09-01 al 2026-09-30 en PDF`;
+    const first = await invoke('sendAgent007Message', { scope: 'GLOBAL', text: request('Alfa Demo') });
+    assert.equal(first.message.reportExport.rows[0].clienteId, 'notes-alfa');
+    const saved = await invoke('createAgent007MemoryCandidate', { kind: 'CONVERSATION_CORRECTION', content: 'Mi indicación personal sobre el contexto del cliente.', responseCorrection: { messageId: first.message.id, scope: 'GLOBAL', confirm: true, expectedText: first.message.text, expectedVersion: 0, rememberFor: { kind: 'CLIENT' } } });
+    const again = await invoke('sendAgent007Message', { scope: 'GLOBAL', text: request('Alfa Demo') });
+    assert.equal(again.message.personalNotes[0].id, saved.id); assert.equal(again.message.personalNotes[0].topic.id, 'notes-alfa');
+    assert.equal(again.message.personalNotes[0].content, 'Mi indicación personal sobre el contexto del cliente.');
+    assert.equal(again.message.text, first.message.text); assert.deepEqual(again.message.reportExport, first.message.reportExport);
+    const history = await invoke('listAgent007Messages', { scope: 'GLOBAL' });
+    assert.deepEqual(history.messages.find(row => row.id === again.message.id).personalNotes, again.message.personalNotes);
+    const beta = await invoke('sendAgent007Message', { scope: 'GLOBAL', text: request('Beta Demo') });
+    assert.equal(beta.message.personalNotes, undefined); assert.equal(beta.message.reportExport.rows[0].clienteId, 'notes-beta');
+    assert.equal((await invoke('reviewAgent007MemoryCandidate', { memoryId: saved.id, decision: 'REJECT' })).changed, true);
+    const after = await invoke('sendAgent007Message', { scope: 'GLOBAL', text: request('Alfa Demo') });
+    assert.equal(after.message.personalNotes, undefined); assert.deepEqual(after.message.reportExport, first.message.reportExport);
+    assert.equal(providerCalls, 0);
   });
 });
 test.after(async () => { assert.equal(providerCalls, 0); console.log(JSON.stringify({ correctionScope: scope, runtime: path.relative(workspace, runtimeLib), externalProviders: providerCalls })); await admin.app().delete(); });

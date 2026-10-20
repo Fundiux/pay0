@@ -252,14 +252,14 @@ export const sendAgent007Message = onCall(
     });
     const reply = result.text;
     const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), ...(result.personalNotes?.length ? { personalNotes: result.personalNotes } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     for (const experienceId of result.learningUsage?.includedIds || []) {
       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
     }
-    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), source, scope, profile, createdAt: saved.createdAt } };
+    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), ...(result.personalNotes?.length ? { personalNotes: result.personalNotes } : {}), source, scope, profile, createdAt: saved.createdAt } };
   },
 );
 
