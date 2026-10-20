@@ -504,7 +504,9 @@ function extractReceiptAmount(lines: string[], text: string): string {
   if (labelled) return labelled;
   // A balance or bank fee is not the transfer amount. Accept a single monetary
   // suggestion, never the first of several different amounts.
-  const candidates = lines.filter(line => !/\b(?:saldo|comision|comisi[oó]n|iva|cargo por)\b/i.test(normalize(line)))
+  const nonTransferLabel = /\b(?:saldo|comision|iva|cargo por)\b/;
+  const candidates = lines.filter((line, index) => !nonTransferLabel.test(normalize(line)) &&
+    !(index > 0 && nonTransferLabel.test(normalize(lines[index - 1])) && !/\d/.test(lines[index - 1])))
     .flatMap(line => [...line.matchAll(/\$\s*(\d[\d,.]*)/g)].map(match => match[1]));
   const values = [...new Set(candidates.map(parseMoney).filter(value => value > 0))];
   return values.length === 1 ? candidates.find(value => parseMoney(value) === values[0]) || "" : "";
@@ -745,7 +747,7 @@ export const parsePagoReceiptPdf = onCall(
     let semanticReceipt: ReturnType<typeof buildSemanticReceipt>;
     let cacheHit = false;
 
-    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 2) {
+    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 3) {
       receipt = cached.get("receipt") as ReceiptData;
       semanticReceipt = cached.get("semanticReceipt") as ReturnType<typeof buildSemanticReceipt>;
       textSource = clean(cached.get("textSource"));
@@ -799,13 +801,15 @@ export const parsePagoReceiptPdf = onCall(
     semanticReceipt = buildSemanticReceipt(text, receipt);
     await db.runTransaction(async tx => {
     const existing = await tx.get(analysisRef);
-    if (existing.exists && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
+    if (existing.exists && existing.get("processingPolicyVersion") === 3 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
+    // Re-read old extraction policy under the same document identity. Merge only
+    // original extraction fields: all actor corrections and versions survive.
     tx.set(analysisRef, {
-      schemaVersion: 1, processingPolicyVersion: 2, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
+      schemaVersion: 1, processingPolicyVersion: 3, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
-      createdAt: new Date(), updatedAt: new Date(),
-    }, { merge: false });
+      ...(!existing.exists ? { createdAt: new Date() } : {}), updatedAt: new Date(),
+    }, { merge: true });
     });
     }
     const latestAnalysis = await analysisRef.get();

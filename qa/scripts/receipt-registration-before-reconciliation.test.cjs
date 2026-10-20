@@ -16,7 +16,7 @@ test('valid unique amount and unconfirmed execution can be registered without fa
   assert.equal(semantic.reviewRequired,false);assert.equal(semantic.fields.transferAmount.confidence,'LOW');assert.equal(semantic.fields.transferAmount.decision,'REVIEW');assert.equal(semantic.fields.executionStatus.value,'UNCONFIRMED');
   assert.equal(semantic.fields.executionStatus.decision,'REVIEW');
 });
-for(const [name,amount] of [['balance-only','Saldo disponible: $9999.00'],['commission-only','Comisión bancaria: $16.00'],['explicit contradiction','Monto: $100.00\nMonto transferido: $200.00'],['malformed explicit amount','Monto: $1,00.50']])test(name+' never supplies a valid transfer amount',()=>{
+for(const [name,amount] of [['balance-only','Saldo disponible: $9999.00'],['commission-only','Comisión bancaria: $16.00'],['split balance-only','Saldo disponible\n$9999.00'],['split commission-only','Comisión bancaria\n$16.00'],['explicit contradiction','Monto: $100.00\nMonto transferido: $200.00'],['malformed explicit amount','Monto: $1,00.50']])test(name+' never supplies a valid transfer amount',()=>{
   const receipt=reader.parse(body(amount));assert.equal(receipt.amount,0);assert.equal(receipt.amountVerified,false);assert(domain.receiptRegistrationReasons(receipt,'OP_DEMO').includes('INVALID_AMOUNT'));
 });
 test('transfer amount stays distinct from balance, commission and tax',()=>{

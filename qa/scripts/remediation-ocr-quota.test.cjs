@@ -163,6 +163,38 @@ test('callable rejects unauthorized and oversized requests before parser/provide
   assert.equal(db.docs.has(key('root', 'forged')), false);
 });
 
+test('legacy policy2 extraction refreshes once without changing analysis identity or human corrections', async () => {
+  const counters = { pdf: 0, vision: 0 }, db = database({ 'users/u1': profile() });
+  const handler = receiptHandler(db, counters, false, 1, false, async (_bytes, options) => {
+    counters.pdf++; assert.equal(options.max, 5);
+    return { numpages: 1, text: 'Transferencia SPEI MXN\nMonto: 100 MXN\nFecha de operación: 2026-10-16\nReferencia: DEMO1234\nEstado: Pendiente' };
+  });
+  const input = { auth: { uid: 'u1' }, data: { base64: Buffer.from('%PDF-synthetic-cache-policy').toString('base64'), contentType: 'application/pdf' } };
+  const first = await handler(input), analysisPath = `pagoReceiptAnalyses/${first.analysisId}`;
+  const previous = db.docs.get(analysisPath);
+  db.docs.set(analysisPath, { ...previous, processingPolicyVersion: 2, createdAt: 'LEGACY_CREATED_AT', customTrace: 'KEEP_TRACE',
+    receipt: { ...previous.receipt, amount: 9999, amountVerified: false, executionConfirmed: false,
+      warnings: ['Importe sin etiqueta inequívoca o importes contradictorios; requiere revisión.', 'Ejecución de la transferencia sin confirmar; requiere revisión.'] },
+    semanticReceipt: { ...previous.semanticReceipt, reviewRequired: true, reviewReasons: ['AMOUNT_REQUIRES_REVIEW', 'EXECUTION_REQUIRES_REVIEW'],
+      fields: { ...previous.semanticReceipt.fields, transferAmount: { ...previous.semanticReceipt.fields.transferAmount, value: 9999, normalizedValue: 9999, decision: 'REVIEW' } } } });
+  const correction = await handler.correct({ auth: input.auth, data: { analysisId: first.analysisId, field: 'transferAmount', correctedField: 'transferAmount', correctedValue: '125.50', expectedCorrectionVersion: 0 } });
+  const before = structuredClone(db.docs.get(analysisPath));
+  const refreshed = await handler(input), persisted = db.docs.get(analysisPath);
+  assert.equal(refreshed.analysisId, first.analysisId); assert.equal(refreshed.readerVersion, first.readerVersion);
+  assert.equal(refreshed.cacheHit, false); assert.equal(refreshed.correctionVersion, correction.correctionVersion);
+  assert.equal(refreshed.receipt.amount, 125.5); assert.equal(refreshed.receipt.executionConfirmed, false);
+  assert.equal(refreshed.semanticReceipt.fields.transferAmount.provenance, 'HUMAN_CORRECTION');
+  assert.equal(refreshed.semanticReceipt.reviewRequired, false); assert.deepEqual(refreshed.semanticReceipt.reviewReasons, []);
+  assert.equal(persisted.processingPolicyVersion, 3); assert.equal(persisted.receipt.amount, 100);
+  assert.equal(persisted.createdAt, 'LEGACY_CREATED_AT'); assert.equal(persisted.customTrace, 'KEEP_TRACE');
+  assert.deepEqual(persisted.humanCorrectionsByActor, before.humanCorrectionsByActor);
+  assert.deepEqual(persisted.correctionVersionsByActor, before.correctionVersionsByActor);
+  assert.deepEqual(persisted.humanCorrections, before.humanCorrections);
+  const cached = await handler(input);
+  assert.equal(cached.cacheHit, true); assert.equal(cached.providerCalls, 0); assert.equal(cached.receipt.amount, 125.5);
+  assert.equal(cached.correctionVersion, correction.correctionVersion); assert.deepEqual(counters, { pdf: 2, vision: 0 });
+});
+
 test('OCR failures remain charged and never expose provider errors', async () => {
   const counters = { pdf: 0, vision: 0 }, db = database({ 'users/u1': profile() });
   const parse = receiptHandler(db, counters, true);
@@ -291,7 +323,7 @@ test('legacy memory fallback reads only same root and scoped candidate takes pre
   const pattern = learning.receiptPattern({ readerVersion, bankName: 'Banco', evidenceLabel: 'Referencia', fromField: 'reference', toField: 'folio' });
   for (const memoryRoot of ['r1', 'foreign']) {
     const db = database({ 'users/u1': profile() });
-    db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion, processingPolicyVersion: 2, receipt: { amount: 100 }, textSource: 'PDF_TEXT', semanticReceipt: { readerVersion, fields: { reference: { label: 'Referencia', value: '12345' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } } } });
+    db.docs.set(`pagoReceiptAnalyses/${analysisId}`, { rootId: 'r1', readerVersion, processingPolicyVersion: 3, receipt: { amount: 100 }, textSource: 'PDF_TEXT', semanticReceipt: { readerVersion, fields: { reference: { label: 'Referencia', value: '12345' }, bankName: { normalizedValue: 'Banco' }, folio: { decision: 'MISSING' } } } });
     db.docs.set(`agent007Memory/receipt_${pattern.key}`, { rootId: memoryRoot, status: 'CANDIDATE', content: 'legacy', receiptLearning: { key: pattern.key } });
     const handler = receiptHandler(db, { pdf: 0, vision: 0 });
     const input = { auth: { uid: 'u1' }, data: { base64: bytes.toString('base64'), contentType: 'application/pdf' } };
