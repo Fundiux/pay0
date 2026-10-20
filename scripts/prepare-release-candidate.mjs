@@ -14,6 +14,7 @@ export const CANDIDATE_GATES = [
   ['capability-negative-tests', 'node', ['--test', 'qa/scripts/capability-registration.test.mjs']],
   ['authorization-policy', 'node', ['scripts/verify-authorization-policy.mjs']],
   ['authorization-contract', 'node', ['--test', 'qa/scripts/remediation-document-policy-specialization.test.mjs', 'qa/scripts/remediation-restrictions.test.cjs']],
+  ['payment-create-overlay-contract', 'node', ['--test', 'qa/scripts/create-pago-overlay-contract.test.mjs']],
   ['candidate-contract', 'node', ['--test', 'qa/scripts/release-candidate.test.mjs', 'qa/scripts/modular-integration.test.mjs', 'qa/scripts/scoped-deployment.test.mjs']],
   ['engineering-contract', 'node', ['--test', 'qa/scripts/engineering-catalog.test.cjs', 'qa/scripts/engineering-evidence.test.cjs']],
   ['receipt-contract', 'node', ['--test', 'qa/scripts/remediation-ocr-quota.test.cjs', 'qa/scripts/receipt-corpus.test.cjs']],

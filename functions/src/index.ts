@@ -1,3 +1,4 @@
+import { assertCreatePagoAuthorityTx } from "./modules/pagos/createPagoAuthority";
 import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
@@ -2108,6 +2109,7 @@ export const createPago = onCall(
     let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
 
     await db.runTransaction(async (tx) => {
+      await assertCreatePagoAuthorityTx({ db, tx, uid, rootId, clientId: String(clienteId), companyId: String(companyId), despachoId: companyDespachoId, auth: request.auth });
       if (receiptIdentificationRef) {
         const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
         assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
