@@ -115,10 +115,10 @@ index 8bfbf81..ef64842 100644
  }
  
 diff --git a/src/modules/pagos/receiptPdfCallables.ts b/src/modules/pagos/receiptPdfCallables.ts
-index 570f167..81f6d09 100644
+index 570f167..c4288fc 100644
 --- a/src/modules/pagos/receiptPdfCallables.ts
 +++ b/src/modules/pagos/receiptPdfCallables.ts
-@@ -351,9 +351,51 @@ function parseDateValue(value: string): string {
+@@ -351,9 +351,59 @@ function parseDateValue(value: string): string {
      if (mm) return `${yyyy}-${mm}-${dd}`;
    }
  
@@ -133,11 +133,19 @@ index 570f167..81f6d09 100644
 +  const operationLabels = [/^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*(.+)$/i];
 +  const genericLabels = [/^fecha\s*(?:\/\s*hora|y\s+hora)?\s*[:\-]\s*(.+)$/i];
 +  const captureLabels = [/^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]\s*(.+)$/i];
-+  const collect = (labels: RegExp[]) => lines.flatMap((line, index) => {
-+    const value = extractLabeled([line, lines[index + 1] || ""], labels);
++  const operationBare = /^fecha(?:\s+y\s+hora)?\s+(?:de\s+)?(?:la\s+)?(?:operacion|transferencia|pago|ejecucion|movimiento|aplicacion)(?:\s+y\s+hora)?\s*[:\-]?\s*$/i;
++  const genericBare = /^fecha(?:\s*(?:\/\s*hora|y\s+hora))?\s*[:\-]?\s*$/i;
++  const captureBare = /^fecha\s+y\s+hora\s+de\s+captura\s*[:\-]?\s*$/i;
++  const collect = (labels: RegExp[], bareLabel: RegExp) => lines.flatMap((line, index) => {
++    if (bareLabel.test(normalize(line))) {
++      const next = (lines[index + 1] || "").trim();
++      const nextIsField = /^[a-z][^:]{0,79}:/i.test(normalize(next)) || /^(?:fecha|hora|referencia|folio|rastreo|clave de rastreo|concepto|ordenante|beneficiario|cuenta|clabe|banco|monto|importe)\b/i.test(normalize(next));
++      return [nextIsField ? "" : next];
++    }
++    const value = extractLabeled([line], labels);
 +    return value ? [value] : [];
 +  });
-+  const operation = collect(operationLabels), generic = collect(genericLabels), capture = collect(captureLabels);
++  const operation = collect(operationLabels, operationBare), generic = collect(genericLabels, genericBare), capture = collect(captureLabels, captureBare);
 +  const labelled = operation.length ? operation : generic.length ? generic : capture;
 +  const patterns = [
 +    /\b20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}\b/g,
@@ -170,7 +178,7 @@ index 570f167..81f6d09 100644
  function parseTimeValue(value: string): string {
    const raw = clean(value);
    const match = raw.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\b/i);
-@@ -581,32 +623,15 @@ export function parseReceiptText(textRaw: string): ReceiptData {
+@@ -581,32 +631,15 @@ export function parseReceiptText(textRaw: string): ReceiptData {
    const declaredStates = lines.map(normalize).filter(line => /^(?:estado|resultado)\b.*[:\-]/.test(line));
    const executionConfirmed = !blockedExecution && positiveExecution.test(normalizedText) && declaredStates.every(line => positiveExecution.test(line));
  
@@ -207,7 +215,7 @@ index 570f167..81f6d09 100644
  
    const reference =
      extractLabeled(lines, [
-@@ -748,7 +773,7 @@ export const parsePagoReceiptPdf = onCall(
+@@ -748,7 +781,7 @@ export const parsePagoReceiptPdf = onCall(
      let semanticReceipt: ReturnType<typeof buildSemanticReceipt>;
      let cacheHit = false;
  
@@ -216,7 +224,7 @@ index 570f167..81f6d09 100644
        receipt = cached.get("receipt") as ReceiptData;
        semanticReceipt = cached.get("semanticReceipt") as ReturnType<typeof buildSemanticReceipt>;
        textSource = clean(cached.get("textSource"));
-@@ -802,11 +827,11 @@ export const parsePagoReceiptPdf = onCall(
+@@ -802,11 +835,11 @@ export const parsePagoReceiptPdf = onCall(
      semanticReceipt = buildSemanticReceipt(text, receipt);
      await db.runTransaction(async tx => {
      const existing = await tx.get(analysisRef);
