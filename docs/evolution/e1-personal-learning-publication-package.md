@@ -1,6 +1,6 @@
 # Aprendizaje personal y comprobantes — paquete de publicación
 
-Estado: DEPLOYMENT_PENDING. Paquete probado y preparado para autorización específica; este documento no autoriza producción. Sin despliegues de estas nuevas capacidades.
+Estado: DEPLOYED_NOT_VERIFIED. El usuario autorizó expresamente el paquete exacto y la reversión descrita. Se publicaron los cuatro destinos Functions y Hosting/SSR; falta la comprobación funcional autenticada del aprendizaje. No se declara COMPLETED.
 
 ## Capacidades
 
@@ -38,6 +38,22 @@ Detener el productor TEXT volviendo a su fuente anterior preservada; revertir ch
 La UI anterior puede dejar de mostrar o retirar esos recuerdos; no se anuncia que fueron borrados. No se publica VOICE, por lo que no existe otro productor de este paquete que detener. Aplicar únicamente los controladores guardados y recibos del destino correspondiente; reconciliar cualquier operación incierta antes de repetirla.
 
 ## Verificación productiva y cierre
+
+Publicación autorizada del 20 de octubre de 2026, hora de Ciudad de México:
+
+| Destino | Revisión publicada | Verificación técnica independiente |
+| --- | --- | --- |
+| listAgent007MemoryDiagnostics | `00003-faq` | PASS; recibo conjunto readers `a18681d0b96846f54475e10b99299435eaa4e5a93d8823712f59a620fbd2c574` |
+| reviewAgent007MemoryCandidate | `00003-jur` | PASS; mismo recibo readers |
+| sendAgent007Message | `00024-noh` | PASS; recibo `3a2dc10a76162419cd75e8eafe5c2ae5b021119c33562f43f50239928597e7c7` |
+| createAgent007MemoryCandidate | `00003-miz` | PASS; recibo `eebdc90ef03b0f7e3aa4f2ea5e2fb3fea82a3a4f4b22005b8343d892aa2d1522` |
+| Hosting/SSR | `22d8f9eff1f18abe` / `00610-xed` | Ejecutor RELEASE_VERIFIED; comprobación independiente de fuente/configuración/Run/IAM/Hosting y navegador PASS |
+
+Los cuatro destinos Functions tienen fuente exacta descargada, estado ACTIVE, configuración/Run/IAM preservados y rechazo anónimo 401. Gate supervisado OFF comprobado sin registrar variables. Consolidado privado `personal-learning-independent-summary-6858457e-6e1a-414f-b197-188527e52f7d.json`, SHA `b873e27a70f271946ef88f23468a4cd7ce48b430f84aaeae413e7ba10062cb00`. No se usaron sesiones autenticadas, documentos de negocio, proveedores ni operaciones financieras como pruebas. Fuentes anteriores y recibos de ejecución preservados; sin reversión aplicada.
+
+UI independiente: ZIP productivo `9522406c` descargado y cotejado; SSR `00610-xed`, Hosting `22d8f9eff1f18abe`, cero operaciones pendientes y Chromium público 390/1440 sin errores ni solicitudes distintas de GET. Baseline estable privado `ui-personal-learning-stable-baseline.json`, SHA `8ed93cfab18882f367f6aaef24fcc6081fe2a4817e47568db4bf81832562ef01`. Hosting completó después los contadores derivados (172 archivos, 4098226 bytes); root verificó hashes y equivalencia exacta del estado salvo esos dos campos y autorizó reconciliación sólo local del recibo de reversión, conservando el original `27569f8b05c9202fb9db9947925746403b8abb9f8af3a3ad87f79eef64a43ff8`. No se alteró producción para reconciliar metadatos.
+
+Recibo UI independiente `bc4a80533d34088bd274bebc55333136151285a18772a0dfe55f1f024776e416`; procedencia privada `6b52949598a0b778c33d90ceb8e79683336d72d83cd108105a4fdaee96b7405a`; estado propio reconciliado `00d38333ceaeba2a4ceec37c8ad0941849c6e6213630cb2d558f09d10d755104`. El GET final coincide con ese estado y permite conservar una reversión controlada. Se pidió al usuario comprobar en `/hugo` tanto «Revisar un comprobante con María» como «Corregir respuesta» y su retiro; respuesta pendiente.
 
 Comprobar fuente descargada exacta, configuración, IAM, revisión activa, rechazo anónimo y Hosting/SSR. Después, el usuario debe comprobar con su propia sesión el ciclo comprobante→lectura→corrección→relectura y respuesta→corrección→mismo tema/cliente→retiro. Verificar que otro tema/cliente no reutiliza la nota y que reportes/PDF continúan funcionando. No pedir archivos ni importes para acreditar el resultado.
 
