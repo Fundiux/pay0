@@ -1,6 +1,6 @@
 # Corrección de consultas operativas y confirmación documental
 
-Estado: IMPLEMENTED_VALIDATION_PENDING. Sin publicación ni autorización productiva para estos nuevos bytes. La respuesta del usuario no verifica el ciclo de aprendizaje: «parece que sí» no acredita guardado y relectura.
+Estado: backend O1 DEPLOYMENT_PENDING; interfaz documental IMPLEMENTED_VALIDATION_PENDING. Sin publicación ni autorización productiva para estos nuevos bytes. La respuesta del usuario no verifica el ciclo de aprendizaje: «parece que sí» no acredita guardado y relectura.
 
 ## Fallos reproducidos
 
@@ -28,8 +28,33 @@ La UI documental exige acuse real del análisis, ID de corrección, siguiente ve
 - Fuente: nueve escenarios de routing/Core, siete de frontera de datos y cinco de presentación/procedencia; fixtures sintéticas, sin proveedores ni datos productivos.
 - UI documental: doce pruebas de transporte/componente y build Next de 47 rutas PASS; fuente `65accf31e98992939e8e51e4951377749e547251`.
 - Política de autorización: PASS, sin cambios de roles ni reglas.
-- Builds NORMAL anteriores y comparación de seis emisores pasaron antes de los últimos guardas de banco y recuperación de comprobante. No se atribuyen a la fuente final. Build final y comparación posterior pendientes.
-- Receta de overlay preparada sobre ZIP productivo chat `22cbdbd9`, con seis módulos permitidos y preservación del resto. Aún no hay artefacto final aprobado para publicar.
+- Build NORMAL final de `6ab526d` PASS y comparación exacta de los seis emisores con la fuente cerrada PASS. El build anterior con un emisor desactualizado fue rechazado, sin usarlo para acreditar el paquete final.
+- Receta de overlay sobre ZIP productivo chat `22cbdbd9`: seis módulos permitidos, resto preservado; artefacto final O1 probado y pendiente de autorización.
 - UI aislada de confirmación: fuente privada `28924fb` sobre la interfaz productiva `3b6602d`, sólo un componente de producto. Instalación propia cancelada deliberadamente para serializar carga; logs y archivos parciales preservados. No es un build aprobado ni una regresión de producto demostrada.
 
 La publicación requerirá paquete exacto, pruebas del ZIP, bases productivas frescas, identidad y reversión. Las aprobaciones anteriores de aprendizaje personal no cubren estos artefactos. El backend y la UI pueden prepararse como paquetes independientes; ninguno se declara COMPLETED sin publicación y comprobación real.
+
+## Paquete O1 de backend listo para autorización
+
+Actualiza únicamente `sendAgent007Message`. No incluye Hosting/SSR, voz, otros endpoints, permisos, reglas, activación de aprendizaje ni operaciones financieras. Corrige la selección de solicitud/pago, nombres de clientes y método/importe; conserva el aprendizaje privado y orienta al panel documental ya existente. La confirmación visual documental nueva permanece fuera de este paquete.
+
+| Identidad | Valor |
+| --- | --- |
+| Fuente | `6ab526d8d1f4445014a260787d73ff123dfc5ba0` |
+| ZIP | `9f95197e7eae30dc5a7bd3ccb8c7afa2e215c4cb2811c0fd3922135c04b93207` |
+| Patch fuente | `38ad03c51d8d616535e56facfb094b34df4305d6cbff43ef789ca3e87758a0c0` |
+| Input | `0e95643a49093d7c4f85a9d330448fc7e7337555972b6693ccb2f2bedd22d914` |
+| Base y reversión | ZIP `22cbdbd9ca1426afb654b0830934b3e491b4dbbc7b909050ebe616811caa5588`, revisión `sendagent007message-00024-noh` |
+| Input privado | `.firebase/modular-release/operational-identity-repair-release/input.json` |
+
+Pruebas del ZIP exacto: 14/14 diálogo/presentación, 66/66 regresiones seleccionadas, ocho pruebas TEXT con Firestore emulado (notas CLIENT/TOPIC, propietario, retiro y persistencia), typecheck dirigido sin errores, arranque con 343 exports y rechazos anónimos. Reproducción independiente de ZIP y patch idéntica. Verificador canónico con instalación nueva de dependencias productivas PASS: 343 exports, destino único y rechazo sin sesión (`unauthenticated`) mediante la entrada real; no se atribuye una prueba HTTP a ese proceso local.
+
+Root comparó independientemente seis archivos JavaScript del ZIP contra el build final y comprobó los otros 792 archivos byte a byte frente a la fuente productiva: cero entradas añadidas o eliminadas. La frontera de datos compilada pasó siete escenarios, incluida conservación del comprobante, cero real, importe desconocido y aislamiento de raíz. Política de autorización PASS.
+
+Límite heredado explícito: los tres tests de `universalQueryContract` tienen una evidencia histórica de un PASS y dos FAIL. Ese módulo coincide byte a byte entre la base productiva y O1 y no tiene consumidores en esta ruta; no se vuelve a etiquetar como aprobado ni se afirma que 69 tests del ZIP pasaron. Prueba de compatibilidad privada `4d3b66c0484c1e703f115f803fe44801d1c8db782f8a88594493023959f21311`. La selección exacta de 66 tests excluye esos tres. Behavior proof final `9801e2bbedcabadc9ccdb8ec2f93f23ad6fcf39ca1865cc90497d9bf467da8c3`; manifiesto `31729273587f2caed9fd89969bf755187839a94964ee30856399d8679ef3e068`.
+
+Preflight GET PASS: revisión productiva `00024-noh`, configuración/Run/IAM sin deriva, recibo `c5264fb7248b5cc6005c343b6958a07958694ed896406de2791503a2253902a6`. Debe repetirse antes de publicar. Riesgos: la resolución añade una lectura por cliente distinto dentro del conector, con caché por instancia; un cliente sin vínculo legible seguirá figurando como nombre no disponible. No se garantiza rellenar datos inexistentes ni se infieren nombres desde bancos o folios.
+
+Reversión autorizable: preservar fuente y configuración anteriores, revertir sólo `sendAgent007Message` al ZIP `22cbdbd9` si falla. No revertir lectores/review ni productor de recuerdos privados; no borrar recuerdos. La UI actual y el backend documental siguen intactos. No cambiar el input ni repetir una operación incierta sin reconciliar su recibo.
+
+Verificación productiva: fuente descargada exacta, ACTIVE/revisión, configuración/Run/IAM, gate supervisado OFF y rechazo anónimo. Después, con sesión propia, repetir la consulta de última solicitud (nombre, PPD/PUE y monto), consultar último pago y preguntar de qué cliente, volver a solicitud y preguntar dónde leer un comprobante. No compartir importes ni documentos. Estado posterior a despliegue: DEPLOYED_NOT_VERIFIED hasta confirmar el recorrido real.
