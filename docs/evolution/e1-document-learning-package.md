@@ -1,6 +1,6 @@
 # Aprendizaje documental de María — integración local
 
-Estado backend: DEPLOYMENT_PENDING, sólo los dos endpoints documentales. UI completa: INTEGRATION_PENDING en composición separada. Sin despliegue ni activación. Montaje integrado por el responsable de Hugo. Frontend raíz posterior al ajuste de tipo: PASS, sesión 68126, 47 rutas; acredita la base actual y no el futuro texto durable. Backend aislado: tsc PASS exit 0.
+Estado backend: DEPLOYED_NOT_VERIFIED para el ciclo autenticado; publicación técnica verificada de los dos endpoints documentales. UI completa: INTEGRATION_PENDING en composición separada. Root publicó el backend con autorización específica; este frente sólo ejecutó verificaciones independientes. Montaje integrado por el responsable de Hugo. Frontend raíz anterior al ajuste legacy de versión: PASS, sesión 68126, 47 rutas; no acredita el futuro texto durable ni el nuevo guard de versión. Backend aislado: tsc PASS exit 0.
 
 ## Alcance
 
@@ -20,7 +20,7 @@ La memoria documental existente puede devolver orientaciones CANDIDATE o CONFIRM
 
 ## Pendientes acotados
 
-Input exacto validado; verificador canónico y preflight GET terminaron PASS. Falta autorización específica de publicación del backend. Hosting completo se compone por separado. No se ha publicado ni probado con documentos reales. Revisión independiente estática de receta/alcance favorable.
+Root autorizó y publicó el input exacto; verificador canónico y preflight GET previos terminaron PASS. Falta UI completa publicada y comprobación autenticada guiada; no se ha usado un documento real. Revisión independiente estática de receta/alcance favorable.
 
 ## Correspondencia LIVE y overlay
 
@@ -44,15 +44,15 @@ Receta: `node qa/scripts/build-document-learning-overlay.mjs <ZIP-LIVE-6615> <mo
 
 QA exacta admite PAY0_DOCUMENT_FUNCTIONS_ROOT, PAY0_DOCUMENT_SOURCE_ROOT, PAY0_DOCUMENT_ARCHIVE, PAY0_DOCUMENT_ARCHIVE_SHA y PAY0_DOCUMENT_PROOF_FILE, dentro del workspace. Browser admite PAY0_DOCUMENT_UI_ROOT/PAY0_DOCUMENT_UI_OUTPUT. Startup admite runtime base, runtime candidato y proof. Transporte browser sintético no equivale a persistencia real emulada.
 
-## Publicación y reversión propuestas
+## Publicación y reversión
 
-Superficie futura: UPDATE de parsePagoReceiptPdf y correctPagoReceiptSemanticField con el mismo ZIP; Hosting revisado por separado. Sin nuevos exports, reglas, índices ni dependencias npm. Cada Function exige baseline/config/IAM propios y preflight fresco. No se ha ejecutado mutación.
+Superficie publicada por root: UPDATE de parsePagoReceiptPdf y correctPagoReceiptSemanticField con el mismo ZIP; Hosting revisado por separado. Sin nuevos exports, reglas, índices ni dependencias npm. Cada Function conserva baseline/config/IAM propios. Este frente no ejecutó mutaciones productivas.
 
 Orden: ambos backend primero, preservando compatibilidad legacy; después UI completa. Omitir expectedCorrectionVersion toma versión vigente al comenzar y revalida en transacción: puede devolver conflicto controlado; no reinicia contador. Si UI llega antes, su guard legacy mantiene sólo lectura hasta recibir contrato versionado.
 
 Rollback: restaurar ambos endpoints al ZIP original exacto 6615… con configuración/IAM originales verificados; después UI previa si corresponde. Si sólo uno se actualiza, reconciliar la operación y restaurar/completar sólo con autorización, sin presentar ciclo completo. No borrar análisis, correcciones, memorias ni evidencias. El código antiguo deja overlays persistidos sin consumo, sin alterar pagos. Preservar fuentes previas sin ocupar rutas reservadas del ejecutor.
 
-## Identidad lista para autorización del backend
+## Identidad publicada del backend
 
 Fuente/patchCommit `1cad29004aa7b34c788edcf06c2f14e26e703f01`, sourceTree null, base ZIP 6615…, patch completo 26aa…, ZIP activo f88b…. Grupo `receipt-learning-overlay`, buildMode BUNDLED_V1: bundle original preservado más entrada normal mínima, no reconstrucción completa del bundle.
 
@@ -61,3 +61,15 @@ Input privado `document-learning-entry-certified/release/input.json`, SHA256 `c6
 Verificador canónico `verify-scoped-functions-artifact.cjs`: PASS exit 0, instalación nueva con dependencias de producción, 354 endpoints cargados y dos denegaciones anónimas, proof SHA256 `817a4fefb3db0425557580baef74e461be2051d7af0d773bc52c3a2f4c304335` a las 05:55:16Z. Complementa la prueba de negocio de 33 checks desde package.main y el startup de preservación de referencias/descriptores.
 
 Preflight exclusivamente GET: PASS a las 05:54:30Z, recursos/configuración/Run/IAM idénticos a baseline y cero operaciones activas; receipt SHA256 `fe0f98a25de6bf716dd0ac1662d5cbf22f67d6430a25cb5cdd57414229b91b2c`. Es evidencia de ese instante; el ejecutor debe revalidar antes de mutar. No autoriza deployment ni hace durable la futura corrección de texto/voz.
+
+## Verificación independiente posterior
+
+Root terminó el despliegue autorizado, sesión 30958 exit 0. Verificación independiente PASS el 2026-10-20T06:04:20Z: parsePagoReceiptPdf revision `00016-qoc` y correctPagoReceiptSemanticField revision `00005-qej`, ambas ACTIVE. Fuentes descargadas con generación fija coinciden con ZIP f88b…; labels de identidad, configuración/runtime e IAM preservados; dos respuestas anónimas HTTP 401/UNAUTHENTICATED. Cero llamadas autenticadas, documentos de negocio leídos o proveedores invocados. Esto verifica publicación técnica, no el ciclo documental autenticado.
+
+Capturas privadas nuevas sin sobrescritura: `document-learning-entry-certified/release/independent-post-publication-6a13a0a8-77a2-47da-b596-ef9b2b9ccaa0`. Proof SHA256 `33f2ecf131197c1b746cc2ab36e037af8aafbc70414d6b753b99ab0427415901`; baseline publicada SHA256 `55d2aabe4cbbcb6b362960af9707ba7628f9f365ec7dfadcd9cf78619cf82d3d`.
+
+Guía y dos PDFs sintéticos preparados privadamente, no ejecutados con sesión productiva. Requieren UI nueva disponible y autorización del escenario. El parser conserva fallback OCR existente; los PDFs textuales dieron providerCalls 0 en QA, sin afirmar que UI pueda deshabilitar ese fallback. Si se exige bloqueo técnico de proveedores, usar el emulador con red externa bloqueada y mantener pendiente el ciclo productivo.
+
+## Guard de versión para UI antigua
+
+La composición frontend detectó que el wrapper convertía una versión ausente a cero. El fixture con analysisId y semanticReceipt presentes pero correctionVersion ausente reprodujo el fallo de sólo lectura. Se conserva undefined salvo entero numérico seguro no negativo; numeric 0 legítimo sigue editable. QA browser final PASS 8, exige ausencia de editor y de llamadas de corrección para ese resultado legacy, y comprueba presencia/ausencia real del acuse en éxito/rechazo. Es un cambio sólo frontend, ajeno al ZIP backend f88b…; requiere el build final de la composición UI.

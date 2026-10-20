@@ -38,7 +38,7 @@ const mocks = {
         window.calls.push({name,input});
         if(name==='parsePagoReceiptPdf') {
           if(window.hold) return new Promise(resolve=>window.finish=()=>resolve({data:{receipt:{warnings:[]},analysisId:'analysis-demo',correctionVersion:0,semanticReceipt:window.semantic()}}));
-          return {data:{receipt:{warnings:[]},analysisId:window.legacy?undefined:'analysis-demo',correctionVersion:window.saved?1:0,semanticReceipt:window.semantic()}};
+          return {data:{receipt:{warnings:[]},analysisId:'analysis-demo',correctionVersion:window.legacy?undefined:window.saved?1:0,semanticReceipt:window.semantic()}};
         }
         if(name==='correctPagoReceiptSemanticField'){
           if(window.reject) throw Error('Version obsoleta');
@@ -56,22 +56,24 @@ const mocks = {
     await expect(page.getByText('DEMO ORIGINAL',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Corregir Concepto'}).click();await page.getByRole('textbox',{name:'Concepto',exact:true}).fill('DEMO CORREGIDO');
     await page.evaluate(()=>window.reject=true);await page.getByRole('button',{name:'Guardar',exact:true}).click();
-    await expect(page.getByRole('alert')).toContainText('Version obsoleta');await expect(page.getByText('Correcci?n guardada y lectura actualizada.',{exact:false})).toHaveCount(0);
+    await expect(page.getByRole('alert')).toContainText('Version obsoleta');await expect(page.getByText(/guardada y lectura actualizada\./)).toHaveCount(0);
     await page.evaluate(()=>window.reject=false);await page.getByRole('button',{name:'Guardar',exact:true}).click();
-    await expect(page.getByText('DEMO CORREGIDO',{exact:true})).toBeVisible();
+    await expect(page.getByText('DEMO CORREGIDO',{exact:true})).toBeVisible();await expect(page.getByText(/guardada y lectura actualizada\./)).toBeVisible();
     await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();await expect(page.getByText('Se recuperaron tus correcciones',{exact:false})).toBeVisible();
     const correction=await page.evaluate(()=>window.calls.find(c=>c.name==='correctPagoReceiptSemanticField'));
     assert.equal(correction.input.expectedCorrectionVersion,0);assert.equal(correction.input.analysisId,'analysis-demo');
     await page.getByRole('button',{name:'Corregir Concepto'}).click();await page.getByRole('textbox',{name:'Concepto',exact:true}).fill('OTRO CAMBIO');
     await page.evaluate(()=>window.holdCorrection=true);await page.getByRole('button',{name:'Guardar',exact:true}).click();
     await page.waitForFunction(()=>typeof window.finishCorrection==='function');await page.evaluate(p=>window.renderProfile(p),{...profile,uid:'actor-c'});await page.evaluate(()=>{window.finishCorrection();window.holdCorrection=false});
-    await expect(page.getByText('OTRO CAMBIO',{exact:true})).toHaveCount(0);await expect(page.getByText('Correcci?n guardada y lectura actualizada.',{exact:false})).toHaveCount(0);
+    await expect(page.getByText('OTRO CAMBIO',{exact:true})).toHaveCount(0);await expect(page.getByText(/guardada y lectura actualizada\./)).toHaveCount(0);
     await upload();await page.getByRole('button',{name:'Analizar comprobante',exact:true}).click();await expect(page.getByText('DEMO CORREGIDO',{exact:true})).toBeVisible();
     await page.evaluate(()=>{window.hold=true});await page.getByRole('button',{name:'Volver a analizar',exact:true}).click();
     await page.waitForFunction(()=>typeof window.finish==='function');await page.evaluate(p=>window.renderProfile(p),{...profile,uid:'actor-b',rootId:'root-b'});await page.evaluate(()=>window.finish());
     await expect(page.getByText('DEMO CORREGIDO',{exact:true})).toHaveCount(0);await expect(page.locator('input[type=file]')).toBeVisible();
+    const beforeLegacyCorrections=await page.evaluate(()=>window.calls.filter(c=>c.name==='correctPagoReceiptSemanticField').length);
     await page.evaluate(()=>{window.hold=false;window.legacy=true});await upload();await page.getByRole('button',{name:'Analizar comprobante',exact:true}).click();
     await expect(page.getByText('este resultado no permite guardar correcciones',{exact:false})).toBeVisible();await expect(page.getByRole('button',{name:'Corregir Concepto'})).toHaveCount(0);
+    assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.name==='correctPagoReceiptSemanticField').length),beforeLegacyCorrections,'LEGACY_RESPONSE_MUST_NOT_TRIGGER_CORRECTION');
     await page.evaluate(p=>window.renderProfile(p),{...profile,role:'cliente'});await expect(page.locator('input[type=file]')).toHaveCount(0);
     assert.deepEqual([...new Set(await page.evaluate(()=>window.calls.map(c=>c.name)))].sort(),['correctPagoReceiptSemanticField','parsePagoReceiptPdf']);
     assert.deepEqual(errors,[]);

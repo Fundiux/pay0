@@ -121,7 +121,7 @@ export async function parsePagoReceiptPdfFile(file: File, options: ReceiptParseO
     warnings: Array.isArray(receipt.warnings) ? receipt.warnings.map(String) : [],
     readerVersion: String(data.readerVersion || ""),
     analysisId: String(data.analysisId || ""),
-    correctionVersion: Number(data.correctionVersion || 0),
+    correctionVersion: Number.isSafeInteger(data.correctionVersion) && data.correctionVersion >= 0 ? data.correctionVersion : undefined,
     contentSha256: String(data.contentSha256 || ""),
     cacheHit: data.cacheHit === true,
     providerCalls: Number(data.providerCalls || 0),
