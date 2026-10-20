@@ -1,6 +1,6 @@
 # Aprendizaje documental de María — integración local
 
-Estado: LOCAL_VALIDATED_INTEGRATION_PENDING. Sin despliegue ni activación. Montaje integrado por el responsable de Hugo. Frontend raíz posterior al ajuste de tipo: PASS, sesión 68126, 47 rutas; acredita la base actual y no el futuro texto durable. Backend aislado: tsc PASS exit 0.
+Estado backend: DEPLOYMENT_PENDING, sólo los dos endpoints documentales. UI completa: INTEGRATION_PENDING en composición separada. Sin despliegue ni activación. Montaje integrado por el responsable de Hugo. Frontend raíz posterior al ajuste de tipo: PASS, sesión 68126, 47 rutas; acredita la base actual y no el futuro texto durable. Backend aislado: tsc PASS exit 0.
 
 ## Alcance
 
@@ -20,7 +20,7 @@ La memoria documental existente puede devolver orientaciones CANDIDATE o CONFIRM
 
 ## Pendientes acotados
 
-Faltan inputs exactos, preflight fresco y aprobación específica del backend; Hosting completo se compone por separado. No se ha publicado ni probado con documentos reales. Revisión independiente estática de receta/alcance favorable.
+Input exacto validado; verificador canónico y preflight GET terminaron PASS. Falta autorización específica de publicación del backend. Hosting completo se compone por separado. No se ha publicado ni probado con documentos reales. Revisión independiente estática de receta/alcance favorable.
 
 ## Correspondencia LIVE y overlay
 
@@ -51,3 +51,13 @@ Superficie futura: UPDATE de parsePagoReceiptPdf y correctPagoReceiptSemanticFie
 Orden: ambos backend primero, preservando compatibilidad legacy; después UI completa. Omitir expectedCorrectionVersion toma versión vigente al comenzar y revalida en transacción: puede devolver conflicto controlado; no reinicia contador. Si UI llega antes, su guard legacy mantiene sólo lectura hasta recibir contrato versionado.
 
 Rollback: restaurar ambos endpoints al ZIP original exacto 6615… con configuración/IAM originales verificados; después UI previa si corresponde. Si sólo uno se actualiza, reconciliar la operación y restaurar/completar sólo con autorización, sin presentar ciclo completo. No borrar análisis, correcciones, memorias ni evidencias. El código antiguo deja overlays persistidos sin consumo, sin alterar pagos. Preservar fuentes previas sin ocupar rutas reservadas del ejecutor.
+
+## Identidad lista para autorización del backend
+
+Fuente/patchCommit `1cad29004aa7b34c788edcf06c2f14e26e703f01`, sourceTree null, base ZIP 6615…, patch completo 26aa…, ZIP activo f88b…. Grupo `receipt-learning-overlay`, buildMode BUNDLED_V1: bundle original preservado más entrada normal mínima, no reconstrucción completa del bundle.
+
+Input privado `document-learning-entry-certified/release/input.json`, SHA256 `c6fce02da91280818acb2993cb9512266bfd301f11cfbc722509b9d4ece5c69d`; baseline propia SHA256 `d9d23f85f14780633bb74e7038db44a5dbfe6c9a138b4d7a7d62fb9fe6106c0f`, capturada 2026-10-20T05:49:25Z. Sólo parsePagoReceiptPdf y correctPagoReceiptSemanticField.
+
+Verificador canónico `verify-scoped-functions-artifact.cjs`: PASS exit 0, instalación nueva con dependencias de producción, 354 endpoints cargados y dos denegaciones anónimas, proof SHA256 `817a4fefb3db0425557580baef74e461be2051d7af0d773bc52c3a2f4c304335` a las 05:55:16Z. Complementa la prueba de negocio de 33 checks desde package.main y el startup de preservación de referencias/descriptores.
+
+Preflight exclusivamente GET: PASS a las 05:54:30Z, recursos/configuración/Run/IAM idénticos a baseline y cero operaciones activas; receipt SHA256 `fe0f98a25de6bf716dd0ac1662d5cbf22f67d6430a25cb5cdd57414229b91b2c`. Es evidencia de ese instante; el ejecutor debe revalidar antes de mutar. No autoriza deployment ni hace durable la futura corrección de texto/voz.
