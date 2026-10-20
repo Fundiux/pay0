@@ -30,8 +30,22 @@ El preflight de tipos también detectó un import omitido en el port; se corrigi
 
 El backend final exige IDs explícitos autorizados para nombres sin corroboración fuerte: mantiene las sugerencias visibles, devuelve CLIENT_SELECTION_REQUIRED/COMPANY_SELECTION_REQUIRED y createPayload nulo hasta revalidar la selección. Esto protege también pestañas SSR612 antiguas ya abiertas; no basta depender de la UI nueva. Los candidatos visibles no son autoridad: el servidor vuelve a validar usuario, raíz, permisos e IDs. La UI es compatible con el auto fuerte de6e0 y con el contrato nuevo; el ciclo manual completo requiere ambos componentes publicados y verificados. Los artefactos backend anteriores sin esa guarda quedan fuera de esta entrega.
 
-## Entrega y reversión pendientes
+## Entrega y reversión
 
-Se requiere congelar la fuente, un build canónico aislado, preparación del ZIP exacto, runtime nuevo y pruebas bajo emulador con los dos overrides QA históricos declarados. El helper de publicación no se modifica. Antes de preparar se recapturará metadata de Hosting/SSR/Run/IAM y cero operaciones activas, preservando la provenance publicada.
+La fuente quedó congelada y pasó el build canónico aislado, la preparación del ZIP exacto y las pruebas del runtime nuevo bajo emulador, con los dos overrides QA históricos declarados. El helper de publicación no se modifica. Las capturas read-only anteriores y posteriores confirman Hosting/SSR/Run/IAM sin deriva y cero operaciones activas, preservando la provenance publicada.
 
 Una eventual publicación Hosting/SSR necesita autorización específica nueva. La reversión será sólo a la fuente/ZIP anteriores `28924fbb`/`39e00880`, mediante recibo propio y comprobación de estado exacto; conservará configuración, IAM, correcciones documentales y todas las capacidades de la UI anterior. No modifica backend, reglas, sesiones ni datos de negocio.
+
+## Artefacto final preparado
+
+Fuente privada f1df4a2835e37db725897bd97a26475437d88637, árbol 16ffb4626e38ae2710a835360beb68c1a7980ff9, sobre 28924fbb. Build canónico exit 0 con 47 rutas; source preservation PASS confirma exactamente dos archivos y dependencias/Functions intactos. Patch SHA256: 52022cc6081c265a7dfdd44cbd4e3a40bc140b2702023b98af1dd64767b9f5e1.
+
+Input local: .firebase/modular-release/hosting-f1df4a2835e3-8586e2c1-aa31-48ea-a7fc-61a5fd9c1398/input.json, SHA256 5e987a6fb8a82b4bf055cb8b42dcbaebda10b547b6a66812719efbcd88d9a043. ZIP SHA256 31aab2ff68a319b1b251e6b4bc29ae4ed790da8a916dd792c157d3cd50d9a1ad; 170 archivos Hosting. Baseline read-only SHA256 50d16cd3f24d69bd5d82e1797610c2ac0cb7063aea3adb1923a636dd8e0d765c. Estado PREPARED_NOT_RELEASE_AUTHORIZED. Revisión independiente root: pins, 170 archivos Hosting y preservación de dos archivos PASS.
+
+Runtime exacto: `runtime-eb51009f-9943-442b-87b5-ede7f6fa1a82`, dentro del directorio del input. Prueba completa exit 0; `proof.json` SHA256 `e597ce725e14acaa2608a1aa9a418931ca99525a8e35dcadab0d1d57a5458482`. Prueba vinculada `proof-with-qa-override.json` SHA256 `e78c9f38094a651450b5f0685c43fa029687bb3e02e360bf5ecd6299ce794301`; `assertRuntimeProof` PASS contra el input exacto. Las dependencias se copiaron físicamente sólo después de igualdad de package/lock; el código se extrajo de este ZIP y pasó realpaths y closure. El emulador y servidor finalizaron.
+
+Cobertura: 486 archivos fuente verificados, cinco rutas HTTP, login a 390/1440 píxeles, redirección anónima de pagos a login y cinco componentes PASS. Root repitió independientemente frozen-input, `assertRuntimeProof` y `assertFreshBaseline` final: PASS sin cambiar bytes.
+
+Se declaran dos adaptaciones QA, no una ejecución literal de los tests antiguos: fixture autenticado sintético del control de ingeniería con RecoveryReview real y negativos de sesión/rol/estado, y test de evidencia documental actualizado que abre los detalles intencionalmente colapsados y comprueba edición, historial y estado. Ambos están limitados por path/hash y registrados en el proof; no alteran el producto. El build sí fue canónico literal. La prueba usa emulador con reglas permisivas y no certifica reglas Firestore ni una sesión productiva autenticada. Cero acciones financieras y cero escrituras productivas.
+
+GET final posterior al runtime: `.firebase/modular-release/ui-receipt-identity-final-preflight.json`, SHA256 `fa5198da5f8a16a631acab53199d246b7ef9a02b064089e13bb401e964509fa3`, PASS frente a la base fijada: SSR `00612-yuq`, configuración/Run/IAM/Hosting idénticos y cero operaciones activas. Se conservaron las capturas previas. Logs privados y resumen: `output/receipt-identity-ui/final-runtime-proof.log`, `final-runtime-summary.json` y `final-preflight.json`. Falta autorización específica y posterior verificación de publicación; no se ha desplegado esta UI.
