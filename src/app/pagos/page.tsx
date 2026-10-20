@@ -6,7 +6,7 @@ import { beginOperationTiming } from "@/lib/operationTiming";
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile, type ReceiptCorrectionField } from "@/services/pagoReceipt";
+import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile, receiptHasStrongAutomaticIdentity, receiptCanResumeRegisteredUpload, receiptCanReviewRegisteredIdentity, receiptIdentitySelections, type ReceiptCorrectionField } from "@/services/pagoReceipt";
 import { automaticReceiptPayload, automaticReceiptMissing } from "@/lib/receiptAutomaticRegistration";
 import { automaticPaymentReviewMessage } from "@/lib/automaticPaymentReview";
 import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
@@ -995,13 +995,14 @@ export default function PagosPage() {
     return missing;
   }
 
-  async function revalidateReceiptItem(item: any, _registerAfterValidation = false) {
+  async function revalidateReceiptItem(item: any, registerAfterValidation = false) {
     if (receiptBatchBusy || receiptBatchCreating || !item.file) return;
     setReceiptBatchBusy(true);
     setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row));
     try {
-      const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || ""), selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
-      const analyzed = { ...item, parsed, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
+      const selections = receiptIdentitySelections(item, item.parsed?.identification, registerAfterValidation);
+      const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || ""), ...selections });
+      const analyzed = { ...item, ...selections, parsed, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
         error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
       setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? analyzed : row));
 
@@ -1094,7 +1095,7 @@ export default function PagosPage() {
       const identification = item.parsed?.identification;
       const payload = automaticReceiptPayload(identification, String(item.operationTypeKey || ""));
       let pagoId: string;
-      if (identification?.status === "REGISTERED" && identification.receiptPending === true && identification.pagoId) {
+      if (receiptCanResumeRegisteredUpload(identification)) {
         pagoId = await uploadExisting(identification.pagoId);
       } else {
         if (!payload) throw new Error("El comprobante requiere revisión antes del registro.");
@@ -1108,7 +1109,7 @@ export default function PagosPage() {
           // A concurrent worker may have created this exact payment. Re-parse to obtain server-authorized recovery.
           const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || ""), selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
           update({ parsed });
-          if (!parsed.identification?.receiptPending || !parsed.identification.pagoId) throw error;
+          if (!receiptCanResumeRegisteredUpload(parsed.identification)) throw error;
           pagoId = await uploadExisting(parsed.identification.pagoId);
         }
       }
@@ -2822,7 +2823,7 @@ export default function PagosPage() {
                             {getReceiptBatchStatusLabel(item)}
                           </div>
 
-                          {item.status === "READY" && (
+                          {(item.status === "READY" || (item.status === "DUPLICATE" && receiptCanReviewRegisteredIdentity(parsed.identification))) && (
                             <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] text-slate-300 md:grid-cols-3">
                               <div className="md:col-span-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 {(["client", "company"] as const).map(kind => {
@@ -2843,6 +2844,7 @@ export default function PagosPage() {
                                   </div>;
                                 })}
                               </div>
+                              {!receiptHasStrongAutomaticIdentity(parsed.identification) && (parsed.identification?.status === "READY" || parsed.identification?.reasons?.some((reason: string) => reason === "CLIENT_SELECTION_REQUIRED" || reason === "COMPANY_SELECTION_REQUIRED")) && <p className="md:col-span-3 text-xs text-amber-200">Revisa o selecciona cliente y empresa antes de registrar.</p>}
                               {parsed.semanticReceipt && <div className="md:col-span-3">
                                 <ReceiptEvidenceSummary receipt={parsed.semanticReceipt} disabled={receiptBatchBusy || receiptBatchCreating}
                                   onCorrect={parsed.analysisId ? (field, value, correctedField) => correctReceiptField(item, field, value, correctedField) : undefined}
@@ -2868,7 +2870,7 @@ export default function PagosPage() {
                                 />
                                 <button type="button" className="mt-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs disabled:opacity-40"
                                   disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
-                                  onClick={() => void revalidateReceiptItem(item)}>Revalidar datos</button>
+                                  onClick={() => void revalidateReceiptItem(item, true)}>Revalidar datos</button>
                                 <p className="mt-1 text-[11px] text-slate-500">El tipo de operación determina los costos y no se deduce del comprobante.</p>
 
                                 {missingFields.length > 0 && (
@@ -2891,7 +2893,7 @@ export default function PagosPage() {
 
                         {["UPLOAD_ERROR", "CREATE_ERROR"].includes(item.status) && <button type="button"
                           className="rounded-xl border border-white/10 px-3 py-2 text-xs disabled:opacity-40"
-                          disabled={receiptBatchBusy || receiptBatchCreating} onClick={() => void revalidateReceiptItem(item)}>Revalidar datos</button>}
+                          disabled={receiptBatchBusy || receiptBatchCreating} onClick={() => void revalidateReceiptItem(item, true)}>Revalidar datos</button>}
                         <button
                           type="button"
                           disabled={receiptBatchBusy || receiptBatchCreating || !canCreatePagos || item.editingReceipt || item.status === "CREATED" || (item.status !== "READY" && !parsed.identification?.receiptPending) || (!serverPayload && !parsed.identification?.receiptPending)}

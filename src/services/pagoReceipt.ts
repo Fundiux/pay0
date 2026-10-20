@@ -16,6 +16,35 @@ export type ReceiptIdentityMatch = { id: string; name: string; despachoId?: stri
 export type ReceiptCorrectionField = "transferAmount" | "executionDate" | "executionTime" | "senderName" | "beneficiaryName" | "sourceBankName" | "destinationBankName" | "bankName" | "sourceAccount" | "destinationAccount" | "concept" | "reference" | "trackingKey" | "folio" | "transactionId";
 export type ReceiptParseOptions = { operationTypeKey?: string; selectedClientId?: string; selectedCompanyId?: string };
 
+export function receiptHasStrongAutomaticIdentity(identification?: Pick<ReceiptIdentification, "verifiedMatches" | "evidence" | "createPayload"> | null): boolean {
+  const hasMatches = !!identification && Object.prototype.hasOwnProperty.call(identification, "verifiedMatches");
+  return (["client", "company"] as const).every(kind => {
+    const id = hasMatches ? identification?.verifiedMatches?.[kind]?.id : kind === "client" ? identification?.createPayload?.clienteId : identification?.createPayload?.companyId;
+    const evidence = hasMatches ? identification?.verifiedMatches?.[kind]?.evidence : identification?.evidence?.[kind];
+    return typeof id === "string" && !!id.trim() && Array.isArray(evidence) &&
+      !evidence.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") && !evidence.includes("USER_SELECTED_VERIFIED_CANDIDATE") &&
+      (evidence.includes("RFC_EXACT") || evidence.includes("FULL_ACCOUNT_EXACT"));
+  });
+}
+
+export function receiptCanResumeRegisteredUpload(identification?: Pick<ReceiptIdentification, "status" | "receiptPending" | "pagoId"> | null): identification is Pick<ReceiptIdentification, "status" | "receiptPending" | "pagoId"> & { status: "REGISTERED"; receiptPending: true; pagoId: string } {
+  return identification?.status === "REGISTERED" && identification.receiptPending === true && typeof identification.pagoId === "string" && !!identification.pagoId.trim();
+}
+
+export function receiptIdentitySelections(selected: Pick<ReceiptParseOptions, "selectedClientId" | "selectedCompanyId">, identification?: Pick<ReceiptIdentification, "verifiedMatches">, acceptVisibleSuggestions = false): Pick<ReceiptParseOptions, "selectedClientId" | "selectedCompanyId"> {
+  const choose = (value: string | undefined, match: ReceiptIdentityMatch | null | undefined) => typeof value === "string" && value.trim() ? value :
+    acceptVisibleSuggestions && typeof match?.id === "string" && !!match.id.trim() && typeof match.name === "string" && !!match.name.trim() ? match.id : undefined;
+  return { selectedClientId: choose(selected.selectedClientId, identification?.verifiedMatches?.client), selectedCompanyId: choose(selected.selectedCompanyId, identification?.verifiedMatches?.company) };
+}
+
+export function receiptCanReviewRegisteredIdentity(identification?: Pick<ReceiptIdentification, "status" | "verifiedMatches" | "candidates"> | null): boolean {
+  if (identification?.status !== "REGISTERED") return false;
+  const options = [identification.verifiedMatches?.client, identification.verifiedMatches?.company,
+    ...(Array.isArray(identification.candidates?.client) ? identification.candidates.client : []),
+    ...(Array.isArray(identification.candidates?.company) ? identification.candidates.company : [])];
+  return options.some(match => typeof match?.id === "string" && !!match.id.trim() && typeof match.name === "string" && !!match.name.trim());
+}
+
 export type ParsedPagoReceipt = {
   senderName: string;
   beneficiaryName: string;
