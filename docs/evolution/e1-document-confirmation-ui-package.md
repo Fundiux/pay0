@@ -29,6 +29,12 @@ Verificador SSR canonical bajo Firestore demo aislado: PASS, exit 0 y emulador c
 
 Recibo canonical `e44d60a9093efe321d79b94d76617c4ff4a6c5f8b3fdde46d439e2c8f4a71cb6`. Recibo ampliado con ambos overrides, preservación de fuente y hashes de QA: `292cf193190ce32ea35a3dafc0b60c56a46153a48cb942d19bfd6a8017ada64e`; assertRuntimeProof PASS. Archivo privado: `runtime-daee88c9-107e-4dd2-af9f-8f7e510a17c5/proof-with-qa-override.json` dentro del directorio de input anterior.
 
+Raíz cotejó independientemente proof, hashes de paquete/fuente/build/base/ZIP previo y assertRuntimeProof: PASS. Preflight canónico de sólo lectura: primer intento METADATA_HTTP_503, preservado sin concluir deriva; segundo intento PASS, sin alterar input ni guardas. Captura posterior 2026-10-20T16:12:58Z: fuente/configuración/Run/IAM/Hosting sin deriva y cero operaciones activas, cero documentos de negocio o mutaciones. Recibo `fresh-preflight-6e0d25be-ff19-4989-84a9-ac95e32dc477/verification.json`, SHA `bedeeebaf2f6e3fcd5e5ae9d9f231f7f8ab4737a25364b1db4479d0467607bfe`, dentro del directorio de input. Es evidencia de ese instante; el ejecutor revalida antes de publicar.
+
+La auditoría de provenance confirmó que sólo cambian el vocabulario de status y cuatro campos de trazabilidad; todos los campos originales restantes son idénticos. Original 6b529… intacto; copia derivada SHA `2d51588b686f58320c5aea938949d5a2d9b7453119c65e6de5d685f338ac446c`. Ningún helper fue modificado.
+
+Receta privada no ejecutada: `output/document-confirmation-ui/deployment-recipe.md`, SHA `8ef9ddb38f9ac71c2913253cd86476d15eae20d7ddf179feb8d92bf9257f2847`. Verificador independiente posterior, sólo lectura y condicionado al cierre de raíz: `output/document-confirmation-ui/verify-published.mjs`, SHA `5fe16ed99e345caf90c4fd05299a4d258639d51e4eaf23c14b794d1f3db2225b`, sintaxis PASS. No se ha desplegado la UI ni ejecutado ese verificador posterior.
+
 ## Dependencias y reversión
 
 No requiere publicar backend nuevo. Reutiliza los dos destinos documentales ya publicados: parsePagoReceiptPdf `00016-qoc` y correctPagoReceiptSemanticField `00005-qej`, ZIP `f88b88d7`. Las respuestas antiguas sin versión permanecen de sólo lectura. No cambia permisos, reglas, almacenamiento, pagos ni solicitudes.
