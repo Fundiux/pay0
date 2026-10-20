@@ -52,7 +52,7 @@ export type ParsedPagoReceipt = {
     distinctions: Record<string, string>;
     fields: Record<string, { humanCorrection?: { actorUid: string; correctedAt: string; originalValue: string | number | null }; value: string | number | null; rawValue: string | null; normalizedValue: string | number | null; confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE"; decision: "ACCEPTED" | "REVIEW" | "MISSING"; source: "DOCUMENT_TEXT" | "HUMAN_CORRECTION"; provenance?: "DETECTED" | "INFERRED" | "MISSING" | "HUMAN_CORRECTION"; label: string | null; excerpt: string | null; page: number | null }>;
   };
-  learningContext?: Array<{ id: string; status: string; patternKey: string; content: string; advisory: boolean }>;
+  learningContext?: Array<{ id: string; status: string; patternKey?: string; content: string; advisory: boolean }>;
   identification?: ReceiptIdentification;
 };
 
