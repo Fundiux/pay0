@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, FileDown, RefreshCw } from "lucide-react";
 
 import DateScopeBar from "@/components/DateScopeBar";
@@ -8,6 +8,7 @@ import NoAccess from "@/components/NoAccess";
 import ControlCenterOverview from "@/components/control-center/ControlCenterOverview";
 import ControlCenterAnalytics from "@/components/control-center/ControlCenterAnalytics";
 import PaymentComplementFollowup from "@/components/control-center/PaymentComplementFollowup";
+import EngineeringControl from "@/components/control-center/EngineeringControl";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { downloadSpreadsheetFile } from "@/lib/spreadsheetReader";
@@ -102,6 +103,24 @@ export default function ReportesPage() {
   const { profile, loading: profileLoading } = useUserProfile();
 
   const [activeTab, setActiveTab] = useState<ReportTab>("control");
+  const complementHashHandled = useRef(false);
+  const canNavigateComplements = String(profile?.role || "").toLowerCase() === "superadmin";
+  useEffect(() => {
+    if (!canNavigateComplements || profileLoading) return;
+    const navigate = () => {
+      if (window.location.hash !== "#complementos-pago" || complementHashHandled.current) return;
+      if (activeTab !== "control") { setActiveTab("control"); return; }
+      const section = document.getElementById("complementos-pago");
+      if (!section) return;
+      section.scrollIntoView({ block: "start" });
+      section.focus({ preventScroll: true });
+      complementHashHandled.current = true;
+    };
+    const onHashChange = () => { complementHashHandled.current = false; navigate(); };
+    navigate();
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [activeTab, canNavigateComplements, profileLoading]);
   const [mode, setMode] = useState<DateScopeMode>("month");
   const [baseDate, setBaseDate] = useState(new Date());
   const [customRange, setCustomRange] = useState<CustomRange>({});
@@ -597,7 +616,10 @@ export default function ReportesPage() {
       {activeTab === "control" ? (
         String(profile?.role || "").toLowerCase() === "superadmin" ? <div className="space-y-5">
           <ControlCenterAnalytics from={range.from} to={range.to} refreshVersion={controlRefreshVersion} />
-          <PaymentComplementFollowup />
+          <section id="complementos-pago" tabIndex={-1} aria-label="Proveedores y complementos de pago" className="scroll-mt-6 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+            <PaymentComplementFollowup />
+          </section>
+          <EngineeringControl />
           <details className="rounded-xl border border-white/10 p-4"><summary className="mb-4 cursor-pointer font-bold">Resumen operativo global · sin filtro de fechas</summary><ControlCenterOverview snapshot={controlSnapshot} loading={controlLoading} error={controlError} onRefresh={refreshControlCenter} canRefresh /></details>
         </div> : <p className="rounded-xl border border-white/10 p-4">El Control Center consolidado está habilitado únicamente para Superadmin. Tus reportes autorizados continúan disponibles en las demás pestañas.</p>
       ) : activeTab === "commissions" ? (

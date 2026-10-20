@@ -1255,12 +1255,16 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       <Modal
         open={openBeneficiaryModal}
         title=""
+        ariaLabel={beneficiaryModalTab === "MASIVA" ? "Importar beneficiarios" : "Agregar beneficiario"}
         onClose={() => {
           clearWholeForm();
           setOpenBeneficiaryModal(false);
           setIsImportDragging(false);
         }}
         widthClassName="max-w-[390px]"
+        closeOnEscape={!saving}
+        closeOnBackdrop={!saving}
+        closeButtonDisabled={saving}
       >
         <div className="space-y-3">
           <div className="grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">
@@ -1533,12 +1537,16 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       <Modal
         open={Boolean(methodEditDialog)}
         title=""
+        ariaLabel={methodEditDialog?.mode === "REPLACE" ? "Corregir método de pago" : "Editar método de pago"}
         onClose={() => {
           if (!methodEditSaving) {
             setMethodEditDialog(null);
           }
         }}
         widthClassName="max-w-[390px]"
+        closeOnEscape={!methodEditSaving}
+        closeOnBackdrop={!methodEditSaving}
+        closeButtonDisabled={methodEditSaving}
       >
         {methodEditDialog ? (
           <form
@@ -1699,6 +1707,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
       <Modal
         open={Boolean(textDialog)}
         title=""
+        ariaLabel={textDialog?.title || "Capturar dato"}
         onClose={() => resolveText(null)}
         widthClassName="max-w-[390px]"
       >

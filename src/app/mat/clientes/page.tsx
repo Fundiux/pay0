@@ -134,25 +134,31 @@ function ActionPanel({
   primary,
   secondary,
   pinReason,
+  primaryHref,
+  secondaryHref,
 }: {
   primary: string;
   secondary: string;
   pinReason?: string;
+  primaryHref?: string;
+  secondaryHref?: string;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <button
         type="button"
         title={pinReason || primary}
+        onClick={primaryHref ? () => window.location.assign(primaryHref) : undefined}
         className="rounded-[26px] bg-cyan-300 p-4 text-left text-slate-950 shadow-xl shadow-cyan-950/30 active:scale-[0.99]"
       >
         <div className="text-xs font-black uppercase tracking-[0.12em]">Accion</div>
         <div className="mt-1 text-lg font-black">{primary}</div>
       </button>
-      <button type="button" className="rounded-[26px] border border-white/10 bg-white/[0.07] p-4 text-left active:scale-[0.99]">
+      <button type="button" onClick={secondaryHref ? () => window.location.assign(secondaryHref) : undefined} className="rounded-[26px] border border-white/10 bg-white/[0.07] p-4 text-left active:scale-[0.99]">
         <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Ver</div>
         <div className="mt-1 text-lg font-black text-white">{secondary}</div>
       </button>
+      {primaryHref && <p className="col-span-2 text-xs text-slate-400">Abre PAY0 web. Requiere iniciar sesión y contar con permisos para la operación.</p>}
     </div>
   );
 }
@@ -216,7 +222,7 @@ export default function MatClientesPage() {
       actionLabel: "Nueva solicitud",
       children: (
         <div className="space-y-4">
-          <ActionPanel primary="Nueva solicitud" secondary="Ver folios" />
+          <ActionPanel primary="Nueva solicitud" secondary="Ver folios" primaryHref="/solicitudes" secondaryHref="/solicitudes" />
           <OperationList title="Solicitudes recientes" items={solicitudes} empty="Aun no hay solicitudes visibles para este cliente." />
         </div>
       ),
@@ -239,13 +245,12 @@ export default function MatClientesPage() {
       id: "dispersiones",
       eyebrow: "Dispersiones",
       title: "Enviar fondos",
-      description: "PIN solo para la primera dispersion de la ventana activa.",
+      description: "Solicitar retorno mediante el flujo de dispersiones de PAY0 web.",
       icon: "D",
-      actionLabel: "Nueva dispersion",
-      pinReason: "Requiere PIN PAY0 para primera dispersion.",
+      actionLabel: "Solicitar retorno",
       children: (
         <div className="space-y-4">
-          <ActionPanel primary="Nueva dispersion" secondary="Beneficiarios" pinReason="Requiere PIN PAY0 para primera dispersion." />
+          <ActionPanel primary="Solicitar retorno" secondary="Ver dispersiones" primaryHref="/wallet/dispersiones" secondaryHref="/wallet/dispersiones" />
           <OperationList title="Dispersiones recientes" items={dispersiones} empty="Aun no hay dispersiones visibles para este cliente." />
         </div>
       ),

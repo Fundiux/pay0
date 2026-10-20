@@ -9,7 +9,7 @@ import {
 import { TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS } from "../telegram/clientNotifications";
 
 export const initDispersionDocumentUpload = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     return await initDispersionDocumentUploadCore(request);
   }
@@ -18,6 +18,9 @@ export const initDispersionDocumentUpload = onCall(
 export const finalizeDispersionDocumentUpload = onCall(
   {
     cors: true,
+    preserveExternalChanges: true,
+    maxInstances: 20,
+    concurrency: 80,
     timeoutSeconds: 60,
     memory: "256MiB",
     secrets: [TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS],
@@ -55,7 +58,7 @@ export const finalizeDispersionDocumentUpload = onCall(
 );
 
 export const deactivateDispersionDocument = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     return await deactivateDispersionDocumentCore(request);
   }

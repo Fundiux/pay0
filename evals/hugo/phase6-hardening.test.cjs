@@ -6,7 +6,7 @@ const core = '../../functions/lib/modules/agent007/hugoCore/';
 const { buildVerifiedExperience, withCorrection, buildDraftExperience, withOutcome } = require(core + 'experienceBuilder');
 const { selectLearningExperiences } = require(core + 'learningStore');
 const { applyHugoContextBudget, compactLearningExperience } = require(core + 'learningContextBudget');
-const { proposeRuleCandidates } = require(core + 'learningEvaluation');
+const { proposeRuleCandidates, decideWithoutModel, measureLearningEffect } = require(core + 'learningEvaluation');
 const { approveSyntheticRule, applyCompiledRule, invalidateCompiledRule } = require(core + 'compiledRule');
 const { internalTrainingAuthorization, externalProviderAuthorization } = require(core + 'learningGovernance');
 const { validateStructuredCandidate } = require(core + 'claimValidation');
@@ -16,9 +16,9 @@ const rootId = 'phase6-synthetic-root', at = n => new Date(Date.UTC(2026, 8, 22,
 function source(id) { const entityId = `case_${id}`; return { rootId, experienceId: `learning_${id}`, domain: 'SOLICITUDES', taskType: 'REASON', intent: 'EXPLAIN_DELAY', questionClass: 'OPERATIONAL_CAUSE',
   memory: { id: `memory_${id}`, rootId, status: 'CONFIRMED', kind: 'EXPERIENCE', entityReference: { sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId },
     links: { observationId: `obs_${id}`, decisionId: `decision_${id}`, outcomeId: `outcome_${id}` }, createdAt: at(3) },
-  observation: { id: `obs_${id}`, rootId, caseId: entityId, source: 'ACTIVITY_LOG', createdAt: at(0) },
-  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', entityId, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: at(1) },
-  outcome: { id: `outcome_${id}`, rootId, caseId: entityId, source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: at(2) },
+  observation: { id: `obs_${id}`, rootId, caseId: entityId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', createdAt: at(0) },
+  decision: { id: `decision_${id}`, rootId, kind: 'DECISION', status: 'CONFIRMED', sourceSystem: 'PAY0', entityType: 'SOLICITUD', entityId, actorUid: 'admin', decisionType: 'APPROVED', decidedAt: at(1) },
+  outcome: { id: `outcome_${id}`, rootId, caseId: entityId, caseType: 'SOLICITUD', sourceSystem: 'PAY0', source: 'ACTIVITY_LOG', sourceEvent: 'SOLICITUD_COMPLETADA', occurredAt: at(2) },
   features: { entityType: 'SOLICITUD', status: 'PENDIENTE', issueCode: 'DOCUMENT_MISSING' }, now: at(3) }; }
 function verified(id, behavior = 'VERIFY_DOCUMENT_BEFORE_DECISION') { const a = source(id), row = buildVerifiedExperience(a);
   return withCorrection(row, { originalBehavior: 'COPY_PRIOR_ACTION', correctedBehavior: behavior, reasonCode: 'OUTCOME_SUPPORTED_CORRECTION',
@@ -67,11 +67,55 @@ test('two independent verified outcomes create one scoped candidate; approval an
   assert.throws(() => approveSyntheticRule({ ...candidate, contradictoryIds: ['learning_contradiction'] }, rootId, 'reviewer', at(5)), /RULE_APPROVAL_UNSAFE/);
 });
 
+test('supervised correction improves a similar case and its approved rule can be deactivated', () => {
+  const examples = [verified('e1-correction-a'), verified('e1-correction-b')];
+  const task = { caseId: 'e1-similar-case', query, expectedBehavior: 'VERIFY_DOCUMENT_BEFORE_DECISION', currentFacts: { documentStatus: 'UNVERIFIED' }, modelNecessity: 'MODEL_NOT_REQUIRED' };
+  const before = decideWithoutModel(task, []);
+  const selected = selectLearningExperiences(examples, query).selected;
+  const after = decideWithoutModel(task, selected);
+  const effect = measureLearningEffect({ task, experience: examples[0], before, after, modelAdapter: 'NONE', promptVersion: 'policy-v1', evidenceDigest: 'e1-controlled-evidence' });
+  assert.equal(before.behavior, 'ESCALATE_UNKNOWN');
+  assert.equal(after.behavior, task.expectedBehavior);
+  assert.equal(effect.improved, true);
+  assert.equal(effect.overgeneralized, false);
+  const [candidate] = proposeRuleCandidates(selected);
+  const active = approveSyntheticRule(candidate, rootId, 'supervised-reviewer', at(5));
+  assert.equal(active.approvedBy, 'supervised-reviewer');
+  assert.equal(applyCompiledRule(active, query), task.expectedBehavior);
+  const counterexample = verified('e1-reviewed-counterexample', 'CHECK_INVOICE_FIRST');
+  const [contradictedCandidate] = proposeRuleCandidates([...selected, counterexample]);
+  assert.ok(contradictedCandidate.contradictoryIds.includes(counterexample.experienceId));
+  assert.throws(() => approveSyntheticRule(contradictedCandidate, rootId, 'supervised-reviewer', at(5)), /RULE_APPROVAL_UNSAFE/);
+  const disabled = invalidateCompiledRule(active, counterexample.experienceId);
+  assert.equal(disabled.version, active.version + 1);
+  assert.equal(disabled.status, 'INVALIDATED');
+  assert.equal(applyCompiledRule(disabled, query), null);
+  assert.equal(applyCompiledRule(active, { ...query, rootId: 'foreign-root' }), null);
+});
+
 test('quality eligibility never implies internal or external training permission', () => {
   const record = verified('governance'); assert.equal(record.trainingEligibility.eligible, true);
   assert.equal(internalTrainingAuthorization(record).approved, false); assert.equal(externalProviderAuthorization(record).approved, false);
   const reviewed = { ...record, governance: { use: 'TRAINING_ELIGIBLE_INTERNAL', externalProvider: 'NOT_APPROVED', reviewedBy: 'human', reviewedAt: at(5) } };
   assert.equal(internalTrainingAuthorization(reviewed).approved, true); assert.equal(externalProviderAuthorization(reviewed).approved, false);
+});
+
+test('revoked evidence or protected revisions cannot retain a cached training authorization', () => {
+  const record = { ...verified('revoked-governance'), governance: { use: 'TRAINING_ELIGIBLE_INTERNAL', externalProvider: 'APPROVED', reviewedBy: 'human', reviewedAt: at(5) } };
+  assert.equal(externalProviderAuthorization(record).approved, true);
+  const revoked = [
+    { ...record, split: 'HOLDOUT' },
+    { ...record, protectedCaseIds: ['protected-case'] },
+    { ...record, supersededById: 'new-revision' },
+    { ...record, state: 'REJECTED' },
+    { ...record, outcome: { ...record.outcome, verified: false } },
+    { ...record, evidenceReferences: [{ ...record.evidenceReferences[0], rootId: 'foreign-root' }] },
+  ];
+  for (const revision of revoked) {
+    assert.equal(revision.trainingEligibility.eligible, true, 'fixture intentionally keeps stale cached eligibility');
+    assert.deepEqual(internalTrainingAuthorization(revision), { approved: false, reason: 'QUALITY_INELIGIBLE' });
+    assert.deepEqual(externalProviderAuthorization(revision), { approved: false, reason: 'QUALITY_INELIGIBLE' });
+  }
 });
 
 test('structured claims require real scoped evidence and cannot contradict current facts', () => {

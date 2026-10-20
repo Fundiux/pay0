@@ -57,7 +57,8 @@ async function run() {
   await runCase('master-off', x => db.doc(`iqIntegrationConfigs/${x.root}`).update({ enabled: false }), zero);
   await runCase('lookup-off', x => db.doc(`paymentComplementConfigs/${x.root}`).update({ iqLookupEnabled: false }), zero);
   await runCase('access-off-origin-persists', x => db.doc(`iqUserAccess/${x.root}`).update({ active: false }), allowed);
-  await runCase('actor-inactive-origin-persists', x => db.doc(`users/${x.root}`).update({ active: false }), allowed);
+  // Persisted origin permits reconciliation, not a new request by an inactive actor.
+  await runCase('actor-inactive-new-request-denied', x => db.doc(`users/${x.root}`).update({ active: false }), lookupOnly, 'REP_GATE_ACTOR_INVALID');
   await runCase('profile-off', x => db.doc(`iqCredentialProfiles/${x.profileId}`).update({ active: false }), zero);
   await runCase('profile-changed-origin-persists', x => db.doc(`iqUserAccess/${x.root}`).update({ iqCredentialProfileId: 'different' }), allowed);
   await runCase('legacy-access-off', async x => {

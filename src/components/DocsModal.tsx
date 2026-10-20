@@ -3,6 +3,7 @@
 import { formatDateTime24 } from "@/lib/dateTime";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { listAuthorizedRelatedRecords } from "@/services/operationalReads";
 import { collection, onSnapshot, query, where,
   getDocs} from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -109,6 +110,7 @@ export default function DocsModal(props: {
   const [docsError, setDocsError] = useState("");
   const [relatedPagoReceipts, setRelatedPagoReceipts] = useState<RelatedPagoReceipt[]>([]);
   const [loadingRelatedPagoReceipts, setLoadingRelatedPagoReceipts] = useState(false);
+  const [relatedReadError, setRelatedReadError] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deliveryPreparing, setDeliveryPreparing] = useState(false);
@@ -180,20 +182,15 @@ export default function DocsModal(props: {
         return;
       }
 
+      setRelatedPagoReceipts([]);
+      setRelatedReadError(null);
       setLoadingRelatedPagoReceipts(true);
 
       try {
-        const aplicacionesSnap = await getDocs(
-          query(
-            collection(db, "pagoAplicaciones"),
-            where("rootId", "==", solicitudRootId),
-            where("solicitudId", "==", sid),
-          )
-        );
+        const aplicaciones = await listAuthorizedRelatedRecords("pagoAplicaciones", sid, () => cancelled);
 
         const pagoIds = Array.from(new Set(
-          aplicacionesSnap.docs
-            .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+          aplicaciones
             .filter((row: any) => !String(row.status || "").trim() || String(row.status || "").toUpperCase() === "APLICADA")
             .map((row: any) => String(row.pagoId || "").trim())
             .filter(Boolean)
@@ -242,6 +239,7 @@ export default function DocsModal(props: {
       } catch {
         if (!cancelled) {
           setRelatedPagoReceipts([]);
+          setRelatedReadError("No se pudo verificar el acceso a los documentos relacionados.");
         }
       } finally {
         if (!cancelled) {
@@ -1006,6 +1004,13 @@ const downloadDoc = async (doc: UploadRow) => {
                 {ocReprocessing ? "Reprocesando OC..." : "Reprocesar OC activa"}
               </button>
             </div>
+            {solicitud?.cotizacionAutoGenerateStatus === "ERROR" ? (
+              <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
+                La cotización no se generó automáticamente ({solicitud?.cotizacionAutoGenerateStage || "ETAPA_DESCONOCIDA"}). {solicitud?.cotizacionAutoGenerateLastError || "Reprocesa la OC activa tras corregir sus partidas."}
+              </div>
+            ) : solicitud?.cotizacionAutoGenerateStatus === "READY" ? (
+              <div className="mt-3 text-[11px] text-emerald-200">Cotización automática lista desde la OC activa.</div>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4">
@@ -1202,6 +1207,8 @@ const downloadDoc = async (doc: UploadRow) => {
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-400">
                 Buscando documentos relacionados...
               </div>
+            ) : relatedReadError ? (
+              <div role="alert" className="rounded-xl border border-amber-400/20 bg-black/20 px-3 py-3 text-[12px] text-amber-200">{relatedReadError}</div>
             ) : relatedPagoReceipts.length === 0 ? (
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-slate-500">
                 Sin documentos relacionados por pagos aplicados.

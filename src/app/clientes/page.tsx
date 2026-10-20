@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Modal from "@/components/Modal";
 
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -157,6 +158,7 @@ export default function ClientesPage() {
     onConfirm: () => Promise<void> | void;
   } | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
   const [telegramClient, setTelegramClient] = useState<ClientRow | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<ClientTelegramLinkStatusResult | null>(null);
   const [telegramStartUrl, setTelegramStartUrl] = useState("");
@@ -808,38 +810,46 @@ export default function ClientesPage() {
         </div>
       )}
       {confirmAction && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#161d2b] shadow-2xl">
-            <div className="border-b border-white/10 bg-white/5 px-6 py-4">
-              <div className="text-base font-semibold text-slate-100">{confirmAction.title}</div>
-              <div className="mt-2 text-sm text-slate-400">{confirmAction.message}</div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => !confirmBusy && setConfirmAction(null)}
-                disabled={confirmBusy}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase text-slate-300 transition-all hover:bg-white/10 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={runConfirmAction}
-                disabled={confirmBusy}
-                className={
-                  confirmAction.danger
-                    ? "rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-xs font-bold uppercase text-rose-300 transition-all hover:bg-rose-500/20 disabled:opacity-50"
-                    : "rounded-xl border border-sky-400/30 bg-sky-500/20 px-4 py-2 text-xs font-bold uppercase text-sky-100 transition-all hover:bg-sky-500/25 disabled:opacity-50"
-                }
-              >
-                {confirmBusy ? "Procesando..." : confirmAction.confirmLabel}
-              </button>
-            </div>
+        <Modal
+          open
+          title={confirmAction.title}
+          onClose={() => !confirmBusy && setConfirmAction(null)}
+          widthClassName="max-w-md"
+          bodyClassName="p-0"
+          closeOnEscape={!confirmBusy}
+          closeOnBackdrop={!confirmBusy}
+          closeButtonDisabled={confirmBusy}
+          initialFocusRef={confirmCancelRef}
+        >
+          <div className="border-b border-white/10 bg-white/5 px-6 py-4 text-sm text-slate-400">
+            {confirmAction.message}
           </div>
-        </div>
+
+          <div className="flex items-center justify-end gap-3 px-6 py-4">
+            <button
+              ref={confirmCancelRef}
+              type="button"
+              onClick={() => !confirmBusy && setConfirmAction(null)}
+              disabled={confirmBusy}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase text-slate-300 transition-all hover:bg-white/10 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={runConfirmAction}
+              disabled={confirmBusy}
+              className={
+                confirmAction.danger
+                  ? "rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-xs font-bold uppercase text-rose-300 transition-all hover:bg-rose-500/20 disabled:opacity-50"
+                  : "rounded-xl border border-sky-400/30 bg-sky-500/20 px-4 py-2 text-xs font-bold uppercase text-sky-100 transition-all hover:bg-sky-500/25 disabled:opacity-50"
+              }
+            >
+              {confirmBusy ? "Procesando..." : confirmAction.confirmLabel}
+            </button>
+          </div>
+        </Modal>
       )}
 {telegramClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">

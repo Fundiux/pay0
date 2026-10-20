@@ -1,0 +1,6 @@
+.build/
+node_modules/
+infra/.terraform/
+infra/*.tfstate*
+infra/*.tfvars
+infra/*.tfplan

@@ -41,9 +41,9 @@ async function relatedSolicitud(
   recommendation: Record<string, any>,
 ): Promise<Record<string, any> | null> {
   const direct = clean(recommendation.caseId);
-  if (direct) {
+  if (direct && !direct.includes("/")) {
     const snap = await db.doc(`solicitudes/${direct}`).get();
-    if (snap.exists) return { id: snap.id, ...(snap.data() || {}) };
+    if (snap.exists && snap.get("rootId") === recommendation.rootId) return { id: snap.id, ...(snap.data() || {}) };
   }
   const folio = clean(recommendation.evidence?.referenceFolio, 80);
   if (!folio) return null;
@@ -149,12 +149,14 @@ export async function reconcileAgent007Recommendations(
     } else if (
       ["PAYMENT_RECONCILIATION", "BANK_CLASSIFICATION"].includes(kind)
     ) {
-      const pago = await db.doc(`pagos/${clean(row.caseId)}`).get();
+      const pagoId = clean(row.caseId);
+      if (!pagoId || pagoId.includes("/")) continue;
+      const pago = await db.doc(`pagos/${pagoId}`).get();
       const status = clean(
         pago.data()?.status || pago.data()?.estatus,
         80,
       ).toUpperCase();
-      if (pago.exists && PAYMENT_RESOLVED.has(status)) {
+      if (pago.exists && pago.get("rootId") === rootId && PAYMENT_RESOLVED.has(status)) {
         patch = {
           ...patch,
           status: "RESOLVED_BY_SYSTEM_EVENT",

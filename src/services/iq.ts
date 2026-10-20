@@ -27,6 +27,8 @@ export type IqCredentialProfile = {
   alias: string;
   username: string;
   usernameMasked: string;
+  associatedName: string;
+  associatedNameConfigured: boolean;
   active: boolean;
   hasPassword: boolean;
   erpUrl?: string | null;
@@ -78,6 +80,7 @@ export async function listIqCredentialProfiles(): Promise<IqCredentialProfile[]>
 export async function createIqCredentialProfile(input: {
   alias: string;
   username: string;
+  associatedName: string;
   password?: string;
   erpUrl?: string;
 }): Promise<IqCredentialProfile> {
@@ -97,6 +100,7 @@ export async function updateIqCredentialProfile(input: {
   profileId: string;
   alias?: string;
   username?: string;
+  associatedName?: string;
   password?: string;
   erpUrl?: string;
   active?: boolean;
@@ -130,12 +134,20 @@ export async function deleteIqCredentialProfile(profileId: string): Promise<void
 export async function testIqConnection(profileId: string): Promise<{
   ok: boolean;
   message: string;
+  operatorMessage?: string;
   mode: string;
+  authenticated?: boolean;
+  associatedName?: string | null;
+  operationalReady?: boolean;
 }> {
   const res = await callIq<{ profileId: string }, CallableResult<{
     ok: boolean;
     message: string;
+    operatorMessage?: string;
     mode: string;
+    authenticated?: boolean;
+    associatedName?: string | null;
+    operationalReady?: boolean;
   }>>("testIqConnection", { profileId });
 
   if (!res.data) {

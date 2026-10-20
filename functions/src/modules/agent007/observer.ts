@@ -1,5 +1,6 @@
 import type { Firestore, Transaction, WriteBatch } from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
+import { isEvidenceSystem } from "./hugoCore/evidenceIdentity";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 
 const OBSERVED_EVENTS = new Set([
@@ -74,7 +75,7 @@ function buildObservationPayload(
   if (event === "AGENTE_007_OBSERVACION") return null;
 
   const rootId = clean(payload.rootId, 128);
-  if (!rootId) return null;
+  if (!rootId || !isEvidenceSystem(payload.sourceSystem)) return null;
 
   const caseType = caseTypeFromPayload(payload);
   const caseId = caseIdFromPayload(payload, activityId);
@@ -86,6 +87,7 @@ function buildObservationPayload(
     agentId: "AGENTE_007",
     phase: "OBSERVATION",
     source: "ACTIVITY_LOG",
+    sourceSystem: payload.sourceSystem,
     sourceActivityId: activityId,
     sourceEvent: event,
     caseType,

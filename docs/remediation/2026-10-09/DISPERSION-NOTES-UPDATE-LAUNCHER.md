@@ -1,0 +1,50 @@
+# Notes-only update launcher candidate
+
+Local implementation for review, not executed against production. Ownership is four new files: scripts/deploy-dispersion-notes-update.ps1, scripts/lib/dispersion-notes-update-launch.cjs, its focused test, and this document. Existing update enforcement core, runtime comparator, upload guard, Firebase configuration, predeploy hooks, product source, dotenv and IAM are unchanged. No commit/deployment authorized by this candidate itself.
+
+## Modes and private input
+
+PowerShell defaults to PreflightLOCAL. LibraryOnly only loads helper functions; PreflightLOCAL verifies local pins with zero cloud reads/writes and zero dotenv writes. StageDryRunCAS deliberately stages only the existing public Firebase web key in the ignored Functions dotenv, executes local checks, and restores exact original bytes with the reviewed Invoke-NotesPhase/Invoke-IqEnvPhase CAS implementation. Execute is explicit and uses the same staging/finally restoration. External mutation prevents overwrite, retains the private backup and fails. No automatic retry or rollback exists.
+
+Input is a size-bounded, hash-pinned, closed PAY0-NOTES-UPDATE-INPUT@1 JSON under root .firebase/notes-update. Fields are candidate (worktree/head/provenanceSha/sourceSha/cliSha/wrapperSha/manifest/manifestSha), firebaseConfigSha, helperPins, cliUpdateSha, baselineFile/baselineSha, originalEnvSha, upload (guardFile/guardSha/verifierFile/verifierSha), receiptFile, postflightFile and privateTemp. Candidate worktree is exactly the existing integration worktree; checkCandidate requires clean expected HEAD, installed source/provenance and the exact 347-endpoint canonical manifest. All seven root helper files are pinned, including launcher, CAS helpers, update enforcement core and runtime comparator. The extended 18-file CLI fingerprint includes pack/deploy/storage/apiv2/poller and mutation modules, in addition to the existing candidate CLI contract. No source pin is generated automatically to accept drift.
+
+The existing private baseline metadata-00001-mug.json has shape function/service/revision and SHA256 1dd47091fdee398337ef1b6b74778ebda714dd749b6f3dad93bea1901e58ad40. Original dotenv SHA256 is 572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856. Neither content is printed. Reviewed limits are GCF max absent, Run service max20, template/revision max absent; absence is preserved, not reinterpreted as a numeric default. Historical fields outside the captured metadata selectors are not claimed verified. Fresh metadata uses those same selectors and the pure runtime.assertPreserved contract.
+
+privateTemp is separately constrained to the integration worktree's ignored .firebase/notes-update-upload subtree, because Firebase's generated archive must stay inside the source project's private temp. Input, baseline, outputs and path ancestors reject symlinks. Receipts, postflight metadata, backup, journal and CLI logs remain ignored and private; output is only status/counters/hash pins. The synthetic test files never use real dotenv bytes.
+
+## Execute sequence
+
+1. Local pin/candidate check; exclusive operation lock. Three bounded GETs of fixed GCF, Run service and baseline exact revision before any dotenv staging. Tokens come from fixed gcloud arguments into process memory, never token argv or token environment variables.
+2. Verified private backup, journal before CAS staging; staged dotenv is exactly one public web-key line. No Telegram mode or build selector goes into runtime dotenv.
+3. Node launcher repeats staged candidate checks and three fresh metadata GETs before spawning its one CLI child. Child uses --require for synchronous activation before Firebase's entrypoint, fixed project and only functions:listClientDispersionNotes. BUNDLED_V1 is process-only; actual predeploy hooks remain intact.
+4. Synchronous Node22 require of the TLA-free verified-upload guard installs pack/stream/destination protections before CLI starts. Full347 endpoint IDs come from the pinned manifest, with only notes targeted. approvedUploadHost is storage.googleapis.com as reviewed policy, not inferred historical upload evidence. The GCF fixed project/region response supplies the exact signed URL; the guard checks HTTPS host/components/signature fields and binds that URL to the sole upload. URLs are never emitted.
+5. verifyBytes dynamically imports the shared archive matcher (which has a CLI branch with TLA), validates CRC/exact file set and hashes against installed bundle/debug/maps/assets plus canonical source/package/lock/tsconfig and the single staged dotenv. It returns only proof hashes/counts; upload uses the verified in-memory buffer. Before update, input/helper/CLI/candidate pins and three fresh metadata GETs repeat. Update core deep-compares request storageSource with the upload receipt, including actual PUT generation; core performs the existing invoker binding GET and forbids create/delete/Run/IAM setters.
+6. Receipt binds accepted operation to the exact completed operation, revision/source and upload proof. Parent checks CLI exit and pins, then performs three GETs for the completed revision/source with runtime.assertPreserved(completed). Private metadata is retained, dotenv restored via finally and exact original hash verified. Hosting remains unapproved; independent actual-source-generation ZIP verification is explicitly pending. Upload bytes/provenance do not claim handler execution.
+
+There are four explicit three-GET metadata sets in Execute (pre-stage, pre-child, immediately before update, postflight); the Firebase CLI and invoker binding GET are separate reads. Each metadata response is bounded to 2MiB with 30-second deadline, fixed GET hosts and no redirect following. This is not an atomic remote snapshot. The IAM/update core, runtime comparator and actual uploaded bytes bound the intended action, while normal cloud concurrency remains observable drift that fails closed.
+
+## Local evidence
+
+40 focused tests PASS: closed schema/pins/scopes, selector, fingerprint coverage, synthetic public-key projection, exact three-GET construction with injected port, operation/upload receipt linkage, tampered input, dangling junction rejection, no-argument Node failure without execution, PowerShell LibraryOnly and synthetic CAS success/failure/conflict restoration. No default Preflight against a real deployment input, StageDryRunCAS against real dotenv, Execute, metadata request, upload, provider invocation or infrastructure mutation was run. Installed CLI fingerprint was read locally only and all 18 paths exist. Launcher still requires root review and a newly prepared private input for the final integrated source/manifest/helper hashes.
+
+Central review completed after this candidate: all four files read; combined launcher/core/runtime tests855b49 PASS53. Packaging integration f3f3bed is clean/pushed; strict installed-artifact pack82565/c526ec passed with1251 expected and1251 actual files, SHAa17eda970597f7fed9c9031152d91a94806b36f7eec8e7b2f92bc43f1734df01, zero cloud calls. Its separate CAS staging restored the original dotenv hash572b76d72c40c427b9ac33220a9a004f2717bd412b67f53e20ed27d19fd86856. This certifies the local archive only; update launcher execution and independent remote ZIP remain pending.
+
+Execute61313 failed after all real predeploy hooks passed, including the exact1251-file gate, but before ZIP_VERIFIED/upload/plan/update. Receipt contains only GUARD_ACTIVE; journal records failure and ENV_RESTORED, independently hashed to original572b76d.... The launcher incorrectly resolved JSZip from Firebase CLI15.3.1; local resolution8c2d70 demonstrated MODULE_NOT_FOUND there and availability under candidate Functions. Decoder now uses createRequire(candidate/functions/package.json), matching the standalone gate; verifyPackedBytes is the shared actual launcher callback.
+
+Corrective validation:41 launcher tests PASSbc7076, including a real tiny ZIP through the candidate decoder/shared verifier and rejection of an extra executable. Offline45447/8c83ee exercised the actual installed CLI packer, guard and exact launch verifyPackedBytes callback against all1251 candidate files, then consumed the protected upload stream and matched its SHA. PASS, archiveSHAa35536323686e4e2d528f46c09341726c2fad36abb1d6e33f2d8d2b3700e2f4d, network ports blocked/cloud0/upload0, original dotenv restored. This is local proof, not a second cloud attempt. New input candidate-f3f3bed-jszip uses new helper pins; prior failed inputs remain preserved.
+
+Execute93350 reached ZIP_VERIFIED1251 then failed before ZIP_UPLOADED or UPDATE.
+Original dotenv hash and clean integration were checked; fresh75310 passed three
+GETs against the original revision/configuration. The CLI empty dynamic extension
+payload reproduces UPLOAD_EXTENSIONS offline. Packaging fix ff69fc6, integrated
+as a52959b, permits only absent/exact empty plain extension envelopes and requires
+nonInteractive, with38 real-CLI-path tests. No extension changes are authorized.
+
+The launcher now pins eight helpers and30 CLI files, including extension handling.
+A separate private phase-diagnostics.jsonl records ENTER/RETURN/FAILED for fixed
+PREPARE/DEPLOY/RELEASE/STREAM/UPLOAD_URL/UPLOAD_PUT stages. Error codes must match
+an explicit allowlist; unknown errors become UNCLASSIFIED. No arguments, payloads,
+stack, provider body or arbitrary exception text are recorded. Wrappers preserve
+the original return/error and synchronous stream contract. Getter-only CLI barrel
+exports are preserved by wrapping their concrete owner modules. This file does not
+alter the nine-state deployment receipt. New helper/input pins are required.

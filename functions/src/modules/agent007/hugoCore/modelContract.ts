@@ -1,6 +1,6 @@
 export const HUGO_MODEL_REQUEST_VERSION = "hugo-model-request-v1";
 export type HugoModelRequest = { schemaVersion: typeof HUGO_MODEL_REQUEST_VERSION; task: { userInput: string; intent: string; name: string; profile?: "OPERATOR" | "PROGRAMMER"; scope?: "GLOBAL" | "PAY0"; risk?: "READ" | "WRITE" | "EXTERNAL_SIDE_EFFECT"; complexity?: "LOW" | "MEDIUM" | "HIGH"; requiredCapabilities?: string[] }; conversation: { history: any[]; activeEntity: { type: string; folio: string } | null };
-  intelligence: { contextSnapshot: any; currentEvidence: any; historicalMemories: any[]; historicalObservations: any[]; learningExperiences: any[]; evidenceBoundaries: any; conflicts: any[]; allowedActions: string[] };
+  intelligence: { contextSnapshot: any; currentEvidence: any; historicalMemories: any[]; historicalObservations: any[]; learningExperiences: any[]; conversationCorrections?: any[]; evidenceBoundaries: any; conflicts: any[]; allowedActions: string[] };
   generation: { promptVersion: string; capability: "FAST_EXTERNAL" | "STRONG_EXTERNAL" | "LOCAL" } };
 export type ModelAttempt = { finishReason: string; latencyMs: number; promptChars: number; outputLimit: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; reasoningTokens: number | null };
 export type ModelOutput = { text: string | null; model: string; modelVersion: string; provider?: string; promptVersion: string;
@@ -16,6 +16,6 @@ export function canonicalModelRequest(input: { message: string; name: string; co
     conversation: { history: input.history, activeEntity: context.activeEntity || null },
     intelligence: { contextSnapshot: context, currentEvidence: { solicitudes: context.solicitudes || [], pagos: context.pagos || [], complementosPendientes: context.complementosPendientes || [], capacidadesIq: context.capacidadesIq || {} },
       historicalMemories: context.memoriasHistoricas || [], historicalObservations: context.observacionesHistoricasNoVerificadas || [], learningExperiences: context.learningExperiences || [],
-      evidenceBoundaries: context.evidenceBoundaries || {}, conflicts: context.memoryConflicts || [], allowedActions: [] },
+      conversationCorrections: context.conversationCorrections || [], evidenceBoundaries: context.evidenceBoundaries || {}, conflicts: context.memoryConflicts || [], allowedActions: [] },
     generation: { promptVersion: input.promptVersion, capability: input.capability || "FAST_EXTERNAL" } };
 }

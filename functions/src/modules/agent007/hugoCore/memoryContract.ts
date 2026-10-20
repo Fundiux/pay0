@@ -15,6 +15,7 @@ export type HugoMemoryRecord = {
   decision?: { actorUid: string; actorRole: string; decisionType: string; decisionAt: string };
   verification?: { evidenceSource: string; confirmations: number; contradictions: number; outcomeKnown: boolean };
   lastUsedAt?: string | null;
+  conversationCorrection?: { version: number; conversationId: string; ownerUid: string; sourceKind: "TEXT" | "VOICE"; sourceId: string; turnId: string; confirmedTurn: number; correctionVersion: number; sourceHash: string; sourceQuestion?: string; topic?: { kind: "CLIENT" | "TOPIC"; id: string; label: string }; bindingId?: string };
 };
 export type MemoryQuery = { rootId: string; entityReferences: HugoEntityReference[]; intent: string; kinds?: HugoMemoryKind[]; limit?: number; now?: string };
 export type RetrievedMemory = { record: HugoMemoryRecord; relevanceReason: "ENTITY_MATCH" | "RULE_SCOPE_MATCH" | "RECENT_OUTCOME" | "EXPLICIT_USER_REFERENCE"; verificationStatus: HugoMemoryStatus };

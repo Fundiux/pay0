@@ -32,6 +32,7 @@ export interface FirebasePagoAdapterContext {
   actorUid: string;
   source: string;
   fingerprint: string;
+  expectedUploadId?: string;
 }
 
 export interface PagoReceiptDescriptor {
@@ -177,6 +178,11 @@ export function createPagoAttemptLockAdapter(
         }
 
         const data = snapshot.data() as Record<string, unknown>;
+        if (context.expectedUploadId && (
+          data.iqDepositCreationQueuedUploadId !== context.expectedUploadId ||
+          data.status !== "CONCILIACION_PENDIENTE" || data.iqDepositAutomationOmitted === true ||
+          data.iqDepositTerminalLocked === true
+        )) throw new Error("IQ_DEPOSIT_STALE_OR_INELIGIBLE_GENERATION");
         const existingIqId = canonicalIqId(data);
         const currentStatus = cleanText(
           data.iqDepositCreationStatus,

@@ -5,7 +5,6 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { logActivityTx } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
-import { isOwnInvoiceIssuerCompany } from "../facturama/service";
 import { canonicalCompanyCatalog, loadCanonicalBundle, type CanonicalDocumentUse } from "../documents/canonicalBundle";
 import { PAY0_CANONICAL_STORAGE } from "./contracts";
 
@@ -19,6 +18,14 @@ const versionRef = (id: string, version: number) => db.collection(store.versions
 const artifactPrefix = (rootId: string, companyId: string, kind: string, id: string, version: number) => `pay0-canonical/${rootId}/${companyId}/${kind}/${id}/${version}`;
 type Context = { uid: string; rootId: string };
 
+// Corporate document ownership is not authorization to use a fiscal provider.
+// Keep the existing resource classification separate from the stricter issuer guard.
+function isOwnCorporateCompany(company: any): boolean {
+  return company?.isOwnCompany === true || company?.ownedByRoot === true || company?.pay0OwnCompany === true ||
+    clean(company?.ownership || company?.companyOwnership || company?.companyType).toUpperCase() === "PROPIA" ||
+    clean(company?.rfc, 13).toUpperCase() === "TRO230717L64";
+}
+
 async function context(request: any, action: "view" | "manage"): Promise<Context> {
   const uid = requireAuth(request), user = await getMyUser(uid);
   assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"], requiredModule: "corporateResources", requiredAction: action });
@@ -30,7 +37,7 @@ async function context(request: any, action: "view" | "manage"): Promise<Context
 async function companyFor(ctx: Context, companyId: string) {
   if (!companyId || companyId.includes("/")) throw new HttpsError("invalid-argument", "Empresa requerida.");
   const row = (await db.doc(`companies/${companyId}`).get()).data();
-  if (!row || row.active === false || row.rootId !== ctx.rootId || !isOwnInvoiceIssuerCompany(row))
+  if (!row || row.active === false || row.rootId !== ctx.rootId || !isOwnCorporateCompany(row))
     throw new HttpsError("permission-denied", "Selecciona una empresa propia activa de tu ámbito.");
   return { ...row, id: companyId, rfc: clean(row.rfc, 13).toUpperCase() };
 }
@@ -71,7 +78,7 @@ export const listCorporateResources = onCall({ region: "us-central1" }, async re
     db.collection(store.resources).where("rootId", "==", ctx.rootId).limit(500).get(),
     db.collection("companies").where("rootId", "==", ctx.rootId).limit(500).get(),
   ]);
-  return { ok: true, resources: resources.docs.map(serial), companies: companies.docs.filter(doc => doc.data().active !== false && isOwnInvoiceIssuerCompany(doc.data()))
+  return { ok: true, resources: resources.docs.map(serial), companies: companies.docs.filter(doc => doc.data().active !== false && isOwnCorporateCompany(doc.data()))
     .map(doc => ({ id: doc.id, name: clean(doc.data().nombre || doc.data().razonSocial), rfc: clean(doc.data().rfc, 13) })), truncated: resources.size === 500 };
 });
 
@@ -183,7 +190,7 @@ export async function migrateBundledCorporateResource(input: { rootId: string; c
     const ref = db.collection(store.resources).doc(result.resourceId), version = versionRef(result.resourceId, result.version);
     const [resource, candidate, company] = await Promise.all([tx.get(ref), tx.get(version), tx.get(db.doc(`companies/${input.companyId}`))]);
     const row = candidate.data();
-    if (!company.exists || company.get("rootId") !== input.rootId || company.get("active") === false || !isOwnInvoiceIssuerCompany(company.data()) ||
+    if (!company.exists || company.get("rootId") !== input.rootId || company.get("active") === false || !isOwnCorporateCompany(company.data()) ||
         clean(company.get("rfc"), 13).toUpperCase() !== item.companyRfc || resource.get("rootId") !== input.rootId ||
         resource.get("activeVersion") || resource.get("latestVersion") !== result.version || row?.status !== "REVIEW" ||
         row.createdBy !== "SYSTEM" || row.contentDigest !== input.expectedDigest || row.payload?.source !== "BUNDLED_IMPORT")

@@ -39,6 +39,17 @@ export function matchReceiptIdentity(items: ReceiptCatalogItem[], signals: { nam
   return { status: "EXACT", id: candidate.id, reasons: [], evidence, candidateCount: 1 };
 }
 
+/** An explicit choice can resolve ambiguity, but cannot override contradictory evidence. */
+export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }, selectedId?: string) {
+  const automatic = matchReceiptIdentity(items, signals);
+  const candidates = automatic.reasons.includes("CONFLICTING_SIGNALS") ? [] : items.filter(item => matchReceiptIdentity([item], signals).status === "EXACT");
+  if (!selectedId) return { match: automatic, candidates };
+  const selected = candidates.find(item => item.id === selectedId);
+  if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: [...automatic.reasons, "INVALID_SELECTION"] }, candidates };
+  const match = matchReceiptIdentity([selected], signals);
+  return { match: { ...match, evidence: [...match.evidence, "USER_SELECTED_VERIFIED_CANDIDATE"] }, candidates };
+}
+
 export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {
   const reasons: string[] = [];
   if (receipt.identityConflict) reasons.push("CONFLICTING_RFC");

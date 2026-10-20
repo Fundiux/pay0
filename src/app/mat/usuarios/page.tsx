@@ -1,11 +1,20 @@
 "use client";
 
+import { useState } from "react";
+import { useAuth } from "@/lib/auth";
+import NuevaSolicitudModal from "@/components/NuevaSolicitudModal";
+import Modal from "@/components/Modal";
+import { GlobalLoadingProvider } from "@/components/GlobalLoading";
+import dynamic from "next/dynamic";
+
 import { MatBalanceCard } from "@/components/mat/MatBalanceCard";
 import { MatCarousel2D, type MatCarouselSlide } from "@/components/mat/MatCarousel2D";
 import { MatShell } from "@/components/mat/MatShell";
 import { useMatUserHome } from "@/components/mat/useMatHome";
 import { formatMatTrustWindow, type MatActorScope } from "@/lib/matSecurityPolicy";
 import type { MatHomeItem, MatHomeMetric } from "@/services/telegramMiniApp";
+
+const CanonicalDispersionPage = dynamic(() => import("@/app/wallet/dispersiones/page"), { ssr: false });
 
 const navItems = [
   { key: "inicio", label: "Inicio", icon: "I", targetId: "inicio" },
@@ -139,31 +148,43 @@ function ActionPanel({
   primary,
   secondary,
   pinReason,
+  primaryHref,
+  secondaryHref,
+  onPrimary,
 }: {
   primary: string;
   secondary: string;
   pinReason?: string;
+  primaryHref?: string;
+  secondaryHref?: string;
+  onPrimary?: () => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <button
         type="button"
         title={pinReason || primary}
+        onClick={onPrimary || (primaryHref ? () => window.location.assign(primaryHref) : undefined)}
         className="rounded-[26px] bg-cyan-300 p-4 text-left text-slate-950 shadow-xl shadow-cyan-950/30 active:scale-[0.99]"
       >
         <div className="text-xs font-black uppercase tracking-[0.12em]">Accion</div>
         <div className="mt-1 text-lg font-black">{primary}</div>
       </button>
-      <button type="button" className="rounded-[26px] border border-white/10 bg-white/[0.07] p-4 text-left active:scale-[0.99]">
+      <button type="button" onClick={secondaryHref ? () => window.location.assign(secondaryHref) : undefined} className="rounded-[26px] border border-white/10 bg-white/[0.07] p-4 text-left active:scale-[0.99]">
         <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Ver</div>
         <div className="mt-1 text-lg font-black text-white">{secondary}</div>
       </button>
+      {primaryHref && <p className="col-span-2 text-xs text-slate-400">{onPrimary ? "Captura y confirma con tu sesión PAY0 vigente. Se aplican los permisos de la operación." : "Abre PAY0 web. Requiere iniciar sesión y contar con permisos para la operación."}</p>}
     </div>
   );
 }
 
 export default function MatUsuariosPage() {
   const { home, loading, error } = useMatUserHome();
+  const { user } = useAuth();
+  const [newSolicitudOpen, setNewSolicitudOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const hasMatchingSession = Boolean(home?.linked && user?.uid && user.uid === home.pay0UserId);
 
   const isSuperadmin = String(home?.role || "").toLowerCase() === "superadmin";
   const actorScope: MatActorScope = isSuperadmin ? "SUPERADMIN" : "USER";
@@ -225,7 +246,7 @@ export default function MatUsuariosPage() {
       actionLabel: "Nueva solicitud",
       children: (
         <div className="space-y-4">
-          <ActionPanel primary="Nueva solicitud" secondary="Ver folios" />
+          <ActionPanel primary="Nueva solicitud" secondary="Ver folios" primaryHref="/solicitudes" secondaryHref="/solicitudes" onPrimary={hasMatchingSession ? () => setNewSolicitudOpen(true) : undefined} />
           <OperationList title="Solicitudes recientes" items={solicitudes} empty="Aun no hay solicitudes visibles para esta cuenta." />
         </div>
       ),
@@ -248,13 +269,12 @@ export default function MatUsuariosPage() {
       id: "dispersiones",
       eyebrow: "Dispersiones",
       title: "Enviar fondos",
-      description: "PIN solo para la primera dispersion de la ventana activa.",
+      description: "Solicitar retorno mediante el flujo de dispersiones de PAY0 web.",
       icon: "D",
-      actionLabel: "Nueva dispersion",
-      pinReason: "Requiere PIN PAY0 para primera dispersion.",
+      actionLabel: "Solicitar retorno",
       children: (
         <div className="space-y-4">
-          <ActionPanel primary="Nueva dispersion" secondary="Beneficiarios" pinReason="Requiere PIN PAY0 para primera dispersion." />
+          <ActionPanel primary="Solicitar retorno" secondary="Ver dispersiones" primaryHref="/wallet/dispersiones" secondaryHref="/wallet/dispersiones" onPrimary={hasMatchingSession ? () => setReturnOpen(true) : undefined} />
           <OperationList title="Dispersiones recientes" items={dispersiones} empty="Aun no hay dispersiones visibles para esta cuenta." />
         </div>
       ),
@@ -283,6 +303,11 @@ export default function MatUsuariosPage() {
   return (
     <MatShell title="Usuarios" subtitle={subtitle} identityLabel={identityLabel} badge="Mini App Telegram" activeNav="inicio" navItems={navItems} botScope="USERS">
       <MatCarousel2D slides={slides} />
+      {hasMatchingSession && <NuevaSolicitudModal open={newSolicitudOpen} onClose={() => setNewSolicitudOpen(false)} />}
+      {hasMatchingSession && returnOpen && <Modal open title="Solicitar retorno" ariaLabel="Retorno desde MAT" onClose={() => setReturnOpen(false)} widthClassName="max-w-7xl">
+        <p className="mb-3 text-sm text-slate-400">Operación con tu sesión PAY0. Selecciona la fuente, revisa la cotización y confirma en el formulario existente.</p>
+        <GlobalLoadingProvider><CanonicalDispersionPage /></GlobalLoadingProvider>
+      </Modal>}
     </MatShell>
   );
 }

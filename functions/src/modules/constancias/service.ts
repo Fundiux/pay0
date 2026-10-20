@@ -100,6 +100,7 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
   const solicitud: any = solicitudSnap.data() || {};
   if (!canAccessSolicitud(user, uid, rootId, solicitud)) throw new HttpsError("permission-denied", "No autorizado.");
+  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
 
   const companyId = clean(solicitud.companyId || solicitud.empresaId, 128);
   const clientId = clean(solicitud.clienteId || solicitud.clientId, 128);
@@ -214,59 +215,65 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   });
 
   const uploadRef = db.collection("uploads").doc(uploadId);
-  await uploadRef.set({
-    rootId,
-    adminId: solicitud.adminId || rootId,
-    clienteId: solicitud.clienteId || solicitud.clientId || null,
-    clienteNombre: clienteNombre || null,
-    companyId: solicitud.companyId || null,
-    empresaNombre: solicitud.empresaNombre || solicitud.companyName || companyName,
-    entityType: "solicitudes",
-    entityId: solicitudId,
-    solicitudId,
-    solicitudFolio: solicitud.folio || null,
-    documentType: "CONSTANCIA_RECEPCION_SATISFACCION",
-    documentTypeLabel: "Constancia de Recepcion y Satisfaccion",
-    originalName: filename,
-    filename,
-    contentType: "application/pdf",
-    sizeBytes: pdf.length,
-    storagePath,
-    sha256: documentSha256,
-    integrityHashAlgorithm: "SHA-256",
-    integritySealStatus: "HASH_SERVER_GENERATED",
-    integritySealVersion: "PAY0-MATERIALIDAD-V1",
-    generatedBySystem: true,
-    generatedByModule: "constancias",
-    constanciaTemplate,
-    constanciaSnapshot: {
-      folio,
-      constanciaKind,
-      signatureUploadId: signatureUpload.id,
-      signatureSha256: (signatureUpload as any).sha256 || null,
-      cotizacionUploadId: cotizacion?.id || null,
-      facturaUploadId: factura?.id || null,
-      receiptLocation: acceptance.receiptLocation,
-      receiptAddress: acceptance.receiptAddress,
-      observations: acceptance.observations,
-      acceptanceVersion: acceptance.acceptanceVersion,
-      acceptanceText: acceptance.acceptanceText,
-      documentSha256,
-      cfdi,
-    },
-    publicVerificationToken,
-    publicVerificationUrl: verificationUrl,
-    status: "PENDING",
-    active: false,
-    version: null,
-    createdBy: uid,
-    createdUsername: username(user, uid),
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+  await db.runTransaction(async (tx) => {
+    const currentSource = await tx.get(solicitudRef);
+    if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+    tx.set(uploadRef, {
+      rootId,
+      adminId: solicitud.adminId || rootId,
+      clienteId: solicitud.clienteId || solicitud.clientId || null,
+      clienteNombre: clienteNombre || null,
+      companyId: solicitud.companyId || null,
+      empresaNombre: solicitud.empresaNombre || solicitud.companyName || companyName,
+      entityType: "solicitudes",
+      entityId: solicitudId,
+      solicitudId,
+      solicitudFolio: solicitud.folio || null,
+      documentType: "CONSTANCIA_RECEPCION_SATISFACCION",
+      documentTypeLabel: "Constancia de Recepcion y Satisfaccion",
+      originalName: filename,
+      filename,
+      contentType: "application/pdf",
+      sizeBytes: pdf.length,
+      storagePath,
+      sha256: documentSha256,
+      integrityHashAlgorithm: "SHA-256",
+      integritySealStatus: "HASH_SERVER_GENERATED",
+      integritySealVersion: "PAY0-MATERIALIDAD-V1",
+      generatedBySystem: true,
+      generatedByModule: "constancias",
+      constanciaTemplate,
+      constanciaSnapshot: {
+        folio,
+        constanciaKind,
+        signatureUploadId: signatureUpload.id,
+        signatureSha256: (signatureUpload as any).sha256 || null,
+        cotizacionUploadId: cotizacion?.id || null,
+        facturaUploadId: factura?.id || null,
+        receiptLocation: acceptance.receiptLocation,
+        receiptAddress: acceptance.receiptAddress,
+        observations: acceptance.observations,
+        acceptanceVersion: acceptance.acceptanceVersion,
+        acceptanceText: acceptance.acceptanceText,
+        documentSha256,
+        cfdi,
+      },
+      publicVerificationToken,
+      publicVerificationUrl: verificationUrl,
+      status: "PENDING",
+      active: false,
+      version: null,
+      createdBy: uid,
+      createdUsername: username(user, uid),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 
   let finalVersion = 1;
   await db.runTransaction(async (tx) => {
+    const currentSource = await tx.get(solicitudRef);
+    if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
     finalVersion = await finalizeSolicitudDocumentVersionTx({
       tx,
       db,
