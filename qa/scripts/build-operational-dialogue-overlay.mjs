@@ -71,7 +71,15 @@ function withoutReceipt(file, text) {
 function preserveReceipt(file, old, next) {
   const base = receiptParts(file, old), current = receiptParts(file, next);
   assert(base.semantic && base.property, 'BASE_RECEIPT_CAPABILITY_REQUIRED');
-  const printed = (node, sf) => printer.printNode(ts.EmitHint.Unspecified, node, sf);
+  // Printer output preserves source line wrapping and trailing commas. Compare AST
+  // structure instead; identifier/literal values and declaration kind remain pinned.
+  const structural = node => {
+    const children = []; ts.forEachChild(node, child => { children.push(structural(child)); });
+    const value = ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? node.text : null;
+    const declarationKind = ts.isVariableDeclarationList(node) ? node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let) : null;
+    return [node.kind, value, declarationKind, Boolean(node.flags & ts.NodeFlags.OptionalChain), children];
+  };
+  const printed = node => JSON.stringify(structural(node));
   if (current.semantic || current.property) {
     assert(current.semantic && current.property, 'PARTIAL_RECEIPT_RECONCILIATION');
     assert.equal(printed(current.semantic, current.sf), printed(base.semantic, base.sf), 'COMMITTED_RECEIPT_DECLARATION_CHANGED');
