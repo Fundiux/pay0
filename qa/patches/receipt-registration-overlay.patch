@@ -1,0 +1,127 @@
+diff --git a/src/modules/pagos/receiptIdentificationDomain.ts b/src/modules/pagos/receiptIdentificationDomain.ts
+index 30a6db8..1e3f80f 100644
+--- a/src/modules/pagos/receiptIdentificationDomain.ts
++++ b/src/modules/pagos/receiptIdentificationDomain.ts
+@@ -53,8 +53,8 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: { na
+ export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {
+   const reasons: string[] = [];
+   if (receipt.identityConflict) reasons.push("CONFLICTING_RFC");
+-  if (receipt.amountVerified !== true) reasons.push("AMOUNT_REQUIRES_REVIEW");
+-  if (receipt.executionConfirmed !== true) reasons.push("EXECUTION_REQUIRES_REVIEW");
++  // Registration precedes reconciliation. OCR confidence and a bank's execution
++  // wording are evidence, not prerequisites for recording a pending payment.
+   if (receipt.dateVerified !== true) reasons.push("DATE_REQUIRES_REVIEW");
+   if (!Number.isFinite(receipt.amount) || Number(receipt.amount) <= 0) reasons.push("INVALID_AMOUNT");
+   const parsedDate = Date.parse(String(receipt.date || ""));
+diff --git a/src/modules/pagos/receiptPdfCallables.ts b/src/modules/pagos/receiptPdfCallables.ts
+index f5da0f5..570f167 100644
+--- a/src/modules/pagos/receiptPdfCallables.ts
++++ b/src/modules/pagos/receiptPdfCallables.ts
+@@ -478,6 +478,9 @@ export async function extractVisionOcrText(buffer: Buffer, contentType: string,
+ }
+ 
+ function extractReceiptAmount(lines: string[], text: string): string {
++  const nonTransferLabel = /\b(?:saldo|comision|iva|cargo por)\b/;
++  const transferLines = lines.filter((line, index) => !nonTransferLabel.test(normalize(line)) &&
++    !(index > 0 && nonTransferLabel.test(normalize(lines[index - 1])) && !/\d/.test(lines[index - 1])));
+   const priorityPatterns: RegExp[] = [
+     /importe\s+total\s+del?\s*deposito[^0-9]*\$?\s*([\d,.]+)/i,
+     /importe\s+total\s+(?:mxp|mxn|m\.n\.)[^0-9]*\$?\s*([\d,.]+)/i,
+@@ -487,7 +490,7 @@ function extractReceiptAmount(lines: string[], text: string): string {
+     /cheques\s+otros\s+bancos[^0-9]*\$?\s*([\d,.]+)/i,
+   ];
+ 
+-  for (const lineRaw of lines) {
++  for (const lineRaw of transferLines) {
+     const line = normalize(lineRaw);
+ 
+     for (const pattern of priorityPatterns) {
+@@ -498,10 +501,16 @@ function extractReceiptAmount(lines: string[], text: string): string {
+     }
+   }
+ 
+-  return firstMatch(text, [
++  const labelled = firstMatch(transferLines.join("\n"), [
+     /(?:importe|monto\s+(?:pagado|transferido|de\s+la\s+operacion)|monto|total)\s*[:$ ]+\s*(?:mxn|mxp|m\.n\.)?\s*\$?\s*([\d,.]+)/i,
+-    /\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/,
+   ]);
++  if (labelled) return labelled;
++  // A balance or bank fee is not the transfer amount. Accept a single monetary
++  // suggestion, never the first of several different amounts.
++  const candidates = transferLines
++    .flatMap(line => [...line.matchAll(/\$\s*(\d[\d,.]*)/g)].map(match => match[1]));
++  const values = [...new Set(candidates.map(parseMoney).filter(value => value > 0))];
++  return values.length === 1 ? candidates.find(value => parseMoney(value) === values[0]) || "" : "";
+ }
+ export function parseReceiptText(textRaw: string): ReceiptData {
+   const text = String(textRaw || "")
+@@ -555,7 +564,7 @@ export function parseReceiptText(textRaw: string): ReceiptData {
+   const destinationBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:destino|receptor|beneficiario)\s*[:\-]\s*(.+)$/i]);
+ 
+   const amountRaw = extractReceiptAmount(lines, text);
+-  // Unlabelled monetary values remain manual suggestions; they never authorize an automatic payment.
++  // Confidence remains evidence; a usable amount does not confirm bank execution.
+   const amountLabel = /^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\b\s*(?:mxn|mxp|m\.n\.)?\s*[:\-]?\s*/;
+   const explicitAmounts = lines.flatMap((line, index) => {
+     const match = normalize(line).match(amountLabel);
+@@ -632,15 +641,13 @@ export function parseReceiptText(textRaw: string): ReceiptData {
+   const account = sourceAccount;
+ 
+   const warnings: string[] = [];
+-  if (!amountVerified) warnings.push("Importe sin etiqueta inequívoca o importes contradictorios; requiere revisión.");
+-  if (!executionConfirmed) warnings.push("Ejecución de la transferencia sin confirmar; requiere revisión.");
+   if (!dateVerified) warnings.push("Formato de fecha ambiguo; requiere revisión.");
+   if (identityConflict) warnings.push("RFC de ordenante o beneficiario ambiguo; requiere revisión.");
+ 
+   if (!senderName) warnings.push("Ordenante/proveedor no detectado.");
+   if (!beneficiaryName) warnings.push("Beneficiario/receptor no detectado.");
+ 
+-  const amount = amountVerified ? explicitAmounts[0] : parseMoney(amountRaw);
++  const amount = explicitAmounts.length > 0 ? (amountVerified ? explicitAmounts[0] : 0) : parseMoney(amountRaw);
+   if (!amount) warnings.push("Monto no detectado.");
+ 
+   const date = validDate ? parsedDate : "";
+@@ -741,7 +748,7 @@ export const parsePagoReceiptPdf = onCall(
+     let semanticReceipt: ReturnType<typeof buildSemanticReceipt>;
+     let cacheHit = false;
+ 
+-    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 2) {
++    if (cached.exists && cached.get("rootId") === rootId && cached.get("readerVersion") === RECEIPT_READER_VERSION && cached.get("processingPolicyVersion") === 3) {
+       receipt = cached.get("receipt") as ReceiptData;
+       semanticReceipt = cached.get("semanticReceipt") as ReturnType<typeof buildSemanticReceipt>;
+       textSource = clean(cached.get("textSource"));
+@@ -795,13 +802,15 @@ export const parsePagoReceiptPdf = onCall(
+     semanticReceipt = buildSemanticReceipt(text, receipt);
+     await db.runTransaction(async tx => {
+     const existing = await tx.get(analysisRef);
+-    if (existing.exists && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
++    if (existing.exists && existing.get("processingPolicyVersion") === 3 && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
++    // Re-read old extraction policy under the same document identity. Merge only
++    // original extraction fields: all actor corrections and versions survive.
+     tx.set(analysisRef, {
+-      schemaVersion: 1, processingPolicyVersion: 2, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
++      schemaVersion: 1, processingPolicyVersion: 3, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
+       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
+       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
+-      createdAt: new Date(), updatedAt: new Date(),
+-    }, { merge: false });
++      ...(!existing.exists ? { createdAt: new Date() } : {}), updatedAt: new Date(),
++    }, { merge: true });
+     });
+     }
+     const latestAnalysis = await analysisRef.get();
+diff --git a/src/modules/pagos/receiptSemantics.ts b/src/modules/pagos/receiptSemantics.ts
+index 2f4330a..e0fc687 100644
+--- a/src/modules/pagos/receiptSemantics.ts
++++ b/src/modules/pagos/receiptSemantics.ts
+@@ -85,8 +85,8 @@ export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): Sema
+   const transaction = identifierEvidence(lines, /^(?:numero de |no\.\s*(?:de )?)(?:transaccion|operacion)\b\s*[:\-]?\s*/);
+   const dateLine = evidenceLine(lines, [/fecha.*(?:operacion|transferencia|pago|ejecucion)/, /^fecha\s*[:\-]/]);
+   const reviewReasons: string[] = [];
+-  if (receipt.amountVerified !== true) reviewReasons.push("AMOUNT_REQUIRES_REVIEW");
+-  if (receipt.executionConfirmed !== true) reviewReasons.push("EXECUTION_REQUIRES_REVIEW");
++  // Preserve per-field extraction confidence without requiring bank execution
++  // confirmation before a receipt can enter the reconciliation workflow.
+   if (receipt.dateVerified !== true) reviewReasons.push("DATE_REQUIRES_REVIEW");
+   if (receipt.identityConflict === true) reviewReasons.push("IDENTITY_CONFLICT");
+ 
