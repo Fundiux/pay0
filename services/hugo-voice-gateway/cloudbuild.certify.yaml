@@ -1,0 +1,18 @@
+# Input context is assembled from verified files only; this never updates Cloud Run.
+timeout: 1200s
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker build --pull -t ${_IMAGE} gateway
+        docker run --rm --network none -v /workspace/gateway-tests:/app/test:ro ${_IMAGE} sh -c 'npm ls --depth=0 && node --test test/*.test.mjs'
+        docker run --rm -v /workspace/qa:/qa ${_IMAGE} npm ci --prefix /qa/runtimes/candidate --ignore-scripts --no-audit --no-fund
+        docker run --rm -v /workspace/qa:/qa ${_IMAGE} sh -ceu 'cmp /qa/runtimes/candidate/package.json /qa/runtimes/history/package.json; cmp /qa/runtimes/candidate/package-lock.json /qa/runtimes/history/package-lock.json; cmp /qa/runtimes/candidate/package.json /qa/runtimes/readers/package.json; cmp /qa/runtimes/candidate/package-lock.json /qa/runtimes/readers/package-lock.json; ln -s ../candidate/node_modules /qa/runtimes/history/node_modules; ln -s ../candidate/node_modules /qa/runtimes/readers/node_modules'
+        docker run -d --name firestore --network cloudbuild gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators gcloud beta emulators firestore start --project=demo-pay0-voice-image --host-port=0.0.0.0:8080 --quiet
+        trap 'docker logs firestore; docker rm -f firestore' EXIT
+        docker run --rm --network cloudbuild ${_IMAGE} node -e 'const net=require("net");let n=0;function check(){const s=net.connect(8080,"firestore");s.on("connect",()=>{s.end();process.exit(0)});s.on("error",()=>{if(++n>120)process.exit(1);setTimeout(check,1000)})}check()'
+        docker run --rm --network cloudbuild -v /workspace/qa:/qa:ro -e GCLOUD_PROJECT=demo-pay0-voice-image -e GOOGLE_CLOUD_PROJECT=demo-pay0-voice-image -e FIRESTORE_EMULATOR_HOST=firestore:8080 -e PAY0_VOICE_RUNTIMES=/qa/runtimes.json -e PAY0_VOICE_GATEWAY_ROOT=/app ${_IMAGE} node --test /qa/integration.cjs
+images:
+  - ${_IMAGE}
