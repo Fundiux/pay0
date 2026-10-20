@@ -15,7 +15,8 @@ test('learning overlays require exact endpoint sets and pinned overlay provenanc
   const identity = { mode: 'PRODUCTION_OVERLAY_V1', baseArchiveSha256: 'b'.repeat(64), patchSha256: 'c'.repeat(64), patchCommit: commit };
   for (const [group, functions] of [
     ['receipt-learning-overlay', ['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']],
-    ['conversation-correction-overlay', ['sendAgent007Message', 'createAgent007MemoryCandidate', 'listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']],
+    ['conversation-memory-review-overlay', ['listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']],
+    ['conversation-memory-create-overlay', ['createAgent007MemoryCandidate']],
   ]) {
     assert.deepEqual(deploymentScope({ group, functions }).names, functions);
     assert.throws(() => deploymentScope({ group, functions: [...functions, 'createPago'] }));
