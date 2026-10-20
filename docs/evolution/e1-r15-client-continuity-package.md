@@ -1,6 +1,6 @@
 # R1.5: cambiar de cliente dentro de un reporte
 
-Estado: **DEPLOYMENT_PENDING**: paquete exacto preparado, pendiente de autorización. El destino es únicamente `sendAgent007Message`; no se publicó ni se cambió gate, UI, IAM o datos productivos. No incorpora D1/D2.
+Estado: **COMPLETED para el recorrido verificado de cambio de cliente, PDF y saludo**. El usuario autorizó la publicación únicamente de `sendAgent007Message`; se conservaron configuración e IAM. No incorpora D1/D2 ni modifica gates, UI o datos productivos. La confirmación funcional no certifica toda expresión en lenguaje natural.
 
 ## Problema y alcance
 
@@ -42,3 +42,13 @@ La entrega selecciona sólo el grupo `hugo-chat-overlay`, con sourceCommit/patch
 El validador de proof y la construcción pura del patch de fuente pasaron con ese input. El preflight debe repetirse al ejecutar y rechazar cambios concurrentes; su resultado no permanece fresco indefinidamente. La autorización de versiones previas no autoriza este update. No necesita una nueva UI ni otro endpoint.
 
 La reversión preserva el ZIP R1.4 desplegado y su configuración/IAM; no elimina conversaciones ni adjuntos. Si R1.5 se publica antes de D1, la composición D1 debe rehacerse sobre R1.5 para conservar este comportamiento; no ejecutar el input D1 basado en R1.4 como si incluyera la corrección nueva.
+
+## Publicación y cierre del recorrido verificado
+
+El usuario autorizó R1.5 y su reversión. El ejecutor finalizó con código 0 y `CONFIGURATION_VERIFIED`, revisión `sendagent007message-00022-nev`. Preservó R1.4 `00021-koz` y su fuente para reversión; no fue necesario revertir.
+
+La verificación independiente del `2026-10-19T23:27:10.960Z` confirmó el ZIP `45e8233d…`, su procedencia desde el input aprobado, la revisión nueva y HTTP 401 / UNAUTHENTICATED para una petición anónima vacía. El ejecutor verificó configuración e IAM conservados. No se consultaron importes ni se ejecutaron operaciones financieras como smoke.
+
+El usuario confirmó después: «Funciona cambio, PDF y saludo». Con esa prueba real quedan verificados el cambio de cliente, la descarga PDF y la salida del reporte al saludar. No se archivaron importes ni archivos del usuario.
+
+Evidencia privada: `release/deployment.jsonl`, `post-publication-verification.json`, `published-source.zip` y `published-baseline.json`. SHA256 de la baseline `c2a4b6cddcb70e65d67f98be8e15d89956822ad00d6261a91b19e71c0cbd3fe8`. Esa captura puede fundamentar el input D1 futuro, pero no autoriza otro despliegue.
