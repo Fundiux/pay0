@@ -53,8 +53,8 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: { na
 export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {
   const reasons: string[] = [];
   if (receipt.identityConflict) reasons.push("CONFLICTING_RFC");
-  if (receipt.amountVerified !== true) reasons.push("AMOUNT_REQUIRES_REVIEW");
-  if (receipt.executionConfirmed !== true) reasons.push("EXECUTION_REQUIRES_REVIEW");
+  // Registration precedes reconciliation. OCR confidence and a bank's execution
+  // wording are evidence, not prerequisites for recording a pending payment.
   if (receipt.dateVerified !== true) reasons.push("DATE_REQUIRES_REVIEW");
   if (!Number.isFinite(receipt.amount) || Number(receipt.amount) <= 0) reasons.push("INVALID_AMOUNT");
   const parsedDate = Date.parse(String(receipt.date || ""));

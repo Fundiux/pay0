@@ -36,13 +36,16 @@ test('field errors expose opaque case and category without document values', () 
   assert.ok(!JSON.stringify(result).includes('SECRET_EXPECTED'));
 });
 
-test('explicit negative execution and missing identity remain review-only after improved extraction', () => {
+test('negative execution remains unconfirmed evidence without blocking document review', () => {
   const text = 'Monto transferido\n100 MXN\nFecha de operación: 2026-10-16\nEstado: Pendiente';
   const receipt = reader.parse(text);
   assert.equal(receipt.amountVerified, true);
   assert.equal(receipt.dateVerified, true);
   assert.equal(receipt.executionConfirmed, false);
-  assert.equal(reader.semantic(text, receipt).reviewRequired, true);
+  const semantic = reader.semantic(text, receipt);
+  assert.equal(semantic.reviewRequired, false);
+  assert.equal(semantic.fields.executionStatus.value, 'UNCONFIRMED');
+  assert.equal(semantic.fields.executionStatus.decision, 'REVIEW');
 });
 
 test('evidence distinguishes detected values from inference and absent fields', () => {
@@ -52,5 +55,6 @@ test('evidence distinguishes detected values from inference and absent fields', 
   assert.equal(semantic.fields.bankName.provenance, 'INFERRED');
   assert.equal(semantic.fields.bankName.decision, 'REVIEW');
   assert.equal(semantic.fields.trackingKey.provenance, 'MISSING');
-  assert.equal(semantic.reviewRequired, true);
+  assert.equal(semantic.reviewRequired, false);
+  assert.equal(semantic.fields.executionStatus.decision, 'REVIEW');
 });

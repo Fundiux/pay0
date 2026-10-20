@@ -62,22 +62,24 @@ async function main() {
   for (const [replace, expected] of [['$1,000', 1000], ['$1.000,50', 1000.5], ['$1,000.50', 1000.5], ['$100', 100]])
     check(parseReceiptText(body.replace('$1,000.50', replace)).amount === expected, 'Thousand and decimal formats retain magnitude');
   for (const [text, reason] of [
-    [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'AMOUNT_REQUIRES_REVIEW'],
-    [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'AMOUNT_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: Pendiente de autorización'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: Programada'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', ''), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: No aplicada'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No efectuada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No completada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No liquidada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: Desconocido', 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('$1,000.50', '$1,00.50'), 'AMOUNT_REQUIRES_REVIEW'],
+    [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'INVALID_AMOUNT'],
+    [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'INVALID_AMOUNT'],
+    [body.replace('$1,000.50', '$1,00.50'), 'INVALID_AMOUNT'],
     [body.replace('2026-09-27', '04/05/2026'), 'DATE_REQUIRES_REVIEW'],
     [body.replace('2026-09-27', '2026-02-31'), 'MISSING_DATE'],
     [body.replace('SPEI MXN', 'SPEI USD MXN'), 'UNSUPPORTED_CURRENCY'],
     [body + '\nRFC ordenante: GHI030303EF3', 'CONFLICTING_RFC'],
   ]) check(receiptRegistrationReasons(parseReceiptText(text), operation).includes(reason), reason);
+  for (const text of [body.replace('Estado: Aplicada', 'Estado: Pendiente de autorización'), body.replace('Estado: Aplicada', 'Estado: Programada'),
+    body.replace('Estado: Aplicada', ''), body.replace('Estado: Aplicada', 'Estado: No aplicada'),
+    ...['No efectuada', 'No completada', 'No liquidada', 'Desconocido'].map(state => body + '\nResultado: ' + state)]) {
+    const receipt = parseReceiptText(text);
+    check(receipt.executionConfirmed === false, 'Unconfirmed execution remains evidence, never forged');
+    check(receiptRegistrationReasons(receipt, operation).length === 0, 'Execution wording does not block registration before reconciliation');
+  }
+  const unlabelled = parseReceiptText(body.replace('Monto: $1,000.50', '$1,000.50'));
+  check(unlabelled.amount === 1000.5 && unlabelled.amountVerified === false, 'Unique unlabelled amount retains low confidence');
+  check(receiptRegistrationReasons(unlabelled, operation).length === 0, 'Low confidence alone does not block a valid pending registration');
   for (const actor of actors) {
     const result = await identify({}, actor);
     check(result.status === 'READY' && result.createPayload.clienteId === clientId && result.createPayload.companyId === companyId, `${actor.role} exact authorized identity`);
@@ -86,8 +88,8 @@ async function main() {
     [{ payerRfc: '', account: '****1234' }, 'CLIENT_INSUFFICIENT_IDENTITY_SIGNALS'],
     [{ senderName: 'Cliente Parecido', payerRfc: 'ABC010101AB1' }, 'CLIENT_IDENTITY_NOT_CORROBORATED'],
     [{ beneficiaryName: 'Empresa Parecida', beneficiaryRfc: '' }, 'COMPANY_INSUFFICIENT_IDENTITY_SIGNALS'],
-    [{ executionConfirmed: false }, 'EXECUTION_REQUIRES_REVIEW'],
   ]) check((await identify(overrides)).reasons.includes(reason), reason);
+  check((await identify({ amountVerified: false, executionConfirmed: false })).status === 'READY', 'Both advisory flags can remain false with exact authorized identities');
   await db.doc(`clients/${clientId}-duplicate`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
   check((await identify()).reasons.includes('CLIENT_MULTIPLE_CANDIDATES'), 'Duplicate catalog identity never auto selects');
   await db.doc(`clients/${clientId}-duplicate`).delete();

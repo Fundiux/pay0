@@ -498,10 +498,16 @@ function extractReceiptAmount(lines: string[], text: string): string {
     }
   }
 
-  return firstMatch(text, [
+  const labelled = firstMatch(text, [
     /(?:importe|monto\s+(?:pagado|transferido|de\s+la\s+operacion)|monto|total)\s*[:$ ]+\s*(?:mxn|mxp|m\.n\.)?\s*\$?\s*([\d,.]+)/i,
-    /\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/,
   ]);
+  if (labelled) return labelled;
+  // A balance or bank fee is not the transfer amount. Accept a single monetary
+  // suggestion, never the first of several different amounts.
+  const candidates = lines.filter(line => !/\b(?:saldo|comision|comisi[oó]n|iva|cargo por)\b/i.test(normalize(line)))
+    .flatMap(line => [...line.matchAll(/\$\s*(\d[\d,.]*)/g)].map(match => match[1]));
+  const values = [...new Set(candidates.map(parseMoney).filter(value => value > 0))];
+  return values.length === 1 ? candidates.find(value => parseMoney(value) === values[0]) || "" : "";
 }
 export function parseReceiptText(textRaw: string): ReceiptData {
   const text = String(textRaw || "")
@@ -555,7 +561,7 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const destinationBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:destino|receptor|beneficiario)\s*[:\-]\s*(.+)$/i]);
 
   const amountRaw = extractReceiptAmount(lines, text);
-  // Unlabelled monetary values remain manual suggestions; they never authorize an automatic payment.
+  // Confidence remains evidence; a usable amount does not confirm bank execution.
   const amountLabel = /^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\b\s*(?:mxn|mxp|m\.n\.)?\s*[:\-]?\s*/;
   const explicitAmounts = lines.flatMap((line, index) => {
     const match = normalize(line).match(amountLabel);
@@ -632,15 +638,13 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   const account = sourceAccount;
 
   const warnings: string[] = [];
-  if (!amountVerified) warnings.push("Importe sin etiqueta inequívoca o importes contradictorios; requiere revisión.");
-  if (!executionConfirmed) warnings.push("Ejecución de la transferencia sin confirmar; requiere revisión.");
   if (!dateVerified) warnings.push("Formato de fecha ambiguo; requiere revisión.");
   if (identityConflict) warnings.push("RFC de ordenante o beneficiario ambiguo; requiere revisión.");
 
   if (!senderName) warnings.push("Ordenante/proveedor no detectado.");
   if (!beneficiaryName) warnings.push("Beneficiario/receptor no detectado.");
 
-  const amount = amountVerified ? explicitAmounts[0] : parseMoney(amountRaw);
+  const amount = explicitAmounts.length > 0 ? (amountVerified ? explicitAmounts[0] : 0) : parseMoney(amountRaw);
   if (!amount) warnings.push("Monto no detectado.");
 
   const date = validDate ? parsedDate : "";
