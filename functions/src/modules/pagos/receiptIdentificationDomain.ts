@@ -58,7 +58,10 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: Iden
   const assessed = assessIdentity(items, signals, options);
   const automatic = matchReceiptIdentity(items, signals, options);
   const candidates = [...assessed].sort((a, b) => Number(b.nameExact) - Number(a.nameExact) || Number(b.rfcExact) - Number(a.rfcExact) || a.item.id.localeCompare(b.item.id)).map(row => row.item);
-  if (!selectedId) return { match: automatic, candidates };
+  if (!selectedId) {
+    const requiresSelection = automatic.status === "EXACT" && !automatic.evidence.some(value => value === "RFC_EXACT" || value === "FULL_ACCOUNT_EXACT");
+    return { match: requiresSelection ? { ...automatic, status: "REQUIRES_REVIEW" as const, reasons: ["SELECTION_REQUIRED"] } : automatic, candidates };
+  }
   const selected = assessed.find(row => row.item.id === selectedId);
   if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
   return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };

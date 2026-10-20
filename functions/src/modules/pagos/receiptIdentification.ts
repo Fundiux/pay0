@@ -80,6 +80,9 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     const operation = await db.doc(`operationTypes/${operationTypeKey}`).get();
     if (!operation.exists || operation.get("active") === false) reasons.push("OPERATION_TYPE_REQUIRES_REVIEW");
   }
+  // Older open tabs automatically create every READY proposal. Name-only
+  // suggestions retain verifiedMatches, but must never expose a create payload
+  // until the caller explicitly selects each identity lacking strong evidence.
   const ready = reasons.length === 0 && !!client && !!company;
   const createPayload = ready ? {
     clienteId: client!.id, companyId: company!.id, despachoId: clean(company!.despachoId),

@@ -90,7 +90,8 @@ async function main() {
   ]) check((await identify(overrides)).reasons.includes(reason), reason);
   check((await identify({ amountVerified: false, executionConfirmed: false })).status === 'READY', 'Both advisory flags can remain false with exact authorized identities');
   const nameOnly = await identify({ payerRfc: '', account: '****1234', beneficiaryRfc: '', destinationAccount: '' });
-  check(nameOnly.status === 'READY', 'Unique exact catalog names identify without RFC or full account');
+  check(nameOnly.status === 'REQUIRES_REVIEW' && !nameOnly.createPayload && nameOnly.reasons.includes('CLIENT_SELECTION_REQUIRED') && nameOnly.reasons.includes('COMPANY_SELECTION_REQUIRED'), 'Old clients cannot automatically create name-only proposals');
+  check(nameOnly.verifiedMatches.client.id === clientId && nameOnly.verifiedMatches.company.id === companyId, 'Name-only suggestions remain visible for explicit selection');
   check(nameOnly.evidence.client.includes('NORMALIZED_NAME_EXACT') && !nameOnly.evidence.client.includes('RFC_EXACT'), 'Name-only evidence never claims RFC equality');
   const unknownNames = { ...parsed, senderName: 'Unknown Ordering Party', beneficiaryName: 'Unknown Beneficiary', payerRfc: '', beneficiaryRfc: '', account: '', destinationAccount: '' };
   const manual = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-catalog`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: companyId });
