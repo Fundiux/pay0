@@ -76,6 +76,8 @@ publicación externa ni su worktree.
 
 ## Límites de las pruebas
 
+La extensión integrada `40bf096` añade notas personales CLIENT sin modificar el texto financiero ni el archivo canónico. Pasaron nueve pruebas de emulador, diez de ámbito, 69 regresiones, quince grupos UI y los builds Functions/Next (47 rutas). La certificación de los artefactos exactos de chat, memoria e interfaz continúa por separado; todavía no se han autorizado ni publicado esas nuevas capacidades.
+
 Los builds de frontend y Functions pasan. Las pruebas en emulador usan datos
 sintéticos, sin proveedores ni operaciones financieras reales. Las pruebas
 de persistencia R1.1 utilizan el validador real de Firestore y un commit
