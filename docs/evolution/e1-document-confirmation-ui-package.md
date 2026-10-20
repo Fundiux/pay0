@@ -1,0 +1,38 @@
+# Confirmación documental: paquete UI independiente
+
+Estado: DEPLOYMENT_PENDING. Artefacto local exacto validado; sin publicación ni autorización implícita. Se requiere preflight fresco antes de cualquier ejecución. El ciclo documental autenticado permanece DEPLOYED_NOT_VERIFIED.
+
+## Cambio y preservación
+
+La confirmación de guardado exige acuse con identificador de corrección, versión anterior más uno, resultado humano del campo solicitado y procedencia HUMAN_CORRECTION. La tarjeta muestra el valor y la versión confirmados por el servidor. «Volver a analizar» verifica por separado que ese valor reaparece con su versión/procedencia; una relectura inconsistente muestra alerta y no afirma que fue verificada. La copia local indica cómo usar el panel de comprobantes de `/hugo`.
+
+Fuente aislada `28924fbb31675a09ac5be35662f28731a163e146`, árbol `6a6d836b5f17334aa0ade1b211af5e17e595b36a`, rama privada `fix/document-confirmation-ui-20261020`. Parte directamente de la UI publicada `3b6602d5b24e52f84f6f867d1048925272c41705`; cambia únicamente `src/components/hugo/HugoReceiptLearning.tsx`, idéntico al componente del commit integrado `65accf31e98992939e8e51e4951377749e547251`. Todas las demás fuentes se conservan, incluidos reportes, correcciones personales, E/G, administración/MAT y backend. No incluye las reparaciones backend posteriores.
+
+## Identidades exactas
+
+- Build canonical PASS `f264d7689711f72b86dfa6ffa6ef8f161e2e2cad8dd4db049ac075be53fca977`.
+- Input `4f6a110df11f7b16d689309721070f27ac8cf43096df860e043db17435f87f2f`.
+- ZIP SSR `39e008804f66f1a01fb580102c898b146a8d55c403f84775cceb32af9f7ec218`, 170 archivos Hosting.
+- Baseline publicada `8ed93cfab18882f367f6aaef24fcc6081fe2a4817e47568db4bf81832562ef01`.
+- ZIP anterior/reversión `9522406cbb25db5651b4d0132eb89be99c468560e4ba872e21a5a34e2bc46a7d`, fuente `3b6602d`.
+- Provenance original `6b52949598a0b778c33d90ceb8e79683336d72d83cd108105a4fdaee96b7405a`, conservada intacta. Su estado PUBLICADO_VERIFICADO_TECNICO_AUTH_PENDING requirió una copia privada con vocabulario FRONTEND_ARTIFACTS_PREPARED para el helper. La copia preserva estado/hash originales y fuente/ZIP/baseline sin cambio; no se modificó el helper ni se sustituyó la evidencia de publicación.
+
+Input privado: `.firebase/modular-release/hosting-28924fbb3167-ee7d414c-7b9c-4b22-a344-a41c779c8d96/input.json`. El primer intento de instalación fue cancelado por instrucción de raíz para serializar I/O, después de verificar la ascendencia propia del único PID detenido. Logs y candidato parcial se conservaron. El segundo build canonical terminó con exit 0; el intento cancelado no se cuenta como PASS.
+
+## Evidencia
+
+Build aislado Next.js 15.5.27 PASS, 47 rutas. Sobre esa copia exacta, componentes/wrappers reales con transporte Firebase sintético: doce casos documentales y quince de correcciones personales. Incluye ACK obsoleto, falta de procedencia humana, pérdida de corrección al reanalizar, recuperación posterior, legacy sin versión, errores y descarte de respuestas tras cambio de identidad. No se atribuye esta simulación al backend productivo.
+
+Runtime nuevo extraído del ZIP exacto. Sólo se copiaron node_modules de un runtime anterior después de comprobar package/lock idénticos; rutas físicas y cierre de módulos se volvieron a validar. El árbol Git Functions y manifiestos de la copia coinciden con la fuente anterior antes de enlazar dependencias exclusivamente para QA.
+
+Verificador SSR canonical bajo Firestore demo aislado: PASS, exit 0 y emulador cerrado. Validó 485 archivos de fuente, rutas físicas, cierre de dependencias, cinco rutas HTTP 200, Chromium en 390/1440, redirección anónima a login y cinco pruebas de componentes. Conserva dos overrides QA acotados por hash: fixture autenticada de ingeniería y prueba documental actual que abre Detalles y verifica edición/historial. No se cambió producto para satisfacer fixtures antiguas.
+
+Recibo canonical `e44d60a9093efe321d79b94d76617c4ff4a6c5f8b3fdde46d439e2c8f4a71cb6`. Recibo ampliado con ambos overrides, preservación de fuente y hashes de QA: `292cf193190ce32ea35a3dafc0b60c56a46153a48cb942d19bfd6a8017ada64e`; assertRuntimeProof PASS. Archivo privado: `runtime-daee88c9-107e-4dd2-af9f-8f7e510a17c5/proof-with-qa-override.json` dentro del directorio de input anterior.
+
+## Dependencias y reversión
+
+No requiere publicar backend nuevo. Reutiliza los dos destinos documentales ya publicados: parsePagoReceiptPdf `00016-qoc` y correctPagoReceiptSemanticField `00005-qej`, ZIP `f88b88d7`. Las respuestas antiguas sin versión permanecen de sólo lectura. No cambia permisos, reglas, almacenamiento, pagos ni solicitudes.
+
+Si se autoriza y publica este paquete, revertir únicamente Hosting/SSR a su ZIP anterior 952… mediante el controlador y recibo propios, preservando configuración/IAM. No revertir los lectores protegidos MEMORY ni borrar correcciones: esta entrega no los modifica y la UI anterior ya es compatible con esos registros. No hay rollback de datos ni activación de reglas/VOZ.
+
+Queda pendiente la publicación específicamente autorizada y la comprobación del usuario con su sesión: analizar, corregir, observar valor/versión confirmados, volver a analizar y comprobar recuperación. No se usaron datos de negocio, proveedores ni operaciones productivas para esta validación.
