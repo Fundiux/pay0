@@ -65,3 +65,19 @@ export function recoveryV1Body(expected, current, revision) {
   assert.match(revision, /^telegramwebhook-[a-z0-9-]+$/, 'RECOVERY_V1_REVISION_SCOPE');
   return {apiVersion:current.apiVersion,kind:current.kind,metadata:{name:current.metadata.name,namespace:current.metadata.namespace,resourceVersion:current.metadata.resourceVersion,labels:current.metadata.labels,annotations:current.metadata.annotations},spec:{...current.spec,traffic:[{revisionName:revision,percent:100}]}};
 }
+
+export function drainProbeV1Body(current, pauseRevision, legacyRevision, tag, enabled) {
+  assert.match(tag, /^drain-[a-f0-9]{12}$/, 'DRAIN_PROBE_TAG_SCOPE');
+  assert.match(pauseRevision, /^telegramwebhook-[a-z0-9-]+$/, 'DRAIN_PROBE_PAUSE_SCOPE');
+  assert.match(legacyRevision, /^telegramwebhook-[a-z0-9-]+$/, 'DRAIN_PROBE_LEGACY_SCOPE');
+  assert.notEqual(pauseRevision,legacyRevision,'DRAIN_PROBE_DISTINCT_REVISION');
+  assert.equal(current.spec?.template?.metadata?.name,pauseRevision,'DRAIN_PROBE_TEMPLATE_CHANGED');
+  const traffic=current.spec?.traffic||[];
+  assert.equal(traffic.length,enabled?1:2,'DRAIN_PROBE_UNEXPECTED_TRAFFIC');
+  const primary=traffic.find(t=>t.percent===100);
+  assert(primary&&primary.latestRevision===true&&!primary.tag&&!primary.revisionName,'DRAIN_PROBE_PRIMARY_MUST_STAY_PAUSED');
+  if(!enabled){const probe=traffic.find(t=>t.tag===tag);assert(probe&&probe.revisionName===legacyRevision&&(probe.percent??0)===0,'DRAIN_PROBE_ROUTE_CHANGED')}
+  const body=recoveryV1Body(current,current,pauseRevision);
+  body.spec.traffic=[{latestRevision:true,percent:100},...(enabled?[{revisionName:legacyRevision,percent:0,tag}]:[])];
+  return body;
+}
