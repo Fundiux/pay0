@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const ts = require("typescript");
 
 const component = fs.readFileSync("src/components/hugo/HugoRealtimeVoice.tsx", "utf8");
 const gateway = fs.readFileSync("services/hugo-voice-gateway/src/server.mjs", "utf8") + fs.readFileSync("services/hugo-voice-gateway/src/gatewayConnection.mjs", "utf8");
@@ -7,7 +8,25 @@ const tools = fs.readFileSync("services/hugo-voice-gateway/src/realtimeTools.mjs
 const history = fs.readFileSync("functions/src/modules/agent007/voiceHistory.ts", "utf8");
 
 assert.match(component, /NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL/);
-assert.match(component, /const idToken = await currentUser\.getIdToken\(\)/);
+// Inspect the real token initializer: the bounded startup must still use the
+// authenticated Firebase user, with its existing no-user guard intact.
+const componentAst = ts.createSourceFile("HugoRealtimeVoice.tsx", component, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let tokenInitializer;
+function visitVoiceContract(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(componentAst) === "idToken") tokenInitializer = node.initializer;
+  ts.forEachChild(node, visitVoiceContract);
+}
+visitVoiceContract(componentAst);
+assert.ok(tokenInitializer && ts.isAwaitExpression(tokenInitializer));
+const tokenCall = tokenInitializer.expression;
+assert.ok(ts.isCallExpression(tokenCall) && tokenCall.expression.getText(componentAst) === "withVoiceStartupAbort");
+assert.equal(tokenCall.arguments.length, 2);
+assert.equal(tokenCall.arguments[1].getText(componentAst), "startup.signal");
+const tokenOperation = tokenCall.arguments[0];
+assert.ok(ts.isArrowFunction(tokenOperation) && tokenOperation.parameters.length === 0 && ts.isCallExpression(tokenOperation.body));
+assert.equal(tokenOperation.body.expression.getText(componentAst), "currentUser.getIdToken");
+assert.equal(tokenOperation.body.arguments.length, 0);
+assert.match(component, /const currentUser = auth\.currentUser;\s*if \(!currentUser\) throw new Error\(/);
 assert.match(component, /new WebSocket\(gatewayUrl!\)/);
 assert.doesNotMatch(component, /createHugoRealtimeSession/);
 assert.doesNotMatch(component, /api\.openai\.com\/v1\/realtime\/calls/);
