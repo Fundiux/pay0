@@ -29,8 +29,9 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'mat-session-overlay': Object.freeze(['verifyTelegramMiniAppSession']),
   'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
   'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
+  'telegram-test-transport-overlay': Object.freeze(['sendMyTelegramTestNotification']),
 });
-const OVERLAY_GROUPS = Object.freeze(['payment-create-safe-recovery-overlay', 'payment-create-overlay', 'receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['payment-create-safe-recovery-overlay', 'payment-create-overlay', 'receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay', 'telegram-test-transport-overlay']);
 export function artifactProbeContract(group) {
   if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
@@ -77,6 +78,13 @@ export function assertArtifactProof(input, proof) {
   assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
   assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
+  if (input.group === 'telegram-test-transport-overlay') {
+    const behavior = proof.behaviorVerification;
+    assert.equal(behavior?.status, 'PASS', 'TELEGRAM_BEHAVIOR_NOT_VERIFIED');
+    assert.equal(behavior.archiveSha256, input.archiveSha256, 'TELEGRAM_ARTIFACT_MISMATCH');
+    for (const key of ['redaction', 'singleAttempt', 'compatibility', 'permissions', 'noFinancialWrites', 'rollbackCompatibility'])
+      assert.equal(behavior[key], true, 'TELEGRAM_BEHAVIOR_INCOMPLETE');
+  }
   const contract = artifactProbeContract(input.group);
   if (contract.kind === 'CALLABLE') assert.equal(proof.unauthenticatedDenied, names.length, 'ARTIFACT_AUTH_NOT_VERIFIED');
   else if (contract.kind === 'SIGNED_SESSION') {
