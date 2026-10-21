@@ -16,7 +16,11 @@ net.Socket.prototype.connect=function(...args){const a=Array.isArray(args[0])?ar
 let mode='success';const sends=[],downloads=[];
 https.request=(url,opts,callback)=>{assert(String(url).startsWith('https://api.telegram.org/bot'+secret+'/sendMessage'));const req=new EventEmitter();let payload='';req.write=b=>payload+=b;req.destroy=()=>{};req.end=()=>{sends.push({kind:'message',payload:JSON.parse(payload)});setImmediate(()=>{if(mode==='network'){req.emit('error',Error('SYNTHETIC_PROVIDER_SECRET'));return}const res=new EventEmitter();res.statusCode=200;res.destroy=()=>{};callback(res);res.emit('data',Buffer.from(JSON.stringify({ok:true,result:{message_id:sends.length}})));res.emit('end')})};return req};
 global.fetch=async(url,options)=>{assert.equal(String(url),'https://api.telegram.org/bot'+secret+'/sendDocument');const form=Object.fromEntries(options.body.entries());sends.push({kind:'document',chatId:form.chat_id});return {ok:true,json:async()=>({ok:true,result:{message_id:sends.length}})}};
-const apis=Object.fromEntries(Object.entries(manifest.runtimes).map(([name,cfg])=>[name,require(path.join(cfg.runtime,JSON.parse(fs.readFileSync(path.join(cfg.runtime,'package.json'))).main)).telegramWebhook]));
+const candidateEntry=path.join(manifest.runtimes.candidate.runtime,'lib/index.js'),entryBytes=fs.readFileSync(candidateEntry),candidateApi=require(candidateEntry).telegramWebhook;
+// The index and re-export remain byte-identical. Load it once to avoid applying
+// process-global SDK defaults three times in this mixed-revision simulation.
+const apis=Object.fromEntries(Object.entries(manifest.runtimes).map(([name,cfg])=>{assert.deepEqual(fs.readFileSync(path.join(cfg.runtime,'lib/index.js')),entryBytes);return [name,require(path.join(cfg.runtime,'lib/modules/telegram/webhook.js')).telegramWebhook]}));
+assert.equal(apis.candidate,candidateApi);
 const admin=dep('firebase-admin'),db=admin.firestore(),checks=[],financial=['pagos','solicitudes','paymentApplications','walletMovements','operationRecoveryJobs'];
 const storage=admin.storage();storage.bucket=()=>({file:name=>{assert.equal(name,'synthetic/root-A/owned.pdf','FOREIGN_STORAGE_READ');return {exists:async()=>[true],download:async()=>{downloads.push(name);return [Buffer.from('%PDF-1.4 synthetic offline fixture')]}}}});
 const update=(id,text='/help',user=987101)=>({update_id:id,message:{message_id:id,chat:{id:user+1000,type:'private'},from:{id:user,is_bot:false,first_name:'Synthetic'},text}});
