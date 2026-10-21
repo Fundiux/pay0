@@ -47,22 +47,28 @@ export async function saveTelegramUpdate(
     : String(update.update_id);
 
   const ref = db.collection("telegramUpdates").doc(updateId);
-  const snap = await ref.get();
-
-  await ref.set(
+  try {
+    await ref.create(
     {
       updateId,
       source: "telegram",
       rawUpdate: update,
       meta,
-      duplicate: snap.exists,
+      duplicate: false,
+      processingState: "CLAIMED",
       receivedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  return { id: updateId, duplicate: snap.exists };
+    }
+    );
+  } catch (error: any) {
+    // An existing receipt also covers an interrupted or uncertain delivery.
+    // Never repeat side effects automatically, including for legacy receipts.
+    if (error?.code === 6 || error?.code === "already-exists") {
+      return { id: updateId, duplicate: true };
+    }
+    throw error;
+  }
+  return { id: updateId, duplicate: false };
 }
 
 export async function markTelegramUpdateHandled(

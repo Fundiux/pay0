@@ -130,11 +130,21 @@ export const telegramWebhook = onRequest(
     try {
       const update = (req.body || {}) as TelegramUpdate;
 
+      if (!Number.isSafeInteger(update.update_id) || Number(update.update_id) < 0) {
+        res.status(400).send("invalid update id");
+        return;
+      }
+
       const saved = await saveTelegramUpdate(update, {
         method: req.method,
         userAgent: String(req.get("user-agent") || ""),
         secretHeader: "ok",
       });
+
+      if (saved.duplicate) {
+        res.status(200).json({ ok: true, duplicate: true });
+        return;
+      }
 
       const ctx = buildTelegramContext(update);
 
