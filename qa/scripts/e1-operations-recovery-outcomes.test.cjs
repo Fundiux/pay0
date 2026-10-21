@@ -3,17 +3,30 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') || !/^demo-pay0-e1-/.test(process.env.GCLOUD_PROJECT || '')) throw Error('Isolated demo emulator required');
-const base = path.resolve(__dirname, '../../functions');
+const workspace = path.resolve(__dirname, '../..');
+const artifact = process.env.PAY0_RECOVERY_ARTIFACT_ROOT;
+const base = artifact ? path.resolve(artifact) : path.join(workspace, 'functions');
+assert.ok(base.startsWith(workspace + path.sep));
 const load = createRequire(path.join(base, 'package.json'));
 const admin = load('firebase-admin');
 admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
-const ts = load('typescript');
 // Only the edited recovery module is transpiled. Its domain, authorization,
 // Firestore and audit dependencies are the existing compiled implementations.
-const source = fs.readFileSync(path.join(base, 'src/modules/controlCenter/recovery.ts'), 'utf8');
-const recovery = {};
-new Function('require', 'exports', ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText)(createRequire(path.join(base, 'lib/modules/controlCenter/recovery.js')), recovery);
+const recovery = artifact ? load('./lib/modules/controlCenter/recovery.js') : {};
+if (!artifact) {
+  const ts = load('typescript');
+  const source = fs.readFileSync(path.join(base, 'src/modules/controlCenter/recovery.ts'), 'utf8');
+  new Function('require', 'exports', ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText)(createRequire(path.join(base, 'lib/modules/controlCenter/recovery.js')), recovery);
+}
+function verifyArtifact() {
+  if (!artifact) return;
+  const crypto = require('node:crypto'), sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const receipt = JSON.parse(fs.readFileSync(path.join(base, '../entry-hashes.json')));
+  assert.equal(sha(fs.readFileSync(receipt.archive)), receipt.archiveSha256);
+  for (const [file, hash] of Object.entries(receipt.entries)) assert.equal(sha(fs.readFileSync(path.join(base, file))), hash, file);
+}
+verifyArtifact();
 const rootId = 'recovery-outcome-root', actorUid = 'recovery-outcome-admin';
 const old = admin.firestore.Timestamp.fromMillis(1);
 async function fixture(id, delta = {}) {
@@ -83,6 +96,15 @@ async function run() {
   assert.equal((await exhausted.get()).get('status'), 'NEEDS_REVIEW');
   assert.equal((await exhausted.get()).get('attempts'), 5);
   assert.equal((await exhausted.get()).get('nextAttemptAt'), undefined);
-  console.log(JSON.stringify({ status: 'PASS', mode: 'SOURCE_TRANSPILED_RECOVERY_REAL_FIRESTORE_REAL_MATERIALITY', cases: 8, financialWrites: 0, externalActions: 0 }));
+  const foreign = await fixture('foreign-source', { rootId: 'another-root' });
+  const foreignSource = (await db.doc('solicitudes/foreign-source').get()).data();
+  await recovery.processRecoveryJobs();
+  assert.equal((await foreign.get()).get('status'), 'PENDING');
+  assert.equal((await foreign.get()).get('lastErrorCode'), 'RECOVERY_SCOPE_DENIED');
+  assert.deepEqual((await db.doc('solicitudes/foreign-source').get()).data(), foreignSource);
+  assert.equal((await db.doc('materialityOperations/foreign-source').get()).exists, false);
+  assert.equal((await audit('foreign-source', 'OPERACION_RECUPERADA')).length, 0);
+  verifyArtifact();
+  console.log(JSON.stringify({ status: 'PASS', mode: artifact ? 'EXACT_ARCHIVE_REAL_FIRESTORE_REAL_MATERIALITY_PRE_POST_ENTRY_HASHES' : 'SOURCE_TRANSPILED_RECOVERY_REAL_FIRESTORE_REAL_MATERIALITY', cases: 9, financialWrites: 0, externalActions: 0 }));
 }
 run().then(() => process.exit(0), error => { console.error(error); process.exit(1); });
