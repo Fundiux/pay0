@@ -1,0 +1,744 @@
+diff --git a/qa/README-authenticated-emulator.md b/qa/README-authenticated-emulator.md
+new file mode 100644
+index 0000000..7836ac8
+--- /dev/null
++++ b/qa/README-authenticated-emulator.md
+@@ -0,0 +1,18 @@
++# QA autenticado local con Firebase Emulator
++
++`npm run qa:ui:authenticated-emulator` ejecuta la certificación local de interfaz sobre `demo-pay0-ui-qa`.
++
++- Reutiliza `scripts/run-firebase-clean-env.mjs`, que serializa emuladores y comprueba sus puertos.
++- Arranca solamente Auth y Firestore en `127.0.0.1`; no se carga configuración de Firebase productiva.
++- Crea tres cuentas efímeras (`superadmin`, `admin`, `operador limitado`) con contraseñas aleatorias que se guardan sólo en `qa/.auth/`, directorio ignorado por Git.
++- Siembra registros sintéticos mínimos y genera sesiones Playwright reutilizables en `qa/.auth/`.
++- Ejecuta pantallas reales de Usuarios, Beneficiarios, Dispersiones, Clientes y Reportes. Los callables de catálogo se interceptan dentro del navegador con respuestas locales para aislar la revisión de interfaz: no son una certificación de Functions.
++- Las capturas de las resoluciones 320, 390, 768 y 1440 se guardan localmente en `test-results/authenticated-emulator/`.
++
++La ejecución falla si el proyecto no es exactamente `demo-pay0-ui-qa` o si Auth/Firestore no apuntan a `127.0.0.1`. No usar este comando contra un proyecto Firebase real.
++
++Cobertura actual: autenticación local, lectura de reglas para superadmin y operador limitado, foco de Modal, `UiSelect` en modales, confirmación de Clientes y `DateScopeBar`. Operaciones mutantes, IQ, bancos, Facturama y datos productivos quedan fuera de alcance.
++
++## Pendiente de producto: SOFÍA — Centro de inteligencia artificial de PAY0
++
++El módulo denominado HUGO podrá evolucionar a SOFÍA. Hugo, María y Sofía deberán conservar identidades diferenciables y admitir conversación individual o unificada. Las reparaciones automáticas deberán asignarse al agente competente y conservar autorización, trazabilidad y confirmaciones cuando correspondan. Esta nota no habilita agentes, escritura autónoma ni cambios de arquitectura.
+diff --git a/qa/playwright/authenticated-emulator-lot1.spec.mjs b/qa/playwright/authenticated-emulator-lot1.spec.mjs
+new file mode 100644
+index 0000000..3b28c93
+--- /dev/null
++++ b/qa/playwright/authenticated-emulator-lot1.spec.mjs
+@@ -0,0 +1,128 @@
++import { test, expect } from "@playwright/test";
++
++const client = { id: "qa-client-001", name: "Cliente sintético QA", razonSocial: "Cliente sintético QA", active: true };
++
++async function stubLocalCallables(page) {
++  await page.route("http://127.0.0.1:5001/**", async (route) => {
++    const operation = new URL(route.request().url()).pathname.split("/").pop();
++    const data = operation === "listClientsCanonical" ? { clients: [client] }
++      : operation === "listClientDispersions" ? { items: [], dispersions: [] }
++      : operation === "listUsersByRole" ? { users: [] }
++      : operation === "listPaymentComplementFollowup" ? {
++        ok: true,
++        rows: [],
++        truncated: false,
++        automation: { iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false },
++      }
++      : operation === "getControlCenterAnalytics" ? {
++        ok: true,
++        from: "2026-01-01",
++        to: "2026-01-31",
++        timezone: "America/Mexico_City",
++        totals: {},
++        previous: {},
++        daily: [],
++        current: {},
++        coverage: { complete: true, source: 0, processed: 0, expensesComplete: true },
++      }
++      : operation === "getControlCenterEvidence" ? {
++        rows: [],
++        incidents: [],
++        facets: [],
++        incidentsTruncated: false,
++        facetsTruncated: false,
++      }
++      : {};
++    await route.fulfill({
++      status: 200,
++      contentType: "application/json",
++      headers: { "access-control-allow-origin": "*" },
++      body: JSON.stringify({ data }),
++    });
++  });
++}
++
++async function screenshot(page, name) {
++  await page.screenshot({ path: `test-results/authenticated-emulator/${name}-${page.viewportSize().width}.png`, fullPage: true });
++}
++
++test.beforeEach(async ({ page }, testInfo) => {
++  console.log(`QA_AUTH_STAGE scenario:start name=${testInfo.title}`);
++  await stubLocalCallables(page);
++});
++
++test.afterEach(async ({}, testInfo) => {
++  console.log(`QA_AUTH_STAGE scenario:done name=${testInfo.title} status=${testInfo.status} durationMs=${testInfo.duration}`);
++});
++
++test("Modal on Usuarios restores focus after Escape", async ({ page }) => {
++  await page.goto("/usuarios", { waitUntil: "domcontentloaded" });
++  const opener = page.getByRole("button", { name: "+ Nuevo usuario" });
++  await expect(opener).toBeVisible();
++  await opener.focus();
++  await opener.click();
++  const dialog = page.getByRole("dialog", { name: "Nuevo usuario" });
++  await expect(dialog).toBeVisible();
++  await expect(dialog).toContainText("Nuevo usuario");
++  await expect(dialog.locator(":focus")).toHaveCount(1);
++  await page.keyboard.press("Escape");
++  await expect(dialog).toBeHidden();
++  await expect(opener).toBeFocused();
++});
++
++test("Beneficiarios use UiSelect inside the real modal", async ({ page }) => {
++  await page.goto("/wallet/beneficiarios", { waitUntil: "domcontentloaded" });
++  const clientSelect = page.getByRole("button", { name: "Selecciona cliente" });
++  await expect(clientSelect).toBeVisible();
++  await clientSelect.click();
++  await page.getByRole("option", { name: "Cliente sintético QA" }).click();
++  const beneficiaryOpener = page.getByRole("button", { name: "+ Beneficiario" });
++  await expect(beneficiaryOpener).toBeEnabled();
++  await beneficiaryOpener.focus();
++  await beneficiaryOpener.click();
++  const beneficiaryDialog = page.getByRole("dialog");
++  await expect(beneficiaryDialog).toBeVisible();
++  await page.keyboard.press("Escape");
++  await expect(beneficiaryOpener).toBeFocused();
++});
++
++test("Dispersiones use UiSelect inside the real modal", async ({ page }) => {
++  await page.goto("/wallet/dispersiones", { waitUntil: "domcontentloaded" });
++  const dispersionClientSelect = page.getByRole("button", { name: "Todos los clientes" });
++  await expect(dispersionClientSelect).toBeVisible();
++  await dispersionClientSelect.click();
++  await page.getByRole("option", { name: "Cliente sintético QA" }).click();
++  const dispersionOpener = page.getByRole("button", { name: "+ Dispersion", exact: true });
++  await expect(dispersionOpener).toBeEnabled();
++  await dispersionOpener.focus();
++  await dispersionOpener.click();
++  await expect(page.getByRole("dialog")).toBeVisible();
++  await page.keyboard.press("Escape");
++  await expect(dispersionOpener).toBeFocused();
++});
++
++test("Clientes no expone Reparar C00 en todos los anchos", async ({ page }) => {
++  for (const width of [320, 390, 768, 1440]) {
++    await page.setViewportSize({ width, height: 900 });
++    await page.goto("/clientes", { waitUntil: "domcontentloaded" });
++    await expect(page.getByRole("button", { name: "Reparar C00" })).toHaveCount(0);
++
++  }
++});
++
++test("DateScopeBar es operable en todos los anchos", async ({ page }) => {
++  for (const width of [320, 390, 768, 1440]) {
++    await page.setViewportSize({ width, height: 900 });
++    await page.goto("/reportes", { waitUntil: "domcontentloaded" });
++    await page.getByRole("button", { name: "MES" }).click();
++    const calendar = page.getByRole("button", { name: "Seleccionar periodo personalizado" });
++    await calendar.click();
++    const calendarDialog = page.getByRole("dialog");
++    await expect(calendarDialog).toBeVisible();
++    await expect(calendarDialog).toHaveAttribute("aria-modal", "false");
++    await expect(page.getByRole("button", { name: /Mes anterior/ })).toBeFocused();
++    await page.keyboard.press("Escape");
++    await expect(calendar).toBeFocused();
++    await screenshot(page, "reportes-datescope");
++  }
++});
+diff --git a/qa/playwright/authenticated-emulator.auth.setup.spec.mjs b/qa/playwright/authenticated-emulator.auth.setup.spec.mjs
+new file mode 100644
+index 0000000..0e24cef
+--- /dev/null
++++ b/qa/playwright/authenticated-emulator.auth.setup.spec.mjs
+@@ -0,0 +1,51 @@
++import { test as setup, expect } from "@playwright/test";
++import { readFile, mkdir } from "node:fs/promises";
++
++const fixturePath = "qa/.auth/emulator-fixtures.json";
++
++async function loginAndSave(page, account, password, destination) {
++  const startedAt = Date.now();
++  console.log(`QA_AUTH_STAGE session:start role=${account.key}`);
++  const diagnostics = [];
++  page.on("console", (message) => {
++    if (message.type() === "error" || message.type() === "warning") diagnostics.push(`${message.type()}: ${message.text()}`);
++  });
++  page.on("pageerror", (error) => diagnostics.push(`pageerror: ${error.message}`));
++  page.on("requestfailed", (request) => diagnostics.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ""}`));
++  page.on("response", (response) => {
++    if (response.url().includes(":9099/")) diagnostics.push(`auth-response: ${response.status()} ${response.url()}`);
++  });
++  await page.route("http://127.0.0.1:5001/**", (route) => route.fulfill({
++    status: 200,
++    contentType: "application/json",
++    headers: { "access-control-allow-origin": "*" },
++    body: JSON.stringify({ data: { ok: true } }),
++  }));
++  await page.goto("/login", { waitUntil: "domcontentloaded" });
++  // Next development mode serves the client login bundle after the document.
++  // Wait for hydration before submitting so the React handler is attached.
++  await page.waitForTimeout(2_000);
++  await page.locator("#login-identifier").fill(account.email);
++  await page.locator("input[type=password]").fill(password);
++  await page.getByRole("button", { name: "Entrar al sistema" }).click();
++  console.log(`QA_AUTH_STAGE session:submitted role=${account.key}`);
++  await page.waitForTimeout(10_000);
++  if (page.url().includes("/login")) {
++    throw new Error(`Emulator login did not navigate: ${await page.locator("main").innerText()} | ${diagnostics.join(" | ")}`);
++  }
++  await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 30_000 });
++  await expect(page.locator("body")).toBeVisible();
++  await page.context().storageState({ path: destination, indexedDB: true });
++  console.log(`QA_AUTH_STAGE session:done role=${account.key} durationMs=${Date.now() - startedAt}`);
++}
++
++setup("creates reusable authenticated emulator sessions for three roles", async ({ browser }) => {
++  const fixtures = JSON.parse(await readFile(fixturePath, "utf8"));
++  await mkdir("qa/.auth", { recursive: true });
++  for (const account of fixtures.accounts) {
++    const context = await browser.newContext();
++    const page = await context.newPage();
++    await loginAndSave(page, account, fixtures.password, `qa/.auth/emulator-${account.key}.json`);
++    await context.close();
++  }
++});
+diff --git a/qa/playwright/authenticated-emulator.config.mjs b/qa/playwright/authenticated-emulator.config.mjs
+new file mode 100644
+index 0000000..dfd0e22
+--- /dev/null
++++ b/qa/playwright/authenticated-emulator.config.mjs
+@@ -0,0 +1,43 @@
++import { defineConfig } from "@playwright/test";
++
++const projectId = "demo-pay0-ui-qa";
++const emulatorEnv = {
++  NEXT_PUBLIC_USE_EMULATORS: "true",
++  NEXT_PUBLIC_FIREBASE_EMULATOR_HOST: "127.0.0.1",
++  NEXT_PUBLIC_FIREBASE_API_KEY: "qa-emulator-only",
++  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "127.0.0.1",
++  NEXT_PUBLIC_FIREBASE_PROJECT_ID: projectId,
++  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${projectId}.appspot.com`,
++  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000",
++  NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:qa-emulator",
++};
++
++export default defineConfig({
++  testDir: ".",
++  testMatch: "authenticated-emulator-*.spec.mjs",
++  timeout: 60_000,
++  expect: { timeout: 12_000 },
++  fullyParallel: false,
++  retries: 0,
++  reporter: [["list"], ["html", { outputFolder: "test-results/authenticated-emulator-html", open: "never" }]],
++  globalSetup: "./authenticated-emulator.global-setup.mjs",
++  use: {
++    baseURL: "http://127.0.0.1:3100",
++    browserName: "chromium",
++    headless: true,
++    trace: "retain-on-failure",
++    screenshot: "only-on-failure",
++    video: "retain-on-failure",
++  },
++  projects: [
++    { name: "setup", testMatch: "authenticated-emulator.auth.setup.spec.mjs" },
++    { name: "chromium", dependencies: ["setup"], testMatch: "authenticated-emulator-lot1.spec.mjs", use: { storageState: "qa/.auth/emulator-superadmin.json" } },
++  ],
++  webServer: {
++    command: "npm run dev -- --port 3100",
++    url: "http://127.0.0.1:3100",
++    reuseExistingServer: false,
++    timeout: 120_000,
++    env: emulatorEnv,
++  },
++});
+diff --git a/qa/playwright/authenticated-emulator.global-setup.mjs b/qa/playwright/authenticated-emulator.global-setup.mjs
+new file mode 100644
+index 0000000..1b25856
+--- /dev/null
++++ b/qa/playwright/authenticated-emulator.global-setup.mjs
+@@ -0,0 +1,73 @@
++import { randomBytes } from "node:crypto";
++import { mkdir, writeFile } from "node:fs/promises";
++import { dirname, resolve } from "node:path";
++import { initializeApp, getApps } from "firebase-admin/app";
++import { getAuth } from "firebase-admin/auth";
++import { getFirestore } from "firebase-admin/firestore";
++
++const projectId = "demo-pay0-ui-qa";
++const fixturePath = resolve("qa/.auth/emulator-fixtures.json");
++
++function requireLocal(value, name) {
++  if (!/^127\.0\.0\.1:\d+$/.test(value || "")) {
++    throw new Error(`${name} must point to a local emulator.`);
++  }
++}
++
++export default async function globalSetup() {
++  const startedAt = Date.now();
++  console.log("QA_AUTH_STAGE global-setup:start");
++  if (process.env.GCLOUD_PROJECT !== projectId) {
++    throw new Error(`Authenticated QA requires ${projectId}.`);
++  }
++  requireLocal(process.env.FIREBASE_AUTH_EMULATOR_HOST, "FIREBASE_AUTH_EMULATOR_HOST");
++  requireLocal(process.env.FIRESTORE_EMULATOR_HOST, "FIRESTORE_EMULATOR_HOST");
++
++  const app = getApps()[0] || initializeApp({ projectId });
++  const auth = getAuth(app);
++  const db = getFirestore(app);
++  const password = `Qa-${randomBytes(18).toString("base64url")}!`;
++  const accounts = [
++    { key: "superadmin", uid: "qa-superadmin", email: "superadmin@pay0-qa.local", role: "superadmin", rootId: "qa-superadmin" },
++    { key: "admin", uid: "qa-admin", email: "admin@pay0-qa.local", role: "admin", rootId: "qa-superadmin" },
++    { key: "limited", uid: "qa-limited", email: "limited@pay0-qa.local", role: "operador", rootId: "qa-superadmin", modules: { usuarios: { view: false } } },
++  ];
++
++  for (const account of accounts) {
++    console.log(`QA_AUTH_STAGE seed-user:start role=${account.key}`);
++    await auth.createUser({ uid: account.uid, email: account.email, password, displayName: `QA ${account.key}` });
++    await db.doc(`users/${account.uid}`).set({
++      rootId: account.rootId,
++      role: account.role,
++      active: true,
++      isActive: true,
++      displayName: `QA ${account.key}`,
++      name: `QA ${account.key}`,
++      email: account.email,
++      ...(account.modules ? { modules: account.modules } : {}),
++    });
++    console.log(`QA_AUTH_STAGE seed-user:done role=${account.key}`);
++  }
++
++  const now = new Date();
++  await db.doc("clients/qa-client-001").set({
++    rootId: "qa-superadmin", adminId: "qa-admin", createdBy: "qa-superadmin", active: true,
++    name: "Cliente sintético QA", razonSocial: "Cliente sintético QA", rfc: "XAXX010101000", createdAt: now,
++  });
++  await db.doc("clientBeneficiaries/qa-beneficiary-001").set({
++    rootId: "qa-superadmin", clientId: "qa-client-001", adminId: "qa-admin", createdBy: "qa-superadmin",
++    nombre: "Beneficiario sintético QA", active: true, createdAt: now,
++  });
++  await db.doc("clientBeneficiaryMethods/qa-method-001").set({
++    rootId: "qa-superadmin", clientId: "qa-client-001", beneficiaryId: "qa-beneficiary-001", adminId: "qa-admin",
++    tipo: "DEBITO", destinationKind: "CLABE", bankCode: "002", bankName: "Banco QA", clabe: "002010077777777777",
++    last4: "7777", masked: "••••7777", active: true, createdAt: now,
++  });
++  await db.doc("solicitudes/qa-solicitud-001").set({ rootId: "qa-superadmin", adminId: "qa-admin", createdBy: "qa-superadmin", clientId: "qa-client-001", status: "PENDIENTE", createdAt: now });
++  await db.doc("pagos/qa-pago-001").set({ rootId: "qa-superadmin", adminId: "qa-admin", createdBy: "qa-superadmin", clientId: "qa-client-001", status: "PENDIENTE", createdAt: now });
++  await db.doc("clientDispersions/qa-dispersion-001").set({ rootId: "qa-superadmin", adminId: "qa-admin", createdBy: "qa-superadmin", clientId: "qa-client-001", status: "BORRADOR", createdAt: now });
++
++  await mkdir(dirname(fixturePath), { recursive: true });
++  await writeFile(fixturePath, JSON.stringify({ projectId, password, accounts }, null, 2), { mode: 0o600 });
++  console.log(`QA_AUTH_STAGE global-setup:done durationMs=${Date.now() - startedAt}`);
++}
+diff --git a/qa/scripts/authenticated-emulator-rules.cjs b/qa/scripts/authenticated-emulator-rules.cjs
+new file mode 100644
+index 0000000..e08bfde
+--- /dev/null
++++ b/qa/scripts/authenticated-emulator-rules.cjs
+@@ -0,0 +1,24 @@
++const assert = require("node:assert/strict");
++const fs = require("node:fs");
++const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@firebase/rules-unit-testing");
++const { doc, getDoc } = require("firebase/firestore");
++
++const projectId = "demo-pay0-ui-qa";
++if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || "") || !/^127\.0\.0\.1:\d+$/.test(process.env.FIREBASE_AUTH_EMULATOR_HOST || "")) {
++  throw new Error("Authenticated emulator rules require only local demo emulators.");
++}
++
++(async () => {
++  const env = await initializeTestEnvironment({ projectId, firestore: { rules: fs.readFileSync("firestore.rules", "utf8") } });
++  try {
++    const superadmin = env.authenticatedContext("qa-superadmin").firestore();
++    const limited = env.authenticatedContext("qa-limited").firestore();
++    await assertSucceeds(getDoc(doc(superadmin, "users", "qa-superadmin")));
++    await assertSucceeds(getDoc(doc(superadmin, "clients", "qa-client-001")));
++    await assertFails(getDoc(doc(limited, "users", "qa-admin")));
++    await assertFails(getDoc(doc(limited, "users", "qa-superadmin")));
++    console.log(JSON.stringify({ ok: true, suite: "authenticated-emulator-rules", productionCalls: 0 }));
++  } finally {
++    await env.cleanup();
++  }
++})().catch((error) => { console.error(error); process.exitCode = 1; });
+diff --git a/qa/scripts/client-confirmations-browser.test.cjs b/qa/scripts/client-confirmations-browser.test.cjs
+new file mode 100644
+index 0000000..1c03dde
+--- /dev/null
++++ b/qa/scripts/client-confirmations-browser.test.cjs
+@@ -0,0 +1,74 @@
++// Real Clientes page and Modal in Chromium with callable mocks; no Firebase or network.
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const ts = require('typescript');
++const { chromium, expect } = require('@playwright/test');
++
++const transpile = file => ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: {
++  module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React,
++  target: ts.ScriptTarget.ES2020, esModuleInterop: true,
++} }).outputText;
++
++async function run() {
++  const pageCode = transpile('src/app/clientes/page.tsx');
++  const modalCode = transpile('src/components/Modal.tsx');
++  const browser = await chromium.launch({ headless: true });
++  try {
++    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
++    const errors = [];
++    page.on('pageerror', error => errors.push(error.message));
++    await page.route('**/*', route => route.abort());
++    await page.setContent('<button id="outside">Fuera</button><div id="root"></div>');
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react')), 'umd/react.development.js') });
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react-dom')), 'umd/react-dom.development.js') });
++    await page.evaluate(({ pageCode, modalCode }) => {
++      const icon = () => React.createElement('svg');
++      const modalExports = {};
++      new Function('require', 'exports', modalCode)(name => {
++        if (name === 'react') return React;
++        if (name === 'lucide-react') return { X: icon };
++        throw new Error(`Unexpected Modal dependency: ${name}`);
++      }, modalExports);
++      const serviceMocks = {
++        saveClientMutation: async () => ({}), syncIqClientMutation: async () => ({}), toggleClientActiveMutation: async () => ({}),
++      };
++      const pageExports = {};
++      new Function('require', 'exports', pageCode)(name => {
++        if (name === 'react') return React;
++        if (name === 'next/link') return { __esModule: true, default: props => React.createElement('a', props) };
++        if (name === '@/components/Modal') return { __esModule: true, default: modalExports.default };
++        if (name === '@/lib/auth') return { useAuth: () => ({ user: { uid: 'qa-admin' } }) };
++        if (name === '@/lib/useUserProfile') return { useUserProfile: () => ({ profile: { role: 'ADMIN', modules: { clientes: { view: true, create: true, edit: true, costs: true } } }, loading: false }) };
++        if (name === '@/lib/roles') return {
++          normalizeRole: value => String(value || '').toUpperCase(), isSuperAdmin: () => false,
++          isAdmin: value => value === 'ADMIN', isOperador: () => false,
++          mergeModules: () => ({ clientes: { view: true, create: true, edit: true, costs: true } }),
++        };
++        if (name === 'lucide-react') return new Proxy({}, { get: () => icon });
++        if (name === '@/services/clientMutations') return serviceMocks;
++        if (name === '@/services/clients') return { listScopedClients: () => () => {} };
++        if (name === '@/services/clientCsf') return { finalizeClientCsfIntake: async () => ({}), parseClientCsfFile: async () => ({}) };
++        if (name === '@/lib/uploadEntityDocument') return { uploadEntityDocument: async () => ({}) };
++        if (name === '@/services/telegram') return {
++          createClientTelegramLinkToken: async () => ({}), getClientTelegramLinkStatus: async () => ({}), unlinkClientTelegramAccount: async () => ({}),
++        };
++        throw new Error(`Unexpected Clientes dependency: ${name}`);
++      }, pageExports);
++      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(pageExports.default));
++    }, { pageCode, modalCode });
++
++    for (const width of [320, 390, 768, 1440]) {
++      await page.setViewportSize({ width, height: 900 });
++      await expect(page.getByRole('button', { name: 'Reparar C00' })).toHaveCount(0);
++    }
++
++    assert.deepEqual(errors, []);
++    console.log(JSON.stringify({ ok: true, component: 'Clientes', repairControlRemoved: true,
++      viewports: [320, 390, 768, 1440] }));
++  } finally {
++    await browser.close();
++  }
++}
++
++run().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/qa/scripts/datescopebar-accessibility-browser.test.cjs b/qa/scripts/datescopebar-accessibility-browser.test.cjs
+new file mode 100644
+index 0000000..8353b9f
+--- /dev/null
++++ b/qa/scripts/datescopebar-accessibility-browser.test.cjs
+@@ -0,0 +1,109 @@
++// Real DateScopeBar component in Chromium; synthetic callbacks, no Firebase or network.
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const ts = require('typescript');
++const { chromium, expect } = require('@playwright/test');
++
++async function run() {
++  const source = fs.readFileSync('src/components/DateScopeBar.tsx', 'utf8');
++  const code = ts.transpileModule(source, { compilerOptions: {
++    module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React,
++    target: ts.ScriptTarget.ES2020, esModuleInterop: true,
++  } }).outputText;
++  const browser = await chromium.launch({ headless: true });
++  try {
++    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
++    const errors = [];
++    page.on('pageerror', error => errors.push(error.message));
++    await page.route('**/*', route => route.abort());
++    await page.setContent('<button id="outside">Fuera</button><div id="root"></div>');
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react')), 'umd/react.development.js') });
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react-dom')), 'umd/react-dom.development.js') });
++    await page.evaluate(code => {
++      const dateScope = {
++        formatMonthSpanish: date => [
++          'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
++          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
++        ][date.getMonth()],
++        getScopeLabel: (mode, baseDate, range) => {
++          if (mode === 'custom' && range?.start && range?.end) return 'personalizado';
++          return `${baseDate.getDate()}/${baseDate.getMonth() + 1}/${baseDate.getFullYear()}`;
++        },
++      };
++      const exports = {};
++      new Function('require', 'exports', code)(name => {
++        if (name === 'react') return React;
++        if (name === 'lucide-react') return { CalendarDays: () => React.createElement('svg') };
++        if (name === '@/lib/dateScope') return dateScope;
++        throw new Error(`Unexpected dependency: ${name}`);
++      }, exports);
++      const root = ReactDOM.createRoot(document.getElementById('root'));
++      function Harness() {
++        const [mode, setMode] = React.useState('day');
++        const [range, setRange] = React.useState({});
++        const [baseDate, setBaseDate] = React.useState(new Date(2026, 0, 15));
++        window.dateScopeState = { mode, range, baseDate: baseDate.toISOString() };
++        return React.createElement(exports.default, {
++          mode,
++          baseDate,
++          customRange: range,
++          onModeChange: setMode,
++          onNavigate: direction => setBaseDate(previous => new Date(previous.getFullYear(), previous.getMonth(), previous.getDate() + direction)),
++          onCustomRangeChange: setRange,
++        });
++      }
++      root.render(React.createElement(Harness));
++    }, code);
++
++    const trigger = page.getByRole('button', { name: 'Seleccionar periodo personalizado' });
++    await trigger.focus();
++    await page.keyboard.press('Enter');
++    const dialog = page.getByRole('dialog', { name: 'Enero 2026' });
++    await expect(dialog).toBeVisible();
++    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
++    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Mes anterior');
++    await page.keyboard.press('Escape');
++    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
++    await expect(trigger).toBeFocused();
++
++    await trigger.click();
++    await page.getByRole('button', { name: 'Cancelar' }).click();
++    await expect(trigger).toBeFocused();
++    assert.deepEqual(await page.evaluate(() => window.dateScopeState.range), {});
++
++    await trigger.click();
++    await page.getByRole('button', { name: /20 de enero de 2026/i }).click();
++    await expect(dialog).toBeVisible();
++    await page.getByRole('button', { name: /22 de enero de 2026/i }).click();
++    await expect(dialog).toHaveCount(0);
++    await expect(trigger).toBeFocused();
++    assert.deepEqual(await page.evaluate(() => ({
++      mode: window.dateScopeState.mode,
++      start: new Date(window.dateScopeState.range.start).getDate(),
++      end: new Date(window.dateScopeState.range.end).getDate(),
++    })), { mode: 'custom', start: 20, end: 22 });
++
++    await trigger.click();
++    await page.locator('#outside').click();
++    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
++    await expect(page.locator('#outside')).toBeFocused();
++
++    for (const width of [320, 390, 768, 1440]) {
++      await page.setViewportSize({ width, height: 900 });
++      await trigger.click();
++      await expect(page.getByRole('dialog')).toBeVisible();
++      await page.keyboard.press('Escape');
++      await expect(trigger).toBeFocused();
++    }
++
++    assert.deepEqual(errors, []);
++    console.log(JSON.stringify({ ok: true, component: 'DateScopeBar', keyboardOpen: true,
++      escape: true, cancel: true, applyRange: true, focusRestore: true,
++      outsideClose: true, viewports: [320, 390, 768, 1440] }));
++  } finally {
++    await browser.close();
++  }
++}
++
++run().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/qa/scripts/uiselect-accessibility-browser.test.cjs b/qa/scripts/uiselect-accessibility-browser.test.cjs
+new file mode 100644
+index 0000000..bd3a92c
+--- /dev/null
++++ b/qa/scripts/uiselect-accessibility-browser.test.cjs
+@@ -0,0 +1,170 @@
++// Real UiSelect and Modal components in Chromium; synthetic state only, no Firebase or network.
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const ts = require('typescript');
++const { chromium, expect } = require('@playwright/test');
++
++const transpile = source => ts.transpileModule(source, { compilerOptions: {
++  module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React,
++  target: ts.ScriptTarget.ES2020, esModuleInterop: true,
++} }).outputText;
++
++async function run() {
++  const uiSelectCode = transpile(fs.readFileSync('src/components/UiSelect.tsx', 'utf8'));
++  const modalCode = transpile(`import * as React from "react";\n${fs.readFileSync('src/components/Modal.tsx', 'utf8')}`);
++  const browser = await chromium.launch({ headless: true });
++  try {
++    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
++    const errors = [];
++    page.on('pageerror', error => errors.push(error.message));
++    page.on('console', message => {
++      if (message.type() === 'error') errors.push(message.text());
++    });
++    await page.route('**/*', route => route.abort());
++    await page.setContent('<button id="outside">Abrir modal</button><div id="root"></div>');
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react')), 'umd/react.development.js') });
++    await page.addScriptTag({ path: path.join(path.dirname(require.resolve('react-dom')), 'umd/react-dom.development.js') });
++    await page.evaluate(({ uiSelectCode, modalCode }) => {
++      const load = (code, dependencies) => {
++        const exports = {};
++        new Function('require', 'exports', code)(name => {
++          if (name === 'react') return React;
++          if (name === 'lucide-react') return {
++            ChevronDown: () => React.createElement('svg'),
++            X: () => React.createElement('svg'),
++          };
++          if (name === '@/components/Modal') return dependencies.modal;
++          if (name === '@/components/UiSelect') return dependencies.uiSelect;
++          return { X: () => null };
++        }, exports);
++        return exports.default;
++      };
++      const Modal = load(modalCode, {});
++      const UiSelect = load(uiSelectCode, { modal: Modal });
++      const root = ReactDOM.createRoot(document.getElementById('root'));
++      const choices = [
++        { value: 'uno', label: 'Uno' },
++        { value: 'bloqueado', label: 'Bloqueado', disabled: true },
++        { value: 'dos', label: 'Dos' },
++        { value: 'tres', label: 'Tres' },
++      ];
++      const longChoices = Array.from({ length: 30 }, (_, index) => ({ value: `item-${index}`, label: `Elemento ${index}` }));
++      function Harness() {
++        const [standaloneValue, setStandaloneValue] = React.useState('uno');
++        const [scrollValue, setScrollValue] = React.useState('item-0');
++        const [modalOpen, setModalOpen] = React.useState(false);
++        const [busyOpen, setBusyOpen] = React.useState(false);
++        const [modalValue, setModalValue] = React.useState('uno');
++        const [formValue, setFormValue] = React.useState('conservado');
++        window.uiSelectState = { standaloneValue, scrollValue, modalValue, formValue, modalOpen, busyOpen };
++        return React.createElement(React.Fragment, null,
++          React.createElement('div', { id: 'standalone' }, React.createElement(UiSelect, {
++            value: standaloneValue, onChange: setStandaloneValue, options: choices,
++          })),
++          React.createElement('div', { id: 'scroll-select' }, React.createElement(UiSelect, {
++            value: scrollValue, onChange: setScrollValue, options: longChoices,
++          })),
++          React.createElement('button', { id: 'open-modal', onClick: () => setModalOpen(true) }, 'Abrir formulario'),
++          React.createElement('button', { id: 'open-busy-modal', onClick: () => setBusyOpen(true) }, 'Abrir formulario ocupado'),
++          React.createElement(Modal, { open: modalOpen, title: 'Formulario de prueba', onClose: () => setModalOpen(false) },
++            React.createElement('input', { id: 'form-value', value: formValue, onChange: event => setFormValue(event.target.value), 'aria-label': 'Campo del formulario' }),
++            React.createElement('div', { id: 'modal-select' }, React.createElement(UiSelect, {
++              value: modalValue, onChange: setModalValue, options: choices,
++            }))),
++          React.createElement(Modal, {
++            open: busyOpen, title: 'Formulario ocupado', onClose: () => setBusyOpen(false),
++            closeOnEscape: false, closeOnBackdrop: false, closeButtonDisabled: true,
++          },
++          React.createElement('div', { id: 'busy-select' }, React.createElement(UiSelect, {
++            value: modalValue, onChange: setModalValue, options: choices,
++          })),
++          React.createElement('button', { id: 'finish-busy', onClick: () => setBusyOpen(false) }, 'Finalizar prueba')),
++        );
++      }
++      root.render(React.createElement(Harness));
++    }, { uiSelectCode, modalCode });
++
++    const standalone = page.locator('#standalone > div > button');
++    await standalone.focus();
++    await page.keyboard.press('ArrowDown');
++    await expect(standalone).toHaveAccessibleName('Dos');
++    await expect(standalone).toHaveAttribute('aria-expanded', 'true');
++    const standaloneListbox = page.locator('#standalone [role=listbox]');
++    await expect(standaloneListbox).toHaveAttribute('aria-labelledby', await standalone.getAttribute('id'));
++    await expect(standalone).toHaveAttribute('aria-controls', await standaloneListbox.getAttribute('id'));
++    await expect(standaloneListbox.getByRole('option', { name: 'Bloqueado' })).toHaveAttribute('aria-disabled', 'true');
++    await page.keyboard.press('Escape');
++    await expect(standaloneListbox).toHaveCount(0);
++    await expect(standalone).toBeFocused();
++    assert.equal(await page.evaluate(() => window.uiSelectState.standaloneValue), 'dos');
++
++    await standalone.press('Enter');
++    await expect(standaloneListbox).toBeVisible();
++    await standalone.press('Tab');
++    await expect(standaloneListbox.getByRole('button', { name: 'Uno' })).toBeFocused();
++    await page.keyboard.press('Shift+Tab');
++    await expect(standalone).toBeFocused();
++    await standalone.press('Escape');
++    await standalone.click();
++    await standaloneListbox.getByRole('button', { name: 'Tres' }).click();
++    await expect(standalone).toHaveAccessibleName('Tres');
++
++    const scrollTrigger = page.locator('#scroll-select > div > button');
++    await scrollTrigger.click();
++    const scrollListbox = page.locator('#scroll-select [role=listbox]');
++    await scrollListbox.evaluate(element => {
++      element.style.maxHeight = '80px';
++      element.style.overflowY = 'auto';
++      element.scrollTop = 120;
++    });
++    assert.ok(await scrollListbox.evaluate(element => element.scrollTop > 0), 'menu scrolls');
++    await page.keyboard.press('Escape');
++    await expect(scrollTrigger).toBeFocused();
++
++    await page.locator('#outside').focus();
++    await page.locator('#open-modal').click();
++    const modal = page.getByRole('dialog', { name: 'Formulario de prueba' });
++    await expect(modal).toBeVisible();
++    const modalSelect = page.locator('#modal-select > div > button');
++    await modalSelect.click();
++    await page.keyboard.press('ArrowDown');
++    await page.keyboard.press('Escape');
++    await expect(page.locator('#modal-select [role=listbox]')).toHaveCount(0);
++    await expect(modal).toBeVisible();
++    await expect(modalSelect).toBeFocused();
++    assert.deepEqual(await page.evaluate(() => ({ value: window.uiSelectState.modalValue, field: window.uiSelectState.formValue })), { value: 'dos', field: 'conservado' });
++    await page.keyboard.press('Escape');
++    await expect(modal).toHaveCount(0);
++    await expect(page.locator('#open-modal')).toBeFocused();
++
++    await page.locator('#open-busy-modal').click();
++    const busyModal = page.getByRole('dialog', { name: 'Formulario ocupado' });
++    await expect(busyModal).toBeVisible();
++    const busySelect = page.locator('#busy-select > div > button');
++    await busySelect.click();
++    await page.keyboard.press('Escape');
++    await expect(page.locator('#busy-select [role=listbox]')).toHaveCount(0);
++    await expect(busyModal).toBeVisible();
++    await page.keyboard.press('Escape');
++    await expect(busyModal).toBeVisible();
++    await page.locator('#finish-busy').click();
++
++    for (const width of [320, 390, 768, 1440]) {
++      await page.setViewportSize({ width, height: 900 });
++      await standalone.click();
++      await expect(standaloneListbox).toBeVisible();
++      await page.keyboard.press('Escape');
++      await expect(standalone).toBeFocused();
++    }
++
++    assert.deepEqual(errors, []);
++    console.log(JSON.stringify({ ok: true, component: 'UiSelect', escape: true, modalIsolation: true,
++      selectionPreserved: true, busyModal: true, mouseAndKeyboard: true, scroll: true,
++      viewports: [320, 390, 768, 1440] }));
++  } finally {
++    await browser.close();
++  }
++}
++
++run().catch(error => { console.error(error); process.exitCode = 1; });
