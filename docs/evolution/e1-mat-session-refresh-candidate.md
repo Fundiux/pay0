@@ -1,6 +1,26 @@
 # MAT — revalidación de sesión al volver al panel
 
-Estado: **INTEGRATION_PENDING**, candidato local probado; sin publicación ni activación. No modifica comprobantes ni la entrega AUTO pausada. La composición aislada parte de la UI productiva b690/SSR618 y la conserva íntegra salvo este hook.
+Estado: **DEPLOYMENT_PENDING**, paquete local exacto y runtime verificados; sin autorización de publicación ni activación. No modifica comprobantes ni la entrega AUTO pausada. La composición aislada parte de la UI productiva b690/SSR618 y la conserva íntegra salvo este hook.
+
+## Paquete exacto y reversión
+
+Directorio `.firebase/modular-release/hosting-63c70651bf1c-abb14735-66fa-4bdc-b8fd-c95831eef03b`:
+
+| Archivo | SHA256 |
+|---|---|
+| `input.json` | `c6e1a862e075d1ccffaad30f67c8e3ed5565d4c7091651b374fe9c91985e373b` |
+| `ssr.zip` | `f71e37d5128611c68e260de448c02952b095f79859a2ea710da64a576295c539` |
+| `runtime-9902c86b-238b-4112-a49f-b46dc09a667f/proof-with-qa-override.json` | `dd1e23a2250de076bbd9396b46f2a90ea61b199c499dbdc6d7dfbcd5908d7009` |
+| Baseline fijada al input | `04eb71f3cb7f51670ea3b2fbb2bbb94104d602fcc873f506fc181f373e305d8c` |
+| Preflight final sólo lectura | `cd42f1547b37a6895ca3bfe00a6ee77204e142574e9797ae995a100c7bf2e45f` |
+
+Build47 y runtime exacto EXIT0/PASS, sesiones29582 y69119; `assertRuntimeProof` PASS. Runtime nuevo extraído de este ZIP, 486 archivos verificados, dependencias copiadas físicamente sólo después de package/lock idénticos, realpaths y closure PASS. Cinco rutas estándar HTTP200, login 390/1440 y redirección anónima pagos→login, cinco componentes estándar PASS. Servidor y emulador cerrados. Las dos adaptaciones QA heredadas de b690 están explícitas: ingeniería `593b8fd70a744c0cc126cd3645b1ce57046f75fb99fa06358721fead5826faa7` y evidencia `2fcc15877b7314ad801ec07737d1327789b81629527c91518eb2c865d28b874e`; sólo binding al candidato nuevo, preload `93e85472a54448b7a596b893b81300c6391b6221a4814aa49d3224eb547e5a94`. No se presentan como ejecución literal de los tests originales ni como pruebas del caso real de comprobantes pausado. Emulador allow-all: no certifica reglas ni autorización productiva.
+
+El coordinador reprodujo independientemente `check(input)` y `assertRuntimeProof` contra c6e/f71/dd1: **PASS**, sin alterar pins, helpers ni artefactos.
+
+También se abrieron `/mat/usuarios` y `/mat/clientes` en Chromium contra este runtime SSR exacto: HTTP200, render sin errores y sin initData Telegram ni cuenta Firebase. Se bloquearon redes externas; no se leyó información financiera. Proof `output/mat-session-refresh/mat-routes-proof.json`, SHA256 `1869693e5a3631d43f0a7ec4ffcf36cded478e74c18ba45a6ca3cbbbca3894c9`. Esa comprobación de arranque no sustituye una sesión Telegram firmada real, todavía pendiente.
+
+Preflight final `ui-mat-session-refresh-final-preflight.json`: SSR618/Hostingb933/configuración/Run/IAM preservados, cero operaciones activas. No hubo escrituras productivas ni invocación de acciones financieras. La publicación requiere aprobación específica del input/ZIP/proof; no se ha ejecutado. Reversión exacta sólo contra el estado propio del ejecutor: Hosting `b933a73db87bb193` y fuente b690/ZIP `a896abb9d175d2c8c711c276d6c6b396d40ba4bd0a5d5830a42b3b66fbb1d767`, configuración/IAM preservados. Nunca retirar ni modificar AUTO para revertir MAT. Incertidumbre exige reconciliar operación/journal, sin replay ni borrar locks.
 
 El hook existente consulta el home una sola vez al montar. Un panel abierto conserva la vista anterior al volver de segundo plano, incluso si el vínculo se revocó después. El control negativo con ese hook reprodujo la conservación de `old-home` tras ocultar la página; no se interpretó como un fallo de autorización del backend, que valida cada solicitud firmada.
 
@@ -15,7 +35,7 @@ El UID Firebase real es sólo una frontera auxiliar para descartar una vista pen
 - Patch `qa/patches/e1-mat-session-refresh.patch`, SHA256 `cfbdbc24ade20c93051ca35f003e5bbca390c30124ffd7356d0307f5baf62e32`; `git apply --check` PASS sobre raíz, sin aplicarlo allí.
 - QA `qa/scripts/mat-session-refresh.test.cjs`: **seis escenarios PASS** con hooks React y eventos Chromium reales. Ambos scopes cubren ocultación, vínculo revocado al volver, agrupación de tres eventos, cambio de actor con respuesta antigua tardía, initData ausente, error seguro y desmontaje. Wrappers y respuestas son sintéticos; no se ejecutan operaciones de negocio ni validaciones HMAC reales en esta prueba.
 
-Comando del candidato: `node qa/scripts/mat-session-refresh.test.cjs`. Puede fijarse otra copia mediante `PAY0_MAT_REFRESH_SOURCE`. La prueba exige esa fuente candidata; no representa que el hook raíz ya esté integrado. Evidencia privada `output/mat-session-refresh/verification.json`; control negativo preservado en `baseline-negative.log`. No hubo consultas de negocio productivas ni instalaciones raíz. El TSC de la composición está **PASS**, reutilizando temporalmente dependencias privadas tras comprobar igualdad exacta de manifest/lock; la junction se retiró antes del build. Build canónico **PASS, 47 rutas**, sesión29582. Runtime exacto todavía **PENDING**, no sustituido por la transpilación de la fixture. Verificador de política de autorización PASS; no se modificaron roles o reglas.
+Comando del candidato: `node qa/scripts/mat-session-refresh.test.cjs`. Puede fijarse otra copia mediante `PAY0_MAT_REFRESH_SOURCE`. La prueba exige esa fuente candidata; no representa que el hook raíz ya esté integrado. Evidencia privada `output/mat-session-refresh/verification.json`; control negativo preservado en `baseline-negative.log`. No hubo consultas de negocio productivas ni instalaciones raíz. El TSC de la composición está **PASS**, reutilizando temporalmente dependencias privadas tras comprobar igualdad exacta de manifest/lock; la junction se retiró antes del build. Build canónico **PASS, 47 rutas**, sesión29582; runtime exacto **PASS**, sesión69119. Verificador de política de autorización PASS; no se modificaron roles o reglas.
 
 ## Composición y procedencia del build
 
@@ -27,7 +47,7 @@ Los cinco commits permanecen en origin/main para reconciliación separada: `8615
 
 Baseline fresca sólo de metadatos: `.firebase/modular-release/ui-mat-session-refresh-baseline.json`, SHA256 `04eb71f3cb7f51670ea3b2fbb2bbb94104d602fcc873f506fc181f373e305d8c`, PASS contra la publicación b690: SSR618/Hostingb933/configuración/Run/IAM idénticos y cero operaciones activas. La preparación local requirió lectura elevada de la configuración del CLI; el primer intento sandbox denegado por EPERM se conserva como limitación de ejecución, no como fallo del producto ni mutación.
 
-Antes de publicación: portar sólo este patch a un hijo de la fuente productiva real, revisar su identidad y scopes, pasar TSC/build/runtime exactos y presentar input/rollback para autorización separada. No se ha preparado un input ejecutable ni tocado la UI productiva.
+Antes de publicación: autorización separada del input/ZIP/proof y rollback indicados, y preflight fresco del ejecutor. La composición, TSC/build/runtime e input ya están preparados; no se ha tocado la UI productiva ni se ha activado ningún servicio.
 
 ## J: bloqueo conservado
 
