@@ -1,6 +1,6 @@
 # Registro automático desde comprobante: backend
 
-Estado: DEPLOYMENT_PENDING. Paquete v2 exacto listo para nueva autorización de dos Functions; sin publicación. Se declara una regresión intermitente:1FAIL y una única repetición PASS, sin causa última probada. ZIP846/inputd783 es SUPERSEDED_NOT_DEPLOYED.
+Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó input6865/ZIPa052 y reversión78; backend publicado y verificado técnicamente. El recorrido funcional productivo DROP→AUTO depende de la UI pendiente. Se conservan la regresión intermitente1FAIL/1PASS declarada y el histórico846/d783 SUPERSEDED_NOT_DEPLOYED.
 
 ## Resultado y alcance
 
@@ -44,7 +44,7 @@ Primer intento9535 EXIT1: shared33 abortó con Firestore INVALID_ARGUMENT Transa
 
 Comparación AST de fuente PDF respecto78: transacción de corrección idéntica; transacción de caché sólo cambia las dos constantes de política3 a4. Control de retry intacto. Proofc97ae43d10ace44a7dfc3ab43221ea0775db6b511b5ed87767bffc7abb90776d. Causa última del fallo no establecida; riesgo de error intermitente de confirmación bajo contención declarado. No se cambió producto para obtener el PASS.
 
-Reproducción de receta en directorio nuevo EXIT0 produce el mismo ZIPa052; hashes de patch Git raw/filtered se comprueban antes del commit. Input final, canónico literal y GET fresco terminados; pendiente aprobación específica y prueba funcional productiva del usuario.
+Reproducción de receta en directorio nuevo EXIT0 produce el mismo ZIPa052; hashes de patch Git raw/filtered se comprueban antes del commit. Input final, canónico literal y GET fresco terminados; autorización recibida y publicación terminada; pendiente prueba funcional productiva del usuario.
 
 ## Input final, canónico y frescura
 
@@ -57,3 +57,11 @@ Primer GET25322 EXIT1 por una operación activa global; antes pasaron los assert
 Única captura completa posterior81229 EXIT0/PASS2026-10-21T00:09:26Z: dos fuentes descargadas78, revisiones00018-zab/00007-qud, configuración/Run/IAM iguales a baseline, driftfalse y0operaciones activas. Cero lecturas de negocio/mutaciones. Proof9adc7c4a26c163ed94a97f09f9460d16e3e10181843dee461b0ab5d9006acd7c, release/fresh-preflight-66e827fb-67d3-4d4f-837c-10dc47becf2c.json. El ejecutor debe revalidar frescura antes de mutar; este recibo no garantiza ausencia de cambios futuros ni autoriza despliegue.
 
 La aprobación solicitada es sólo backend y debe mencionar la intermitencia1FAIL/1PASS, el fullflow15 con un pago sintético y la dependencia de nueva UI para el objetivo DROP→AUTO del usuario. Publicar backend no constituye COMPLETED del recorrido. Hosting se reconcilia y autoriza por separado sobre su baseline productiva fresca.
+
+## Publicación autorizada y postverificación
+
+Usuario autorizó expresamente los bytes input686509c42b59b69f27c5f11781e251ec7a5376890e21d6b8dcca9b13684a7200/ZIPa052fafbe33ce77e4972092a4b244365f46000628dcd01301e5ed8a0eb032373 y rollback78. El ejecutor raíz14677 concluyó EXIT0, ambos CONFIGURATION_VERIFIED: parsepagoreceiptpdf-00019-tec y correctpagoreceiptsemanticfield-00008-xew. Fuentes78 previas preservadas; reversión NO utilizada. Sin otras Functions ni Hosting incluidos en esta publicación backend.
+
+Postverificador independiente95239 EXIT0/PASS2026-10-21T00:32:33Z: ambas fuentes descargadasa052 exactas, ACTIVE, revisiones listas y generaciones observadas, configuración de runtime/Run/IAM preservada, dos HTTP401 UNAUTHENTICATED y0operaciones activas. Cero documentos de negocio leídos y cero mutaciones del verificador. Proof012e7134ff8aec7ed8853fbd98d1e352ef3435980a8522972d6ba5ddfdfa9467; baseline publicada08c255f1c1fa8b62197e84ffe9bc4784a658ab54a670c3741ae0b614edd91f24. Recibos y ZIPs descargados en release/independent-post-publication-8cf3a3c1-370d-4764-8c2d-379796487e70.
+
+La verificación técnica no convierte el recorrido del usuario en COMPLETED. La nueva UI se autoriza/publica por separado; tras ella sigue pendiente comprobar el DROP real y el resultado canónico desde una sesión autorizada. No se ejercieron datos productivos, proveedores ni conciliación real. No hubo rollback ni nuevas consultas tras el postverificador registrado.
