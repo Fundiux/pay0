@@ -8,7 +8,8 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { PROJECT, REGION, tokenInMemory, getMetadata, digest } from './capture-production-baseline.mjs';
-import { assertPauseProof, assertDrainWitness } from './telegram-webhook-transition-policy.mjs';
+import { assertPauseProof, assertDrainWitness, normalizeWebhookBookkeeping } from './telegram-webhook-transition-policy.mjs';
+import { observeDrain } from './telegram-webhook-transition-control.mjs';
 
 export const DEPLOYMENT_GROUPS = Object.freeze({
   receipts: Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
@@ -207,7 +208,11 @@ export function assertRuntimePreserved(before, after) {
 export function assertRunRuntimePreserved(before, after, input) {
   // Google may add these identity annotations while replacing a revision.
   // Normalize only additions absent in the baseline, and only canonical identity.
-  const normalizedAfter = structuredClone(after);
+  let normalizedAfter = structuredClone(after), normalizedBefore=before;
+  if(input?.group==='telegram-webhook-claim-overlay') {
+    normalizedBefore=normalizeWebhookBookkeeping(before,input.runTransitionActors?.before);
+    normalizedAfter=normalizeWebhookBookkeeping(normalizedAfter,input.runTransitionActors?.after);
+  }
   const normalizeAddedIdentity = (oldMap, newMap, key, expected) => {
     if (!Object.hasOwn(oldMap || {}, key) && Object.hasOwn(newMap || {}, key)) {
       assert.equal(after.name, before.name, 'RUN_IDENTITY_SERVICE_CHANGED');
@@ -260,7 +265,7 @@ export function assertRunRuntimePreserved(before, after, input) {
     return copy;
   };
   assert.equal(after.terminalCondition?.state, 'CONDITION_SUCCEEDED', 'RUN_NOT_READY');
-  assert.deepEqual(comparable(normalizedAfter), comparable(before), 'RUN_CONFIGURATION_CHANGED');
+  assert.deepEqual(comparable(normalizedAfter), comparable(normalizedBefore), 'RUN_CONFIGURATION_CHANGED');
 }
 export function assertOperationMatchesGet(operationResource, getResource) {
   // Long-running operation responses wrap Function in protobuf Any and can
@@ -375,7 +380,10 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
   if (group === 'telegram-webhook-claim-overlay') {
     const witnessBytes = fs.readFileSync(privatePath(input.transitionWitnessFile));
     assert.equal(sha(witnessBytes), input.transitionWitnessSha256, 'DRAIN_WITNESS_CHANGED');
-    assertDrainWitness(JSON.parse(witnessBytes), input.transitionExpected);
+    const witness=JSON.parse(witnessBytes);
+    assertDrainWitness(witness, input.transitionExpected, resume?Date.parse(witness.checkedAt):Date.now());
+    const pauseBytes=fs.readFileSync(privatePath(input.pauseInfoFile));
+    assert.equal(sha(pauseBytes),input.pauseInfoSha256,'PAUSE_INFO_CHANGED');
     assert.equal(input.sourceIdentity.baseArchiveSha256, input.safeRecoveryArchiveSha256, 'WEBHOOK_BASE_MUST_BE_CERTIFIED_PAUSE');
     assert.equal(input.transitionExpected.pauseArchiveSha256, input.safeRecoveryArchiveSha256, 'WEBHOOK_RECOVERY_MISMATCH');
     assert.equal(baseline.functions.telegramWebhook.resource.serviceConfig.revision, input.transitionExpected.pauseRevision, 'WEBHOOK_PAUSE_BASELINE_CHANGED');
@@ -427,7 +435,10 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
         continue;
       }
       const fresh = await assertCurrent(expected, name, token);
-      if (group === 'telegram-webhook-claim-overlay') assertDrainWitness(JSON.parse(fs.readFileSync(input.transitionWitnessFile)), input.transitionExpected);
+      if (group === 'telegram-webhook-claim-overlay') {
+        const preflightWitness=await observeDrain(input.pauseInfoFile,privatePath(path.join(path.dirname(inputFile),'preflight-drain-witness.json')));
+        assertDrainWitness(preflightWitness,input.transitionExpected);
+      }
       sourceOnlyPatch(fresh, fresh.buildConfig.source.storageSource, input.sourceCommit, input.archiveSha256, group, input.sourceIdentity);
       if (!resume) {
         const rollback = await preservePrevious(fresh, token, path.dirname(inputFile), name);
@@ -453,7 +464,10 @@ async function executeInternal(inputFile, inputSha256, resume = false) {
       const expected = baseline.functions[name];
       const fresh = await assertCurrent(expected, name, token);
       const body = sourceOnlyPatch(fresh, uploadedSource, input.sourceCommit, input.archiveSha256, group, input.sourceIdentity);
-      if (group === 'telegram-webhook-claim-overlay') assertDrainWitness(JSON.parse(fs.readFileSync(input.transitionWitnessFile)), input.transitionExpected);
+      if (group === 'telegram-webhook-claim-overlay') {
+        const dispatchWitness=await observeDrain(input.pauseInfoFile,privatePath(input.dispatchWitnessFile));
+        assertDrainWitness(dispatchWitness,input.transitionExpected);
+      }
       emit({ state: 'UPDATE_PREPARED', function: name, previousSource: previousSource(fresh), source: uploadedSource, previousRevision: fresh.serviceConfig.revision });
       unresolved = true;
       fs.writeFileSync(lockPath, JSON.stringify({ inputFile, inputSha256, function: name, state: 'DISPATCHING' }));

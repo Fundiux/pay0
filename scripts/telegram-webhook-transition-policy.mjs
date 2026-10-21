@@ -34,7 +34,12 @@ export function assertDrainWitness(witness, expected, now = Date.now()) {
   assert(Number.isFinite(sample) && Number.isFinite(checked) && Number.isFinite(barrier), 'DRAIN_TIMES_REQUIRED');
   assert(sample > barrier, 'DRAIN_SAMPLE_BEFORE_PAUSE');
   assert(sample <= checked && checked <= now && now - checked <= 60000, 'DRAIN_STALE_OR_FUTURE');
-  assert(checked - sample <= 240000, 'DRAIN_SAMPLE_STALE');
+  // Retired revisions stop emitting metrics. A terminal zero AFTER the barrier
+  // remains valid only while the exact fenced service generation is unchanged.
+  if (checked - sample > 240000) {
+    assert.equal(witness.legacyRetired, true, 'DRAIN_SAMPLE_STALE');
+    assert.equal(witness.serviceStateUnchangedSinceBarrier, true, 'DRAIN_TERMINAL_FENCE_REQUIRED');
+  }
 }
 
 export function recoveryTrafficPatch(expected, current, pause) {
@@ -80,4 +85,15 @@ export function drainProbeV1Body(current, pauseRevision, legacyRevision, tag, en
   const body=recoveryV1Body(current,current,pauseRevision);
   body.spec.traffic=[{latestRevision:true,percent:100},...(enabled?[{revisionName:legacyRevision,percent:0,tag}]:[])];
   return body;
+}
+
+export function normalizeWebhookBookkeeping(service, expectedLastModifier) {
+  assert.equal(typeof expectedLastModifier, 'string', 'WEBHOOK_MODIFIER_IDENTITY_REQUIRED');
+  assert.equal(service.lastModifier, expectedLastModifier, 'WEBHOOK_MODIFIER_CHANGED');
+  const copy=structuredClone(service);delete copy.lastModifier;
+  if(copy.conditions)copy.conditions=copy.conditions.filter(c=>{
+    if(c.type==='BaseImageValidated'){assert.equal(c.state,'CONDITION_SUCCEEDED','WEBHOOK_BASE_IMAGE_NOT_VALIDATED');return false}
+    return true;
+  }).sort((a,b)=>a.type.localeCompare(b.type));
+  return copy;
 }

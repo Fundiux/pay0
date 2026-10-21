@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {tokenInMemory, getMetadata} from './capture-production-baseline.mjs';
-import {TARGET, hash, assertDrainWitness, recoveryTrafficPatch, recoveryV1Body} from './telegram-webhook-transition-policy.mjs';
+import {TARGET, hash, assertDrainWitness, recoveryTrafficPatch, recoveryV1Body, normalizeWebhookBookkeeping} from './telegram-webhook-transition-policy.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),privateRoot=path.join(root,'.firebase/modular-release');
 const functionUrl='https://cloudfunctions.googleapis.com/v2/projects/pay-0-system/locations/us-central1/functions/telegramWebhook';
@@ -21,7 +21,7 @@ export async function observeDrain(pauseFile,outputFile){
   const pause=JSON.parse(fs.readFileSync(privateFile(pauseFile))),token=tokenInMemory(),current=await state(token);
   assert.equal(hash(current),pause.pauseStateDigest,'DRAIN_CONCURRENT_CHANGE');await noOperations(token);
   const revision=await jsonGet('https://us-central1-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/pay-0-system/revisions/'+pause.legacyRevision,token);
-  const end=new Date(),start=new Date(end-20*60000),filter='metric.type="run.googleapis.com/container/instance_count" AND resource.type="cloud_run_revision" AND resource.labels.service_name="telegramwebhook" AND resource.labels.revision_name="'+pause.legacyRevision+'"';
+  const end=new Date(),start=new Date(Math.min(end-20*60000,Date.parse(pause.pauseTrafficConfirmedAt)-60000)),filter='metric.type="run.googleapis.com/container/instance_count" AND resource.type="cloud_run_revision" AND resource.labels.service_name="telegramwebhook" AND resource.labels.revision_name="'+pause.legacyRevision+'"';
   const metrics=await jsonGet('https://monitoring.googleapis.com/v3/projects/pay-0-system/timeSeries?'+new URLSearchParams({filter,'interval.startTime':start.toISOString(),'interval.endTime':end.toISOString(),view:'FULL'}),token);
   const counts={};
   for(const series of metrics.timeSeries||[]){const label=series.metric?.labels?.state;if(!['active','idle'].includes(label))continue;assert(!counts[label],'DUPLICATE_METRIC_SERIES');const point=series.points?.[0];if(point&&/^[0-9]+$/.test(point.value?.int64Value||''))counts[label]={value:Number(point.value.int64Value),time:point.interval.endTime}}
@@ -29,6 +29,8 @@ export async function observeDrain(pauseFile,outputFile){
   const routed=current.service.trafficStatuses||[],noTags=!(current.service.traffic||[]).some(t=>t.tag),allPause=routed.length===1&&routed[0].revision===pause.pauseRevision&&routed[0].percent===100;
   const expected={pauseArchiveSha256:pause.archiveSha256,pauseRevision:pause.pauseRevision,pauseStateDigest:pause.pauseStateDigest,legacyRevision:pause.legacyRevision};
   const witness={status:'PASS',service:TARGET,...expected,noLegacyTrafficOrTags:noTags&&allPause,legacyInactive:revision.status?.conditions?.some(c=>c.type==='Active'&&c.status==='False')===true,telemetryComplete:complete,legacyActiveInstances:counts.active?.value,legacyIdleInstances:counts.idle?.value,legacyInFlightRequests:zero?0:null,activeOperations:0,sampledAt:complete?new Date(Math.min(Date.parse(counts.active.time),Date.parse(counts.idle.time))).toISOString():null,checkedAt:new Date().toISOString(),pauseTrafficConfirmedAt:pause.pauseTrafficConfirmedAt};
+  witness.legacyRetired=revision.status?.conditions?.some(c=>c.type==='Active'&&c.status==='False'&&c.reason==='Retired')===true;
+  witness.serviceStateUnchangedSinceBarrier=pause.ownedServiceGeneration!==undefined&&String(current.service.generation)===String(pause.ownedServiceGeneration);
   let reason;try{assertDrainWitness(witness,expected)}catch(e){reason=e.message.split('\n')[0];witness.status='PENDING'}
   const file=privateFile(outputFile);fs.writeFileSync(file,JSON.stringify(witness,null,2),{mode:0o600});
   fs.writeFileSync(file+'.telemetry.json',JSON.stringify({revision,metrics,current}),{mode:0o600});
@@ -59,7 +61,7 @@ export async function executeRecovery(planFile,planSha256){
     const response=await fetch(serviceV1Url,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});assert(response.ok,'RECOVERY_HTTP_'+response.status);const accepted=await response.json();emit({state:'ACCEPTED',generation:accepted.metadata.generation,resourceVersion:accepted.metadata.resourceVersion});
     let done=false;for(let i=0;i<120;i++){const status=await jsonGet(serviceV1Url,token);if(Number(status.status.observedGeneration)===Number(accepted.metadata.generation)&&status.status.traffic?.length===1&&status.status.traffic[0].revisionName===pause.revision&&status.status.traffic[0].percent===100&&status.status.conditions?.some(c=>c.type==='Ready'&&c.status==='True')){done=true;break}await new Promise(r=>setTimeout(r,10000))}assert(done,'RECOVERY_OPERATION_PENDING');
     const after=await state(token);assert.equal(hash(after.resource),hash(expected.resource),'RECOVERY_FUNCTION_CHANGED');assert.equal(hash(after.iam),hash(expected.iam),'RECOVERY_IAM_CHANGED');
-    const normalize=value=>{const v=structuredClone(value);for(const k of ['traffic','trafficStatuses','generation','observedGeneration','updateTime','etag'])delete v[k];if(v.terminalCondition)delete v.terminalCondition.lastTransitionTime;for(const c of v.conditions||[])delete c.lastTransitionTime;return v};assert.equal(hash(normalize(after.service)),hash(normalize(expected.service)),'RECOVERY_RUNTIME_CHANGED');
+    const normalize=value=>{const v=structuredClone(value);for(const k of ['traffic','trafficStatuses','generation','observedGeneration','updateTime','etag'])delete v[k];if(v.terminalCondition)delete v.terminalCondition.lastTransitionTime;for(const c of v.conditions||[])delete c.lastTransitionTime;return v};assert.equal(hash(normalize(normalizeWebhookBookkeeping(after.service,pause.trafficLastModifier))),hash(normalize(normalizeWebhookBookkeeping(expected.service,expected.service.lastModifier))),'RECOVERY_RUNTIME_CHANGED');
     assert.equal(after.service.trafficStatuses?.length,1);assert.equal(after.service.trafficStatuses[0].revision,pause.revision);assert.equal(after.service.trafficStatuses[0].percent,100);emit({state:'VERIFIED',revision:pause.revision,redeployments:0});fs.writeFileSync(privateFile(planFile+'.after.json'),JSON.stringify(after),{flag:'wx',mode:0o600});console.log(JSON.stringify({status:'RECOVERY_VERIFIED',revision:pause.revision,redeployments:0}));
   }finally{fs.closeSync(fd)}
 }
