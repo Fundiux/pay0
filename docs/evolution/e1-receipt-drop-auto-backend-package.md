@@ -1,6 +1,6 @@
 # Registro automático desde comprobante: backend
 
-Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó input6865/ZIPa052 y reversión78; backend publicado y verificado técnicamente. El recorrido funcional productivo DROP→AUTO depende de la UI pendiente. Se conservan la regresión intermitente1FAIL/1PASS declarada y el histórico846/d783 SUPERSEDED_NOT_DEPLOYED.
+Estado: **INCOMPLETE / PAUSED_BY_USER**. La prueba funcional posterior fallo: el flujo requiere seleccion manual adicional y devuelve «La identificación cambió; vuelve a revisar el comprobante. [400]». La deteccion de duplicados no quedo confirmada. El usuario ordeno detener este frente y terminar los demas antes de retomarlo, tanto para archivo como imagen. No se haran nuevos desarrollos, diagnosticos o despliegues de esta familia ahora. La publicacion tecnica anterior se conserva como historial; no acredita cierre funcional.
 
 ## Resultado y alcance
 

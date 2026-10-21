@@ -1,6 +1,6 @@
 # Comprobantes DROP→AUTO — paquete UI exacto
 
-Estado: **DEPLOYED_NOT_VERIFIED**. Publicación autorizada y ejecutada por el coordinador: sesión97761 EXIT0, RELEASE_VERIFIED, Hosting `b933a73db87bb193` y SSR `ssrpay0system-00618-rim`. Verificación técnica independiente estricta PASS; comprobación funcional solicitada al usuario y pendiente. Se preservó la capacidad de voz de SSR616. El backend canónico tiene entrega y autorización separadas.
+Estado: **INCOMPLETE / PAUSED_BY_USER**. La prueba funcional posterior fallo: el flujo requiere seleccion manual adicional y devuelve «La identificación cambió; vuelve a revisar el comprobante. [400]». La deteccion de duplicados no quedo confirmada. El usuario ordeno detener este frente y terminar los demas antes de retomarlo, tanto para archivo como imagen. No se haran nuevos desarrollos, diagnosticos o despliegues de esta familia ahora. La publicacion tecnica anterior se conserva como historial; no acredita cierre funcional.
 
 ## Publicación y verificación posterior
 
