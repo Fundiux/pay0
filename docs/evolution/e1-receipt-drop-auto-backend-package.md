@@ -1,6 +1,6 @@
 # Registro automático desde comprobante: backend
 
-Estado: LOCAL_VALIDATED_CANONICAL_PENDING. Candidato v2 probado con un fallo intermitente de regresión declarado. Sin autorización ni publicación. ZIP846/inputd783 queda SUPERSEDED_NOT_DEPLOYED; no certifica el fix final. El dossier78 publicado permanece separado.
+Estado: DEPLOYMENT_PENDING. Paquete v2 exacto listo para nueva autorización de dos Functions; sin publicación. Se declara una regresión intermitente:1FAIL y una única repetición PASS, sin causa última probada. ZIP846/inputd783 es SUPERSEDED_NOT_DEPLOYED.
 
 ## Resultado y alcance
 
@@ -44,4 +44,16 @@ Primer intento9535 EXIT1: shared33 abortó con Firestore INVALID_ARGUMENT Transa
 
 Comparación AST de fuente PDF respecto78: transacción de corrección idéntica; transacción de caché sólo cambia las dos constantes de política3 a4. Control de retry intacto. Proofc97ae43d10ace44a7dfc3ab43221ea0775db6b511b5ed87767bffc7abb90776d. Causa última del fallo no establecida; riesgo de error intermitente de confirmación bajo contención declarado. No se cambió producto para obtener el PASS.
 
-Reproducción de receta en directorio nuevo EXIT0 produce el mismo ZIPa052; hashes de patch Git raw/filtered se comprueban antes del commit. Pendientes input final/canónico literal/GET fresco y aprobación específica de nuevos bytes.
+Reproducción de receta en directorio nuevo EXIT0 produce el mismo ZIPa052; hashes de patch Git raw/filtered se comprueban antes del commit. Input final, canónico literal y GET fresco terminados; pendiente aprobación específica y prueba funcional productiva del usuario.
+
+## Input final, canónico y frescura
+
+Commit de receta/patch/QA fd4a15d870f2350fd2917a79b02a3e72d0bc0ed1; fuente final002671f999390ff737ce5d02be0a9f6d2cee96c8; sourceTree=null. Input privado receipt-drop-auto-candidate-v2/release/input.json SHA686509c42b59b69f27c5f11781e251ec7a5376890e21d6b8dcca9b13684a7200. Scope exclusivo parsePagoReceiptPdf/correctPagoReceiptSemanticField, BUNDLED_V1/955 archivos. Base78/patch9babe/ZIPa052 completos arriba; baseline previa7933ff5e48ba642500a7fca48cfdbd928b10928387b4003babb5e6b8aae19efb.
+
+Canónico inmutable qa/scripts/verify-scoped-functions-artifact.cjs:8405 EXIT0/PASS, npm ci --omit=dev literal en runtime privado nuevo,354 endpoints y2 denegaciones. Proofc965fff05980f852fde8bc4f6d958c81a13ef6980e304855bafe2994004ca446, release/artifact-verification.json. No se reemplazó la instalación por un interceptor ni por reuse no admitido. assertArtifactProof independiente raíz PASS.
+
+Primer GET25322 EXIT1 por una operación activa global; antes pasaron los asserts de fuentes/configuración/Run/IAM, pero no hubo recibo PASS ni0ops. La inspección acotada siguiente observó0activas; la operación concluyó antes de identificar su target. No se atribuye tipo, actor ni causa. Logs y observación se conservan; no hubo retry loop.
+
+Única captura completa posterior81229 EXIT0/PASS2026-10-21T00:09:26Z: dos fuentes descargadas78, revisiones00018-zab/00007-qud, configuración/Run/IAM iguales a baseline, driftfalse y0operaciones activas. Cero lecturas de negocio/mutaciones. Proof9adc7c4a26c163ed94a97f09f9460d16e3e10181843dee461b0ab5d9006acd7c, release/fresh-preflight-66e827fb-67d3-4d4f-837c-10dc47becf2c.json. El ejecutor debe revalidar frescura antes de mutar; este recibo no garantiza ausencia de cambios futuros ni autoriza despliegue.
+
+La aprobación solicitada es sólo backend y debe mencionar la intermitencia1FAIL/1PASS, el fullflow15 con un pago sintético y la dependencia de nueva UI para el objetivo DROP→AUTO del usuario. Publicar backend no constituye COMPLETED del recorrido. Hosting se reconcilia y autoriza por separado sobre su baseline productiva fresca.
