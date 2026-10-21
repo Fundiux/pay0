@@ -57,7 +57,7 @@ function pickContentType(documentType: string, data: any): string {
   return cleanText(data.contentType) || (documentType === "FACTURA_XML" ? "application/xml" : "application/pdf");
 }
 
-async function getSolicitudMeta(solicitudId: string): Promise<{
+async function getSolicitudMeta(solicitudId: string, rootId: string): Promise<{
   solicitudFolio: string;
   clientId: string;
   clientName: string;
@@ -89,6 +89,10 @@ async function getSolicitudMeta(solicitudId: string): Promise<{
   }
 
   const data = snap.data() || {};
+
+  if (cleanText(data.rootId) !== rootId) {
+    throw new Error("Solicitud fuera del ambito de la notificacion.");
+  }
 
   return {
     solicitudFolio: cleanText(
@@ -176,7 +180,7 @@ async function getActiveFacturaPair(input: {
   };
 }
 
-async function getClientRecipients(clientId: string): Promise<Array<{
+async function getClientRecipients(clientId: string, rootId: string): Promise<Array<{
   telegramUserId: string;
   chatId: string;
   telegramUsername: string;
@@ -201,7 +205,7 @@ async function getClientRecipients(clientId: string): Promise<Array<{
     const data = doc.data() || {};
     const chatId = cleanText(data.chatId);
 
-    if (!chatId) return;
+    if (!chatId || cleanText(data.rootId) !== rootId) return;
 
     rows.push({
       telegramUserId: cleanText(data.telegramUserId || doc.id),
@@ -277,26 +281,23 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
     return { ok: true, notified: false, reason: "missing_pdf_or_xml" };
   }
 
-  const meta = await getSolicitudMeta(solicitudId);
+  const meta = await getSolicitudMeta(solicitudId, rootId);
 
   if (!meta.clientId) {
     return { ok: true, notified: false, reason: "missing_client_id" };
   }
 
-  const eventId = safeDocId(`FACTURA_CLIENTE_${meta.clientId}_${solicitudId}_${pair.pdf.uploadId}_${pair.xml.uploadId}`);
-  const eventRef = db.collection("telegramClientNotificationEvents").doc(eventId);
-  const eventSnap = await eventRef.get();
-
-  if (eventSnap.exists) {
-    const event = eventSnap.data() || {};
-    const status = cleanUpper(event.status);
-
-    if (status === "SENT" || status === "PENDING") {
-      return { ok: true, notified: false, reason: "duplicate" };
-    }
+  const clientSnap = await db.collection("clients").doc(meta.clientId).get();
+  if (!clientSnap.exists || cleanText(clientSnap.data()?.rootId) !== rootId) {
+    return { ok: true, notified: false, reason: "client_scope_mismatch" };
   }
 
-  await eventRef.set(
+  const eventId = safeDocId(`FACTURA_CLIENTE_${meta.clientId}_${solicitudId}_${pair.pdf.uploadId}_${pair.xml.uploadId}`);
+  const eventRef = db.collection("telegramClientNotificationEvents").doc(eventId);
+  try {
+    // Any existing receipt, including a partial or uncertain delivery, is final
+    // for automatic retries. Keep the historical key so legacy receipts count.
+    await eventRef.create(
     {
       eventId,
       type: "FACTURA_CLIENTE_DISPONIBLE",
@@ -316,11 +317,16 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
       xmlUploadId: pair.xml.uploadId,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+    }
+    );
+  } catch (error: any) {
+    if (error?.code === 6 || error?.code === "already-exists") {
+      return { ok: true, notified: false, reason: "duplicate" };
+    }
+    throw error;
+  }
 
-  const recipients = await getClientRecipients(meta.clientId);
+  const recipients = await getClientRecipients(meta.clientId, rootId);
 
   if (recipients.length === 0) {
     await eventRef.set(
@@ -369,7 +375,7 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
 
       sentCount += 1;
     } catch (error: any) {
-      const message = String(error?.message || error || "unknown");
+      const message = "delivery_uncertain";
       errors.push(message);
 
       logger.error("notifyClientFacturaDisponibleFromUploadId recipient error", {
@@ -382,8 +388,11 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
 
   await eventRef.set(
     {
-      status: sentCount > 0 ? "SENT" : "FAILED",
-      reason: sentCount > 0 ? "sent" : "send_failed",
+      // PENDING is intentionally retained for compatibility with old readers,
+      // which would retry an unfamiliar status after a traffic rollback.
+      status: errors.length > 0 ? "PENDING" : "SENT",
+      deliveryState: errors.length > 0 ? "UNCERTAIN" : "SENT",
+      reason: errors.length > 0 ? "delivery_uncertain" : "sent",
       sentCount,
       errors,
       sentAt: sentCount > 0 ? FieldValue.serverTimestamp() : null,
@@ -426,7 +435,7 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
   return {
     ok: true,
     notified: sentCount > 0,
-    reason: sentCount > 0 ? "sent" : "send_failed",
+    reason: errors.length > 0 ? "delivery_uncertain" : "sent",
     sentCount,
   };
 }
