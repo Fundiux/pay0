@@ -1,6 +1,6 @@
 # D3: ACK canónico del retiro personal
 
-Estado: **DEPLOYMENT_PENDING; requiere autorización específica**. No se ha desplegado este paquete. Su único destino es `reviewAgent007MemoryCandidate`; la interfaz se entrega por separado. No interviene en chat, voz, comprobantes, productores, reglas ni permisos.
+Estado: **DEPLOYED_NOT_VERIFIED funcionalmente**. El usuario autorizó este backend, su interfaz y reversión exacta. El backend se publicó y pasó la verificación técnica independiente; su único destino es `reviewAgent007MemoryCandidate`. La interfaz se entrega por separado. No interviene en chat, voz, comprobantes, productores, reglas ni permisos.
 
 Una corrección retirada devuelve `retirement:{memoryId,status:"REJECTED",scope:"USER_TOPIC"|"CONVERSATION_ONLY"}`. Si se pierde ese ACK, el reintento autorizado devuelve el mismo estado con `changed:false`, sin otra escritura. `SUPERSEDED` y otros estados conservan `changed:false` sin afirmar retiro. Autorización y referencias se revalidan dentro de la misma transacción antes de devolver el ACK, también en el reintento.
 
@@ -37,6 +37,12 @@ Recibos independientes: emulador `ed9ef16cf4c1231d7f86276de325851e01865ef7ac6998
 
 ## Orden y reversión
 
-Publicar únicamente el reviewer compatible antes de la UI D3, con nueva autorización del paquete exacto. No instalar ni activar otros endpoints o gates. La reversión propia restaura f078 y su configuración/IAM: conserva las guardas de privacidad, el listado y la capacidad de retirar, pero pierde el ACK aditivo; la UI anterior debe acompañar esa reversión para evitar errores de confirmación. No volver a lectores c50 sin guardas, no borrar recuerdos ni deshacer retiros ya confirmados. El artefacto no cambia productor ni crea una nueva clase de datos.
+Se publicó únicamente el reviewer compatible antes de la UI D3, con autorización del paquete exacto. No se instalaron ni activaron otros endpoints o gates. La reversión propia restaura f078 y su configuración/IAM: conserva las guardas de privacidad, el listado y la capacidad de retirar, pero pierde el ACK aditivo; la UI anterior debe acompañar esa reversión para evitar errores de confirmación. No volver a lectores c50 sin guardas, no borrar recuerdos ni deshacer retiros ya confirmados. El artefacto no cambia productor ni crea una nueva clase de datos.
 
-La verificación funcional autenticada de retirar y reintentar desde la UI queda pendiente de su paquete y publicación autorizada. Este documento certifica la preparación backend y sus límites; no declara aprendizaje supervisado activo ni cierre funcional del usuario.
+## Publicación y comprobación independiente
+
+El ejecutor de raíz terminó con código 0 y `CONFIGURATION_VERIFIED`: revisión `reviewagent007memorycandidate-00004-sef`, anterior `00003-jur`. La verificación independiente posterior también terminó con código 0 y `PASS_TECHNICAL_PUBLICATION`: fuente descargada exactamente igual al ZIP `1eb8e6e0…`, etiquetas de procedencia `65ca033`, configuración Function/Run e IAM conservados, revisión lista y generación observada. La petición anónima vacía devolvió HTTP 401 / `UNAUTHENTICATED`.
+
+Snapshot y fuente de reversión futura: `.firebase/modular-release/d3-memory-retirement-release/post-publication-2026-10-21T07-38-22-608Z/`; baseline SHA256 `4ba4a159ec6d4f772a2ec84cffdf7ff81e4fcd021695a138c05fc064e54f4f1a`, generación de fuente `1792568157460612`. Recibo `proof.json` SHA256 `ab414868b6687c5e44a8c889f5ccac9f5c9dd09ed2dfa6734ae68306418240be`. No se retiraron recuerdos reales, no se consultaron datos de negocio y no se hicieron escrituras productivas durante esta comprobación. No se ejecutó reversión.
+
+La verificación funcional autenticada de retirar y reintentar desde la UI queda pendiente. Este documento acredita la publicación técnica backend y sus límites; no declara aprendizaje supervisado activo ni cierre funcional del usuario.
