@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 export const TARGET = 'projects/pay-0-system/locations/us-central1/services/telegramwebhook';
-export const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));
+  return value;
+}
+export const hash = value => crypto.createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
 
 export function assertPauseProof(proof, archiveSha256) {
   assert.equal(proof?.status, 'PASS', 'PAUSE_NOT_VERIFIED');
