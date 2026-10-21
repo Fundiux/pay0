@@ -72,6 +72,10 @@ Preflight independiente anterior a la publicación, `2026-10-21T07:31:31.320Z`, 
 
 ## Orden y reversión
 
+El usuario pospuso la comprobación funcional con «Lo comprobaré después».
+Se mantiene `DEPLOYED_NOT_VERIFIED`; no se solicita repetirla ahora ni se
+interpreta la respuesta como confirmación del guardado o retiro real.
+
 Se respetó el orden autorizado: primero backend D3 compatible, input `afdf8b68870039f17ddb2b189c3b4c6a612b90b966bb4ddbb97c2acec299479f`, único destino `reviewAgent007MemoryCandidate`; después esta UI `ff71291a...`. El backend antiguo puede retirar el recuerdo pero carece de este ACK, por lo que esta UI requiere mantener el reviewer compatible. La autorización correspondió únicamente a estos bytes y las reversiones preservadas.
 
 Si se revierte la familia, volver primero la UI al ZIP MAT f71 y su Hosting/SSR preservados; luego, sólo si se decide necesario, revertir review a su baseline protegida f078. Conservar los lectores y el endpoint protegido de revisión: no volver al lector antiguo c50 ni borrar recuerdos, bindings o mensajes. El rollback no revierte datos personales ni activa reglas de aprendizaje. La verificación funcional real del retiro continúa pendiente; las pruebas sintéticas y la publicación técnica no la sustituyen.
