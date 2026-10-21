@@ -1,6 +1,12 @@
 # MAT — revalidación de sesión al volver al panel
 
-Estado: **DEPLOYMENT_PENDING**, paquete local exacto y runtime verificados; sin autorización de publicación ni activación. No modifica comprobantes ni la entrega AUTO pausada. La composición aislada parte de la UI productiva b690/SSR618 y la conserva íntegra salvo este hook.
+Estado: **DEPLOYED_NOT_VERIFIED**. Usuario autorizó el paquete exacto y su reversión; publicación raíz83369 EXIT0/RELEASE_VERIFIED: Hosting `bd2ed1c61e22c573`, SSR `ssrpay0system-00620-zuz`. Post independiente estricto PASS. Sigue pendiente una sesión Telegram firmada real; no se declara completo el flujo MAT financiero. Comprobantes pausados y voz permanecen intactos: sólo cambia el hook de lectura.
+
+## Publicación y post independiente
+
+Se publicó el input c6e/ZIP f71/proof dd1 de la tabla siguiente. El verificador estricto original conservó SHA256 `fc9ffd70709a32bab4add64296020606fdcf5404f9e7256e9e5dc87b87fdfdf3`; rerun EXIT0/PASS, proof `683f81d2f1d4b2f8ea86ed60646dc1af64d7bc31699f74fd01471f25d00181a3`, baseline `2771146f074b951cfd1f54717b1cb9b3de87e378e0291ae6d3663e60a9e07f0e`. Ambos archivos están en `independent-post-publication-376b6851-8ed3-49e3-b521-77c0b15f960f` dentro del paquete. Fuente f71 exacta, configuración/Run/IAM preservados, cinco rutas HTTP200, cero operaciones activas y cero datos de negocio leídos o escritos. Los 170 archivos Hosting coinciden por hash gzip; sólo se añaden los dos reservados Firebase init.js/init.json. Ref local raíz `release/mat-session-refresh-20261021` preserva fuente63; se importó por fetch local sin checkout/merge/rebase/push ni cambios en HEAD/main.
+
+El primer post quedó BLOCKED por contadores asíncronos. Original local SHA256 `01fb860e87020fa7418962edca59c56a5594e2c59c505453adf9494160ed0dc2` preservado junto a GETs y prueba bloqueada. El coordinador comprobó de forma independiente archivos y la igualdad de todos los demás campos antes de aplicar sólo `snapshot.hosting.releases[0].version.fileCount` = `172` y `snapshot.hosting.releases[0].version.versionBytes` = `4103294` al recibo LOCAL. Resultado SHA256 `2eaaec9a4ff598a9a74d55831663e1d5e3da3fa40ce61263dffe9be47f7cbefb`; proof raíz `1bc078d8fdd5134662d486dab2c02e7bf5df216de568b03c0abb88d9c1f5debe`, comprobación de archivos raíz `cf85f89c0ce70ba712a4395ff57f9ee1bfc79645c33b58f316467be7d0c35117`. No se alteraron contadores productivos, helpers, input o ZIP, ni se repitió el despliegue. El post estricto final compara ya ambos contadores idénticos, sin excepción.
 
 ## Paquete exacto y reversión
 
@@ -20,7 +26,7 @@ El coordinador reprodujo independientemente `check(input)` y `assertRuntimeProof
 
 También se abrieron `/mat/usuarios` y `/mat/clientes` en Chromium contra este runtime SSR exacto: HTTP200, render sin errores y sin initData Telegram ni cuenta Firebase. Se bloquearon redes externas; no se leyó información financiera. Proof `output/mat-session-refresh/mat-routes-proof.json`, SHA256 `1869693e5a3631d43f0a7ec4ffcf36cded478e74c18ba45a6ca3cbbbca3894c9`. Esa comprobación de arranque no sustituye una sesión Telegram firmada real, todavía pendiente.
 
-Preflight final `ui-mat-session-refresh-final-preflight.json`: SSR618/Hostingb933/configuración/Run/IAM preservados, cero operaciones activas. No hubo escrituras productivas ni invocación de acciones financieras. La publicación requiere aprobación específica del input/ZIP/proof; no se ha ejecutado. Reversión exacta sólo contra el estado propio del ejecutor: Hosting `b933a73db87bb193` y fuente b690/ZIP `a896abb9d175d2c8c711c276d6c6b396d40ba4bd0a5d5830a42b3b66fbb1d767`, configuración/IAM preservados. Nunca retirar ni modificar AUTO para revertir MAT. Incertidumbre exige reconciliar operación/journal, sin replay ni borrar locks.
+Preflight previo a publicación `ui-mat-session-refresh-final-preflight.json`: SSR618/Hostingb933/configuración/Run/IAM preservados, cero operaciones activas. Preparación y pruebas no realizaron acciones financieras; el despliegue posterior fue autorizado y se limita a Hosting/SSR. Reversión autorizada exacta sólo contra el estado propio del ejecutor: Hosting `b933a73db87bb193` y fuente b690/ZIP `a896abb9d175d2c8c711c276d6c6b396d40ba4bd0a5d5830a42b3b66fbb1d767`, configuración/IAM preservados. Nunca retirar ni modificar AUTO para revertir MAT. Incertidumbre exige reconciliar operación/journal, sin replay ni borrar locks. El guard pin de deploy-scoped es 80be; el controlador actual c52 tiene otros bytes. Se prepara preservación exacta y receta de restauración temporal coordinada, sin cambiar input/pins ni ejecutar restore: no se promete que el rollback pase con el controlador actual sin ese paso comprobado.
 
 El hook existente consulta el home una sola vez al montar. Un panel abierto conserva la vista anterior al volver de segundo plano, incluso si el vínculo se revocó después. El control negativo con ese hook reprodujo la conservación de `old-home` tras ocultar la página; no se interpretó como un fallo de autorización del backend, que valida cada solicitud firmada.
 
@@ -47,7 +53,7 @@ Los cinco commits permanecen en origin/main para reconciliación separada: `8615
 
 Baseline fresca sólo de metadatos: `.firebase/modular-release/ui-mat-session-refresh-baseline.json`, SHA256 `04eb71f3cb7f51670ea3b2fbb2bbb94104d602fcc873f506fc181f373e305d8c`, PASS contra la publicación b690: SSR618/Hostingb933/configuración/Run/IAM idénticos y cero operaciones activas. La preparación local requirió lectura elevada de la configuración del CLI; el primer intento sandbox denegado por EPERM se conserva como limitación de ejecución, no como fallo del producto ni mutación.
 
-Antes de publicación: autorización separada del input/ZIP/proof y rollback indicados, y preflight fresco del ejecutor. La composición, TSC/build/runtime e input ya están preparados; no se ha tocado la UI productiva ni se ha activado ningún servicio.
+La autorización separada del input/ZIP/proof y rollback se recibió y el ejecutor realizó el preflight antes de publicar. No se activaron Sentinel, gateway, reglas globales ni acciones financieras. La comprobación funcional pendiente debe hacerse desde `/mat/usuarios` o `/mat/clientes` dentro de una sesión Telegram válida; navegar sin initData sólo comprueba la vista LOCAL, no el vínculo firmado.
 
 ## J: bloqueo conservado
 
