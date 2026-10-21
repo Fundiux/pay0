@@ -51,7 +51,9 @@ El primer intento de runtime abortó antes del emulador por un path de preload h
 
 ## Preflight y reversión
 
-La captura final anterior al despliegue backend del coordinador pasó con cero operaciones y SSR616/Hosting89de/configuración/Run/IAM idénticos: `.firebase/modular-release/ui-receipt-auto-on-voice-final-preflight.json`, SHA256 `b0499fd93933af329af68e4d40f48f979750b78530417ff01f551aa3fd7f8c53`. Debe refrescarse después de la verificación backend; no se interpreta como un GET posterior ni se consulta durante una mutación activa.
+La captura final anterior al despliegue backend del coordinador pasó con cero operaciones y SSR616/Hosting89de/configuración/Run/IAM idénticos: `.firebase/modular-release/ui-receipt-auto-on-voice-final-preflight.json`, SHA256 `b0499fd93933af329af68e4d40f48f979750b78530417ff01f551aa3fd7f8c53`. Se conserva como captura previa, sin presentarla como posterior.
+
+Tras finalizar el backend se obtuvo un nuevo preflight sólo lectura: `.firebase/modular-release/ui-receipt-auto-on-voice-post-backend-preflight.json`, SHA256 `e68b5afe4b30d27bde5340e32c8c461ca91f9e346f6b8f8f0dfd3dd2b4a98039`; proof `output/receipt-drop-auto-ui/post-backend-preflight-on-voice.json`. validateBaseline y assertFreshBaseline PASS: SSR616/Hosting89de, resource/Run/IAM sin deriva, cero operaciones y cero escrituras. Estado UI **DEPLOYMENT_PENDING**, autorización solicitada y todavía no recibida. Input, ZIP y proof permanecen intactos.
 
 La autorización UI pendiente debe cubrir exclusivamente este input/ZIP/proof y su rollback exacto. El rollback vuelve al código `af1a884`/ZIP9d4 y al Hosting89de de la baseline SSR616, preservando configuración e IAM; las nuevas revisiones las asigna cloud. Sólo procede contra el estado propio exacto. Resultado incierto exige reconciliar el journal/operación, sin replay ni borrar locks. No borra datos, sesiones o pagos, ni modifica reglas o activa gateway/OCI. La reversión backend se controla separadamente.
 
