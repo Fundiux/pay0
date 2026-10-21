@@ -6,7 +6,8 @@ const sourceCommit=git(['rev-parse','HEAD']),sourcePath='src/modules/telegram/se
 const printer=ts.createPrinter({removeComments:true}),tree=(name,s)=>ts.createSourceFile(name,s,ts.ScriptTarget.Latest,true,name.endsWith('.ts')?ts.ScriptKind.TS:ts.ScriptKind.JS),canonical=(name,s)=>printer.printFile(tree(name,s));
 const options={module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017,esModuleInterop:true,sourceMap:true},changed=new Map();
 for(const moduleName of ['service','repository','webhook']){
- const tsPath='src/modules/telegram/'+moduleName+'.ts',jsPath='lib/modules/telegram/'+moduleName+'.js',beforeTs=await zip.file(tsPath).async('string'),beforeJs=await zip.file(jsPath).async('string'),afterTs=fs.readFileSync(path.join(root,'functions',tsPath),'utf8').replace(moduleName==='webhook'?/    try \{\r?\n      const update =/:/a^/, '    res.set("Retry-After", "30");\n    res.status(503).json({ ok: false, reason: "telegram_transition_paused" });\n    return;\n\n    try {\n      const update =');
+ const tsPath='src/modules/telegram/'+moduleName+'.ts',jsPath='lib/modules/telegram/'+moduleName+'.js',beforeTs=await zip.file(tsPath).async('string'),beforeJs=await zip.file(jsPath).async('string');let afterTs=fs.readFileSync(path.join(root,'functions',tsPath),'utf8');
+ if(moduleName==='webhook'){const offset=afterTs.search(/    try \{\r?\n      const update =/);assert(offset>0,'PAUSE_BOUNDARY_MISSING');afterTs=afterTs.slice(0,offset)+'    res.set("Retry-After", "30");\n    res.status(503).json({ ok: false, reason: "telegram_transition_paused" });\n    return;\n  }\n);\n';}
  const baselineCommit=moduleName==='service'?'afe9ad2^':'63ef0a1d7a45b6bdb19abad631c898d79ca45a91';
  assert.equal(canonical(tsPath,beforeTs),canonical(tsPath,git(['show',baselineCommit+':functions/'+tsPath])),'PRODUCTION_SOURCE_NOT_AUDITED_BASE_'+moduleName);
  const oldEmit=ts.transpileModule(beforeTs,{compilerOptions:options,fileName:tsPath}).outputText;
