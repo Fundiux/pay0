@@ -1,6 +1,12 @@
 # F — Resultado explícito de recuperación
 
-Estado: `DEPLOYMENT_PENDING`. Paquete exacto preparado; falta autorización específica. Sin despliegue ni cambios productivos.
+Estado: `DEPLOYED_NOT_VERIFIED`. El usuario autorizó estos dos inputs/ZIP y su reversión. Publicación técnica verificada; recuperación funcional productiva pendiente. No se forzó ningún job productivo.
+
+Raíz ejecutó serialmente: queue sesión `13800`, código 0, revisión `queueoperationrecovery-00008-zag`; reconcile sesión `94186`, código 0, revisión `reconcileoperationrecovery-00009-qof`. Ambos terminaron `CONFIGURATION_VERIFIED`. El primer comando sin prefijo `--execute` fue rechazado con `MODE_REQUIRED` antes de operaciones; su log quedó preservado y no se considera una publicación.
+
+Verificación independiente sesión `87748`, código 0, a las `2026-10-21T06:58:00.250Z`: ambos `ACTIVE`, fuentes descargadas byte-idénticas al ZIP `ba933570681c33d65bb296d923020aad9a9566e5b9a5a1da397d08a69445a75c`, configuración Functions/Run e IAM preservados, generaciones observadas y revisiones Run listas, cero operaciones activas. Cero handlers background invocados y cero lecturas/escrituras de negocio.
+
+Recibos privados bajo `.firebase/modular-release/recovery-outcome-candidate/independent-post-publication-a12084ae-9dcb-428d-ab40-12d26e3511cf/`: `post-verification.json`, SHA256 `b9c379f36a512788d7569ede28a03b54547aace84f75ee0036a36a42b5311926`; `published-baseline.json`, SHA256 `f13d91a9c9eaed86d23c2f57e160f8456b13cb9964883594ecebce43021f570b`. Los ZIP previos `741a...` quedaron preservados para reversión; no se utilizó rollback.
 
 El worker distinguía únicamente excepciones: un retorno temprano por fuente terminal, generación antigua o error ya resuelto terminaba como `COMPLETED` y emitía `OPERACION_RECUPERADA` aunque no hubiera ejecutado el dominio.
 
@@ -51,6 +57,6 @@ Todas las pruebas financieras productivas, proveedores y recuperación de jobs p
 
 ## Publicación y reversión propuestas
 
-Publicar exclusivamente los dos destinos indicados, de forma serial con los inputs y certificados fijados, después de autorización específica. Se conserva el trigger con retry y la agenda de cinco minutos; patch de fuente exclusivamente, sin cambiar IAM ni configuración de runtime.
+La publicación autorizada se limitó a los dos destinos indicados, de forma serial con los inputs y certificados fijados. Se conserva el trigger con retry y la agenda de cinco minutos; patch de fuente exclusivamente, sin cambiar IAM ni configuración de runtime. Una futura publicación de otros bytes necesita su propia autorización.
 
 Revertir sólo la fuente de cada worker que haya sido actualizado, usando su ZIP previo preservado `741a0025088645a7b66ab84dc1c3b071536c37d8000e0596b2290b43c6f7953b`. No borrar ni restaurar documentos de solicitudes, jobs o auditoría, ni reabrir terminales para simular recuperación. Una publicación parcial requiere verificar primero cuál destino cambió; no repetir un PATCH de resultado incierto. Los estados nuevos de jobs usan valores ya existentes y no requieren migración de datos. Las entradas de auditoría permanecen preservadas.
