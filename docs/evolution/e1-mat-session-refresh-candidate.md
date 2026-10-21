@@ -1,6 +1,6 @@
 # MAT — revalidación de sesión al volver al panel
 
-Estado: **DEPLOYED_NOT_VERIFIED**. Usuario autorizó el paquete exacto y su reversión; publicación raíz83369 EXIT0/RELEASE_VERIFIED: Hosting `bd2ed1c61e22c573`, SSR `ssrpay0system-00620-zuz`. Post independiente estricto PASS. Sigue pendiente una sesión Telegram firmada real; no se declara completo el flujo MAT financiero. Comprobantes pausados y voz permanecen intactos: sólo cambia el hook de lectura.
+Estado: **COMPLETED, sólo recorrido de retorno al panel MAT**. Usuario confirmó: «Funciona al volver al panel». Implementado/probado/integrado en fuente63, publicado con autorización por raíz83369 EXIT0/RELEASE_VERIFIED: Hosting `bd2ed1c61e22c573`, SSR `ssrpay0system-00620-zuz`; post independiente estricto PASS y comprobación real del usuario. Revocaciones y cambios de actor reales no se ensayaron; sus casos siguen siendo sintéticos. No se declara completo el flujo MAT financiero. Comprobantes pausados y voz permanecen intactos: sólo cambia el hook de lectura.
 
 ## Publicación y post independiente
 
@@ -24,7 +24,7 @@ Build47 y runtime exacto EXIT0/PASS, sesiones29582 y69119; `assertRuntimeProof` 
 
 El coordinador reprodujo independientemente `check(input)` y `assertRuntimeProof` contra c6e/f71/dd1: **PASS**, sin alterar pins, helpers ni artefactos.
 
-También se abrieron `/mat/usuarios` y `/mat/clientes` en Chromium contra este runtime SSR exacto: HTTP200, render sin errores y sin initData Telegram ni cuenta Firebase. Se bloquearon redes externas; no se leyó información financiera. Proof `output/mat-session-refresh/mat-routes-proof.json`, SHA256 `1869693e5a3631d43f0a7ec4ffcf36cded478e74c18ba45a6ca3cbbbca3894c9`. Esa comprobación de arranque no sustituye una sesión Telegram firmada real, todavía pendiente.
+También se abrieron `/mat/usuarios` y `/mat/clientes` en Chromium contra este runtime SSR exacto: HTTP200, render sin errores y sin initData Telegram ni cuenta Firebase. Se bloquearon redes externas; no se leyó información financiera. Proof `output/mat-session-refresh/mat-routes-proof.json`, SHA256 `1869693e5a3631d43f0a7ec4ffcf36cded478e74c18ba45a6ca3cbbbca3894c9`. Esa prueba de arranque no equivale a validación firmada; la confirmación posterior del usuario acredita únicamente volver al panel, sin certificar por separado ambas rutas, revocaciones ni cambios de actor.
 
 Preflight previo a publicación `ui-mat-session-refresh-final-preflight.json`: SSR618/Hostingb933/configuración/Run/IAM preservados, cero operaciones activas. Preparación y pruebas no realizaron acciones financieras; el despliegue posterior fue autorizado y se limita a Hosting/SSR. Reversión autorizada exacta sólo contra el estado propio del ejecutor: Hosting `b933a73db87bb193` y fuente b690/ZIP `a896abb9d175d2c8c711c276d6c6b396d40ba4bd0a5d5830a42b3b66fbb1d767`, configuración/IAM preservados. Nunca retirar ni modificar AUTO para revertir MAT. Incertidumbre exige reconciliar operación/journal, sin replay ni borrar locks. El guard pin de deploy-scoped es 80be; el controlador actual c52 tiene otros bytes. Se prepara preservación exacta y receta de restauración temporal coordinada, sin cambiar input/pins ni ejecutar restore: no se promete que el rollback pase con el controlador actual sin ese paso comprobado.
 
@@ -53,7 +53,7 @@ Los cinco commits permanecen en origin/main para reconciliación separada: `8615
 
 Baseline fresca sólo de metadatos: `.firebase/modular-release/ui-mat-session-refresh-baseline.json`, SHA256 `04eb71f3cb7f51670ea3b2fbb2bbb94104d602fcc873f506fc181f373e305d8c`, PASS contra la publicación b690: SSR618/Hostingb933/configuración/Run/IAM idénticos y cero operaciones activas. La preparación local requirió lectura elevada de la configuración del CLI; el primer intento sandbox denegado por EPERM se conserva como limitación de ejecución, no como fallo del producto ni mutación.
 
-La autorización separada del input/ZIP/proof y rollback se recibió y el ejecutor realizó el preflight antes de publicar. No se activaron Sentinel, gateway, reglas globales ni acciones financieras. La comprobación funcional pendiente debe hacerse desde `/mat/usuarios` o `/mat/clientes` dentro de una sesión Telegram válida; navegar sin initData sólo comprueba la vista LOCAL, no el vínculo firmado.
+La autorización separada del input/ZIP/proof y rollback se recibió y el ejecutor realizó el preflight antes de publicar. No se activaron Sentinel, gateway, reglas globales ni acciones financieras. Rutas disponibles: `/mat/usuarios` y `/mat/clientes`; navegar sin initData sólo comprueba la vista LOCAL. La confirmación real recibida no amplía la certificación a operaciones financieras ni al puente Firebase, que no se implementó.
 
 ## J: bloqueo conservado
 
