@@ -16,6 +16,7 @@ test('learning overlays require exact endpoint sets and pinned overlay provenanc
   for (const [group, functions] of [
     ['receipt-learning-overlay', ['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']],
     ['conversation-memory-review-overlay', ['listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']],
+    ['conversation-memory-retirement-overlay', ['reviewAgent007MemoryCandidate']],
     ['conversation-memory-create-overlay', ['createAgent007MemoryCandidate']],
   ]) {
     assert.deepEqual(deploymentScope({ group, functions }).names, functions);

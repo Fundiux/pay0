@@ -13,6 +13,7 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   receipts: Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'receipt-learning-overlay': Object.freeze(['parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'conversation-memory-review-overlay': Object.freeze(['listAgent007MemoryDiagnostics', 'reviewAgent007MemoryCandidate']),
+  'conversation-memory-retirement-overlay': Object.freeze(['reviewAgent007MemoryCandidate']),
   'conversation-memory-create-overlay': Object.freeze(['createAgent007MemoryCandidate']),
   'receipt-workflow': Object.freeze(['createPago', 'parsePagoReceiptPdf', 'correctPagoReceiptSemanticField']),
   'security-readers': Object.freeze(['listClientsCanonical', 'getClientCanonical', 'listPagos', 'listSolicitudes', 'listScopedClientDispersions', 'listPagoNotes', 'listSolicitudNotes', 'listClientDispersionNotes', 'getAuthorizedDocumentDownloadUrl']),
@@ -28,7 +29,7 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'operation-recovery-queue-overlay': Object.freeze(['queueOperationRecovery']),
   'operation-recovery-reconcile-overlay': Object.freeze(['reconcileOperationRecovery']),
 });
-const OVERLAY_GROUPS = Object.freeze(['receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-retirement-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay']);
 export function artifactProbeContract(group) {
   if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
