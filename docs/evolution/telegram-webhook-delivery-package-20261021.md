@@ -1,5 +1,7 @@
 # Telegram webhook: candidato retenido
 
+Actualización posterior: el bloqueo de este diagnóstico inicial se resolvió con una pausa compatible y drenaje certificado. Producción quedó en `telegramwebhook-00037-ged`; la recuperación usa `telegramwebhook-00034-rul`, nunca la revisión insegura anterior. Véase [la entrega y transición completadas](telegram-webhook-safe-transition-20261021.md). El diagnóstico original que sigue se conserva como evidencia histórica.
+
 Estado: **NO PUBLICAR**. Rama aislada `fix/telegram-webhook-certification-20261021`, basada en main `63ef0a1d7a45b6bdb19abad631c898d79ca45a91`. No se cambió main ni producción. El audio real continúa pendiente.
 
 ## Comparación y alcance

@@ -48,10 +48,11 @@ jobs:
           node --test qa/scripts/voice-startup-lifecycle.test.cjs
           node qa/scripts/verify-hugo-voice-runtime-contract.cjs
           node qa/scripts/verify-hugo-voice-build-artifact.mjs
-      - name: Verify isolated Telegram test transport package
+      - name: Verify isolated Telegram delivery packages
         run: |
           node --test qa/scripts/remediation-telegram-transport.test.cjs
           node --test qa/scripts/telegram-test-transport-scope.test.mjs
+          node --test qa/scripts/scoped-deployment.test.mjs qa/scripts/telegram-webhook-transition-policy.test.mjs qa/scripts/telegram-webhook-deployment-scope.test.mjs
       - name: Preserve candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
