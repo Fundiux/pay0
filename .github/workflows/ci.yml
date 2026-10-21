@@ -53,6 +53,7 @@ jobs:
           node --test qa/scripts/remediation-telegram-transport.test.cjs
           node --test qa/scripts/telegram-test-transport-scope.test.mjs
           node --test qa/scripts/scoped-deployment.test.mjs qa/scripts/telegram-webhook-transition-policy.test.mjs qa/scripts/telegram-webhook-deployment-scope.test.mjs
+          node --test qa/scripts/telegram-invoice-deployment-proof.test.mjs qa/scripts/telegram-invoice-queue-release-policy.test.mjs qa/scripts/telegram-invoice-queue-drain.test.mjs qa/scripts/telegram-invoice-transition-policy.test.mjs
       - name: Preserve candidate evidence
         if: always()
         uses: actions/upload-artifact@v4

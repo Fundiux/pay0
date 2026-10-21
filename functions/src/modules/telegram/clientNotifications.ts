@@ -4,6 +4,7 @@ import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { buildClientFacturaDeliveryMessage } from "./commands";
 import { sendTelegramDocumentBuffer, sendTelegramMessage } from "./service";
+import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES } from "../solicitudDocuments/domain";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -27,6 +28,12 @@ type FacturaPair = {
 
 function cleanText(value: any): string {
   return String(value || "").trim();
+}
+
+function assertInvoiceDeliveryAcknowledged(value: any): void {
+  if (value?.ok !== true || !Number.isSafeInteger(value?.result?.message_id) || value.result.message_id <= 0) {
+    throw new Error("INVOICE_DELIVERY_UNCONFIRMED");
+  }
 }
 
 function cleanUpper(value: any): string {
@@ -57,7 +64,7 @@ function pickContentType(documentType: string, data: any): string {
   return cleanText(data.contentType) || (documentType === "FACTURA_XML" ? "application/xml" : "application/pdf");
 }
 
-async function getSolicitudMeta(solicitudId: string): Promise<{
+async function getSolicitudMeta(solicitudId: string, rootId: string): Promise<{
   solicitudFolio: string;
   clientId: string;
   clientName: string;
@@ -89,6 +96,10 @@ async function getSolicitudMeta(solicitudId: string): Promise<{
   }
 
   const data = snap.data() || {};
+
+  if (cleanText(data.rootId) !== rootId) {
+    throw new Error("Solicitud fuera del ambito de la notificacion.");
+  }
 
   return {
     solicitudFolio: cleanText(
@@ -155,7 +166,9 @@ async function getActiveFacturaPair(input: {
 
     if (!storagePath) return;
     if (documentType !== "FACTURA_PDF" && documentType !== "FACTURA_XML") return;
-    if (["DELETED", "ELIMINADA", "INACTIVE", "INACTIVO", "REPLACED"].includes(status)) return;
+    if (status !== "READY") return;
+    const expectedPrefix = `roots/${rootId}/solicitudes/${solicitudId}/docs/${documentType}/${doc.id}-`;
+    if (!storagePath.startsWith(expectedPrefix)) return;
 
     rows.push({
       uploadId: doc.id,
@@ -176,7 +189,8 @@ async function getActiveFacturaPair(input: {
   };
 }
 
-async function getClientRecipients(clientId: string): Promise<Array<{
+async function getClientRecipients(clientId: string, rootId: string): Promise<Array<{
+  documentId: string;
   telegramUserId: string;
   chatId: string;
   telegramUsername: string;
@@ -192,6 +206,7 @@ async function getClientRecipients(clientId: string): Promise<Array<{
     .get();
 
   const rows: Array<{
+    documentId: string;
     telegramUserId: string;
     chatId: string;
     telegramUsername: string;
@@ -201,16 +216,17 @@ async function getClientRecipients(clientId: string): Promise<Array<{
     const data = doc.data() || {};
     const chatId = cleanText(data.chatId);
 
-    if (!chatId) return;
+    if (!chatId || cleanText(data.rootId) !== rootId) return;
 
     rows.push({
+      documentId: doc.id,
       telegramUserId: cleanText(data.telegramUserId || doc.id),
       chatId,
       telegramUsername: cleanText(data.telegramUsername || ""),
     });
   });
 
-  return rows;
+  return rows.filter((row, index) => rows.findIndex(other => other.chatId === row.chatId) === index);
 }
 
 async function sendStorageFileToTelegram(input: {
@@ -218,6 +234,7 @@ async function sendStorageFileToTelegram(input: {
   chatId: string;
   file: FacturaUploadFile;
   caption: string;
+  beforeSend?: () => Promise<void>;
 }) {
   const bucket = admin.storage().bucket();
   const storageFile = bucket.file(input.file.storagePath);
@@ -227,7 +244,14 @@ async function sendStorageFileToTelegram(input: {
     throw new Error(`Archivo no encontrado en Storage: ${input.file.storagePath}`);
   }
 
-  const [buffer] = await storageFile.download();
+  const [metadata] = await storageFile.getMetadata();
+  const size = Number(metadata.size);
+  if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_SOLICITUD_DOCUMENT_SIZE_BYTES || !/^[1-9][0-9]*$/.test(String(metadata.generation || ""))) {
+    throw new Error("INVOICE_DOCUMENT_UNAVAILABLE");
+  }
+  const [buffer] = await bucket.file(input.file.storagePath, { generation: metadata.generation }).download();
+  if (buffer.length !== size) throw new Error("INVOICE_DOCUMENT_CHANGED");
+  await input.beforeSend?.();
 
   return await sendTelegramDocumentBuffer(
     input.botToken,
@@ -235,15 +259,17 @@ async function sendStorageFileToTelegram(input: {
     input.file.fileName || "documento",
     buffer,
     input.file.contentType || "application/octet-stream",
-    input.caption.slice(0, 1024)
+    input.caption.slice(0, 1024),
+    { signal: AbortSignal.timeout(12000) }
   );
 }
 
-export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string): Promise<{
+export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string, controls: { beforeSend?: () => Promise<void> } = {}): Promise<{
   ok: boolean;
   notified: boolean;
   reason: string;
   sentCount?: number;
+  reviewRequired?: boolean;
 }> {
   const cleanUploadId = cleanText(uploadId);
 
@@ -277,26 +303,23 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
     return { ok: true, notified: false, reason: "missing_pdf_or_xml" };
   }
 
-  const meta = await getSolicitudMeta(solicitudId);
+  const meta = await getSolicitudMeta(solicitudId, rootId);
 
   if (!meta.clientId) {
     return { ok: true, notified: false, reason: "missing_client_id" };
   }
 
-  const eventId = safeDocId(`FACTURA_CLIENTE_${meta.clientId}_${solicitudId}_${pair.pdf.uploadId}_${pair.xml.uploadId}`);
-  const eventRef = db.collection("telegramClientNotificationEvents").doc(eventId);
-  const eventSnap = await eventRef.get();
-
-  if (eventSnap.exists) {
-    const event = eventSnap.data() || {};
-    const status = cleanUpper(event.status);
-
-    if (status === "SENT" || status === "PENDING") {
-      return { ok: true, notified: false, reason: "duplicate" };
-    }
+  const clientSnap = await db.collection("clients").doc(meta.clientId).get();
+  if (!clientSnap.exists || cleanText(clientSnap.data()?.rootId) !== rootId) {
+    return { ok: true, notified: false, reason: "client_scope_mismatch" };
   }
 
-  await eventRef.set(
+  const eventId = safeDocId(`FACTURA_CLIENTE_${meta.clientId}_${solicitudId}_${pair.pdf.uploadId}_${pair.xml.uploadId}`);
+  const eventRef = db.collection("telegramClientNotificationEvents").doc(eventId);
+  try {
+    // Any existing receipt, including a partial or uncertain delivery, is final
+    // for automatic retries. Keep the historical key so legacy receipts count.
+    await eventRef.create(
     {
       eventId,
       type: "FACTURA_CLIENTE_DISPONIBLE",
@@ -316,11 +339,17 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
       xmlUploadId: pair.xml.uploadId,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+    }
+    );
+  } catch (error: any) {
+    if (error?.code === 6 || error?.code === "already-exists") {
+      const receipt = (await eventRef.get()).data();
+      return { ok: true, notified: false, reason: "duplicate", reviewRequired: receipt?.status !== "SENT" };
+    }
+    throw error;
+  }
 
-  const recipients = await getClientRecipients(meta.clientId);
+  const recipients = await getClientRecipients(meta.clientId, rootId);
 
   if (recipients.length === 0) {
     await eventRef.set(
@@ -347,29 +376,43 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
 
   for (const recipient of recipients) {
     try {
-      await sendTelegramMessage(
+      const authorizeRecipient = async () => {
+        await controls.beforeSend?.();
+        const current = (await db.collection("clientTelegramUsers").doc(recipient.documentId).get()).data();
+        if (current?.active !== true || current.rootId !== rootId || current.clientId !== meta.clientId || cleanText(current.chatId) !== recipient.chatId) {
+          throw new Error("INVOICE_RECIPIENT_AUTHORITY_CHANGED");
+        }
+      };
+      await authorizeRecipient();
+      const textResult = await sendTelegramMessage(
         TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         recipient.chatId,
-        message
+        message,
+        { signal: AbortSignal.timeout(12000) }
       );
+      assertInvoiceDeliveryAcknowledged(textResult);
 
-      await sendStorageFileToTelegram({
+      const pdfResult = await sendStorageFileToTelegram({
         botToken: TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         chatId: recipient.chatId,
         file: pair.pdf,
         caption: "PDF",
+        beforeSend: authorizeRecipient,
       });
+      assertInvoiceDeliveryAcknowledged(pdfResult);
 
-      await sendStorageFileToTelegram({
+      const xmlResult = await sendStorageFileToTelegram({
         botToken: TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         chatId: recipient.chatId,
         file: pair.xml,
         caption: "XML",
+        beforeSend: authorizeRecipient,
       });
+      assertInvoiceDeliveryAcknowledged(xmlResult);
 
       sentCount += 1;
     } catch (error: any) {
-      const message = String(error?.message || error || "unknown");
+      const message = "delivery_uncertain";
       errors.push(message);
 
       logger.error("notifyClientFacturaDisponibleFromUploadId recipient error", {
@@ -382,8 +425,11 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
 
   await eventRef.set(
     {
-      status: sentCount > 0 ? "SENT" : "FAILED",
-      reason: sentCount > 0 ? "sent" : "send_failed",
+      // PENDING is intentionally retained for compatibility with old readers,
+      // which would retry an unfamiliar status after a traffic rollback.
+      status: errors.length > 0 ? "PENDING" : "SENT",
+      deliveryState: errors.length > 0 ? "UNCERTAIN" : "SENT",
+      reason: errors.length > 0 ? "delivery_uncertain" : "sent",
       sentCount,
       errors,
       sentAt: sentCount > 0 ? FieldValue.serverTimestamp() : null,
@@ -426,7 +472,7 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
   return {
     ok: true,
     notified: sentCount > 0,
-    reason: sentCount > 0 ? "sent" : "send_failed",
+    reason: errors.length > 0 ? "delivery_uncertain" : "sent",
     sentCount,
   };
 }

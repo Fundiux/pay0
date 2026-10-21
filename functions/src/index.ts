@@ -2818,6 +2818,7 @@ export { requestClientDispersionIncident } from "./modules/financing/callables";
 export { resolveClientDispersionIncident } from "./modules/financing/callables";
 export { addClientDispersionNota } from "./modules/financing/callables";
 export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
+export { processTelegramInvoiceNotificationQueue } from "./modules/telegram/invoiceNotificationWorker";
 export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
 export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";
 export { getPublicConstanciaVerification, generateSolicitudReceiptCertificate } from "./modules/constancias/service";
