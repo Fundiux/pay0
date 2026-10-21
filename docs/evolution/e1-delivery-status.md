@@ -20,7 +20,7 @@ La consulta inicial encontró Hosting `d446c05b06cc4941`. Una publicación concu
 | Herramienta directa de reporte en gateway | Pendiente de construir y aprobar imagen específica. La revisión actual conserva las 13 herramientas anteriores. |
 | Comparaciones de periodos y contexto | Integradas localmente en `0a783d0`; 56 pruebas backend y 49 gateway aprobadas. Requieren paquete posterior sobre la base productiva vigente. `DEPLOYMENT_PENDING`. |
 | Revisión administrativa de recuperaciones y formularios MAT | Integradas localmente en `a280e72`; emulador real verifica concurrencia, auditoría, paginación y permisos. Pruebas de navegador con fixtures; sin operaciones financieras reales. `DEPLOYMENT_PENDING`. |
-| Transporte Telegram | Integrado localmente en `afe9ad2`; 23 pruebas de transporte aprobadas. Debe revisar 46 exportaciones transitivas antes de seleccionar el paquete. No se enviaron mensajes reales. |
+| Transporte Telegram | Transporte en main y notificación de prueba `00016-mix` preservada. Webhook publicado por separado en `telegramwebhook-00037-ged`, con recuperación compatible `00034-rul` y drenaje probado; ver `telegram-webhook-safe-transition-20261021.md`. Los demás consumidores del inventario transitivo siguen requiriendo validación propia. No se enviaron mensajes reales. |
 | Control de capacidades canónicas | Integrado en `d6f9d42`, conectado a CI y preparación de candidatos. Verificación local aprobada; CI remoto no ejecutado. |
 | Consumidor QR WhatsApp | Productor, wrapper e interfaz presentes. No se ha localizado el consumidor ejecutable de comandos. Incompleto. |
 
