@@ -1,6 +1,6 @@
 # B: overlay local de reportes R2 para voz
 
-**Estado: LOCAL_CANDIDATE_PURE_TESTED_NOT_DEPLOY_READY.** No hay input, publicacion ni nueva imagen. No se ejecuto build Functions, npm, JVM, servicio, proveedor ni consulta cloud. Este candidato no incluye memoria durable ni correccion SESSION f328eea; no modifica gates.
+**Estado actual: SUPERSEDED_BY_CAPABILITY.** El overlay historico `87cad` y el gateway fuente `049e` se conservan como evidencia; no son propuestas de publicacion. La captura del 21 de octubre encontro R2 y correccion de sesion ya publicados por otra entrega. No se reconstruyo ni se desplego nada. Los apartados historicos siguientes describen la preparacion original; la reconciliacion final figura al cierre.
 
 ## Identidad exacta
 
@@ -47,3 +47,21 @@ La prueba pura ejecuto los JS candidatos: comparo las 13 herramientas gateway pr
 Orden futuro: certificar el callable de voz y solicitar autorizacion; luego certificar imagen gateway y su propuesta de trafico. Reversion del callable contra f740 y recibos propios, previa comprobacion del estado vigente. Preservar la imagen gateway anterior documentada hasta capturar su estado fresco; no usar una etiqueta historica como autorizacion. No borrar memorias ni activar reglas.
 
 La memoria personal durable por voz sigue INCOMPLETE: el seam59a3 gate OFF no conecta confirmacion, persistencia y recuperacion entre sesiones. Este paquete de reportes no declara cerrado ese frente.
+
+
+## Reconciliacion fresca del 21 de octubre
+
+La Function vigente es `delegatehugovoiceturn-00011-nom`, ZIP `60af834eff55b146fac1ee6744db183c1b3a4bfb0b723a300ca275f1e112095b`. La captura propia solo GET esta en `.firebase/modular-release/voice-r2-report-overlay/fresh-baseline-2026-10-21T06-02-40-181Z/`; baseline SHA256 `58d397b213750763197c3074061040c293287064636eb97c8c00a60b52268610`. Respecto de f740 conserva 782 entradas, cambia seis JS/maps y anade cuatro correspondientes al helper de correcciones y su adaptador VOICE. Conserva ambos adaptadores corregidos R1.1, package y lockfile. Reaplicar 87cad perderia capacidades posteriores.
+
+El gateway vigente sirve el 100% desde `hugo-voice-gateway-canary-vr2-6f4a27e`, con imagen `sha256:1411300ac4cda7950f66fccba8ed9a2c329a172c1eac9546ee8b62b324076c06`. latestCreated y latestReady coinciden; generation y observedGeneration son 32. Su captura GET esta en `gateway-fresh-2026-10-21T06-11-09-090Z`, baseline SHA256 `3963b8bc20678c0011b19c50ddd144424560b81f05e6ab3bc1b15cc05d21ce4e`.
+
+La identidad se comprobo mas alla de labels: el GET del build global `0d839593-4dd2-4675-8ddf-a3c1f391e0fa` confirma SUCCESS y el digest anterior. Su fuente inmutable descargada tiene SHA256 `11b12f7fef1d5b4d65112a7b85264d51159676c0899762e52aca7e45045de8dc`, igual al hash de sourceProvenance. Las 2978 entradas del tar coinciden exactamente con el manifiesto `066712c2f0242e1b5c6e0894728dde3b92c02a32bb6a41200523d05151c700ce`, sin altas ni bajas. Los diez archivos de gateway cotejados corresponden al commit `6f4a27e2d60c4280e7ec9cf5b8db3f8880f9f2e4` del repositorio externo de entrega, considerando exclusivamente CRLF/LF en esa comparacion Git. El manifiesto del contexto si se comprobo byte por byte. El AST declara 15 herramientas: las 13 anteriores, reporte R2 y correccion de respuesta de sesion. Evidencia: `source-link-proof.json` en la captura del gateway. No se ejecutaron scripts del repositorio externo.
+
+### Alcance de las comprobaciones
+
+- Se hizo npm ci --omit=dev literal y privado para 87cad, Node 22, con package y lockfile propios; no se cambiaron dependencias raiz. La fuente fresca 60af conserva ambos manifiestos exactamente. El typecheck privado de los cinco modulos R2 y sus dependencias fuente pasi; no equivale a un build completo de 60af.
+- Arranque de package.main fresco60af: 341 exports/endpoints; dos peticiones anonimas rechazadas; cero intentos de red y cierre de dependencias por realpath comprobado. No se cargaron archivos de entorno del archivo.
+- La suite historica adaptada al runtime fresco obtuvo **9/10**: el callable real de voz compara dos periodos mediante los handlers canonicos y rechaza anonimo, perfil inactivo, rol cambiado y root inyectado. El transporte de Firestore y request.auth de esta suite son sinteticos. El fallo restante es una expectativa de continuidad WEB: el Core de esta base no guarda lastEarningsReport tras el primer reporte; no es un PASS universal ni prueba de contexto encadenado. La herramienta explicita VOICE si pasi.
+- La entrega externa versionada documenta 57 pruebas de gateway, 12 de integracion con Firestore y 17 regresiones sobre los artefactos publicados. Se revisaron sus recibos y procedencia; no se repitieron esas suites en esta reconciliacion ni se atribuyen a ellas validacion JWT/HTTP o audio real.
+
+No hay nuevo ZIP, input o cambio productivo. La reversion historica a f740/7df no debe proponerse frente a este estado fresco sin nueva evaluacion: eliminaria R2/correccion de sesion ya instalados. El siguiente paso util es verificar la sesion autenticada y la continuacion audible con el gateway actual; la memoria durable por usuario/tema en VOICE sigue pendiente del seam y de su conexion explicita. No se activaron gates ni reglas globales. Todas las capturas de esta reconciliacion tienen cero escrituras productivas y cero llamadas de negocio/proveedor.
