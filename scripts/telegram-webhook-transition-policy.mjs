@@ -47,3 +47,12 @@ export function recoveryTrafficPatch(expected, current, pause) {
   assert.equal(typeof current.service.etag, 'string', 'RECOVERY_ETAG_REQUIRED');
   return { name: TARGET, etag: current.service.etag, traffic: [{ type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION', revision: pause.revision, percent: 100 }] };
 }
+
+export function recoveryV1Body(expected, current, revision) {
+  assert.equal(hash(current), hash(expected), 'RECOVERY_V1_CONCURRENT_CHANGE');
+  assert.equal(current.metadata?.name, 'telegramwebhook', 'RECOVERY_V1_SERVICE_SCOPE');
+  assert(['pay-0-system','751158244178'].includes(current.metadata?.namespace), 'RECOVERY_V1_PROJECT_SCOPE');
+  assert.match(current.metadata?.resourceVersion || '', /^.+$/, 'RECOVERY_RESOURCE_VERSION_REQUIRED');
+  assert.match(revision, /^telegramwebhook-[a-z0-9-]+$/, 'RECOVERY_V1_REVISION_SCOPE');
+  return {apiVersion:current.apiVersion,kind:current.kind,metadata:{name:current.metadata.name,namespace:current.metadata.namespace,resourceVersion:current.metadata.resourceVersion,labels:current.metadata.labels,annotations:current.metadata.annotations},spec:{...current.spec,traffic:[{revisionName:revision,percent:100}]}};
+}

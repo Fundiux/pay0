@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {tokenInMemory, getMetadata} from './capture-production-baseline.mjs';
-import {TARGET, hash, assertDrainWitness, recoveryTrafficPatch} from './telegram-webhook-transition-policy.mjs';
+import {TARGET, hash, assertDrainWitness, recoveryTrafficPatch, recoveryV1Body} from './telegram-webhook-transition-policy.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),privateRoot=path.join(root,'.firebase/modular-release');
 const functionUrl='https://cloudfunctions.googleapis.com/v2/projects/pay-0-system/locations/us-central1/functions/telegramWebhook';
 const operationUrl='https://cloudfunctions.googleapis.com/v2/projects/pay-0-system/locations/us-central1/operations?pageSize=100&filter=done%3Dfalse';
+const serviceV1Url='https://us-central1-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/pay-0-system/services/telegramwebhook';
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 function privateFile(file){const p=path.resolve(file);assert(p.startsWith(privateRoot+path.sep),'PRIVATE_PATH_REQUIRED');for(let q=p;q!==privateRoot;q=path.dirname(q))if(fs.existsSync(q))assert(!fs.lstatSync(q).isSymbolicLink(),'PRIVATE_LINK_FORBIDDEN');return p}
 async function state(token){const resource=await getMetadata(functionUrl,token);assert.equal(resource.serviceConfig.service,TARGET);const [service,iam]=await Promise.all([getMetadata('https://run.googleapis.com/v2/'+TARGET,token),getMetadata('https://run.googleapis.com/v2/'+TARGET+':getIamPolicy',token)]);return {resource,service,iam}}
@@ -37,24 +38,26 @@ export async function observeDrain(pauseFile,outputFile){
 export async function prepareRecovery(expectedFile,pauseFile,outputFile){
   const expectedBytes=fs.readFileSync(privateFile(expectedFile)),expected=JSON.parse(expectedBytes),pauseBytes=fs.readFileSync(privateFile(pauseFile)),pause=JSON.parse(pauseBytes),token=tokenInMemory();
   const current=await state(token);pause.observedRevision=await getMetadata('https://run.googleapis.com/v2/'+TARGET+'/revisions/'+pause.revision,token);
-  const body=recoveryTrafficPatch(expected,current,pause);await noOperations(token);
-  // validateOnly checks IAM and request shape without changing traffic.
-  const response=await fetch('https://run.googleapis.com/v2/'+TARGET+'?updateMask=traffic&validateOnly=true',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});
-  assert(response.ok,'RECOVERY_VALIDATION_HTTP_'+response.status);await response.json();assert.equal(hash(await state(token)),hash(current),'VALIDATION_CHANGED_STATE');
-  const plan={status:'READY',expectedFile:privateFile(expectedFile),expectedSha256:sha(expectedBytes),pauseFile:privateFile(pauseFile),pauseSha256:sha(pauseBytes),validatedBody:body,service:TARGET,method:'PATCH',updateMask:'traffic',redeployments:0,validatedAt:new Date().toISOString()};
+  recoveryTrafficPatch(expected,current,pause);await noOperations(token);
+  const expectedV1=await jsonGet(serviceV1Url,token),body=recoveryV1Body(expectedV1,expectedV1,pause.revision);
+  // v1 preserves this Functions-managed service's template exactly. The v2
+  // conversion was rejected in validateOnly with an existing-revision conflict.
+  const response=await fetch(serviceV1Url+'?dryRun=all',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});
+  assert(response.ok,'RECOVERY_VALIDATION_HTTP_'+response.status);await response.json();assert.equal(hash(await state(token)),hash(current),'VALIDATION_CHANGED_STATE');assert.equal(hash(await jsonGet(serviceV1Url,token)),hash(expectedV1),'VALIDATION_CHANGED_V1_STATE');
+  const plan={status:'READY',expectedFile:privateFile(expectedFile),expectedSha256:sha(expectedBytes),pauseFile:privateFile(pauseFile),pauseSha256:sha(pauseBytes),expectedV1,validatedBody:body,service:TARGET,method:'PUT_V1',updateMask:'traffic-only-diff',redeployments:0,validatedAt:new Date().toISOString()};
   fs.writeFileSync(privateFile(outputFile),JSON.stringify(plan,null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify({status:'RECOVERY_VALIDATED_NO_TRAFFIC_CHANGE',pauseRevision:pause.revision,redeployments:0}));return plan;
 }
 
 export async function executeRecovery(planFile,planSha256){
   const bytes=fs.readFileSync(privateFile(planFile));assert.equal(sha(bytes),planSha256,'RECOVERY_PLAN_CHANGED');const plan=JSON.parse(bytes);
-  assert.equal(plan.status,'READY');assert.equal(plan.service,TARGET);assert.equal(plan.updateMask,'traffic');assert.equal(plan.method,'PATCH');
+  assert.equal(plan.status,'READY');assert.equal(plan.service,TARGET);assert.equal(plan.updateMask,'traffic-only-diff');assert.equal(plan.method,'PUT_V1');
   const expectedBytes=fs.readFileSync(privateFile(plan.expectedFile)),pauseBytes=fs.readFileSync(privateFile(plan.pauseFile));assert.equal(sha(expectedBytes),plan.expectedSha256);assert.equal(sha(pauseBytes),plan.pauseSha256);
-  const expected=JSON.parse(expectedBytes),pause=JSON.parse(pauseBytes),token=tokenInMemory(),current=await state(token);pause.observedRevision=await getMetadata('https://run.googleapis.com/v2/'+TARGET+'/revisions/'+pause.revision,token);const body=recoveryTrafficPatch(expected,current,pause);assert.deepEqual(body,plan.validatedBody);await noOperations(token);
+  const expected=JSON.parse(expectedBytes),pause=JSON.parse(pauseBytes),token=tokenInMemory(),current=await state(token);pause.observedRevision=await getMetadata('https://run.googleapis.com/v2/'+TARGET+'/revisions/'+pause.revision,token);recoveryTrafficPatch(expected,current,pause);const currentV1=await jsonGet(serviceV1Url,token),body=recoveryV1Body(plan.expectedV1,currentV1,pause.revision);assert.deepEqual(body,plan.validatedBody);await noOperations(token);
   const journal=privateFile(planFile+'.execution.jsonl'),fd=fs.openSync(journal,'wx',0o600),emit=row=>fs.writeSync(fd,JSON.stringify({time:new Date().toISOString(),...row})+'\n');
   try{
     emit({state:'DISPATCHING',planSha256});
-    const response=await fetch('https://run.googleapis.com/v2/'+TARGET+'?updateMask=traffic',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});assert(response.ok,'RECOVERY_HTTP_'+response.status);const operation=await response.json();assert.match(operation.name,/^projects\/(pay-0-system|751158244178)\/locations\/us-central1\/operations\/[^/]+$/);emit({state:'ACCEPTED',operation:operation.name});
-    let done=false;for(let i=0;i<120;i++){const status=await getMetadata('https://run.googleapis.com/v2/'+operation.name,token);if(status.done){assert(!status.error,'RECOVERY_OPERATION_FAILED');done=true;break}await new Promise(r=>setTimeout(r,10000))}assert(done,'RECOVERY_OPERATION_PENDING');
+    const response=await fetch(serviceV1Url,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});assert(response.ok,'RECOVERY_HTTP_'+response.status);const accepted=await response.json();emit({state:'ACCEPTED',generation:accepted.metadata.generation,resourceVersion:accepted.metadata.resourceVersion});
+    let done=false;for(let i=0;i<120;i++){const status=await jsonGet(serviceV1Url,token);if(Number(status.status.observedGeneration)===Number(accepted.metadata.generation)&&status.status.traffic?.length===1&&status.status.traffic[0].revisionName===pause.revision&&status.status.traffic[0].percent===100&&status.status.conditions?.some(c=>c.type==='Ready'&&c.status==='True')){done=true;break}await new Promise(r=>setTimeout(r,10000))}assert(done,'RECOVERY_OPERATION_PENDING');
     const after=await state(token);assert.equal(hash(after.resource),hash(expected.resource),'RECOVERY_FUNCTION_CHANGED');assert.equal(hash(after.iam),hash(expected.iam),'RECOVERY_IAM_CHANGED');
     const normalize=value=>{const v=structuredClone(value);for(const k of ['traffic','trafficStatuses','generation','observedGeneration','updateTime','etag'])delete v[k];if(v.terminalCondition)delete v.terminalCondition.lastTransitionTime;for(const c of v.conditions||[])delete c.lastTransitionTime;return v};assert.equal(hash(normalize(after.service)),hash(normalize(expected.service)),'RECOVERY_RUNTIME_CHANGED');
     assert.equal(after.service.trafficStatuses?.length,1);assert.equal(after.service.trafficStatuses[0].revision,pause.revision);assert.equal(after.service.trafficStatuses[0].percent,100);emit({state:'VERIFIED',revision:pause.revision,redeployments:0});fs.writeFileSync(privateFile(planFile+'.after.json'),JSON.stringify(after),{flag:'wx',mode:0o600});console.log(JSON.stringify({status:'RECOVERY_VERIFIED',revision:pause.revision,redeployments:0}));
