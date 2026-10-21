@@ -1,23 +1,62 @@
-# Comprobantes: DROP→AUTO canónico
+# Comprobantes DROP→AUTO — paquete UI exacto
 
-Estado: **INTEGRATION_PENDING**, fuente congelada y verificada localmente; build canónico pendiente de terminar y sin autorización de despliegue.
+Estado: **DEPLOYMENT_PENDING**. UI preparada y verificada sobre la fuente productiva SSR616, preservando su mejora de voz. Esta UI todavía no está autorizada ni publicada. El backend canónico tiene entrega y autorización separadas; el coordinador realiza sus operaciones productivas.
 
-La entrega anterior permanece publicada y preservada: source f1df4a2835e37db725897bd97a26475437d88637, ZIP31aab2ff68a319b1b251e6b4bc29ae4ed790da8a916dd792c157d3cd50d9a1ad, Hosting40a3d90573d2a52b, SSR00614-qep. Sus input/proofs/recibos no cambian.
+La entrega registra al soltar un PDF sólo cuando el servidor devuelve READY canónico: sin motivos pendientes, identificación de 64 hex ligada al payload, cliente/empresa/tipo no vacíos y tipo consistente. Incluye la coincidencia única por nombre autorizado que resuelve el nuevo backend. No elige el primer candidato ni deduce identidades o datos financieros en el navegador. Ambigüedad y REQUIRES_REVIEW conservan revisión manual.
 
-## Evolución solicitada: DROP→AUTO con coincidencia canónica única
+## Identidad y base preservada
 
-El usuario sigue encontrando barreras y pidió automatización, dejando selección manual para excepciones. El texto «RFC o cuenta completa insuficientes» provenía del mapping de `receiptAutomaticRegistration`, por lo que no acreditaba una versión backend antigua. La nueva fuente local usa copy neutral sobre datos insuficientes para una coincidencia única. Fecha y tipo pendientes siguen siendo decisiones del servidor, sin inferencias financieras en el navegador.
+Directorio privado del paquete: `.firebase/modular-release/hosting-b69021834f3a-a956ec86-6800-402f-a65e-e2b5e84d3b34`.
 
-Base aislada nueva: `receipt-auto-ui-source`, rama `fix/receipt-drop-auto-20261020`, hija exacta de la fuente productiva `f1df4a2`/ZIP `31aab2ff`/SSR614. Delta de cinco archivos: página de pagos, servicio de comprobantes, mapping/guardia canónica, helper puro de preferencia/contexto y utilidad de upload con callback opcional. No se copia la página acumulativa raíz ni se modifican otras rutas, dependencias o backend.
+| Elemento | Identidad exacta |
+|---|---|
+| Fuente candidata | `b69021834f3a90415202cd0c3ba8dd36f93ed11c` |
+| Árbol | `a25c09216d0a5746fe703e9cc81b7733c6627218` |
+| Recibo de build SHA256 | `1baebffca74b6581cf5b368dd48e92144bb011cee95c6db2b229393898940a28` |
+| `input.json` SHA256 | `b7a8880e0e10d21e47c02dd3d7189f19f7ca0f92ce10f6bb4d6e1ebe1b0b526b` |
+| ZIP candidato SHA256 | `a896abb9d175d2c8c711c276d6c6b396d40ba4bd0a5d5830a42b3b66fbb1d767` |
+| Proof runtime vinculado SHA256 | `8f1997edfd52638d1f6f2675502f1ce4fc3d4f5247699ac6e13cef6e32a03963` |
+| Proof canónico previo a anotaciones SHA256 | `e867d70d366cc27098674f6ac792524a5aad1caa57172457833d37dbaa15f6ab` |
+| Fuente productiva padre | `af1a884270d427244b5a78feed123b5e9be89aaf` |
+| ZIP productivo padre SHA256 | `9d4321facd660bc9ec0d319883982698aa5ace21a59127508c7411be1ba6549b` |
+| Hosting / SSR de base | `89de9f0862d03d49` / `ssrpay0system-00616-ret` |
+| Baseline fijada al input SHA256 | `a5a9029c4941d6c703a549a436ce88846882c8838b37bbfed9615b9da1ac509c` |
 
-La nueva cola registra automáticamente sólo READY canónico sin reasons, ID de identificación de 64 hex igual al payload y cliente/empresa/tipo no vacíos del servidor; incluye nombres únicos autorizados cuando el nuevo backend los resuelve. Ambigüedad o REQUIRES_REVIEW nunca crean. La selección manual sigue siendo parse-only; el botón explícito vuelve a validar. REGISTERED sólo adjunta con receiptPending exactamente true y pagoId servidor, nunca crea otro pago.
+El proof vinculado está en `runtime-627d495b-f775-43b4-b0e2-df7431262e2c/proof-with-qa-override.json`, dentro del directorio del paquete. El input contiene 170 archivos Hosting con hashes fijados. Fuente privada: `receipt-auto-on-voice-ui-source`, rama `fix/receipt-auto-preserve-voice-20261020`, limpia antes del build.
 
-El tipo `resolvedOperationTypeKey` servidor rellena una entrada vacía, con fallback al tipo del createPayload; una contradicción entre campos o frente a una elección explícita impide creación. No se bloquea una resolución canónica por la carrera del catálogo local todavía cargando. Cuando hay varios tipos, el control explícito «Tipo predeterminado para comprobantes (recordar en este navegador)» guarda únicamente la clave de catálogo en un namespace root/uid. No toma la primera opción ni hereda silenciosamente el último tipo del formulario; valida activo/OPERACION/ámbito, elimina claves inválidas sólo después de cargar el catálogo y no crea pagos por configurar la preferencia.
+Exactamente cinco archivos cambian sobre el padre: `src/app/pagos/page.tsx`, `src/services/pagoReceipt.ts`, `src/lib/receiptAutomaticRegistration.ts`, `src/lib/receiptOperationPreference.ts` y `src/lib/uploadPagoDoc.ts`. Patch SHA256 `13c6bd57b8cb5cdf237b52c60b9faf63b82760c9fe0030537aba6cd40006b6f7`. Functions, dependencias y el resto de la fuente permanecen intactos, incluidos los dos archivos productivos de arranque de voz.
 
-Las tareas de comprobantes capturan root/uid/epoch. Un cambio de actor/raíz invalida síncronamente las referencias y limpia el lote; antes de llamadas y después de cada await se compara también Firebase auth.currentUser.uid. Los callbacks `assertContext` son internos y nunca se serializan. Parse protege la lectura del archivo; upload protege SHA, init, Storage, progreso/cancelación y finalize. El callback es opcional para conservar otros callers. Una creación ya enviada puede terminar bajo su autorización original, pero el cambio posterior bloquea uploads y actualizaciones UI de esa tarea; no se finge que esa creación enviada fue cancelada ni se ejecutan limpiezas cloud con otra sesión.
+## Comportamiento y límites
 
-QA sintética raíz y candidato previa al último early-return: 19/19 PASS, cero skip/fail, incluyendo Chromium, auto por nombre READY, payload incompleto rechazado, selección parse-only, recuperación sin create, operación canónica antes de catálogo, mismatch, preferencia persistida durante carga y eliminación posterior, y carreras de actor durante arrayBuffer/init/Storage/create. Los fixtures de actor estable están etiquetados como tales; la suite separada `receipt-actor-context.test.cjs` usa las guardias reales. Los primeros intentos detectaron una referencia obsoleta del helper y un rechazo del fixture manejado demasiado tarde; logs conservados y corregidos, sin contarlos como PASS. El preflight TypeScript de contexto pasó; revisión independiente y build canónico final siguen pendientes, sin nuevo despliegue.
+El tipo `resolvedOperationTypeKey` del servidor rellena una entrada vacía, con fallback al tipo del createPayload. Una contradicción entre campos o frente a una elección explícita impide crear. La resolución canónica no depende de que el catálogo del navegador ya haya terminado de cargar.
 
-Freeze final: commit privado `c3ece52ed86a5325d40e4d3290387612facee253`, exactamente cinco archivos sobre `f1df4a2`, checkout limpio. Intel revisó las guardias y señaló un rechazo no capturado en el entrypoint invocado con void; se corrigió con early-return al detectar sesión cambiada. La prueba del entrypoint real confirma resolución limpia y cero parser. La suite de Storage espera señales explícitas de init/upload para evitar carreras del fixture con SHA, sin relajar las aserciones.
+En `/pagos`, el control **«Tipo predeterminado para comprobantes (recordar en este navegador)»** permite elegir una vez cuando existen varios tipos. Guarda sólo una clave, con namespace root/uid, valida catálogo activo OPERACION del ámbito y nunca hereda silenciosamente el último tipo del formulario. Una preferencia persistida se conserva mientras carga el catálogo y se elimina si resulta inválida después de cargar. Configurarla no crea pagos.
 
-Resultado final exacto: **20/20 PASS** tanto raíz como candidato (10 identidad/Chromium, 4 operación/preferencia y 6 actor). Logs `output/receipt-identity-ui/drop-auto-root-final20.log` y `drop-auto-candidate-final20.log`. TSC final `--noEmit --incremental false` exit 0, sesión66352, log `drop-auto-typecheck-freeze.log`. Se usaron dependencias privadas package/lock idénticos mediante junction temporal sólo de QA, retirada al terminar; no será parte del build/runtime. Revisión independiente Intel final PASS. El siguiente paso es el build canónico literal de esta fuente, sin omitir npm ci ni modificar helpers fijados; no se ha publicado el cambio.
+Cambiar cliente/empresa sólo vuelve a analizar; no crea por seleccionar. El botón explícito revalida los IDs elegidos o sugeridos visibles. Se conserva el par de IDs en correcciones y reintentos; la creación usa exclusivamente el payload del servidor. REGISTERED sólo adjunta con receiptPending exactamente true y pagoId servidor válido; nunca crea otro pago. Un duplicado completo produce cero uploads y cero creaciones. El copy de señales insuficientes es neutral: el texto antiguo sobre RFC/cuenta provenía del mapping UI y no demostraba una versión backend antigua.
+
+La cola captura root/uid/epoch y comprueba también Firebase auth.currentUser.uid antes de llamadas y después de awaits. Un cambio de sesión invalida el lote y sus actualizaciones UI. Los callbacks assertContext son internos y no se serializan. Parse protege la lectura del archivo; upload protege SHA, init, Storage, progreso/cancelación y finalize. Una creación ya enviada puede completar bajo la autorización original; el cambio posterior impide uploads y publicación de resultados en otra sesión. La recuperación canónica del pago pendiente se conserva. Otros callers sin callback mantienen su comportamiento. Las autorizaciones, transacciones e idempotencia siguen siendo responsabilidad del servidor.
+
+## Verificación exacta
+
+- Build canónico literal del compuesto: **PASS, 47 rutas**, sesión49435. Log `output/receipt-drop-auto-ui/canonical-build-on-voice.log`; no se omitió npm ci ni se cambiaron helpers/pins.
+- QA contra el compuesto: **20/20 PASS**, cero skip/fail: 10 identidad/Chromium, 4 operación/preferencia y 6 actor. Log `output/receipt-drop-auto-ui/preserve-voice-candidate20.log`. Cubre nombre READY automático, payload incompleto rechazado, selección parse-only, recuperación sin create, tipo canónico antes de catálogo, mismatch, reload de preferencias y carreras durante lectura/init/Storage/create.
+- TSC del compuesto: **PASS**, sesión77956; junction temporal de QA retirada. El TSC raíz detectó una variable fuera de alcance exclusiva de su render acumulativo: se corrigió una línea en `c841dc2` y pasó TSC50849. El candidato privado ya era correcto.
+- Runtime del ZIP exacto: **PASS**, sesión69084, 486 archivos verificados, realpaths y closure, cinco rutas HTTP 200, login a 390/1440 píxeles, redirección anónima de pagos a login y cinco componentes. Emulador y servidor finalizados. `assertRuntimeProof` PASS contra el input exacto.
+- Revisión independiente del coordinador: `check(input)` y `assertRuntimeProof` con proof8f19 **PASS**, sin cambios en artefactos o pins.
+- Verificador de política de autorización: **PASS**, frontend/Functions/Firestore sincronizados. No se cambiaron roles, rutas o reglas.
+
+El runtime usa dos adaptaciones QA declaradas, no una ejecución literal de los tests originales: fixture autenticado sintético de ingeniería con RecoveryReview real y negativos de sesión/rol/estado; test de evidencia documental que abre detalles intencionalmente colapsados y comprueba edición, clasificación, historial y estado. Ambos targets están acotados por path y hashes originales/adaptados. El producto no se modificó para estas pruebas. El emulador permite todas las reglas: esta ejecución no certifica reglas Firestore ni una sesión productiva autenticada. Cero escrituras productivas y cero acciones financieras reales durante la preparación.
+
+El primer intento de runtime abortó antes del emulador por un path de preload heredado. Sólo se corrigió el binding al nuevo checkout, manteniendo las mismas dos adaptaciones semánticas. Preload SHA256 anterior `26f1b0583f369cedaf3780022beb347869acd33a6ba8a407a3e78c1fc81261eb`; nuevo `6b589f3f440c3eae92f9be4c7462166ac874cb5de6d1eba9c2fc59b79f4244d5`. Audit SHA256 `31bb9b22759daaa1620bd5c837251e7a8a7d88025f11073db2d9c7925f1c074c`, vinculado al proof final. Se conservaron el fallo y los bytes anteriores; se reutilizaron las dependencias verificadas sin reinstalar ni reconstruir el ZIP.
+
+## Preflight y reversión
+
+La captura final anterior al despliegue backend del coordinador pasó con cero operaciones y SSR616/Hosting89de/configuración/Run/IAM idénticos: `.firebase/modular-release/ui-receipt-auto-on-voice-final-preflight.json`, SHA256 `b0499fd93933af329af68e4d40f48f979750b78530417ff01f551aa3fd7f8c53`. Debe refrescarse después de la verificación backend; no se interpreta como un GET posterior ni se consulta durante una mutación activa.
+
+La autorización UI pendiente debe cubrir exclusivamente este input/ZIP/proof y su rollback exacto. El rollback vuelve al código `af1a884`/ZIP9d4 y al Hosting89de de la baseline SSR616, preservando configuración e IAM; las nuevas revisiones las asigna cloud. Sólo procede contra el estado propio exacto. Resultado incierto exige reconciliar el journal/operación, sin replay ni borrar locks. No borra datos, sesiones o pagos, ni modifica reglas o activa gateway/OCI. La reversión backend se controla separadamente.
+
+## Procedencia histórica preservada
+
+`c3ece52` pasó build47 sobre SSR614 pero quedó **BASE_LOCAL_SUPERSEDED** antes de preparar un input al detectarse la nueva SSR616. La fuente real `af1a884`, árbol `08d669577516114b05076f2e3dd845fe0900f9c7`, se encontró mediante el path de build embebido y se leyó sin editar ni ejecutar el repositorio externo. Sus 482 archivos .next/public coincidieron con el ZIP9d4: proof SHA256 `c50310038e21c8ec2243761c68cee0817b6a570f1fdf2d6b9f27ea7497bd880e`.
+
+Su delta frente a f1df eran sólo HugoRealtimeVoice y hugoVoiceStartup, con arranque acotado/cancelable. AUTO se aplicó como cinco hunks disjuntos con contexto comprobado, sin merge/rebase. Los blobs Git y los bytes de checkout de ambos archivos de voz se preservaron: proof SHA256 `7cd32ad2572d2f4947700661f143f635a2c5596c85ce08ade088ac50b52feaf9`. La comparación inicial errónea entre blob LF y checkout CRLF no era una pérdida de capacidad y no requirió cambiar esos archivos. Los recibos y logs anteriores se mantienen; el dossier de selección publicado f1df/31 no se altera.
