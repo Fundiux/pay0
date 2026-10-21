@@ -4,6 +4,7 @@ import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { buildClientFacturaDeliveryMessage } from "./commands";
 import { sendTelegramDocumentBuffer, sendTelegramMessage } from "./service";
+import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES } from "../solicitudDocuments/domain";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -27,6 +28,12 @@ type FacturaPair = {
 
 function cleanText(value: any): string {
   return String(value || "").trim();
+}
+
+function assertInvoiceDeliveryAcknowledged(value: any): void {
+  if (value?.ok !== true || !Number.isSafeInteger(value?.result?.message_id) || value.result.message_id <= 0) {
+    throw new Error("INVOICE_DELIVERY_UNCONFIRMED");
+  }
 }
 
 function cleanUpper(value: any): string {
@@ -159,7 +166,9 @@ async function getActiveFacturaPair(input: {
 
     if (!storagePath) return;
     if (documentType !== "FACTURA_PDF" && documentType !== "FACTURA_XML") return;
-    if (["DELETED", "ELIMINADA", "INACTIVE", "INACTIVO", "REPLACED"].includes(status)) return;
+    if (status !== "READY") return;
+    const expectedPrefix = `roots/${rootId}/solicitudes/${solicitudId}/docs/${documentType}/${doc.id}-`;
+    if (!storagePath.startsWith(expectedPrefix)) return;
 
     rows.push({
       uploadId: doc.id,
@@ -181,6 +190,7 @@ async function getActiveFacturaPair(input: {
 }
 
 async function getClientRecipients(clientId: string, rootId: string): Promise<Array<{
+  documentId: string;
   telegramUserId: string;
   chatId: string;
   telegramUsername: string;
@@ -196,6 +206,7 @@ async function getClientRecipients(clientId: string, rootId: string): Promise<Ar
     .get();
 
   const rows: Array<{
+    documentId: string;
     telegramUserId: string;
     chatId: string;
     telegramUsername: string;
@@ -208,13 +219,14 @@ async function getClientRecipients(clientId: string, rootId: string): Promise<Ar
     if (!chatId || cleanText(data.rootId) !== rootId) return;
 
     rows.push({
+      documentId: doc.id,
       telegramUserId: cleanText(data.telegramUserId || doc.id),
       chatId,
       telegramUsername: cleanText(data.telegramUsername || ""),
     });
   });
 
-  return rows;
+  return rows.filter((row, index) => rows.findIndex(other => other.chatId === row.chatId) === index);
 }
 
 async function sendStorageFileToTelegram(input: {
@@ -222,6 +234,7 @@ async function sendStorageFileToTelegram(input: {
   chatId: string;
   file: FacturaUploadFile;
   caption: string;
+  beforeSend?: () => Promise<void>;
 }) {
   const bucket = admin.storage().bucket();
   const storageFile = bucket.file(input.file.storagePath);
@@ -231,7 +244,14 @@ async function sendStorageFileToTelegram(input: {
     throw new Error(`Archivo no encontrado en Storage: ${input.file.storagePath}`);
   }
 
-  const [buffer] = await storageFile.download();
+  const [metadata] = await storageFile.getMetadata();
+  const size = Number(metadata.size);
+  if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_SOLICITUD_DOCUMENT_SIZE_BYTES || !/^[1-9][0-9]*$/.test(String(metadata.generation || ""))) {
+    throw new Error("INVOICE_DOCUMENT_UNAVAILABLE");
+  }
+  const [buffer] = await bucket.file(input.file.storagePath, { generation: metadata.generation }).download();
+  if (buffer.length !== size) throw new Error("INVOICE_DOCUMENT_CHANGED");
+  await input.beforeSend?.();
 
   return await sendTelegramDocumentBuffer(
     input.botToken,
@@ -239,15 +259,17 @@ async function sendStorageFileToTelegram(input: {
     input.file.fileName || "documento",
     buffer,
     input.file.contentType || "application/octet-stream",
-    input.caption.slice(0, 1024)
+    input.caption.slice(0, 1024),
+    { signal: AbortSignal.timeout(12000) }
   );
 }
 
-export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string): Promise<{
+export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string, controls: { beforeSend?: () => Promise<void> } = {}): Promise<{
   ok: boolean;
   notified: boolean;
   reason: string;
   sentCount?: number;
+  reviewRequired?: boolean;
 }> {
   const cleanUploadId = cleanText(uploadId);
 
@@ -321,7 +343,8 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
     );
   } catch (error: any) {
     if (error?.code === 6 || error?.code === "already-exists") {
-      return { ok: true, notified: false, reason: "duplicate" };
+      const receipt = (await eventRef.get()).data();
+      return { ok: true, notified: false, reason: "duplicate", reviewRequired: receipt?.status !== "SENT" };
     }
     throw error;
   }
@@ -353,25 +376,39 @@ export async function notifyClientFacturaDisponibleFromUploadId(uploadId: string
 
   for (const recipient of recipients) {
     try {
-      await sendTelegramMessage(
+      const authorizeRecipient = async () => {
+        await controls.beforeSend?.();
+        const current = (await db.collection("clientTelegramUsers").doc(recipient.documentId).get()).data();
+        if (current?.active !== true || current.rootId !== rootId || current.clientId !== meta.clientId || cleanText(current.chatId) !== recipient.chatId) {
+          throw new Error("INVOICE_RECIPIENT_AUTHORITY_CHANGED");
+        }
+      };
+      await authorizeRecipient();
+      const textResult = await sendTelegramMessage(
         TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         recipient.chatId,
-        message
+        message,
+        { signal: AbortSignal.timeout(12000) }
       );
+      assertInvoiceDeliveryAcknowledged(textResult);
 
-      await sendStorageFileToTelegram({
+      const pdfResult = await sendStorageFileToTelegram({
         botToken: TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         chatId: recipient.chatId,
         file: pair.pdf,
         caption: "PDF",
+        beforeSend: authorizeRecipient,
       });
+      assertInvoiceDeliveryAcknowledged(pdfResult);
 
-      await sendStorageFileToTelegram({
+      const xmlResult = await sendStorageFileToTelegram({
         botToken: TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS.value(),
         chatId: recipient.chatId,
         file: pair.xml,
         caption: "XML",
+        beforeSend: authorizeRecipient,
       });
+      assertInvoiceDeliveryAcknowledged(xmlResult);
 
       sentCount += 1;
     } catch (error: any) {

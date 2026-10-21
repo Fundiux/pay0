@@ -7,6 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
 import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallables";
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
+import { prepareTelegramInvoiceNotificationTx } from "../telegram/invoiceNotificationOutbox";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
 import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
@@ -590,6 +591,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
   let didFinalize = false;
 
   await db.runTransaction(async (tx) => {
+    const invoiceIntent = await prepareTelegramInvoiceNotificationTx({ tx, db, rootId, solicitudId, documentType, uploadId });
     didFinalize = false;
     const currentUpload = await tx.get(uploadRef);
     const current = currentUpload.data() || {};
@@ -634,7 +636,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
       },
     });
 
-        
+    invoiceIntent?.();
       if (facturaXmlMetadata) {
         tx.update(solicitudRef, {
           numFactura: facturaXmlMetadata.facturaDisplay || null,

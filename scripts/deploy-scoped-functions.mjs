@@ -34,9 +34,12 @@ export const DEPLOYMENT_GROUPS = Object.freeze({
   'telegram-test-transport-overlay': Object.freeze(['sendMyTelegramTestNotification']),
   'telegram-webhook-pause-overlay': Object.freeze(['telegramWebhook']),
   'telegram-webhook-claim-overlay': Object.freeze(['telegramWebhook']),
+  'telegram-invoice-producer-overlay': Object.freeze(['finalizeSolicitudDocumentUpload']),
+  'telegram-invoice-worker-overlay': Object.freeze(['processTelegramInvoiceNotificationQueue']),
 });
-const OVERLAY_GROUPS = Object.freeze(['payment-create-safe-recovery-overlay', 'payment-create-overlay', 'receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay', 'telegram-test-transport-overlay', 'telegram-webhook-pause-overlay', 'telegram-webhook-claim-overlay']);
+const OVERLAY_GROUPS = Object.freeze(['payment-create-safe-recovery-overlay', 'payment-create-overlay', 'receipt-learning-overlay', 'conversation-memory-review-overlay', 'conversation-memory-create-overlay', 'hugo-chat-overlay', 'hugo-voice-overlay', 'document-generation-overlay', 'complement-config-overlay', 'mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay', 'operation-recovery-queue-overlay', 'operation-recovery-reconcile-overlay', 'telegram-test-transport-overlay', 'telegram-webhook-pause-overlay', 'telegram-webhook-claim-overlay', 'telegram-invoice-producer-overlay', 'telegram-invoice-worker-overlay']);
 export function artifactProbeContract(group) {
+  if (group === 'telegram-invoice-worker-overlay') return { kind: 'SCHEDULE', schedule: 'every 1 minutes' };
   if (['telegram-webhook-pause-overlay', 'telegram-webhook-claim-overlay'].includes(group)) return { kind: 'HTTP_WEBHOOK' };
   if (['mat-user-home-overlay', 'mat-client-home-overlay', 'mat-session-overlay'].includes(group)) return { kind: 'SIGNED_SESSION', missingScopeError: 'invalid-argument' };
   if (group === 'operation-recovery-queue-overlay') return { kind: 'FIRESTORE', eventType: 'google.cloud.firestore.document.v1.written', document: 'solicitudes/{documentId}', retry: true };
@@ -83,6 +86,12 @@ export function assertArtifactProof(input, proof) {
   assert.equal(proof.status, 'PASS', 'ARTIFACT_NOT_VERIFIED');
   assert.equal(proof.sourceCommit, input.sourceCommit, 'ARTIFACT_PROOF_COMMIT');
   assert.equal(proof.archiveSha256, input.archiveSha256, 'ARTIFACT_PROOF_HASH');
+  if (['telegram-invoice-producer-overlay','telegram-invoice-worker-overlay'].includes(input.group)) {
+    const queue = proof.queueVerification;
+    assert.equal(queue?.status,'PASS','INVOICE_QUEUE_NOT_CERTIFIED');
+    assert.equal(queue.archiveSha256,input.archiveSha256,'INVOICE_QUEUE_ARTIFACT_CHANGED');
+    for (const key of ['atomicIntent','durablePause','restartWithoutFinalizer','concurrency','uncertainNotRepeated','permissions','scopePinned','recoveryEpochFence','noFinancialOperations','financialSourcePreserved']) assert.equal(queue[key],true,'INVOICE_QUEUE_PROOF_INCOMPLETE');
+  }
   if (input.group === 'telegram-test-transport-overlay' || input.group === 'telegram-webhook-claim-overlay') {
     const behavior = proof.behaviorVerification;
     assert.equal(behavior?.status, 'PASS', 'TELEGRAM_BEHAVIOR_NOT_VERIFIED');
