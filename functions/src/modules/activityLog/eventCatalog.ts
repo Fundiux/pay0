@@ -133,6 +133,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   FACTURA_EMITIDA: eventEntry("FACTURA_EMITIDA", "CFDI vinculado al expediente", "facturacion", "financial", "success"),
   OPERACION_RECUPERADA: eventEntry("OPERACION_RECUPERADA", "Operación reconciliada", "solicitudes", "repair", "success"),
   OPERACION_RECUPERACION_FALLIDA: eventEntry("OPERACION_RECUPERACION_FALLIDA", "Recuperación requiere atención", "solicitudes", "repair", "warning"),
+  OPERACION_RECUPERACION_OMITIDA: eventEntry("OPERACION_RECUPERACION_OMITIDA", "Recuperación no ejecutada o sustituida", "solicitudes", "repair", "warning"),
   GASTO_RECONOCIDO: eventEntry("GASTO_RECONOCIDO", "Gasto reconocido", "costos", "financial", "success"),
   GASTO_REVERTIDO: eventEntry("GASTO_REVERTIDO", "Gasto revertido", "costos", "financial", "warning"),
   COMPLEMENTO_PAGO_SEGUIMIENTO: eventEntry("COMPLEMENTO_PAGO_SEGUIMIENTO", "Seguimiento de complemento de pago", "facturacion", "document", "warning"),

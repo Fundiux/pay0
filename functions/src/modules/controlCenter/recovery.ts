@@ -76,7 +76,11 @@ export async function reconcileRecoverySource(solicitudId: string, row: any) {
   }
 }
 
-export async function executeRecovery(job: any) {
+export type RecoveryExecutionResult =
+  | { status: "COMPLETED" }
+  | { status: "SUPERSEDED" | "RESOLVED_EXTERNALLY"; reason: string };
+
+export async function executeRecovery(job: any): Promise<RecoveryExecutionResult> {
   const [source, actor] = await Promise.all([
     db.doc(`solicitudes/${job.solicitudId}`).get(), db.doc(`users/${job.actorUid}`).get(),
   ]);
@@ -85,13 +89,13 @@ export async function executeRecovery(job: any) {
     throw new Error("RECOVERY_SCOPE_DENIED");
   }
   const row = source.data()!;
-  if (recoverySourceIsTerminal(row)) return;
-  if (job.kind === "DRAFT" && !belongsToPay0Dispatch(job.rootId, row.despachoId)) return;
+  if (recoverySourceIsTerminal(row)) return { status: "SUPERSEDED", reason: "SOURCE_TERMINAL" };
+  if (job.kind === "DRAFT" && !belongsToPay0Dispatch(job.rootId, row.despachoId)) return { status: "SUPERSEDED", reason: "SOURCE_NOT_APPLICABLE" };
   const field = RECOVERY_FIELDS[job.kind as RecoveryKind];
   if (!field) throw new Error("RECOVERY_KIND_INVALID");
-  if (row[field] !== "ERROR") return;
+  if (row[field] !== "ERROR") return { status: "RESOLVED_EXTERNALLY", reason: "SOURCE_NOT_IN_ERROR" };
   // A new OC supersedes a pending task for the previous document.
-  if (String(row.ocFiscalMetadataUploadId || "initial") !== job.generation) return;
+  if (String(row.ocFiscalMetadataUploadId || "initial") !== job.generation) return { status: "SUPERSEDED", reason: "SOURCE_GENERATION_CHANGED" };
   const auth = { uid: job.actorUid, token: { uid: job.actorUid, role: actor.data()?.role } };
   const role = getUserRole(actor.data());
   assertAuthorized(auth, actor.data(), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
@@ -126,16 +130,21 @@ export async function executeRecovery(job: any) {
       throw new Error("DOCUMENT_REGENERATION_REQUIRES_REVIEW");
   }
   // Do not overwrite a newer failure or source version while this task ran.
-  await db.runTransaction(async tx => {
-    const latest = await tx.get(source.ref);
-    if (!recoverySourceIsTerminal(latest.data()) && latest.data()?.[field] === "ERROR" && String(latest.data()?.ocFiscalMetadataUploadId || "initial") === job.generation &&
-        latest.data()?.[field.replace(/Status$/, "LastError")] === row[field.replace(/Status$/, "LastError")]) {
-      tx.update(source.ref, { [field]: "RECOVERED", recoveryUpdatedAt: FieldValue.serverTimestamp() });
-    }
+  return db.runTransaction(async tx => {
+    const latest = await tx.get(source.ref), current = latest.data();
+    if (!current || recoverySourceIsTerminal(current) || String(current.ocFiscalMetadataUploadId || "initial") !== job.generation)
+      return { status: "SUPERSEDED", reason: "SOURCE_CHANGED_DURING_RECOVERY" } as const;
+    if (current.rootId !== job.rootId) throw new Error("RECOVERY_SCOPE_DENIED");
+    // The awaited domain ran successfully; it may have updated its own source status.
+    if (current[field] !== "ERROR") return { status: "COMPLETED" } as const;
+    if (current[field.replace(/Status$/, "LastError")] !== row[field.replace(/Status$/, "LastError")])
+      return { status: "SUPERSEDED", reason: "SOURCE_FAILURE_CHANGED" } as const;
+    tx.update(source.ref, { [field]: "RECOVERED", recoveryUpdatedAt: FieldValue.serverTimestamp() });
+    return { status: "COMPLETED" } as const;
   });
 }
 
-export async function processRecoveryJobs(handler = executeRecovery) {
+export async function processRecoveryJobs(handler: (job: any) => Promise<RecoveryExecutionResult | void> = executeRecovery) {
   const due = await db.collection("operationRecoveryJobs").where("nextAttemptAt", "<=", Timestamp.now()).limit(5).get();
   for (const doc of due.docs) {
     const lease = randomUUID();
@@ -148,25 +157,28 @@ export async function processRecoveryJobs(handler = executeRecovery) {
     if (!job) continue;
     let failed = false;
     let lastErrorCode = "";
-    try { await handler(job); } catch (error: any) {
+    let outcome: RecoveryExecutionResult | void = undefined;
+    try { outcome = await handler(job); } catch (error: any) {
       failed = true;
       const code = String(error?.code || error?.message || "RECOVERY_FAILED");
       lastErrorCode = /^[A-Z0-9_/-]{1,100}$/i.test(code) ? code : "RECOVERY_DOMAIN_ERROR";
     }
     await db.runTransaction(async tx => {
       const current = await tx.get(doc.ref);
-      if (current.data()?.lease !== lease) return;
+      if (current.data()?.lease !== lease || current.data()?.status !== "RUNNING") return;
       const exhausted = failed && job.attempts >= 5;
+      const skipped = !failed && outcome && outcome.status !== "COMPLETED" ? outcome : null;
       tx.update(doc.ref, {
-        status: failed ? exhausted ? "NEEDS_REVIEW" : "PENDING" : "COMPLETED",
+        status: failed ? exhausted ? "NEEDS_REVIEW" : "PENDING" : skipped ? skipped.status : "COMPLETED",
+        ...(skipped ? { resolutionReason: skipped.reason } : {}),
         lastErrorCode,
         nextAttemptAt: failed && !exhausted ? Timestamp.fromMillis(Date.now() + Math.min(60, 2 ** job.attempts) * 60_000) : FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-      logActivityTx(tx, db, { event: failed ? "OPERACION_RECUPERACION_FALLIDA" : "OPERACION_RECUPERADA",
+      logActivityTx(tx, db, { event: failed ? "OPERACION_RECUPERACION_FALLIDA" : skipped ? "OPERACION_RECUPERACION_OMITIDA" : "OPERACION_RECUPERADA",
         rootId: (job as any).rootId, actorUid: "SYSTEM_RECOVERY", actorRole: "SYSTEM",
         referenceId: (job as any).solicitudId, referenceType: "SOLICITUD",
-        description: `${(job as any).kind}: ${failed ? lastErrorCode : "Reconciliación terminada"}`,
+        description: `${(job as any).kind}: ${failed ? lastErrorCode : skipped ? `${skipped.reason}; no se declara recuperación` : "Reconciliación terminada"}`,
       });
     });
   }
