@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useUserProfile } from "@/lib/useUserProfile";
-import { correctAgent007Response, reviewAgent007MemoryCandidate, type Agent007Message, type Agent007ResponseCorrection, type HugoScope } from "@/services/agent007";
+import { correctAgent007Response, reviewAgent007MemoryCandidate, type Agent007Message, type Agent007ResponseCorrection, type Agent007MemoryReviewResult, type HugoScope } from "@/services/agent007";
+
+const confirmsRetirement = (result: Agent007MemoryReviewResult, id: string, scope: Agent007ResponseCorrection["scope"]) =>
+  result.ok === true && typeof result.changed === "boolean" && result.retirement?.memoryId === id && result.retirement.status === "REJECTED" && result.retirement.scope === scope;
 
 const validCorrection = (value: unknown): value is Agent007ResponseCorrection => {
   const row = value as Agent007ResponseCorrection | undefined;
@@ -43,14 +46,14 @@ function CorrectionContent({ message, scope, onSaved, allowed, onTopicSelected }
   const remove = async () => {
     if (!saved || busy) return;
     const version = generation.current; setBusy(true); setError("");
-    try { const result = await reviewAgent007MemoryCandidate(saved.memoryId, "REJECT"); if (version !== generation.current) return; if (!result.ok || result.changed !== true) throw Error("El servidor no confirmó el retiro. Recarga la conversación."); const removed = { ...saved, status: "REJECTED" as const }; setSaved(removed); onSaved(removed); }
+    try { const result = await reviewAgent007MemoryCandidate(saved.memoryId, "REJECT"); if (version !== generation.current) return; if (!confirmsRetirement(result, saved.memoryId, saved.scope)) throw Error("El servidor no confirmó el retiro. Recarga la conversación."); const removed = { ...saved, status: "REJECTED" as const }; setSaved(removed); onSaved(removed); }
     catch (cause: any) { if (version === generation.current) setError(cause?.message || "No se retiró la corrección."); }
     finally { if (version === generation.current) setBusy(false); }
   };
   const removeChoice = async (id: string) => {
     if (busy) return;
     const version = generation.current; setBusy(true); setError("");
-    try { const result = await reviewAgent007MemoryCandidate(id, "REJECT"); if (version !== generation.current) return; if (!result.ok || result.changed !== true) throw Error("El servidor no confirmó el retiro. Vuelve a consultar el tema."); setChoices(current => current.filter(row => row.id !== id)); setPersonalNotes(current => current.filter(row => row.id !== id)); }
+    try { const result = await reviewAgent007MemoryCandidate(id, "REJECT"); if (version !== generation.current) return; if (!confirmsRetirement(result, id, "USER_TOPIC")) throw Error("El servidor no confirmó el retiro. Vuelve a consultar el tema."); setChoices(current => current.filter(row => row.id !== id)); setPersonalNotes(current => current.filter(row => row.id !== id)); }
     catch (cause: any) { if (version === generation.current) setError(cause?.message || "No se retiró el recuerdo."); }
     finally { if (version === generation.current) setBusy(false); }
   };

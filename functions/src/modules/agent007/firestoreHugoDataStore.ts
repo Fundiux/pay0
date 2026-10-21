@@ -216,11 +216,12 @@ export class FirestoreHugoDataStore implements HugoDataStore {
         if (source && (source.get("rootId") !== rootId || source.get("recipientUid") !== actorUid || source.get("conversationId") !== link.conversationId)) throw new HttpsError("permission-denied", "Respuesta de otro ámbito.");
         if (binding?.exists && (binding.get("rootId") !== rootId || binding.get("ownerUid") !== actorUid)) throw new HttpsError("permission-denied", "Ámbito ajeno.");
         if (binding?.exists && (!Array.isArray(binding.get("memoryIds")) || binding.get("memoryIds").length > 3 || !binding.get("memoryIds").every((value: unknown) => typeof value === "string" && valid(value)))) throw new HttpsError("failed-precondition", "El vínculo del recuerdo requiere revisión.");
-        if (row.status !== "CONFIRMED") return { changed: false };
+        const retirement = { memoryId: id, status: "REJECTED" as const, scope: link.topic ? "USER_TOPIC" as const : "CONVERSATION_ONLY" as const };
+        if (row.status !== "CONFIRMED") return row.status === "REJECTED" ? { changed: false, retirement } : { changed: false };
         tx.update(ref, { status: "REJECTED", lastVerifiedAt: new Date().toISOString(), reviewedBy: actorUid });
         if (bindingRef && binding?.exists) tx.update(bindingRef, { memoryIds: (binding.get("memoryIds") || []).filter((value: string) => value !== id) });
         if (sourceRef && source?.get("responseCorrection.memoryId") === id) tx.update(sourceRef, { "responseCorrection.status": "REJECTED" });
-        return { changed: true };
+        return { changed: true, retirement };
       }
       if (row.status !== "CANDIDATE") return { changed: false };
       if (decision === "CONFIRM" && (["FACT", "RULE", "HYPOTHESIS"].includes(row.kind) || row.kind === "EXPERIENCE" && (!row.links?.outcomeId || row.verification?.outcomeKnown !== true))) throw new HttpsError("failed-precondition", "La evidencia no permite confirmar esta memoria.");
