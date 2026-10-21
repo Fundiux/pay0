@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {TARGET, assertPauseProof, assertDrainWitness, recoveryTrafficPatch} from '../../scripts/telegram-webhook-transition-policy.mjs';
+
+const archiveSha256 = 'a'.repeat(64), now = Date.now();
+const proof = {status:'PASS',archiveSha256,permissions:true,zeroProviderCalls:true,zeroDatabaseWrites:true,retryable503:true,claimedReceiptsPreserved:true,freshEventsNotClaimed:true,restartCompatible:true};
+const expected = {pauseArchiveSha256:archiveSha256,pauseRevision:'telegramwebhook-00034-pause',pauseStateDigest:'b'.repeat(64),legacyRevision:'telegramwebhook-00033-dav'};
+const witness = {status:'PASS',service:TARGET,...expected,noLegacyTrafficOrTags:true,legacyInactive:true,telemetryComplete:true,legacyActiveInstances:0,legacyIdleInstances:0,legacyInFlightRequests:0,activeOperations:0,sampledAt:new Date(now-150000).toISOString(),checkedAt:new Date(now-1000).toISOString(),pauseTrafficConfirmedAt:new Date(now-200000).toISOString()};
+test('activation accepts complete current evidence only',()=>assert.doesNotThrow(()=>assertDrainWitness(witness,expected,now)));
+for (const [key,value] of Object.entries({status:'UNKNOWN',service:TARGET+'-foreign',pauseArchiveSha256:'c'.repeat(64),pauseStateDigest:'c'.repeat(64),pauseRevision:'telegramwebhook-other',legacyRevision:'telegramwebhook-other',noLegacyTrafficOrTags:false,legacyInactive:false,telemetryComplete:false,legacyActiveInstances:1,legacyIdleInstances:1,legacyInFlightRequests:1,activeOperations:1,sampledAt:undefined,checkedAt:new Date(now-61000).toISOString(),pauseTrafficConfirmedAt:new Date(now).toISOString()}))
+  test('activation rejects '+key,()=>assert.throws(()=>assertDrainWitness({...witness,[key]:value},expected,now)));
+test('absence of monitoring series is not an instance count of zero',()=>assert.throws(()=>assertDrainWitness({...witness,telemetryComplete:false,legacyActiveInstances:undefined,legacyIdleInstances:undefined},expected,now)));
+test('pause proof is exact and requires every no-effects guarantee',()=>{assert.doesNotThrow(()=>assertPauseProof(proof,archiveSha256));for(const key of Object.keys(proof).filter(k=>proof[k]===true))assert.throws(()=>assertPauseProof({...proof,[key]:false},archiveSha256));assert.throws(()=>assertPauseProof(proof,'d'.repeat(64)))});
+const state={resource:{name:'projects/pay-0-system/locations/us-central1/functions/telegramWebhook',labels:{hash:'candidate'}},service:{name:TARGET,etag:'expected-etag',template:{containers:[{image:'candidate'}]}},iam:{etag:'iam'}};
+const imageDigest='us-central1-docker.pkg.dev/pay-0-system/gcf-artifacts/webhook@sha256:'+'e'.repeat(64),revision='telegramwebhook-00034-pause';
+const pause={service:TARGET,revision,archiveSha256,imageDigest,proof,observedRevision:{name:TARGET+'/revisions/'+revision,containers:[{image:imageDigest}],reconciling:false,conditions:[{type:'Ready',state:'CONDITION_SUCCEEDED'}]}};
+test('recovery reuses the existing certified revision with etag and traffic only',()=>{const body=recoveryTrafficPatch(state,structuredClone(state),pause);assert.deepEqual(Object.keys(body).sort(),['etag','name','traffic']);assert.equal(body.traffic[0].revision,revision);assert.equal(body.traffic[0].percent,100)});
+for(const key of ['resource','service','iam'])test('recovery rejects concurrent '+key+' changes',()=>{const current=structuredClone(state);current[key].changed=true;assert.throws(()=>recoveryTrafficPatch(state,current,pause))});
+test('recovery rejects a missing, changed or unready image',()=>{for(const observedRevision of [undefined,{...pause.observedRevision,containers:[{image:'other'}]},{...pause.observedRevision,reconciling:true},{...pause.observedRevision,conditions:[]}])assert.throws(()=>recoveryTrafficPatch(state,state,{...pause,observedRevision}))});
