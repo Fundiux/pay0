@@ -1,0 +1,6 @@
+const fs=require('fs'),path=require('path'),assert=require('assert/strict'),crypto=require('crypto'),M=require('module');const cfg=JSON.parse(fs.readFileSync(process.env.PAY0_TELEGRAM_RUNTIME_FILE||(()=>{throw Error('PRIVATE_RUNTIME_MANIFEST_REQUIRED')})())),runtime=process.env.PAY0_TELEGRAM_BASE==='true'?cfg.baseRuntime:cfg.runtime;
+if(runtime===cfg.runtime)for(const row of cfg.files)assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(runtime,row.file))).digest('hex'),row.sha256,'RUNTIME_BYTES_CHANGED');
+for(const file of['package.json','package-lock.json'])assert.deepEqual(fs.readFileSync(path.join(runtime,file)),fs.readFileSync(path.join(cfg.dependencyRoot,file)));
+const depRequire=M.createRequire(path.join(cfg.dependencyRoot,'package.json')),original=M._resolveFilename;
+M._resolveFilename=function(request,parent,...rest){try{return original.call(this,request,parent,...rest)}catch(e){if(e.code==='MODULE_NOT_FOUND'&&parent?.filename.startsWith(runtime+path.sep)&&!request.startsWith('.')&&!path.isAbsolute(request))return depRequire.resolve(request);throw e}};
+module.exports={cfg,runtime,load:()=>require(path.join(runtime,JSON.parse(fs.readFileSync(path.join(runtime,'package.json'))).main)),requireDependency:name=>depRequire(name)};
