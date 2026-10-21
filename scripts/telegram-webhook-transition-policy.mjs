@@ -47,7 +47,11 @@ export function recoveryTrafficPatch(expected, current, pause) {
   assertPauseProof(pause.proof, pause.archiveSha256);
   assert.equal(pause.observedRevision?.name, TARGET + '/revisions/' + pause.revision, 'RECOVERY_REVISION_MISSING');
   assert.equal(pause.observedRevision?.containers?.[0]?.image, pause.imageDigest, 'RECOVERY_IMAGE_CHANGED');
-  assert.equal(pause.observedRevision?.reconciling, false, 'RECOVERY_REVISION_RECONCILING');
+  // Proto3 JSON omits false booleans. Readiness and observed generation must
+  // independently confirm completion; missing monitoring counts remain unknown.
+  assert.equal(pause.observedRevision?.reconciling ?? false, false, 'RECOVERY_REVISION_RECONCILING');
+  assert.match(pause.observedRevision?.generation || '', /^[1-9][0-9]*$/, 'RECOVERY_GENERATION_REQUIRED');
+  assert.equal(pause.observedRevision.observedGeneration, pause.observedRevision.generation, 'RECOVERY_GENERATION_NOT_OBSERVED');
   assert.equal(pause.observedRevision?.conditions?.some(c => c.type === 'Ready' && c.state === 'CONDITION_SUCCEEDED'), true, 'RECOVERY_REVISION_NOT_READY');
   assert.equal(typeof current.service.etag, 'string', 'RECOVERY_ETAG_REQUIRED');
   return { name: TARGET, etag: current.service.etag, traffic: [{ type: 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION', revision: pause.revision, percent: 100 }] };
