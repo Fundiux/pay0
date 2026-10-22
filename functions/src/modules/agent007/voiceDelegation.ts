@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { executeEarningsReportTool } from "./reportConnector";
-import { formatEarningsReport } from "./hugoCore/reportSemantics";
+import { earningsReportRequest, formatEarningsReport, isEarningsReportComparison, isEarningsReportQuestion } from "./hugoCore/reportSemantics";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -12,6 +12,7 @@ import { HugoModelRouter } from "./hugoModelRouter";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
 import { persistVoiceConversationCorrection } from "./voiceConversationCorrections";
+import { beginVoiceReportTurn, completeVoiceReportTurn, saveVoiceCoreReferenceState } from "./voiceReportContext";
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
 import { PlatformReadConnector } from "./platformReadConnector";
 import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./hugoCore/interactionSemantics";
@@ -147,16 +148,32 @@ export const delegateHugoVoiceTurn = onCall(
         cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
     }
     if (requestedTool && !directTool) { await recordSecurityBlock(uid, requestedTool, "TOOL_ALLOWLIST", "TOOL_NOT_ALLOWED").catch(() => undefined); throw new HttpsError("invalid-argument", "Herramienta de voz no permitida."); }
+    const normalizedMessage = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const resetReport = /^(?:hola(?:\s+(?:maria|hugo))?|buenos dias|buenas tardes|buenas noches)[\s!?.]*$/.test(normalizedMessage)
+      || /\b(nueva conversacion|empezar de nuevo|cambiando de tema|otro tema)\b/.test(normalizedMessage);
+    const reportQuestion = directTool === "getEarningsByClientReport" || isEarningsReportQuestion(message);
+    const reportComparison = !directTool && isEarningsReportComparison(message) && !/\b(pagos?|solicitudes?|folios?)\b/.test(normalizedMessage)
+      && (reportQuestion || /\b(comparalo|comparala|periodos?|mes|semana|ano|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|\b\d{4}-\d{2}-\d{2}\b/.test(normalizedMessage));
+    const reportTurn = await beginVoiceReportTurn(db, { uid, rootId, sessionId }, { reset: resetReport, invalidate: reportQuestion || reportComparison });
     const classified = classifyVoiceRoute(message);
-    const { profile, signals } = classified, route = directTool ? "DETERMINISTIC_TOOL" : classified.route;
+    const { profile, signals } = classified, route = directTool || reportComparison ? "DETERMINISTIC_TOOL" : classified.route;
     if (route === "ECONOMIC_VOICE") return { ok: true, delegationId, route, text: "Puedo responder este turno directamente en la sesion de voz.", cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
+    if (reportComparison && !reportTurn.previous && !earningsReportRequest(message)) {
+      return { ok: true, delegationId, route, text: "Indica ambos periodos en formato AAAA-MM-DD y, si corresponde, el cliente. No hay un reporte reciente inequívoco de esta sesión para comparar.",
+        cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
+    }
 
     const identity = { uid, rootId, role: "superadmin" as const };
     const safeUserRef = createHash("sha256").update(`${rootId}:${uid}`).digest("hex").slice(0, 20);
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
-      getEarningsByClientReport: input => executeEarningsReportTool(request, input),
+      getEarningsByClientReport: async input => {
+        const result = await executeEarningsReportTool(request, input);
+        const saved = await completeVoiceReportTurn(db, reportTurn.ticket, input, result);
+        if (!saved.current) throw new HttpsError("failed-precondition", "Esa consulta fue reemplazada por otra más reciente. Usa el último reporte.");
+        return result;
+      },
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
@@ -199,8 +216,38 @@ export const delegateHugoVoiceTurn = onCall(
         throw error;
       }
     }
+    const priorReport = reportComparison ? reportTurn.previous : null;
+    if (priorReport) {
+      // Re-query the canonical handler before injecting old filters. This also
+      // rechecks present report/client access; no prior result is used as a fact.
+      const current = await executeEarningsReportTool(request, priorReport.query);
+      if (["AMBIGUOUS", "NOT_FOUND"].includes(current.data?.clientResolution?.status)) {
+        return { ok: true, delegationId, route, text: "Confirma el cliente y ambos periodos antes de comparar; el contexto anterior ya no identifica un reporte autorizado inequívoco.",
+          cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
+      }
+    }
+    const scopedStore = Object.create(dataStore) as FirestoreHugoDataStore;
+    scopedStore.loadConversationState = async (actor, conversationId) => {
+      const state = await dataStore.loadConversationState(actor, conversationId);
+      const cleanState: any = { ...(reportTurn.referenceState || state.conversationState) };
+      // Chat and another voice socket are not an authority for this RTC's report.
+      delete cleanState.lastEarningsReport; delete cleanState.pendingEarningsReport;
+      if (priorReport) cleanState.lastEarningsReport = { rootId, query: priorReport.query,
+        resolvedAt: priorReport.resolvedAt, resolvedTurn: cleanState.turn };
+      return { ...state, conversationState: cleanState };
+    };
+    scopedStore.saveTurn = async input => {
+      if (input.conversationState) {
+        const saved = await saveVoiceCoreReferenceState(db, reportTurn.ticket, input.conversationState, reportQuestion || reportComparison);
+        if (!saved.current) throw new HttpsError("failed-precondition", "Esa consulta fue reemplazada por otra más reciente. Usa el último reporte.");
+      }
+      // The shared Store may replace this whole map. Its TEXT report fields are
+      // preserved by the authorized leaf/CAS write above, not a stale merge.
+      const { conversationState: _voiceState, ...safe } = input;
+      return dataStore.saveTurn(safe);
+    };
     const started = Date.now(), modelRouter = new HugoModelRouter();
-    const result = await new HugoConversationCore(router, route === "BRAIN_MODEL" ? modelRouter : null, dataStore, learningStore).respond({
+    const result = await new HugoConversationCore(router, route === "BRAIN_MODEL" ? modelRouter : null, scopedStore, learningStore).respond({
       channel: "VOICE", conversationId: `${rootId}_${uid}_global`, identity: { ...identity, role: "superadmin" as const }, name: clean(user?.displayName || user?.email || "usuario", 80),
       message, scope: "GLOBAL", profile, routingSignals: signals, promptVersion: "hugo-v2",
       modelCapability: route === "BRAIN_MODEL" ? "STRONG_EXTERNAL" : "FAST_EXTERNAL",
