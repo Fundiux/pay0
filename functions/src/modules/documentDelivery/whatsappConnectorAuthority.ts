@@ -101,6 +101,10 @@ export class WhatsAppConnectorAuthority {
       if (!binding || binding.state !== "ACTIVE" || binding.ownerUid !== actor.uid || binding.rootId !== actor.rootId) fail();
       tx.create(commandRef, { bindingId: binding.id, generation: binding.generation, connectorId: "default", rootId: actor.rootId,
         requestedByUid: actor.uid, type, status: "PENDING", createdAt: FieldValue.serverTimestamp() });
+      tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { bindingId: binding.id, rootId: actor.rootId, ownerUid: actor.uid,
+        lastCommandId: commandRef.id, lastCommandType: type, lastCommandStatus: "PENDING", lastCommandMessage: "Solicitud pendiente del conector autorizado.",
+        lastCommandAt: FieldValue.serverTimestamp(), lastCommandFinishedAt: null,
+        ...(type === "NEW_QR" ? { qrText: null, qrDataUrl: null } : {}) }, { merge: true });
       return { ok: true, commandId: commandRef.id, type, status: "PENDING", message: "Solicitud enviada al conector autorizado." };
     });
   }
@@ -146,6 +150,8 @@ export class WhatsAppConnectorAuthority {
     if (resetRef) tx.update(resetRef, { status: "DONE", finishedAt: FieldValue.serverTimestamp(), outcome: "LOCAL_QR_AVAILABLE_NOT_ACCOUNT_OWNERSHIP" });
     tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { bindingId: binding.id, rootId: binding.rootId, ownerUid: binding.ownerUid,
       generation: binding.generation, status: data.status || (data.ready ? "CONNECTED" : "DISCONNECTED"),
+      ...(command ? { lastCommandId: command.id, lastCommandType: command.type, lastCommandStatus: "PROCESSING", lastCommandMessage: "El conector autorizado está procesando la solicitud." } : {}),
+      ...(resetRef ? { lastCommandId: resetRef.id, lastCommandType: "NEW_QR", lastCommandStatus: "DONE", lastCommandMessage: "QR local disponible para escaneo humano.", lastCommandFinishedAt: FieldValue.serverTimestamp() } : {}),
       ...(data.qrText !== undefined ? { qrText: data.qrText } : {}), ...(data.qrDataUrl !== undefined ? { qrDataUrl: data.qrDataUrl } : {}),
       ...(data.error !== undefined ? { error: data.error } : {}), lastSeenAt: FieldValue.serverTimestamp(), externalAccountVerified: false }, { merge: true });
     return { command };
@@ -161,6 +167,8 @@ export class WhatsAppConnectorAuthority {
     const ref = await this.command(tx, binding, data.commandId, "NEW_QR");
     // A reset lease is consumed once. Lost responses require human reconciliation, never automatic replay.
     tx.update(ref, { status: "RESET_AUTHORIZED", finishedAt: FieldValue.serverTimestamp() });
+    tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { lastCommandId: ref.id, lastCommandType: "NEW_QR", lastCommandStatus: "PROCESSING",
+      lastCommandMessage: "Reinicio local autorizado; se espera un QR nuevo.", qrText: null, qrDataUrl: null }, { merge: true });
     return { resetAuthorized: true, commandId: ref.id, externalAccountVerified: false };
   }
   private async sync(tx: any, bindingRef: any, row: any, data: any) {
@@ -202,7 +210,12 @@ export class WhatsAppConnectorAuthority {
     for (const doc of page.docs) if (doc.data().lastSyncId !== syncId) tx.update(doc.ref, { active: false, staleAt: FieldValue.serverTimestamp() });
     const done = page.size < 100;
     tx.update(bindingRef, { sync: { ...row.sync, state: done ? "COMPLETE" : "PRUNING", cursor: page.docs[page.docs.length - 1]?.id || row.sync.cursor } });
-    if (done && commandRef) tx.update(commandRef, { status: "DONE", finishedAt: FieldValue.serverTimestamp() });
+    if (done) {
+      if (commandRef) tx.update(commandRef, { status: "DONE", finishedAt: FieldValue.serverTimestamp() });
+      tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { lastChatsSyncedAt: FieldValue.serverTimestamp(),
+        ...(commandRef ? { lastCommandId: commandRef.id, lastCommandType: "SYNC_CHATS", lastCommandStatus: "DONE",
+          lastCommandMessage: "Sincronización autorizada completada.", lastCommandFinishedAt: FieldValue.serverTimestamp() } : {}) }, { merge: true });
+    }
     return { syncId, done };
   }
 }
