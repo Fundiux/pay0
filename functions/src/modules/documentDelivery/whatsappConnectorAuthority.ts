@@ -9,7 +9,7 @@ const id = (s: unknown): string => {
   if (typeof s !== "string" || !s || s.length > 180 || /[\/\x00-\x1f]/.test(s)) throw new HttpsError("invalid-argument", "Identidad inválida.");
   return s;
 };
-const fail = (code = "permission-denied"): never => { throw new HttpsError(code as any, "El vínculo del conector no está autorizado."); };
+function fail(code = "permission-denied"): never { throw new HttpsError(code as any, "El vínculo del conector no está autorizado."); }
 export async function requireWhatsAppSuperadmin(request: any) {
   const uid = requireAuth(request), user = await getMyUser(uid);
   assertAuthorized({ uid }, user, { allowedRoles: ["superadmin"] });
