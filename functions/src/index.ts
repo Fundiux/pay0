@@ -3013,3 +3013,5 @@ export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";
 export { listClientDispersionNotes } from "./modules/financing/noteReads";
 export { listPagoNotes } from "./modules/notes/pagoReads";
 export { listSolicitudNotes } from "./modules/notes/solicitudReads";
+
+export { createWhatsAppConnectorEnrollment, consumeWhatsAppConnectorEnrollment, getWhatsAppConnectorBinding, revokeWhatsAppConnectorBinding, operateWhatsAppConnector } from "./modules/documentDelivery/whatsappConnectorCallables";
