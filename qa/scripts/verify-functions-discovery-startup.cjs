@@ -21,15 +21,17 @@ const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
 // The isolated 8af329e artifact exposes 351 endpoints. This candidate adds
-// engineering assignment and the two server-authorized operational readers.
+// engineering assignment, the two server-authorized operational readers, and
+// the three reviewed recovery/learning endpoints.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 354;
+const expectedEndpointCount = 357;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
   "getAuthorizedDocumentDownloadUrl",
   "getControlCenterEngineering", "importControlCenterEngineeringEvidence", "assignControlCenterEngineeringTask",
+  "listOperationRecoveryReviews", "acknowledgeOperationRecoveryReview",
   "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
   "createClientDispersionIq",
   "processIqDispersionCreate",
@@ -45,6 +47,7 @@ const requiredEndpoints = [
   "listCorporateResources", "getCorporateResource", "prepareCorporateResourceMigration", "importCorporateResource",
   "reviewCorporateResourceVersion", "activateCorporateResourceVersion", "restoreCorporateResourceVersion", "retireCorporateResourceVersion",
   "getCorporateResourceDownloadUrl", "initCorporateResourceUpload", "finalizeCorporateResourceUpload", "listHugoVoiceActivity",
+  "reviewAgent007LearningRule",
 ];
 
 function fail(message) {
