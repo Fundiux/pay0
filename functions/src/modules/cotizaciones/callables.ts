@@ -117,16 +117,25 @@ function activeDepositAccount(company: any): { bankName: string; accountNumber: 
 export async function generateCotizacionForSolicitudCore(request: {
   auth?: any;
   data: { solicitudId?: unknown; replaceExisting?: unknown };
+  /** Server-only capability. It is deliberately outside callable data. */
+  internalAutomation?: { rootId: string; originUid: string; quotationJobId: string };
 }) {
-    const uid = requireAuth(request);
+    const internalAutomation = request.internalAutomation;
+    const uid = internalAutomation ? clean(internalAutomation.originUid, 128) : requireAuth(request);
+    if (!uid) throw new HttpsError("failed-precondition", "La automatizacion no conserva usuario origen.");
     const user = await getMyUser(uid);
-    assertAuthorized(request.auth, user, {
-      allowedRoles: ["superadmin", "admin", "operador"],
-      requiredModule: "solicitudes",
-      requiredAction: "uploadDocs",
-    });
+    if (!internalAutomation) {
+      assertAuthorized(request.auth, user, {
+        allowedRoles: ["superadmin", "admin", "operador"],
+        requiredModule: "solicitudes",
+        requiredAction: "uploadDocs",
+      });
+    }
 
-    const rootId = clean(user?.rootId || uid, 128);
+    const rootId = internalAutomation ? clean(internalAutomation.rootId, 128) : clean(user?.rootId || uid, 128);
+    if (internalAutomation && clean(user?.rootId || uid, 128) !== rootId) {
+      throw new HttpsError("permission-denied", "El usuario origen no pertenece al expediente de la automatizacion.");
+    }
     const solicitudId = clean(request.data?.solicitudId, 128);
     if (!solicitudId) throw new HttpsError("invalid-argument", "solicitudId requerido.");
 
@@ -141,7 +150,9 @@ export async function generateCotizacionForSolicitudCore(request: {
 
     const clientId = clean(solicitud.clienteId || solicitud.clientId, 128);
     if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
-    await requireClientOperationalAccess({ uid, role: role(user) as "superadmin" | "admin" | "operador", rootId, clientId, permission: "operateSolicitudes" });
+    if (!internalAutomation) {
+      await requireClientOperationalAccess({ uid, role: role(user) as "superadmin" | "admin" | "operador", rootId, clientId, permission: "operateSolicitudes" });
+    }
 
     const replaceExisting = request.data?.replaceExisting === true;
     const existing = await db.collection("uploads")
@@ -341,7 +352,7 @@ export async function generateCotizacionForSolicitudCore(request: {
         adminId: solicitud.adminId || rootId,
         actorUid: uid,
         actorUsername: username(user, uid),
-        actorRole: role(user),
+        actorRole: internalAutomation ? "system" : role(user),
         entityType: "solicitudes",
         entityId: solicitudId,
         referenceId: solicitudId,
@@ -361,6 +372,8 @@ export async function generateCotizacionForSolicitudCore(request: {
           documentSha256,
           companyId: solicitud.companyId || null,
           clienteId: solicitud.clienteId || solicitud.clientId || null,
+          automaticExecution: Boolean(internalAutomation),
+          quotationJobId: internalAutomation?.quotationJobId || null,
         },
       });
     });

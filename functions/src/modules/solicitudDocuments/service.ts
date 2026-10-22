@@ -718,27 +718,6 @@ logActivityTx(tx, db, {
   });
 
   const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
-  const generateOcQuotation = async () => {
-    if (!didFinalize || documentType !== "ORDEN_COMPRA") return;
-    await generateCotizacionForSolicitudCore({
-      auth: request.auth,
-      // Replacing the active OC must also replace its derivative quotation.
-      data: { solicitudId, replaceExisting: true },
-    }).catch(async (error) => {
-      const errorCode = String(error?.code || "COTIZACION_GENERATION_FAILED").toUpperCase();
-      await solicitudRef.set(
-        {
-          cotizacionAutoGenerateStatus: "ERROR",
-          cotizacionAutoGenerateStage: errorCode === "PERMISSION-DENIED" ? "AUTHORIZATION" : errorCode === "FAILED-PRECONDITION" ? "SOURCE_VALIDATION" : "PDF_OR_STORAGE",
-          cotizacionAutoGenerateErrorCode: errorCode,
-          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
-          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-  };
-
   if (documentType === "ORDEN_COMPRA" && belongsToPay0Dispatch(rootId, solicitud.despachoId)) {
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
@@ -790,15 +769,11 @@ logActivityTx(tx, db, {
       },
       { merge: true },
     );
-    // The OC is already READY. Preserve the derivative quotation on this
-    // failure path so an idempotent finalize retry does not silently lose it.
-    await generateOcQuotation();
     throw error;
   });
 
   if (["ORDEN_COMPRA", "FACTURA_XML"].includes(documentType) &&
       (materiality.materialityOperationId !== solicitudId || !materiality.completedTypes.includes(documentType))) {
-    await generateOcQuotation();
     throw new HttpsError("failed-precondition", "Materialidad no confirma el documento obligatorio.");
   }
   operationTiming("materiality_confirmed_at", solicitudId);
@@ -818,11 +793,6 @@ logActivityTx(tx, db, {
         { merge: true },
       );
     });
-
-    // The OC and its Materialidad projection are already durable. The
-    // quotation still runs and refreshes Materialidad, but it must not hold
-    // the immediate IQ dispatch behind PDF rendering and Storage writes.
-    await generateOcQuotation();
 
   }
 

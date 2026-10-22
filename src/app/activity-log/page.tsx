@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import NoAccess from "@/components/NoAccess";
 import ActivityLog from "@/components/ActivityLog";
 import DateScopeBar from "@/components/DateScopeBar";
@@ -15,13 +16,14 @@ import {
 import { activityEventBelongsToSystem } from "@/lib/systemActivity";
 
 export default function ActivityLogPage() {
+  const searchParams = useSearchParams();
   const { profile } = useUserProfile();
   const { canAccess: canViewActivity } = useModuleAccess(profile, "actividad", "view");
 
   const [mode, setMode] = useState<DateScopeMode>("day");
   const [baseDate, setBaseDate] = useState(new Date());
   const [customRange, setCustomRange] = useState<CustomRange>({});
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("solicitudId") || searchParams.get("batchId") || "");
   const [eventFilter, setEventFilter] = useState("TODOS");
   const [includeAccess, setIncludeAccess] = useState(true);
 

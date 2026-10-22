@@ -2910,6 +2910,11 @@ export {
   processIqCreateQueue,
 } from "./modules/iq/solicitudCreateQueueCallables";
 export {
+  processSolicitudQuotationOnDemandTask,
+  processSolicitudQuotationQueue,
+  previewSolicitudesWithoutQuotation,
+} from "./modules/cotizaciones/queueCallables";
+export {
   syncIqSolicitudStatus,
 // IQ2G_H4_D55A_INDEX_EXPORT_DISABLED processIqStatusMonitorQueue
 } from "./modules/iq/solicitudStatusMonitorCallables";

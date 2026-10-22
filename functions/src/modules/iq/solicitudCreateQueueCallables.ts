@@ -28,6 +28,7 @@ import { assertIqAuthorized } from "./authorization";
 
 import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
+import { enqueueQuotationForConfirmedIq } from "../cotizaciones/queueCallables";
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -1685,6 +1686,18 @@ async function finalizeJobFromResult(input: {
   }
 
   if (iqId) {
+    await enqueueQuotationForConfirmedIq({
+      solicitudId: input.job.solicitudId,
+      iqFolio: iqId,
+      requestedBy: input.job.requestedBy,
+      source: "IQ_CREATION_QUEUE",
+    }).catch(async (error) => {
+      await solicitudRef.set({
+        cotizacionAutoGenerateStatus: "FAILED_RETRYABLE",
+        cotizacionAutoGenerateLastError: `No se pudo reservar cotizacion: ${safeErrorMessage(error)}`,
+        cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
     await enqueueIqStatusMonitorJob({
       solicitudId: input.job.solicitudId,
       solicitudFolio: input.job.solicitudFolio,
