@@ -2788,6 +2788,7 @@ export {
   reservePagoApplicationBatch,
   applyPagoToSolicitudesAtomic,
   applyPagoToSolicitud,
+  listPagoApplicationsForPayment,
   preparePagoApplicationIqPlan,
   resumePagoApplicationIqPlan,
   executePagoApplicationIqPlan,
@@ -2878,6 +2879,7 @@ export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, ge
 export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
+export { streamPrivateDocument } from "./modules/documents/documentDownloadHttp";
 export { getAuthorizedOperationalRecord } from "./modules/documents/operationalReads";
 export { listAuthorizedRelatedRecords } from "./modules/documents/relatedReads";
 export {
@@ -2991,6 +2993,7 @@ export { createHugoRealtimeSession } from "./modules/agent007/realtimeVoice";
 export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modules/agent007/voiceDelegation";
 export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
+export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 

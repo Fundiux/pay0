@@ -21,15 +21,20 @@ const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
 // The isolated 8af329e artifact exposes 351 endpoints. This candidate adds
-// engineering assignment, the two server-authorized operational readers, and
-// the three reviewed recovery/learning endpoints.
+// engineering assignment, the two server-authorized operational readers, the
+// three reviewed recovery/learning endpoints, the legacy payment reader, and
+// the private-document compatibility transport, and the P4 historical-import
+// recovery engine retained for existing manifests and runs.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 357;
+const expectedEndpointCount = 360;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
   "getAuthorizedDocumentDownloadUrl",
+  "streamPrivateDocument",
+  "manageP4HistoricalIqImport",
+  "listPagoApplicationsForPayment",
   "getControlCenterEngineering", "importControlCenterEngineeringEvidence", "assignControlCenterEngineeringTask",
   "listOperationRecoveryReviews", "acknowledgeOperationRecoveryReview",
   "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
