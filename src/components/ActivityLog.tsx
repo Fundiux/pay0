@@ -337,11 +337,13 @@ export default function ActivityLog({
         const actorDisplay = getActorDisplay(it).toLowerCase();
         const reference = getReference(it).toLowerCase();
         const description = getCleanDescription(it).toLowerCase();
+        const batchId = String(it?.extra?.batchId || "").toLowerCase();
 
         return (
           reference.includes(term) ||
           actorDisplay.includes(term) ||
           description.includes(term) ||
+          batchId.includes(term) ||
           eventLabel.includes(term)
         );
       });
