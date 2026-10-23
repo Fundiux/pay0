@@ -1691,6 +1691,7 @@ async function finalizeJobFromResult(input: {
       iqFolio: iqId,
       requestedBy: input.job.requestedBy,
       source: "IQ_CREATION_QUEUE",
+      batchId: input.batchId,
     }).catch(async (error) => {
       await solicitudRef.set({
         cotizacionAutoGenerateStatus: "FAILED_RETRYABLE",

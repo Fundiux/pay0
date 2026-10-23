@@ -5,7 +5,9 @@ const { test, before, after } = require('node:test');
 const { createRequire } = require('node:module');
 const functionsRequire = createRequire(require('node:path').resolve('functions/package.json'));
 // Never permit this suite to fall through to a live project.
-assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8088');
+const [firestoreHost, firestorePortText] = String(process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
+assert.ok(firestoreHost && Number(firestorePortText), 'Firestore Emulator required');
+const firestorePort = Number(firestorePortText);
 const projectId = `demo-pay0-latency-${Date.now().toString(36)}`;
 const admin = functionsRequire('firebase-admin');
 const { FieldValue, Timestamp } = functionsRequire('firebase-admin/firestore');
@@ -134,7 +136,7 @@ async function seedPago(id, patch = {}) {
     iqDepositCreationQueuedUploadId: 'receipt', iqDepositCreationQueuedAt: Timestamp.now(), ...patch });
 }
 before(async () => {
-  env = await initializeTestEnvironment({ projectId, firestore: { host: '127.0.0.1', port: 8088,
+  env = await initializeTestEnvironment({ projectId, firestore: { host: firestoreHost, port: firestorePort,
     rules: fs.readFileSync('firestore.rules', 'utf8') } });
   await configRef.set({ enabled: true, automation: { pagos: true }, intervalMinutes: { pagoCreate: 1 } });
 });

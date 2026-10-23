@@ -22,7 +22,7 @@ const upper = (value: unknown) => clean(value).toUpperCase();
 const jobIdFor = (solicitudId: string, iqFolio: string, ocUploadId: string) =>
   createHash("sha256").update([solicitudId, iqFolio, ocUploadId].join("|")).digest("hex");
 
-type QueueInput = { solicitudId: string; iqFolio: string; requestedBy: string; source?: string };
+type QueueInput = { solicitudId: string; iqFolio: string; requestedBy: string; source?: string; batchId?: string };
 
 /** A transaction-backed reservation shared by both IQ success paths. */
 export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
@@ -48,7 +48,7 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
       tx.set(ref, {
         rootId, solicitudId: input.solicitudId, solicitudFolio: clean(solicitud.folio || input.solicitudId, 128),
         iqFolio: currentIqFolio, ocUploadId: activeOcUploadId, ocFingerprint: clean(solicitud.orderUploadId || activeOcUploadId, 128),
-        requestedBy: input.requestedBy, source: input.source || "IQ_CONFIRMED", status: "QUEUED",
+        requestedBy: input.requestedBy, source: input.source || "IQ_CONFIRMED", batchId: clean(input.batchId, 128) || null, status: "QUEUED",
         attemptCount: Number(row.attemptCount || 0), lastError: FieldValue.delete(), nextRunAt: null,
         createdAt: current.exists ? row.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -67,7 +67,7 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
     adminId: reserved.rootId, actorUid: input.requestedBy, actorRole: "system", referenceId: input.solicitudId,
     referenceFolio: reserved.solicitudFolio, referenceType: "solicitud", entityId: input.solicitudId, entityType: "solicitudes",
     description: `Cotizacion encolada para ejecucion automatica tras confirmar IQ.`,
-    extra: { quotationJobId: reserved.id, iqFolio: input.iqFolio, source: input.source || "IQ_CONFIRMED", automaticExecution: true },
+    extra: { quotationJobId: reserved.id, iqFolio: input.iqFolio, batchId: clean(input.batchId, 128) || null, source: input.source || "IQ_CONFIRMED", automaticExecution: true },
   }).catch(() => undefined);
 
   if (!TERMINAL.has(reserved.status)) {
