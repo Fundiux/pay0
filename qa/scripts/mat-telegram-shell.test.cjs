@@ -56,3 +56,11 @@ test('browser without Telegram stays available', () => {
   assert.equal(api.getTelegramWebApp(), null);
   api.initTelegramMiniAppShell()();
 });
+
+test('native controls are gated by Telegram API version', () => {
+  const { api } = setup(null);
+  assert.equal(api.supportsTelegramVersion({ version: '6.0' }, '6.1'), false);
+  assert.equal(api.supportsTelegramVersion({ version: '6.1' }, '6.1'), true);
+  assert.equal(api.supportsTelegramVersion({ version: '7.9' }, '8.0'), false);
+  assert.equal(api.supportsTelegramVersion({ version: '8.0' }, '8.0'), true);
+});

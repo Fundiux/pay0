@@ -23,6 +23,12 @@ export type TelegramWebAppLike = {
   requestFullscreen?: () => void | Promise<void>;
   onEvent?: (event: string, callback: () => void) => void;
   offEvent?: (event: string, callback: () => void) => void;
+  BackButton?: {
+    show?: () => void;
+    hide?: () => void;
+    onClick?: (callback: () => void) => void;
+    offClick?: (callback: () => void) => void;
+  };
 };
 
 declare global {
@@ -58,6 +64,16 @@ export function getTelegramPlatform(): string {
   return String(getTelegramWebApp()?.platform || "").trim();
 }
 
+export function supportsTelegramVersion(app: TelegramWebAppLike, minimum: string): boolean {
+  try {
+    if (app.isVersionAtLeast) return app.isVersionAtLeast(minimum);
+    const current = (app.version || "0").split(".").map(Number);
+    const required = minimum.split(".").map(Number);
+    return (current[0] || 0) > (required[0] || 0) ||
+      ((current[0] || 0) === (required[0] || 0) && (current[1] || 0) >= (required[1] || 0));
+  } catch { return false; }
+}
+
 let initializedApp: TelegramWebAppLike | null = null;
 
 export function initTelegramMiniAppShell(onReady?: () => void): () => void {
@@ -89,8 +105,7 @@ export function initTelegramMiniAppShell(onReady?: () => void): () => void {
     initializedApp = app;
     try { app.ready?.(); } catch { /* Older clients may reject optional shell calls. */ }
     try { app.expand?.(); } catch { /* Continue with the available viewport. */ }
-    const supportsFullscreen = app.isVersionAtLeast?.("8.0") ??
-      (Number.parseInt(app.version || "0", 10) >= 8);
+    const supportsFullscreen = supportsTelegramVersion(app, "8.0");
     if (supportsFullscreen && app.requestFullscreen && !app.isFullscreen) {
       try {
         const result = app.requestFullscreen();

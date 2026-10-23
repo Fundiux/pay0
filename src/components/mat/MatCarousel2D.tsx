@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { getTelegramWebApp, supportsTelegramVersion } from "@/lib/telegramMiniApp";
 
 export type MatCarouselSlide = {
   id: string;
@@ -56,6 +57,27 @@ export function MatCarousel2D({
       window.dispatchEvent(new CustomEvent("mat-section-change", { detail: { id: activeIdRef.current } }));
     }
   }, [slides]);
+
+  useEffect(() => {
+    const app = getTelegramWebApp();
+    if (!app?.initData || !app.BackButton || !supportsTelegramVersion(app, "6.1")) return;
+    const back = app.BackButton;
+    const onBack = () => goTo(0);
+    try {
+      if (activeIndex > 0) {
+        back.onClick?.(onBack);
+        back.show?.();
+      } else {
+        back.hide?.();
+      }
+    } catch { /* Native navigation is optional. */ }
+    return () => {
+      try {
+        back.offClick?.(onBack);
+        back.hide?.();
+      } catch { /* Route teardown must remain safe. */ }
+    };
+  }, [activeIndex]);
 
   useEffect(() => {
     const track = trackRef.current;
