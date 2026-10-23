@@ -818,9 +818,8 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   const zip = new JSZip();
   zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CANTIDAD</t></is></c></row></sheetData></worksheet>');
   const bytes = await zip.generateAsync({ type: 'nodebuffer' });
-  let present = false, enqueue = 0, projectionConfirmed = false, releaseQuotation;
+  let present = false, enqueue = 0, projectionConfirmed = false;
   const order = [];
-  const quotationGate = new Promise(resolve => { releaseQuotation = resolve; });
   const service = load('functions/src/modules/solicitudDocuments/service.ts', {
     crypto: require('node:crypto'), '../../utils/operationTiming': { operationTiming: () => Date.now() },
     'firebase-admin': { apps: admin.apps, initializeApp: admin.initializeApp, firestore: admin.firestore, storage: () => ({ bucket: () => ({ file: () => ({ exists: async () => [present], download: async () => [bytes] }) }) }) },
@@ -837,7 +836,7 @@ test('Solicitud source finalization registers the original OC before enqueue, in
     '../materiality/service': { linkSolicitudToMaterialityOperationCore: async ({data}) => { projectionConfirmed = true; order.push('materiality'); return {materialityOperationId:data.solicitudId, completedTypes:['ORDEN_COMPRA']}; } },
     '../facturama/service': { ensureAutomaticFacturamaDraftForSolicitud: async () => {} },
     '../facturama/issuerGuard': functionsRequire('./lib/modules/facturama/issuerGuard.js'),
-    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => { order.push('quotation'); await quotationGate; } },
+    '../cotizaciones/callables': { generateCotizacionForSolicitudCore: async () => { throw Error('La cotizacion no debe generarse al finalizar la OC'); } },
     '../constancias/service': { generateConstanciaRecepcionForSolicitudCore: async () => {} },
   });
   await db.doc('users/source-actor').set({ role: 'superadmin', rootId: 'root', username: 'source-actor' });
@@ -850,9 +849,8 @@ test('Solicitud source finalization registers the original OC before enqueue, in
   assert.equal(enqueue, 0);
   present = true;
   const firstFinalization = service.finalizeSolicitudDocumentUploadCore(request);
-  await eventually(() => enqueue === 1 && order.includes('quotation'), 'OC dispatch precedes quotation');
-  assert.deepEqual(order.slice(0, 3), ['materiality', 'enqueue', 'quotation']);
-  releaseQuotation();
+  await eventually(() => enqueue === 1, 'OC dispatch enqueues IQ immediately');
+  assert.deepEqual(order.slice(0, 2), ['materiality', 'enqueue']);
   await firstFinalization;
   await service.finalizeSolicitudDocumentUploadCore(request);
   const active = await db.collection('uploads').where('solicitudId', '==', 'source-regression').where('active', '==', true).get();
@@ -983,11 +981,11 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     }, publishSuperadminQueueSummary: async () => {},
   }, 'functions/src/modules/iq/solicitudCreateQueueCallables.ts');
   try {
-    for (const mode of ['normal','slow-quotation','slow-iq','cold-worker','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','five-workers','master-off']) {
+    for (const mode of ['normal','slow-iq','cold-worker','init-response-failure','upload-failure','finalize-failure','projection-failure','url-failure','double-click','five-workers','master-off']) {
       const file = {size:bytes.length,name:'synthetic.xlsx',arrayBuffer:async()=>Uint8Array.from(bytes).buffer};
       let creates = 0, closed = false, error = '', id; const click = Date.now();
       failInitResponse = mode === 'init-response-failure'; failUpload = mode === 'upload-failure'; failFinalize = mode === 'finalize-failure'; failProjection = mode === 'projection-failure'; failUrl = mode === 'url-failure';
-      quoteDelayMs = mode === 'slow-quotation' ? 700 : 0; responseDelayMs = mode === 'slow-iq' ? 700 : 0;
+      quoteDelayMs = 0; responseDelayMs = mode === 'slow-iq' ? 700 : 0;
       const ctx = { sourceCompanyWarning:"", sourceCompanyConfirmed:false, beginOperationTiming:()=>sid=>{stamp('ui_released_at',sid);}, saving:{current:false},submission:{current:null},
         formData:{monto:'98,000',tipoFactura:'PUE',clientId:'flow-client',companyId:'flow-company',operationTypeKey:'FACTURA_SUBTOTAL'},
         isSolicitudFormComplete:true, facturaXmlFile:null,ordenCompraFile:file, facturaXmlParsed:null,ordenCompraParsed:{montoSolicitud:98000,tipoFactura:'PUE'},
@@ -1011,11 +1009,9 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
       assert.equal((await doc.ref.get()).data().version,1);
       assert((await db.doc(`materialityOperations/${id}`).get()).updateTime.isEqual(projection.updateTime));
       const task=tasks.get(`iq-solicitud-create-${id}`.toLowerCase());assert(task);assert.equal(task.functionName,'processIqCreateOnDemandTask');
-      if (mode !== 'projection-failure')
-        assert(timing[id].task_enqueued_at <= timing[id].quotation_finished_at, 'IQ Task precedes derivative quotation completion');
-      else
-        assert(timing[id].quotation_finished_at <= timing[id].task_enqueued_at, 'projection failure retains the quotation but never dispatches before retry');
-      assert(timing[id].ui_released_at >= timing[id].quotation_finished_at, 'the existing Solicitud response still waits for quotation');
+      assert(timing[id].task_enqueued_at, 'La OC debe encolar la tarea IQ inmediata.');
+      assert.equal(timing[id].quotation_finished_at, undefined, 'La OC no debe generar cotizacion antes de confirmar IQ.');
+      assert(timing[id].ui_released_at >= timing[id].task_enqueued_at, 'La UI espera la persistencia y encolado IQ, no la cotizacion.');
       await db.doc('iqIntegrationConfigs/flow-root').update({enabled:mode!=='master-off'});
       if (mode === 'cold-worker') await new Promise(resolve => setTimeout(resolve, 700));
       stamp('harness_worker_started_at',id);

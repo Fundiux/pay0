@@ -9,6 +9,7 @@ import { logActivity } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { enqueueIqOnDemandTaskH4D64 } from "../iq/iqOnDemandTaskQueue";
 import { generateCotizacionForSolicitudCore } from "./callables";
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -90,10 +91,13 @@ async function processJob(jobId: string) {
     const attemptCount = Number(job.attemptCount || 0) + 1;
     tx.set(ref, { status: "PROCESSING", attemptCount, processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     tx.set(solicitudSnap.ref, { cotizacionAutoGenerateStatus: "PROCESSING", cotizacionAutoGenerateAttemptCount: attemptCount, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { ...job, attemptCount, solicitudId: clean(job.solicitudId, 128), rootId: clean(job.rootId, 128), requestedBy: clean(job.requestedBy, 128) };
+    return { ...job, attemptCount, solicitudId: clean(job.solicitudId, 128), rootId: clean(job.rootId, 128), requestedBy: clean(job.requestedBy, 128), clientId: clean(solicitud.clienteId || solicitud.clientId, 128) };
   });
   if (!claimed) return;
   try {
+    // Cloud Tasks has no end-user Firebase auth. Revalidate the persisted
+    // origin at execution time before granting the server-only capability.
+    await authorizeDeferredIntent({ uid: claimed.requestedBy, rootId: claimed.rootId, module: "solicitudes", action: "uploadDocs", clientId: claimed.clientId, permission: "operateSolicitudes" });
     // A confirmed replacement IQ folio is a new commercial attempt. The
     // document lifecycle keeps only one active version if a worker is retried.
     const result: any = await generateCotizacionForSolicitudCore({ data: { solicitudId: claimed.solicitudId, replaceExisting: true }, internalAutomation: { rootId: claimed.rootId, originUid: claimed.requestedBy, quotationJobId: jobId } });
@@ -102,9 +106,11 @@ async function processJob(jobId: string) {
     await logActivity({ event: "COTIZACION_GENERADA", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: "Cotizacion generada por ejecucion automatica.", extra: { quotationJobId: jobId, iqFolio: claimed.iqFolio, uploadId: result.uploadId || null, automaticExecution: true } }).catch(() => undefined);
   } catch (error) {
     const message = clean((error as any)?.message || error, 1500);
-    await ref.set({ status: "FAILED_RETRYABLE", lastError: message, nextRunAt: Timestamp.fromMillis(Date.now() + RETRY_DELAY_MS), finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await db.collection("solicitudes").doc(claimed.solicitudId).set({ cotizacionAutoGenerateStatus: "FAILED_RETRYABLE", cotizacionAutoGenerateLastError: message, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await logActivity({ event: "COTIZACION_FALLIDA_REINTENTO", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: "Cotizacion fallida; pendiente de reintento automatico.", extra: { quotationJobId: jobId, automaticExecution: true, error: message } }).catch(() => undefined);
+    const blocked = String((error as any)?.code || "").toLowerCase() === "permission-denied";
+    const status = blocked ? "BLOCKED" : "FAILED_RETRYABLE";
+    await ref.set({ status, lastError: message, nextRunAt: blocked ? null : Timestamp.fromMillis(Date.now() + RETRY_DELAY_MS), finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection("solicitudes").doc(claimed.solicitudId).set({ cotizacionAutoGenerateStatus: status, cotizacionAutoGenerateLastError: message, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await logActivity({ event: "COTIZACION_FALLIDA_REINTENTO", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: blocked ? "Cotizacion bloqueada porque la autorizacion origen ya no es valida." : "Cotizacion fallida; pendiente de reintento automatico.", extra: { quotationJobId: jobId, automaticExecution: true, status, error: message } }).catch((auditError) => console.error("COTIZACION_AUDIT_WRITE_FAILED", auditError));
   }
 }
 
@@ -112,16 +118,23 @@ export const processSolicitudQuotationOnDemandTask = onTaskDispatched({ region: 
 
 export const processSolicitudQuotationQueue = onSchedule({ schedule: "every 5 minutes", timeZone: "America/Mexico_City", timeoutSeconds: 540, memory: "1GiB" }, async () => {
   const now = Timestamp.now();
-  const jobs = await db.collection("solicitudQuotationJobs").where("status", "in", ["QUEUED", "FAILED_RETRYABLE"]).orderBy("updatedAt", "asc").limit(100).get();
-  for (const snap of jobs.docs) { const row: any = snap.data() || {}; const next = row.nextRunAt?.toMillis?.() || 0; if (!next || next <= now.toMillis()) await processJob(snap.id); }
+  // Two single-field reads avoid requiring a production composite index for
+  // recovery; Cloud Tasks remains the primary execution path.
+  const [queued, retryable] = await Promise.all([
+    db.collection("solicitudQuotationJobs").where("status", "==", "QUEUED").limit(50).get(),
+    db.collection("solicitudQuotationJobs").where("status", "==", "FAILED_RETRYABLE").limit(50).get(),
+  ]);
+  const jobs = [...queued.docs, ...retryable.docs];
+  for (const snap of jobs) { const row: any = snap.data() || {}; const next = row.nextRunAt?.toMillis?.() || 0; if (!next || next <= now.toMillis()) await processJob(snap.id); }
 });
 
 /** Read-only operational preview; it deliberately never enqueues or repairs. */
 export const previewSolicitudesWithoutQuotation = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async (request) => {
   const uid = requireAuth(request); const user = await getMyUser(uid);
   assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"], requiredModule: "solicitudes", requiredAction: "view" });
-  const rootId = clean(user?.rootId || uid, 128); const snap = await db.collection("solicitudes").where("rootId", "==", rootId).limit(500).get();
+  const rootId = clean(user?.rootId || uid, 128); const [snap, uploads] = await Promise.all([db.collection("solicitudes").where("rootId", "==", rootId).limit(500).get(), db.collection("uploads").where("rootId", "==", rootId).limit(2000).get()]);
+  const activeQuoteSolicitudIds = new Set(uploads.docs.filter(doc => { const row: any = doc.data() || {}; return row.documentType === "COTIZACION" && row.active === true; }).map(doc => clean((doc.data() || {}).solicitudId, 128)));
   const candidates: any[] = [];
-  for (const doc of snap.docs) { const row: any = doc.data() || {}; const iqFolio = clean(row.iqFolio || row.iqId, 128); const ocUploadId = clean(row.ocFiscalMetadataUploadId, 128); if (!iqFolio || !ocUploadId || upper(row.cotizacionAutoGenerateStatus) === "READY") continue; const quote = await db.collection("uploads").where("solicitudId", "==", doc.id).where("documentType", "==", "COTIZACION").where("active", "==", true).limit(1).get(); if (quote.empty) candidates.push({ solicitudId: doc.id, folio: clean(row.folio || doc.id, 128), iqFolio, ocUploadId, quotationStatus: clean(row.cotizacionAutoGenerateStatus || "MISSING", 64) }); }
+  for (const doc of snap.docs) { const row: any = doc.data() || {}; const iqFolio = clean(row.iqFolio || row.iqId, 128); const ocUploadId = clean(row.ocFiscalMetadataUploadId, 128); if (!iqFolio || !ocUploadId || activeQuoteSolicitudIds.has(doc.id)) continue; candidates.push({ solicitudId: doc.id, folio: clean(row.folio || doc.id, 128), iqFolio, ocUploadId, quotationStatus: clean(row.cotizacionAutoGenerateStatus || "MISSING", 64) }); }
   return { ok: true, readOnly: true, candidates };
 });
