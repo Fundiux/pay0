@@ -90,7 +90,7 @@ test.describe("MAT experiencia principal", () => {
 
       await expect(page.getByTestId("mat-identity")).toContainText(route.identity);
       await expect(page.getByLabel(/Estado MAT/i)).toBeVisible();
-      await expect(page.locator("#inicio").getByText("Operacion PAY0")).toBeVisible();
+      await expect(page.locator("#inicio")).toHaveAttribute("aria-label", "Operacion PAY0");
       await expect(page.locator("#solicitudes")).toBeVisible();
       await expect(page.locator("#pagos")).toBeVisible();
       await expect(page.locator("#dispersiones")).toBeVisible();
