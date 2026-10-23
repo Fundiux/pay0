@@ -133,7 +133,7 @@ export function MatCarousel2D({
     <section id={id} aria-label="Carrusel MAT 2D" className="relative flex h-full min-h-0 flex-col">
       <div
         ref={trackRef}
-        className="flex flex-1 snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pb-[104px] pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-h-0 flex-1 snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pb-12 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {slides.map((slide, index) => (
           <section
@@ -152,7 +152,7 @@ export function MatCarousel2D({
         ))}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-[88px] z-30 flex justify-center px-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex justify-center px-4">
         <div className="pointer-events-auto flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-3 py-2 shadow-xl shadow-black/40 backdrop-blur-xl">
           {slides.map((slide, index) => (
             <button

@@ -15,8 +15,14 @@ export type TelegramWebAppLike = {
   platform?: string;
   colorScheme?: string;
   version?: string;
+  isFullscreen?: boolean;
+  isExpanded?: boolean;
   expand?: () => void;
   ready?: () => void;
+  isVersionAtLeast?: (version: string) => boolean;
+  requestFullscreen?: () => void | Promise<void>;
+  onEvent?: (event: string, callback: () => void) => void;
+  offEvent?: (event: string, callback: () => void) => void;
 };
 
 declare global {
@@ -52,15 +58,55 @@ export function getTelegramPlatform(): string {
   return String(getTelegramWebApp()?.platform || "").trim();
 }
 
-export function initTelegramMiniAppShell() {
-  const webApp = getTelegramWebApp();
+let initializedApp: TelegramWebAppLike | null = null;
 
-  if (!webApp) return;
-
-  try {
-    webApp.ready?.();
-    webApp.expand?.();
-  } catch {
-    // No-op: Telegram shell helpers are optional.
-  }
+export function initTelegramMiniAppShell(onReady?: () => void): () => void {
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let observedApp: TelegramWebAppLike | null = null;
+  const syncFullscreen = () => {
+    if (observedApp) document.documentElement.dataset.matFullscreen = String(observedApp.isFullscreen === true);
+  };
+  const start = (attempt: number) => {
+    if (disposed) return;
+    const app = getTelegramWebApp();
+    if (!app && attempt < 20) {
+      timer = setTimeout(() => start(attempt + 1), 100);
+      return;
+    }
+    if (!app || !app.initData) {
+      onReady?.();
+      return;
+    }
+    onReady?.();
+    observedApp = app;
+    syncFullscreen();
+    try {
+      app.onEvent?.("fullscreenChanged", syncFullscreen);
+      app.onEvent?.("fullscreenFailed", syncFullscreen);
+    } catch { /* Event support varies by client. */ }
+    if (initializedApp === app) return;
+    initializedApp = app;
+    try { app.ready?.(); } catch { /* Older clients may reject optional shell calls. */ }
+    try { app.expand?.(); } catch { /* Continue with the available viewport. */ }
+    const supportsFullscreen = app.isVersionAtLeast?.("8.0") ??
+      (Number.parseInt(app.version || "0", 10) >= 8);
+    if (supportsFullscreen && app.requestFullscreen && !app.isFullscreen) {
+      try {
+        const result = app.requestFullscreen();
+        if (result && typeof result.catch === "function") result.catch(syncFullscreen);
+      } catch { syncFullscreen(); }
+    }
+  };
+  start(0);
+  return () => {
+    disposed = true;
+    if (timer) clearTimeout(timer);
+    if (observedApp) {
+      try {
+        observedApp.offEvent?.("fullscreenChanged", syncFullscreen);
+        observedApp.offEvent?.("fullscreenFailed", syncFullscreen);
+      } catch { /* Shell teardown must not block route changes. */ }
+    }
+  };
 }

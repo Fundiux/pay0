@@ -1,0 +1,15 @@
+.mat-shell {
+  height: 100dvh;
+  height: var(--tg-viewport-stable-height, 100dvh);
+  max-width: 100vw;
+}
+
+.mat-header {
+  padding-top: calc(max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px), var(--tg-content-safe-area-inset-top, 0px)) + 10px);
+  padding-inline: max(16px, env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px), var(--tg-content-safe-area-inset-left, 0px));
+}
+
+.mat-bottom-nav {
+  padding-bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px)) + 10px);
+  padding-inline: max(16px, env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px), var(--tg-content-safe-area-inset-left, 0px));
+}

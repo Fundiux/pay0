@@ -78,7 +78,7 @@ export function MatBottomNav({
   }, [items]);
 
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+18px)] z-50 px-4">
+    <nav className="mat-bottom-nav pointer-events-none relative z-50 shrink-0 px-4">
       <div
         className="pointer-events-auto mx-auto grid w-full max-w-[560px] gap-1 rounded-[34px] border border-white/10 bg-[#050914]/82 p-1.5 shadow-2xl shadow-black/70 backdrop-blur-2xl ring-1 ring-cyan-300/5"
         style={{ gridTemplateColumns: `repeat(${Math.max(items.length, 1)}, minmax(0, 1fr))` }}

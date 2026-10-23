@@ -39,42 +39,35 @@ export function MatTelegramStatus({ scope }: { scope: MatBotScope }) {
   useEffect(() => {
     let cancelled = false;
 
-    initTelegramMiniAppShell();
-
-    const initData = getTelegramInitData();
-    const name = getBrowserTelegramName();
-    const currentPlatform = getTelegramPlatform();
-
-    setInitDataLength(initData.length);
-    setDisplayName(name);
-    setPlatform(currentPlatform);
-
-    if (!initData) {
-      setLocalStatus("LOCAL");
-      setSession(null);
-      return;
-    }
-
-    setLocalStatus("CHECKING");
-
-    verifyTelegramMiniAppSession({
-      initData,
-      botScope: scope,
-    })
-      .then((result) => {
-        if (cancelled) return;
-        setSession(result);
-        setLocalStatus(result.ok ? "OK" : "ERROR");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error("[MAT] verifyTelegramMiniAppSession error", error);
+    const stopTelegramShell = initTelegramMiniAppShell(() => {
+      if (cancelled) return;
+      const initData = getTelegramInitData();
+      setInitDataLength(initData.length);
+      setDisplayName(getBrowserTelegramName());
+      setPlatform(getTelegramPlatform());
+      if (!initData) {
+        setLocalStatus("LOCAL");
         setSession(null);
-        setLocalStatus("ERROR");
-      });
+        return;
+      }
+      setLocalStatus("CHECKING");
+      verifyTelegramMiniAppSession({ initData, botScope: scope })
+        .then((result) => {
+          if (cancelled) return;
+          setSession(result);
+          setLocalStatus(result.ok ? "OK" : "ERROR");
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          console.error("[MAT] verifyTelegramMiniAppSession error", error);
+          setSession(null);
+          setLocalStatus("ERROR");
+        });
+    });
 
     return () => {
       cancelled = true;
+      stopTelegramShell();
     };
   }, [scope]);
 
