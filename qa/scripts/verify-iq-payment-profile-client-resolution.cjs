@@ -62,6 +62,18 @@ const canonical = resolveIqDepositClientCatalogRow(clients, {
 assert.equal(String(canonical.row.id), "712");
 assert.equal(canonical.strategy, "HTTP_CATALOG_PROFILE_ID");
 
+const renamedInPay0 = resolveIqDepositClientCatalogRow(clients, {
+  iqClientId: "712",
+  clientName: "NOMBRE ANTERIOR EN PAY0",
+});
+assert.equal(String(renamedInPay0.row.id), "712");
+assert.equal(renamedInPay0.strategy, "HTTP_CATALOG_PROFILE_ID");
+
+assert.throws(() => resolveIqDepositClientCatalogRow([
+  { id: 712, name: "CLIENTE A" },
+  { id: 712, name: "CLIENTE B" },
+], { iqClientId: "712", clientName: "CLIENTE A" }), /IQ_CATALOG_CLIENT_ID_AMBIGUOUS/);
+
 assert.throws(
   () => resolveIqDepositClientCatalogRow([
     { id: 712, name: "LIMPIEZA PROFUNDA E INTEGRAL DAL" },
@@ -78,6 +90,12 @@ const paymentCallablesSource = fs.readFileSync(
   path.join(__dirname, "../../functions/src/modules/iq/pagoDepositCallables.ts"),
   "utf8",
 );
+const applicationSource = fs.readFileSync(
+  path.join(__dirname, "../../functions/src/modules/paymentApplications/iqExecution.ts"),
+  "utf8",
+);
+assert.match(applicationSource, /resolveStoredIqClientIdForProfile\(clientSnap\.data\(\) \|\| \{\}, access\)/);
+assert.match(applicationSource, /resolveIqDepositClientCatalogRow\(\s*catalogArray\(partnerCatalog\.client\)/);
 assert.doesNotMatch(
   paymentCallablesSource,
   /"iqDepositSync\.(?:iqClientId|clientMatchStrategy)"\s*:/,

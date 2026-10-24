@@ -14,6 +14,8 @@ import {
 } from "../iq/iqDateTime";
 import type { PaymentApplicationActor } from "./service";
 import { requireIqAssociatedName } from "../iq/associatedName";
+import { resolveStoredIqClientIdForProfile } from "../iq/iqClientProfileLink";
+import { resolveIqDepositClientCatalogRow } from "../iq/iqDepositHttpCatalogResolver";
 import {
   PAYMENT_APPLICATION_IQ_EXECUTION_VERSION,
   buildPaymentApplicationIqExecutionAttemptId,
@@ -1140,6 +1142,7 @@ async function runIqPaymentApplicationHttpDirect(params: {
   pagoIqFolio: string;
   asociadoName: string;
   clienteName: string;
+  iqClientId: string;
   empresaName: string;
   items: Array<{
     key: string;
@@ -1319,10 +1322,15 @@ async function runIqPaymentApplicationHttpDirect(params: {
       partner_id: partnerId,
     });
 
-    const client = oneByName(
-      partnerCatalog.client,
-      params.clienteName,
-    );
+    let client: { id?: unknown; name?: unknown } | null = null;
+    try {
+      client = resolveIqDepositClientCatalogRow(
+        catalogArray(partnerCatalog.client),
+        { iqClientId: params.iqClientId, clientName: params.clienteName },
+      ).row;
+    } catch {
+      // An absent or ambiguous profile link must stop before the IQ POST.
+    }
 
     if (!client) {
       return baseResult({
@@ -2111,6 +2119,12 @@ export async function executePaymentApplicationIqPlan(params: {
     movement: plan,
     legacyEvidence: pagoSnap?.exists ? [pagoSnap.data() || {}] : [],
   });
+  const pagoClientId = cleanText(pagoSnap?.get("clienteId") || pagoSnap?.get("clientId"));
+  const clientSnap = pagoClientId ? await db.collection("clients").doc(pagoClientId).get() : null;
+  if (!clientSnap?.exists || cleanText(clientSnap.get("rootId")) !== params.actor.rootId) {
+    throw new HttpsError("failed-precondition", "Cliente PAY0 no disponible para la aplicacion IQ.");
+  }
+  const iqClientId = resolveStoredIqClientIdForProfile(clientSnap.data() || {}, access);
   const claimed = await claimExecution({
     actor: params.actor,
     planId: request.planId,
@@ -2127,6 +2141,7 @@ export async function executePaymentApplicationIqPlan(params: {
       pagoIqFolio: claimed.pagoIqFolio,
       asociadoName: access.associatedName,
       clienteName: claimed.clienteName,
+      iqClientId,
       empresaName: claimed.empresaName,
       items: claimed.items.map((item) => ({
         key: item.planItemId,
