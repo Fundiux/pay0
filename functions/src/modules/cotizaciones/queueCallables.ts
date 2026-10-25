@@ -10,10 +10,18 @@ import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { enqueueIqOnDemandTaskH4D64 } from "../iq/iqOnDemandTaskQueue";
 import { generateCotizacionForSolicitudCore } from "./callables";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
+import { finishRun, reserveRun } from "../agentOperations/engine";
+import { mexicoDayKey } from "../agentOperations/time";
+import { verifyQuotationEvidence } from "../agentOperations/quotationEvidence";
+import { isTerminalSolicitud } from "./quotationPolicy";
+import { observeSentinelEvent } from "../agentOperations/sentinel";
+import { escalateStaleQuotationJob } from "./staleJob";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const RETRY_DELAY_MS = 10 * 60 * 1000;
+const STALE_PROCESSING_MS = 10 * 60 * 1000;
+const EXPECTED_QUOTE_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 2;
 const TASK_NAME = "processSolicitudQuotationOnDemandTask";
 const TERMINAL = new Set(["SUCCEEDED", "BLOCKED", "ESCALATED"]);
@@ -32,9 +40,10 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
     const solicitudSnap = await tx.get(solicitudRef);
     if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const solicitud: any = solicitudSnap.data() || {};
+    if (isTerminalSolicitud(solicitud)) throw new HttpsError("failed-precondition", "Solicitud terminal; no se encola cotizacion.");
     const rootId = clean(solicitud.rootId, 128);
     const currentIqFolio = clean(solicitud.iqFolio || solicitud.iqId, 128);
-    if (!rootId || currentIqFolio !== clean(input.iqFolio, 128)) {
+    if (!rootId || !currentIqFolio || currentIqFolio !== clean(input.iqFolio, 128)) {
       throw new HttpsError("failed-precondition", "La cotizacion requiere un folio IQ confirmado y vigente.");
     }
     const activeOcUploadId = clean(solicitud.ocFiscalMetadataUploadId, 128);
@@ -89,19 +98,32 @@ async function processJob(jobId: string) {
     const snap = await tx.get(ref); if (!snap.exists) return null;
     const job: any = snap.data() || {}; if (!["QUEUED", "FAILED_RETRYABLE"].includes(upper(job.status))) return null;
     const control = await tx.get(db.collection("agentControls").doc(clean(job.rootId, 128)));
-    if (control.get("killSwitch") === true) { tx.set(ref, { status: "BLOCKED", lastError: "Kill switch de agentes activo.", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return null; }
-    if (Number(job.attemptCount || 0) >= MAX_ATTEMPTS) { tx.set(ref, { status: "ESCALATED", lastError: "Límite de intentos agotado.", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return null; }
+    const incident = (cause: string) => tx.set(db.collection("agentIncidents").doc(`quotation-${jobId}`), { rootId: job.rootId, reportDay: mexicoDayKey(), runId: null, correlationId: jobId, entityType: "solicitud", entityId: job.solicitudId, status: "OPEN", cause, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${job.solicitudId}`], createdAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (control.get("killSwitch") === true) { const cause = "Kill switch de agentes activo."; tx.set(ref, { status: "BLOCKED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
+    if (Number(job.attemptCount || 0) >= MAX_ATTEMPTS) { const cause = "Límite de intentos agotado."; tx.set(ref, { status: "ESCALATED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
     const solicitudSnap = await tx.get(db.collection("solicitudes").doc(clean(job.solicitudId, 128)));
     const solicitud: any = solicitudSnap.exists ? solicitudSnap.data() || {} : {};
-    const valid = solicitudSnap.exists && !solicitud.isDeleted && clean(solicitud.iqFolio || solicitud.iqId, 128) === clean(job.iqFolio, 128) && clean(solicitud.ocFiscalMetadataUploadId, 128) === clean(job.ocUploadId, 128);
-    if (!valid) { tx.set(ref, { status: "BLOCKED", lastError: "La OC activa o el folio IQ ya no corresponden al trabajo.", finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return null; }
+    const valid = solicitudSnap.exists && !isTerminalSolicitud(solicitud) && clean(solicitud.iqFolio || solicitud.iqId, 128) === clean(job.iqFolio, 128) && clean(solicitud.ocFiscalMetadataUploadId, 128) === clean(job.ocUploadId, 128);
+    if (!valid) { const cause = "Solicitud terminal o la OC activa o el folio IQ ya no corresponden al trabajo."; tx.set(ref, { status: "BLOCKED", lastError: cause, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
     const attemptCount = Number(job.attemptCount || 0) + 1;
     tx.set(ref, { status: "PROCESSING", attemptCount, processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     tx.set(solicitudSnap.ref, { cotizacionAutoGenerateStatus: "PROCESSING", cotizacionAutoGenerateAttemptCount: attemptCount, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { ...job, attemptCount, solicitudId: clean(job.solicitudId, 128), rootId: clean(job.rootId, 128), requestedBy: clean(job.requestedBy, 128), clientId: clean(solicitud.clienteId || solicitud.clientId, 128) };
+    return { ...job, attemptCount, solicitudId: clean(job.solicitudId, 128), rootId: clean(job.rootId, 128), requestedBy: clean(job.requestedBy, 128), clientId: clean(solicitud.clienteId || solicitud.clientId, 128), iqFingerprint: clean(solicitud.iqCreationFingerprint, 128) };
   });
   if (!claimed) return;
+  let agentRunId: string | null = null;
+  let runFinished = false;
   try {
+    const iqAttempt = claimed.iqFingerprint ? await db.collection("solicitudes").doc(claimed.solicitudId).collection("iqAttempts").doc(claimed.iqFingerprint).get() : null;
+    const iqEvidence = iqAttempt?.exists ? `solicitudes/${claimed.solicitudId}/iqAttempts/${claimed.iqFingerprint}` : "IQ_ATTEMPT_NOT_FOUND";
+    const run = await reserveRun({
+      rootId: claimed.rootId, agentId: "expediente", toolId: "quotation-recovery",
+      entityType: "solicitud", entityId: claimed.solicitudId, revision: jobId,
+      actorUid: claimed.requestedBy, correlationId: jobId,
+      evidence: [`solicitudes/${claimed.solicitudId}`, `solicitudQuotationJobs/${jobId}`, iqEvidence, `IQ:${claimed.iqFolio}`, `OC:${claimed.ocUploadId}`],
+    });
+    if (!run.claimed) throw new HttpsError("failed-precondition", `Ejecucion de agente no disponible: ${run.status}.`);
+    agentRunId = run.id;
     // Cloud Tasks has no end-user Firebase auth. Revalidate the persisted
     // origin at execution time before granting the server-only capability.
     await authorizeDeferredIntent({ uid: claimed.requestedBy, rootId: claimed.rootId, module: "solicitudes", action: "uploadDocs", clientId: claimed.clientId, permission: "operateSolicitudes" });
@@ -109,15 +131,35 @@ async function processJob(jobId: string) {
     // document lifecycle keeps only one active version if a worker is retried.
     const result: any = await generateCotizacionForSolicitudCore({ data: { solicitudId: claimed.solicitudId, replaceExisting: true }, internalAutomation: { rootId: claimed.rootId, originUid: claimed.requestedBy, quotationJobId: jobId } });
     if (!result?.active) throw new Error("La cotizacion no quedo activa.");
-    await ref.set({ status: "SUCCEEDED", uploadId: result.uploadId || null, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete(), nextRunAt: null }, { merge: true });
+    const verified = await verifyQuotationEvidence({ rootId: claimed.rootId, solicitudId: claimed.solicitudId, jobId, uploadId: clean(result.uploadId, 128), iqFolio: claimed.iqFolio, ocUploadId: claimed.ocUploadId });
+    const delayed = claimed.attemptCount > 1 || (claimed.createdAt?.toMillis?.() || Date.now()) + EXPECTED_QUOTE_MS < Date.now();
+    const resolution = result.alreadyExists ? "RECOVERED_EXISTING" : delayed ? "RECOVERED_MISSING" : "GENERATED_NORMAL";
+    await finishRun(agentRunId, "SUCCEEDED", { reason: result.alreadyExists ? "Cotización existente recuperada, ligada al expediente y verificada en Storage." : "Cotización generada, ligada al expediente y verificada en Storage.", resolution, uploadId: verified.uploadId, evidence: [...verified.evidence, iqEvidence] });
+    runFinished = true;
+    await db.runTransaction(async tx => {
+      const solicitudRef = db.collection("solicitudes").doc(claimed.solicitudId);
+      const [jobSnap, solicitudSnap] = await Promise.all([tx.get(ref), tx.get(solicitudRef)]);
+      const solicitud = solicitudSnap.data() || {};
+      if (jobSnap.get("status") !== "PROCESSING" || !solicitudSnap.exists || isTerminalSolicitud(solicitud) || clean(solicitud.iqFolio || solicitud.iqId, 128) !== claimed.iqFolio || clean(solicitud.ocFiscalMetadataUploadId, 128) !== claimed.ocUploadId) throw new HttpsError("failed-precondition", "IQ, OC o estado cambiaron antes de cerrar la cotización.");
+      tx.set(ref, { status: "SUCCEEDED", uploadId: verified.uploadId, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete(), nextRunAt: null }, { merge: true });
+      tx.set(solicitudRef, { cotizacionAutoGenerateStatus: "READY", cotizacionAutoGenerateStage: "COMPLETED", cotizacionAutoGenerateJobId: jobId, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    });
     await logActivity({ event: "COTIZACION_GENERADA", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: "Cotizacion generada por ejecucion automatica.", extra: { quotationJobId: jobId, iqFolio: claimed.iqFolio, uploadId: result.uploadId || null, automaticExecution: true } }).catch(() => undefined);
   } catch (error) {
     const message = clean((error as any)?.message || error, 1500);
-    const blocked = String((error as any)?.code || "").toLowerCase() === "permission-denied";
-    const status = blocked ? "BLOCKED" : claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
+    const code = String((error as any)?.code || "").toLowerCase();
+    const blocked = code === "permission-denied";
+    const uncertain = code === "failed-precondition" || message.startsWith("COTIZACION_") || message.startsWith("OC_");
+    let status: "BLOCKED" | "ESCALATED" | "FAILED_RETRYABLE" = blocked ? "BLOCKED" : runFinished || uncertain || claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
+    if (agentRunId && !runFinished) {
+      try { await finishRun(agentRunId, status, { reason: message, evidence: [`solicitudes/${claimed.solicitudId}`, `solicitudQuotationJobs/${jobId}`] }); }
+      catch (auditError) { status = "ESCALATED"; console.error("AGENT_RUN_AUDIT_FAILED", auditError); }
+    }
     await ref.set({ status, lastError: message, nextRunAt: status === "FAILED_RETRYABLE" ? Timestamp.fromMillis(Date.now() + RETRY_DELAY_MS) : null, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (!agentRunId && status !== "FAILED_RETRYABLE") await db.collection("agentIncidents").doc(`quotation-${jobId}`).set({ rootId: claimed.rootId, reportDay: mexicoDayKey(), runId: null, correlationId: jobId, entityType: "solicitud", entityId: claimed.solicitudId, status: "OPEN", cause: message, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${claimed.solicitudId}`], createdAt: FieldValue.serverTimestamp() }, { merge: true });
     await db.collection("solicitudes").doc(claimed.solicitudId).set({ cotizacionAutoGenerateStatus: status, cotizacionAutoGenerateLastError: message, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await logActivity({ event: "COTIZACION_FALLIDA_REINTENTO", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: blocked ? "Cotizacion bloqueada porque la autorizacion origen ya no es valida." : "Cotizacion fallida; pendiente de reintento automatico.", extra: { quotationJobId: jobId, automaticExecution: true, status, error: message } }).catch((auditError) => console.error("COTIZACION_AUDIT_WRITE_FAILED", auditError));
+    await observeSentinelEvent({ rootId: claimed.rootId, systemId: "pay0", eventId: `quotation-${jobId}-${claimed.attemptCount}`, kind: blocked ? "AUTH_DENIED" : uncertain ? "INTEGRITY_MISMATCH" : "REPEATED_FAILURE", actorUid: claimed.requestedBy, entityType: "solicitud", entityId: claimed.solicitudId, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${claimed.solicitudId}`] }).catch(error => console.error("SENTINEL_OBSERVATION_FAILED", error));
+    await logActivity({ event: "COTIZACION_FALLIDA_REINTENTO", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: blocked ? "Cotización bloqueada porque la autorización origen ya no es válida." : status === "ESCALATED" ? "Cotización escalada para conciliación humana." : "Cotización fallida; pendiente de un reintento automático.", extra: { quotationJobId: jobId, automaticExecution: true, status, error: message } }).catch((auditError) => console.error("COTIZACION_AUDIT_WRITE_FAILED", auditError));
   }
 }
 
@@ -127,12 +169,18 @@ export const processSolicitudQuotationQueue = onSchedule({ schedule: "every 5 mi
   const now = Timestamp.now();
   // Two single-field reads avoid requiring a production composite index for
   // recovery; Cloud Tasks remains the primary execution path.
-  const [queued, retryable] = await Promise.all([
+  const [queued, retryable, processing] = await Promise.all([
     db.collection("solicitudQuotationJobs").where("status", "==", "QUEUED").limit(50).get(),
     db.collection("solicitudQuotationJobs").where("status", "==", "FAILED_RETRYABLE").limit(50).get(),
+    db.collection("solicitudQuotationJobs").where("status", "==", "PROCESSING").limit(50).get(),
   ]);
   const jobs = [...queued.docs, ...retryable.docs];
   for (const snap of jobs) { const row: any = snap.data() || {}; const next = row.nextRunAt?.toMillis?.() || 0; if (!next || next <= now.toMillis()) await processJob(snap.id); }
+  for (const snap of processing.docs) {
+    const started = snap.get("processingStartedAt")?.toMillis?.() || 0;
+    if (!started || started + STALE_PROCESSING_MS > now.toMillis()) continue;
+    await escalateStaleQuotationJob(db, snap.id, now.toMillis(), STALE_PROCESSING_MS);
+  }
 });
 
 /** Read-only operational preview; it deliberately never enqueues or repairs. */

@@ -12,6 +12,7 @@ import { linkSolicitudToMaterialityOperationCore } from "../materiality/service"
 import { renderCanonicalQuotePdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { isTerminalSolicitud } from "./quotationPolicy";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -143,7 +144,8 @@ export async function generateCotizacionForSolicitudCore(request: {
     const solicitudSnap = await solicitudRef.get();
     if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const solicitud: any = solicitudSnap.data() || {};
-    if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+    if (isTerminalSolicitud(solicitud)) throw new HttpsError("failed-precondition", "Solicitud terminal.");
+    if (!clean(solicitud.iqFolio || solicitud.iqId, 128)) throw new HttpsError("failed-precondition", "Se requiere folio IQ confirmado antes de generar cotizacion.");
     if (clean(solicitud.rootId, 128) !== rootId) {
       throw new HttpsError("permission-denied", "La solicitud no pertenece a tu expediente.");
     }
@@ -287,7 +289,8 @@ export async function generateCotizacionForSolicitudCore(request: {
     const uploadRef = db.collection("uploads").doc(uploadId);
     await db.runTransaction(async (tx) => {
       const currentSource = await tx.get(solicitudRef);
-      if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+      if (!currentSource.exists || isTerminalSolicitud(currentSource.data() || {})) throw new HttpsError("failed-precondition", "Solicitud terminal.");
+      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocFiscalMetadataUploadId"), 128) !== clean(solicitud.ocFiscalMetadataUploadId, 128))) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
       tx.set(uploadRef, {
         rootId,
         adminId: solicitud.adminId || rootId,
@@ -337,7 +340,8 @@ export async function generateCotizacionForSolicitudCore(request: {
     let finalVersion = 1;
     await db.runTransaction(async (tx) => {
       const currentSource = await tx.get(solicitudRef);
-      if (!currentSource.exists || currentSource.get("isDeleted") || currentSource.get("deletedAt") || currentSource.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+      if (!currentSource.exists || isTerminalSolicitud(currentSource.data() || {})) throw new HttpsError("failed-precondition", "Solicitud terminal.");
+      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocFiscalMetadataUploadId"), 128) !== clean(solicitud.ocFiscalMetadataUploadId, 128))) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
       finalVersion = await finalizeSolicitudDocumentVersionTx({
         tx,
         db,
