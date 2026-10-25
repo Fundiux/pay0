@@ -162,6 +162,25 @@ export async function generateCotizacionForSolicitudCore(request: {
       .where("active", "==", true)
       .limit(1)
       .get();
+    if (internalAutomation && !existing.empty) {
+      const doc = existing.docs[0];
+      const row: any = doc.data() || {};
+      if (clean(row.quotationJobId, 128) === clean(internalAutomation.quotationJobId, 128)) {
+        return { ok: true, alreadyExists: true, uploadId: doc.id, active: true, ...row };
+      }
+      if (!row.quotationJobId) throw new HttpsError("failed-precondition", "Existe una cotizacion activa sin origen verificable; requiere conciliacion humana.");
+    }
+    if (internalAutomation && existing.empty) {
+      const prior = await db.collection("uploads")
+        .where("rootId", "==", rootId)
+        .where("solicitudId", "==", solicitudId)
+        .where("documentType", "==", "COTIZACION")
+        .limit(50).get();
+      if (prior.docs.some(doc => {
+        const row: any = doc.data() || {};
+        return clean(row.quotationJobId, 128) === clean(internalAutomation.quotationJobId, 128) && row.status !== "READY";
+      })) throw new HttpsError("failed-precondition", "Existe una cotizacion previa sin finalizacion confirmada; requiere conciliacion.");
+    }
     if (!replaceExisting && !existing.empty) {
       const doc = existing.docs[0];
       return { ok: true, alreadyExists: true, uploadId: doc.id, ...(doc.data() || {}) };
@@ -293,6 +312,7 @@ export async function generateCotizacionForSolicitudCore(request: {
         integritySealVersion: "PAY0-MATERIALIDAD-V1",
         generatedBySystem: true,
         generatedByModule: "cotizaciones",
+        quotationJobId: internalAutomation?.quotationJobId || null,
         quotationTemplate: templateSnapshot,
         quotationSnapshot: {
           folio,
