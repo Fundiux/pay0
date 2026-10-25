@@ -1,0 +1,31 @@
+const assert = require("node:assert/strict");
+if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || "") || !/^demo-/.test(process.env.GCLOUD_PROJECT || "")) throw Error("ISOLATED_FIRESTORE_EMULATOR_REQUIRED");
+const admin = require("firebase-admin");
+if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
+const db = admin.firestore();
+const { draftRepeatedCauseProposal, transitionProposal, draftAgentBlueprint } = require("../../functions/lib/modules/agentOperations/proposals.js");
+
+(async () => {
+  await db.doc("agentIncidents/a").set({ rootId: "root", cause: "IQ sin documento", evidence: ["case-a"] });
+  assert.equal(await draftRepeatedCauseProposal("root", "IQ sin documento"), null);
+  await db.doc("agentIncidents/b").set({ rootId: "root", cause: "IQ sin documento", evidence: ["case-b"] });
+  const id = await draftRepeatedCauseProposal("root", "IQ sin documento");
+  assert.match(id, /^[a-f0-9]{64}$/);
+  assert.equal(await draftRepeatedCauseProposal("root", "IQ sin documento"), id);
+  assert.equal((await db.collection("agentProposals").get()).size, 1);
+  await assert.rejects(transitionProposal({ rootId: "other", proposalId: id, actorUid: "admin", status: "APPROVED" }), /PROPOSAL_NOT_FOUND/);
+  await assert.rejects(transitionProposal({ rootId: "root", proposalId: id, actorUid: "admin", status: "APPROVED" }), /INVALID_PROPOSAL_TRANSITION/);
+  await transitionProposal({ rootId: "root", proposalId: id, actorUid: "admin", status: "PENDING_APPROVAL" });
+  await transitionProposal({ rootId: "root", proposalId: id, actorUid: "admin", status: "APPROVED" });
+  const snap = await db.doc(`agentProposals/${id}`).get();
+  assert.equal(snap.get("status"), "APPROVED");
+  assert.equal(snap.get("executeAutomatically"), false);
+  assert.equal((await db.collection("agentLedger").where("proposalId", "==", id).get()).size, 2);
+  const blueprint = await draftAgentBlueprint({ rootId: "root", actorUid: "admin", systemId: "future-system", systemName: "Future System", agentName: "Explorer", specialty: "Research", tools: ["read-only-search"], permissions: ["proposed-read"], tests: ["sandbox evaluation"], risks: ["scope leakage"] });
+  assert.equal(blueprint.published, false);
+  assert.equal((await db.doc(`agentBlueprints/${blueprint.blueprintId}`).get()).get("grantsPermissions"), false);
+  await transitionProposal({ rootId: "root", proposalId: blueprint.proposalId, actorUid: "admin", status: "PENDING_APPROVAL" });
+  await transitionProposal({ rootId: "root", proposalId: blueprint.proposalId, actorUid: "admin", status: "APPROVED" });
+  assert.equal((await db.doc(`agentBlueprints/${blueprint.blueprintId}`).get()).get("published"), false);
+  console.log("PASS repeated-cause proposal, root isolation, approval state machine, no automatic execution");
+})().catch(error => { console.error(error); process.exitCode = 1; });

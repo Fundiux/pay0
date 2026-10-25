@@ -3000,7 +3000,7 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
-export { getAgentOperations, setAgentKillSwitch } from "./modules/agentOperations/callables";
+export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 
 export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";

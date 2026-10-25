@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { AGENTS, TOOLS, canExecuteTool } = require("../../functions/lib/modules/agentOperations/contract.js");
+const { SYSTEMS, canAgentAccessSystem } = require("../../functions/lib/modules/agentOperations/systems.js");
 
 assert.equal(new Set(AGENTS.map(row => row.id)).size, AGENTS.length);
 assert.equal(AGENTS.find(row => row.id === "sentinel").kind, "DEFENSE");
@@ -13,4 +14,9 @@ assert.equal(canExecuteTool(quotation, false, 1, true), false);
 const proposal = TOOLS.find(row => row.id === "agent-proposal");
 assert.equal(canExecuteTool(proposal, false, 1, false), false);
 assert.equal(canExecuteTool(proposal, true, 1, false), true);
+assert.equal(canAgentAccessSystem("expediente", "pay0", "recoverQuotation"), true);
+assert.equal(canAgentAccessSystem("expediente", "apuestas", "recoverQuotation"), false);
+assert.equal(canAgentAccessSystem("hugo", "pay0", "diagnose"), true);
+assert.equal(canAgentAccessSystem("maria", "assets", "diagnose"), false);
+assert.equal(SYSTEMS.find(row => row.id === "trading").status, "PLANNED");
 console.log("PASS agent contracts, authority, retry limits and kill switch");
