@@ -3001,6 +3001,7 @@ export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./mod
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
+export { detectMissingSolicitudQuotations } from "./modules/cotizaciones/missingQuoteDetector";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 
 export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";

@@ -1,0 +1,32 @@
+const assert = require("node:assert/strict");
+const { createRequire } = require("node:module");
+const { resolve } = require("node:path");
+if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || "") || !/^demo-/.test(process.env.GCLOUD_PROJECT || "")) throw Error("ISOLATED_FIRESTORE_EMULATOR_REQUIRED");
+const functionRequire = createRequire(resolve("functions/package.json"));
+const admin = functionRequire("firebase-admin");
+if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
+const db = admin.firestore();
+const { Timestamp } = functionRequire("firebase-admin/firestore");
+const { scanMissingQuotationPage } = require("../../functions/lib/modules/cotizaciones/missingQuoteDetector.js");
+
+(async () => {
+  const now = Date.now();
+  const old = Timestamp.fromMillis(now - 20 * 60_000);
+  const recent = Timestamp.fromMillis(now - 60_000);
+  const base = { rootId: "root", ocFiscalMetadataUploadId: "oc", status: "PROCESANDO", cotizacionAutoGenerateUpdatedAt: old };
+  await db.doc("solicitudes/missing-a").set({ ...base, iqFolio: "IQ-A" });
+  await db.doc("solicitudes/missing-b").set({ ...base, iqFolio: "IQ-B" });
+  await db.doc("solicitudes/recent").set({ ...base, iqFolio: "IQ-RECENT", cotizacionAutoGenerateUpdatedAt: recent });
+  await db.doc("solicitudes/no-iq").set({ ...base, iqFolio: "" });
+  await db.doc("solicitudes/terminal").set({ ...base, iqFolio: "IQ-TERMINAL", status: "CANCELADA" });
+  const before = (await db.doc("solicitudes/missing-a").get()).data();
+  const first = await scanMissingQuotationPage(now);
+  assert.equal(first.scanned, 5);
+  assert.equal(first.incidents, 2);
+  assert.equal((await scanMissingQuotationPage(now)).wrapped, true);
+  assert.equal((await scanMissingQuotationPage(now)).incidents, 0);
+  assert.deepEqual((await db.doc("solicitudes/missing-a").get()).data(), before);
+  assert.equal((await db.collection("agentProposals").get()).size, 1);
+  assert.equal((await db.collection("agentIncidents").get()).size, 2);
+  console.log("PASS bounded missing-quotation scan, expected delay, terminal/no-IQ exclusions, idempotent incidents and proposal");
+})().catch(error => { console.error(error); process.exitCode = 1; });
