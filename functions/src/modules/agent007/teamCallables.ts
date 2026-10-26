@@ -8,6 +8,7 @@ import { Pay0Connector } from "./pay0Connector";
 import { assertTeamReadOnly, routeTeamTurn, TEAM_AGENTS, type HugoTeamAgent } from "./teamRouting";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES } from "../solicitudDocuments/domain";
 import { parseOcCommercialMetadataBuffer } from "../solicitudDocuments/service";
+import { resolveHumanSolicitud, solicitudLabel } from "./humanSolicitudResolver";
 
 const ELIUT_UID = "Ab4z0RttIqXbZFT0NuWsDjBkt6J2";
 const folioPattern = /\bS(?=[A-Z0-9]*\d)[A-Z0-9]{5,19}\b/i;
@@ -27,7 +28,13 @@ async function authorized(request: any) {
 type TeamEvidence = { collection: string; folio: string; kind: string };
 async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, message: string, consulted: HugoTeamAgent[]) {
   const evidence: TeamEvidence[] = [];
-  const folio = safe(message.match(folioPattern)?.[0]?.toUpperCase(), 20);
+  const wantsSolicitud = /\b(solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
+  const resolved = wantsSolicitud ? await resolveHumanSolicitud(message, uid, rootId, ["hugo", "maria", "sofia", "sentinel"]) : null;
+  if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const };
+  if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 100 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
+  if (resolved?.kind === "NEEDS_DETAIL") return { text: "Dime la empresa, cliente, fecha, importe o estado de la Solicitud para encontrarla sin usar un folio.", evidence, resolution: "NEEDS_DETAIL" as const };
+  if (resolved?.kind === "NONE") return { text: `No encontré una coincidencia verificable en ${resolved.partial ? "las 100 Solicitudes recientes consultadas" : "las Solicitudes consultadas"}. Da otro dato legible para ampliar la búsqueda.`, evidence, resolution: "NONE" as const };
+  const folio = resolved?.kind === "MATCH" ? safe(resolved.item.folio, 20) : "";
   if (folio) {
     const result = await new Pay0Connector(db, { uid, rootId, role: "superadmin" }).getSolicitud(folio);
     const solicitud: any = result.data;
@@ -43,7 +50,7 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
     const jobStatus = job?.exists && job.get("rootId") === rootId ? safe(job.get("status"), 60) : "sin job canónico asociado";
     const amount = solicitud.monto == null ? NaN : Number(solicitud.monto);
     const formatted = Number.isFinite(amount) ? amount.toLocaleString("es-MX", { style: "currency", currency: solicitud.moneda || "MXN" }) : "importe no registrado";
-    const base = `${folio}: ${solicitud.estado || "sin estado"}; empresa ${solicitud.empresa || "no registrada"}; cliente ${solicitud.cliente || "no registrado"}; ${formatted}. Documentos activos en la muestra: ${documents.length ? documents.join(", ") : "ninguno"}. Cotizaciones PAY0 activas en la muestra: ${quoteCount}${partialDocuments ? "; lectura parcial, no concluye ausencia" : ""}. Job de cotización: ${jobStatus}.`;
+    const base = `${solicitudLabel({ id: solicitud.id, folio, empresa: solicitud.empresa, cliente: solicitud.cliente, monto: solicitud.monto, moneda: solicitud.moneda, estado: solicitud.estado, createdAt: solicitud.createdAt })}. Documentos activos en la muestra: ${documents.length ? documents.join(", ") : "ninguno"}. Cotizaciones PAY0 activas en la muestra: ${quoteCount}${partialDocuments ? "; lectura parcial, no concluye ausencia" : ""}. Job de cotización: ${jobStatus}.`;
     if (job?.exists && job.get("rootId") === rootId) evidence.push({ collection: "solicitudQuotationJobs", folio, kind: "COTIZACION_JOB" });
     for (const type of new Set(documents)) evidence.push({ collection: "uploads", folio, kind: type });
     const prefix = consulted.includes("sofia") ? "Sofía revisó metadatos documentales de PAY0. " : "";
@@ -62,9 +69,9 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
       if (!extracted) return { text: `${prefix}${base} La extracción comercial de la OC no produjo datos confiables.`, evidence };
       const items = extracted.items.map(item => `${item.quantity} × ${safe(item.description, 120)}`);
       evidence.push({ collection: "uploads", folio, kind: "OC_CONTENIDO_LEIDO" });
-      return { text: `${prefix}${base} OC analizada en memoria: ${items.length} partida(s): ${items.join("; ") || "sin partidas"}. Subtotal ${extracted.subtotal ?? "no identificado"}, IVA ${extracted.iva ?? "no identificado"}, total ${extracted.total ?? "no identificado"}, moneda ${extracted.currency || "no identificada"}. No persistí la extracción.`, evidence };
+      return { text: `${prefix}${base} OC analizada en memoria: ${items.length} partida(s): ${items.join("; ") || "sin partidas"}. Subtotal ${extracted.subtotal ?? "no identificado"}, IVA ${extracted.iva ?? "no identificado"}, total ${extracted.total ?? "no identificado"}, moneda ${extracted.currency || "no identificada"}. No persistí la extracción.`, evidence, selectedSolicitudId: solicitud.id };
     }
-    return { text: `${prefix}${base} Pide “analiza la OC” para leer su contenido sin persistirlo.`, evidence };
+    return { text: `${prefix}${base} Pide “analiza la OC” para leer su contenido sin persistirlo.`, evidence, selectedSolicitudId: solicitud.id };
   }
   if (/\b(plantilla|plantillas|biblioteca)\b/i.test(message)) {
     assertAuthorized(auth, user, { allowedRoles: ["superadmin"], requiredModule: "corporateResources", requiredAction: "view" });
@@ -110,21 +117,22 @@ export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 
     return { ok: true, ...existing.data() };
   }
   const blocked = assertTeamReadOnly(message, channel);
-  const askFolio = !blocked && !folioPattern.test(message) && /\bsolicitud\b/i.test(message) && !/\b(última|ultima|reciente|pendientes?|errores?)\b/i.test(message);
-  const recognized = folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alerta|seguridad|solicitud|reciente|última|ultima)\b/i.test(message);
+  const askFolio = false;
+  const recognized = folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alerta|seguridad|solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
   const unavailable = !blocked && !recognized;
   const fact = blocked ? { text: blocked, evidence: [] as TeamEvidence[] } : unavailable
     ? { text: "Aún no tengo una herramienta verificada para esa consulta. No ejecuté acciones ni inventé una respuesta.", evidence: [] as TeamEvidence[] }
     : await readTeamFacts(rootId, uid, user, request.auth, message, route.consulted);
-  const hasFolio = folioPattern.test(message);
-  const toolsUsed = blocked || unavailable || askFolio ? [] : hasFolio ? ["getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
+  const hasSolicitud = Boolean((fact as { selectedSolicitudId?: string }).selectedSolicitudId);
+  const toolsUsed = blocked || unavailable || askFolio ? [] : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
     : /\b(plantilla|plantillas|biblioteca)\b/i.test(message) ? ["listCorporateResources"]
     : route.consulted.includes("sentinel") || /\b(pendientes?|errores?)\b/i.test(message) ? ["listAgentIncidents"] : ["getLatestSolicitud"];
   const modulesAffected = [...new Set(fact.evidence.map(item => item.collection === "uploads" ? "documentos" : item.collection === "agentIncidents" ? "agentes" : item.collection === "pay0CanonicalResources" ? "corporateResources" : "solicitudes"))];
   const activity = blocked ? "Vista previa sin consulta ni cambio" : unavailable || askFolio ? "No se ejecutó herramienta" : route.consulted.map(agent => `${agentName(agent)} consultó PAY0`).join("; ");
   const reply = route.agent === "hugo" && route.consulted.length > 1 ? `Hugo consultó a ${route.consulted.map(agentName).join(" y ")}. ${fact.text}` : fact.text;
   const row = { actorUid: uid, rootId, conversationId: `${rootId}_${uid}_${route.agent}`, turnId, selectedAgent: selected, agent: route.agent,
-    consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio ? "NEEDS_CLARIFICATION" : "READ", activity,
+    selectedSolicitudId: (fact as { selectedSolicitudId?: string }).selectedSolicitudId || null,
+    consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio || (fact as { resolution?: string }).resolution ? "NEEDS_CLARIFICATION" : "READ", activity,
     evidence: fact.evidence, toolsUsed, modulesAffected, result: blocked ? "NO_EXECUTION" : unavailable ? "CAPABILITY_NOT_AVAILABLE" : askFolio ? "NEEDS_FOLIO" : "READ_COMPLETE", createdAt: FieldValue.serverTimestamp() };
   try { await ref.create(row); } catch (error: any) {
     if (error?.code !== 6) throw error;
