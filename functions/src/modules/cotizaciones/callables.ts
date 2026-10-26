@@ -75,24 +75,27 @@ function sha256(buffer: Buffer): string {
 
 type OcItem = { quantity?: unknown; unit?: unknown; productCode?: unknown; description?: unknown };
 
-function requireQuotationSource(solicitud: any, activeOcUploadId: string) {
-  if (!activeOcUploadId || clean(solicitud.ocFiscalMetadataUploadId, 128) !== activeOcUploadId) {
+export function requireQuotationSource(solicitud: any, activeOcUploadId: string) {
+  const commercialUploadId = clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128);
+  if (!activeOcUploadId || commercialUploadId !== activeOcUploadId) {
     throw new HttpsError("failed-precondition", "La OC activa debe reprocesarse antes de generar la cotizacion.");
   }
-  const items = Array.isArray(solicitud.ocItems) ? solicitud.ocItems as OcItem[] : [];
+  const items = Array.isArray(solicitud.ocCommercialItems) ? solicitud.ocCommercialItems as OcItem[] : Array.isArray(solicitud.ocItems) ? solicitud.ocItems as OcItem[] : [];
   if (!items.length || items.some(item =>
-    !clean(item.description, 1000) || !clean(item.unit, 60) || !/^\d{8}$/.test(clean(item.productCode, 16)) ||
+    !clean(item.description, 1000) ||
     !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0
   )) {
-    throw new HttpsError("failed-precondition", "La OC no contiene partidas completas. Corrige o reprocesa la OC antes de generar la cotizacion.");
+    throw new HttpsError("failed-precondition", "La OC no contiene conceptos comerciales completos. Corrige la OC antes de generar la cotizacion.");
   }
   const total = money(solicitud.total || solicitud.monto || solicitud.amount);
   if (total <= 0) throw new HttpsError("failed-precondition", "La solicitud no tiene un importe total valido para la cotizacion.");
+  if (solicitud.ocCommercialMetadataUploadId && Math.abs(money(solicitud.ocCommercialTotal) - total) > 0.01)
+    throw new HttpsError("failed-precondition", "El total comercial de la OC no coincide con la Solicitud.");
   return {
     items: items.map(item => ({
       description: clean(item.description, 1000),
       unit: clean(item.unit, 60),
-      productCode: clean(item.productCode, 16),
+      productCode: /^\d{8}$/.test(clean(item.productCode, 16)) ? clean(item.productCode, 16) : "",
       quantity: Number(item.quantity),
     })),
     total,
@@ -144,6 +147,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     const solicitudSnap = await solicitudRef.get();
     if (!solicitudSnap.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const solicitud: any = solicitudSnap.data() || {};
+    const commercialUploadId = clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128);
     if (isTerminalSolicitud(solicitud)) throw new HttpsError("failed-precondition", "Solicitud terminal.");
     if (!clean(solicitud.iqFolio || solicitud.iqId, 128)) throw new HttpsError("failed-precondition", "Se requiere folio IQ confirmado antes de generar cotizacion.");
     if (clean(solicitud.rootId, 128) !== rootId) {
@@ -197,6 +201,10 @@ export async function generateCotizacionForSolicitudCore(request: {
     const client: any = clientSnap?.exists ? clientSnap.data() || {} : {};
     if (company.rootId !== rootId || (clientSnap?.exists && client.rootId !== rootId))
       throw new HttpsError("permission-denied", "La empresa o el cliente no pertenecen al expediente.");
+    const ocClientRfc = normalizeRfc(solicitud.ocClientRfc);
+    const registeredClientRfc = normalizeRfc(client.rfc || client.fiscalProfile?.rfc);
+    if (ocClientRfc && registeredClientRfc && ocClientRfc !== registeredClientRfc)
+      throw new HttpsError("failed-precondition", "El RFC del cliente en la OC no coincide con el expediente.");
     const companyRfc = normalizeRfc(company.rfc || solicitud.companyRfc || solicitud.empresaRfc);
     const deposit = activeDepositAccount(company);
 
@@ -290,7 +298,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     await db.runTransaction(async (tx) => {
       const currentSource = await tx.get(solicitudRef);
       if (!currentSource.exists || isTerminalSolicitud(currentSource.data() || {})) throw new HttpsError("failed-precondition", "Solicitud terminal.");
-      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocFiscalMetadataUploadId"), 128) !== clean(solicitud.ocFiscalMetadataUploadId, 128))) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
+      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocCommercialMetadataUploadId") || currentSource.get("ocFiscalMetadataUploadId"), 128) !== commercialUploadId)) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
       tx.set(uploadRef, {
         rootId,
         adminId: solicitud.adminId || rootId,
@@ -341,7 +349,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     await db.runTransaction(async (tx) => {
       const currentSource = await tx.get(solicitudRef);
       if (!currentSource.exists || isTerminalSolicitud(currentSource.data() || {})) throw new HttpsError("failed-precondition", "Solicitud terminal.");
-      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocFiscalMetadataUploadId"), 128) !== clean(solicitud.ocFiscalMetadataUploadId, 128))) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
+      if (internalAutomation && (clean(currentSource.get("iqFolio") || currentSource.get("iqId"), 128) !== clean(solicitud.iqFolio || solicitud.iqId, 128) || clean(currentSource.get("ocCommercialMetadataUploadId") || currentSource.get("ocFiscalMetadataUploadId"), 128) !== commercialUploadId)) throw new HttpsError("failed-precondition", "IQ u OC cambiaron durante la generacion; requiere conciliacion.");
       finalVersion = await finalizeSolicitudDocumentVersionTx({
         tx,
         db,

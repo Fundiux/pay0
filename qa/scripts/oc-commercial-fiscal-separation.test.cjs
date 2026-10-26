@@ -1,0 +1,31 @@
+const assert = require('node:assert/strict');
+const ExcelJS = require('exceljs');
+const { parseOcCommercialMetadataBuffer, parseOcFiscalMetadataBuffer, parseFacturaFiscalItems } = require('../../functions/lib/modules/solicitudDocuments/service.js');
+const { requireQuotationSource } = require('../../functions/lib/modules/cotizaciones/callables.js');
+const { requireDeliveryFiscalItems } = require('../../functions/lib/modules/constancias/fiscalSource.js');
+
+(async () => {
+  const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('OC');
+  sheet.getRow(1).values = ['Moneda', 'MXN - Pesos Mexicanos'];
+  sheet.getRow(2).values = ['Razon Social:', 'Cliente de prueba'];
+  sheet.getRow(3).values = ['RFC:', 'XAXX010101000'];
+  sheet.getRow(4).values = ['Cantidad', 'Clave Unidad', 'Clave Concepto', 'Concepto', 'Precio unitario', 'Importe'];
+  sheet.getRow(5).values = [1, '', '', 'Servicio comercial', 6500, 6500];
+  sheet.getRow(6).values = ['Subtotal:', 6500];
+  sheet.getRow(7).values = ['IVA:', 1040];
+  sheet.getRow(8).values = ['TOTAL:', 7540];
+  const bytes = Buffer.from(await book.xlsx.writeBuffer());
+  const commercial = await parseOcCommercialMetadataBuffer(bytes);
+  assert(commercial, 'commercial OC must not require SAT code or fiscal unit');
+  assert.equal(commercial.items.length, 1);
+  assert.equal(commercial.total, 7540);
+  assert.equal(commercial.items[0].productCode, '');
+  assert.equal(await parseOcFiscalMetadataBuffer(bytes), null, 'fiscal parser remains strict');
+  const solicitud = { ocCommercialMetadataUploadId: 'oc', ocCommercialItems: commercial.items, ocCommercialTotal: commercial.total, monto: 7540 };
+  assert.equal(requireQuotationSource(solicitud, 'oc').total, 7540);
+  assert.throws(() => requireQuotationSource({ ...solicitud, monto: 7541 }, 'oc'), /total comercial/);
+  assert.throws(() => requireDeliveryFiscalItems({ facturaFiscalXmlUploadId: 'xml', facturaFiscalItems: commercial.items }), /CONSTANCIA_XML_FISCAL_ITEMS_REQUIRED/);
+  const fromXml = parseFacturaFiscalItems('<cfdi:Concepto ClaveProdServ="72141702" ClaveUnidad="E48" Cantidad="1" Descripcion="Servicio XML"/>');
+  assert.equal(requireDeliveryFiscalItems({ facturaFiscalXmlUploadId: 'xml', facturaFiscalItems: fromXml }).length, 1);
+  console.log('PASS commercial quotation without SAT fields; XML fiscal delivery remains strict');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -30,7 +30,7 @@ export async function scanMissingQuotationPage(nowMs = Date.now()): Promise<{ sc
     const solicitud: any = doc.data() || {};
     const rootId = clean(solicitud.rootId);
     const iqFolio = clean(solicitud.iqFolio || solicitud.iqId);
-    const ocUploadId = clean(solicitud.ocFiscalMetadataUploadId);
+    const ocUploadId = clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId);
     if (!rootId || !iqFolio || !ocUploadId || isTerminalSolicitud(solicitud)) continue;
     const confirmedAt = solicitud.iqConfirmedAt?.toMillis?.() || solicitud.cotizacionAutoGenerateUpdatedAt?.toMillis?.() || solicitud.updatedAt?.toMillis?.() || 0;
     if (confirmedAt && confirmedAt + EXPECTED_MS > nowMs) continue;

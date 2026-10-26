@@ -26,7 +26,7 @@ export async function verifyQuotationEvidence(input: { rootId: string; solicitud
       clean(oc.rootId) !== input.rootId || clean(oc.solicitudId) !== input.solicitudId ||
       oc.documentType !== "ORDEN_COMPRA" || oc.status !== "READY" || oc.active !== true ||
       !ocStoragePath.startsWith(`roots/${input.rootId}/solicitudes/${input.solicitudId}/docs/ORDEN_COMPRA/`) ||
-      clean(solicitud.iqFolio || solicitud.iqId) !== input.iqFolio || clean(solicitud.ocFiscalMetadataUploadId) !== input.ocUploadId ||
+      clean(solicitud.iqFolio || solicitud.iqId) !== input.iqFolio || clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId) !== input.ocUploadId ||
       clean(upload.solicitudId) !== input.solicitudId || clean(upload.quotationJobId) !== input.jobId ||
       upload.documentType !== "COTIZACION" || upload.status !== "READY" || upload.active !== true || !/^[a-f0-9]{64}$/i.test(sha256) ||
       !storagePath.startsWith(`roots/${input.rootId}/solicitudes/${input.solicitudId}/docs/COTIZACION/`)) {

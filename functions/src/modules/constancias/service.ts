@@ -9,6 +9,7 @@ import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecy
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { renderCanonicalConstanciaPdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
+import { requireDeliveryFiscalItems } from "./fiscalSource";
 import { receiptAcceptance } from "../signatureLinks/acceptance";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -148,6 +149,11 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   }
 
   const constanciaKind = resolveConstanciaKind(solicitud);
+  let fiscalItems: Array<{ quantity: number; unit: string; productCode: string; description: string }> = [];
+  if (constanciaKind === "CONSTANCIA_ENTREGA_BIENES") {
+    try { fiscalItems = requireDeliveryFiscalItems(solicitud); }
+    catch { throw new HttpsError("failed-precondition", "La constancia de entrega requiere conceptos fiscales completos del XML de factura."); }
+  }
   const canonicalBundle = await resolveCorporateDocumentBundle(rootId, companyId, companyRfc, constanciaKind);
   const constanciaTemplate = {
     documentType: "CONSTANCIA_RECEPCION_SATISFACCION",
@@ -191,7 +197,7 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
     signaturePng,
     iqFolio: clean(solicitud.iqFolio || solicitud.iqId || "", 120),
     verificationUrl,
-    items: Array.isArray(solicitud.ocItems) ? solicitud.ocItems : [],
+    items: constanciaKind === "CONSTANCIA_ENTREGA_BIENES" ? fiscalItems : Array.isArray(solicitud.ocCommercialItems) ? solicitud.ocCommercialItems : Array.isArray(solicitud.ocItems) ? solicitud.ocItems : [],
   });
   const documentSha256 = sha256(pdf);
   const uploadId = db.collection("uploads").doc().id;

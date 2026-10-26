@@ -46,7 +46,7 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
     if (!rootId || !currentIqFolio || currentIqFolio !== clean(input.iqFolio, 128)) {
       throw new HttpsError("failed-precondition", "La cotizacion requiere un folio IQ confirmado y vigente.");
     }
-    const activeOcUploadId = clean(solicitud.ocFiscalMetadataUploadId, 128);
+    const activeOcUploadId = clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128);
     if (!activeOcUploadId) throw new HttpsError("failed-precondition", "La solicitud no tiene OC activa procesada.");
     const id = jobIdFor(input.solicitudId, currentIqFolio, activeOcUploadId);
     const ref = db.collection("solicitudQuotationJobs").doc(id);
@@ -103,7 +103,7 @@ async function processJob(jobId: string) {
     if (Number(job.attemptCount || 0) >= MAX_ATTEMPTS) { const cause = "Límite de intentos agotado."; tx.set(ref, { status: "ESCALATED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
     const solicitudSnap = await tx.get(db.collection("solicitudes").doc(clean(job.solicitudId, 128)));
     const solicitud: any = solicitudSnap.exists ? solicitudSnap.data() || {} : {};
-    const valid = solicitudSnap.exists && !isTerminalSolicitud(solicitud) && clean(solicitud.iqFolio || solicitud.iqId, 128) === clean(job.iqFolio, 128) && clean(solicitud.ocFiscalMetadataUploadId, 128) === clean(job.ocUploadId, 128);
+    const valid = solicitudSnap.exists && !isTerminalSolicitud(solicitud) && clean(solicitud.iqFolio || solicitud.iqId, 128) === clean(job.iqFolio, 128) && clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128) === clean(job.ocUploadId, 128);
     if (!valid) { const cause = "Solicitud terminal o la OC activa o el folio IQ ya no corresponden al trabajo."; tx.set(ref, { status: "BLOCKED", lastError: cause, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
     const attemptCount = Number(job.attemptCount || 0) + 1;
     tx.set(ref, { status: "PROCESSING", attemptCount, processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -140,7 +140,7 @@ async function processJob(jobId: string) {
       const solicitudRef = db.collection("solicitudes").doc(claimed.solicitudId);
       const [jobSnap, solicitudSnap] = await Promise.all([tx.get(ref), tx.get(solicitudRef)]);
       const solicitud = solicitudSnap.data() || {};
-      if (jobSnap.get("status") !== "PROCESSING" || !solicitudSnap.exists || isTerminalSolicitud(solicitud) || clean(solicitud.iqFolio || solicitud.iqId, 128) !== claimed.iqFolio || clean(solicitud.ocFiscalMetadataUploadId, 128) !== claimed.ocUploadId) throw new HttpsError("failed-precondition", "IQ, OC o estado cambiaron antes de cerrar la cotización.");
+      if (jobSnap.get("status") !== "PROCESSING" || !solicitudSnap.exists || isTerminalSolicitud(solicitud) || clean(solicitud.iqFolio || solicitud.iqId, 128) !== claimed.iqFolio || clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128) !== claimed.ocUploadId) throw new HttpsError("failed-precondition", "IQ, OC o estado cambiaron antes de cerrar la cotización.");
       tx.set(ref, { status: "SUCCEEDED", uploadId: verified.uploadId, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete(), nextRunAt: null }, { merge: true });
       tx.set(solicitudRef, { cotizacionAutoGenerateStatus: "READY", cotizacionAutoGenerateStage: "COMPLETED", cotizacionAutoGenerateJobId: jobId, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
@@ -190,6 +190,6 @@ export const previewSolicitudesWithoutQuotation = onCall({ cors: true, timeoutSe
   const rootId = clean(user?.rootId || uid, 128); const [snap, uploads] = await Promise.all([db.collection("solicitudes").where("rootId", "==", rootId).limit(500).get(), db.collection("uploads").where("rootId", "==", rootId).limit(2000).get()]);
   const activeQuoteSolicitudIds = new Set(uploads.docs.filter(doc => { const row: any = doc.data() || {}; return row.documentType === "COTIZACION" && row.active === true; }).map(doc => clean((doc.data() || {}).solicitudId, 128)));
   const candidates: any[] = [];
-  for (const doc of snap.docs) { const row: any = doc.data() || {}; const iqFolio = clean(row.iqFolio || row.iqId, 128); const ocUploadId = clean(row.ocFiscalMetadataUploadId, 128); if (!iqFolio || !ocUploadId || activeQuoteSolicitudIds.has(doc.id)) continue; candidates.push({ solicitudId: doc.id, folio: clean(row.folio || doc.id, 128), iqFolio, ocUploadId, quotationStatus: clean(row.cotizacionAutoGenerateStatus || "MISSING", 64) }); }
+  for (const doc of snap.docs) { const row: any = doc.data() || {}; const iqFolio = clean(row.iqFolio || row.iqId, 128); const ocUploadId = clean(row.ocCommercialMetadataUploadId || row.ocFiscalMetadataUploadId, 128); if (!iqFolio || !ocUploadId || activeQuoteSolicitudIds.has(doc.id)) continue; candidates.push({ solicitudId: doc.id, folio: clean(row.folio || doc.id, 128), iqFolio, ocUploadId, quotationStatus: clean(row.cotizacionAutoGenerateStatus || "MISSING", 64) }); }
   return { ok: true, readOnly: true, candidates };
 });

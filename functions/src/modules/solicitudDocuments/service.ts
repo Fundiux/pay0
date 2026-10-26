@@ -113,6 +113,7 @@ type FacturaXmlMetadata = {
   facturaMetodoPago: string | null;
   facturaMoneda: string | null;
   facturaFecha: string | null;
+  fiscalItems: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
 };
 
 type OcFiscalMetadata = {
@@ -122,6 +123,7 @@ type OcFiscalMetadata = {
   paymentMethod: string; paymentForm: string; currency: string;
   deliveryLocation: string;
   items: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
+  subtotal?: number; iva?: number; total?: number;
 };
 
 function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
@@ -132,9 +134,13 @@ async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<O
   const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
   return parseOcFiscalMetadataBuffer(buffer);
 }
+async function readOcCommercialMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
+  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+  return parseOcCommercialMetadataBuffer(buffer);
+}
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
-export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
+export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = false, diagnostics?: Record<string, unknown>): Promise<OcFiscalMetadata | null> {
   try {
   const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
   const sharedXml = await zip.readText("xl/sharedStrings.xml");
@@ -210,12 +216,13 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
     // indicada por el encabezado contiene una unidad como E48.
     const headerProductCode = String(row[conceptIndex] || "").trim().match(/^\d{8}$/)?.[0] || "";
     const productCode = headerProductCode || String(row.find(cell => /^\d{8}$/.test(String(cell || "").trim())) || "").trim();
-    if (!productCode) continue;
+    if (!productCode && !commercial) continue;
     const headerUnit = String(row[unitIndex] || "").trim();
     const unitCandidate = /^[A-Z0-9]{2,3}$/i.test(headerUnit) ? headerUnit : String(row.find(cell => /^[A-Z0-9]{2,3}$/i.test(String(cell || "").trim()) && !/^\d{2,3}$/.test(String(cell || "").trim())) || "").trim();
     const unit = unitCandidate.toUpperCase();
     const description = String(row[descriptionIndex] || "").replace(/\s+/g, " ").trim().slice(0, 1000)
       || row.filter(cell => /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(String(cell || "")) && !isCodeHeader(cell)).map(cell => String(cell).trim()).sort((a, b) => b.length - a.length)[0] || "";
+    if (commercial && !description && !String(row[quantityIndex] || "").trim()) continue;
     items.push({ quantity: parseQuantity(row[quantityIndex]), unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000) });
   }
   const firstItem = items.find(item => item.productCode && item.unit) || items[0];
@@ -250,6 +257,14 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   // avoids confusing 03 Transferencia with another numeric value elsewhere.
   const paymentForm = paymentFormField.match(/^\s*(0[1-9]|[12]\d|30|31)\b/)?.[1] || paymentFormField.match(/\b(?:0[1-9]|[12]\d|30|31)\b/)?.[0] || "";
   const currency = field("MONEDA").match(/\b[A-Z]{3}\b/)?.[0] || "";
+  const amount = (label: string) => {
+    const row = rows.find(cells => cells.some(cell => normalized(cell) === label));
+    if (!row) return NaN;
+    const index = row.findIndex(cell => normalized(cell) === label);
+    const value = row.slice(index + 1).map(cell => Number(String(cell || "").replace(/[$,\s]/g, ""))).find(Number.isFinite);
+    return value ?? NaN;
+  };
+  const subtotal = amount("SUBTOTAL"), iva = amount("IVA"), total = amount("TOTAL");
   const clientName = field("RAZON SOCIAL:") || field("RAZON SOCIAL");
   const clientRfc = (field("RFC:") || field("RFC")).match(/[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}/i)?.[0] || "";
   const addressParts = [
@@ -258,14 +273,22 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   ].filter(Boolean);
   const clientAddress = addressParts.join(", ");
   const deliveryLocation = field("LUGAR DE ENTREGA") || field("LUGAR ENTREGA") || field("LUGAR DE PRESTACION") || field("DOMICILIO DE ENTREGA") || clientAddress;
-  // The OC is the operational source for the quote and fiscal classification.
-  // CSF remains a fiscal validation source, but no quote should display a
-  // placeholder when the OC already supplies the data.
-  return code && unit ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items } : null;
+  // The OC supplies commercial quote data. Fiscal document classification
+  // is validated independently from the invoice XML.
+  const commercialValid = items.length > 0 && items.every(item => item.description && item.quantity > 0) &&
+    Number.isFinite(subtotal) && Number.isFinite(iva) && Number.isFinite(total) && total > 0 &&
+    Math.abs(subtotal + iva - total) <= 0.01 && currency === "MXN";
+  if (diagnostics) Object.assign(diagnostics, { items: items.length, itemDescriptions: items.map(item => !!item.description), subtotal, iva, total, currency, commercialValid });
+  return (commercial ? commercialValid : code && unit) ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items, subtotal, iva, total } : null;
   } catch (error) {
     if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
     throw error;
   }
+}
+
+/** Commercial extraction permits missing SAT codes; fiscal consumers keep the strict default. */
+export async function parseOcCommercialMetadataBuffer(buffer: Buffer, diagnostics?: Record<string, unknown>): Promise<OcFiscalMetadata | null> {
+  return parseOcFiscalMetadataBuffer(buffer, true, diagnostics);
 }
 
 function cleanCfdiText(value: any): string {
@@ -305,6 +328,15 @@ function buildFacturaDisplay(serie: string, folio: string, uuid: string): string
   return cleanUuid;
 }
 
+export function parseFacturaFiscalItems(xml: string) {
+  return Array.from(xml.matchAll(/<(?:[A-Za-z0-9_]+:)?Concepto\b[^>]*>/gi)).map(([tag]) => ({
+    quantity: Number(readXmlAttribute(tag, "Cantidad")),
+    unit: readXmlAttribute(tag, "ClaveUnidad").toUpperCase(),
+    productCode: readXmlAttribute(tag, "ClaveProdServ"),
+    description: readXmlAttribute(tag, "Descripcion").slice(0, 1000),
+  }));
+}
+
 function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
   const comprobanteTag = findXmlTag(xml, "Comprobante");
   if (!comprobanteTag) return null;
@@ -320,6 +352,7 @@ function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
   const facturaMoneda = cleanCfdiText(readXmlAttribute(comprobanteTag, "Moneda")).toUpperCase() || null;
   const facturaFecha = cleanCfdiText(readXmlAttribute(comprobanteTag, "Fecha")) || null;
   const facturaDisplay = cleanCfdiText(buildFacturaDisplay(facturaSerie || "", facturaFolio || "", facturaUuid || "")) || null;
+  const fiscalItems = parseFacturaFiscalItems(xml);
 
   if (!facturaDisplay && !facturaUuid && facturaTotal === null) return null;
 
@@ -333,6 +366,7 @@ function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
     facturaMetodoPago,
     facturaMoneda,
     facturaFecha,
+    fiscalItems,
   };
 }
 
@@ -565,6 +599,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
 
   let facturaXmlMetadata: FacturaXmlMetadata | null = null;
   let ocFiscalMetadata: OcFiscalMetadata | null = null;
+  let ocCommercialMetadata: OcFiscalMetadata | null = null;
 
   try {
     const bucket = admin.storage().bucket();
@@ -578,9 +613,10 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
       documentType === "FACTURA_XML"
         ? await readFacturaXmlMetadataFromStorage(bucket, String(upload.storagePath || ""))
         : null;
+    ocCommercialMetadata = documentType === "ORDEN_COMPRA"
+      ? await readOcCommercialMetadata(bucket, String(upload.storagePath || "")) : null;
     ocFiscalMetadata = documentType === "ORDEN_COMPRA"
-      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || ""))
-      : null;
+      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || "")) : null;
   } catch (e: any) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
@@ -630,6 +666,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           facturaMetodoPago: facturaXmlMetadata.facturaMetodoPago,
           facturaMoneda: facturaXmlMetadata.facturaMoneda,
           facturaFecha: facturaXmlMetadata.facturaFecha,
+          fiscalItems: facturaXmlMetadata.fiscalItems,
         } : {}),
       },
     });
@@ -648,10 +685,28 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           facturaMetodoPago: facturaXmlMetadata.facturaMetodoPago,
           facturaMoneda: facturaXmlMetadata.facturaMoneda,
           facturaFecha: facturaXmlMetadata.facturaFecha,
+          facturaFiscalItems: facturaXmlMetadata.fiscalItems,
+          facturaFiscalXmlUploadId: uploadId,
           facturaXmlUploadId: uploadId,
           facturaMetadataSource: "FACTURA_XML",
           facturaMetadataUpdatedAt: FieldValue.serverTimestamp(),
         });
+      }
+      if (ocCommercialMetadata) {
+        tx.set(solicitudRef, {
+          ocCommercialMetadataUploadId: uploadId,
+          ocCommercialItems: ocCommercialMetadata.items,
+          ocCommercialSubtotal: ocCommercialMetadata.subtotal,
+          ocCommercialIva: ocCommercialMetadata.iva,
+          ocCommercialTotal: ocCommercialMetadata.total,
+          ocClientName: ocCommercialMetadata.clientName || null,
+          ocClientRfc: ocCommercialMetadata.clientRfc || null,
+          ocClientAddress: ocCommercialMetadata.clientAddress || null,
+          ocDeliveryLocation: ocCommercialMetadata.deliveryLocation || null,
+          currency: ocCommercialMetadata.currency,
+          ocCommercialMetadataUpdatedAt: FieldValue.serverTimestamp(),
+          replacementOcStatus: "UPLOADED", replacementRequiresOc: false,
+        }, { merge: true });
       }
       if (ocFiscalMetadata) {
         tx.set(solicitudRef, {

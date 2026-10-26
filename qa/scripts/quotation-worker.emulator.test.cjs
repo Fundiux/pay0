@@ -75,7 +75,7 @@ async function seed(id, overrides = {}) {
     db.doc("users/user-integral").set({ rootId: "root", role: "superadmin", active: true, modules: { solicitudes: { uploadDocs: true } } }),
     db.doc("clients/client").set({ rootId: "root", active: true, rfc: "XAXX010101000", razonSocial: "CLIENTE QA" }),
     db.doc("companies/company").set({ rootId: "root", active: true, rfc: "TRO230717L64", nombre: "TROSTRE", isOwnCompany: true }),
-    db.doc(`solicitudes/${integral}`).set({ rootId: "root", clienteId: "client", companyId: "company", status: "PROCESANDO", iqFolio: "IQ-INTEGRAL", ocFiscalMetadataUploadId: ocId, ocItems: [{ description: "Servicio QA", unit: "E48", productCode: "72141702", quantity: 1 }], monto: 100, folio: "S-INTEGRAL" }),
+    db.doc(`solicitudes/${integral}`).set({ rootId: "root", clienteId: "client", companyId: "company", status: "PROCESANDO", iqFolio: "IQ-INTEGRAL", ocCommercialMetadataUploadId: ocId, ocCommercialItems: [{ description: "Servicio QA", unit: "", productCode: "", quantity: 1 }], ocCommercialTotal: 100, monto: 100, folio: "S-INTEGRAL" }),
     db.doc(`uploads/${ocId}`).set({ rootId: "root", solicitudId: integral, documentType: "ORDEN_COMPRA", status: "READY", active: true, storagePath: ocPath }),
     admin.storage().bucket().file(ocPath).save(Buffer.from("OC fixture")),
   ]);
