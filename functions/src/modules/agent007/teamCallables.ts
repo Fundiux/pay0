@@ -103,7 +103,7 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
   return { text: item ? `La Solicitud más reciente visible en PAY0 es ${item.folio || "sin folio"}, estado ${item.estado || "sin estado"}. Indica un folio para revisar documentos y cotización.` : "No encontré Solicitudes en el alcance autorizado.", evidence: item?.folio ? [{ collection: "solicitudes", folio: item.folio, kind: "SOLICITUD" }] : [] };
 }
 
-export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 45, memory: "256MiB" }, async request => {
+export async function executeHugoTeamTurn(request: any) {
   const { uid, rootId, user } = await authorized(request);
   const message = safe(request.data?.message, 2000), turnId = safe(request.data?.turnId, 100);
   const selected = request.data?.agent;
@@ -117,14 +117,17 @@ export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 
     return { ok: true, ...existing.data() };
   }
   const blocked = assertTeamReadOnly(message, channel);
+  const switchOnly = !blocked && route.explicitAgent && /\b(p[aá]same con|hablar con|regresa con|vuelve con)\b/i.test(message) && !/\b(revisa|analiza|consulta|dime|muestra|explica)\b/i.test(message);
   const askFolio = false;
-  const recognized = folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alerta|seguridad|solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
+  const recognized = switchOnly || folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alertas?|seguridad|solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
   const unavailable = !blocked && !recognized;
-  const fact = blocked ? { text: blocked, evidence: [] as TeamEvidence[] } : unavailable
+  const fact = blocked ? { text: blocked, evidence: [] as TeamEvidence[] } : switchOnly
+    ? { text: `Ahora hablas con ${agentName(route.agent)}. Dime qué quieres consultar.`, evidence: [] as TeamEvidence[] }
+    : unavailable
     ? { text: "Aún no tengo una herramienta verificada para esa consulta. No ejecuté acciones ni inventé una respuesta.", evidence: [] as TeamEvidence[] }
     : await readTeamFacts(rootId, uid, user, request.auth, message, route.consulted);
   const hasSolicitud = Boolean((fact as { selectedSolicitudId?: string }).selectedSolicitudId);
-  const toolsUsed = blocked || unavailable || askFolio ? [] : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
+  const toolsUsed = blocked || unavailable || askFolio || switchOnly ? [] : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
     : /\b(plantilla|plantillas|biblioteca)\b/i.test(message) ? ["listCorporateResources"]
     : route.consulted.includes("sentinel") || /\b(pendientes?|errores?)\b/i.test(message) ? ["listAgentIncidents"] : ["getLatestSolicitud"];
   const modulesAffected = [...new Set(fact.evidence.map(item => item.collection === "uploads" ? "documentos" : item.collection === "agentIncidents" ? "agentes" : item.collection === "pay0CanonicalResources" ? "corporateResources" : "solicitudes"))];
@@ -141,7 +144,9 @@ export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 
     return { ok: true, ...winner.data() };
   }
   return { ok: true, ...row };
-});
+}
+
+export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 45, memory: "256MiB" }, executeHugoTeamTurn);
 
 export const listHugoTeamTurns = onCall({ region: "us-central1", timeoutSeconds: 20, memory: "256MiB" }, async request => {
   const { uid, rootId } = await authorized(request);

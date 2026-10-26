@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { delegationForRealtimeTool, realtimeToolNames, realtimeTools } from "../src/realtimeTools.mjs";
 
 test("Realtime registers the canonical PAY0 read capabilities", () => {
-  assert.deepEqual(realtimeToolNames.slice(0, 4), ["get_earnings_by_client_report", "get_authorized_capabilities", "get_system_catalog", "count_clients_for_user"]);
+  assert.deepEqual(realtimeToolNames.slice(0, 5), ["consult_hugo_team", "get_earnings_by_client_report", "get_authorized_capabilities", "get_system_catalog", "count_clients_for_user"]);
+  assert.deepEqual(delegationForRealtimeTool("consult_hugo_team", { request: "Hugo, revisa la Solicitud de ACIER CAPITAL por siete mil quinientos cuarenta pesos" }), { request: "Hugo, revisa la Solicitud de ACIER CAPITAL por siete mil quinientos cuarenta pesos", toolName: "consultHugoTeam", toolInput: {} });
   for (const tool of realtimeTools) {
     assert.equal(tool.type, "function");
     assert.equal(tool.parameters.additionalProperties, false);
@@ -28,7 +29,7 @@ test("payment list limits are bounded and tool schemas remain fail closed", () =
   assert.equal(delegationForRealtimeTool("query_received_payments", { operation: "UNKNOWN" }).toolInput.limit, 1);
   assert.ok(realtimeToolNames.includes("query_received_payments"));
   assert.ok(realtimeToolNames.includes("explain_last_operation"));
-  assert.equal(realtimeToolNames.length, 15);
+  assert.equal(realtimeToolNames.length, 16);
   assert.match(realtimeTools.find(tool => tool.name === "query_received_payments").description, /Nunca interpretes movimiento/);
 });
 

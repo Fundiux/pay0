@@ -16,6 +16,7 @@ import { beginVoiceReportTurn, completeVoiceReportTurn, saveVoiceCoreReferenceSt
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
 import { PlatformReadConnector } from "./platformReadConnector";
 import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./hugoCore/interactionSemantics";
+import { executeHugoTeamTurn } from "./teamCallables";
 
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
@@ -146,6 +147,14 @@ export const delegateHugoVoiceTurn = onCall(
       return { ok: true, delegationId, route: "SESSION_CORRECTION", ...correction,
         text: "Guardé tu corrección para esta sesión. La usaré como indicación tuya, sin cambiar datos ni permisos.",
         cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
+    }
+    if (requestedTool === "consultHugoTeam") {
+      const digest = createHash("sha256").update(`${rootId}|${uid}|${sessionId}|${turnId}|${delegationId}`).digest("hex");
+      const stableTurnId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+      const team: any = await executeHugoTeamTurn({ auth: request.auth, data: { agent: "hugo", channel: "AUDIO", message, turnId: stableTurnId } });
+      return { ok: true, delegationId, route: "DETERMINISTIC_TOOL", tool: "consultHugoTeam", text: team.reply,
+        team: { agent: team.agent, consultedAgents: team.consultedAgents, action: team.action, result: team.result, activity: team.activity, evidence: team.evidence, toolsUsed: team.toolsUsed },
+        cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
     }
     if (requestedTool && !directTool) { await recordSecurityBlock(uid, requestedTool, "TOOL_ALLOWLIST", "TOOL_NOT_ALLOWED").catch(() => undefined); throw new HttpsError("invalid-argument", "Herramienta de voz no permitida."); }
     const normalizedMessage = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();

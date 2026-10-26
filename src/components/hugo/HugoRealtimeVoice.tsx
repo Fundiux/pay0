@@ -46,6 +46,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
   const [gatewayRuntime, setGatewayRuntime] = useState<{ revision: string; commit: string } | null>(null);
+  const [liveTurns, setLiveTurns] = useState<Array<{ speaker: string; text: string }>>([]);
+  const [teamResults, setTeamResults] = useState<Array<{ agent: string; activity: string; evidence: Array<{ kind: string; folio: string }>; toolsUsed: string[] }>>([]);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -205,6 +207,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       if (generationRef.current !== generation) return;
       const stream = await withVoiceStartupAbort(() => navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
       }), startup.signal, lateStream => lateStream.getTracks().forEach(track => track.stop()));
       if (generationRef.current !== generation) {
         stream.getTracks().forEach(track => track.stop());
@@ -283,6 +286,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           const id = event.item_id || turnId;
           const userTurn = id ? historyRef.current?.turns.get(`USER:${id}`) : null;
           if (userTurn) { const logprobs = Array.isArray(event.logprobs) ? event.logprobs.map((entry: any) => Number(entry?.logprob)).filter(Number.isFinite) : []; userTurn.text = String(event.transcript || ""); userTurn.transcriptionStatus = "REALTIME_NATIVE"; userTurn.transcriptionConfidence = logprobs.length ? logprobs.reduce((sum: number, value: number) => sum + Math.exp(value), 0) / logprobs.length : null; dirtyTurn(`USER:${id}`); void persistHistory("ACTIVE").catch(() => undefined); }
+          if (event.transcript) setLiveTurns(current => [...current.slice(-7), { speaker: "Tú", text: String(event.transcript) }]);
         }
         if (type === "conversation.item.input_audio_transcription.failed") {
           const id = event.item_id || turnId;
@@ -302,6 +306,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           const id = event.response_id || responseId;
           const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
           if (assistant && event.transcript) { assistant.text = String(event.transcript); dirtyTurn(`HUGO:${id}`); }
+          if (event.transcript) setLiveTurns(current => [...current.slice(-7), { speaker: "Agente", text: String(event.transcript) }]);
         }
         trace(type, {
           eventId: event.event_id || null,
@@ -365,6 +370,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           if (event.type === "authenticated") gateway.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
           if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model), voice: String(event.voice), runtime: event.runtime }); }
           if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`María no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
+          if (event.type === "gateway.team_result") setTeamResults(current => [...current.slice(-7), { agent: String(event.agent || "hugo"), activity: String(event.activity || "Consulta PAY0"), evidence: Array.isArray(event.evidence) ? event.evidence : [], toolsUsed: Array.isArray(event.toolsUsed) ? event.toolsUsed : [] }]);
           if (String(event.type).startsWith("gateway.") && event.type !== "gateway.error") {
             trace(event.type, event);
             const eventId = String(event.eventId || `${event.type}:${event.responseId || event.toolCallId || "none"}:${Date.now()}`);
@@ -406,7 +412,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     <span data-testid="hugo-voice-runtime" title={`Entorno: CANARY | Frontend: ${frontendCommit} | Gateway: ${gatewayRevision} | Gateway commit: ${gatewayCommit}`} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">CANARY · {gatewayRevision} · frontend {frontendCommit.slice(0, 7)}</span>
     <div className="flex flex-wrap items-center justify-end gap-2">
       {state !== "LISTENING" ? <button type="button" onClick={() => void start()} disabled={state === "CONNECTING" || state === "FINALIZING"} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 hover:bg-violet-500 disabled:opacity-60">
-        {state === "CONNECTING" || state === "FINALIZING" ? <Loader2 className="animate-spin" size={17}/> : <Mic size={17}/>} {state === "CONNECTING" ? "Conectando..." : state === "FINALIZING" ? "Terminando..." : "Hablar con María"}
+        {state === "CONNECTING" || state === "FINALIZING" ? <Loader2 className="animate-spin" size={17}/> : <Mic size={17}/>} {state === "CONNECTING" ? "Conectando..." : state === "FINALIZING" ? "Terminando..." : "Hablar con Hugo"}
       </button> : <>
         <span className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"><Volume2 size={15}/> Conversacion activa</span>
         <button type="button" onClick={toggleMute} aria-label={muted ? "Activar microfono" : "Silenciar microfono"} className="rounded-xl border border-slate-700 p-2.5 text-slate-200 hover:bg-slate-800">{muted ? <MicOff size={17}/> : <Mic size={17}/>}</button>
@@ -415,5 +421,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       {state === "CONNECTING" && <button type="button" onClick={() => { cleanup(); setMuted(false); setError(""); setState("IDLE"); }} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Cancelar conexión</button>}
     </div>
     {error && <p role="alert" className="max-w-sm text-right text-xs text-rose-300">{error}</p>}
+    <p className="text-xs text-slate-400">Micrófono solamente · STT gpt-4o-mini-transcribe · conversación gpt-realtime-2.1 · voz marin</p>
+    {(liveTurns.length > 0 || teamResults.length > 0) && <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-sm text-slate-200" aria-live="polite">{liveTurns.map((turn, index) => <p key={index} className="mb-2"><span className="font-medium text-violet-300">{turn.speaker}: </span>{turn.text}</p>)}{teamResults.length > 0 && <details className="text-xs text-slate-400"><summary className="cursor-pointer">Evidencia de PAY0 ({teamResults.length} consultas)</summary>{teamResults.map((result, index) => <p key={index} className="mt-2">{result.agent}: {result.activity}. {result.evidence.map(item => `${item.kind} ${item.folio}`).join("; ")} · {result.toolsUsed.join(", ")}</p>)}</details>}</div>}
   </div>;
 }
