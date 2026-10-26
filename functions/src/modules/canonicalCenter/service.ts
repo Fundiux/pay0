@@ -7,6 +7,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { canonicalCompanyCatalog, loadCanonicalBundle, type CanonicalDocumentUse } from "../documents/canonicalBundle";
 import { PAY0_CANONICAL_STORAGE } from "./contracts";
+import { DOCUMENT_TEMPLATE_TYPES, DOCUMENT_TEMPLATE_NAMES, globalTemplateBase, type DocumentTemplateType } from "./globalTemplateBase";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(), store = PAY0_CANONICAL_STORAGE;
@@ -36,7 +37,7 @@ async function context(request: any, action: "view" | "manage"): Promise<Context
 }
 async function companyFor(ctx: Context, companyId: string) {
   if (!companyId || companyId.includes("/")) throw new HttpsError("invalid-argument", "Empresa requerida.");
-  const row = (await db.doc(`companies/${companyId}`).get()).data();
+  const row: any = (await db.doc(`companies/${companyId}`).get()).data();
   if (!row || row.active === false || row.rootId !== ctx.rootId || !isOwnCorporateCompany(row))
     throw new HttpsError("permission-denied", "Selecciona una empresa propia activa de tu ámbito.");
   return { ...row, id: companyId, rfc: clean(row.rfc, 13).toUpperCase() };
@@ -89,7 +90,13 @@ export const getCorporateResource = onCall({ region: "us-central1" }, async requ
     db.collection(store.versions).where("resourceId", "==", id).limit(200).get(),
     db.collection(store.audit).where("resourceId", "==", id).limit(200).get(),
   ]);
-  return { ok: true, resource: serial(await ref.get()), versions: versions.docs.map(serial).sort((a: any, b: any) => b.version - a.version), history: history.docs.map(serial) };
+  const actors = [...new Set(versions.docs.map(doc => clean(doc.get("createdBy"), 128)).filter(uid => uid && uid !== "SYSTEM" && !uid.includes("/")))];
+  const names = new Map<string, string>([["SYSTEM", "Sistema"]]);
+  if (actors.length) {
+    const users = await db.getAll(...actors.map(uid => db.collection("users").doc(uid)));
+    for (const user of users) if (user.get("rootId") === ctx.rootId) names.set(user.id, clean(user.get("displayName") || user.get("username") || user.get("name")) || "Usuario");
+  }
+  return { ok: true, resource: serial(await ref.get()), versions: versions.docs.map(doc => ({ ...serial(doc), createdByName: names.get(clean(doc.get("createdBy"), 128)) || "Usuario" })).sort((a: any, b: any) => b.version - a.version), history: history.docs.map(serial) };
 });
 
 export const prepareCorporateResourceMigration = onCall({ region: "us-central1" }, async request => {
@@ -100,12 +107,13 @@ export const prepareCorporateResourceMigration = onCall({ region: "us-central1" 
   return { ok: true, candidates, readOnly: true, source: "Git / paquete canónico publicado", companyId };
 });
 
-async function createDraft(ctx: Context, input: { companyId: string; kind: string; key: string; title: string; comment: string; requireUnmanaged?: boolean }, payload: any) {
+async function createDraft(ctx: Context, input: { companyId: string; kind: string; key: string; title: string; comment: string; requireUnmanaged?: boolean; expectedLatest?: number }, payload: any) {
   const id = resourceId(ctx.rootId, input.companyId, input.kind, input.key), ref = db.collection(store.resources).doc(id);
   const version = await db.runTransaction(async tx => {
     const previous = (await tx.get(ref)).data();
     if (input.requireUnmanaged && previous) throw new HttpsError("failed-precondition", "El recurso ya está administrado; se conserva su versión.");
     if (previous && previous.rootId !== ctx.rootId) throw new HttpsError("permission-denied", "Ámbito inválido.");
+    if (input.expectedLatest !== undefined && Number(previous?.latestVersion || 0) !== input.expectedLatest) throw new HttpsError("failed-precondition", "La plantilla cambió; actualiza su historial antes de editar.");
     const next = Number(previous?.latestVersion || 0) + 1;
     tx.set(ref, { schemaVersion: 1, rootId: ctx.rootId, ownCompanyId: input.companyId, resourceKind: input.kind,
       stableKey: input.key, title: input.title, activeVersion: previous?.activeVersion || null, latestVersion: next,
@@ -158,6 +166,57 @@ async function importCorporateResourceCore(ctx: Context, input: { companyId: str
 export const importCorporateResource = onCall({ region: "us-central1", timeoutSeconds: 90 }, async request => {
   const ctx = await context(request, "manage");
   return importCorporateResourceCore(ctx, { companyId: request.data?.companyId, use: request.data?.use, comment: request.data?.comment });
+});
+
+/** Clone a global base inside the existing immutable resource lifecycle. */
+export const cloneCorporateTemplateBase = onCall({ region: "us-central1", timeoutSeconds: 90 }, async request => {
+  const ctx = await context(request, "manage"), companyId = clean(request.data?.companyId, 128);
+  const company = await companyFor(ctx, companyId), use = clean(request.data?.use) as DocumentTemplateType;
+  if (!DOCUMENT_TEMPLATE_TYPES.includes(use)) throw new HttpsError("invalid-argument", "Tipo documental inválido.");
+  if (!/^[A-ZÑ&0-9]{12,13}$/.test(company.rfc)) throw new HttpsError("failed-precondition", "La empresa requiere RFC válido antes de clonar una plantilla.");
+  if (uses.includes(use as CanonicalDocumentUse) && canonicalCompanyCatalog().some(row => row.rfc === company.rfc))
+    return importCorporateResourceCore(ctx, { companyId, use: use as CanonicalDocumentUse, comment: "Copia de la plantilla base para revisión." });
+  const bundle = await globalTemplateBase({ use, companyId, companyName: clean(company.nombre || company.razonSocial), rfc: company.rfc });
+  const encoded = Buffer.from(JSON.stringify({ html: bundle.html, css: bundle.css, logo: bundle.logo.toString("base64"), snapshot: bundle.snapshot }));
+  const draft = await createDraft(ctx, { companyId, kind: "DOCUMENT_TEMPLATE", key: use,
+    title: `${DOCUMENT_TEMPLATE_NAMES[use]} · ${clean(company.nombre || company.razonSocial)}`, comment: "Plantilla base global clonada para edición y aprobación." },
+    { use, source: "GLOBAL_BASE_CLONE", template: bundle.snapshot });
+  const prefix = artifactPrefix(ctx.rootId, companyId, "DOCUMENT_TEMPLATE", draft.id, draft.version);
+  const artifacts = [];
+  for (const [name, bytes, contentType] of [["bundle.json", encoded, "application/json"], ["referencia.pdf", bundle.reference, "application/pdf"]] as const) {
+    const storagePath = `${prefix}/${name}`;
+    await saveImmutable(storagePath, bytes, contentType);
+    artifacts.push({ name, storagePath, sha256: sha(bytes), contentType, sizeBytes: bytes.length });
+  }
+  await publishDraft(ctx, draft.id, draft.version, { artifacts, contentDigest: sha(encoded) });
+  return { ok: true, resourceId: draft.id, version: draft.version };
+});
+
+/** Structured editing keeps executable HTML out of caller input. */
+export const reviseCorporateTemplate = onCall({ region: "us-central1", timeoutSeconds: 90 }, async request => {
+  const ctx = await context(request, "manage"), id = clean(request.data?.resourceId, 128);
+  const { row } = await resourceFor(ctx, id);
+  if (row.resourceKind !== "DOCUMENT_TEMPLATE" || !DOCUMENT_TEMPLATE_TYPES.includes(row.stableKey)) throw new HttpsError("failed-precondition", "Selecciona una plantilla documental.");
+  const company = await companyFor(ctx, row.ownCompanyId), use = row.stableKey as DocumentTemplateType;
+  const expectedLatest = Number(request.data?.expectedLatest);
+  if (!Number.isInteger(expectedLatest) || expectedLatest < 1) throw new HttpsError("invalid-argument", "Versión origen requerida.");
+  const heading = clean(request.data?.heading, 120), footer = clean(request.data?.footer, 300);
+  const accent = clean(request.data?.accent, 7), notes = clean(request.data?.notes, 500);
+  if (!heading || !/^#[0-9a-fA-F]{6}$/.test(accent)) throw new HttpsError("invalid-argument", "Indica título y color hexadecimal válidos.");
+  const bundle = await globalTemplateBase({ use, companyId: row.ownCompanyId, companyName: clean(company.nombre || company.razonSocial), rfc: company.rfc, heading, footer, accent });
+  const encoded = Buffer.from(JSON.stringify({ html: bundle.html, css: bundle.css, logo: bundle.logo.toString("base64"), snapshot: bundle.snapshot }));
+  const draft = await createDraft(ctx, { companyId: row.ownCompanyId, kind: "DOCUMENT_TEMPLATE", key: use, title: row.title,
+    comment: notes || "Edición estructurada de plantilla base.", expectedLatest },
+    { use, source: "STRUCTURED_REVISION", heading, footer, accent, template: bundle.snapshot });
+  const prefix = artifactPrefix(ctx.rootId, row.ownCompanyId, "DOCUMENT_TEMPLATE", draft.id, draft.version);
+  const artifacts = [];
+  for (const [name, bytes, contentType] of [["bundle.json", encoded, "application/json"], ["referencia.pdf", bundle.reference, "application/pdf"]] as const) {
+    const storagePath = `${prefix}/${name}`;
+    await saveImmutable(storagePath, bytes, contentType);
+    artifacts.push({ name, storagePath, sha256: sha(bytes), contentType, sizeBytes: bytes.length });
+  }
+  await publishDraft(ctx, draft.id, draft.version, { artifacts, contentDigest: sha(encoded) });
+  return { ok: true, resourceId: draft.id, version: draft.version };
 });
 
 /** Internal maintenance only. No public Function exports this operation. */
@@ -277,6 +336,8 @@ export const initCorporateResourceUpload = onCall({ region: "us-central1" }, asy
   const ctx = await context(request, "manage"), companyId = clean(request.data?.companyId, 128);
   await companyFor(ctx, companyId);
   const kind = clean(request.data?.kind), key = clean(request.data?.key, 80).toUpperCase();
+  if (kind === "DOCUMENT_TEMPLATE" && uses.includes(key as CanonicalDocumentUse))
+    throw new HttpsError("failed-precondition", "Cotizaciones y constancias usan edición estructurada; un PDF suelto no es una plantilla renderizable.");
   const contentType = clean(request.data?.contentType), sizeBytes = Number(request.data?.sizeBytes);
   if (!["OWN_COMPANY_DOCUMENT", "DOCUMENT_TEMPLATE", "BRAND_STATIONERY"].includes(kind) || !/^[A-Z0-9_-]{3,80}$/.test(key) ||
       !["application/pdf", "image/png", "image/jpeg"].includes(contentType) || !Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 10_000_000 ||
@@ -330,7 +391,9 @@ async function resolveTemplateBundle(rootId: string, companyId: string, rfc: str
   const resource = (await db.collection(store.resources).doc(id).get()).data();
   if (!resource?.activeVersion) {
     if (resource?.hasActivated) throw Error("CORPORATE_RESOURCE_ACTIVE_VERSION_REQUIRED");
-    return loadCanonicalBundle(rfc, use);
+    if (canonicalCompanyCatalog().some(row => row.rfc === rfc)) return loadCanonicalBundle(rfc, use);
+    const company = (await db.collection("companies").doc(companyId).get()).data() || {};
+    return globalTemplateBase({ use, companyId, companyName: clean(company.nombre || company.razonSocial || "Empresa"), rfc });
   }
   if (resource.rootId !== rootId || resource.ownCompanyId !== companyId) throw Error("CORPORATE_RESOURCE_SCOPE_INVALID");
   const version = (await versionRef(id, resource.activeVersion).get()).data();

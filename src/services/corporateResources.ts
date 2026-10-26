@@ -3,7 +3,7 @@ import { ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "@/lib/firebaseClient";
 
 export type CorporateResource = { id: string; title: string; ownCompanyId: string; resourceKind: string; stableKey: string; activeVersion: number | null; latestVersion: number };
-export type CorporateVersion = { id: string; version: number; status: string; contentDigest?: string; comment?: string; createdAt?: string; payload?: { template?: { templateId: string; templateVersion: string; templateBundleSha256: string } }; artifacts?: Array<{ name: string; contentType: string; sizeBytes: number }> };
+export type CorporateVersion = { id: string; version: number; status: string; contentDigest?: string; comment?: string; createdAt?: string; createdByName?: string; payload?: { heading?: string; footer?: string; accent?: string; template?: { templateId: string; templateVersion: string; templateBundleSha256: string } }; artifacts?: Array<{ name: string; contentType: string; sizeBytes: number }> };
 export type CorporateCompany = { id: string; name: string; rfc: string };
 const call = async <T>(name: string, data: Record<string, unknown> = {}) => (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
 
@@ -11,6 +11,8 @@ export const listCorporateResources = () => call<{ resources: CorporateResource[
 export const getCorporateResource = (resourceId: string) => call<{ resource: CorporateResource; versions: CorporateVersion[]; history: Array<{ id: string; action: string; version: number; createdAt: string }> }>("getCorporateResource", { resourceId });
 export const prepareCorporateResourceMigration = (companyId: string) => call<{ candidates: Array<{ use: string; templateId: string; templateVersion: string; templateBundleSha256: string }>; reason?: string }>("prepareCorporateResourceMigration", { companyId });
 export const importCorporateResource = (companyId: string, use: string) => call<{ resourceId: string }>("importCorporateResource", { companyId, use });
+export const cloneCorporateTemplateBase = (companyId: string, use: string) => call<{ resourceId: string; version: number }>("cloneCorporateTemplateBase", { companyId, use });
+export const reviseCorporateTemplate = (input: { resourceId: string; expectedLatest: number; heading: string; footer: string; accent: string; notes: string }) => call<{ resourceId: string; version: number }>("reviseCorporateTemplate", { ...input });
 export const changeCorporateVersion = (action: "approve" | "activate" | "restore" | "retire", resourceId: string, version: number) => call(
   { approve: "reviewCorporateResourceVersion", activate: "activateCorporateResourceVersion", restore: "restoreCorporateResourceVersion", retire: "retireCorporateResourceVersion" }[action], { resourceId, version, ...(action === "approve" ? { approve: true } : {}) });
 export const downloadCorporateResource = (resourceId: string, version: number, name: string) => call<{ url: string }>("getCorporateResourceDownloadUrl", { resourceId, version, name });

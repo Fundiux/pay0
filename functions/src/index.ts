@@ -2987,7 +2987,7 @@ export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modul
 export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
 export {
   listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
-  importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
+  importCorporateResource, cloneCorporateTemplateBase, reviseCorporateTemplate, reviewCorporateResourceVersion, activateCorporateResourceVersion,
   restoreCorporateResourceVersion, retireCorporateResourceVersion, getCorporateResourceDownloadUrl,
   initCorporateResourceUpload, finalizeCorporateResourceUpload,
 } from "./modules/canonicalCenter/service";

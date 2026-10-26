@@ -23,7 +23,7 @@ export type QuotePdfInput = {
   bankName?: string;
   bankAccount?: string;
   bankClabe?: string;
-  canonicalBundle?: ReturnType<typeof loadCanonicalBundle>;
+  canonicalBundle?: { html: string; css: string; logo: Buffer };
   items?: Array<{ quantity?: number; unit?: string; productCode?: string; description?: string }>;
 };
 
@@ -92,7 +92,7 @@ export type ConstanciaPdfInput = {
   receiptAddress: string;
   observations?: string;
   acceptanceText: string;
-  canonicalBundle?: ReturnType<typeof loadCanonicalBundle>;
+  canonicalBundle?: { html: string; css: string; logo: Buffer };
   verificationUrl?: string;
   items?: Array<{ quantity?: number; unit?: string; productCode?: string; description?: string }>;
 };
