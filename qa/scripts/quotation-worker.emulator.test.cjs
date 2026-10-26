@@ -12,6 +12,8 @@ const { verifyQuotationEvidence } = require("../../functions/lib/modules/agentOp
 const { isTerminalSolicitud } = require("../../functions/lib/modules/cotizaciones/quotationPolicy.js");
 const { observeSentinelEvent } = require("../../functions/lib/modules/agentOperations/sentinel.js");
 const { mexicoDayKey } = require("../../functions/lib/modules/agentOperations/time.js");
+const { authorizeDeferredIntent: realAuthorize } = require("../../functions/lib/utils/authorizeDeferredIntent.js");
+const { generateCotizacionForSolicitudCore: realGenerate } = require("../../functions/lib/modules/cotizaciones/callables.js");
 class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const revoked = new Set();
 const failOnce = new Set();
@@ -46,8 +48,8 @@ new Function("exports", "db", "FieldValue", "Timestamp", "HttpsError", "reserveR
     await finishRun(...args);
     if (args[1] === "SUCCEEDED" && (await db.doc(`agentRuns/${args[0]}`).get()).get("entityId") === "race") await db.doc("solicitudes/race").update({ iqFolio: "IQ-NEW" });
   },
-  async input => { if (revoked.has(input.uid)) throw new HttpsError("permission-denied", "Authorization revoked"); },
-  syntheticQuotation, verifyQuotationEvidence, async () => {}, observeSentinelEvent, isTerminalSolicitud, mexicoDayKey,
+  async input => { if (input.uid === "user-integral") return realAuthorize(input); if (revoked.has(input.uid)) throw new HttpsError("permission-denied", "Authorization revoked"); },
+  request => request.data.solicitudId === "integral" ? realGenerate(request) : syntheticQuotation(request), verifyQuotationEvidence, async () => {}, observeSentinelEvent, isTerminalSolicitud, mexicoDayKey,
 );
 
 async function seed(id, overrides = {}) {
@@ -59,6 +61,39 @@ async function seed(id, overrides = {}) {
 }
 
 (async () => {
+  // The canonical queue dispatch is replaced only at the Cloud Tasks boundary;
+  // the worker below uses the actual authorization, PDF and document core.
+  const queueNames = new Set(["MAX_ATTEMPTS", "TASK_NAME", "TERMINAL", "clean", "upper", "jobIdFor", "enqueueQuotationForConfirmedIq"]);
+  const queueParts = [];
+  const queueVisit = node => { if (ts.isFunctionDeclaration(node) && queueNames.has(node.name?.text)) queueParts.push(node.getText(ast).replace(/^export\s+/, "")); if (ts.isVariableDeclaration(node) && queueNames.has(node.name.getText(ast))) queueParts.push(`const ${node.getText(ast)};`); ts.forEachChild(node, queueVisit); };
+  queueVisit(ast); assert.equal(queueParts.length, queueNames.size);
+  const queueCode = ts.transpileModule(`${queueParts.join("\n")}\nexports.enqueueQuotationForConfirmedIq=enqueueQuotationForConfirmedIq;`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  const queue = {}; const dispatched = [];
+  new Function("exports", "db", "FieldValue", "Timestamp", "HttpsError", "createHash", "logActivity", "enqueueIqOnDemandTaskH4D64", "isTerminalSolicitud", queueCode)(queue, db, FieldValue, Timestamp, HttpsError, createHash, async () => {}, async input => { dispatched.push(input); return { taskId: input.taskId }; }, isTerminalSolicitud);
+  const integral = "integral", ocId = "OC-integral", ocPath = `roots/root/solicitudes/${integral}/docs/ORDEN_COMPRA/${ocId}.xlsx`;
+  await Promise.all([
+    db.doc("users/user-integral").set({ rootId: "root", role: "superadmin", active: true, modules: { solicitudes: { uploadDocs: true } } }),
+    db.doc("clients/client").set({ rootId: "root", active: true, rfc: "XAXX010101000", razonSocial: "CLIENTE QA" }),
+    db.doc("companies/company").set({ rootId: "root", active: true, rfc: "TRO230717L64", nombre: "TROSTRE", isOwnCompany: true }),
+    db.doc(`solicitudes/${integral}`).set({ rootId: "root", clienteId: "client", companyId: "company", status: "PROCESANDO", iqFolio: "IQ-INTEGRAL", ocFiscalMetadataUploadId: ocId, ocItems: [{ description: "Servicio QA", unit: "E48", productCode: "72141702", quantity: 1 }], monto: 100, folio: "S-INTEGRAL" }),
+    db.doc(`uploads/${ocId}`).set({ rootId: "root", solicitudId: integral, documentType: "ORDEN_COMPRA", status: "READY", active: true, storagePath: ocPath }),
+    admin.storage().bucket().file(ocPath).save(Buffer.from("OC fixture")),
+  ]);
+  const queued = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral" });
+  const duplicate = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral" });
+  assert.equal(queued.jobId, duplicate.jobId); assert.equal(dispatched.length, 2);
+  assert.equal(dispatched[0].taskId, dispatched[1].taskId);
+  await Promise.all([extracted.processJob(queued.jobId), extracted.processJob(queued.jobId)]);
+  const integralJob = await db.doc(`solicitudQuotationJobs/${queued.jobId}`).get();
+  assert.equal(integralJob.get("status"), "SUCCEEDED");
+  assert.equal((await db.doc(`solicitudes/${integral}`).get()).get("cotizacionAutoGenerateStatus"), "READY");
+  const integralQuotes = await db.collection("uploads").where("solicitudId", "==", integral).where("documentType", "==", "COTIZACION").get();
+  assert.equal(integralQuotes.size, 1);
+  const integralUploadId = integralQuotes.docs[0].id;
+  await verifyQuotationEvidence({ rootId: "root", solicitudId: integral, jobId: queued.jobId, uploadId: integralUploadId, iqFolio: "IQ-INTEGRAL", ocUploadId: ocId });
+  assert.equal((await db.collection("agentRuns").where("entityId", "==", integral).get()).docs[0].get("status"), "SUCCEEDED");
+  assert.equal((await db.collection("agentLedger").where("entityId", "==", integral).get()).size, 1);
+  console.log("PASS canonical queue to real authorization, PDF, Storage, dossier and ledger");
   await seed("success");
   await Promise.all([extracted.processJob("success"), extracted.processJob("success")]);
   assert.equal((await db.doc("solicitudQuotationJobs/success").get()).get("status"), "SUCCEEDED");
