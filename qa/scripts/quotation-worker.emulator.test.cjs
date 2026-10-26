@@ -79,14 +79,15 @@ async function seed(id, overrides = {}) {
     db.doc(`uploads/${ocId}`).set({ rootId: "root", solicitudId: integral, documentType: "ORDEN_COMPRA", status: "READY", active: true, storagePath: ocPath }),
     admin.storage().bucket().file(ocPath).save(Buffer.from("OC fixture")),
   ]);
-  const queued = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral" });
-  const duplicate = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral" });
+  const queued = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral", source: "AUTHORIZED_QUOTE_ONLY" });
+  const duplicate = await queue.enqueueQuotationForConfirmedIq({ solicitudId: integral, iqFolio: "IQ-INTEGRAL", requestedBy: "user-integral", source: "AUTHORIZED_QUOTE_ONLY" });
   assert.equal(queued.jobId, duplicate.jobId); assert.equal(dispatched.length, 2);
   assert.equal(dispatched[0].taskId, dispatched[1].taskId);
   await Promise.all([extracted.processJob(queued.jobId), extracted.processJob(queued.jobId)]);
   const integralJob = await db.doc(`solicitudQuotationJobs/${queued.jobId}`).get();
   assert.equal(integralJob.get("status"), "SUCCEEDED");
   assert.equal((await db.doc(`solicitudes/${integral}`).get()).get("cotizacionAutoGenerateStatus"), "READY");
+  assert.equal((await db.doc(`solicitudes/${integral}`).get()).get("materialitySyncStatus"), undefined);
   const integralQuotes = await db.collection("uploads").where("solicitudId", "==", integral).where("documentType", "==", "COTIZACION").get();
   assert.equal(integralQuotes.size, 1);
   const integralUploadId = integralQuotes.docs[0].id;
@@ -109,6 +110,15 @@ async function seed(id, overrides = {}) {
   assert.equal((await db.doc("solicitudQuotationJobs/retry").get()).get("status"), "SUCCEEDED");
   assert.equal((await db.collection("agentLedger").where("entityId", "==", "retry").get()).size, 2);
   assert.equal((await db.collection("agentRuns").where("entityId", "==", "retry").get()).docs[0].get("resolution"), "RECOVERED_MISSING");
+
+  await seed("one-shot");
+  await db.doc("solicitudQuotationJobs/one-shot").update({ source: "AUTHORIZED_QUOTE_ONLY" });
+  failOnce.add("one-shot");
+  await extracted.processJob("one-shot");
+  assert.equal((await db.doc("solicitudQuotationJobs/one-shot").get()).get("status"), "ESCALATED");
+  assert.equal((await db.doc("solicitudQuotationJobs/one-shot").get()).get("attemptCount"), 1);
+  await extracted.processJob("one-shot");
+  assert.equal((await db.doc("solicitudQuotationJobs/one-shot").get()).get("attemptCount"), 1);
 
   await seed("revoked"); revoked.add("user-revoked");
   await extracted.processJob("revoked");

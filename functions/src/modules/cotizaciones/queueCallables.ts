@@ -100,7 +100,7 @@ async function processJob(jobId: string) {
     const control = await tx.get(db.collection("agentControls").doc(clean(job.rootId, 128)));
     const incident = (cause: string) => tx.set(db.collection("agentIncidents").doc(`quotation-${jobId}`), { rootId: job.rootId, reportDay: mexicoDayKey(), runId: null, correlationId: jobId, entityType: "solicitud", entityId: job.solicitudId, status: "OPEN", cause, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${job.solicitudId}`], createdAt: FieldValue.serverTimestamp() }, { merge: true });
     if (control.get("killSwitch") === true) { const cause = "Kill switch de agentes activo."; tx.set(ref, { status: "BLOCKED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
-    if (Number(job.attemptCount || 0) >= MAX_ATTEMPTS) { const cause = "Límite de intentos agotado."; tx.set(ref, { status: "ESCALATED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
+    if (Number(job.attemptCount || 0) >= (job.source === "AUTHORIZED_QUOTE_ONLY" ? 1 : MAX_ATTEMPTS)) { const cause = "Límite de intentos agotado."; tx.set(ref, { status: "ESCALATED", lastError: cause, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); incident(cause); return null; }
     const solicitudSnap = await tx.get(db.collection("solicitudes").doc(clean(job.solicitudId, 128)));
     const solicitud: any = solicitudSnap.exists ? solicitudSnap.data() || {} : {};
     const valid = solicitudSnap.exists && !isTerminalSolicitud(solicitud) && clean(solicitud.iqFolio || solicitud.iqId, 128) === clean(job.iqFolio, 128) && clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128) === clean(job.ocUploadId, 128);
@@ -129,7 +129,7 @@ async function processJob(jobId: string) {
     await authorizeDeferredIntent({ uid: claimed.requestedBy, rootId: claimed.rootId, module: "solicitudes", action: "uploadDocs", clientId: claimed.clientId, permission: "operateSolicitudes" });
     // A confirmed replacement IQ folio is a new commercial attempt. The
     // document lifecycle keeps only one active version if a worker is retried.
-    const result: any = await generateCotizacionForSolicitudCore({ data: { solicitudId: claimed.solicitudId, replaceExisting: true }, internalAutomation: { rootId: claimed.rootId, originUid: claimed.requestedBy, quotationJobId: jobId } });
+    const result: any = await generateCotizacionForSolicitudCore({ data: { solicitudId: claimed.solicitudId, replaceExisting: true }, internalAutomation: { rootId: claimed.rootId, originUid: claimed.requestedBy, quotationJobId: jobId, quoteOnly: claimed.source === "AUTHORIZED_QUOTE_ONLY" } });
     if (!result?.active) throw new Error("La cotizacion no quedo activa.");
     const verified = await verifyQuotationEvidence({ rootId: claimed.rootId, solicitudId: claimed.solicitudId, jobId, uploadId: clean(result.uploadId, 128), iqFolio: claimed.iqFolio, ocUploadId: claimed.ocUploadId });
     const delayed = claimed.attemptCount > 1 || (claimed.createdAt?.toMillis?.() || Date.now()) + EXPECTED_QUOTE_MS < Date.now();
@@ -150,7 +150,7 @@ async function processJob(jobId: string) {
     const code = String((error as any)?.code || "").toLowerCase();
     const blocked = code === "permission-denied";
     const uncertain = code === "failed-precondition" || message.startsWith("COTIZACION_") || message.startsWith("OC_");
-    let status: "BLOCKED" | "ESCALATED" | "FAILED_RETRYABLE" = blocked ? "BLOCKED" : runFinished || uncertain || claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
+    let status: "BLOCKED" | "ESCALATED" | "FAILED_RETRYABLE" = blocked ? "BLOCKED" : runFinished || uncertain || claimed.source === "AUTHORIZED_QUOTE_ONLY" || claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
     if (agentRunId && !runFinished) {
       try { await finishRun(agentRunId, status, { reason: message, evidence: [`solicitudes/${claimed.solicitudId}`, `solicitudQuotationJobs/${jobId}`] }); }
       catch (auditError) { status = "ESCALATED"; console.error("AGENT_RUN_AUDIT_FAILED", auditError); }

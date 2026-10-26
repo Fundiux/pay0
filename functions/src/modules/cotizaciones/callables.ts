@@ -122,7 +122,7 @@ export async function generateCotizacionForSolicitudCore(request: {
   auth?: any;
   data: { solicitudId?: unknown; replaceExisting?: unknown };
   /** Server-only capability. It is deliberately outside callable data. */
-  internalAutomation?: { rootId: string; originUid: string; quotationJobId: string };
+  internalAutomation?: { rootId: string; originUid: string; quotationJobId: string; quoteOnly?: boolean };
 }) {
     const internalAutomation = request.internalAutomation;
     const uid = internalAutomation ? clean(internalAutomation.originUid, 128) : requireAuth(request);
@@ -410,16 +410,18 @@ export async function generateCotizacionForSolicitudCore(request: {
       });
     });
 
-    await linkSolicitudToMaterialityOperationCore({
-      auth: request.auth,
-      data: { solicitudId },
-    }).catch(async (error) => {
-      await solicitudRef.set({
-        materialitySyncStatus: "ERROR",
-        materialitySyncLastError: String(error?.message || error || "No se pudo actualizar Materialidad."),
-        materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    });
+    if (!internalAutomation?.quoteOnly) {
+      await linkSolicitudToMaterialityOperationCore({
+        auth: request.auth,
+        data: { solicitudId },
+      }).catch(async (error) => {
+        await solicitudRef.set({
+          materialitySyncStatus: "ERROR",
+          materialitySyncLastError: String(error?.message || error || "No se pudo actualizar Materialidad."),
+          materialitySyncUpdatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
+    }
 
     await logActivity({
       event: "DOCUMENTO_SOLICITUD_SUBIDO",
