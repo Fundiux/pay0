@@ -31,12 +31,13 @@ export async function loadAgentOperations(rootId: string) {
   const serialize = (snap: FirebaseFirestore.QuerySnapshot) => snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const runRows = serialize(runs) as Array<Record<string, any>>;
   const today = serialize(dailyRuns) as Array<Record<string, any>>;
-  const todayIncidents = serialize(dailyIncidents) as Array<Record<string, any>>;
+  const visible = (row: Record<string, any>) => row.reportingExcluded !== true;
+  const todayIncidents = (serialize(dailyIncidents) as Array<Record<string, any>>).filter(visible);
   const causes = Object.entries(todayIncidents.reduce((acc, row) => { const key = String(row.cause || "Sin causa registrada"); acc[key] = (acc[key] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cause, count]) => ({ cause, count }));
   const providerStatus = new HugoModelRouter().status();
   return { ok: true, systems: SYSTEMS, agents: AGENTS, tools: TOOLS, killSwitch: control.get("killSwitch") === true,
     providers: providerStatus,
-    runs: runRows, incidents: serialize(incidents), proposals: serialize(proposals),
+    runs: runRows, incidents: serialize(incidents).filter(visible), proposals: serialize(proposals).filter(visible),
     report: { day, reviewed: new Set(today.map(row => row.entityId)).size,
       detected: today.length, incidents: todayIncidents.length,
       generated: today.filter(row => row.toolId === "quotation-recovery" && row.status === "SUCCEEDED" && row.resolution === "GENERATED_NORMAL").length,
