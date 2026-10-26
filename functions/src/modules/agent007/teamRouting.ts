@@ -20,7 +20,8 @@ export function routeTeamTurn(message: string, selected: HugoTeamAgent = "hugo")
   const agent = direct || selected;
   const text = normalize(message);
   const consulted: HugoTeamAgent[] = agent === "hugo" && /\b(cotizaci[oó]n|oc|xml|documento|pdf)\b/.test(text) ? ["sofia", "maria"]
-    : agent === "hugo" && /\b(incidente|alerta|seguridad)\b/.test(text) ? ["sentinel"] : [agent];
+    : agent === "hugo" && /\b(incidente|alerta|seguridad)\b/.test(text) ? ["sentinel"]
+    : agent === "hugo" && /\b(pendientes?|errores?|reportes?|operacion)\b/.test(text) ? ["maria"] : [agent];
   const writeIntent = /\b(crea|crear|genera|generar|corrige|corregir|modifica|modificar|actualiza|actualizar|cambia|cambiar|elimina|eliminar|borra|borrar|paga|pagar|dispersa|dispersar|factura|facturar|envia|enviar|reintenta|reintentar|publica|publicar|recupera|recuperar|procesa|procesar|sube|subir|aprueba|aprobar|ejecuta|ejecutar|haz|hace)\b/.test(text);
   return { agent, consulted, writeIntent, explicitAgent: direct !== null };
 }
