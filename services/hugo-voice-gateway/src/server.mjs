@@ -4,6 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { WebSocketServer, WebSocket } from "ws";
 import { realtimeTools } from "./realtimeTools.mjs";
 import { attachGatewayConnection } from "./gatewayConnection.mjs";
+import { handleHttpRequest, isAllowedVoiceOrigin } from "./httpPolicy.mjs";
 import { HUGO_VOICE, HUGO_VOICE_INSTRUCTIONS, HUGO_VOICE_SPEED, REALTIME_MODEL } from "./voiceConfig.mjs";
 
 if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: process.env.GOOGLE_CLOUD_PROJECT || "pay-0-system" });
@@ -25,6 +26,7 @@ const runtimeMetadata = Object.freeze({
   transcription: Object.freeze({ model: "gpt-4o-mini-transcribe", language: "es" }),
 });
 const canaryUids = new Set(String(process.env.HUGO_CANARY_UIDS || "").split(",").map(value => value.trim()).filter(Boolean));
+const allowedOrigins = new Set(String(process.env.HUGO_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean));
 
 async function openRealtime(sdp, signal) {
   const instructions = [
@@ -59,13 +61,12 @@ function protectedRequest(url, token, data, signal) { return fetch(url, { method
 function authorize(token, signal) { return fetch(authorizeUrl, { method: "POST", signal, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ data: {} }) }).then(async response => { const body = await response.json(); if (!response.ok || body.error || !body.result?.ok) throw Error(body.error?.status || "HUGO_VOICE_FORBIDDEN"); return body.result; }); }
 function log(type, detail = {}) { console.log(JSON.stringify({ severity: "INFO", type, at: new Date().toISOString(), ...detail })); }
 const server = http.createServer((req, res) => {
-  const pathname = new URL(req.url || "/", "http://gateway.internal").pathname;
+  const pathname = handleHttpRequest(req, res, runtimeMetadata);
   log("gateway.http", { method: req.method, pathname });
-  const healthy = pathname === "/" || pathname === "/healthz" || pathname === "/healthz/";
-  res.writeHead(healthy ? 200 : 404, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end(healthy ? "ok" : "not found");
 });
-const wss = new WebSocketServer({ server, path: "/voice", maxPayload: 1024 * 1024 });
+const wss = new WebSocketServer({ server, path: "/voice", maxPayload: 1024 * 1024,
+  verifyClient: ({ req }) => isAllowedVoiceOrigin(req.headers.origin, allowedOrigins),
+});
 wss.on("connection", browser => attachGatewayConnection(browser, {
   verifyIdToken: (token, checkRevoked) => getAuth().verifyIdToken(token, checkRevoked),
   authorize, canaryUids, openRealtime, callable,
