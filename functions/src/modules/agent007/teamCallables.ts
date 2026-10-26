@@ -148,6 +148,18 @@ export async function executeHugoTeamTurn(request: any) {
 
 export const sendHugoTeamTurn = onCall({ region: "us-central1", timeoutSeconds: 45, memory: "256MiB" }, executeHugoTeamTurn);
 
+export const delegateHugoTeamVoiceTurn = onCall({ region: "us-central1", timeoutSeconds: 90, memory: "512MiB" }, async request => {
+  const message = safe(request.data?.request, 2000);
+  const sessionId = safe(request.data?.sessionId, 180), nativeTurnId = safe(request.data?.turnId, 180), delegationId = safe(request.data?.delegationId, 180);
+  if (request.data?.toolName !== "consultHugoTeam" || !message || !sessionId || !nativeTurnId || !delegationId) throw new HttpsError("invalid-argument", "Delegación de voz incompleta.");
+  const digest = createHash("sha256").update(`${request.auth?.uid || ""}|${sessionId}|${nativeTurnId}|${delegationId}`).digest("hex");
+  const turnId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+  const team: any = await executeHugoTeamTurn({ auth: request.auth, data: { agent: "hugo", channel: "AUDIO", message, turnId } });
+  return { ok: true, delegationId, route: "DETERMINISTIC_TOOL", tool: "consultHugoTeam", text: team.reply,
+    team: { agent: team.agent, consultedAgents: team.consultedAgents, action: team.action, result: team.result, activity: team.activity, evidence: team.evidence, toolsUsed: team.toolsUsed },
+    cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
+});
+
 export const listHugoTeamTurns = onCall({ region: "us-central1", timeoutSeconds: 20, memory: "256MiB" }, async request => {
   const { uid, rootId } = await authorized(request);
   const selected = request.data?.agent;

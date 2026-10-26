@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
+import { createHash } from "node:crypto";
 
 const TOKEN = "test-token-never-log-this", UID = "configured-canary-user", ROOT = "configured-root";
 const auth = { type: "authenticate", idToken: TOKEN };
@@ -71,6 +72,43 @@ async function correctionTurn(h) {
   await sideband.receive({ type: "response.created", response: { id: "response2" } });
   return sideband;
 }
+
+test("gateway real flow waits for history, preserves native session, and never announces durable memory before valid ACK", async () => {
+  const historyGate = deferred(), order = [], label = "Estilo personal", correction = "Prefiero el periodo antes del total.";
+  const topic = { kind: "TOPIC", id: createHash("sha256").update(JSON.stringify(label.toLocaleLowerCase("es-MX"))).digest("hex"), label };
+  let histories = 0, query;
+  const h = harness({
+    saveHistory: async (_token, input) => { order.push("history"); assert.equal(input.sessionId, "sess1"); assert.equal(input.gatewayCallId, "simulated-call"); histories++;
+      return histories === 1 ? historyGate.promise : { ok: true, appendOnly: true, appended: input.turns.length }; },
+    callable: async (_token, input) => {
+      order.push("delegate");
+      if (input.recordResponseCorrection) return { ...input.responseCorrection, persisted: true, scope: "SESSION", correctionId: "session_memory", version: 1,
+        correction: { content: correction }, route: "SESSION_CORRECTION", text: "Corrección de sesión guardada" };
+      if (input.requestVoiceTopicConfirmation) return { ok: true, delegationId: input.delegationId, route: "VOICE_TOPIC_CONFIRMATION", state: "PENDING", challengeId: "challenge", durablePersisted: false, confirmationText: `Confirmo recordar esta indicación para el tema: ${label}` };
+      if (input.confirmVoiceTopic) return { ok: true, delegationId: input.delegationId, route: "VOICE_TOPIC_CONFIRMATION", state: "DURABLE", challengeId: "challenge", durablePersisted: true, created: true, transcriptAuthority: "CLIENT_TRANSCRIPT_NOT_FACT", topic,
+        correction: { memoryId: "durable_memory", version: 2, content: correction, status: "CONFIRMED", scope: "USER_TOPIC", expiresAt: null, topic } };
+      query = input; return { route: "BRAIN_MODEL", text: "Resultado autorizado" };
+    },
+  });
+  const sideband = await correctionTurn(h);
+  const first = sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "session_tool", response_id: "response2", arguments: "{}" });
+  await flush(); assert.deepEqual(order, ["history"]); historyGate.resolve({ ok: true, appendOnly: true, appended: 2 }); await first;
+  async function tool(turn, transcript, name, callId) {
+    await sideband.receive({ type: "conversation.item.created", item: { id: turn, type: "message", role: "user" } });
+    await sideband.receive({ type: "conversation.item.input_audio_transcription.completed", item_id: turn, transcript });
+    await sideband.receive({ type: "response.function_call_arguments.done", name, call_id: callId, response_id: "response2", arguments: JSON.stringify({ confirmed: true, label: "forged" }) });
+  }
+  await tool("proposal", `Recuerda esta indicación para el tema: ${label}`, "request_voice_topic_memory", "request_tool");
+  const pending = JSON.parse(sideband.sent.filter(e => e.type === "conversation.item.create").at(-1).item.output);
+  assert.equal(pending.durablePersisted, false); assert.match(pending.text, /^Confirmo recordar/);
+  await tool("confirmation", `Confirmo recordar esta indicación para el tema: ${label}`, "confirm_voice_topic_memory", "confirm_tool");
+  const saved = JSON.parse(sideband.sent.filter(e => e.type === "conversation.item.create").at(-1).item.output);
+  assert.equal(saved.durablePersisted, true); assert.equal(saved.userCorrection.authority, "USER_STATEMENT_NOT_FACT");
+  await tool("query", "Responde usando mi tema", "delegate_to_hugo_core", "query_tool");
+  assert.equal(query.nativeSessionId, "sess1"); assert.equal(query.sessionId, "simulated-call");
+  assert(!JSON.stringify(h.logs).includes(correction)); assert(!JSON.stringify(h.logs).includes(label));
+  h.browser.close();
+});
 
 test("voice correction confirms only after matching persisted ACK in the same session", async () => {
   const pending = deferred(); let sent;

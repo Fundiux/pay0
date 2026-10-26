@@ -20,10 +20,10 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-// The current checkout exports 372 endpoints, including the Hugo team read
+// The current checkout exports 373 endpoints, including the Hugo team voice read
 // and history callables added after the 370-endpoint release baseline.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 372;
+const expectedEndpointCount = 373;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
@@ -51,7 +51,7 @@ const requiredEndpoints = [
   "reviewCorporateResourceVersion", "activateCorporateResourceVersion", "restoreCorporateResourceVersion", "retireCorporateResourceVersion",
   "getCorporateResourceDownloadUrl", "initCorporateResourceUpload", "finalizeCorporateResourceUpload", "listHugoVoiceActivity",
   "reviewAgent007LearningRule",
-  "sendHugoTeamTurn", "listHugoTeamTurns",
+  "sendHugoTeamTurn", "listHugoTeamTurns", "delegateHugoTeamVoiceTurn",
 ];
 
 function fail(message) {

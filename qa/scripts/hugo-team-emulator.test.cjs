@@ -6,8 +6,7 @@ if (!admin.apps.length) admin.initializeApp({ projectId: "demo-pay0", storageBuc
 const db = admin.firestore();
 const ExcelJS = require("exceljs");
 const { routeTeamTurn } = require("../../functions/lib/modules/agent007/teamRouting.js");
-const { sendHugoTeamTurn, listHugoTeamTurns } = require("../../functions/lib/modules/agent007/teamCallables.js");
-const { delegateHugoVoiceTurn } = require("../../functions/lib/modules/agent007/voiceDelegation.js");
+const { sendHugoTeamTurn, listHugoTeamTurns, delegateHugoTeamVoiceTurn } = require("../../functions/lib/modules/agent007/teamCallables.js");
 const uid = "Ab4z0RttIqXbZFT0NuWsDjBkt6J2", rootId = "root-hugo-team";
 const auth = value => ({ uid: value, token: { role: "superadmin" } });
 const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
@@ -54,11 +53,11 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   const context = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "sofia", channel: "TEXT", message: "Sofía, analiza esta OC", turnId: turnId(11) } });
   assert.equal(context.selectedSolicitudId, "sol-team");
   assert.match(context.reply, /Servicio comercial/);
-  const voice = await delegateHugoVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, revisa la Solicitud de ACIER CAPITAL por siete mil quinientos cuarenta pesos y dime cómo está su cotización", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
+  const voice = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, revisa la Solicitud de ACIER CAPITAL por siete mil quinientos cuarenta pesos y dime cómo está su cotización", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
   assert.match(voice.text, /ACIER CAPITAL.*\$7,540/);
   assert.equal(voice.team.agent, "hugo");
   assert.equal(voice.team.toolsUsed.includes("getSolicitud"), true);
-  const voiceSwitch = await delegateHugoVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, pásame con Sofía", sessionId: "voice-team-session", turnId: "voice-turn-2", delegationId: "voice-tool-2" } });
+  const voiceSwitch = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, pásame con Sofía", sessionId: "voice-team-session", turnId: "voice-turn-2", delegationId: "voice-tool-2" } });
   assert.equal(voiceSwitch.team.agent, "sofia");
   assert.match(voiceSwitch.text, /Ahora hablas con Sofía/);
   await db.doc("companies/company-team").set({ rootId, nombre: "ACIER CAPITAL", active: true, isOwnCompany: true });

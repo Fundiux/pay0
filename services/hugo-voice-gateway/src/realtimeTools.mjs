@@ -1,9 +1,7 @@
 export const realtimeTools = [
-  {
-    type: "function", name: "consult_hugo_team",
-    description: "Consulta de solo lectura al equipo Hugo, Maria, Sofia y Sentinel con herramientas PAY0 reales. Usala para toda pregunta sobre Solicitudes, OC, cotizaciones, documentos, pendientes, alertas y cambios de agente. Envia literalmente la peticion completa del usuario, incluida la referencia humana. Nunca inventes evidencia.",
-    parameters: { type: "object", additionalProperties: false, properties: { request: { type: "string" } }, required: ["request"] },
-  },
+  { type: "function", name: "consult_hugo_team",
+    description: "Consulta de solo lectura al equipo Hugo, Maria, Sofia y Sentinel con herramientas PAY0 reales. Usala para Solicitudes, OC, cotizaciones, documentos, pendientes, alertas y cambios de agente. Envia la peticion completa del usuario.",
+    parameters: { type: "object", additionalProperties: false, properties: { request: { type: "string" } }, required: ["request"] } },
   { type: "function", name: "get_earnings_by_client_report",
     description: "Consulta el reporte canónico de utilidades por cliente. Pide fechas explícitas antes de usarla; sólo lectura, alcance de la sesión autenticada. Devuelve resumen y hasta 25 clientes, con advertencia si se alcanza el límite.",
     parameters: { type: "object", additionalProperties: false, properties: { dateFrom: { type: "string", description: "Fecha inicial AAAA-MM-DD." }, dateTo: { type: "string", description: "Fecha final AAAA-MM-DD." }, compareDateFrom: { type: "string", description: "Inicio del periodo a comparar AAAA-MM-DD; requiere compareDateTo." }, compareDateTo: { type: "string", description: "Fin del periodo a comparar AAAA-MM-DD; requiere compareDateFrom." }, includeCompensated: { type: "boolean", description: "Incluir operaciones compensadas sólo si el usuario lo pide explícitamente; false por defecto." }, limit: { type: "integer", minimum: 1, maximum: 5000 } }, required: ["dateFrom", "dateTo"] }
@@ -104,12 +102,23 @@ export const realtimeTools = [
   { type: "function", name: "correct_current_voice_response",
     description: "Guarda una corrección explícita que el usuario acaba de dictar sobre la respuesta anterior de esta sesión. No crea reglas globales ni cambia datos. Sólo confirma que quedó guardada si la herramienta devuelve persisted true.",
     parameters: { type: "object", additionalProperties: false, properties: {}, required: [] } },
+  ...[
+    ["request_voice_topic_memory", "Solicita recordar la última corrección de sesión para el tema exacto declarado por el usuario. Requiere que diga Recuerda esta indicación para el tema: seguido de la etiqueta. No recibe texto del modelo ni guarda todavía memoria durable."],
+    ["confirm_voice_topic_memory", "Confirma únicamente el challenge pendiente cuando el usuario dicta la frase exacta de confirmationText. No interpretes un sí aislado. Sólo anuncia guardado durable tras durablePersisted true."],
+    ["select_voice_memory_topic", "Selecciona el tema privado declarado por el usuario con Usa el tema: seguido de etiqueta exacta. No infiere clientes, hechos ni permisos."],
+    ["clear_voice_memory_topic", "Quita el tema de esta sesión sólo cuando el usuario dice Quita el tema activo. No borra recuerdos."],
+    ["retire_current_voice_topic_memory", "Retira únicamente la indicación que se guardó para un tema en este socket, con declaración exacta Retira la indicación del tema: seguida de la etiqueta. No acepta IDs del modelo."],
+  ].map(([name, description]) => ({ type: "function", name, description,
+    parameters: { type: "object", additionalProperties: false, properties: {}, required: [] } })),
 ];
 
 export const realtimeToolNames = realtimeTools.map(tool => tool.name);
 
 export function delegationForRealtimeTool(name, args = {}) {
   if (name === "consult_hugo_team") return { request: String(args.request || "").trim(), toolName: "consultHugoTeam", toolInput: {} };
+  const topicActions = { request_voice_topic_memory: "REQUEST", confirm_voice_topic_memory: "CONFIRM", select_voice_memory_topic: "SELECT",
+    clear_voice_memory_topic: "CLEAR", retire_current_voice_topic_memory: "RETIRE" };
+  if (Object.hasOwn(topicActions, name)) return { request: "Procesar la declaración privada del tema observado en esta sesión.", voiceTopicAction: topicActions[name] };
   if (name === "correct_current_voice_response") return { request: "Registrar la corrección explícita del turno de voz.", recordResponseCorrection: true };
   if (name === "get_earnings_by_client_report") return { request: "Consulta el reporte de utilidades por cliente.", toolName: "getEarningsByClientReport", toolInput: { dateFrom: args.dateFrom, dateTo: args.dateTo, limit: args.limit ?? 5000, ...(args.includeCompensated !== undefined ? { includeCompensated: args.includeCompensated } : {}), ...(args.compareDateFrom !== undefined ? { compareDateFrom: args.compareDateFrom } : {}), ...(args.compareDateTo !== undefined ? { compareDateTo: args.compareDateTo } : {}) } };
   if (name === "get_authorized_capabilities") return { request: "¿A qué tengo acceso?", toolName: "getAuthorizedCapabilities", toolInput: {} };
