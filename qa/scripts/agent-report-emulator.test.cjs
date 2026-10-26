@@ -26,6 +26,6 @@ const { loadAgentOperations } = require("../../functions/lib/modules/agentOperat
   assert.equal(report.report.incidents, 1);
   assert.equal(report.runs.length, 2);
   assert.equal(report.report.causes[0].cause, "Autorización revocada");
-  assert.equal(report.providers.local.status, "NOT_IMPLEMENTED");
+  assert.equal(report.providers.local.status, "NOT_CONFIGURED");
   console.log("PASS daily report timezone, root isolation, verified correction count, provider configuration state");
 })().catch(error => { console.error(error); process.exitCode = 1; });

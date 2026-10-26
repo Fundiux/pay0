@@ -12,6 +12,7 @@ import HugoRealtimeVoice from "@/components/hugo/HugoRealtimeVoice";
 import HugoReportAttachment from "@/components/hugo/HugoReportAttachment";
 import HugoResponseCorrection, { HugoCorrectionTopic } from "@/components/hugo/HugoResponseCorrection";
 import HugoReceiptLearning from "@/components/hugo/HugoReceiptLearning";
+import HugoTeamPanel from "@/components/hugo/HugoTeamPanel";
 
 const card = "rounded-2xl border border-slate-800 bg-slate-900/70 p-4";
 const stamp = (value: any) => { const date = value?.toDate?.() || (value?.seconds ? new Date(value.seconds * 1000) : new Date(value || 0)); return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("es-MX"); };
@@ -21,9 +22,9 @@ const millis = (value: any) => value?.toMillis?.() || (value?.seconds ? value.se
 const dayLabel = (dateKey: string) => new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${dateKey}T12:00:00Z`));
 export default function HugoPage() {
   const { profile, profileUid } = useUserProfile();
-  return <HugoPageContent key={JSON.stringify([profileUid, profile?.rootId, profile?.role, profile?.active, profile?.disabled])} profile={profile} />;
+  return <HugoPageContent key={JSON.stringify([profileUid, profile?.rootId, profile?.role, profile?.active, profile?.disabled])} profile={profile} profileUid={profileUid} />;
 }
-function HugoPageContent({ profile }: { profile: any }) {
+function HugoPageContent({ profile, profileUid }: { profile: any; profileUid: string | null }) {
   const allowed = profile?.role === "superadmin" && profile?.active !== false && profile?.disabled !== true;
   const [dashboard, setDashboard] = useState<HugoDashboard | null>(null), [messages, setMessages] = useState<Agent007Message[]>([]);
   const [correctionTopic, setCorrectionTopic] = useState("");
@@ -55,6 +56,8 @@ function HugoPageContent({ profile }: { profile: any }) {
   const totals = useMemo(() => Object.values(dashboard?.consumption || {}).reduce((sum, row) => ({ requests: sum.requests + row.requests, input: sum.input + row.inputTokens, output: sum.output + row.outputTokens }), { requests: 0, input: 0, output: 0 }), [dashboard]);
   if (!allowed) return <main className="p-6 text-slate-400">María conserva por ahora sus permisos de superadministración.</main>;
   return <main className="space-y-6 pb-20">
+    {profileUid === "Ab4z0RttIqXbZFT0NuWsDjBkt6J2" && <HugoTeamPanel/>}
+    {profileUid === "Ab4z0RttIqXbZFT0NuWsDjBkt6J2" && dashboard?.providers.local && <p className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs text-slate-400">Proveedor local: Ollama · {dashboard.providers.local.model} · {dashboard.providers.local.connected ? "conectado" : "no conectado"} · datos PAY0: {dashboard.providers.local.dataAuthorized ? "habilitados" : "no habilitados"} · última prueba: {dashboard.providers.local.lastSuccessfulTest ? stamp(dashboard.providers.local.lastSuccessfulTest) : "sin éxito registrado"}{dashboard.providers.local.recentError ? ` · error: ${dashboard.providers.local.recentError}` : ""}. Gemini continúa como proveedor actual.</p>}
     <header className="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/15 via-slate-950 to-slate-950 p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.28em] text-violet-300">María · sistema global</p><h1 className="mt-2 text-3xl font-semibold text-white">Control sin ruido</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">María trabaja y registra. Te avisa cuando necesita una decisión y responde cuando preguntas.</p></div><div className="flex flex-col items-end gap-3"><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200">Silent by default</span><HugoRealtimeVoice onHistorySaved={() => void load(dateKey)}/></div></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{dashboard?.systems.map(system => <div key={system.id} className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="font-medium text-white">{system.id === "HUGO" ? "María" : system.id}</p><p className={system.status === "CONNECTED" ? "text-xs text-emerald-300" : "text-xs text-slate-500"}>{system.status}</p></div>)}</div></header>
     <div className="flex justify-end gap-2"><a href="/hugo/operations" className="rounded-xl border border-violet-500/30 px-3 py-2 text-xs text-violet-200 hover:bg-violet-500/10">Operaciones de Agentes</a><a href="/hugo/evaluation" className="rounded-xl border border-violet-500/30 px-3 py-2 text-xs text-violet-200 hover:bg-violet-500/10">Abrir evaluación de modelos</a></div>
     {error && <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</p>}
