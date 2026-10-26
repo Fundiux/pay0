@@ -20,13 +20,10 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = 7_000;
 const firebaseTimeoutMs = 10_000;
 const warmupTimeoutMs = 60_000;
-// The isolated 8af329e artifact exposes 351 endpoints. This candidate adds
-// engineering assignment, the two server-authorized operational readers, the
-// three reviewed recovery/learning endpoints, the legacy payment reader, and
-// the private-document compatibility transport, and the P4 historical-import
-// recovery engine retained for existing manifests and runs.
+// The current checkout exports 370 endpoints, including two company-template
+// callables absent from the 368-endpoint production inventory before release.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 360;
+const expectedEndpointCount = 370;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
@@ -50,6 +47,7 @@ const requiredEndpoints = [
   "getCommissionAutomationConfig", "saveCommissionAutomationConfig", "runDailyUserCommissionPreflight", "prepareDailyUserCommissions",
   "refreshMaterialityFromPaymentApplication", "generateSolicitudReceiptCertificate",
   "listCorporateResources", "getCorporateResource", "prepareCorporateResourceMigration", "importCorporateResource",
+  "cloneCorporateTemplateBase", "reviseCorporateTemplate",
   "reviewCorporateResourceVersion", "activateCorporateResourceVersion", "restoreCorporateResourceVersion", "retireCorporateResourceVersion",
   "getCorporateResourceDownloadUrl", "initCorporateResourceUpload", "finalizeCorporateResourceUpload", "listHugoVoiceActivity",
   "reviewAgent007LearningRule",
