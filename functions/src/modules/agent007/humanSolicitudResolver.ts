@@ -52,6 +52,25 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
   }
   const normalized = normalize(message);
   const amount = amountInMessage(message);
+  const ordinal = normalized.match(/\b(?:la|el|opcion|numero)\s*(primera|primer|segunda|segundo|tercera|tercero|cuarta|cuarto|quinta|quinto|[1-5])\b/)?.[1];
+  if (ordinal && sessionId && amount == null) {
+    const positions: Record<string, number> = { primera: 0, primer: 0, segunda: 1, segundo: 1, tercera: 2, tercero: 2, cuarta: 3, cuarto: 3, quinta: 4, quinto: 4 };
+    const position = positions[ordinal] ?? Number(ordinal) - 1;
+    const turns = await Promise.all(agents.map(agent => db.collection("hugoTeamTurns").where("conversationId", "==", `${rootId}_${uid}_${agent}`).orderBy("createdAt", "desc").limit(20).get()));
+    const prior = turns.flatMap(snap => snap.docs).filter(doc => doc.get("rootId") === rootId && doc.get("voiceSessionId") === sessionId)
+      .sort((a, b) => (b.get("createdAt")?.toMillis?.() || 0) - (a.get("createdAt")?.toMillis?.() || 0))[0];
+    const fresh = prior?.get("createdAt")?.toMillis?.();
+    const ids = fresh && Date.now() - fresh <= 5 * 60_000 ? prior?.get("clarificationSolicitudIds") : null;
+    const labels = prior?.get("clarificationSolicitudLabels");
+    if (Array.isArray(ids) && position >= 0 && position < ids.length && typeof ids[position] === "string") {
+      const snapshot = await db.collection("solicitudes").doc(ids[position]).get();
+      if (snapshot.exists && snapshot.get("rootId") === rootId && snapshot.get("folio")) {
+        const found = (await connector.getSolicitud(String(snapshot.get("folio")))).data as Candidate | null;
+        if (found?.id === ids[position] && Array.isArray(labels) && labels[position] === solicitudLabel(found)) return { kind: "MATCH" as const, item: found, source: "conversationChoice" };
+      }
+    }
+    return { kind: "NEEDS_DETAIL" as const, source: "conversationChoice" };
+  }
   if (/\b(ultima|reciente)\b/.test(normalized) && amount == null && !/\b(cliente|proveedor|empresa)\s*[:;]?\s*\w/.test(normalized)) {
     const latest = (await connector.getLatestSolicitud()).data.item as Candidate | null;
     return latest ? { kind: "MATCH" as const, item: latest, source: "getLatestSolicitud" } : { kind: "NONE" as const, source: "getLatestSolicitud" };
@@ -79,9 +98,9 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
     return { kind: "NEEDS_DETAIL" as const, source: "searchSolicitudes" };
   }
   const matches = sample.filter(item => (!company || item.empresa === company) && (!client || item.cliente === client) && (amount == null || item.monto === amount) && (!status || status.test(item.estado || "")));
-  if (sample.length === 1000) return { kind: "PARTIAL" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
+  if (sample.length === 1000) return { kind: "PARTIAL" as const, options: matches.slice(0, 5).map(solicitudLabel), optionIds: matches.slice(0, 5).map(item => item.id), source: "searchSolicitudes" };
   if (matches.length === 1) return { kind: "MATCH" as const, item: matches[0], source: "searchSolicitudes" };
   if (matches.length > 1 && /\b(ultima|reciente)\b/.test(normalized) && matches[0].createdAt && matches[0].createdAt !== matches[1].createdAt) return { kind: "MATCH" as const, item: matches[0], source: "searchSolicitudes" };
-  if (matches.length > 1) return { kind: "AMBIGUOUS" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
+  if (matches.length > 1) return { kind: "AMBIGUOUS" as const, options: matches.slice(0, 5).map(solicitudLabel), optionIds: matches.slice(0, 5).map(item => item.id), source: "searchSolicitudes" };
   return { kind: "NONE" as const, source: "searchSolicitudes", partial: sample.length === 1000 };
 }

@@ -41,9 +41,9 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
       return { text: `Hay ${count} Solicitud${count === 1 ? "" : "es"} ${amount == null ? "" : `por ${amount.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} `}${today ? "creadas hoy " : ""}en tu alcance PAY0.`, evidence, toolsUsed: ["searchSolicitudes"] };
     }
   }
-  const wantsSolicitud = /\b(solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima|reciente)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
+  const wantsSolicitud = /\b(?:opci[o\u00f3]n|n[u\u00fa]mero)\s*[1-5]\b/i.test(message) || /\b(solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima|reciente|primera|primer|segunda|segundo|tercera|tercero|cuarta|cuarto|quinta|quinto)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
   const resolved = wantsSolicitud ? await resolveHumanSolicitud(message, uid, rootId, ["hugo", "maria", "sofia", "sentinel"], sessionId) : null;
-  if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const };
+  if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const, optionIds: resolved.optionIds, optionLabels: resolved.options };
   if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 1000 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
   if (resolved?.kind === "NEEDS_DETAIL") return { text: "Dime la empresa, cliente, fecha, importe o estado de la Solicitud para encontrarla sin usar un folio.", evidence, resolution: "NEEDS_DETAIL" as const };
   if (resolved?.kind === "NONE") return { text: "transcriptionMismatch" in resolved && resolved.transcriptionMismatch
@@ -65,7 +65,7 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
     const jobStatus = job?.exists && job.get("rootId") === rootId ? safe(job.get("status"), 60) : "sin job canónico asociado";
     const amount = solicitud.monto == null ? NaN : Number(solicitud.monto);
     const formatted = Number.isFinite(amount) ? amount.toLocaleString("es-MX", { style: "currency", currency: solicitud.moneda || "MXN" }) : "importe no registrado";
-    const base = `${solicitudLabel({ id: solicitud.id, folio, empresa: solicitud.empresa, cliente: solicitud.cliente, monto: solicitud.monto, moneda: solicitud.moneda, estado: solicitud.estado, createdAt: solicitud.createdAt })}. Documentos activos en la muestra: ${documents.length ? documents.join(", ") : "ninguno"}. Cotizaciones PAY0 activas en la muestra: ${quoteCount}${partialDocuments ? "; lectura parcial, no concluye ausencia" : ""}. Job de cotización: ${jobStatus}.`;
+    const base = `${solicitudLabel({ id: solicitud.id, folio, empresa: solicitud.empresa, cliente: solicitud.cliente, monto: solicitud.monto, moneda: solicitud.moneda, estado: solicitud.estado, createdAt: solicitud.createdAt })}. Documentos activos en la muestra: ${documents.length ? documents.join(", ") : "ninguno"}. Cotizaciones PAY0 activas en la muestra: ${quoteCount}${partialDocuments ? "; lectura parcial, no concluye ausencia" : ""}. Job de cotización: ${jobStatus}.${!partialDocuments && quoteCount === 0 ? " Observación: no aparece una cotización activa entre los documentos revisados; revisa el estado de generación antes de darla por disponible." : ""}`;
     if (job?.exists && job.get("rootId") === rootId) evidence.push({ collection: "solicitudQuotationJobs", folio, kind: "COTIZACION_JOB" });
     for (const type of new Set(documents)) evidence.push({ collection: "uploads", folio, kind: type });
     const prefix = consulted.includes("sofia") ? "Sofía revisó metadatos documentales de PAY0. " : "";
@@ -134,7 +134,7 @@ export async function executeHugoTeamTurn(request: any) {
   const blocked = assertTeamReadOnly(message, channel);
   const switchOnly = !blocked && route.explicitAgent && /\b(p[aá]same con|hablar con|regresa con|vuelve con)\b/i.test(message) && !/\b(revisa|analiza|consulta|dime|muestra|explica)\b/i.test(message);
   const askFolio = false;
-  const recognized = switchOnly || folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alertas?|seguridad|solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
+  const recognized = switchOnly || folioPattern.test(message) || /\b(?:la|el|opcion|numero)\s*(?:primera|primer|segunda|segundo|tercera|tercero|cuarta|cuarto|quinta|quinto|[1-5])\b/i.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alertas?|seguridad|solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
   const unavailable = !blocked && !recognized;
   const fact = blocked ? { text: blocked, evidence: [] as TeamEvidence[] } : switchOnly
     ? { text: `Ahora hablas con ${agentName(route.agent)}. Dime qué quieres consultar.`, evidence: [] as TeamEvidence[] }
@@ -152,6 +152,8 @@ export async function executeHugoTeamTurn(request: any) {
   const reply = route.agent === "hugo" && route.consulted.length > 1 ? `Hugo consultó a ${route.consulted.map(agentName).join(" y ")}. ${fact.text}` : fact.text;
   const row = { actorUid: uid, rootId, conversationId: `${rootId}_${uid}_${route.agent}`, voiceSessionId: safe(request.data?.sessionId, 180) || null, turnId, selectedAgent: selected, agent: route.agent,
     selectedSolicitudId: (fact as { selectedSolicitudId?: string }).selectedSolicitudId || null,
+    clarificationSolicitudIds: (fact as { optionIds?: string[] }).optionIds || null,
+    clarificationSolicitudLabels: (fact as { optionLabels?: string[] }).optionLabels || null,
     consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ", activity,
     evidence: fact.evidence, toolsUsed, modulesAffected, result: blocked ? "NO_EXECUTION" : unavailable ? "CAPABILITY_NOT_AVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ_COMPLETE", createdAt: FieldValue.serverTimestamp() };
   try { await ref.create(row); } catch (error: any) {
