@@ -6,8 +6,14 @@ const normalize = (value: unknown) => String(value ?? "").normalize("NFD").repla
 const money = (value: number | null, currency = "MXN") => value == null ? "importe sin registrar" : value.toLocaleString("es-MX", { style: "currency", currency });
 const date = (value: string | null) => value ? new Date(value).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" }) : "fecha sin registrar";
 const amountInMessage = (message: string) => {
-  const numeric = message.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/)?.[1];
-  if (numeric) return Number(numeric.replace(/,/g, ""));
+  const numeric = message.match(/\$\s*(\d[\d,. ]*)/)?.[1]
+    || message.match(/\b(?:monto|importe|total|por)\s*(?:(?:exacto\s*)?(?:de\s*)?|:\s*)(\d{1,3}(?:[,. ]\d{3})+(?:[,.]\d{1,2})?|\d{4,}(?:[,.]\d{1,2})?)/i)?.[1]
+    || message.match(/\b(\d{1,3}(?:[,. ]\d{3})+|\d{4,})\s*(?:pesos?|mxn)\b/i)?.[1];
+  if (numeric) {
+    const compact = numeric.trim().replace(/\s/g, "");
+    const value = Number(/^\d{1,3}(?:[,.]\d{3})+$/.test(compact) ? compact.replace(/[,.]/g, "") : compact.replace(/,/g, ""));
+    if (Number.isFinite(value)) return value;
+  }
   const words = normalize(message);
   if (/siete mil quinientos cuarenta/.test(words)) return 7540;
   return null;
@@ -23,8 +29,9 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
     return found ? { kind: "MATCH" as const, item: found, source: "getSolicitud" } : { kind: "NONE" as const, source: "getSolicitud" };
   }
   const normalized = normalize(message);
+  const amount = amountInMessage(message);
   const contextual = /\b(esa|ese|esta|este|la misma|su cotizacion|su oc|regresa|resumen)\b/.test(normalized);
-  if (contextual) {
+  if (contextual && amount == null && !/\b(cliente|proveedor|empresa)\s*[:;]?\s*\w/.test(normalized)) {
     const turns = await Promise.all(agents.map(agent => db.collection("hugoTeamTurns").where("conversationId", "==", `${rootId}_${uid}_${agent}`).orderBy("createdAt", "desc").limit(5).get()));
     const refs = turns.flatMap(snap => snap.docs).filter(doc => doc.get("selectedSolicitudId") && doc.get("rootId") === rootId).sort((a, b) => (b.get("createdAt")?.toMillis?.() || 0) - (a.get("createdAt")?.toMillis?.() || 0));
     if (refs.length) {
@@ -36,13 +43,15 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
     }
   }
   const sample = (await connector.searchSolicitudes(1000)).data as Candidate[];
-  const amount = amountInMessage(message);
   const companies = [...new Set(sample.map(item => item.empresa).filter(Boolean))] as string[];
   const clients = [...new Set(sample.map(item => item.cliente).filter(Boolean))] as string[];
   const company = companies.filter(name => normalized.includes(normalize(name))).sort((a, b) => b.length - a.length)[0];
   const client = clients.filter(name => normalized.includes(normalize(name))).sort((a, b) => b.length - a.length)[0];
   const status = /atorad|pendient|error/.test(normalized) ? /error|pendiente|bloquead/i : null;
-  if (!company && !client && amount == null && !status && !/\b(ultima|reciente)\b/.test(normalized)) return { kind: "NEEDS_DETAIL" as const, source: "searchSolicitudes" };
+  if (!company && !client && amount == null && !status && !/\b(ultima|reciente)\b/.test(normalized)) {
+    if (/\b(cliente|proveedor|empresa)\b/.test(normalized)) return { kind: "NONE" as const, source: "searchSolicitudes", partial: sample.length === 1000, transcriptionMismatch: true };
+    return { kind: "NEEDS_DETAIL" as const, source: "searchSolicitudes" };
+  }
   const matches = sample.filter(item => (!company || item.empresa === company) && (!client || item.cliente === client) && (amount == null || item.monto === amount) && (!status || status.test(item.estado || "")));
   if (sample.length === 1000) return { kind: "PARTIAL" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
   if (matches.length === 1) return { kind: "MATCH" as const, item: matches[0], source: "searchSolicitudes" };

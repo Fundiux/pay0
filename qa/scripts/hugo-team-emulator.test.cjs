@@ -14,6 +14,8 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
 (async () => {
   assert.equal(routeTeamTurn("Hugo, pregúntale a Sofía por esta OC").agent, "sofia");
   assert.equal(routeTeamTurn("Regresa con Hugo", "maria").agent, "hugo");
+  assert.equal(routeTeamTurn("Consulta la Solicitud con factura Z39199 y monto 7,540 pesos").writeIntent, false);
+  assert.equal(routeTeamTurn("Facturar esta Solicitud").writeIntent, true);
   assert.deepEqual(routeTeamTurn("¿Por qué falta la cotización?", "hugo").consulted, ["sofia", "maria"]);
   await db.doc(`users/${uid}`).set({ role: "superadmin", rootId, active: true, modules: { corporateResources: { view: true } } });
   await db.doc("users/other-superadmin").set({ role: "superadmin", rootId, active: true });
@@ -57,13 +59,21 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.match(human.reply, /ACIER CAPITAL.*\$7,540/);
   assert.equal(human.selectedSolicitudId, "sol-team");
   assert.doesNotMatch(human.reply, /S1C19U3E2/);
+  const misunderstood = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "AUDIO", message: "Revisa la solicitud del cliente Desarrollo y Construcciones DMR con proveedor ASIER", turnId: turnId(12) } });
+  assert.equal(misunderstood.result, "NEEDS_CLARIFICATION");
+  assert.match(misunderstood.reply, /transcripci[oó]n/i);
+  assert.deepEqual(misunderstood.toolsUsed, ["resolveHumanSolicitud", "searchSolicitudes"]);
   const context = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "sofia", channel: "TEXT", message: "Sofía, analiza esta OC", turnId: turnId(11) } });
   assert.equal(context.selectedSolicitudId, "sol-team");
   assert.match(context.reply, /Servicio comercial/);
-  const voice = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, revisa la Solicitud del cliente Desarrollo y Construcción DMR con proveedor ACIER CAPITAL por siete mil quinientos cuarenta pesos y dime cómo está su cotización", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
+  const voice = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Revisa la solicitud del cliente Desarrollo y Construcciones DMR con el proveedor ASIER por 7,540 pesos y dime cómo está esta cotización.", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
   assert.match(voice.text, /ACIER CAPITAL.*\$7,540/);
   assert.equal(voice.team.agent, "hugo");
   assert.equal(voice.team.toolsUsed.includes("getSolicitud"), true);
+  assert.equal(voice.team.action, "READ");
+  const invoiceReference = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Consulta de Solicitud: cliente Desarrollo y Construcciones DMR, empresa ACIER Capital, método PUE, factura Z39199, monto 7,540. Solo lectura.", sessionId: "voice-team-session", turnId: "voice-turn-invoice", delegationId: "voice-tool-invoice" } });
+  assert.equal(invoiceReference.team.action, "READ");
+  assert.match(invoiceReference.text, /ACIER CAPITAL.*\$7,540/);
   const voiceSwitch = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, pásame con Sofía", sessionId: "voice-team-session", turnId: "voice-turn-2", delegationId: "voice-tool-2" } });
   assert.equal(voiceSwitch.team.agent, "sofia");
   assert.match(voiceSwitch.text, /Ahora hablas con Sofía/);
@@ -84,11 +94,11 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.equal(preview.action, "PENDING_AUTHORIZATION");
   assert.deepEqual(preview.toolsUsed, []);
   assert.equal((await db.doc("solicitudes/sol-team").get()).get("status"), "PROCESANDO");
-  assert.equal((await listHugoTeamTurns.run({ auth: auth(uid), data: { agent: "hugo" } })).turns.length, 4);
+  assert.equal((await listHugoTeamTurns.run({ auth: auth(uid), data: { agent: "hugo" } })).turns.length, 6);
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: auth("other-superadmin"), data: { ...input, turnId: turnId(3) } }));
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: null, data: { ...input, turnId: turnId(5) } }));
   await db.doc(`users/${uid}`).update({ active: false });
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: auth(uid), data: { ...input, turnId: turnId(4) } }));
-  assert.equal((await db.collection("hugoTeamTurns").get()).size, 10);
+  assert.equal((await db.collection("hugoTeamTurns").get()).size, 12);
   console.log("PASS team routing, delegated read, evidence, idempotency, audio write block, owner and revoked authorization");
 })().catch(error => { console.error(error); process.exitCode = 1; });

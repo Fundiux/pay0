@@ -33,7 +33,9 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
   if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const };
   if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 1000 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
   if (resolved?.kind === "NEEDS_DETAIL") return { text: "Dime la empresa, cliente, fecha, importe o estado de la Solicitud para encontrarla sin usar un folio.", evidence, resolution: "NEEDS_DETAIL" as const };
-  if (resolved?.kind === "NONE") return { text: `No encontré una coincidencia verificable en ${resolved.partial ? "las 1000 Solicitudes recientes consultadas" : "las Solicitudes consultadas"}. Da otro dato legible para ampliar la búsqueda.`, evidence, resolution: "NONE" as const };
+  if (resolved?.kind === "NONE") return { text: "transcriptionMismatch" in resolved && resolved.transcriptionMismatch
+    ? "No pude cotejar los nombres que entendí por voz con PAY0. Revisa la transcripción; puedes repetir sólo el importe exacto en pesos para buscarlo sin folio."
+    : `No encontré una coincidencia verificable en ${resolved.partial ? "las 1000 Solicitudes recientes consultadas" : "las Solicitudes consultadas"}. Da otro dato legible para ampliar la búsqueda.`, evidence, resolution: "NONE" as const };
   const folio = resolved?.kind === "MATCH" ? safe(resolved.item.folio, 20) : "";
   if (folio) {
     const result = await new Pay0Connector(db, { uid, rootId, role: "superadmin" }).getSolicitud(folio);
@@ -127,7 +129,9 @@ export async function executeHugoTeamTurn(request: any) {
     ? { text: "Aún no tengo una herramienta verificada para esa consulta. No ejecuté acciones ni inventé una respuesta.", evidence: [] as TeamEvidence[] }
     : await readTeamFacts(rootId, uid, user, request.auth, message, route.consulted);
   const hasSolicitud = Boolean((fact as { selectedSolicitudId?: string }).selectedSolicitudId);
+  const needsClarification = Boolean((fact as { resolution?: string }).resolution);
   const toolsUsed = blocked || unavailable || askFolio || switchOnly ? [] : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
+    : needsClarification ? ["resolveHumanSolicitud", "searchSolicitudes"]
     : /\b(plantilla|plantillas|biblioteca)\b/i.test(message) ? ["listCorporateResources"]
     : route.consulted.includes("sentinel") || /\b(pendientes?|errores?)\b/i.test(message) ? ["listAgentIncidents"] : ["getLatestSolicitud"];
   const modulesAffected = [...new Set(fact.evidence.map(item => item.collection === "uploads" ? "documentos" : item.collection === "agentIncidents" ? "agentes" : item.collection === "pay0CanonicalResources" ? "corporateResources" : "solicitudes"))];
@@ -135,8 +139,8 @@ export async function executeHugoTeamTurn(request: any) {
   const reply = route.agent === "hugo" && route.consulted.length > 1 ? `Hugo consultó a ${route.consulted.map(agentName).join(" y ")}. ${fact.text}` : fact.text;
   const row = { actorUid: uid, rootId, conversationId: `${rootId}_${uid}_${route.agent}`, turnId, selectedAgent: selected, agent: route.agent,
     selectedSolicitudId: (fact as { selectedSolicitudId?: string }).selectedSolicitudId || null,
-    consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio || (fact as { resolution?: string }).resolution ? "NEEDS_CLARIFICATION" : "READ", activity,
-    evidence: fact.evidence, toolsUsed, modulesAffected, result: blocked ? "NO_EXECUTION" : unavailable ? "CAPABILITY_NOT_AVAILABLE" : askFolio ? "NEEDS_FOLIO" : "READ_COMPLETE", createdAt: FieldValue.serverTimestamp() };
+    consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ", activity,
+    evidence: fact.evidence, toolsUsed, modulesAffected, result: blocked ? "NO_EXECUTION" : unavailable ? "CAPABILITY_NOT_AVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ_COMPLETE", createdAt: FieldValue.serverTimestamp() };
   try { await ref.create(row); } catch (error: any) {
     if (error?.code !== 6) throw error;
     const winner = await ref.get();
