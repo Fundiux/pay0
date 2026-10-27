@@ -6,12 +6,15 @@ if (!admin.apps.length) admin.initializeApp({ projectId: "demo-pay0", storageBuc
 const db = admin.firestore();
 const ExcelJS = require("exceljs");
 const { routeTeamTurn } = require("../../functions/lib/modules/agent007/teamRouting.js");
+const { amountInMessage } = require("../../functions/lib/modules/agent007/humanSolicitudResolver.js");
 const { sendHugoTeamTurn, listHugoTeamTurns, delegateHugoTeamVoiceTurn } = require("../../functions/lib/modules/agent007/teamCallables.js");
 const uid = "Ab4z0RttIqXbZFT0NuWsDjBkt6J2", rootId = "root-hugo-team";
 const auth = value => ({ uid: value, token: { role: "superadmin" } });
 const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
 
 (async () => {
+  assert.equal(amountInMessage("por doce mil trescientos cincuenta pesos"), 12350);
+  assert.equal(amountInMessage("siete mil quinientos cuarenta pesos"), 7540);
   assert.equal(routeTeamTurn("Hugo, pregúntale a Sofía por esta OC").agent, "sofia");
   assert.equal(routeTeamTurn("Regresa con Hugo", "maria").agent, "hugo");
   assert.equal(routeTeamTurn("Consulta la Solicitud con factura Z39199 y monto 7,540 pesos").writeIntent, false);
@@ -55,6 +58,17 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
     createdAt: admin.firestore.Timestamp.fromMillis(Date.now() + (index + 1) * 1000),
   });
   await newer.commit();
+  await db.doc("solicitudes/older-updated").set({ rootId, folio: "SOLDER", status: "RECHAZADA", companyName: "EMPRESA ANTIGUA",
+    clientName: "Cliente antiguo", total: 414488.88, createdAt: admin.firestore.Timestamp.fromDate(new Date("2026-08-31T12:00:00Z")),
+    updatedAt: admin.firestore.Timestamp.fromMillis(Date.now() + 9999999) });
+  await db.doc("solicitudes/amount-7450").set({ rootId, folio: "SAMOUNT", status: "PROCESANDO", companyName: "EMPRESA DE PRUEBA",
+    clientName: "Cliente de prueba", total: 7450, createdAt: admin.firestore.Timestamp.fromDate(new Date("2026-08-30T12:00:00Z")) });
+  const latest = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "AUDIO", message: "Dime el estado y el monto de la solicitud más reciente", turnId: turnId(13) } });
+  assert.match(latest.reply, /OTRO PROVEEDOR/);
+  assert.doesNotMatch(latest.reply, /EMPRESA ANTIGUA/);
+  const amountCount = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "AUDIO", message: "Dime cuántas solicitudes de siete mil cuatrocientos cincuenta pesos tenemos", turnId: turnId(14) } });
+  assert.match(amountCount.reply, /Hay 1 Solicitud por \$7,450/);
+  assert.deepEqual(amountCount.toolsUsed, ["searchSolicitudes"]);
   const human = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "TEXT", message: "Hugo, revisa la Solicitud del cliente Desarrollo y Construcción DMR con proveedor ACIER CAPITAL por $7,540 y dime cómo está su cotización", turnId: turnId(10) } });
   assert.match(human.reply, /ACIER CAPITAL.*\$7,540/);
   assert.equal(human.selectedSolicitudId, "sol-team");
@@ -71,6 +85,10 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.equal(voice.team.agent, "hugo");
   assert.equal(voice.team.toolsUsed.includes("getSolicitud"), true);
   assert.equal(voice.team.action, "READ");
+  const voiceContext = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Analiza la OC", sessionId: "voice-team-session", turnId: "voice-turn-context", delegationId: "voice-tool-context" } });
+  assert.match(voiceContext.text, /Servicio comercial/);
+  const otherSession = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Analiza la OC", sessionId: "other-voice-session", turnId: "voice-turn-other", delegationId: "voice-tool-other" } });
+  assert.equal(otherSession.team.result, "NEEDS_CLARIFICATION");
   const invoiceReference = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Consulta de Solicitud: cliente Desarrollo y Construcciones DMR, empresa ACIER Capital, método PUE, factura Z39199, monto 7,540. Solo lectura.", sessionId: "voice-team-session", turnId: "voice-turn-invoice", delegationId: "voice-tool-invoice" } });
   assert.equal(invoiceReference.team.action, "READ");
   assert.match(invoiceReference.text, /ACIER CAPITAL.*\$7,540/);
@@ -94,11 +112,11 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.equal(preview.action, "PENDING_AUTHORIZATION");
   assert.deepEqual(preview.toolsUsed, []);
   assert.equal((await db.doc("solicitudes/sol-team").get()).get("status"), "PROCESANDO");
-  assert.equal((await listHugoTeamTurns.run({ auth: auth(uid), data: { agent: "hugo" } })).turns.length, 6);
+  assert.equal((await listHugoTeamTurns.run({ auth: auth(uid), data: { agent: "hugo" } })).turns.length, 10);
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: auth("other-superadmin"), data: { ...input, turnId: turnId(3) } }));
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: null, data: { ...input, turnId: turnId(5) } }));
   await db.doc(`users/${uid}`).update({ active: false });
   await assert.rejects(() => sendHugoTeamTurn.run({ auth: auth(uid), data: { ...input, turnId: turnId(4) } }));
-  assert.equal((await db.collection("hugoTeamTurns").get()).size, 12);
+  assert.equal((await db.collection("hugoTeamTurns").get()).size, 16);
   console.log("PASS team routing, delegated read, evidence, idempotency, audio write block, owner and revoked authorization");
 })().catch(error => { console.error(error); process.exitCode = 1; });

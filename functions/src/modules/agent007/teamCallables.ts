@@ -8,7 +8,7 @@ import { Pay0Connector } from "./pay0Connector";
 import { assertTeamReadOnly, routeTeamTurn, TEAM_AGENTS, type HugoTeamAgent } from "./teamRouting";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES } from "../solicitudDocuments/domain";
 import { parseOcCommercialMetadataBuffer } from "../solicitudDocuments/service";
-import { resolveHumanSolicitud, solicitudLabel } from "./humanSolicitudResolver";
+import { amountInMessage, resolveHumanSolicitud, solicitudLabel } from "./humanSolicitudResolver";
 
 const ELIUT_UID = "Ab4z0RttIqXbZFT0NuWsDjBkt6J2";
 const folioPattern = /\bS(?=[A-Z0-9]*\d)[A-Z0-9]{5,19}\b/i;
@@ -26,10 +26,23 @@ async function authorized(request: any) {
 }
 
 type TeamEvidence = { collection: string; folio: string; kind: string };
-async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, message: string, consulted: HugoTeamAgent[]) {
+async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, message: string, consulted: HugoTeamAgent[], sessionId?: string) {
   const evidence: TeamEvidence[] = [];
-  const wantsSolicitud = /\b(solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
-  const resolved = wantsSolicitud ? await resolveHumanSolicitud(message, uid, rootId, ["hugo", "maria", "sofia", "sentinel"]) : null;
+  const countSolicitudes = /\bcu[aá]ntas?\s+solicitudes\b/i.test(message);
+  if (countSolicitudes) {
+    const amount = amountInMessage(message);
+    const today = /\b(hoy|d[ií]a de hoy)\b/i.test(message);
+    if (amount != null || today) {
+      const sample = (await new Pay0Connector(db, { uid, rootId, role: "superadmin" }).searchSolicitudes(1000)).data as Array<{ monto: number | null; createdAt: string | null }>;
+      if (sample.length === 1000) return { text: "La consulta alcanzó el límite de 1000 Solicitudes; no puedo dar un conteo total confiable.", evidence, resolution: "PARTIAL" as const, toolsUsed: ["searchSolicitudes"] };
+      const localDay = (value: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+      const currentDay = localDay(new Date());
+      const count = sample.filter(item => (amount == null || item.monto === amount) && (!today || item.createdAt && localDay(new Date(item.createdAt)) === currentDay)).length;
+      return { text: `Hay ${count} Solicitud${count === 1 ? "" : "es"} ${amount == null ? "" : `por ${amount.toLocaleString("es-MX", { style: "currency", currency: "MXN" })} `}${today ? "creadas hoy " : ""}en tu alcance PAY0.`, evidence, toolsUsed: ["searchSolicitudes"] };
+    }
+  }
+  const wantsSolicitud = /\b(solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima|reciente)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
+  const resolved = wantsSolicitud ? await resolveHumanSolicitud(message, uid, rootId, ["hugo", "maria", "sofia", "sentinel"], sessionId) : null;
   if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const };
   if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 1000 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
   if (resolved?.kind === "NEEDS_DETAIL") return { text: "Dime la empresa, cliente, fecha, importe o estado de la Solicitud para encontrarla sin usar un folio.", evidence, resolution: "NEEDS_DETAIL" as const };
@@ -121,23 +134,23 @@ export async function executeHugoTeamTurn(request: any) {
   const blocked = assertTeamReadOnly(message, channel);
   const switchOnly = !blocked && route.explicitAgent && /\b(p[aá]same con|hablar con|regresa con|vuelve con)\b/i.test(message) && !/\b(revisa|analiza|consulta|dime|muestra|explica)\b/i.test(message);
   const askFolio = false;
-  const recognized = switchOnly || folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alertas?|seguridad|solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
+  const recognized = switchOnly || folioPattern.test(message) || /\b(plantilla|plantillas|biblioteca|pendientes?|errores?|incidente|alertas?|seguridad|solicitud(?:es)?|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|reciente|última|ultima)\b/i.test(message);
   const unavailable = !blocked && !recognized;
   const fact = blocked ? { text: blocked, evidence: [] as TeamEvidence[] } : switchOnly
     ? { text: `Ahora hablas con ${agentName(route.agent)}. Dime qué quieres consultar.`, evidence: [] as TeamEvidence[] }
     : unavailable
     ? { text: "Aún no tengo una herramienta verificada para esa consulta. No ejecuté acciones ni inventé una respuesta.", evidence: [] as TeamEvidence[] }
-    : await readTeamFacts(rootId, uid, user, request.auth, message, route.consulted);
+    : await readTeamFacts(rootId, uid, user, request.auth, message, route.consulted, safe(request.data?.sessionId, 180) || undefined);
   const hasSolicitud = Boolean((fact as { selectedSolicitudId?: string }).selectedSolicitudId);
   const needsClarification = Boolean((fact as { resolution?: string }).resolution);
-  const toolsUsed = blocked || unavailable || askFolio || switchOnly ? [] : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
+  const toolsUsed = blocked || unavailable || askFolio || switchOnly ? [] : "toolsUsed" in fact ? fact.toolsUsed : hasSolicitud ? ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob", ...(fact.evidence.some(item => item.kind === "OC_CONTENIDO_LEIDO") ? ["parseOcCommercialMetadataBuffer"] : [])]
     : needsClarification ? ["resolveHumanSolicitud", "searchSolicitudes"]
     : /\b(plantilla|plantillas|biblioteca)\b/i.test(message) ? ["listCorporateResources"]
     : route.consulted.includes("sentinel") || /\b(pendientes?|errores?)\b/i.test(message) ? ["listAgentIncidents"] : ["getLatestSolicitud"];
   const modulesAffected = [...new Set(fact.evidence.map(item => item.collection === "uploads" ? "documentos" : item.collection === "agentIncidents" ? "agentes" : item.collection === "pay0CanonicalResources" ? "corporateResources" : "solicitudes"))];
   const activity = blocked ? "Vista previa sin consulta ni cambio" : unavailable || askFolio ? "No se ejecutó herramienta" : route.consulted.map(agent => `${agentName(agent)} consultó PAY0`).join("; ");
   const reply = route.agent === "hugo" && route.consulted.length > 1 ? `Hugo consultó a ${route.consulted.map(agentName).join(" y ")}. ${fact.text}` : fact.text;
-  const row = { actorUid: uid, rootId, conversationId: `${rootId}_${uid}_${route.agent}`, turnId, selectedAgent: selected, agent: route.agent,
+  const row = { actorUid: uid, rootId, conversationId: `${rootId}_${uid}_${route.agent}`, voiceSessionId: safe(request.data?.sessionId, 180) || null, turnId, selectedAgent: selected, agent: route.agent,
     selectedSolicitudId: (fact as { selectedSolicitudId?: string }).selectedSolicitudId || null,
     consultedAgents: unavailable || askFolio ? [] : route.consulted, channel, message, reply, action: blocked ? "PENDING_AUTHORIZATION" : unavailable ? "UNAVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ", activity,
     evidence: fact.evidence, toolsUsed, modulesAffected, result: blocked ? "NO_EXECUTION" : unavailable ? "CAPABILITY_NOT_AVAILABLE" : askFolio || needsClarification ? "NEEDS_CLARIFICATION" : "READ_COMPLETE", createdAt: FieldValue.serverTimestamp() };
@@ -158,7 +171,7 @@ export const delegateHugoTeamVoiceTurn = onCall({ region: "us-central1", timeout
   if (request.data?.toolName !== "consultHugoTeam" || !message || !sessionId || !nativeTurnId || !delegationId) throw new HttpsError("invalid-argument", "Delegación de voz incompleta.");
   const digest = createHash("sha256").update(`${request.auth?.uid || ""}|${sessionId}|${nativeTurnId}|${delegationId}`).digest("hex");
   const turnId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
-  const team: any = await executeHugoTeamTurn({ auth: request.auth, data: { agent: "hugo", channel: "AUDIO", message, turnId } });
+  const team: any = await executeHugoTeamTurn({ auth: request.auth, data: { agent: "hugo", channel: "AUDIO", message, turnId, sessionId } });
   return { ok: true, delegationId, route: "DETERMINISTIC_TOOL", tool: "consultHugoTeam", text: team.reply,
     team: { agent: team.agent, consultedAgents: team.consultedAgents, action: team.action, result: team.result, activity: team.activity, evidence: team.evidence, toolsUsed: team.toolsUsed },
     cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
