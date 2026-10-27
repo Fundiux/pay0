@@ -17,7 +17,7 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.deepEqual(routeTeamTurn("¿Por qué falta la cotización?", "hugo").consulted, ["sofia", "maria"]);
   await db.doc(`users/${uid}`).set({ role: "superadmin", rootId, active: true, modules: { corporateResources: { view: true } } });
   await db.doc("users/other-superadmin").set({ role: "superadmin", rootId, active: true });
-  await db.doc("solicitudes/sol-team").set({ rootId, folio: "S1C19U3E2", status: "PROCESANDO", companyName: "ACIER CAPITAL", clientName: "Cliente prueba", total: 7540, moneda: "MXN", createdAt: admin.firestore.Timestamp.now() });
+  await db.doc("solicitudes/sol-team").set({ rootId, folio: "S1C19U3E2", status: "PROCESANDO", companyName: "ACIER CAPITAL", clientName: "DESARROLLO Y CONSTRUCCION DMR", total: 7540, moneda: "MXN", createdAt: admin.firestore.Timestamp.now() });
   const book = new ExcelJS.Workbook(), sheet = book.addWorksheet("OC");
   sheet.getRow(1).values = ["Moneda", "MXN - Pesos Mexicanos"];
   sheet.getRow(2).values = ["Razon Social:", "Cliente de prueba"];
@@ -46,14 +46,21 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   assert.match(analyzed.reply, /Servicio comercial/);
   assert.equal(analyzed.evidence.some(row => row.kind === "OC_CONTENIDO_LEIDO"), true);
   assert.equal(analyzed.toolsUsed.includes("parseOcCommercialMetadataBuffer"), true);
-  const human = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "TEXT", message: "Hugo, revisa la Solicitud de ACIER CAPITAL por $7,540 y dime cómo está su cotización", turnId: turnId(10) } });
+  const newer = db.batch();
+  for (let index = 0; index < 101; index += 1) newer.set(db.doc(`solicitudes/newer-${index}`), {
+    rootId, folio: `SNEW${index}`, status: "PROCESANDO", companyName: "OTRO PROVEEDOR",
+    clientName: "Otro cliente", total: 1000 + index,
+    createdAt: admin.firestore.Timestamp.fromMillis(Date.now() + (index + 1) * 1000),
+  });
+  await newer.commit();
+  const human = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "hugo", channel: "TEXT", message: "Hugo, revisa la Solicitud del cliente Desarrollo y Construcción DMR con proveedor ACIER CAPITAL por $7,540 y dime cómo está su cotización", turnId: turnId(10) } });
   assert.match(human.reply, /ACIER CAPITAL.*\$7,540/);
   assert.equal(human.selectedSolicitudId, "sol-team");
   assert.doesNotMatch(human.reply, /S1C19U3E2/);
   const context = await sendHugoTeamTurn.run({ auth: auth(uid), data: { agent: "sofia", channel: "TEXT", message: "Sofía, analiza esta OC", turnId: turnId(11) } });
   assert.equal(context.selectedSolicitudId, "sol-team");
   assert.match(context.reply, /Servicio comercial/);
-  const voice = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, revisa la Solicitud de ACIER CAPITAL por siete mil quinientos cuarenta pesos y dime cómo está su cotización", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
+  const voice = await delegateHugoTeamVoiceTurn.run({ auth: auth(uid), data: { toolName: "consultHugoTeam", request: "Hugo, revisa la Solicitud del cliente Desarrollo y Construcción DMR con proveedor ACIER CAPITAL por siete mil quinientos cuarenta pesos y dime cómo está su cotización", sessionId: "voice-team-session", turnId: "voice-turn-1", delegationId: "voice-tool-1" } });
   assert.match(voice.text, /ACIER CAPITAL.*\$7,540/);
   assert.equal(voice.team.agent, "hugo");
   assert.equal(voice.team.toolsUsed.includes("getSolicitud"), true);

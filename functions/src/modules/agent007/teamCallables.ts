@@ -31,9 +31,9 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
   const wantsSolicitud = /\b(solicitud|cotizaci[oó]n|oc|documentos?|esa|esta|resumen|última|ultima)\b/i.test(message) && !/\b(plantilla|plantillas|biblioteca)\b/i.test(message);
   const resolved = wantsSolicitud ? await resolveHumanSolicitud(message, uid, rootId, ["hugo", "maria", "sofia", "sentinel"]) : null;
   if (resolved?.kind === "AMBIGUOUS") return { text: `Encontré varias Solicitudes. Elige una por sus datos: ${resolved.options.map((option, index) => `${index + 1}. ${option}`).join("; ")}. No seleccioné ninguna.`, evidence, resolution: "AMBIGUOUS" as const };
-  if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 100 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
+  if (resolved?.kind === "PARTIAL") return { text: `La búsqueda alcanzó el límite de 1000 Solicitudes recientes y no puedo garantizar una coincidencia única. Coincidencias visibles: ${resolved.options.join("; ") || "ninguna"}. Añade fecha, cliente u otro dato para acotar; no seleccioné ninguna.`, evidence, resolution: "PARTIAL" as const };
   if (resolved?.kind === "NEEDS_DETAIL") return { text: "Dime la empresa, cliente, fecha, importe o estado de la Solicitud para encontrarla sin usar un folio.", evidence, resolution: "NEEDS_DETAIL" as const };
-  if (resolved?.kind === "NONE") return { text: `No encontré una coincidencia verificable en ${resolved.partial ? "las 100 Solicitudes recientes consultadas" : "las Solicitudes consultadas"}. Da otro dato legible para ampliar la búsqueda.`, evidence, resolution: "NONE" as const };
+  if (resolved?.kind === "NONE") return { text: `No encontré una coincidencia verificable en ${resolved.partial ? "las 1000 Solicitudes recientes consultadas" : "las Solicitudes consultadas"}. Da otro dato legible para ampliar la búsqueda.`, evidence, resolution: "NONE" as const };
   const folio = resolved?.kind === "MATCH" ? safe(resolved.item.folio, 20) : "";
   if (folio) {
     const result = await new Pay0Connector(db, { uid, rootId, role: "superadmin" }).getSolicitud(folio);

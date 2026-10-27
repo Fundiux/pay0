@@ -35,7 +35,7 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
       }
     }
   }
-  const sample = (await connector.searchSolicitudes(100)).data as Candidate[];
+  const sample = (await connector.searchSolicitudes(1000)).data as Candidate[];
   const amount = amountInMessage(message);
   const companies = [...new Set(sample.map(item => item.empresa).filter(Boolean))] as string[];
   const clients = [...new Set(sample.map(item => item.cliente).filter(Boolean))] as string[];
@@ -44,9 +44,9 @@ export async function resolveHumanSolicitud(message: string, uid: string, rootId
   const status = /atorad|pendient|error/.test(normalized) ? /error|pendiente|bloquead/i : null;
   if (!company && !client && amount == null && !status && !/\b(ultima|reciente)\b/.test(normalized)) return { kind: "NEEDS_DETAIL" as const, source: "searchSolicitudes" };
   const matches = sample.filter(item => (!company || item.empresa === company) && (!client || item.cliente === client) && (amount == null || item.monto === amount) && (!status || status.test(item.estado || "")));
-  if (sample.length === 100) return { kind: "PARTIAL" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
+  if (sample.length === 1000) return { kind: "PARTIAL" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
   if (matches.length === 1) return { kind: "MATCH" as const, item: matches[0], source: "searchSolicitudes" };
   if (matches.length > 1 && /\b(ultima|reciente)\b/.test(normalized) && matches[0].createdAt && matches[0].createdAt !== matches[1].createdAt) return { kind: "MATCH" as const, item: matches[0], source: "searchSolicitudes" };
   if (matches.length > 1) return { kind: "AMBIGUOUS" as const, options: matches.slice(0, 5).map(solicitudLabel), source: "searchSolicitudes" };
-  return { kind: "NONE" as const, source: "searchSolicitudes", partial: sample.length === 100 };
+  return { kind: "NONE" as const, source: "searchSolicitudes", partial: sample.length === 1000 };
 }
