@@ -5,6 +5,7 @@ import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { auth } from "@/lib/firebaseClient";
 import { saveHugoVoiceHistory } from "@/services/agent007";
 import { withVoiceStartupAbort } from "@/lib/hugoVoiceStartup";
+import { ELIUT_VOICE_UID, selectHugoVoiceGateway } from "@/lib/hugoVoiceGateway.mjs";
 
 type VoiceState = "IDLE" | "CONNECTING" | "LISTENING" | "FINALIZING" | "ERROR";
 type RealtimeEvent = Record<string, any> & { type?: string; event_id?: string };
@@ -24,6 +25,9 @@ type VoiceHistoryDraft = { sessionId: string; gatewayCallId: string; model: stri
 
 const FINALIZATION_TIMEOUT_MS = 8000;
 const STARTUP_TIMEOUT_MS = 45000;
+const teamAgents = { hugo: "Hugo", maria: "María", sofia: "Sofía", sentinel: "Sentinel" } as const;
+type TeamAgent = keyof typeof teamAgents;
+const isTeamAgent = (value: unknown): value is TeamAgent => typeof value === "string" && Object.prototype.hasOwnProperty.call(teamAgents, value);
 
 export async function withVoiceFinalizationTimeout(operation: Promise<void>, timeoutMs = FINALIZATION_TIMEOUT_MS) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +52,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const [gatewayRuntime, setGatewayRuntime] = useState<{ revision: string; commit: string } | null>(null);
   const [liveTurns, setLiveTurns] = useState<Array<{ speaker: string; text: string }>>([]);
   const [teamResults, setTeamResults] = useState<Array<{ agent: string; activity: string; evidence: Array<{ kind: string; folio: string }>; toolsUsed: string[] }>>([]);
+  const [activeAgent, setActiveAgent] = useState<TeamAgent>("hugo");
+  const activeAgentRef = useRef<TeamAgent>("hugo");
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -188,6 +194,10 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     setState("CONNECTING");
     setError("");
     setGatewayRuntime(null);
+    setLiveTurns([]);
+    setTeamResults([]);
+    setActiveAgent("hugo");
+    activeAgentRef.current = "hugo";
     const startup = new AbortController();
     startupRef.current = startup;
     startup.signal.addEventListener("abort", () => {
@@ -199,10 +209,10 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     startupTimerRef.current = window.setTimeout(() => startup.abort(new Error("VOICE_STARTUP_TIMEOUT")), STARTUP_TIMEOUT_MS);
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite usar el microfono.");
-      const gatewayUrl = process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
-      if (!gatewayUrl) throw new Error("El gateway server-side de María no esta configurado en esta version.");
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
+      const gatewayUrl = selectHugoVoiceGateway(currentUser.uid, process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL);
+      if (!gatewayUrl) throw new Error("El gateway server-side de María no esta configurado en esta version.");
       const idToken = await withVoiceStartupAbort(() => currentUser.getIdToken(), startup.signal);
       if (generationRef.current !== generation) return;
       const stream = await withVoiceStartupAbort(() => navigator.mediaDevices.getUserMedia({
@@ -306,7 +316,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           const id = event.response_id || responseId;
           const assistant = id ? historyRef.current?.turns.get(`HUGO:${id}`) : null;
           if (assistant && event.transcript) { assistant.text = String(event.transcript); dirtyTurn(`HUGO:${id}`); }
-          if (event.transcript) setLiveTurns(current => [...current.slice(-7), { speaker: "Agente", text: String(event.transcript) }]);
+          if (event.transcript) setLiveTurns(current => [...current.slice(-7), { speaker: teamAgents[activeAgentRef.current], text: String(event.transcript) }]);
         }
         trace(type, {
           eventId: event.event_id || null,
@@ -370,7 +380,10 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           if (event.type === "authenticated") gateway.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
           if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model), voice: String(event.voice), runtime: event.runtime }); }
           if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`María no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
-          if (event.type === "gateway.team_result") setTeamResults(current => [...current.slice(-7), { agent: String(event.agent || "hugo"), activity: String(event.activity || "Consulta PAY0"), evidence: Array.isArray(event.evidence) ? event.evidence : [], toolsUsed: Array.isArray(event.toolsUsed) ? event.toolsUsed : [] }]);
+          if (event.type === "gateway.team_result") {
+            if (isTeamAgent(event.agent)) { activeAgentRef.current = event.agent; setActiveAgent(event.agent); }
+            setTeamResults(current => [...current.slice(-7), { agent: isTeamAgent(event.agent) ? teamAgents[event.agent] : "Hugo", activity: String(event.activity || "Consulta PAY0"), evidence: Array.isArray(event.evidence) ? event.evidence : [], toolsUsed: Array.isArray(event.toolsUsed) ? event.toolsUsed : [] }]);
+          }
           if (String(event.type).startsWith("gateway.") && event.type !== "gateway.error") {
             trace(event.type, event);
             const eventId = String(event.eventId || `${event.type}:${event.responseId || event.toolCallId || "none"}:${Date.now()}`);
@@ -409,6 +422,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   };
 
   return <div className="flex flex-col items-end gap-2">
+    {auth.currentUser?.uid === ELIUT_VOICE_UID && <div className="flex w-full flex-wrap items-center gap-2 text-xs" aria-label="Equipo de voz de Hugo"><span className="text-slate-400">Habla para cambiar de agente:</span>{Object.entries(teamAgents).map(([id, name]) => <span key={id} className={`rounded-full border px-2 py-1 ${activeAgent === id ? "border-violet-400 bg-violet-500/20 text-violet-100" : "border-slate-700 text-slate-400"}`}>{name}</span>)}</div>}
     <span data-testid="hugo-voice-runtime" title={`Entorno: CANARY | Frontend: ${frontendCommit} | Gateway: ${gatewayRevision} | Gateway commit: ${gatewayCommit}`} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">CANARY · {gatewayRevision} · frontend {frontendCommit.slice(0, 7)}</span>
     <div className="flex flex-wrap items-center justify-end gap-2">
       {state !== "LISTENING" ? <button type="button" onClick={() => void start()} disabled={state === "CONNECTING" || state === "FINALIZING"} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 hover:bg-violet-500 disabled:opacity-60">
