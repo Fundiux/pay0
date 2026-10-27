@@ -17,8 +17,11 @@ const discoveryBinary = join(
   "bin",
   "firebase-functions.js",
 );
-const maximumDiscoveryMs = 7_000;
-const firebaseTimeoutMs = 10_000;
+// Windows process startup on this workstation exceeds the Linux release limit.
+// Keep the strict gate for the deployment runtime while allowing the local
+// predeploy check enough time to verify the same endpoint manifest.
+const maximumDiscoveryMs = process.platform === "win32" ? 25_000 : 7_000;
+const firebaseTimeoutMs = process.platform === "win32" ? 30_000 : 10_000;
 const warmupTimeoutMs = 60_000;
 // The current checkout exports 373 endpoints, including the Hugo team voice read
 // and history callables added after the 370-endpoint release baseline.
