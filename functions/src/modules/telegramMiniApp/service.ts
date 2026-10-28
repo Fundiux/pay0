@@ -112,17 +112,18 @@ function movementTone(data: any): MatHomeTone {
   return "muted";
 }
 
-function movementToHomeItem(doc: any): MatHomeItem {
+function movementToHomeItem(doc: any, clientNames: Map<string, string>): MatHomeItem {
   const data = doc.data ? doc.data() : doc;
   const direction = cleanText(data?.direction).toUpperCase();
   const signed = direction === "IN" ? "+" : direction === "OUT" ? "-" : "";
   const type = cleanText(data?.movementType || "MOVIMIENTO").replace(/_/g, " ");
   const folio = getFolio(data, doc.id || "movimiento");
-  const caption = cleanText(data?.note || data?.sourceModule || data?.referenceType || "", "Movimiento");
+  const clientName = clientNames.get(cleanText(data?.clienteId));
+  const caption = `${folio} · ${type}`;
 
   return {
     id: doc.id || folio,
-    title: folio === (doc.id || "") ? type : folio,
+    title: clientName || type,
     caption,
     amount: `${signed}${formatMoney(data?.amount || 0)}`,
     status: movementStatus(data?.movementType),
@@ -137,6 +138,7 @@ async function readRecentMovements(
   holderId: string,
   rootId: string,
   limit = 8,
+  clientNames = new Map<string, string>(),
 ): Promise<MatHomeItem[]> {
   const statement = await readCanonicalStatement(db, holderType, holderId, 80);
   if (cleanText(statement.summary.rootId) && cleanText(statement.summary.rootId) !== rootId) throw new Error("MAT_LEDGER_SCOPE_DENIED");
@@ -147,7 +149,7 @@ async function readRecentMovements(
       createdAt: item.createdAtMillis ? new Date(item.createdAtMillis) : null,
     }))
     .slice(0, limit)
-    .map((item) => movementToHomeItem(item));
+    .map((item) => movementToHomeItem(item, clientNames));
 }
 
 function isActiveDoc(data: any) {
@@ -211,8 +213,8 @@ function solicitudToHomeItem(doc: any): MatHomeItem {
 
   return {
     id: doc.id || folio,
-    title: folio,
-    caption: `${getClientName(data, "Cliente")} | ${getCompanyName(data)}`,
+    title: cleanText(data?.clienteNombre || data?.clientName, getClientName(data, "Cliente")),
+    caption: `${folio} · ${getCompanyName(data)}`,
     amount: formatMoney(amount),
     status: cleanText(data?.status || "ACTIVA").toUpperCase(),
     tone: "info",
@@ -258,8 +260,8 @@ function dispersionToHomeItem(doc: any): MatHomeItem {
 
   return {
     id: doc.id || folio,
-    title: folio,
-    caption: data?.fundingSource?.holderType === "USER" ? "Retiro de utilidad" : cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || data?.clienteNombre || "", "Dispersión"),
+    title: data?.fundingSource?.holderType === "USER" ? "Retiro de utilidad" : cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || "", "Beneficiario"),
+    caption: `${folio}${cleanText(data?.clienteNombre) ? ` · ${cleanText(data?.clienteNombre)}` : ""}`,
     amount: formatMoney(amount),
     status: cleanText(data?.status || "PROCESO").toUpperCase(),
     tone: cleanText(data?.incidenceStatus || data?.incidenciaStatus) ? "danger" : "warn",
@@ -425,10 +427,11 @@ export async function buildMatUserHome({
   }
 
   const balance = await readBalance(db, "USER", user.id, cleanText(user.rootId || user.id));
-  const movements = await readRecentMovements(db, "USER", user.id, cleanText(user.rootId || user.id), 6);
   const visibleClients = await readVisibleClients(db, user);
+  const clientNames = new Map(visibleClients.map((client) => [client.id, client.title]));
+  const movements = await readRecentMovements(db, "USER", user.id, cleanText(user.rootId || user.id), 6, clientNames);
   const visibleClientIds = new Set(visibleClients.map((client) => client.id));
-  const clients = visibleClients.slice(0, 6);
+  const clients = visibleClients;
   const solicitudes = await readRecentSolicitudesForUser(db, user, visibleClientIds, 5);
   const dispersiones = await readRecentDispersionsForUser(db, user, visibleClientIds, 5);
 
@@ -522,7 +525,7 @@ export async function buildMatClientHome({
   }
 
   const balance = await readBalance(db, "CLIENT", clienteId, cleanText(client?.rootId));
-  const movements = await readRecentMovements(db, "CLIENT", clienteId, cleanText(client?.rootId), 6);
+  const movements = await readRecentMovements(db, "CLIENT", clienteId, cleanText(client?.rootId), 6, new Map([[clienteId, getClientName(client, clienteId)]]));
   const solicitudes = await readRecentSolicitudesForClient(db, clienteId, cleanText(client?.rootId), 5);
   const dispersiones = await readRecentDispersionsForClient(db, clienteId, cleanText(client?.rootId), 5);
 

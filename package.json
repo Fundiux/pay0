@@ -3,7 +3,8 @@
   "private": true,
   "version": "1.5.0",
   "engines": {
-    "node": "22"
+    "node": "22",
+    "npm": "11.21.1"
   },
   "scripts": {
     "dev": "next dev",
@@ -12,6 +13,7 @@
     "start": "next start",
     "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "firebase:deploy:hosting": "node scripts/run-with-frontend-build-env.mjs -- firebase deploy --project pay-0-system --non-interactive --only hosting",
+    "firebase:deploy:miniapp": "firebase deploy --config firebase.miniapp.json --project pay-0-system --non-interactive --only hosting",
     "qa:pay0": "node qa/scripts/run-pay0-qa.mjs",
     "qa:pay0:auth": "playwright test qa/playwright/auth.setup.spec.mjs --headed",
     "qa:pay0:superadmin": "playwright test qa/playwright/superadmin-smoke.spec.mjs",
@@ -88,7 +90,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.562.0",
-    "next": "15.5.27",
+    "next": "16.4.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

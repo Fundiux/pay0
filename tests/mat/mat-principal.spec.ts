@@ -39,7 +39,7 @@ const cases: RouteCase[] = [
       { label: "Solicitudes", hash: "solicitudes", target: "solicitudes" },
       { label: "Pagos", hash: "pagos", target: "pagos" },
       { label: "Disp.", hash: "dispersiones", target: "dispersiones" },
-      { label: "Docs", hash: "docs", target: "docs" },
+      { label: "Movs.", hash: "docs", target: "docs" },
     ],
     quickAction: { label: "Solicitudes", hash: "solicitudes", target: "solicitudes" },
   },
@@ -51,7 +51,7 @@ const cases: RouteCase[] = [
       { label: "Solicitudes", hash: "solicitudes", target: "solicitudes" },
       { label: "Pagos", hash: "pagos", target: "pagos" },
       { label: "Disp.", hash: "dispersiones", target: "dispersiones" },
-      { label: "Docs", hash: "docs", target: "docs" },
+      { label: "Movs.", hash: "docs", target: "docs" },
     ],
     quickAction: { label: "Solicitudes", hash: "solicitudes", target: "solicitudes" },
   },
@@ -75,7 +75,7 @@ async function attachConsoleGuards(page: Page) {
 
 async function gotoMat(page: Page, path: string) {
   await page.goto(`${baseUrl}${path}`, { waitUntil: "load" });
-  await expect(page.getByLabel("Carrusel MAT 2D")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByLabel("Secciones MAT")).toBeVisible({ timeout: 15000 });
   await page.waitForTimeout(750);
 }
 
@@ -83,18 +83,37 @@ test.describe("MAT experiencia principal", () => {
   test.setTimeout(60000);
 
   for (const route of cases) {
+    test(`${route.path} permite cambiar de sección con un gesto horizontal`, async ({ page }) => {
+      await gotoMat(page, route.path);
+      await page.locator("#carrusel").evaluate((element) => {
+        const verticalStart = new Touch({ identifier: 2, target: element, clientX: 220, clientY: 600 });
+        const verticalEnd = new Touch({ identifier: 2, target: element, clientX: 205, clientY: 250 });
+        element.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [verticalStart] }));
+        element.dispatchEvent(new TouchEvent("touchend", { bubbles: true, changedTouches: [verticalEnd] }));
+      });
+      await expect(page.locator("#inicio")).toBeVisible();
+      await page.locator("#carrusel").evaluate((element) => {
+        const begin = new Touch({ identifier: 1, target: element, clientX: 320, clientY: 400 });
+        const end = new Touch({ identifier: 1, target: element, clientX: 80, clientY: 405 });
+        element.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [begin] }));
+        element.dispatchEvent(new TouchEvent("touchend", { bubbles: true, changedTouches: [end] }));
+      });
+      await expect(page).toHaveURL(/#solicitudes$/);
+      await expect(page.locator("#solicitudes")).toBeVisible();
+    });
+
     test(`${route.path} carga operativo`, async ({ page }) => {
       const consoleErrors = await attachConsoleGuards(page);
 
       await gotoMat(page, route.path);
 
-      await expect(page.getByTestId("mat-identity")).toContainText(route.identity);
-      await expect(page.getByLabel(/Estado MAT/i)).toBeVisible();
+      await expect(page.getByTestId("mat-identity")).toHaveCount(0);
+      await expect(page.getByLabel(/Estado MAT/i)).toHaveCount(0);
       await expect(page.locator("#inicio")).toHaveAttribute("aria-label", "Operacion PAY0");
-      await expect(page.locator("#solicitudes")).toBeVisible();
-      await expect(page.locator("#pagos")).toBeVisible();
-      await expect(page.locator("#dispersiones")).toBeVisible();
-      await expect(page.locator("#docs")).toBeVisible();
+      await expect(page.locator("#solicitudes")).toHaveCount(0);
+      await expect(page.locator("#pagos")).toHaveCount(0);
+      await expect(page.locator("#dispersiones")).toHaveCount(0);
+      await expect(page.locator("#docs")).toHaveCount(0);
       await expect(page.locator("nav")).toBeVisible();
 
       for (const forbidden of commonForbidden) {
@@ -134,4 +153,19 @@ test.describe("MAT experiencia principal", () => {
       expect(consoleErrors, "Consola sin errores rojos").toEqual([]);
     });
   }
+
+  test("/mat/usuarios reserva el formulario de pago para la sesión vinculada", async ({ page }) => {
+    await gotoMat(page, "/mat/usuarios");
+    await page.locator("nav").getByRole("button", { name: /Pagos/i }).click();
+    await expect(page.getByRole("link", { name: "Abrir pagos en PAY0" })).toHaveAttribute("href", "/pagos");
+    await expect(page.getByRole("button", { name: "Nuevo pago" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Subir pago" })).toHaveCount(0);
+  });
+
+  test("/mat/clientes muestra consultas sin prometer mutaciones", async ({ page }) => {
+    await gotoMat(page, "/mat/clientes");
+    await page.locator("nav").getByRole("button", { name: /Pagos/i }).click();
+    await expect(page.locator("#pagos")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Subir pago|Solicitar retorno|Subir archivo/i })).toHaveCount(0);
+  });
 });

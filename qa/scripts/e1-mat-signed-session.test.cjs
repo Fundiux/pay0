@@ -35,6 +35,8 @@ const callables = load('callables.js', {
   'firebase-admin/firestore': { getFirestore: () => db },
   'firebase-functions/params': { defineSecret: () => ({ value: () => token }) },
   'firebase-functions/v2/https': { HttpsError, onCall: (_, handler) => handler },
+  'firebase-admin/storage': { getStorage: () => ({ bucket: () => ({}) }) },
+  '../documents/generationBoundDownload': { signGenerationBoundDownload: async (_, storagePath) => `https://signed.example/${encodeURIComponent(storagePath)}` },
   './auth': auth, './service': service,
 });
 function signed(age = 0) {
@@ -69,17 +71,34 @@ test('home scope cannot be swapped despite a valid signed Telegram session', asy
   await assert.rejects(callables.getMatUserHome({data:{botScope:'CLIENTS',initData:signed()}}), e=>e.code==='permission-denied');
   await assert.rejects(callables.getMatClientHome({data:{botScope:'USERS',initData:signed()}}), e=>e.code==='permission-denied');
 });
+test('user home returns every visible client for the dispersion picker', async () => {
+  rows = {
+    'telegramUsers/101': { uid: 'u', active: true },
+    'users/u': { rootId: 'r', role: 'operador', active: true },
+    ...Object.fromEntries(Array.from({ length: 12 }, (_, index) => [
+      `clients/client-${index + 1}`,
+      { rootId: 'r', createdBy: 'u', name: `Cliente ${index + 1}`, active: true },
+    ])),
+    'clients/foreign': { rootId: 'foreign', createdBy: 'u', name: 'Ajeno', active: true },
+  };
+  const result = await callables.getMatUserHome({ data: { botScope: 'USERS', initData: signed() } });
+  assert.equal(result.clients.length, 12);
+  assert.equal(result.metrics.find(item => item.label === 'Clientes').value, '12');
+  assert.equal(result.clients.some(item => item.id === 'foreign'), false);
+});
 test('same compiled service rejects foreign client roots and filters foreign financial rows', async () => {
   rows = {'clientTelegramUsers/101':{rootId:'r',clientId:'c',active:true},'clients/c':{rootId:'foreign',active:true}};
   const invoke=()=>callables.getMatClientHome({data:{botScope:'CLIENTS',initData:signed()}});
   assert.equal((await invoke()).linked,false);
   rows['clients/c']={rootId:'r',active:true};
-  rows['solicitudes/allowed']={rootId:'r',clienteId:'c'};
+  rows['solicitudes/allowed']={rootId:'r',clienteId:'c',clienteNombre:'Cliente Visible',folio:'S-123'};
   rows['solicitudes/foreign']={rootId:'foreign',clienteId:'c'};
   rows['clientDispersions/foreign']={rootId:'foreign',clienteId:'c'};
   const result=await invoke();
   assert.equal(result.linked,true);
   assert.deepEqual(Array.from(result.solicitudes,x=>x.id),['allowed']);
+  assert.equal(result.solicitudes[0].title,'Cliente Visible');
+  assert.match(result.solicitudes[0].caption,/S-123/);
   assert.equal(result.dispersiones.length,0);
   db.ledgerRoot='foreign';
   await assert.rejects(invoke(),/MAT_LEDGER_SCOPE_DENIED/);
@@ -87,11 +106,28 @@ test('same compiled service rejects foreign client roots and filters foreign fin
   await assert.rejects(invoke(),/MAT_LEDGER_SCOPE_DENIED/);
   db.statementRoot='r';
 });
+test('MAT documents require a signed, linked session and stay inside the visible solicitud', async () => {
+  rows = {
+    'clientTelegramUsers/101': { rootId: 'r', clientId: 'c', active: true },
+    'clients/c': { rootId: 'r', name: 'Cliente', active: true },
+    'solicitudes/s': { rootId: 'r', clienteId: 'c', folio: 'S-1' },
+    'uploads/ok': { rootId: 'r', solicitudId: 's', entityType: 'solicitudes', active: true, status: 'READY', documentType: 'OC', storagePath: 'roots/r/solicitudes/s/docs/OC/ok.pdf' },
+    'uploads/other': { rootId: 'r', solicitudId: 's', entityType: 'solicitudes', active: true, status: 'READY', storagePath: 'roots/r/solicitudes/other/docs/OC/other.pdf' },
+  };
+  const data = { botScope: 'CLIENTS', initData: signed(), solicitudId: 's' };
+  const result = await callables.getMatSolicitudDocuments({ data });
+  assert.equal(result.documents.length, 1);
+  assert.match(result.documents[0].url, /^https:\/\/signed\.example\//);
+  await assert.rejects(callables.getMatSolicitudDocuments({ data: { ...data, solicitudId: 'other' } }), e => e.code === 'permission-denied');
+  await assert.rejects(callables.getMatSolicitudDocuments({ data: { ...data, initData: 'forged' } }));
+  rows['clientTelegramUsers/101'].active = false;
+  await assert.rejects(callables.getMatSolicitudDocuments({ data }), e => e.code === 'permission-denied');
+});
 test.after(() => {
   const sha=file=>crypto.createHash('sha256').update(fs.readFileSync(path.join(runtime,'lib/modules/telegramMiniApp',file))).digest('hex');
   console.log(JSON.stringify({status:'ASSERTIONS_RECORDED',invalidSignatureRejected:true,expiredSignatureRejected:true,
     membershipRevocationRejected:true,foreignRootsIsolated:true,emptyScopeDenied:true,canonicalUidPreserved:true,
-    coverage:'All three handlers and their shared service/auth modules in this exact archive; foreign-root financial data checks apply to homes, verification returns link status only',
+    coverage:'Signed home and document handlers with shared service/auth modules in this archive; foreign-root checks apply to homes and documents',
     dependencies:'Synthetic database/ledger/provider and secret accessor; real compiled HMAC validator, handlers and service',
     moduleHashes:Object.fromEntries(['auth.js','callables.js','service.js'].map(f=>[f,sha(f)])),productionWrites:0}));
 });

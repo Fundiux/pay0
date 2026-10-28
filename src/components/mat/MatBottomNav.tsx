@@ -1,6 +1,7 @@
 "use client";
 
 import { MouseEvent, useEffect, useState } from "react";
+import { CreditCard, FileText, House, Send, ScrollText } from "lucide-react";
 
 export type MatBottomNavItem = {
   key: string;
@@ -17,11 +18,6 @@ function getItemByTarget(items: MatBottomNavItem[], targetId: string) {
 function scrollToMatSection(targetId: string) {
   if (typeof window === "undefined") return false;
 
-  const target = document.getElementById(targetId);
-  if (!target) return false;
-
-  target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-
   if (window.history?.replaceState) {
     window.history.replaceState(null, "", `#${targetId}`);
   } else {
@@ -32,6 +28,8 @@ function scrollToMatSection(targetId: string) {
 
   return true;
 }
+
+const icons = { inicio: House, solicitudes: ScrollText, pagos: CreditCard, dispersiones: Send, docs: FileText };
 
 export function MatBottomNav({
   items,
@@ -86,6 +84,7 @@ export function MatBottomNav({
         {items.map((item) => {
           const isActive = item.key === activeKey;
           const targetId = item.targetId || item.key;
+          const Icon = icons[item.key as keyof typeof icons] || FileText;
 
           function handleClick(event: MouseEvent<HTMLAnchorElement>) {
             if (item.disabled) {
@@ -114,8 +113,8 @@ export function MatBottomNav({
                     : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100"
               }`}
             >
-              <div className="text-sm font-black leading-none">{item.icon}</div>
-              <div className="mt-1 truncate text-[7px] font-black uppercase tracking-[0.08em]">{item.label}</div>
+              <Icon aria-hidden="true" size={19} strokeWidth={isActive ? 2.5 : 2} className="mx-auto" />
+              <div className="mt-1 truncate text-[9px] font-bold">{item.label}</div>
             </a>
           );
         })}
