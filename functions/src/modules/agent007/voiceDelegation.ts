@@ -16,6 +16,8 @@ import { beginVoiceReportTurn, completeVoiceReportTurn, saveVoiceCoreReferenceSt
 import { classifyHugoProfile, classifyHugoRoutingSignals } from "./hugoCore/runtimeContract";
 import { PlatformReadConnector } from "./platformReadConnector";
 import { canonicalErrorCategory, formatAuthorizedCapabilities, formatLatestSolicitud, formatSystemCatalog, normalizePay0Brand } from "./hugoCore/interactionSemantics";
+import { runHugoReadTool } from "./hugoReadTools/loader";
+import { isHugoGeneralReadTool } from "./hugoReadTools/validate";
 
 const clean = (value: unknown, max = 2000) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const dataStore = new FirestoreHugoDataStore(db);
@@ -26,7 +28,7 @@ type VoiceDirectTool = "getEarningsByClientReport" | "getAuthorizedCapabilities"
 const paymentStatusesConciliated = new Set(["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]);
 const money = (value: unknown, currency = "MXN") => Number(value || 0).toLocaleString("es-MX", { style: "currency", currency });
 const actorRef = (uid: string) => createHash("sha256").update(`hugo-voice:${uid}`).digest("hex").slice(0, 24);
-const safeAuditTool = (tool: string) => tool === "VOICE_SESSION" ? tool : VOICE_PLATFORM_TOOLS.has(tool) ? tool : tool ? "UNRECOGNIZED_VOICE_TOOL" : "VOICE_SESSION";
+const safeAuditTool = (tool: string) => tool === "VOICE_SESSION" ? tool : VOICE_PLATFORM_TOOLS.has(tool) || isHugoGeneralReadTool(tool) ? tool : tool ? "UNRECOGNIZED_VOICE_TOOL" : "VOICE_SESSION";
 export const safeVoiceSourceTrace = (trace: any) => ({ tool: clean(trace?.tool, 80) || null, sourceSystem: clean(trace?.sourceSystem, 40) || null, latencyMs: Math.max(0, Number(trace?.latencyMs) || 0), completeness: clean(trace?.completeness, 30) || null, result: clean(trace?.result, 30) || null });
 async function recordSecurityBlock(uid: string, tool: string, restrictionType: string, reason: string) {
   await db.collection("agent007VoiceSecurityAudit").add({ actorRef: actorRef(uid), restrictionType: clean(restrictionType, 60), tool: safeAuditTool(tool), reason: clean(reason, 80) || "DENIED", channel: "VOICE", sensitiveResourceStored: false, createdAt: FieldValue.serverTimestamp() });
@@ -105,6 +107,19 @@ function formatVoicePlatformResultRaw(tool: string, data: any) {
   throw Error("HUGO_VOICE_TOOL_UNSUPPORTED");
 }
 
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+export function summarizeHugoReadResult(tool: string, data: any) {
+  if (tool === "findSolicitudes" || tool === "findPagos") {
+    const noun = tool === "findPagos" ? ["pago", "pagos"] : ["solicitud", "solicitudes"];
+    if (!data?.total) return `Sin coincidencias para esos filtros.${data?.sugerencias?.length ? ` Nombres cercanos: ${data.sugerencias.join(", ")}.` : ""}`;
+    return `${plural(Number(data.total), `${noun[0]} coincide`, `${noun[1]} coinciden`)}; monto total ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}.`;
+  }
+  if (tool === "getSolicitudDetail") return data?.encontrada ? `Solicitud ${data.solicitud?.folio || "sin folio"}: estado ${data.solicitud?.estado || "no registrado"}, ${data.solicitud?.monto == null ? "monto no registrado" : money(data.solicitud.monto, data.solicitud.moneda || "MXN")}.`
+    : data?.candidatos?.length ? `No hay una solicitud única; ${plural(data.candidatos.length, "candidata", "candidatas")}.` : "No encontré esa solicitud dentro del alcance autorizado.";
+  const rows = Array.isArray(data?.coincidencias) ? data.coincidencias : [];
+  return rows.length ? `${plural(rows.length, "coincidencia", "coincidencias")}: ${rows.slice(0, 5).map((row: any) => `${row.nombre} (${row.tipo})`).join(", ")}.` : "Sin coincidencias de nombre.";
+}
+
 export function formatVoicePlatformResult(tool: string, data: any) {
   return normalizePay0Brand(formatVoicePlatformResultRaw(tool, data));
 }
@@ -146,6 +161,31 @@ export const delegateHugoVoiceTurn = onCall(
       return { ok: true, delegationId, route: "SESSION_CORRECTION", ...correction,
         text: "Guardé tu corrección para esta sesión. La usaré como indicación tuya, sin cambiar datos ni permisos.",
         cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 } };
+    }
+    if (isHugoGeneralReadTool(requestedTool)) {
+      const started = Date.now(), safeUserRef = createHash("sha256").update(`${rootId}:${uid}`).digest("hex").slice(0, 20);
+      const diagnostic = (status: "OK" | "ERROR", extra: Record<string, unknown>) => ({ conversationId: `${rootId}_${uid}_global`, sessionId, safeUserRef, system: "PAY0", intent: requestedTool, requestedOperation: requestedTool, selectedCapability: requestedTool, capability: requestedTool, status, scope: "CURRENT_AUTHORIZED_ROOT", fallbackUsed: false, attemptCount: 1, latencyMs: Date.now() - started, timestamp: new Date().toISOString(), ...extra });
+      let data: any;
+      try { data = await runHugoReadTool(db, rootId, requestedTool, request.data?.toolInput); }
+      catch (error: any) {
+        const code = String(error?.message || "");
+        await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: diagnostic("ERROR", { ...voiceError(error), authorization: code === "HUGO_READ_ROOT_MISMATCH" ? "DENIED" : "ALLOWED", resultCount: 0 }) }).catch(() => undefined);
+        if (code === "HUGO_TOOL_INVALID_INPUT") throw new HttpsError("invalid-argument", "HUGO_TOOL_INVALID_INPUT: parámetros de consulta inválidos.");
+        if (code === "HUGO_READ_ROOT_MISMATCH") { await recordSecurityBlock(uid, requestedTool, "ROOT_SCOPE", "ROOT_MISMATCH").catch(() => undefined); throw new HttpsError("permission-denied", "Consulta bloqueada por alcance de datos."); }
+        throw error;
+      }
+      const resultCount = Number(data?.total ?? data?.coincidencias?.length ?? (data?.encontrada ? 1 : 0)) || 0;
+      await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: diagnostic("OK", { errorCategory: null, errorCode: null, retryable: false, authorization: "ALLOWED", connectorStatus: "HEALTHY", resultCount }) }).catch(() => undefined);
+      const latencyMs = Date.now() - started;
+      const ledger = { rootId, ownerUid: uid, sessionId, turnId, responseId: responseId || null, delegationId, toolCallId, route: "DETERMINISTIC_TOOL",
+        voiceCostUsd: null, delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0,
+        provider: null, model: null, tokenUsage: null, latencyMs,
+        authorization: { role: "superadmin", rootId }, tool: requestedTool, sourceSystem: "PAY0",
+        sourceTrace: safeVoiceSourceTrace({ tool: requestedTool, sourceSystem: "PAY0", latencyMs, completeness: "COMPLETE", result: "OK" }),
+        createdAt: FieldValue.serverTimestamp() };
+      await db.collection("agent007CostLedger").doc(`${sessionId}_${delegationId}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 500)).set(ledger, { merge: true });
+      return { ok: true, delegationId, route: "DETERMINISTIC_TOOL", tool: requestedTool, sourceSystem: "PAY0",
+        text: normalizePay0Brand(summarizeHugoReadResult(requestedTool, data)), data, cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
     }
     if (requestedTool && !directTool) { await recordSecurityBlock(uid, requestedTool, "TOOL_ALLOWLIST", "TOOL_NOT_ALLOWED").catch(() => undefined); throw new HttpsError("invalid-argument", "Herramienta de voz no permitida."); }
     const normalizedMessage = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -208,7 +248,7 @@ export const delegateHugoVoiceTurn = onCall(
         createdAt: FieldValue.serverTimestamp() };
       await db.collection("agent007CostLedger").doc(`${sessionId}_${delegationId}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 500)).set(ledger, { merge: true });
       return { ok: true, delegationId, route, tool: directTool, sourceSystem: result.sourceSystem,
-        text: formatVoicePlatformResult(directTool, result.data), cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
+        text: formatVoicePlatformResult(directTool, result.data), data: result.data, cost: { delegatedModelCostUsd: 0, externalToolCostUsd: 0, transcriptionCostUsd: 0 }, usage: null };
       } catch (error) {
         const safe = voiceError(error);
         if (safe.errorCategory === "PERMISSION_DENIED") await recordSecurityBlock(uid, directTool, "CANONICAL_AUTHORIZATION", "TOOL_SCOPE_DENIED").catch(() => undefined);
