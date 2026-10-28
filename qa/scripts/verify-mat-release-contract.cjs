@@ -6,6 +6,10 @@ const { resolve, join } = require("node:path");
 
 const root = resolve(__dirname, "../..");
 
+function fingerprint(content) {
+  return createHash("sha256").update(content.toString("utf8").replace(/\r\n/g, "\n")).digest("hex");
+}
+
 function verifyFiles(sourceRoot, contract) {
   const failures = [];
   if (contract.version !== 1 || !Array.isArray(contract.files) || !contract.files.length) {
@@ -24,7 +28,7 @@ function verifyFiles(sourceRoot, contract) {
       continue;
     }
     try {
-      const actual = createHash("sha256").update(readFileSync(file)).digest("hex");
+      const actual = fingerprint(readFileSync(file));
       if (actual !== entry.sha256) failures.push(`Cambió ${entry.path}`);
     } catch {
       failures.push(`Falta ${entry.path}`);
@@ -45,4 +49,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { verifyFiles };
+module.exports = { fingerprint, verifyFiles };
