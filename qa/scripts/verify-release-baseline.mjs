@@ -12,16 +12,29 @@ function git(args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
-for (const requirement of manifest.requiredCommits) {
-  try {
-    execFileSync("git", ["merge-base", "--is-ancestor", requirement.commit, "HEAD"], {
-      cwd: root,
-      stdio: "ignore",
-    });
-    console.log(`PASS historia: ${requirement.capability} (${requirement.commit.slice(0, 8)})`);
-  } catch {
-    failures.push(`Falta el commit requerido ${requirement.commit}: ${requirement.capability}`);
+let head = "";
+try {
+  head = git(["rev-parse", "--short=12", "HEAD"]);
+} catch {
+  if (process.env.PAY0_APPHOSTING_SOURCE_ARCHIVE !== "1") {
+    failures.push("No se puede verificar la historia Git fuera de un build de archivo App Hosting autorizado");
   }
+}
+
+if (head) {
+  for (const requirement of manifest.requiredCommits) {
+    try {
+      execFileSync("git", ["merge-base", "--is-ancestor", requirement.commit, "HEAD"], {
+        cwd: root,
+        stdio: "ignore",
+      });
+      console.log(`PASS historia: ${requirement.capability} (${requirement.commit.slice(0, 8)})`);
+    } catch {
+      failures.push(`Falta el commit requerido ${requirement.commit}: ${requirement.capability}`);
+    }
+  }
+} else if (process.env.PAY0_APPHOSTING_SOURCE_ARCHIVE === "1") {
+  console.log("INFO historia: comprobada antes de empaquetar; el archivo App Hosting no contiene .git");
 }
 
 function inspect(requirement, shouldExist) {
@@ -36,7 +49,7 @@ function inspect(requirement, shouldExist) {
 for (const requirement of manifest.requiredText) inspect(requirement, true);
 for (const requirement of manifest.forbiddenText || []) inspect(requirement, false);
 
-console.log(`HEAD verificado: ${git(["rev-parse", "--short=12", "HEAD"])}`);
+if (head) console.log(`HEAD verificado: ${head}`);
 if (failures.length) {
   console.error("\nDEPLOY BLOQUEADO POR REGRESION ACUMULATIVA:");
   for (const failure of failures) console.error(`- ${failure}`);

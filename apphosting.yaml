@@ -27,6 +27,9 @@ env:
   - variable: NEXT_PUBLIC_USE_EMULATORS
     value: "false"
     availability: [BUILD, RUNTIME]
+  - variable: PAY0_APPHOSTING_SOURCE_ARCHIVE
+    value: "1"
+    availability: [BUILD]
   - variable: NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL
     value: "https://hugo-voice-gateway-canary-o4tesftjlq-uc.a.run.app/voice"
     availability: [BUILD, RUNTIME]
