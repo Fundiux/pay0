@@ -32,10 +32,17 @@ assert.doesNotMatch(component, /createHugoRealtimeSession/);
 assert.doesNotMatch(component, /api\.openai\.com\/v1\/realtime\/calls/);
 assert.doesNotMatch(component, /voiceCanary/);
 
-const expectedTools = ["get_authorized_capabilities", "get_system_catalog", "count_clients_for_user", "count_my_visible_clients", "get_latest_solicitud", "query_received_payments", "get_payment_details", "get_payment_complement_status", "get_recent_session_context", "explain_last_operation", "delegate_to_hugo_core"];
+const expectedTools = ["buscar_solicitudes", "ver_solicitud", "buscar_pagos", "buscar_personas", "get_earnings_by_client_report", "get_authorized_capabilities", "get_system_catalog", "count_clients_for_user", "count_my_visible_clients", "get_payment_complement_status", "explain_last_operation", "delegate_to_hugo_core", "correct_current_voice_response"];
+const removedTools = ["consult_hugo_team", "get_latest_solicitud", "get_latest_solicitud_for_user", "get_latest_payment_for_user", "query_received_payments", "get_payment_details", "get_recent_session_context"];
 for (const tool of expectedTools) {
   assert.match(tools, new RegExp(`name: "${tool}"`));
 }
+for (const tool of removedTools) assert.doesNotMatch(tools, new RegExp(`"${tool}"`));
+// The model chooses filters only: delegation must whitelist inputs, never forward identity or root scope.
+assert.match(tools, /export function readToolInput/);
+assert.doesNotMatch(tools, /(?:args|source)\.(?:rootId|uid|identity)\b/);
+assert.match(gateway, /boundToolData\(result\.data\)/);
+assert.match(gateway, /MAX_TOOL_DATA_BYTES = 16 \* 1024/);
 assert.match(gateway, /authorize\(candidateToken, controller\.signal\)/);
 assert.match(gateway, /rootId: scope\.rootId/);
 assert.match(gateway, /function_call_output/);

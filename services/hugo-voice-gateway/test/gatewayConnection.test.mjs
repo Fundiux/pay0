@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
+import { attachGatewayConnection, boundToolData, ConnectionState, classifyRequestError, MAX_TOOL_DATA_BYTES, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
 import { createHash } from "node:crypto";
 
 const TOKEN = "test-token-never-log-this", UID = "configured-canary-user", ROOT = "configured-root";
@@ -419,4 +419,67 @@ test("malformed messages and arbitrary error payloads are rejected with sanitize
   for (const sensitive of [TOKEN, TOKEN.toUpperCase(), UID, ROOT, "Bearer", offer.sdp]) assert.equal(output.includes(sensitive), false);
   assert.equal(classifyRequestError(Error("ARBITRARY_SECRET_VALUE")), "GATEWAY_REQUEST_FAILED");
   const malformed = harness(); await malformed.browser.raw("not-json-sensitive-payload"); await assertRejectedThenCannotRecover(malformed);
+});
+
+async function readToolOutput(result, name = "buscar_solicitudes", args = {}) {
+  let sent;
+  const h = harness({ callable: async (_token, input) => { sent = input; return result; } });
+  await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "response.function_call_arguments.done", name, call_id: "read-1", response_id: "response1", arguments: JSON.stringify(args) });
+  const event = sideband.sent.find(item => item.type === "conversation.item.create");
+  h.browser.close();
+  return { sent, output: event && JSON.parse(event.item.output) };
+}
+
+test("general read tools deliver structured data to the model without model-supplied identity", async () => {
+  const data = { total: 2, montoTotal: 15080, mostrados: 1, items: [{ id: "sol-1", folio: "S1C4U3E1", cliente: "ACIER", monto: 7540 }], filtros: { cliente: "ACIER" },
+    interpretacion: [{ campo: "cliente", dicho: "asier", entendido: "ACIER", confianza: "APROXIMADA" }] };
+  const { sent, output } = await readToolOutput({ ok: true, route: "DETERMINISTIC_TOOL", tool: "findSolicitudes", sourceSystem: "PAY0", text: "Hay 2 solicitudes.", data,
+    trace: { secret: "internal" }, uid: "leak-uid", rootId: "leak-root", cost: 3 }, "buscar_solicitudes", { cliente: "asier", rootId: "foreign", uid: "foreign" });
+  assert.equal(sent.toolName, "findSolicitudes");
+  assert.deepEqual(sent.toolInput, { cliente: "asier" });
+  assert.equal(JSON.stringify(sent).includes("foreign"), false);
+  assert.deepEqual(output, { route: "DETERMINISTIC_TOOL", text: "Hay 2 solicitudes.", data });
+});
+
+test("results without data keep the previous output shape", async () => {
+  const { output } = await readToolOutput({ route: "DETERMINISTIC_TOOL", text: "Tienes acceso a PAY0.", sourceSystem: "PAY0" }, "get_authorized_capabilities");
+  assert.deepEqual(output, { route: "DETERMINISTIC_TOOL", text: "Tienes acceso a PAY0." });
+});
+
+test("structured data is bounded: items are trimmed and marked truncado", async () => {
+  const items = Array.from({ length: 20 }, (_, index) => ({ id: `sol-${index}`, cliente: "C".repeat(1500), monto: index }));
+  const { output } = await readToolOutput({ route: "DETERMINISTIC_TOOL", text: "Hay 40.", data: { total: 40, montoTotal: 1, mostrados: 20, items, filtros: {}, interpretacion: [] } });
+  assert.ok(Buffer.byteLength(JSON.stringify(output.data)) <= MAX_TOOL_DATA_BYTES);
+  assert.equal(output.data.truncado, true);
+  assert.equal(output.data.total, 40);
+  assert.ok(output.data.items.length > 0 && output.data.items.length < 20);
+  assert.equal(output.data.mostrados, output.data.items.length);
+  assert.deepEqual(output.data.items[0], items[0]);
+});
+
+test("bounding trims nested detail arrays, leaves small data intact and never throws", () => {
+  const small = { encontrada: true, solicitud: { id: "s", documentos: [] } };
+  assert.deepEqual(boundToolData(small), small);
+  assert.equal(boundToolData(undefined), undefined);
+  assert.equal(boundToolData(null), undefined);
+  const cyclic = {}; cyclic.self = cyclic;
+  assert.equal(boundToolData(cyclic), undefined);
+  const detail = { encontrada: true, solicitud: { id: "s", oc: { partidas: Array.from({ length: 400 }, () => ({ cantidad: 1, descripcion: "x".repeat(80), importe: 1 })) }, documentos: [{ tipo: "OC" }] } };
+  const bounded = boundToolData(detail);
+  assert.ok(Buffer.byteLength(JSON.stringify(bounded)) <= MAX_TOOL_DATA_BYTES);
+  assert.equal(bounded.truncado, true);
+  assert.equal(bounded.solicitud.id, "s");
+  assert.deepEqual(bounded.solicitud.documentos, [{ tipo: "OC" }]);
+  assert.ok(bounded.solicitud.oc.partidas.length > 0 && bounded.solicitud.oc.partidas.length < 400);
+  assert.deepEqual(boundToolData({ blob: "z".repeat(20000) }), { truncado: true });
+  assert.equal(detail.solicitud.oc.partidas.length, 400, "input is not mutated");
+});
+
+test("invalid general read input fails as a non-retryable validation without calling the backend", async () => {
+  const { sent, output } = await readToolOutput({ route: "X", text: "must-not-run" }, "ver_solicitud", { rootId: "foreign" });
+  assert.equal(sent, undefined);
+  assert.deepEqual(output, { status: "INVALID_INPUT", text: "Falta el dato a consultar: un id, folio o nombre." });
+  assert.deepEqual(safeToolFailure(Error("INVALID_TOOL_INPUT")), { errorCategory: "VALIDATION", errorCode: "INVALID_TOOL_INPUT", retryable: false });
 });

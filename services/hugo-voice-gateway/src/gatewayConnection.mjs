@@ -21,6 +21,7 @@ export function classifyRequestError(error) {
 export function safeToolFailure(error) {
   if (error?.message === "VOICE_CORRECTION_TOO_LONG") return { errorCategory: "VALIDATION", errorCode: "VOICE_CORRECTION_TOO_LONG", retryable: false };
   if (error?.message === "VOICE_CORRECTION_ORIGIN_UNAVAILABLE") return { errorCategory: "NOT_READY", errorCode: "VOICE_CORRECTION_ORIGIN_UNAVAILABLE", retryable: true };
+  if (error?.message === "INVALID_TOOL_INPUT") return { errorCategory: "VALIDATION", errorCode: "INVALID_TOOL_INPUT", retryable: false };
   if (error?.message === "VOICE_CORRECTION_NOT_PERSISTED") return { errorCategory: "INTERNAL", errorCode: "VOICE_CORRECTION_NOT_PERSISTED", retryable: false };
   const code = classifyRequestError(error);
   if (code === "PERMISSION_DENIED") return { errorCategory: "PERMISSION_DENIED", errorCode: code, retryable: false };
@@ -33,9 +34,30 @@ export function safeVoiceToolFailureOutput(failure) {
   if (failure?.errorCode === "VOICE_CORRECTION_TOO_LONG") return { status: "INVALID_INPUT", text: "La corrección supera los 1.000 caracteres. Dícela más breve; no la guardé." };
   if (failure?.errorCode === "VOICE_CORRECTION_ORIGIN_UNAVAILABLE") return { status: "NOT_READY", text: "Aún no tengo un turno de voz completo al que vincular la corrección. No la guardé." };
   if (failure?.errorCode === "VOICE_CORRECTION_NOT_PERSISTED") return { status: "ERROR", text: "No pude confirmar el guardado de esa corrección. No asumiré que quedó guardada." };
+  if (failure?.errorCode === "INVALID_TOOL_INPUT") return { status: "INVALID_INPUT", text: "Falta el dato a consultar: un id, folio o nombre." };
   if (failure?.errorCategory === "PERMISSION_DENIED") return { status: "BLOCKED", text: "Esta consulta está fuera del alcance autorizado de tu sesión." };
   if (failure?.errorCategory === "ENTITY_NOT_FOUND") return { status: "NOT_FOUND", text: "No encontré información que coincida con esa consulta." };
   return { status: "ERROR", text: failure?.retryable ? "No pude completar la consulta en este momento. Puedes reintentarla." : "No pude completar esa consulta." };
+}
+
+export const MAX_TOOL_DATA_BYTES = 16 * 1024;
+const jsonBytes = value => Buffer.byteLength(JSON.stringify(value), "utf8");
+// Structured tool data reaches the model so it can chain ids; the largest arrays are trimmed until it fits.
+export function boundToolData(data, maxBytes = MAX_TOOL_DATA_BYTES) {
+  if (data === undefined || data === null) return undefined;
+  let bounded; try { bounded = JSON.parse(JSON.stringify(data)); } catch { return undefined; }
+  if (bounded === undefined || jsonBytes(bounded) <= maxBytes) return bounded;
+  if (!bounded || typeof bounded !== "object" || Array.isArray(bounded)) return { truncado: true };
+  const arrays = [], collect = (value, depth) => { if (!value || typeof value !== "object" || depth > 3) return;
+    for (const child of Object.values(value)) { if (Array.isArray(child)) arrays.push(child); if (child && typeof child === "object") collect(child, depth + 1); } };
+  collect(bounded, 0); bounded.truncado = true;
+  while (jsonBytes(bounded) > maxBytes) {
+    const largest = arrays.filter(array => array.length).sort((a, b) => jsonBytes(b) - jsonBytes(a))[0];
+    if (!largest) return { truncado: true };
+    largest.length = Math.min(largest.length - 1, Math.floor(largest.length * 0.75));
+  }
+  if (Array.isArray(bounded.items) && typeof bounded.mostrados === "number") bounded.mostrados = bounded.items.length;
+  return bounded;
 }
 
 function withTimeout(operation, timeoutMs, code) {
@@ -230,8 +252,9 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
           if (!active() || controller.signal.aborted) return;
           if (correctionOrigin) { voiceCorrections.acknowledge(correctionOrigin, result); topicFlow.acknowledgeSession(correctionOrigin, result); }
           registry.complete(toolCallId, false); if (!registry.canDeliver(toolCallId)) return;
+          const data = boundToolData(result.data);
           sideband.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: toolCallId,
-            output: JSON.stringify({ route: result.route, text: result.text,
+            output: JSON.stringify({ route: result.route, text: result.text, ...(data !== undefined ? { data } : {}),
               ...(result.team ? { agent: result.team.agent, consultedAgents: result.team.consultedAgents, action: result.team.action } : {}),
               ...(delegation.voiceTopicAction ? { durablePersisted: result.durablePersisted === true, ...(result.userCorrection ? { userCorrection: result.userCorrection } : {}) } : {}),
               ...(correctionOrigin ? { userCorrection: { authority: "USER_STATEMENT_NOT_FACT", scope: "SESSION", content: result.correction?.content }, persisted: true } : {}) }) } }));
