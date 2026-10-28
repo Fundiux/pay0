@@ -4,6 +4,7 @@
                       "runtime":  "nodejs22",
                       "predeploy":  [
                                         "node qa/scripts/verify-release-baseline.mjs",
+                                        "node qa/scripts/verify-mat-release-contract.cjs",
                                         "npm --prefix functions run build",
                                         "npm run qa:functions-discovery",
                                         "node qa/scripts/verify-client-csf-parser.cjs",

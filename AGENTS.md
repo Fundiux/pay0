@@ -107,6 +107,16 @@ and terminal-status protections.
   cleaned up in a dedicated change, not propagated.
 - Keep `package-lock.json` and `functions/package-lock.json` aligned with their
   respective package manifests when dependencies change.
+- Before any `pay0-next16`, MAT Function, or `pay0-miniapp` release, run
+  `npm run qa:mat-release-contract`. The 15 file fingerprints in
+  `config/mat-release-contract.json` represent the MAT approved on 2026-10-28.
+  A deliberate MAT change needs review and a new fingerprint; never regenerate
+  the manifest merely to make a failing gate pass. A candidate without this
+  gate is not a valid release source, even if another feature works locally.
+- For App Hosting, the Firebase CLI's `Deploy complete` line is insufficient.
+  Check the new build is `READY`, its rollout `SUCCEEDED`, traffic serves that
+  build, and both `/mat/usuarios` and `/mat/clientes` show the approved UI.
+  Confirm `pay0-miniapp` still opens those routes after any launcher change.
 - `npm run firebase:deploy` deploys Firestore rules and indexes. Deploying
   Functions is performed from `functions/` with `npm run deploy`. Both target
   production, so never deploy, alter production data, or run a live IQ/WhatsApp

@@ -12,6 +12,10 @@
     {
       "commit": "ca0cb423f2c15b19a33beb3a492cc6ef64c5f886",
       "capability": "Hugo Voice y herramientas canonicas PAY0"
+    },
+    {
+      "commit": "4235980cae3f",
+      "capability": "MAT actual integrada con Hugo"
     }
   ],
   "requiredText": [

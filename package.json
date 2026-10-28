@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/run-with-frontend-build-env.mjs -- npm run build:validated",
-    "build:validated": "node qa/scripts/verify-frontend-build-env.mjs && node qa/scripts/verify-release-baseline.mjs && node qa/scripts/critical-release-guard.mjs && node scripts/copy-canonical-assets.mjs && next build",
+    "build:validated": "node qa/scripts/verify-frontend-build-env.mjs && node qa/scripts/verify-release-baseline.mjs && node qa/scripts/verify-mat-release-contract.cjs && node qa/scripts/critical-release-guard.mjs && node scripts/copy-canonical-assets.mjs && next build",
     "start": "next start",
     "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "firebase:deploy:hosting": "node scripts/run-with-frontend-build-env.mjs -- firebase deploy --project pay-0-system --non-interactive --only hosting",
@@ -20,6 +20,7 @@
     "qa:pay0:ui": "playwright test qa/playwright/public-routes.spec.mjs",
     "qa:pay0:business": "playwright test qa/playwright/superadmin-smoke.spec.mjs",
     "test:mat": "powershell -ExecutionPolicy Bypass -File scripts/run-mat-smoke.ps1",
+    "qa:mat-release-contract": "node qa/scripts/verify-mat-release-contract.cjs && node qa/scripts/mat-release-contract.test.cjs",
     "test:mat:headed": "powershell -ExecutionPolicy Bypass -File scripts/run-mat-smoke.ps1 -Headed",
     "qa:pay0:h4-d64-a6": "powershell -ExecutionPolicy Bypass -File scripts/run-h4-d64-a6-qa.ps1",
     "qa:pay0:h4-d65-a0": "powershell -ExecutionPolicy Bypass -File scripts/run-h4-d65-a0-qa.ps1",
