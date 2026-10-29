@@ -38,7 +38,9 @@ test("session instructions are principle-based, read-only and keep the security,
     "un sí aislado no basta. No anuncies memoria durable antes de durablePersisted true.",
     "retire_current_voice_topic_memory",
     "nunca supongas que es un pago",
-  ]) assert.ok(text.includes(required), required);
+    "READY o COMPLETED es lista",
+    "Nunca menciones nombres de campos o parámetros, valores true o false",
+  ])assert.ok(text.includes(required), required);
   assert.ok(text.endsWith(HUGO_VOICE_INSTRUCTIONS));
   for (const removed of ["consult_hugo_team", "No pronuncies folios", "get_recent_session_context", "query_received_payments"]) assert.ok(!text.includes(removed), removed);
   assert.ok(text.length < 6000);
