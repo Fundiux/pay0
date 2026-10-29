@@ -137,7 +137,14 @@ export const realtimeTools = [
 
 export const realtimeToolNames = realtimeTools.map(tool => tool.name);
 
+// Offered only when the browser declares END_CALL support, so Hugo never promises a hang-up the page cannot perform.
+export const END_CALL_TOOL = { type: "function", name: "terminar_llamada",
+  description: "Termina la llamada de voz cuando el usuario pide colgar, terminar o cerrar la conversación. Después despídete en una sola frase breve; la llamada se cierra al terminar de hablar.",
+  parameters: { type: "object", additionalProperties: false, properties: {}, required: [] } };
+export function realtimeToolsFor({ endCall = false } = {}) { return endCall ? [...realtimeTools, END_CALL_TOOL] : realtimeTools; }
+
 export function delegationForRealtimeTool(name, args = {}) {
+  if (name === END_CALL_TOOL.name) return { request: "Terminar la llamada de voz.", endCall: true };
   if (Object.hasOwn(READ_TOOL_MAP, name)) { const [toolName, request] = READ_TOOL_MAP[name]; return { request, toolName, toolInput: readToolInput(name, args) }; }
   const topicActions = { request_voice_topic_memory: "REQUEST", confirm_voice_topic_memory: "CONFIRM", select_voice_memory_topic: "SELECT",
     clear_voice_memory_topic: "CLEAR", retire_current_voice_topic_memory: "RETIRE" };

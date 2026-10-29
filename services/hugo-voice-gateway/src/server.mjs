@@ -2,7 +2,7 @@ import http from "node:http";
 import { initializeApp, applicationDefault, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { WebSocketServer, WebSocket } from "ws";
-import { realtimeTools } from "./realtimeTools.mjs";
+import { realtimeToolsFor } from "./realtimeTools.mjs";
 import { attachGatewayConnection } from "./gatewayConnection.mjs";
 import { handleHttpRequest, isAllowedVoiceOrigin } from "./httpPolicy.mjs";
 import { HUGO_VOICE, HUGO_VOICE_SPEED, REALTIME_MODEL } from "./voiceConfig.mjs";
@@ -29,9 +29,9 @@ const runtimeMetadata = Object.freeze({
 const canaryUids = new Set(String(process.env.HUGO_CANARY_UIDS || "").split(",").map(value => value.trim()).filter(Boolean));
 const allowedOrigins = new Set(String(process.env.HUGO_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean));
 
-async function openRealtime(sdp, signal) {
+async function openRealtime(sdp, signal, { endCall = false } = {}) {
   const instructions = buildSessionInstructions(new Date());
-  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions, tools: realtimeTools, tool_choice: "auto", include: ["item.input_audio_transcription.logprobs"], audio: { input: { noise_reduction: { type: "near_field" }, transcription: { model: runtimeMetadata.transcription.model, language: runtimeMetadata.transcription.language }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } }, output: { voice, speed: HUGO_VOICE_SPEED } } } }) });
+  const secretResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", signal, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model, instructions, tools: realtimeToolsFor({ endCall }), tool_choice: "auto", include: ["item.input_audio_transcription.logprobs"], audio: { input: { noise_reduction: { type: "near_field" }, transcription: { model: runtimeMetadata.transcription.model, language: runtimeMetadata.transcription.language }, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } }, output: { voice, speed: HUGO_VOICE_SPEED } } } }) });
   const secret = await secretResponse.json(); if (!secretResponse.ok || !secret.value) throw Error("REALTIME_SECRET_FAILED");
   const call = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", signal, headers: { Authorization: `Bearer ${secret.value}`, "Content-Type": "application/sdp" }, body: sdp });
   const answer = await call.text(), location = call.headers.get("location"), callId = location?.split("/").pop();

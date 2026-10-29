@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ToolCallRegistry } from "./toolCallRegistry.mjs";
 import { ResponseContinuationRegistry } from "./responseContinuationRegistry.mjs";
-import { delegationForRealtimeTool, realtimeToolNames } from "./realtimeTools.mjs";
+import { END_CALL_TOOL, delegationForRealtimeTool, realtimeToolNames } from "./realtimeTools.mjs";
 import { createVoiceSessionCorrection } from "./voiceSessionCorrection.mjs";
 import { createVoiceTopicFlow } from "./voiceTopicFlow.mjs";
 
@@ -72,7 +72,8 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
   const socketBinding = Object.freeze({ socket: browser, gatewaySessionId: randomUUID() });
   const allowedUids = new Set(canaryUids);
   let state = ConnectionState.NEW, authorizedContext = null, token = "", sideband = null, sessionId = "", turnId = "", responseId = "";
-  let pendingAuthenticationCleanup = null, realtimeController = null, realtimeCreationAttempts = 0;
+  let pendingAuthenticationCleanup = null, realtimeController = null, realtimeCreationAttempts = 0, endCallSupported = false;
+  const sessionToolNames = () => endCallSupported ? [...realtimeToolNames, END_CALL_TOOL.name] : realtimeToolNames;
   const connectedAt = Date.now();
   let activeResponse = null, pendingInterruption = null, lastSpeechStoppedAt = null;
   let registry = new ToolCallRegistry(), continuations = new ResponseContinuationRegistry();
@@ -114,6 +115,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
     state = ConnectionState.AUTHENTICATING;
     let candidateToken = typeof event.idToken === "string" ? event.idToken : "", decodedIdentity = null, scope = null;
     delete event.idToken;
+    endCallSupported = Array.isArray(event.clientFeatures) && event.clientFeatures.includes("END_CALL");
     const controller = new AbortController();
     const cleanup = () => { candidateToken = ""; decodedIdentity = null; scope = null; controller.abort(); };
     pendingAuthenticationCleanup = cleanup;
@@ -228,7 +230,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
         if (pendingInterruption?.responseId === doneResponseId) clearPendingInterruption();
         if (activeResponse?.id === doneResponseId) activeResponse = null;
       }
-      if (type === "response.function_call_arguments.done" && realtimeToolNames.includes(item.name)) {
+      if (type === "response.function_call_arguments.done" && sessionToolNames().includes(item.name)) {
         const callResponseId = String(item.response_id || responseId || "");
         if (!turnId) { turnId = `turn_${callResponseId || item.call_id || randomUUID()}`; log("gateway.turn_recognized", { sessionId, turnId, modality: "TEXT_FALLBACK" }); }
         const toolCallId = String(item.call_id || item.item_id || ""), started = registry.begin(toolCallId, turnId); if (!started.accepted) { log("gateway.tool_duplicate", { sessionId, turnId, responseId: callResponseId, toolCallId }); return; }
@@ -241,6 +243,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
           const correctionOrigin = delegation.recordResponseCorrection ? voiceCorrections.prepare({ sessionId: nativeSessionId, turnId }) : null;
           let result;
           if (delegation.voiceTopicAction) result = await topicFlow.execute(delegation.voiceTopicAction, context);
+          else if (delegation.endCall) result = { route: "LOCAL", text: "La llamada se cerrará cuando termines de hablar. Despídete en una sola frase breve." };
           else {
             if (saveHistory && nativeSessionId) {
               if (correctionOrigin) await topicFlow.persistSessionCorrection(correctionOrigin, context);
@@ -258,6 +261,8 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
               ...(result.team ? { agent: result.team.agent, consultedAgents: result.team.consultedAgents, action: result.team.action } : {}),
               ...(delegation.voiceTopicAction ? { durablePersisted: result.durablePersisted === true, ...(result.userCorrection ? { userCorrection: result.userCorrection } : {}) } : {}),
               ...(correctionOrigin ? { userCorrection: { authority: "USER_STATEMENT_NOT_FACT", scope: "SESSION", content: result.correction?.content }, persisted: true } : {}) }) } }));
+          // The browser hangs up after the goodbye audio; the gateway cannot end a WebRTC peer it does not own.
+          if (delegation.endCall) send({ type: "gateway.end_call_requested", eventId: randomUUID(), turnId, responseId: callResponseId, toolCallId });
           if (result.team) send({ type: "gateway.team_result", eventId: randomUUID(), turnId, agent: result.team.agent, consultedAgents: result.team.consultedAgents, action: result.team.action, result: result.team.result, activity: result.team.activity, evidence: result.team.evidence, toolsUsed: result.team.toolsUsed, text: result.text });
           log("gateway.tool_output_sent", { sessionId, turnId, responseId: callResponseId, toolCallId, tool: item.name, route: result.route, sourceSystem: result.sourceSystem || null });
           if (continuations.outputDelivered(callResponseId, toolCallId)) sideband.send(JSON.stringify({ type: "response.create" }));
@@ -285,7 +290,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
       const connectionController = realtimeController;
       realtimeCreationAttempts += 1;
       log("gateway.realtime_create_attempt", { gatewaySessionId: socketBinding.gatewaySessionId, realtimeCreationAttempts });
-      const realtime = await openRealtime(event.sdp, connectionController.signal);
+      const realtime = await openRealtime(event.sdp, connectionController.signal, { endCall: endCallSupported });
       if (state !== ConnectionState.REALTIME_STARTING || connectionController.signal.aborted || browser.readyState !== 1) return;
       sessionId = realtime.callId;
       const connectionSideband = createSideband(realtime.callId); sideband = connectionSideband;
@@ -303,7 +308,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
       state = ConnectionState.REALTIME_ACTIVE;
       sideband.on("message", onSidebandMessage);
       const runtime = runtimeMetadata || { service: "unknown", revision: "unknown", commit: "unknown", branch: "unknown", version: "unknown", vad: { type: "semantic_vad", eagerness: "low", createResponse: true, interruptResponse: false, confirmationMs: interruptionConfirmationMs } };
-      log("gateway.session_ready", { gatewaySessionId: socketBinding.gatewaySessionId, sessionId, model, voice, runtime, tools: realtimeToolNames }); send({ type: "answer", sdp: realtime.answer, sessionId, model, voice, runtime, tools: realtimeToolNames });
+      log("gateway.session_ready", { gatewaySessionId: socketBinding.gatewaySessionId, sessionId, model, voice, runtime, tools: sessionToolNames() }); send({ type: "answer", sdp: realtime.answer, sessionId, model, voice, runtime, tools: sessionToolNames() });
     } catch (error) { reject(error); }
   });
   browser.on("error", () => reject(Error("GATEWAY_REQUEST_FAILED")));

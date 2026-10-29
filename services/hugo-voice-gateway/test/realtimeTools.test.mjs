@@ -92,3 +92,11 @@ test("unknown Realtime tools fail closed", () => {
   assert.throws(() => delegationForRealtimeTool("invented_tool", {}), /UNKNOWN_REALTIME_TOOL/);
   assert.throws(() => delegationForRealtimeTool("toString", {}), /UNKNOWN_REALTIME_TOOL/);
 });
+
+test("end-call tool is opt-in and never delegated to PAY0", async () => {
+  const { END_CALL_TOOL, realtimeToolsFor } = await import("../src/realtimeTools.mjs");
+  assert.deepEqual(realtimeToolsFor().map(tool => tool.name), EXPECTED_TOOLS);
+  assert.deepEqual(realtimeToolsFor({ endCall: true }).map(tool => tool.name), [...EXPECTED_TOOLS, "terminar_llamada"]);
+  assert.equal(END_CALL_TOOL.parameters.additionalProperties, false);
+  assert.deepEqual(delegationForRealtimeTool("terminar_llamada", { rootId: "foreign" }), { request: "Terminar la llamada de voz.", endCall: true });
+});

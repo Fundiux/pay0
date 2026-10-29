@@ -483,3 +483,20 @@ test("invalid general read input fails as a non-retryable validation without cal
   assert.deepEqual(output, { status: "INVALID_INPUT", text: "Falta el dato a consultar: un id, folio o nombre." });
   assert.deepEqual(safeToolFailure(Error("INVALID_TOOL_INPUT")), { errorCategory: "VALIDATION", errorCode: "INVALID_TOOL_INPUT", retryable: false });
 });
+
+test("end-call tool exists only when the browser declares END_CALL support", async () => {
+  const plain = harness(); await plain.browser.receive(auth); await plain.browser.receive(offer);
+  assert.equal(plain.browser.sent.at(-1).tools.includes("terminar_llamada"), false);
+  await plain.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-1", response_id: "r1", arguments: "{}" });
+  assert.equal(plain.sidebands[0].sent.length, 0); assert.equal(plain.browser.sent.some(event => event.type === "gateway.end_call_requested"), false);
+  let realtimeOptions;
+  const h = harness({ openRealtime: async (_sdp, _signal, options) => { realtimeOptions = options; return { callId: "simulated-call", answer: "simulated-answer" }; } });
+  await h.browser.receive({ ...auth, clientFeatures: ["END_CALL"] }); await h.browser.receive(offer);
+  assert.deepEqual(realtimeOptions, { endCall: true }); assert.ok(h.browser.sent.at(-1).tools.includes("terminar_llamada"));
+  await h.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-2", response_id: "r2", arguments: "{}" });
+  assert.equal(h.counts.delegate, 0);
+  const output = JSON.parse(h.sidebands[0].sent.find(event => event.type === "conversation.item.create").item.output);
+  assert.equal(output.route, "LOCAL"); assert.match(output.text, /Despídete/);
+  const ended = h.browser.sent.find(event => event.type === "gateway.end_call_requested");
+  assert.equal(ended.toolCallId, "end-2"); assert.equal(ended.responseId, "r2");
+});
