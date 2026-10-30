@@ -48,6 +48,10 @@
     {
       "commit": "2b7b9b07b4a81561ded1d3ee08c41a991870f879",
       "capability": "Cotizaciones de OC sin clave SAT"
+    },
+    {
+      "commit": "6b5b5deec2c192313a3f647e68cf400d6c5dd40d",
+      "capability": "Dispersiones IQ: autorizacion por wallet, destinos mixtos y retencion de fallos seguros (Codex)"
     }
   ],
   "requiredText": [
@@ -210,6 +214,11 @@
       "file": "functions/src/modules/solicitudDocuments/service.ts",
       "text": "!isOcTemplateHelp(cell)",
       "capability": "El lector de OC ignora instrucciones de la plantilla"
+    },
+    {
+      "file": "src/lib/pay0MassiveLayout.ts",
+      "text": "export function toPay0MassiveDispersionItem",
+      "capability": "Dispersion masiva envia el destino completo por partida (Codex)"
     }
   ],
   "forbiddenText": [
