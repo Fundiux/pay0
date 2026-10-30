@@ -121,6 +121,14 @@ and terminal-status protections.
   Functions is performed from `functions/` with `npm run deploy`. Both target
   production, so never deploy, alter production data, or run a live IQ/WhatsApp
   action without explicit user approval.
+- Deploy Functions and App Hosting only from an up-to-date `main`. A deploy
+  publishes whatever tree it runs from, so deploying from a feature branch or
+  stale worktree silently removes production work that branch lacks. Merge the
+  change into `main` first, then deploy from `main`.
+- `config/release-baseline.json` lists the commits and code contracts every
+  release must contain; Functions predeploy and the App Hosting build both
+  check it. When a change reaches production, add it there. Never remove an
+  entry to make a deploy pass; bring the missing work into the branch instead.
 
 ## Git workflow
 
