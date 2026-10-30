@@ -149,6 +149,34 @@ export function requirePricedQuoteLines(
   return { items, subtotal, iva };
 }
 
+export const QUOTE_DATE_WINDOW_DAYS = 45;
+
+function mexicoDay(ms: number): string {
+  return new Date(ms).toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+}
+
+/**
+ * Date printed on the quote. The OC date is accepted when it falls within the
+ * window before the solicitud was created. Templates typed in a US-locale
+ * Excel swap day and month, so a swapped date that lands in the window is
+ * used and recorded as corrected. Otherwise the day the OC was uploaded is
+ * used, so the quote never shows a stale or impossible date.
+ */
+export function resolveQuoteDocumentDate(ocDate: string, solicitudCreatedMs: number | null, ocUploadedMs: number | null): { date: string; source: string } {
+  if (!solicitudCreatedMs) return ocDate ? { date: ocDate, source: "ORDEN_COMPRA" } : { date: "", source: "GENERACION" };
+  const latest = mexicoDay(solicitudCreatedMs);
+  const earliest = mexicoDay(solicitudCreatedMs - QUOTE_DATE_WINDOW_DAYS * 86_400_000);
+  const inWindow = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= earliest && date <= latest;
+  if (inWindow(ocDate)) return { date: ocDate, source: "ORDEN_COMPRA" };
+  const match = ocDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match && Number(match[3]) <= 12 && match[2] !== match[3]) {
+    const swapped = `${match[1]}-${match[3]}-${match[2]}`;
+    if (inWindow(swapped)) return { date: swapped, source: "ORDEN_COMPRA_DIA_MES_CORREGIDO" };
+  }
+  if (ocUploadedMs) return { date: mexicoDay(ocUploadedMs), source: ocDate ? "CARGA_OC_FECHA_FUERA_DE_RANGO" : "CARGA_OC_SIN_FECHA" };
+  return { date: latest, source: ocDate ? "SOLICITUD_FECHA_FUERA_DE_RANGO" : "SOLICITUD_SIN_FECHA" };
+}
+
 /** Issuer contact printed on the quote: the company's configured contact, else contacto@<alias>.mx. */
 export function quotationIssuerContact(company: any): string {
   const configured = clean(company?.quotationContact, 120);
@@ -299,7 +327,11 @@ export async function generateCotizacionForSolicitudCore(request: {
     const description = clean(quoteItems[0]?.description, 240);
     // The quote shows the OC date; the real generation time stays in
     // generatedAt and createdAt on the upload record.
-    const documentDate = ocLines?.date || "";
+    const { date: documentDate, source: documentDateSource } = resolveQuoteDocumentDate(
+      ocLines?.date || "",
+      solicitud.createdAt?.toMillis?.() ?? null,
+      activeOc.docs[0].get("createdAt")?.toMillis?.() ?? null,
+    );
     const ocNumber = clean(ocLines?.number, 30);
 
     // This opaque token is intentionally the only credential in the QR.  It
@@ -396,7 +428,8 @@ export async function generateCotizacionForSolicitudCore(request: {
           description,
           documentSha256,
           documentDate: documentDate || null,
-          documentDateSource: documentDate ? "ORDEN_COMPRA" : "GENERACION",
+          documentDateSource,
+          ocStatedDate: ocLines?.date || null,
           ocNumber: ocNumber || null,
           lineCount: quoteItems.length,
         },

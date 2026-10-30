@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
 const { parseOcFiscalMetadataBuffer, parseOcDate } = require('../../functions/lib/modules/solicitudDocuments/service.js');
-const { requirePricedQuoteLines, quotationIssuerContact } = require('../../functions/lib/modules/cotizaciones/callables.js');
+const { requirePricedQuoteLines, quotationIssuerContact, resolveQuoteDocumentDate } = require('../../functions/lib/modules/cotizaciones/callables.js');
 
 async function workbook(rows) {
   const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('OC');
@@ -53,6 +53,19 @@ const quoteLines = buffer => parseOcFiscalMetadataBuffer(buffer, true, undefined
   assert.doesNotThrow(() => requirePricedQuoteLines({ ...labelled, items: [{ ...labelled.items[0], amount: 1000.01 }] }, 1160), 'a one-cent gap is tolerated');
 
   assert.equal(parseOcDate('31/02/2026'), '', 'impossible dates are rejected');
+
+  // Quote date window: 45 days before the solicitud was created (Mexico City days).
+  const created = Date.parse('2026-10-17T17:30:00Z'), uploaded = Date.parse('2026-10-17T17:29:00Z');
+  assert.deepEqual(resolveQuoteDocumentDate('2026-10-06', created, uploaded), { date: '2026-10-06', source: 'ORDEN_COMPRA' });
+  assert.deepEqual(resolveQuoteDocumentDate('2026-03-10', created, uploaded), { date: '2026-10-03', source: 'ORDEN_COMPRA_DIA_MES_CORREGIDO' }, '"3 octubre" typed in a US-locale Excel');
+  assert.deepEqual(resolveQuoteDocumentDate('2026-01-10', created, uploaded), { date: '2026-10-01', source: 'ORDEN_COMPRA_DIA_MES_CORREGIDO' });
+  assert.deepEqual(resolveQuoteDocumentDate('2025-07-21', created, uploaded), { date: '2026-10-17', source: 'CARGA_OC_FECHA_FUERA_DE_RANGO' }, 'a stale template date falls back to the upload day');
+  assert.deepEqual(resolveQuoteDocumentDate('', created, uploaded), { date: '2026-10-17', source: 'CARGA_OC_SIN_FECHA' });
+  assert.deepEqual(resolveQuoteDocumentDate('2026-11-02', created, uploaded), { date: '2026-10-17', source: 'CARGA_OC_FECHA_FUERA_DE_RANGO' }, 'a date after the solicitud is not accepted');
+  assert.equal(resolveQuoteDocumentDate('2026-09-02', created, uploaded).date, '2026-09-02', 'the window edge (45 days) is accepted');
+  assert.equal(resolveQuoteDocumentDate('2026-09-01', created, uploaded).source, 'CARGA_OC_FECHA_FUERA_DE_RANGO');
+  assert.deepEqual(resolveQuoteDocumentDate('2026-03-10', created, null), { date: '2026-10-03', source: 'ORDEN_COMPRA_DIA_MES_CORREGIDO' });
+  assert.deepEqual(resolveQuoteDocumentDate('', created, null), { date: '2026-10-17', source: 'SOLICITUD_SIN_FECHA' });
   assert.equal(quotationIssuerContact({ quotationContact: 'ventas@elite.mx', depositAlias: 'ELITE' }), 'ventas@elite.mx');
   assert.equal(quotationIssuerContact({ depositAlias: 'Mercacobra' }), 'contacto@mercacobra.mx');
   assert.equal(quotationIssuerContact({ depositAlias: 'REFACCIONES Y TRABAJAOS' }), 'contacto@refaccionesytrabajaos.mx');
