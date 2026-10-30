@@ -85,7 +85,8 @@ export function getScopeLabel(mode: DateScopeMode, baseDate: Date, customRange?:
 }
 
 export function isTsWithinRange(ts: any, from: Date, to: Date) {
-  if (!ts?.seconds) return false;
-  const value = ts.seconds * 1000;
+  const seconds = ts?.seconds ?? ts?._seconds;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return false;
+  const value = seconds * 1000;
   return value >= from.getTime() && value <= to.getTime();
 }

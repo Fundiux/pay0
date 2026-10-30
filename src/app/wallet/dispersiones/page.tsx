@@ -4,7 +4,7 @@ import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 import { useDispersionNotes, dispersionNoteDisplayDate } from "@/lib/useDispersionNotes";
 
 import { formatDateTime24 } from "@/lib/dateTime";
-import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
+import { parsePay0MassiveLayoutRows, toPay0MassiveDispersionItem, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
 
 import {
@@ -1631,26 +1631,7 @@ export default function WalletDispersionesPage() {
       await globalLoading.run(
         undefined,
         async () => {
-          const payloadRows =
-            validRows.map((row: any) => ({
-              rowNumber: row.rowNumber,
-              beneficiaryName:
-                row.beneficiaryName,
-              amount: row.amount,
-              reference: row.reference,
-              banco: row.banco,
-              clabe: row.clabe,
-              tarjeta: row.tarjeta,
-              tipo: row.tipo,
-              methodTipo: row.methodTipo,
-              beneficiaryId:
-                row.beneficiaryId,
-              methodId: row.methodId,
-              beneficiaryAction:
-                row.beneficiaryAction,
-              methodAction:
-                row.methodAction,
-            }));
+          const payloadRows = validRows.map(toPay0MassiveDispersionItem);
 
           const result =
             await createClientDispersionsMassive({
