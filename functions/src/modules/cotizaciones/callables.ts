@@ -13,6 +13,7 @@ import { renderCanonicalQuotePdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { isTerminalSolicitud } from "./quotationPolicy";
+import { readOcQuotationLines } from "../solicitudDocuments/service";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -100,6 +101,60 @@ export function requireQuotationSource(solicitud: any, activeOcUploadId: string)
     })),
     total,
   };
+}
+
+/** Half-up cents as Excel shows them: 6163.675 is 6163.68, not the binary 6163.67. */
+function roundCents(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(Number((n * 100).toPrecision(12))) / 100 : NaN;
+}
+
+type PricedQuoteLines = {
+  items: Array<{ quantity: number; unit: string; productCode: string; description: string; unitPrice: number; amount: number }>;
+  subtotal: number; iva: number;
+};
+
+/**
+ * A quote mirrors the OC line by line. Every line needs its amount, and the
+ * lines must add up to the OC subtotal; otherwise the quote stays pending
+ * instead of showing a price the OC never stated.
+ */
+export function requirePricedQuoteLines(
+  oc: { items?: Array<{ quantity?: unknown; unit?: unknown; productCode?: unknown; description?: unknown; unitPrice?: unknown; amount?: unknown }>; subtotal?: unknown; iva?: unknown } | null,
+  total: number,
+): PricedQuoteLines {
+  const lines = Array.isArray(oc?.items) ? oc!.items : [];
+  if (!lines.length) throw new HttpsError("failed-precondition", "No se pudieron leer las partidas de la OC activa.");
+  const items = lines.map(item => ({
+    quantity: Number(item.quantity),
+    unit: clean(item.unit, 60),
+    productCode: /^\d{8}$/.test(clean(item.productCode, 16)) ? clean(item.productCode, 16) : "",
+    description: clean(item.description, 1000),
+    // A missing price is never a zero price.
+    unitPrice: item.unitPrice === null || item.unitPrice === undefined || item.unitPrice === "" ? NaN : Number(item.unitPrice),
+    amount: item.amount === null || item.amount === undefined || item.amount === "" ? NaN : roundCents(item.amount),
+  }));
+  if (items.some(item => !item.description || !(item.quantity > 0) || !Number.isFinite(item.amount) || !Number.isFinite(item.unitPrice) || item.amount < 0))
+    throw new HttpsError("failed-precondition", "La OC no trae precio e importe en todas sus partidas; la cotizacion queda pendiente.");
+  // Prefer the OC's own subtotal and IVA when they reconcile with the total;
+  // otherwise fall back to the IVA-inclusive split used before.
+  const ocSubtotal = roundCents(oc?.subtotal), ocIva = roundCents(oc?.iva);
+  const ocSplitValid = ocSubtotal > 0 && ocIva >= 0 && Math.abs(ocSubtotal + ocIva - total) <= 0.01 + 1e-9;
+  const subtotal = ocSplitValid ? ocSubtotal : roundCents(total / 1.16);
+  const iva = ocSplitValid ? ocIva : roundCents(total - subtotal);
+  const linesTotal = roundCents(items.reduce((sum, item) => sum + item.amount, 0));
+  // Each line may carry its own half-cent rounding; a one-cent gap is accepted.
+  if (Math.abs(linesTotal - subtotal) > Math.max(0.01, items.length * 0.005) + 1e-9)
+    throw new HttpsError("failed-precondition", `Las partidas de la OC suman ${formatMoney(linesTotal)} y no cuadran con el subtotal ${formatMoney(subtotal)}; la cotizacion queda pendiente.`);
+  return { items, subtotal, iva };
+}
+
+/** Issuer contact printed on the quote: the company's configured contact, else contacto@<alias>.mx. */
+export function quotationIssuerContact(company: any): string {
+  const configured = clean(company?.quotationContact, 120);
+  if (configured) return configured;
+  const alias = clean(company?.depositAlias, 80).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return alias ? `contacto@${alias}.mx` : "";
 }
 
 function activeDepositAccount(company: any): { bankName: string; accountNumber: string; clabe: string } {
@@ -237,9 +292,15 @@ export async function generateCotizacionForSolicitudCore(request: {
     // Solicitudes conservan monto como total operativo. A quote must never
     // treat that total as a subtotal and charge IVA twice.
     const total = quotationSource.total;
-    const subtotal = Math.round((total / 1.16) * 100) / 100;
-    const iva = Math.round((total - subtotal) * 100) / 100;
-    const description = clean(quotationSource.items[0]?.description, 240);
+    // Stored OC metadata predates line pricing, so the priced lines, date and
+    // number are read from the active OC file itself.
+    const ocLines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
+    const { items: quoteItems, subtotal, iva } = requirePricedQuoteLines(ocLines, total);
+    const description = clean(quoteItems[0]?.description, 240);
+    // The quote shows the OC date; the real generation time stays in
+    // generatedAt and createdAt on the upload record.
+    const documentDate = ocLines?.date || "";
+    const ocNumber = clean(ocLines?.number, 30);
 
     // This opaque token is intentionally the only credential in the QR.  It
     // verifies one sealed quotation publicly and never grants access to PAY0.
@@ -260,7 +321,9 @@ export async function generateCotizacionForSolicitudCore(request: {
       bankName: deposit.bankName,
       bankAccount: deposit.accountNumber,
       bankClabe: deposit.clabe,
-      reference: clean(solicitud.ordenCompraFolio || solicitud.ocReferencia || solicitud.folio || solicitudId, 180),
+      reference: clean(ocNumber || solicitud.ordenCompraFolio || solicitud.ocReferencia || solicitud.folio || solicitudId, 180),
+      documentDate,
+      issuerContact: quotationIssuerContact(company),
       description,
       productCode: clean(solicitud.satProductCode || solicitud.productCode || solicitud.claveSat || "", 16),
       unit: clean(solicitud.satUnitCode || solicitud.unit || solicitud.unidad || "SERVICIO", 60),
@@ -272,7 +335,7 @@ export async function generateCotizacionForSolicitudCore(request: {
       solicitudId,
       referencePdf: templateSnapshot.referencePdf,
       verificationUrl,
-      items: quotationSource.items,
+      items: quoteItems,
     });
     const documentSha256 = sha256(pdf);
     const uploadId = db.collection("uploads").doc().id;
@@ -332,7 +395,12 @@ export async function generateCotizacionForSolicitudCore(request: {
           total,
           description,
           documentSha256,
+          documentDate: documentDate || null,
+          documentDateSource: documentDate ? "ORDEN_COMPRA" : "GENERACION",
+          ocNumber: ocNumber || null,
+          lineCount: quoteItems.length,
         },
+        generatedAt: FieldValue.serverTimestamp(),
         publicVerificationToken,
         publicVerificationUrl: verificationUrl,
         status: "PENDING",
@@ -461,7 +529,7 @@ export async function generateCotizacionForSolicitudCore(request: {
 }
 
 export const generateSolicitudQuotation = onCall(
-  { cors: true, timeoutSeconds: 120, memory: "1GiB" },
+  { cors: true, timeoutSeconds: 120, memory: "1GiB", maxInstances: 20 },
   async (request) => generateCotizacionForSolicitudCore(request),
 );
 

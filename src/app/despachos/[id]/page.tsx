@@ -24,6 +24,7 @@ type CompanyRow = {
   nombre: string;
   rfc: string;
   depositAlias?: string;
+  quotationContact?: string;
   depositClabes?: string[];
   depositAccounts?: Array<{ id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom?: string | null; validTo?: string | null }>;
   active: boolean;
@@ -78,6 +79,7 @@ export default function DespachoDetallePage() {
 
   const [depositEditorCompany, setDepositEditorCompany] = useState<CompanyRow | null>(null);
   const [depositAlias, setDepositAlias] = useState("");
+  const [quotationContact, setQuotationContact] = useState("");
   const [depositClabesText, setDepositClabesText] = useState("");
   const [depositSaving, setDepositSaving] = useState(false);
 
@@ -158,6 +160,7 @@ export default function DespachoDetallePage() {
     setErr(null);
     setDepositEditorCompany(company);
     setDepositAlias(String(company.depositAlias || ""));
+    setQuotationContact(String(company.quotationContact || ""));
     setDepositClabesText(
       Array.isArray(company.depositAccounts) && company.depositAccounts.length
         ? company.depositAccounts.map((row) => `${row.clabe}|${row.status}`).join("\n")
@@ -194,10 +197,12 @@ export default function DespachoDetallePage() {
         depositAlias: alias,
         depositClabes: clabes,
         depositAccounts: accounts,
+        quotationContact: quotationContact.trim(),
       });
 
       setDepositEditorCompany(null);
       setDepositAlias("");
+      setQuotationContact("");
       setDepositClabesText("");
     } catch (e: any) {
       setErr(e?.message || "No se pudo guardar la identificacion de deposito.");
@@ -406,6 +411,22 @@ export default function DespachoDetallePage() {
                   />
                   <div className="mt-1 text-[10px] text-slate-500">
                     Solo para identificar depositos. No sustituye la razon social.
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-xs text-slate-400">
+                    Contacto para cotizaciones
+                  </div>
+                  <input
+                    value={quotationContact}
+                    onChange={(e) => setQuotationContact(e.target.value)}
+                    maxLength={120}
+                    placeholder={depositAlias.trim() ? `contacto@${depositAlias.trim().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "")}.mx` : "Ej. contacto@empresa.mx"}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-slate-100 outline-none"
+                  />
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    Aparece en el recuadro Contacto de las cotizaciones. Si lo dejas vacio se usa contacto@alias.mx.
                   </div>
                 </div>
 

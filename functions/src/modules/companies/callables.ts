@@ -241,7 +241,7 @@ export const setDispatchCompanies = onCall(
 );
 
 export const listCompaniesCanonical = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, timeoutSeconds: 60, memory: "256MiB", maxInstances: 20 },
   async (request) => {
     const callerUid = requireAuth(request);
     const caller = await getMyUser(callerUid);
@@ -282,6 +282,7 @@ export const listCompaniesCanonical = onCall(
         nombre: String(data.nombre || ""),
         rfc: String(data.rfc || ""),
         depositAlias: String(data.depositAlias || ""),
+        quotationContact: String(data.quotationContact || ""),
         depositClabes: depositAccounts.filter((row) => row.status === "ACTIVA").map((row) => row.clabe),
         depositAccounts,
         active: data.active !== false,
@@ -328,7 +329,7 @@ function normalizeCompanyDepositAccounts(value: unknown, legacyClabes: unknown =
 }
 
 export const updateCompanyDepositIdentity = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, timeoutSeconds: 60, memory: "256MiB", maxInstances: 20 },
   async (request) => {
     const callerUid = requireAuth(request);
     const caller = await getMyUser(callerUid);
@@ -349,6 +350,10 @@ export const updateCompanyDepositIdentity = onCall(
       request.data?.depositClabes,
     );
     const depositAccounts = normalizeCompanyDepositAccounts(request.data?.depositAccounts, depositClabes);
+    // Optional so older pages that do not send it keep the stored contact.
+    const quotationContact = request.data?.quotationContact === undefined
+      ? undefined
+      : String(request.data.quotationContact ?? "").replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
 
     if (!companyId) {
       throw new HttpsError("invalid-argument", "companyId requerido.");
@@ -407,6 +412,7 @@ export const updateCompanyDepositIdentity = onCall(
         depositAlias,
         depositClabes,
         depositAccounts,
+        ...(quotationContact !== undefined ? { quotationContact } : {}),
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: callerUid,
       },
