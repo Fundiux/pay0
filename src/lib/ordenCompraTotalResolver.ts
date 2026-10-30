@@ -364,7 +364,9 @@ function componentContext(total: LabelHit, allHits: LabelHit[]) {
 
   for (const hit of components) {
     if (hit.kind === "SUBTOTAL") continue;
-    dedupe.set(`${hit.kind}:${hit.labelCell}`, hit);
+    // Plantillas con etiquetas repetidas en celdas contiguas (p. ej. J y K)
+    // apuntan al mismo importe. Contarlo dos veces invalida la conciliación.
+    dedupe.set(`${hit.kind}:${hit.valueCell}`, hit);
   }
 
   const other = [...dedupe.values()];
