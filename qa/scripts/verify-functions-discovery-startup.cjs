@@ -26,7 +26,7 @@ const warmupTimeoutMs = 60_000;
 // the private-document compatibility transport, and the P4 historical-import
 // recovery engine retained for existing manifests and runs.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 360;
+const expectedEndpointCount = 361;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
@@ -40,6 +40,7 @@ const requiredEndpoints = [
   "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
   "createClientDispersionIq",
   "processIqDispersionCreate",
+  "importIqDispersionReceipt",
   "previewPaymentCommissionDistribution",
   "authorizeHugoVoiceGatewaySession",
   "loginWithUsername", "setMyUsername",

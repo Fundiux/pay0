@@ -39,6 +39,8 @@ type DispersionLike = {
   clienteNombre?: string | null;
   beneficiaryNombre?: string | null;
   amount?: number | null;
+  iqDispersionFolio?: string | null;
+  iqDispersionId?: string | null;
 };
 
 function formatDate(value: any) {
@@ -66,6 +68,8 @@ export default function DispersionDocsModal(props: {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deliveryBusyId, setDeliveryBusyId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [iqImportBusy, setIqImportBusy] = useState(false);
+  const [iqImportMessage, setIqImportMessage] = useState("");
 
   const dispersionId = dispersion?.id || "";
   const dispersionRootId = String(dispersion?.rootId || "").trim();
@@ -130,6 +134,7 @@ export default function DispersionDocsModal(props: {
   if (!open) return null;
 
   const activeDocs = docs.filter((doc) => doc.active !== false && String(doc.status || "") !== "INACTIVE");
+  const iqFolio = String(dispersion?.iqDispersionFolio || dispersion?.iqDispersionId || "").trim();
 
 
   async function prepareDispersionWhatsapp(doc: any) {
@@ -230,6 +235,29 @@ export default function DispersionDocsModal(props: {
     }
   };
 
+  const importFromIq = async () => {
+    if (!dispersionId || !iqFolio || iqImportBusy) return;
+    setIqImportBusy(true);
+    setIqImportMessage("");
+    try {
+      const callable = httpsCallable<{ dispersionId: string }, { status: string }>(
+        functions, CALLABLES.importIqDispersionReceipt,
+      );
+      const result = await callable({ dispersionId });
+      setIqImportMessage(
+        result.data.status === "IMPORTED"
+          ? "Comprobante de IQ guardado en PAY0."
+          : result.data.status === "ALREADY_ATTACHED"
+            ? "Esta dispersion ya tiene un comprobante adjunto."
+            : "IQ aun no tiene un comprobante disponible para este folio.",
+      );
+    } catch (error: any) {
+      setIqImportMessage(error?.message || "No se pudo consultar el comprobante en IQ.");
+    } finally {
+      setIqImportBusy(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0f1624] shadow-2xl">
@@ -252,6 +280,20 @@ export default function DispersionDocsModal(props: {
         </div>
 
         <div className="space-y-4 p-4">
+          {iqFolio && activeDocs.length === 0 ? (
+            <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-3">
+              <div className="mb-2 text-xs text-slate-300">Folio IQ {iqFolio}</div>
+              <button
+                type="button"
+                onClick={importFromIq}
+                disabled={iqImportBusy}
+                className="rounded-lg bg-sky-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {iqImportBusy ? "Consultando IQ..." : "Traer comprobante de IQ"}
+              </button>
+              {iqImportMessage ? <div className="mt-2 text-xs text-slate-300">{iqImportMessage}</div> : null}
+            </div>
+          ) : null}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
               Subir comprobante

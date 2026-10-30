@@ -37,6 +37,7 @@ export const CALLABLES = {
   initDispersionDocumentUpload: "initDispersionDocumentUpload",
   finalizeDispersionDocumentUpload: "finalizeDispersionDocumentUpload",
   deactivateDispersionDocument: "deactivateDispersionDocument",
+  importIqDispersionReceipt: "importIqDispersionReceipt",
   createAdmin: "createAdmin",
   createOperador: "createOperador",
   ensureMaterialityClientCompany: "ensureMaterialityClientCompany",

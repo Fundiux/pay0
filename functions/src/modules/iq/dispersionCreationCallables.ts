@@ -33,7 +33,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const FieldValue =
   admin.firestore.FieldValue;
-const IQ_CREDENTIALS_KEY =
+export const IQ_CREDENTIALS_KEY =
   defineSecret("IQ_CREDENTIALS_KEY");
 
 const VERSION = "H4_D82_A4_A1";
@@ -596,7 +596,7 @@ async function getIqDispersionDespachoDiagnostic(
   };
 }
 
-async function loadIqAccess(
+export async function loadIqAccess(
   auth: AuthContext,
   despachoId: string,
   sourceChannel: string,
