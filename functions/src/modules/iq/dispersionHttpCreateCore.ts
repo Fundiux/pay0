@@ -16,6 +16,7 @@ export type IqDispersionCreateItemH4D82A4A1 = {
   percentageLabel: string;
   amount: number;
   expectedDestinationLast4: string;
+  expectedDestinationDigits?: string;
   reference: string;
   fundingHolderType?: "USER" | "CLIENT";
   verifiedInstrument?: VerifiedIqCommissionInstrument;
@@ -478,6 +479,8 @@ function beneficiarySearchTerm(
 function resolveBeneficiaryAccount(
   rows: AnyRow[],
   expectedLast4: string,
+  expectedDigits?: string,
+  verifiedAccountId?: string,
 ): {
   id: number;
   label: string;
@@ -488,12 +491,32 @@ function resolveBeneficiaryAccount(
     throw new Error("IQ_DESTINATION_LAST4_INVALID");
   }
 
-  const matches = rows.filter((row) =>
+  let matches = rows.filter((row) =>
     flattenStrings(row).some((value) => {
       const d = digits(value);
       return d.length >= 4 && d.endsWith(last4);
     }),
   );
+
+  const fullExpected = digits(expectedDigits);
+  if (fullExpected.length >= 15) {
+    const visibleFullNumbers = matches.flatMap((row) =>
+      flattenStrings(row).map(digits).filter((value) => value.length >= 15),
+    );
+    if (visibleFullNumbers.length > 0 && !visibleFullNumbers.includes(fullExpected)) {
+      throw new Error("IQ_BENEFICIARY_ACCOUNT_MISMATCH");
+    }
+  }
+
+  if (matches.length > 1 && fullExpected.length >= 15) {
+    const exact = matches.filter((row) =>
+      flattenStrings(row).some((value) => digits(value) === fullExpected),
+    );
+    if (exact.length > 0) {
+      matches = exact.sort((a, b) => (rowId(a) || 0) - (rowId(b) || 0));
+      matches = [matches.find((row) => String(rowId(row)) === verifiedAccountId) || matches[0]];
+    }
+  }
 
   if (matches.length !== 1) {
     throw new Error(
@@ -520,6 +543,42 @@ function resolveBeneficiaryAccount(
     id,
     label,
   };
+}
+
+async function resolveDuplicateBeneficiaryByDestination(input: {
+  rows: AnyRow[];
+  candidates: string[];
+  expectedDestinationDigits: string;
+  verifiedBeneficiaryId?: string;
+  verifiedAccountId?: string;
+  loadDetail: (beneficiaryId: number) => Promise<WizardPayload>;
+}): Promise<{ beneficiary: AnyRow; detail: WizardPayload; account: { id: number; label: string } }> {
+  const wanted = unique(input.candidates.map(normalize).filter(Boolean));
+  const exact = input.rows.filter((row) => wanted.includes(normalize(rowName(row))));
+  const matches = exact.length > 0 ? exact : input.rows.filter((row) =>
+    wanted.some((name) => name.length >= 5 && (normalize(rowName(row)).includes(name) || name.includes(normalize(rowName(row))))),
+  );
+  const expected = digits(input.expectedDestinationDigits);
+  if (matches.length < 2 || matches.length > 25 || expected.length < 15) {
+    throw new Error("IQ_BENEFICIARY_AMBIGUOUS_DESTINATION_UNVERIFIED");
+  }
+  const resolved: Array<{ beneficiary: AnyRow; detail: WizardPayload; account: { id: number; label: string } }> = [];
+  for (const beneficiary of matches) {
+    const beneficiaryId = rowId(beneficiary);
+    if (!beneficiaryId || (input.verifiedBeneficiaryId && String(beneficiaryId) !== input.verifiedBeneficiaryId)) continue;
+    const detail = await input.loadDetail(beneficiaryId);
+    const accounts = asRows(detail.beneficiary_accounts).filter((row) =>
+      flattenStrings(row).some((value) => digits(value) === expected),
+    );
+    for (const row of accounts) {
+      const accountId = rowId(row);
+      if (!accountId || (input.verifiedAccountId && String(accountId) !== input.verifiedAccountId)) continue;
+      resolved.push({ beneficiary, detail, account: { id: accountId, label: `****${expected.slice(-4)}` } });
+    }
+  }
+  if (!resolved.length) throw new Error("IQ_BENEFICIARY_AMBIGUOUS_DESTINATION_UNVERIFIED");
+  resolved.sort((a, b) => (rowId(a.beneficiary) || 0) - (rowId(b.beneficiary) || 0) || a.account.id - b.account.id);
+  return resolved[0];
 }
 
 function normalizePercent(
@@ -1014,14 +1073,33 @@ export async function runIqCreateDispersionHttpH4D85A50(
     const beneficiaryPayload =
       (beneficiaryLookup.json ?? {}) as WizardPayload;
 
-    const beneficiary =
-      findUniqueByNormalizedNames(
-        asRows(
-          beneficiaryPayload.beneficiaries,
-        ),
-        input.item.beneficiaryCandidates,
-        "IQ_BENEFICIARY",
+    const loadBeneficiaryDetail = async (beneficiaryId: number) =>
+      (await fetchJson(buildWizardUrl(apiOrigin, {
+        partner_id: partner.id,
+        client_id: clientId,
+        currency: clean(input.item.currency).toLowerCase(),
+        operation_type_id: opTypeId,
+        beneficiary_search: searchTerm,
+        beneficiary_id: beneficiaryId,
+      }), token)).json as WizardPayload ?? {};
+    let beneficiary: AnyRow;
+    let resolvedDuplicate: Awaited<ReturnType<typeof resolveDuplicateBeneficiaryByDestination>> | null = null;
+    try {
+      beneficiary = findUniqueByNormalizedNames(
+        asRows(beneficiaryPayload.beneficiaries), input.item.beneficiaryCandidates, "IQ_BENEFICIARY",
       );
+    } catch (error) {
+      if (!clean((error as Error).message).includes("IQ_BENEFICIARY_AMBIGUOUS")) throw error;
+      resolvedDuplicate = await resolveDuplicateBeneficiaryByDestination({
+        rows: asRows(beneficiaryPayload.beneficiaries),
+        candidates: input.item.beneficiaryCandidates,
+        expectedDestinationDigits: input.item.expectedDestinationDigits || "",
+        verifiedBeneficiaryId: verified?.beneficiaryId,
+        verifiedAccountId: verified?.accountId,
+        loadDetail: loadBeneficiaryDetail,
+      });
+      beneficiary = resolvedDuplicate.beneficiary;
+    }
 
     const beneficiaryId = rowId(beneficiary);
     if (!beneficiaryId) {
@@ -1034,21 +1112,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
     const beneficiaryName =
       rowName(beneficiary);
 
-    const detail = await fetchJson(
-      buildWizardUrl(apiOrigin, {
-        partner_id: partner.id,
-        client_id: clientId,
-        currency:
-          clean(input.item.currency).toLowerCase(),
-        operation_type_id: opTypeId,
-        beneficiary_search: searchTerm,
-        beneficiary_id: beneficiaryId,
-      }),
-      token,
-    );
-
-    const detailPayload =
-      (detail.json ?? {}) as WizardPayload;
+    const detailPayload = resolvedDuplicate?.detail ?? await loadBeneficiaryDetail(beneficiaryId);
 
     const clientRows =
       asRows(detailPayload.clients);
@@ -1071,13 +1135,10 @@ export async function runIqCreateDispersionHttpH4D85A50(
       );
     }
 
-    const account =
-      resolveBeneficiaryAccount(
-        asRows(
-          detailPayload.beneficiary_accounts,
-        ),
-        input.item.expectedDestinationLast4,
-      );
+    const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(
+      asRows(detailPayload.beneficiary_accounts), input.item.expectedDestinationLast4,
+      input.item.expectedDestinationDigits, verified?.accountId,
+    );
     if (verified && String(account.id) !== verified.accountId) throw new Error("IQ_COMMISSION_ACCOUNT_CHANGED");
 
     destinationVerified = true;
@@ -1390,6 +1451,7 @@ export async function resolveIqBeneficiaryInstrument(input: {
   currency?: string;
   operationTypeKey: "TRANSFERENCIA" | "TDC";
   expectedDestinationLast4: string;
+  expectedDestinationDigits?: string;
 }): Promise<IqBeneficiaryInstrumentResolution> {
   const apiOrigin = (() => {
     const raw = clean(input.apiOrigin) || clean(process.env.PAY0_IQ_API_ORIGIN) || DEFAULT_IQ_API_ORIGIN;
@@ -1406,14 +1468,28 @@ export async function resolveIqBeneficiaryInstrument(input: {
     partner_id: partner.id, client_id: clientId, currency: clean(input.currency || "MXN").toLowerCase(),
     operation_type_id: opTypeId, beneficiary_search: searchTerm,
   }), token);
-  const beneficiary = findUniqueByNormalizedNames(asRows(((lookup.json ?? {}) as WizardPayload).beneficiaries), input.beneficiaryCandidates, "IQ_BENEFICIARY");
+  const beneficiaryRows = asRows(((lookup.json ?? {}) as WizardPayload).beneficiaries);
+  const loadDetail = async (beneficiaryId: number) =>
+    (await fetchJson(buildWizardUrl(apiOrigin, {
+      partner_id: partner.id, client_id: clientId, currency: clean(input.currency || "MXN").toLowerCase(),
+      operation_type_id: opTypeId, beneficiary_search: searchTerm, beneficiary_id: beneficiaryId,
+    }), token)).json as WizardPayload ?? {};
+  let beneficiary: AnyRow;
+  let resolvedDuplicate: Awaited<ReturnType<typeof resolveDuplicateBeneficiaryByDestination>> | null = null;
+  try {
+    beneficiary = findUniqueByNormalizedNames(beneficiaryRows, input.beneficiaryCandidates, "IQ_BENEFICIARY");
+  } catch (error) {
+    if (!clean((error as Error).message).includes("IQ_BENEFICIARY_AMBIGUOUS")) throw error;
+    resolvedDuplicate = await resolveDuplicateBeneficiaryByDestination({
+      rows: beneficiaryRows, candidates: input.beneficiaryCandidates,
+      expectedDestinationDigits: input.expectedDestinationDigits || "", loadDetail,
+    });
+    beneficiary = resolvedDuplicate.beneficiary;
+  }
   const beneficiaryId = rowId(beneficiary);
   if (!beneficiaryId) throw new Error("IQ_BENEFICIARY_ID_INVALID");
-  const detail = await fetchJson(buildWizardUrl(apiOrigin, {
-    partner_id: partner.id, client_id: clientId, currency: clean(input.currency || "MXN").toLowerCase(),
-    operation_type_id: opTypeId, beneficiary_search: searchTerm, beneficiary_id: beneficiaryId,
-  }), token);
-  const account = resolveBeneficiaryAccount(asRows(((detail.json ?? {}) as WizardPayload).beneficiary_accounts), input.expectedDestinationLast4);
+  const detailPayload = resolvedDuplicate?.detail ?? await loadDetail(beneficiaryId);
+  const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(asRows(detailPayload.beneficiary_accounts), input.expectedDestinationLast4, input.expectedDestinationDigits);
   return {
     status: "VERIFIED",
     iqBeneficiaryId: String(beneficiaryId),

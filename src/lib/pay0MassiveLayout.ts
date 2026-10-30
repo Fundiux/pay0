@@ -41,6 +41,35 @@ export interface Pay0MassiveParseResult {
   };
 }
 
+export function toPay0MassiveDispersionItem(row: Pay0MassiveParsedRow & {
+  amount?: number;
+  reference?: string;
+  beneficiaryName?: string;
+  beneficiaryId?: string;
+  methodId?: string;
+  beneficiaryAction?: string;
+  methodAction?: string;
+}) {
+  return {
+    rowNumber: row.rowNumber,
+    beneficiaryName: row.beneficiaryName || row.nombre,
+    amount: row.amount ?? row.monto ?? 0,
+    reference: row.reference,
+    banco: row.banco,
+    bankCode: row.bankCode,
+    clabe: row.clabe,
+    numeroTarjeta: row.numeroTarjeta,
+    cuenta: row.cuenta,
+    destinationKind: row.destinationKind,
+    tipo: row.tipo,
+    methodTipo: row.methodTipo,
+    beneficiaryId: row.beneficiaryId,
+    methodId: row.methodId,
+    beneficiaryAction: row.beneficiaryAction,
+    methodAction: row.methodAction,
+  };
+}
+
 export const PAY0_MASSIVE_LAYOUT_HEADERS = [
   "NOMBRE",
   "MONTO",

@@ -16,9 +16,9 @@ async function fakeFetch(input, init = {}) {
   if (url.pathname === '/users/sessions' && init.method === 'POST') return response({ access_token: 'synthetic-memory-token' }, 201);
   if (url.pathname === '/dispersions/new' && init.method === 'GET') {
     if (!url.search) return response({ partners: [{ id: scenario.partnerId || 101, name: 'Synthetic partner' }] });
-    if (!url.searchParams.has('beneficiary_id')) return response({ beneficiaries: [{ id: scenario.beneficiaryId || 103, name: 'Synthetic beneficiary' }] });
+    if (!url.searchParams.has('beneficiary_id')) return response({ beneficiaries: scenario.beneficiaries || [{ id: scenario.beneficiaryId || 103, name: 'Synthetic beneficiary' }] });
     return response({ clients: [{ id: 102, name: 'Synthetic client' }],
-      beneficiary_accounts: [{ id: scenario.accountId || 104, account: '00001234' }],
+      beneficiary_accounts: scenario.accountsByBeneficiary?.[url.searchParams.get('beneficiary_id')] || [{ id: scenario.accountId || 104, account: '00001234' }],
       sale_percentages: [{ id: 301, base_percentage: 2, sale_percentage: 2, name: '2%' }],
     });
   }
@@ -33,6 +33,7 @@ async function fakeFetch(input, init = {}) {
 const modules = new Map();
 function load(name) {
   assert(allow.has(name), 'Unexpected dependency: ' + name);
+  if (name === 'externalActionsPolicy') return { fetchIqExternal: fakeFetch };
   if (modules.has(name)) return modules.get(name);
   const filename = path.join(directory, name + '.ts'), module = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -44,14 +45,14 @@ function load(name) {
   return module.exports;
 }
 const { bindVerifiedIqCommissionInstrument: bind } = load('commissionInstrumentBinding');
-const { runIqCreateDispersionHttpH4D85A50: execute } = load('dispersionHttpCreateCore');
+const { runIqCreateDispersionHttpH4D85A50: execute, resolveIqBeneficiaryInstrument } = load('dispersionHttpCreateCore');
 const fingerprint = crypto.createHash('sha256').update(JSON.stringify({ rootId: 'root', despachoId: 'dispatch', profileId: 'owner-profile', clientIqId: '102', beneficiaryId: '103', accountId: '104', last4: '1234', operationTypeKey: 'TRANSFERENCIA' })).digest('hex');
 const bindInput = { rootId: 'root', despachoId: 'dispatch', profileId: 'owner-profile', clientIqId: '102', operationTypeKey: 'TRANSFERENCIA',
   method: { iqPartnerId: '101', iqClientId: '102', iqBeneficiaryId: '103', iqAccountId: '104', iqInstrumentLast4: '1234', last4: '1234', iqDespachoId: 'dispatch', iqCredentialProfileId: 'owner-profile', iqInstrumentType: 'TRANSFERENCIA', iqEvidenceFingerprint: fingerprint },
   historicalLeg: { iqPartnerId: '101', iqBeneficiaryId: '103', iqAccountId: '104', instrumentLast4: '1234', iqEvidenceFingerprint: fingerprint },
 };
 const binding = bind(bindInput);
-const item = { associatedName: 'Synthetic partner', clientCandidates: ['Synthetic client'], beneficiaryCandidates: ['Synthetic beneficiary'], clientIqId: '102', currency: 'MXN', operationTypeKey: 'TRANSFERENCIA', percentageLabel: '2', amount: 100, expectedDestinationLast4: '1234', reference: 'SYNTHETIC', fundingHolderType: 'USER', verifiedInstrument: binding };
+const item = { associatedName: 'Synthetic partner', clientCandidates: ['Synthetic client'], beneficiaryCandidates: ['Synthetic beneficiary'], clientIqId: '102', currency: 'MXN', operationTypeKey: 'TRANSFERENCIA', percentageLabel: '2', amount: 100, expectedDestinationLast4: '1234', expectedDestinationDigits: '1234567890121234', reference: 'SYNTHETIC', fundingHolderType: 'USER', verifiedInstrument: binding };
 function check(condition, label) { assert.ok(condition, label); checks++; }
 async function run(changes = {}, itemChanges = {}) {
   scenario = changes; calls = posts = 0; posted = null;
@@ -88,6 +89,22 @@ async function main() {
   check(calls === 0 && posts === 0, 'Changed method and provider partner cannot replace the historical partner');
   const legacy = await run({ accountId: 904 }, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
   check(legacy.outcome === 'CREATED' && posts === 1 && posted.beneficiary_account_id === '904', 'Existing CLIENT path is unchanged');
+  const duplicates = { beneficiaries: [{ id: 108, name: 'SYNTHETIC BENEFICIARY' }, { id: 103, name: 'Synthetic Beneficiary' }], accountsByBeneficiary: {
+    '108': [{ id: 208, account: '9999999999991234' }], '103': [{ id: 104, account: '1234567890121234' }],
+  } };
+  const matched = await run(duplicates, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
+  check(matched.outcome === 'CREATED' && posts === 1 && posted.beneficiary_account_id === '104', 'Duplicate names select only the exact requested account');
+  const sameAccount = await run({ ...duplicates, accountsByBeneficiary: { '108': [{ id: 208, account: '1234567890121234' }], '103': [{ id: 104, account: '1234567890121234' }] } }, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
+  check(sameAccount.outcome === 'CREATED' && posts === 1 && posted.beneficiary_account_id === '104', 'Identical destinations choose a stable beneficiary ID');
+  const unsafe = await run({ ...duplicates, accountsByBeneficiary: { '108': [{ id: 208, account: '9999999999991234' }], '103': [{ id: 104, account: '8888888888881234' }] } }, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
+  check(unsafe.outcome === 'FAILED_SAFE' && posts === 0 && unsafe.errors.includes('IQ_BENEFICIARY_AMBIGUOUS_DESTINATION_UNVERIFIED'), 'Matching last four digits alone never select a duplicate');
+  const repeatedAccounts = await run({ accountsByBeneficiary: { '103': [{ id: 207, account: '9999999999991234' }, { id: 104, account: '1234567890121234' }, { id: 208, account: '1234567890121234' }] } }, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
+  check(repeatedAccounts.outcome === 'CREATED' && posts === 1 && posted.beneficiary_account_id === '104', 'Repeated IQ accounts select the exact requested number with a stable ID');
+  const wrongFullAccount = await run({ accountsByBeneficiary: { '103': [{ id: 104, account: '9999999999991234' }] } }, { fundingHolderType: 'CLIENT', verifiedInstrument: undefined });
+  check(wrongFullAccount.outcome === 'FAILED_SAFE' && posts === 0 && wrongFullAccount.errors.includes('IQ_BENEFICIARY_ACCOUNT_MISMATCH'), 'A single same-last-four account with a different full number cannot be selected');
+  scenario = duplicates; calls = posts = 0;
+  const link = await resolveIqBeneficiaryInstrument({ apiOrigin: 'https://synthetic-iq.invalid', username: 'synthetic', password: 'synthetic', associatedName: 'Synthetic partner', clientIqId: '102', beneficiaryCandidates: ['synthetic beneficiary'], operationTypeKey: 'TRANSFERENCIA', expectedDestinationLast4: '1234', expectedDestinationDigits: '1234567890121234' });
+  check(link.iqBeneficiaryId === '103' && link.iqAccountId === '104' && posts === 0, 'Account linking resolves name variants through the same exact destination rule');
   console.log(JSON.stringify({ ok: true, checks, providerRequests: 0, emulatorUsed: false, coverage: 'actual HTTP adapter with in-memory provider; USER verified IDs and CLIENT compatibility' }));
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

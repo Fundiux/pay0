@@ -431,6 +431,7 @@ function isDispersionCreateSchedulerCandidate(
     [
       "IQ_GENERADA",
       "IQ_REQUIERE_REVISION",
+      "IQ_ERROR_SEGURO",
     ].includes(iqStatus)
   ) {
     return false;
@@ -1944,6 +1945,11 @@ export async function runCreateClientDispersionIqCore(input: {
         amount,
         expectedDestinationLast4:
           destination.last4,
+        expectedDestinationDigits: clean(
+          destination.kind === "CLABE"
+            ? (method.clabe ?? method.CLABE ?? method.bankClabe)
+            : (method.cardNumber ?? method.numeroTarjeta ?? method.tarjeta),
+        ).replace(/\D/g, ""),
         reference:
           clean(
             principal.folio,
@@ -2198,6 +2204,7 @@ export const resolveCommissionInstrumentIq = onCall(
         apiOrigin: access.erpUrl, username: access.username, password: access.password, associatedName: access.associatedName,
         clientIqId, beneficiaryCandidates: [beneficiary.iqNombre, beneficiary.nombre, beneficiary.name].map(clean).filter(Boolean),
         currency: clean(payment.moneda) || "MXN", operationTypeKey: operationTypeKey as "TRANSFERENCIA" | "TDC", expectedDestinationLast4: expectedLast4,
+        expectedDestinationDigits: clean(operationTypeKey === "TDC" || !clean(method.clabe) ? (method.cardNumber ?? method.numeroTarjeta ?? method.tarjeta) : method.clabe).replace(/\D/g, ""),
       });
       const evidenceFingerprint = crypto.createHash("sha256").update(JSON.stringify({ rootId: auth.rootId, despachoId, profileId: access.profileId, clientIqId, beneficiaryId: resolved.iqBeneficiaryId, accountId: resolved.iqAccountId, last4: resolved.instrumentLast4, operationTypeKey })).digest("hex");
       await methodRef.set({
