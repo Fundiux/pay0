@@ -431,6 +431,7 @@ function isDispersionCreateSchedulerCandidate(
     [
       "IQ_GENERADA",
       "IQ_REQUIERE_REVISION",
+      "IQ_ERROR_SEGURO",
     ].includes(iqStatus)
   ) {
     return false;
