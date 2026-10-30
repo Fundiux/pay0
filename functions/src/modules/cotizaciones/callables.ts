@@ -13,6 +13,7 @@ import { renderCanonicalQuotePdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { isTerminalSolicitud } from "./quotationPolicy";
+import { stripOcTemplateHelp } from "../../utils/ocTemplateText";
 import { readOcQuotationLines } from "../solicitudDocuments/service";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -400,10 +401,10 @@ export async function generateCotizacionForSolicitudCore(request: {
       // An active OC is the immediate commercial instruction. Prefer its
       // extracted client data so the document never says "Conforme a CSF" or
       // substitutes a generic service when the source has those values.
-      clientName: clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180),
+      clientName: clean(stripOcTemplateHelp(solicitud.ocClientName) || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180),
       clientRfc: normalizeRfc(solicitud.ocClientRfc || solicitud.clienteRfc || solicitud.clientRfc || client.rfc || client.fiscalProfile?.rfc) || "PENDIENTE",
-      clientAddress: clean(solicitud.ocClientAddress || client.fiscalProfile?.address || client.domicilioFiscal || client.address || "", 300),
-      deliveryLocation: clean(solicitud.ocDeliveryLocation || solicitud.lugarEntrega || "", 240),
+      clientAddress: clean(stripOcTemplateHelp(solicitud.ocClientAddress) || client.fiscalProfile?.address || client.domicilioFiscal || client.address || "", 300),
+      deliveryLocation: clean(stripOcTemplateHelp(solicitud.ocDeliveryLocation) || solicitud.lugarEntrega || "", 240),
       bankName: deposit.bankName,
       bankAccount: deposit.accountNumber,
       bankClabe: deposit.clabe,

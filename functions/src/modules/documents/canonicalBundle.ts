@@ -12,6 +12,29 @@ export function canonicalCompanyCatalog(): Array<{ companyId: string; companyNam
   return (manifest.templates || []).map(({ companyId, companyName, rfc }: any) => ({ companyId, companyName, rfc }));
 }
 
+const TRANSPARENT_PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lZkAAAAASUVORK5CYII=", "base64");
+
+/**
+ * Quotation for a company without its own canonical package: the same shared
+ * base layout every canonical quote uses, with the default accent and no logo.
+ * The company logo comes from its active corporate LOGO resource, uploaded in
+ * Administracion > Recursos corporativos, when there is one.
+ */
+export function loadBaseQuotationBundle(input: { companyId: string; companyName: string; rfc: string }) {
+  if (!/^[A-ZÑ&0-9]{12,13}$/.test(input.rfc)) throw Error("CANONICAL_COMPANY_INVALID");
+  const folder = resolve(assets, "cotizaciones/templates/base");
+  const html = readFileSync(resolve(folder, "template.html"), "utf8");
+  const css = readFileSync(resolve(folder, "template.css"), "utf8");
+  const logo = TRANSPARENT_PIXEL;
+  const snapshot = {
+    templateId: "PAY0-BASE-COTIZACION", templateVersion: "1.0",
+    companyId: input.companyId, companyRfc: input.rfc, companyName: input.companyName,
+    referencePdfSha256: digest(html), templateBundleSha256: digest(Buffer.concat([Buffer.from(html), Buffer.from(css), logo])),
+    templateEngine: "PAY0_CANONICAL_HTML_CSS_PRINT_V2", documentUse: "COTIZACION" as CanonicalDocumentUse,
+  };
+  return { html, css, logo, reference: Buffer.alloc(0), snapshot };
+}
+
 export function loadCanonicalBundle(rfc: string, use: CanonicalDocumentUse) {
   if (!/^[A-ZÑ&0-9]{12,13}$/.test(rfc)) throw Error("CANONICAL_COMPANY_INVALID");
   const quotation = JSON.parse(readFileSync(resolve(assets, "cotizaciones-manifest.json"), "utf8"));

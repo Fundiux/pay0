@@ -29,6 +29,7 @@ export const finalizeSolicitudDocumentUpload = onCall(
     // La carga de una OC puede regenerar la cotizacion canonica HTML/CSS.
     // Chromium requiere mas margen que un upload ordinario.
     memory: "1GiB",
+    maxInstances: 20,
     secrets: [TELEGRAM_BOT_TOKEN_FOR_CLIENT_NOTIFICATIONS],
   },
   async (request) => {

@@ -190,6 +190,26 @@
       "file": "src/app/despachos/[id]/page.tsx",
       "text": "Contacto para cotizaciones",
       "capability": "Contacto de cotizaciones editable por empresa"
+    },
+    {
+      "file": "functions/src/modules/canonicalCenter/service.ts",
+      "text": "if (use === \"COTIZACION\") return loadBaseQuotationBundle(",
+      "capability": "Empresas sin plantilla propia cotizan con el diseno base y QR"
+    },
+    {
+      "file": "functions/src/modules/cotizaciones/callables.ts",
+      "text": "clientName: clean(stripOcTemplateHelp(solicitud.ocClientName)",
+      "capability": "La cotizacion no muestra instrucciones de la plantilla de OC"
+    },
+    {
+      "file": "functions/src/modules/constancias/service.ts",
+      "text": "stripOcTemplateHelp(solicitud.ocClientName)",
+      "capability": "La constancia no muestra instrucciones de la plantilla de OC"
+    },
+    {
+      "file": "functions/src/modules/solicitudDocuments/service.ts",
+      "text": "!isOcTemplateHelp(cell)",
+      "capability": "El lector de OC ignora instrucciones de la plantilla"
     }
   ],
   "forbiddenText": [

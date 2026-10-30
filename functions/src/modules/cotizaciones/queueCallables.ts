@@ -28,10 +28,12 @@ const TERMINAL = new Set(["SUCCEEDED", "BLOCKED", "ESCALATED"]);
 
 const clean = (value: unknown, max = 500) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const upper = (value: unknown) => clean(value).toUpperCase();
-const jobIdFor = (solicitudId: string, iqFolio: string, ocUploadId: string) =>
-  createHash("sha256").update([solicitudId, iqFolio, ocUploadId].join("|")).digest("hex");
+// A regeneration key makes a deliberate re-run a new idempotent job instead
+// of reusing the finished one for the same solicitud, IQ folio and OC.
+const jobIdFor = (solicitudId: string, iqFolio: string, ocUploadId: string, regenerationKey = "") =>
+  createHash("sha256").update([solicitudId, iqFolio, ocUploadId, ...(regenerationKey ? [regenerationKey] : [])].join("|")).digest("hex");
 
-type QueueInput = { solicitudId: string; iqFolio: string; requestedBy: string; source?: string; batchId?: string };
+type QueueInput = { solicitudId: string; iqFolio: string; requestedBy: string; source?: string; batchId?: string; regenerationKey?: string };
 
 /** A transaction-backed reservation shared by both IQ success paths. */
 export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
@@ -51,7 +53,7 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
     }
     const activeOcUploadId = clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128);
     if (!activeOcUploadId) throw new HttpsError("failed-precondition", "La solicitud no tiene OC activa procesada.");
-    const id = jobIdFor(input.solicitudId, currentIqFolio, activeOcUploadId);
+    const id = jobIdFor(input.solicitudId, currentIqFolio, activeOcUploadId, clean(input.regenerationKey, 80));
     const ref = db.collection("solicitudQuotationJobs").doc(id);
     const current = await tx.get(ref);
     const row: any = current.exists ? current.data() || {} : {};

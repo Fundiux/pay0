@@ -5,7 +5,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { logActivityTx } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
-import { canonicalCompanyCatalog, loadCanonicalBundle, type CanonicalDocumentUse } from "../documents/canonicalBundle";
+import { canonicalCompanyCatalog, loadBaseQuotationBundle, loadCanonicalBundle, type CanonicalDocumentUse } from "../documents/canonicalBundle";
 import { PAY0_CANONICAL_STORAGE } from "./contracts";
 import { DOCUMENT_TEMPLATE_TYPES, DOCUMENT_TEMPLATE_NAMES, globalTemplateBase, type DocumentTemplateType } from "./globalTemplateBase";
 
@@ -393,6 +393,7 @@ async function resolveTemplateBundle(rootId: string, companyId: string, rfc: str
     if (resource?.hasActivated) throw Error("CORPORATE_RESOURCE_ACTIVE_VERSION_REQUIRED");
     if (canonicalCompanyCatalog().some(row => row.rfc === rfc)) return loadCanonicalBundle(rfc, use);
     const company = (await db.collection("companies").doc(companyId).get()).data() || {};
+    if (use === "COTIZACION") return loadBaseQuotationBundle({ companyId, companyName: clean(company.nombre || company.razonSocial || "Empresa"), rfc });
     return globalTemplateBase({ use, companyId, companyName: clean(company.nombre || company.razonSocial || "Empresa"), rfc });
   }
   if (resource.rootId !== rootId || resource.ownCompanyId !== companyId) throw Error("CORPORATE_RESOURCE_SCOPE_INVALID");

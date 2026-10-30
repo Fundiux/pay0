@@ -10,6 +10,7 @@ import { linkSolicitudToMaterialityOperationCore } from "../materiality/service"
 import { renderCanonicalConstanciaPdf } from "../documents/canonicalPdf";
 import { resolveCorporateDocumentBundle } from "../canonicalCenter/service";
 import { requireDeliveryFiscalItems } from "./fiscalSource";
+import { stripOcTemplateHelp } from "../../utils/ocTemplateText";
 import { receiptAcceptance } from "../signatureLinks/acceptance";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -165,7 +166,7 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
   const cotizacion = await findActiveUpload(solicitudId, ["COTIZACION_FIRMADA", "COTIZACION"]);
   const factura = await findActiveUpload(solicitudId, ["FACTURA_XML", "FACTURA_PDF"]);
   const folio = `CONST-${clean(solicitud.folio || solicitudId, 80)}`;
-  const clienteNombre = clean(solicitud.ocClientName || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180);
+  const clienteNombre = clean(stripOcTemplateHelp(solicitud.ocClientName) || solicitud.clienteNombre || solicitud.clientName || client.razonSocial || client.nombre || client.name || "Cliente", 180);
   // The CSF canonical profile belongs to the client catalogue. Solicitudes can
   // carry a legacy partial snapshot, so use it only before the verified profile.
   const clienteRfc = normalizeRfc(solicitud.ocClientRfc || solicitud.clienteRfc || solicitud.clientRfc || client.rfc || client.fiscalProfile?.rfc) || "PENDIENTE";
@@ -376,7 +377,7 @@ export async function generateConstanciaRecepcionForSolicitudCore(request: {
 
 /** Authorized recovery reuses the sealed receipt, never asks the recipient to sign again. */
 export const generateSolicitudReceiptCertificate = onCall(
-  { region: "us-central1", cors: true, timeoutSeconds: 90, memory: "1GiB" },
+  { region: "us-central1", cors: true, timeoutSeconds: 90, memory: "1GiB", maxInstances: 20 },
   request => generateConstanciaRecepcionForSolicitudCore(request),
 );
 

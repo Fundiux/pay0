@@ -13,6 +13,7 @@ import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { isOcTemplateHelp } from "../../utils/ocTemplateText";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -210,7 +211,7 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
     const row = rows.find(item => item.some(cell => normalized(cell).startsWith(target)));
     if (!row) return "";
     const labelIndex = row.findIndex(cell => normalized(cell).startsWith(target));
-    return row.slice(Math.max(0, labelIndex + 1)).filter(Boolean).join(" ");
+    return row.slice(Math.max(0, labelIndex + 1)).filter(cell => cell && !isOcTemplateHelp(cell)).join(" ");
   };
   // OC templates vary in the literal heading (CLAVE SAT, CLAVE PROD SERV,
   // CLAVE CONCEPTO, etc.).  Detect the semantic table, never its coordinates

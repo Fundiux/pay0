@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
 const { parseOcFiscalMetadataBuffer, parseOcDate } = require('../../functions/lib/modules/solicitudDocuments/service.js');
 const { requirePricedQuoteLines, quotationIssuerContact, resolveQuoteDocumentDate } = require('../../functions/lib/modules/cotizaciones/callables.js');
+const { stripOcTemplateHelp } = require('../../functions/lib/utils/ocTemplateText.js');
+const { loadBaseQuotationBundle } = require('../../functions/lib/modules/documents/canonicalBundle.js');
 
 async function workbook(rows) {
   const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('OC');
@@ -71,6 +73,21 @@ const quoteLines = buffer => parseOcFiscalMetadataBuffer(buffer, true, undefined
   assert.doesNotThrow(() => requirePricedQuoteLines({ ...labelled, items: [{ ...labelled.items[0], amount: 1000.01 }] }, 1160), 'a one-cent gap is tolerated');
 
   assert.equal(parseOcDate('31/02/2026'), '', 'impossible dates are rejected');
+
+  // The template's instruction column never becomes part of a value.
+  const withHelp = await quoteLines(await workbook([
+    ['Razon Social:', 'INSERVICE TELECOM SA DE CV', '* Obligatorio (Cliente, tal como aparece en la CIF)'],
+    ['PROVEEDOR:', 'NORREY', 'Opcional (Nosotros lo validamos con Producto)'],
+    ['Cantidad', 'Unidad', 'Clave SAT', 'Descripcion', 'Precio Unitario', 'Importe'],
+    [1, 'E48', '', 'Servicio', 100, 100],
+  ]));
+  assert.equal(withHelp.clientName, 'INSERVICE TELECOM SA DE CV');
+  assert.equal(stripOcTemplateHelp('INSERVICE TELECOM SA DE CV * Obligatorio (Cliente, tal como aparece en la CIF)'), 'INSERVICE TELECOM SA DE CV', 'names stored before the fix are cleaned');
+  assert.equal(stripOcTemplateHelp('REFACCIONARIA ELITE'), 'REFACCIONARIA ELITE');
+  const base = loadBaseQuotationBundle({ companyId: 'qa', companyName: 'EMPRESA QA', rfc: 'OII200101AB1' });
+  assert.equal(base.snapshot.templateId, 'PAY0-BASE-COTIZACION');
+  assert.match(base.html, /src="{{logoUrl}}"/, 'companies without a package use the shared base layout with a logo slot');
+  assert.match(base.html, /{{qr}}/);
 
   // Quote date window: 45 days before the solicitud was created (Mexico City days).
   const created = Date.parse('2026-10-17T17:30:00Z'), uploaded = Date.parse('2026-10-17T17:29:00Z');
