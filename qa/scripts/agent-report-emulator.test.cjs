@@ -1,0 +1,31 @@
+const assert = require("node:assert/strict");
+const { createRequire } = require("node:module");
+const { resolve } = require("node:path");
+if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || "") || !/^demo-/.test(process.env.GCLOUD_PROJECT || "")) throw Error("ISOLATED_FIRESTORE_EMULATOR_REQUIRED");
+const functionRequire = createRequire(resolve("functions/package.json"));
+const admin = functionRequire("firebase-admin");
+if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
+const db = admin.firestore();
+const { mexicoDayKey } = require("../../functions/lib/modules/agentOperations/engine.js");
+const { loadAgentOperations } = require("../../functions/lib/modules/agentOperations/callables.js");
+
+(async () => {
+  const day = mexicoDayKey();
+  const now = admin.firestore.Timestamp.now();
+  await db.doc("agentRuns/report-success").set({ rootId: "report-root", reportDay: day, entityId: "sol-a", toolId: "quotation-recovery", status: "SUCCEEDED", resolution: "RECOVERED_MISSING", uploadId: "upload-a", updatedAt: now });
+  await db.doc("agentRuns/report-blocked").set({ rootId: "report-root", reportDay: day, entityId: "sol-b", toolId: "quotation-recovery", status: "BLOCKED", reason: "Autorización revocada", updatedAt: now });
+  await db.doc("agentRuns/other-root").set({ rootId: "other-root", reportDay: day, entityId: "sol-private", toolId: "quotation-recovery", status: "SUCCEEDED", uploadId: "private", updatedAt: now });
+  await db.doc("agentIncidents/report-incident").set({ rootId: "report-root", reportDay: day, entityType: "solicitud", entityId: "sol-b", cause: "Autorización revocada", status: "OPEN", createdAt: now });
+  const report = await loadAgentOperations("report-root");
+  assert.equal(report.report.day, day);
+  assert.equal(report.report.reviewed, 2);
+  assert.equal(report.report.corrected, 1);
+  assert.equal(report.report.generated, 0);
+  assert.equal(report.report.verified, 1);
+  assert.equal(report.report.escalated, 1);
+  assert.equal(report.report.incidents, 1);
+  assert.equal(report.runs.length, 2);
+  assert.equal(report.report.causes[0].cause, "Autorización revocada");
+  assert.equal(report.providers.local.status, "NOT_CONFIGURED");
+  console.log("PASS daily report timezone, root isolation, verified correction count, provider configuration state");
+})().catch(error => { console.error(error); process.exitCode = 1; });

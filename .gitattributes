@@ -1,0 +1,2 @@
+# Keep reviewed patch hashes stable; blank context lines are valid patch syntax.
+qa/patches/*.patch text eol=lf whitespace=-blank-at-eol

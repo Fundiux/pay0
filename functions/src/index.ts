@@ -1,3 +1,9 @@
+import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
+import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
+import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
+import { manualNoteAuthor } from "./modules/notes/domain";
+import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
+import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
   buildPagoCoverageApplyPatch,
@@ -23,6 +29,7 @@ import { logActivity, logActivityTx } from "./utils/logActivity";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { FieldValue, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
+import { operationTiming } from "./utils/operationTiming";
 import { nextSequenceTx, buildCanonicalFolio } from "./modules/sequences/service";
 import {
   resolveCanonicalBusinessFolioContext,
@@ -32,15 +39,12 @@ import { normalizeSolicitudBackendStatus, canTransitionSolicitudBackendStatus, n
 import { canCancelSolicitudWithAbonos, needsUuidOrRelatedForSatCancel01, needsUuidOrRelatedForEnSustitucion, getSolicitudStatusEventMeta, getSolicitudRechazadaEventMeta } from "./utils/solicitudStatusHandlerRules";
 import { buildSolicitudCanceladaPatch, buildSolicitudEnSustitucionPatch, getSolicitudCanceladaEventMeta, getSolicitudEnSustitucionEventMeta } from "./utils/solicitudStatusPatches";
 import { requestSolicitudIqCancellationCore, IQ_CANCELLATION_CREDENTIALS_KEY } from "./modules/iq/solicitudCancellationService";
-import { normalizeClientAccessPermissions } from "./modules/clientDelegations/access";
+import { getCurrentClientDelegationAccess } from "./modules/clientDelegations/access";
 import { recordOperationalMetric } from "./modules/operationalMetrics/service";
 import { linkSolicitudToMaterialityOperationCore } from "./modules/materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "./modules/facturama/service";
+import { belongsToPay0Dispatch } from "./modules/facturama/issuerGuard";
 import { canRunIqAutomationForDispatch } from "./modules/dispatches/domain";
-import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
-import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
-import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
 
 function normalizeStatus(input: any): SolicitudBackendStatus {
   return normalizeSolicitudBackendStatus(input);
@@ -77,19 +81,7 @@ async function getActiveClientDelegationAccess(
   clienteId: string,
   requiredPermission: "operateSolicitudes" | "operatePagos"
 ) {
-  const accessSnap = await db.doc(`userClientAccess/${uid}/clients/${clienteId}`).get();
-  if (!accessSnap.exists) return null;
-
-  const data: any = accessSnap.data() || {};
-  if (data?.active !== true) return null;
-  const permissions = normalizeClientAccessPermissions(data?.permissions, true);
-  if (permissions.view !== true || permissions[requiredPermission] !== true) return null;
-
-  return {
-    id: accessSnap.id,
-    path: accessSnap.ref.path,
-    data,
-  };
+  return getCurrentClientDelegationAccess(uid, clienteId, requiredPermission);
 }
 
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";
@@ -477,6 +469,12 @@ export const createSolicitud = onCall(
         rootId,
         adminId,
         createdBy: uid,
+        createdByDisplayName: String(caller.displayName || caller.name || caller.username || "").trim(),
+        createdByUsername: String(caller.username || "").trim(),
+        createdByUserNumber: Number(caller.userNumber || caller.numeroUsuario || caller.sequenceNumber || 0) || null,
+        folioOwnerId: businessFolioContext.ownerUid,
+        delegateUid: businessFolioContext.delegateUid,
+        delegateUserNumber: businessFolioContext.delegateUserNumber,
         ownerId: operationalOwnerId,
         operationalOwnerId,
         operationalOwnerName,
@@ -551,6 +549,7 @@ export const createSolicitud = onCall(
     });
 
     __mark("folio_transaction");
+    operationTiming("pay0_persisted_at", solicitudRef.id, __perfStartedAt);
 
     const comentarioText = String(comentario || "").trim();
 
@@ -610,7 +609,7 @@ export const createSolicitud = onCall(
       ),
     );
 
-    postCreateTasks.push(
+    if (belongsToPay0Dispatch(rootId, companyDespachoId)) postCreateTasks.push(
       ensureAutomaticFacturamaDraftForSolicitud({
         auth: request.auth,
         solicitudId: solicitudRef.id,
@@ -1080,6 +1079,8 @@ async function resolveSolicitudRelacion(rootId: string, rawValue: any, currentSo
 }
 
 const changeSolicitudStatusHandler = async (request: any) => {
+  if (normalizeSolicitudBackendStatus(request.data?.newStatus) === "ELIMINADA" ||
+      (typeof request.data?.ocultar === "boolean" && !request.data?.newStatus)) return changeSolicitudVisibilityCore(request);
   const uid = requireAuth(request);
   const rootId = await getRootId(uid);
   const me = await getMyUser(uid);
@@ -1719,6 +1720,9 @@ export const createPago = onCall(
       throw new HttpsError("invalid-argument", "Identificación de comprobante inválida.");
     }
     const receiptIdentificationRef = receiptIdentificationId ? db.doc(`pagoReceiptIdentifications/${receiptIdentificationId}`) : null;
+    let validatedReceiptAnalysisId = "";
+    let validatedReceiptReaderVersion = "";
+    let validatedReceiptSemantic: Record<string, unknown> | null = null;
 
     const costGuardOperationTypeKey = String(operationTypeKey || "").trim().toUpperCase();
     const costGuardDespachoId = String(despachoId || "").trim();
@@ -2101,10 +2105,34 @@ export const createPago = onCall(
     let folio = "";
     let pagoSequenceNumber = 0;
     let pagoSequenceCounterPath = "";
+    let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
 
     await db.runTransaction(async (tx) => {
       if (receiptIdentificationRef) {
-        assertReceiptCreation(await tx.get(receiptIdentificationRef), { uid, rootId }, request.data || {});
+        const receiptIdentificationSnap = await tx.get(receiptIdentificationRef);
+        assertReceiptCreation(receiptIdentificationSnap, { uid, rootId }, request.data || {});
+        const contentSha256 = String(receiptIdentificationSnap.get("contentSha256") || "");
+        if (!/^[a-f0-9]{64}$/.test(contentSha256)) throw new HttpsError("failed-precondition", "El comprobante no tiene una huella verificable.");
+        receiptContentClaimRef = db.doc(`pagoReceiptDedup/content_${createHash("sha256").update(JSON.stringify([rootId, contentSha256])).digest("hex")}`);
+        const contentClaim = await tx.get(receiptContentClaimRef);
+        if (contentClaim.exists) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: contentClaim.get("clienteId") === clienteId && contentClaim.get("companyId") === companyId ? contentClaim.get("pagoId") || null : null });
+        // Existing registrations remain protected without rewriting historical payments.
+        const earlierIdentifications = await tx.get(db.collection("pagoReceiptIdentifications").where("contentSha256", "==", contentSha256).limit(501));
+        if (earlierIdentifications.size > 500) throw new HttpsError("failed-precondition", "La huella del comprobante requiere revisión.");
+        const registered = earlierIdentifications.docs.find(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
+        if (registered) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: registered.get("createPayload.clienteId") === clienteId && registered.get("createPayload.companyId") === companyId ? registered.get("pagoId") || null : null });
+        const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
+        validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
+        if (validatedReceiptAnalysisId) {
+          const receiptAnalysis = await tx.get(db.doc(`pagoReceiptAnalyses/${validatedReceiptAnalysisId}`));
+          if (!receiptAnalysis.exists || receiptAnalysis.get("rootId") !== rootId ||
+              getReceiptActorCorrectionState(receiptAnalysis.data() || {}, uid).version !== Number(receiptIdentificationSnap.get("correctionVersion") || 0)) {
+            throw new HttpsError("failed-precondition", "El comprobante cambió; vuelve a validar sus datos antes de registrar el pago.");
+          }
+        }
+        validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
+        validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
+          ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
       }
       if (receiptDuplicateRef) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
@@ -2204,6 +2232,9 @@ export const createPago = onCall(
         concepto: String(request.data?.concepto || "").trim().slice(0, 1000) || null,
         referenciaNormalized: referenciaNormalized || null,
         receiptLearningSignals: {
+          analysisId: validatedReceiptAnalysisId || null,
+          readerVersion: validatedReceiptReaderVersion || null,
+          semanticReceipt: validatedReceiptSemantic,
           detectedBankName: detectedBankNameValue || null,
           detectedSenderName: detectedSenderNameValue || null,
           detectedBeneficiaryName: detectedBeneficiaryNameValue || null,
@@ -2228,6 +2259,12 @@ export const createPago = onCall(
         moneda: String(moneda || "MXN"),
         comprobantes: [],
         createdBy: uid,
+        createdByDisplayName: String(me.displayName || me.name || me.username || "").trim(),
+        createdByUsername: String(me.username || "").trim(),
+        createdByUserNumber: Number(me.userNumber || me.numeroUsuario || me.sequenceNumber || 0) || null,
+        folioOwnerId: businessFolioContextPago.ownerUid,
+        delegateUid: businessFolioContextPago.delegateUid,
+        delegateUserNumber: businessFolioContextPago.delegateUserNumber,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         conciliatedBy: null,
@@ -2264,6 +2301,7 @@ export const createPago = onCall(
         });
       }
 
+      if (receiptContentClaimRef) tx.set(receiptContentClaimRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), pagoId: ref.id, type: "RECEIPT_CONTENT", createdAt: FieldValue.serverTimestamp() });
       if (receiptIdentificationRef) tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
 
       logActivityTx(tx, db, {
@@ -2300,6 +2338,7 @@ export const createPago = onCall(
 
 
     __mark("folio_transaction");
+    operationTiming("pay0_persisted_at", ref.id, __perfStartedAt);
 
     await recordOperationalMetric({
       rootId,
@@ -2749,6 +2788,7 @@ export {
   reservePagoApplicationBatch,
   applyPagoToSolicitudesAtomic,
   applyPagoToSolicitud,
+  listPagoApplicationsForPayment,
   preparePagoApplicationIqPlan,
   resumePagoApplicationIqPlan,
   executePagoApplicationIqPlan,
@@ -2779,7 +2819,7 @@ export { addClientDispersionNota } from "./modules/financing/callables";
 export { initSolicitudDocumentUpload, finalizeSolicitudDocumentUpload, deactivateSolicitudDocument, reprocessActiveSolicitudOc } from "./modules/solicitudDocuments/callables";
 export { createSolicitudSignatureLink, getSolicitudSignatureRequest, submitSolicitudSignature } from "./modules/signatureLinks/callables";
 export { generateSolicitudQuotation, getPublicQuotationVerification } from "./modules/cotizaciones/callables";
-export { getPublicConstanciaVerification } from "./modules/constancias/service";
+export { getPublicConstanciaVerification, generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoAmountForRetry, deactivatePagoDocument } from "./modules/pagoDocuments/callables";
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
 
@@ -2808,6 +2848,8 @@ export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from 
 export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
 export { backfillPagoReportDates } from "./modules/reports/pagoReportDateBackfillCallables";
 export { getControlCenterOverview, refreshControlCenterOverview } from "./modules/controlCenter/callables";
+export { getControlCenterEngineering, importControlCenterEngineeringEvidence, assignControlCenterEngineeringTask } from "./modules/controlCenter/engineeringCallables";
+export { listOperationalDocuments } from "./modules/canonicalCenter/documentDossier";
 export { trackPaymentComplement, refreshComplementOnSolicitud, refreshComplementOnPago, listPaymentComplementFollowup, refreshPaymentComplementFollowup } from "./modules/paymentApplications/complementFollowup";
 export { enqueueAutomaticPaymentComplement, executeAutomaticPaymentComplement, checkPaymentComplementsDaily, configurePaymentComplementAutomation, setComplementPaymentForm } from "./modules/paymentApplications/complementAutomation";
 export { getHugoComplementInventoryPage } from "./modules/paymentApplications/complementInventory";
@@ -2819,6 +2861,7 @@ export { runHugoIqRepReadCohort } from "./modules/paymentApplications/repReadCoh
 export { getControlCenterAnalytics, initializeControlCenterAnalytics, getControlCenterEvidence } from "./modules/controlCenter/analyticsCallables";
 export { recognizeControlCenterExpense, reverseControlCenterExpense } from "./modules/expenses/callables";
 export { queueOperationRecovery, reconcileOperationRecovery } from "./modules/controlCenter/recovery";
+export { listOperationRecoveryReviews, acknowledgeOperationRecoveryReview } from "./modules/controlCenter/recoveryReviewCallables";
 export { queueControlCenterApplications, queueControlCenterBalances, queueControlCenterMovements, queueControlCenterAdvances, queueControlCenterLearning, queueControlCenterRecovery, queueControlCenterExpenses } from "./modules/controlCenter/automation";
 export { queueControlCenterIqInvoice, queueControlCenterIqCreate, queueControlCenterIqStatus, queueControlCenterIqReceipt, queueControlCenterIqDeposit, queueControlCenterWhatsapp, queueControlCenterTelegram } from "./modules/controlCenter/automation";
 export {
@@ -2830,13 +2873,15 @@ export {
   queueControlCenterHugo,
   reconcileDirtyControlCenters,
 } from "./modules/controlCenter/automation";
-export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome } from "./modules/telegramMiniApp/callables";
+export { verifyTelegramMiniAppSession, getMatUserHome, getMatClientHome, getMatSolicitudDocuments } from "./modules/telegramMiniApp/callables";
 export { getClientBalanceSummary, getClientStatement, getUserBalanceSummary, getUserStatement, getClientOperationalBalanceSummary, getClientWalletOverview, getUserWalletOverview, getClientWalletAccountsOverview, getClientWalletDetailOverview } from "./modules/ledger/callables";
 export { ensureMaterialityClientCompany, linkSolicitudToMaterialityOperation, getMaterialityOperation, getMaterialityClientCompanyOverview, getMaterialityDashboard } from "./modules/materiality/callables";
 export { refreshMaterialityFromUpload, refreshMaterialityFromPaymentApplication } from "./modules/materiality/triggers";
-export { generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initEntityDocumentUpload, finalizeEntityDocumentUpload, listEntityDocuments, deactivateEntityDocument, reactivateEntityDocument } from "./modules/entityDocuments/callables";
 export { getAuthorizedDocumentDownloadUrl } from "./modules/documents/authorizedDownload";
+export { streamPrivateDocument } from "./modules/documents/documentDownloadHttp";
+export { getAuthorizedOperationalRecord } from "./modules/documents/operationalReads";
+export { listAuthorizedRelatedRecords } from "./modules/documents/relatedReads";
 export {
   createIqCredentialProfile,
   updateIqCredentialProfile,
@@ -2864,6 +2909,11 @@ export {
   processIqCreateOnDemandTask,
   processIqCreateQueue,
 } from "./modules/iq/solicitudCreateQueueCallables";
+export {
+  processSolicitudQuotationOnDemandTask,
+  processSolicitudQuotationQueue,
+  previewSolicitudesWithoutQuotation,
+} from "./modules/cotizaciones/queueCallables";
 export {
   syncIqSolicitudStatus,
 // IQ2G_H4_D55A_INDEX_EXPORT_DISABLED processIqStatusMonitorQueue
@@ -2924,6 +2974,8 @@ export {
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
 export {
   processIqPagoDepositCreateQueue,
+  dispatchQueuedPagoIqCreation,
+  processIqPagoDepositAutomaticTask,
   processIqPagoDepositReconciliationQueue,
 } from "./modules/iq/pagoDepositCallables";
 // H4_D82_A3_A6_A3C_AUTOMATION_CONTROL_END
@@ -2932,23 +2984,28 @@ export {
 export { syncIqClientCallable } from "./modules/clients/iqLinkCallable";
 
 export { parseClientCsfCallable, finalizeClientCsfIntakeCallable } from "./modules/clients/csfCallables";
-export { parsePagoReceiptPdf } from "./modules/pagos/receiptPdfCallables";
+export { parsePagoReceiptPdf, correctPagoReceiptSemanticField } from "./modules/pagos/receiptPdfCallables";
 export {
   listCorporateResources, getCorporateResource, prepareCorporateResourceMigration,
-  importCorporateResource, reviewCorporateResourceVersion, activateCorporateResourceVersion,
+  importCorporateResource, cloneCorporateTemplateBase, reviseCorporateTemplate, reviewCorporateResourceVersion, activateCorporateResourceVersion,
   restoreCorporateResourceVersion, retireCorporateResourceVersion, getCorporateResourceDownloadUrl,
   initCorporateResourceUpload, finalizeCorporateResourceUpload,
 } from "./modules/canonicalCenter/service";
 export { getFacturamaSandboxStatus, getFacturamaProductionStatus, saveFacturamaDraft, listFacturamaInvoices, importCompanyInvoiceCatalog, initGlobalSatCatalogUpload, finalizeGlobalSatCatalogImport } from "./modules/facturama/callables";
 export { saveFacturamaIssuerConfig, issueFacturamaSandboxInvoice, issueFacturamaProductionInvoice, reconcileFacturamaIssuedMetadata, cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus, getFacturamaProductionCsdStatus, registerFacturamaProductionCsd } from "./modules/facturama/sandboxCallables";
-export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews } from "./modules/agent007/callables";
+export { recordAgent007Observation, listAgent007Observations, listAgent007Recommendations, reconcileAgent007RecommendationsNow, resolveAgent007Recommendation, listAgent007Messages, markAgent007MessagesRead, sendAgent007Message, getHugoDashboard, listAgent007Traces, getAgent007Trace, listAgent007MemoryDiagnostics, createAgent007MemoryCandidate, reviewAgent007MemoryCandidate, linkAgent007VerifiedExperience, createAgent007LearningExperience, createAgent007LearningDraft, linkAgent007LearningOutcome, correctAgent007LearningExperience, listAgent007LearningDiagnostics, listAgent007LearningLineage, assignAgent007LearningSplit, supersedeAgent007LearningExperience, saveAgent007HumanReview, listAgent007HumanReviews, reviewAgent007LearningRule } from "./modules/agent007/callables";
 export { createHugoRealtimeSession } from "./modules/agent007/realtimeVoice";
+export { sendHugoTeamTurn, listHugoTeamTurns, delegateHugoTeamVoiceTurn } from "./modules/agent007/teamCallables";
 export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modules/agent007/voiceDelegation";
 export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
+export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
+export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
+export { detectMissingSolicitudQuotations } from "./modules/cotizaciones/missingQuoteDetector";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 
+export { getMyRestrictionStatus } from "./modules/users/restrictionsCallables";
 export { listClientDispersionNotes } from "./modules/financing/noteReads";
 export { listPagoNotes } from "./modules/notes/pagoReads";
 export { listSolicitudNotes } from "./modules/notes/solicitudReads";

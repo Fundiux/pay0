@@ -19,10 +19,39 @@ export function normalizePay0Brand(text: string) {
   return text.replace(/\b(?:pay\s*zero|pay\s*cero|pay0)\b/gi, "PAY0");
 }
 
+export function receiptReadingLocationReply(message: string): string | null {
+  const value = plain(message);
+  if (!/\b(comprobante|recibo)s?\b/.test(value)) return null;
+  if (!/\b(donde|como|puedes|puedo)\b/.test(value) || !/\b(leer|lees|lectura|analizar|analizas|subir|adjuntar|cargar)\b/.test(value)) return null;
+  return "En PAY0 abre /hugo y busca «Revisar un comprobante con María». Selecciona un PDF o imagen de hasta 1 MB y pulsa «Analizar comprobante». Ahí puedes revisar la lectura, editar un campo y volver a analizar para comprobar tu corrección. El acceso depende de tu sesión autorizada; el análisis no registra un pago.";
+}
+
 export function formatLatestSolicitud(data: any) {
-  return data?.item?.cliente
-    ? `El cliente asociado a la solicitud más reciente visible es ${data.item.cliente}.`
-    : "No hay solicitudes visibles dentro de tu alcance autorizado.";
+  return data?.item ? formatSolicitudDetails(data.item, true) : "No hay solicitudes visibles dentro de tu alcance autorizado.";
+}
+
+export function formatSolicitudDetails(item: any, latest = false) {
+  const client = typeof item?.cliente === "string" && item.cliente.trim() ? item.cliente.trim() : "nombre de cliente no disponible en la evidencia autorizada";
+  const method = item?.metodoPago === "PPD" || item?.metodoPago === "PUE" ? item.metodoPago : "no registrado como PPD/PUE";
+  const amount = formatRecordedAmount(item?.monto, item?.moneda);
+  return `${latest ? "La solicitud más reciente visible" : "La solicitud consultada"} corresponde a ${client}. Método de pago: ${method}. Monto: ${amount}.${item?.folio ? ` Folio: ${item.folio}.` : ""}`;
+}
+
+export function formatRecordedAmount(raw: unknown, currencyValue: unknown): string {
+  const validAmount = (typeof raw === "number" || typeof raw === "string" && raw.trim() !== "") && Number.isFinite(Number(raw));
+  const currency = typeof currencyValue === "string" && /^[A-Z]{3}$/.test(currencyValue) ? currencyValue : "MXN";
+  let amount = "no registrado";
+  if (validAmount) {
+    try { amount = Number(raw).toLocaleString("es-MX", {style:"currency", currency}); }
+    catch { amount = `${Number(raw).toLocaleString("es-MX")} ${currency}`; }
+  }
+  return amount;
+}
+
+export function formatPaymentClients(rows: any[]): string {
+  const names = [...new Set(rows.map(row => typeof row?.cliente === "string" ? row.cliente.trim() : "").filter(Boolean))];
+  if (!names.length) return "No tengo un nombre de cliente verificado para ese pago en la evidencia autorizada. Un banco o un remitente detectado en el comprobante no identifica al cliente.";
+  return `${names.length === 1 ? "El cliente asociado es" : "Los clientes asociados a los pagos consultados son"} ${names.join(", ")}.${rows.some(row => !row?.cliente) ? " Hay pagos consultados sin nombre de cliente verificado." : ""}`;
 }
 
 export function formatSystemCatalog(rowsValue: any, message = "") {

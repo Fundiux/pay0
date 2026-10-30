@@ -1,5 +1,7 @@
+import { createHash } from "crypto";
+import { operationTiming } from "../../utils/operationTiming";
 import * as admin from "firebase-admin";
-import type JSZip from "jszip";
+import { openBoundedWorkbook, createWorkbookStructureBudget, WorkbookLimitError } from "../../utils/boundedZip";
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, buildSolicitudDocumentStoragePath, getSolicitudDocumentTypeLabel, normalizeSolicitudDocumentType, sanitizeDocumentLabel, sanitizeFilename } from "./domain";
@@ -7,16 +9,14 @@ import { enqueueIqCreationForSolicitud } from "../iq/solicitudCreateQueueCallabl
 import { finalizeSolicitudDocumentVersionTx } from "./lifecycle";
 import { linkSolicitudToMaterialityOperationCore } from "../materiality/service";
 import { ensureAutomaticFacturamaDraftForSolicitud } from "../facturama/service";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
+import { requireClientOperationalAccess } from "../clientDelegations/access";
 
 if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
-
-function getJsZip(): typeof JSZip {
-  return require("jszip");
-}
 function isSolicitudIqTerminalForReplacementH4D58H(solicitud: Record<string, unknown>): boolean {
   if (solicitud.iqTerminalLocked === true) return true;
   if (solicitud.iqSolicitudTerminalLocked === true) return true;
@@ -113,6 +113,7 @@ type FacturaXmlMetadata = {
   facturaMetodoPago: string | null;
   facturaMoneda: string | null;
   facturaFecha: string | null;
+  fiscalItems: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
 };
 
 type OcFiscalMetadata = {
@@ -121,33 +122,69 @@ type OcFiscalMetadata = {
   cfdiUse: string; fiscalRegime: string; postalCode: string;
   paymentMethod: string; paymentForm: string; currency: string;
   deliveryLocation: string;
-  items: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
+  items: OcLineItem[];
+  subtotal?: number; iva?: number; total?: number;
+  /** OC issue date as YYYY-MM-DD, or "" when the OC does not state one. */
+  date: string;
+  /** OC number when the OC states one, or "". */
+  number: string;
 };
+
+export type OcLineItem = { quantity: number; unit: string; productCode: string; description: string; unitPrice: number | null; amount: number | null };
+
+/** Excel stores dates as serial days since 1899-12-30; Mexican text dates are day first. */
+export function parseOcDate(raw: string): string {
+  const value = String(raw || "").trim();
+  const iso = (year: number, month: number, day: number) => {
+    const at = new Date(Date.UTC(year, month - 1, day));
+    return at.getUTCFullYear() === year && at.getUTCMonth() === month - 1 && at.getUTCDate() === day && year >= 2000 && year <= 2100
+      ? at.toISOString().slice(0, 10) : "";
+  };
+  const serial = value.match(/^(\d{5})(?:\.\d+)?\b/);
+  if (serial) {
+    const at = new Date(Date.UTC(1899, 11, 30) + Number(serial[1]) * 86_400_000);
+    return iso(at.getUTCFullYear(), at.getUTCMonth() + 1, at.getUTCDate());
+  }
+  const isoText = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (isoText) return iso(Number(isoText[1]), Number(isoText[2]), Number(isoText[3]));
+  const dayFirst = value.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/);
+  if (dayFirst) return iso(Number(dayFirst[3].length === 2 ? `20${dayFirst[3]}` : dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1]));
+  return "";
+}
 
 function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
 function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
 
 async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
-  const [buffer] = await bucket.file(storagePath).download();
+  // Fetch one extra byte so an oversized object is rejected before full allocation.
+  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
   return parseOcFiscalMetadataBuffer(buffer);
+}
+async function readOcCommercialMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
+  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+  return parseOcCommercialMetadataBuffer(buffer);
 }
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
-export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFiscalMetadata | null> {
-  const zip = await getJsZip().loadAsync(buffer);
-  const sharedXml = await zip.file("xl/sharedStrings.xml")?.async("string") || "";
-  const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => xmlValue(match[1]));
-  const sheetNames = Object.keys(zip.files).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = false, diagnostics?: Record<string, unknown>, quotationLines = false): Promise<OcFiscalMetadata | null> {
+  try {
+  const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
+  const sharedXml = await zip.readText("xl/sharedStrings.xml");
+  const shared: string[] = [];
+  for (const match of sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)) { budget.sharedString(); shared.push(xmlValue(match[1])); }
+  const sheetNames = zip.sheetNames;
   const parseRows = async (sheetName: string): Promise<string[][]> => {
-    const sheet = await zip.file(sheetName)?.async("string") || "";
+    const sheet = await zip.readText(sheetName);
     const parsed: string[][] = [];
     for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      budget.row();
       const values: string[] = [];
       // Ignore self-closing cells from merged ranges. The former expression
       // treated `<c .../>` as an opening tag and then consumed the next real
       // cell, shifting values such as regimen, CP and uso CFDI one column.
       for (const cell of row[1].matchAll(/<c\b([^>]*[^/])>([\s\S]*?)<\/c>/g)) {
         const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "";
+        budget.cell(reference, true);
         const raw = cell[2].match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || cell[2].match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "";
         values[excelColumn(reference) - 1] = cell[1].includes('t="s"') ? shared[Number(raw)] || "" : xmlValue(raw);
       }
@@ -189,9 +226,18 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   // "Clave Concepto" contains the word Concepto, but it is the SAT code
   // column.  It must never win over the actual Concepto/Descripcion column.
   const descriptionIndex = headerIndex(cell => isDescriptionHeader(cell) && !isCodeHeader(cell));
+  // Some templates leave the unit price heading blank; the unit price is then
+  // derived from the line amount so a quote never loses its line pricing.
+  const unitPriceIndex = headerIndex(cell => /\b(PRECIO|P UNITARIO|V UNITARIO|VALOR UNITARIO|COSTO UNITARIO)\b/.test(normalized(cell)));
+  const amountIndex = headerIndex(cell => /^(IMPORTE|MONTO)\b/.test(normalized(cell)));
   const parseQuantity = (value: unknown) => Number(String(value || "1").replace(/[^0-9.,-]/g, "").replace(",", ".")) || 1;
+  const parseMoney = (value: unknown): number | null => {
+    const text = String(value ?? "").replace(/[$,\s]/g, "");
+    const parsed = text ? Number(text) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
   const rowsAfterHeader = header >= 0 ? rows.slice(header + 1) : rows;
-  const items: Array<{ quantity: number; unit: string; productCode: string; description: string }> = [];
+  const items: OcLineItem[] = [];
   for (const row of rowsAfterHeader) {
     const rowText = row.map(normalized).filter(Boolean).join(" ");
     if (/\b(SUBTOTAL|TOTAL|IVA|IMPUESTO|RETENCION)\b/.test(rowText)) {
@@ -205,13 +251,22 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
     // indicada por el encabezado contiene una unidad como E48.
     const headerProductCode = String(row[conceptIndex] || "").trim().match(/^\d{8}$/)?.[0] || "";
     const productCode = headerProductCode || String(row.find(cell => /^\d{8}$/.test(String(cell || "").trim())) || "").trim();
-    if (!productCode) continue;
+    if (!productCode && !commercial) continue;
     const headerUnit = String(row[unitIndex] || "").trim();
     const unitCandidate = /^[A-Z0-9]{2,3}$/i.test(headerUnit) ? headerUnit : String(row.find(cell => /^[A-Z0-9]{2,3}$/i.test(String(cell || "").trim()) && !/^\d{2,3}$/.test(String(cell || "").trim())) || "").trim();
     const unit = unitCandidate.toUpperCase();
     const description = String(row[descriptionIndex] || "").replace(/\s+/g, " ").trim().slice(0, 1000)
       || row.filter(cell => /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(String(cell || "")) && !isCodeHeader(cell)).map(cell => String(cell).trim()).sort((a, b) => b.length - a.length)[0] || "";
-    items.push({ quantity: parseQuantity(row[quantityIndex]), unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000) });
+    // Template rows left at quantity 0 with no concept are not lines.
+    if (commercial && !description && !Number(String(row[quantityIndex] || "").replace(/[^0-9.]/g, ""))) continue;
+    const quantity = parseQuantity(row[quantityIndex]);
+    const statedUnitPrice = unitPriceIndex >= 0 ? parseMoney(row[unitPriceIndex]) : null;
+    // A workbook saved without recalculation keeps "=B23*H23" with no cached
+    // value; the amount is then the quantity times the stated unit price.
+    const statedAmount = amountIndex >= 0 ? parseMoney(row[amountIndex]) : null;
+    const amount = statedAmount ?? (statedUnitPrice !== null && quantity > 0 ? Math.round(Number((quantity * statedUnitPrice * 100).toPrecision(12))) / 100 : null);
+    const unitPrice = statedUnitPrice ?? (amount !== null && quantity > 0 ? Math.round((amount / quantity) * 10000) / 10000 : null);
+    items.push({ quantity, unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000), unitPrice, amount });
   }
   const firstItem = items.find(item => item.productCode && item.unit) || items[0];
   const code = firstItem?.productCode || "";
@@ -245,6 +300,14 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   // avoids confusing 03 Transferencia with another numeric value elsewhere.
   const paymentForm = paymentFormField.match(/^\s*(0[1-9]|[12]\d|30|31)\b/)?.[1] || paymentFormField.match(/\b(?:0[1-9]|[12]\d|30|31)\b/)?.[0] || "";
   const currency = field("MONEDA").match(/\b[A-Z]{3}\b/)?.[0] || "";
+  const amount = (label: string) => {
+    const row = rows.find(cells => cells.some(cell => normalized(cell) === label));
+    if (!row) return NaN;
+    const index = row.findIndex(cell => normalized(cell) === label);
+    const value = row.slice(index + 1).map(cell => Number(String(cell || "").replace(/[$,\s]/g, ""))).find(Number.isFinite);
+    return value ?? NaN;
+  };
+  const subtotal = amount("SUBTOTAL"), iva = amount("IVA"), total = amount("TOTAL");
   const clientName = field("RAZON SOCIAL:") || field("RAZON SOCIAL");
   const clientRfc = (field("RFC:") || field("RFC")).match(/[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}/i)?.[0] || "";
   const addressParts = [
@@ -253,10 +316,41 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer): Promise<OcFis
   ].filter(Boolean);
   const clientAddress = addressParts.join(", ");
   const deliveryLocation = field("LUGAR DE ENTREGA") || field("LUGAR ENTREGA") || field("LUGAR DE PRESTACION") || field("DOMICILIO DE ENTREGA") || clientAddress;
-  // The OC is the operational source for the quote and fiscal classification.
-  // CSF remains a fiscal validation source, but no quote should display a
-  // placeholder when the OC already supplies the data.
-  return code && unit ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items } : null;
+  const date = parseOcDate(field("FECHA"));
+  // Only an explicitly labelled short identifier counts as the OC number; a
+  // fiscal UUID or free text is never promoted to the quote reference.
+  const number = ["NO DE ORDEN", "NUMERO DE ORDEN", "NO ORDEN", "ORDEN DE COMPRA NO", "NO OC", "OC NO", "FOLIO"]
+    .map(label => field(label).trim().split(/\s+/)[0] || "")
+    .find(value => /^[A-Z0-9-]{1,30}$/i.test(value) && /\d/.test(value)) || "";
+  // The OC supplies commercial quote data. Fiscal document classification
+  // is validated independently from the invoice XML.
+  const commercialValid = items.length > 0 && items.every(item => item.description && item.quantity > 0) &&
+    Number.isFinite(subtotal) && Number.isFinite(iva) && Number.isFinite(total) && total > 0 &&
+    Math.abs(subtotal + iva - total) <= 0.01 && currency === "MXN";
+  if (diagnostics) Object.assign(diagnostics, { items: items.length, itemDescriptions: items.map(item => !!item.description), subtotal, iva, total, currency, commercialValid });
+  const metadata = { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items, subtotal, iva, total, date, number };
+  if (quotationLines) return items.length ? metadata : null;
+  return (commercial ? commercialValid : code && unit) ? metadata : null;
+  } catch (error) {
+    if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
+    throw error;
+  }
+}
+
+/** Commercial extraction permits missing SAT codes; fiscal consumers keep the strict default. */
+export async function parseOcCommercialMetadataBuffer(buffer: Buffer, diagnostics?: Record<string, unknown>): Promise<OcFiscalMetadata | null> {
+  return parseOcFiscalMetadataBuffer(buffer, true, diagnostics);
+}
+
+/**
+ * Quote source read straight from the active OC file: priced lines, totals,
+ * date and number. It does not require currency or SAT codes, because the
+ * quotation only mirrors the commercial terms; validation happens in the
+ * quotation module.
+ */
+export async function readOcQuotationLines(storagePath: string): Promise<OcFiscalMetadata | null> {
+  const [buffer] = await admin.storage().bucket().file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+  return parseOcFiscalMetadataBuffer(buffer, true, undefined, true);
 }
 
 function cleanCfdiText(value: any): string {
@@ -296,6 +390,15 @@ function buildFacturaDisplay(serie: string, folio: string, uuid: string): string
   return cleanUuid;
 }
 
+export function parseFacturaFiscalItems(xml: string) {
+  return Array.from(xml.matchAll(/<(?:[A-Za-z0-9_]+:)?Concepto\b[^>]*>/gi)).map(([tag]) => ({
+    quantity: Number(readXmlAttribute(tag, "Cantidad")),
+    unit: readXmlAttribute(tag, "ClaveUnidad").toUpperCase(),
+    productCode: readXmlAttribute(tag, "ClaveProdServ"),
+    description: readXmlAttribute(tag, "Descripcion").slice(0, 1000),
+  }));
+}
+
 function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
   const comprobanteTag = findXmlTag(xml, "Comprobante");
   if (!comprobanteTag) return null;
@@ -311,6 +414,7 @@ function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
   const facturaMoneda = cleanCfdiText(readXmlAttribute(comprobanteTag, "Moneda")).toUpperCase() || null;
   const facturaFecha = cleanCfdiText(readXmlAttribute(comprobanteTag, "Fecha")) || null;
   const facturaDisplay = cleanCfdiText(buildFacturaDisplay(facturaSerie || "", facturaFolio || "", facturaUuid || "")) || null;
+  const fiscalItems = parseFacturaFiscalItems(xml);
 
   if (!facturaDisplay && !facturaUuid && facturaTotal === null) return null;
 
@@ -324,6 +428,7 @@ function parseFacturaXmlMetadata(xml: string): FacturaXmlMetadata | null {
     facturaMetodoPago,
     facturaMoneda,
     facturaFecha,
+    fiscalItems,
   };
 }
 
@@ -348,24 +453,6 @@ function canUploadSolicitudDocs(user: any): boolean {
   return false;
 }
 
-function canAccessSolicitud(user: any, uid: string, rootId: string, solicitud: any): boolean {
-  const role = getRole(user);
-
-  if (role === "superadmin") {
-    return String(solicitud?.rootId || "") === rootId || String(solicitud?.createdBy || "") === uid;
-  }
-
-  if (role === "admin") {
-    return String(solicitud?.rootId || "") === rootId && String(solicitud?.adminId || "") === uid;
-  }
-
-  if (role === "operador") {
-    return String(solicitud?.rootId || "") === rootId && String(solicitud?.createdBy || "") === uid;
-  }
-
-  return false;
-}
-
 async function loadSolicitudOrThrow(input: {
   solicitudId: string;
   uid: string;
@@ -381,9 +468,17 @@ async function loadSolicitudOrThrow(input: {
 
   const solicitud = solicitudSnap.data() || {};
 
-  if (!canAccessSolicitud(input.user, input.uid, input.rootId, solicitud)) {
-    throw new HttpsError("permission-denied", "No autorizado.");
-  }
+  if (String(solicitud?.rootId || "") !== input.rootId) throw new HttpsError("permission-denied", "No autorizado.");
+  const clientId = String(solicitud?.clienteId || solicitud?.clientId || "").trim();
+  if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
+  await requireClientOperationalAccess({
+    uid: input.uid,
+    role: getRole(input.user) as "superadmin" | "admin" | "operador",
+    rootId: input.rootId,
+    clientId,
+    permission: "operateSolicitudes",
+  });
+  if (solicitud.isDeleted || solicitud.deletedAt || solicitud.status === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
 
   return {
     solicitudRef,
@@ -441,10 +536,24 @@ const { solicitud } = await loadSolicitudOrThrow({
 
   
 const safeName = sanitizeFilename(originalName);
-  const uploadId = db.collection("uploads").doc().id;
+  const uploadRequestId = String(data.uploadRequestId || "").trim();
+  if (uploadRequestId && !/^[a-zA-Z0-9_-]{8,128}$/.test(uploadRequestId)) throw new HttpsError("invalid-argument", "Identificador de carga invalido.");
+  const uploadId = uploadRequestId
+    ? createHash("sha256").update(JSON.stringify([rootId, uid, solicitudId, documentType, uploadRequestId])).digest("hex")
+    : db.collection("uploads").doc().id;
   const storagePath = buildSolicitudDocumentStoragePath({ rootId, solicitudId, documentType, uploadId, originalName: safeName });
 
-  await db.collection("uploads").doc(uploadId).set({
+  const uploadRef = db.collection("uploads").doc(uploadId);
+  await db.runTransaction(async tx => {
+    const existing = await tx.get(uploadRef);
+    const source = await tx.get(db.doc(`solicitudes/${solicitudId}`));
+    if (!source.exists || source.get("isDeleted") || source.get("deletedAt") || source.get("status") === "ELIMINADA") throw new HttpsError("failed-precondition", "Solicitud eliminada.");
+    if (existing.exists) {
+      const row = existing.data()!;
+      if (row.createdBy !== uid || row.solicitudId !== solicitudId || row.originalName !== originalName || row.sizeBytes !== sizeBytes || (row.sha256 || "") !== sha256) throw new HttpsError("failed-precondition", "La carga existente no coincide con el archivo.");
+      return;
+    }
+    tx.create(uploadRef, {
     rootId,
     adminId: solicitud.adminId || rootId,
     clienteId: solicitud.clienteId || solicitud.clientId || null,
@@ -478,6 +587,7 @@ const safeName = sanitizeFilename(originalName);
     createdUsername: getUsername(user, uid),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+  });
   });
 
   return {
@@ -535,7 +645,7 @@ export async function finalizeSolicitudDocumentUploadCore(request: any) {
     throw new HttpsError("failed-precondition", "Upload sin solicitudId.");
   }
 
-  await loadSolicitudOrThrow({
+  const { solicitud } = await loadSolicitudOrThrow({
     solicitudId,
     uid,
     user,
@@ -551,6 +661,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
 
   let facturaXmlMetadata: FacturaXmlMetadata | null = null;
   let ocFiscalMetadata: OcFiscalMetadata | null = null;
+  let ocCommercialMetadata: OcFiscalMetadata | null = null;
 
   try {
     const bucket = admin.storage().bucket();
@@ -564,18 +675,30 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
       documentType === "FACTURA_XML"
         ? await readFacturaXmlMetadataFromStorage(bucket, String(upload.storagePath || ""))
         : null;
+    ocCommercialMetadata = documentType === "ORDEN_COMPRA"
+      ? await readOcCommercialMetadata(bucket, String(upload.storagePath || "")) : null;
     ocFiscalMetadata = documentType === "ORDEN_COMPRA"
-      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || ""))
-      : null;
+      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || "")) : null;
   } catch (e: any) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
   }
 
   let finalVersion = 1;
+  let didFinalize = false;
 
   await db.runTransaction(async (tx) => {
+    didFinalize = false;
+    const currentUpload = await tx.get(uploadRef);
+    const current = currentUpload.data() || {};
     const solicitudSnapH4D58H = await tx.get(solicitudRef);
+    if (!solicitudSnapH4D58H.exists || solicitudSnapH4D58H.data()?.isDeleted || solicitudSnapH4D58H.data()?.deletedAt) throw new HttpsError("failed-precondition", "La solicitud no esta disponible.");
+    if (current.status === "READY" && current.active === true) {
+      finalVersion = Number(current.version || 1);
+      return;
+    }
+    if (current.status !== "PENDING") throw new HttpsError("failed-precondition", "La carga ya fue reemplazada o desactivada.");
+    didFinalize = true;
     const solicitudH4D58H = solicitudSnapH4D58H.exists ? ((solicitudSnapH4D58H.data() || {}) as Record<string, unknown>) : {};
     // H4_D58H_B1_SOLICITUD_DOC_TX_READ
     finalVersion = await finalizeSolicitudDocumentVersionTx({
@@ -605,6 +728,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           facturaMetodoPago: facturaXmlMetadata.facturaMetodoPago,
           facturaMoneda: facturaXmlMetadata.facturaMoneda,
           facturaFecha: facturaXmlMetadata.facturaFecha,
+          fiscalItems: facturaXmlMetadata.fiscalItems,
         } : {}),
       },
     });
@@ -623,10 +747,28 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           facturaMetodoPago: facturaXmlMetadata.facturaMetodoPago,
           facturaMoneda: facturaXmlMetadata.facturaMoneda,
           facturaFecha: facturaXmlMetadata.facturaFecha,
+          facturaFiscalItems: facturaXmlMetadata.fiscalItems,
+          facturaFiscalXmlUploadId: uploadId,
           facturaXmlUploadId: uploadId,
           facturaMetadataSource: "FACTURA_XML",
           facturaMetadataUpdatedAt: FieldValue.serverTimestamp(),
         });
+      }
+      if (ocCommercialMetadata) {
+        tx.set(solicitudRef, {
+          ocCommercialMetadataUploadId: uploadId,
+          ocCommercialItems: ocCommercialMetadata.items,
+          ocCommercialSubtotal: ocCommercialMetadata.subtotal,
+          ocCommercialIva: ocCommercialMetadata.iva,
+          ocCommercialTotal: ocCommercialMetadata.total,
+          ocClientName: ocCommercialMetadata.clientName || null,
+          ocClientRfc: ocCommercialMetadata.clientRfc || null,
+          ocClientAddress: ocCommercialMetadata.clientAddress || null,
+          ocDeliveryLocation: ocCommercialMetadata.deliveryLocation || null,
+          currency: ocCommercialMetadata.currency,
+          ocCommercialMetadataUpdatedAt: FieldValue.serverTimestamp(),
+          replacementOcStatus: "UPLOADED", replacementRequiresOc: false,
+        }, { merge: true });
       }
       if (ocFiscalMetadata) {
         tx.set(solicitudRef, {
@@ -692,22 +834,8 @@ logActivityTx(tx, db, {
     });
   });
 
-  if (documentType === "ORDEN_COMPRA") {
-    await enqueueIqCreationForSolicitud({
-      solicitudId,
-      requestedBy: uid,
-      source: "OC_UPLOAD",
-    }).catch(async (error) => {
-      await solicitudRef.set(
-        {
-          iqCreateQueueStatus: "NOT_ENQUEUED",
-          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
-          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-
+  const documentFinalizedAt = operationTiming("document_finalized_at", solicitudId);
+  if (documentType === "ORDEN_COMPRA" && belongsToPay0Dispatch(rootId, solicitud.despachoId)) {
     await ensureAutomaticFacturamaDraftForSolicitud({
       auth: request.auth,
       solicitudId,
@@ -723,25 +851,9 @@ logActivityTx(tx, db, {
       );
     });
 
-    await generateCotizacionForSolicitudCore({
-      auth: request.auth,
-      // The active OC is the source of truth. Replacing it must also replace
-      // the derivative quotation; returning an old active version leaves its
-      // SAT key, concept, amount, and receiver data stale.
-      data: { solicitudId, replaceExisting: true },
-    }).catch(async (error) => {
-      await solicitudRef.set(
-        {
-          cotizacionAutoGenerateStatus: "ERROR",
-          cotizacionAutoGenerateLastError: String(error?.message || error || "No se pudo generar la cotizacion automatica desde la OC."),
-          cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
   }
 
-  if (documentType === "FIRMA_AUTORIZADA_CLIENTE") {
+  if (didFinalize && documentType === "FIRMA_AUTORIZADA_CLIENTE") {
     await generateConstanciaRecepcionForSolicitudCore({
       auth: request.auth,
       data: {
@@ -761,7 +873,8 @@ logActivityTx(tx, db, {
     });
   }
 
-  await linkSolicitudToMaterialityOperationCore({
+
+  const materiality = await linkSolicitudToMaterialityOperationCore({
     auth: request.auth,
     data: { solicitudId },
   }).catch(async (error) => {
@@ -773,7 +886,32 @@ logActivityTx(tx, db, {
       },
       { merge: true },
     );
+    throw error;
   });
+
+  if (["ORDEN_COMPRA", "FACTURA_XML"].includes(documentType) &&
+      (materiality.materialityOperationId !== solicitudId || !materiality.completedTypes.includes(documentType))) {
+    throw new HttpsError("failed-precondition", "Materialidad no confirma el documento obligatorio.");
+  }
+  operationTiming("materiality_confirmed_at", solicitudId);
+
+  if (documentType === "ORDEN_COMPRA") {
+    await enqueueIqCreationForSolicitud({
+      solicitudId,
+      requestedBy: uid,
+      source: "OC_UPLOAD",
+    }).catch(async (error) => {
+      await solicitudRef.set(
+        {
+          iqCreateQueueStatus: "NOT_ENQUEUED",
+          iqCreateQueueLastError: String(error?.message || error || "No se pudo encolar envio al despacho."),
+          iqSyncUpdatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+
+  }
 
   return {
     ok: true,
@@ -781,6 +919,9 @@ logActivityTx(tx, db, {
     status: "READY",
     active: true,
     version: finalVersion,
+    solicitudId,
+    materialityConfirmed: true,
+    documentFinalizedAt,
   };
 }
 
@@ -823,12 +964,13 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     ocFiscalMetadataSource: "ORDEN_COMPRA_XLSX",
     ocFiscalMetadataUploadId: activeOc.docs[0].id,
     ocFiscalMetadataUpdatedAt: FieldValue.serverTimestamp(),
-    facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC",
+    ...(belongsToPay0Dispatch(rootId, solicitud.despachoId) ? { facturamaAutoDraftStatus: "REPROCESSING_ACTIVE_OC" } : {}),
     cotizacionAutoGenerateStatus: "REPROCESSING_ACTIVE_OC",
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
+  if (belongsToPay0Dispatch(rootId, solicitud.despachoId))
+    await ensureAutomaticFacturamaDraftForSolicitud({ auth: request.auth, solicitudId, source: "OC_UPLOAD" });
   const quote = await generateCotizacionForSolicitudCore({ auth: request.auth, data: { solicitudId, replaceExisting: true } });
   await linkSolicitudToMaterialityOperationCore({ auth: request.auth, data: { solicitudId } });
   await logActivity({
@@ -843,7 +985,7 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
     referenceId: solicitudId,
     referenceFolio: solicitud.folio || solicitudId,
     referenceType: "solicitudDocument",
-    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron Facturacion y Cotizacion.`,
+    description: `OC activa reprocesada para solicitud ${solicitud.folio || solicitudId}; se actualizaron ${belongsToPay0Dispatch(rootId, solicitud.despachoId) ? "Facturacion y Cotizacion" : "Cotizacion y Materialidad"}.`,
     createdBy: uid,
     extra: { source: "docs", activeOcUploadId: activeOc.docs[0].id, productCode: metadata.productCode, unitCode: metadata.unitCode, quotationUploadId: (quote as any).uploadId || null },
   });

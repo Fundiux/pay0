@@ -1,4 +1,5 @@
 import Script from "next/script";
+import "./mat.css";
 
 export default function MatLayout({
   children,

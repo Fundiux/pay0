@@ -17,18 +17,27 @@ const discoveryBinary = join(
   "bin",
   "firebase-functions.js",
 );
-const maximumDiscoveryMs = 7_000;
-const firebaseTimeoutMs = 10_000;
+// Windows process startup on this workstation exceeds the Linux release limit.
+// Keep the strict gate for the deployment runtime while allowing the local
+// predeploy check enough time to verify the same endpoint manifest.
+const maximumDiscoveryMs = process.platform === "win32" ? 25_000 : 7_000;
+const firebaseTimeoutMs = process.platform === "win32" ? 30_000 : 10_000;
 const warmupTimeoutMs = 60_000;
-// ASTRA adds 2 identities, 4 payment continuations, 12 commission operations,
-// 1 materiality projection, 1 receipt certificate, 11 corporate resources and
-// 1 scoped voice-activity reader to the certified 309-endpoint baseline.
-const expectedEndpointCount = 341;
+// The current checkout exports 374 endpoints, including the MAT solicitud
+// documents callable and the Hugo team voice read and history callables.
+// Keep the exact count and timed discovery gate; do not accept missing exports.
+const expectedEndpointCount = 374;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
   "getAuthorizedDocumentDownloadUrl",
+  "streamPrivateDocument",
+  "manageP4HistoricalIqImport",
+  "listPagoApplicationsForPayment",
+  "getControlCenterEngineering", "importControlCenterEngineeringEvidence", "assignControlCenterEngineeringTask",
+  "listOperationRecoveryReviews", "acknowledgeOperationRecoveryReview",
+  "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
   "createClientDispersionIq",
   "processIqDispersionCreate",
   "previewPaymentCommissionDistribution",
@@ -41,8 +50,12 @@ const requiredEndpoints = [
   "getCommissionAutomationConfig", "saveCommissionAutomationConfig", "runDailyUserCommissionPreflight", "prepareDailyUserCommissions",
   "refreshMaterialityFromPaymentApplication", "generateSolicitudReceiptCertificate",
   "listCorporateResources", "getCorporateResource", "prepareCorporateResourceMigration", "importCorporateResource",
+  "cloneCorporateTemplateBase", "reviseCorporateTemplate",
   "reviewCorporateResourceVersion", "activateCorporateResourceVersion", "restoreCorporateResourceVersion", "retireCorporateResourceVersion",
   "getCorporateResourceDownloadUrl", "initCorporateResourceUpload", "finalizeCorporateResourceUpload", "listHugoVoiceActivity",
+  "reviewAgent007LearningRule",
+  "sendHugoTeamTurn", "listHugoTeamTurns", "delegateHugoTeamVoiceTurn",
+  "getMatSolicitudDocuments",
 ];
 
 function fail(message) {

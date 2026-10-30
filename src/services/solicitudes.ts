@@ -29,8 +29,14 @@ export type CreateSolicitudInput = {
 };
 
 export async function createSolicitud(input: CreateSolicitudInput) {
-  const fn = httpsCallable(functions, "createSolicitud");
-  return await fn(input);
+  const fn = httpsCallable<CreateSolicitudInput, {
+    ok: boolean;
+    solicitudId: string;
+    folio: string;
+    _perf?: { totalMs: number; stages: Record<string, number> };
+  }>(functions, "createSolicitud");
+  const response = await fn(input);
+  return response.data;
 }
 
 export type SolicitudPageCursor = { seconds: number; nanoseconds: number; id: string };

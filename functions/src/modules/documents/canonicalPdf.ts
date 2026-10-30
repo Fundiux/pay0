@@ -23,9 +23,23 @@ export type QuotePdfInput = {
   bankName?: string;
   bankAccount?: string;
   bankClabe?: string;
-  canonicalBundle?: ReturnType<typeof loadCanonicalBundle>;
-  items?: Array<{ quantity?: number; unit?: string; productCode?: string; description?: string }>;
+  canonicalBundle?: { html: string; css: string; logo: Buffer };
+  items?: Array<{ quantity?: number; unit?: string; productCode?: string; description?: string; unitPrice?: number; amount?: number }>;
+  /** OC date (YYYY-MM-DD) printed as the quote date; generation date when absent. */
+  documentDate?: string;
+  /** Issuer contact printed in the Contacto box. */
+  issuerContact?: string;
 };
+
+/** OC unit prices may carry more than two decimals (e.g. 880.525); show them as stated. */
+function unitMxn(value: number): string {
+  return Number(value || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function documentDateLabel(isoDate?: string): string {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : date();
+}
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -46,11 +60,14 @@ async function renderCanonicalQuoteHtmlPdf(input: QuotePdfInput): Promise<Buffer
   const bundle = input.canonicalBundle || loadCanonicalBundle(text(input.companyRfc, 13).toUpperCase(), "COTIZACION");
   const logo = dataUri(bundle.logo, "image/png");
   const qr = dataUri(await QRCode.toBuffer(text(input.verificationUrl, 900), { type: "png", width: 220, margin: 1, errorCorrectionLevel: "M" }), "image/png");
-  const quoteItems = input.items?.length ? input.items.slice(0, 12) : [{ quantity: input.quantity, unit: input.unit, description: input.description, productCode: input.productCode }];
-  const rows = quoteItems.map((item, index) => `<tr><td>${escapeHtml(item.quantity || 1)}</td><td>${escapeHtml(item.unit || input.unit || "SERVICIO")}</td><td>${escapeHtml(item.description || input.description)}</td><td>${escapeHtml(item.productCode || input.productCode || "-")}</td><td class="money">${index === 0 ? escapeHtml(mxn(input.unitPrice)) : ""}</td><td class="money">${index === 0 ? escapeHtml(mxn(input.subtotal)) : ""}</td></tr>`).join("");
+  // Every OC line is printed with its own price; the bound only protects the
+  // renderer from a malformed workbook.
+  const quoteItems = input.items?.length ? input.items.slice(0, 200) : [{ quantity: input.quantity, unit: input.unit, description: input.description, productCode: input.productCode, unitPrice: input.unitPrice, amount: input.subtotal }];
+  const priced = (value: unknown) => typeof value === "number" && Number.isFinite(value);
+  const rows = quoteItems.map(item => `<tr><td>${escapeHtml(item.quantity || 1)}</td><td>${escapeHtml(item.unit || input.unit || "SERVICIO")}</td><td>${escapeHtml(item.description || input.description)}</td><td>${escapeHtml(item.productCode || input.productCode || "-")}</td><td class="money">${priced(item.unitPrice) ? escapeHtml(unitMxn(item.unitPrice!)) : ""}</td><td class="money">${priced(item.amount) ? escapeHtml(mxn(item.amount!)) : ""}</td></tr>`).join("");
   const values: Record<string, string> = {
-    folio: input.folio, fecha: date(), vigencia: "15 dias", "cliente.nombre": input.clientName, "cliente.rfc": input.clientRfc,
-    "cliente.contacto": "Operacion PAY0", referenciaOc: input.reference, items: rows, subtotal: mxn(input.subtotal), iva: mxn(input.iva), total: mxn(input.total),
+    folio: input.folio, fecha: documentDateLabel(input.documentDate), vigencia: "15 dias", "cliente.nombre": input.clientName, "cliente.rfc": input.clientRfc,
+    "cliente.contacto": input.issuerContact || "-", referenciaOc: input.reference, items: rows, subtotal: mxn(input.subtotal), iva: mxn(input.iva), total: mxn(input.total),
     bankName: input.bankName || "Datos bancarios no configurados", bankAccount: input.bankAccount || "-", bankClabe: input.bankClabe || "-", terms: `Lugar de entrega / prestacion: ${input.deliveryLocation || "No especificado en la OC"}`,
     qr, quotationId: input.folio, solicitudId: input.solicitudId || "-", materialidadId: input.solicitudId || "-", purchaseOrderId: input.reference, cfdiUuid: "-", logoUrl: logo, companyName: input.companyName, companyRfc: input.companyRfc, companyId: text(input.companyRfc, 13).toLowerCase(),
   };
@@ -92,7 +109,7 @@ export type ConstanciaPdfInput = {
   receiptAddress: string;
   observations?: string;
   acceptanceText: string;
-  canonicalBundle?: ReturnType<typeof loadCanonicalBundle>;
+  canonicalBundle?: { html: string; css: string; logo: Buffer };
   verificationUrl?: string;
   items?: Array<{ quantity?: number; unit?: string; productCode?: string; description?: string }>;
 };

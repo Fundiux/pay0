@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { Download, FileText, Trash2, UploadCloud, X } from "lucide-react";
 
@@ -16,6 +16,7 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { requestPagoIqSync } from "@/services/iq";
+import { getAuthorizedOperationalRecord } from "@/services/operationalReads";
 
 type UploadRow = {
   id: string;
@@ -80,7 +81,7 @@ export default function PagoDocsModal(props: {
 }) {
   const { open, onClose, pago } = props;
 
-  const { profile } = useUserProfile();
+  const { profile, profileUid } = useUserProfile();
   const globalLoading = useGlobalLoading();
   const iqRole = normalizeRole((profile as any)?.role);
   const { modules: iqModules } = useModuleAccess(profile, "pagos", "view");
@@ -99,7 +100,9 @@ export default function PagoDocsModal(props: {
   const [otherLabel, setOtherLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [livePago, setLivePago] = useState<any | null>(null);
+  const [livePago, setLivePago] = useState<{ scope: string; item: any } | null>(null);
+  const [readError, setReadError] = useState("");
+  const [readRetry, setReadRetry] = useState(0);
   const [correctedAmount, setCorrectedAmount] = useState("");
   const [correctedPayerName, setCorrectedPayerName] = useState("");
   const [correctedBeneficiaryName, setCorrectedBeneficiaryName] = useState("");
@@ -107,8 +110,9 @@ export default function PagoDocsModal(props: {
   const [amountBusy, setAmountBusy] = useState(false);
 
   const pagoId = String(pago?.id || pago?.pagoId || "").trim();
-  const currentPago = livePago || pago;
-  const pagoRootId = String(currentPago?.rootId || pago?.rootId || (profile as any)?.rootId || "").trim();
+  const readScope = JSON.stringify([profileUid, profile?.rootId, pagoId]);
+  const currentPago = livePago?.scope === readScope ? livePago.item : null;
+  const pagoRootId = String(currentPago?.rootId || "").trim();
   const pagoFolio = getPagoFolio(currentPago);
 
   const visibleDocs = useMemo(() => {
@@ -233,21 +237,29 @@ export default function PagoDocsModal(props: {
     String(currentPago?.status || "").toUpperCase() === "RECHAZADO";
 
   useEffect(() => {
-    if (!open || !pagoId) {
+    if (!open || !pagoId || !profileUid || !profile) {
       setLivePago(null);
       return;
     }
-
-    return onSnapshot(
-      doc(db, "pagos", pagoId),
-      (snap) => {
-        setLivePago(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
-      },
-      (err) => {
-        setMsg(err?.message || "No se pudo actualizar el pago.");
-      },
-    );
-  }, [open, pagoId]);
+    let cancelled = false;
+    let pending = false;
+    setReadError("");
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const item = await getAuthorizedOperationalRecord("pagos", pagoId);
+        if (!cancelled) { setLivePago({ scope: readScope, item }); setReadError(""); }
+      } catch {
+        if (!cancelled) { setLivePago(null); setReadError("No se pudo verificar el acceso al pago. Actualiza o consulta a tu administrador."); }
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
+    const focused = () => { void refresh(); };
+    window.addEventListener("focus", focused);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", focused); };
+  }, [open, pagoId, profileUid, readScope, readRetry, busy, iqBusy, amountBusy, profile]);
 
   useEffect(() => {
     if (!open) return;
@@ -518,6 +530,17 @@ export default function PagoDocsModal(props: {
     }
   }
   if (!open || !pago) return null;
+  if (!currentPago) return (
+    <div className="fixed inset-0 z-[1320] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-label="Documentos del pago" className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#161d2b] p-6 text-slate-200">
+        <p role={readError ? "alert" : "status"}>{readError || "Verificando acceso al pago…"}</p>
+        <div className="mt-4 flex justify-end gap-3">
+          {readError && <button type="button" onClick={() => setReadRetry(value => value + 1)}>Actualizar</button>}
+          <button type="button" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
 
   const accept =
     documentType === "COMPROBANTE_PAGO"

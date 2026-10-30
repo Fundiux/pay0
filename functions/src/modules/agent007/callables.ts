@@ -1,8 +1,9 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { executeEarningsReportTool } from "./reportConnector";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
-import { logActivity } from "../../utils/logActivity";
+import { logActivity, logActivityBatch } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { reconcileAgent007Recommendations } from "./reconciliation";
 import { executeRequestIqComplement, requestedComplementAction } from "./capabilities";
@@ -16,6 +17,7 @@ import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
 import { HugoTraceFilter } from "./hugoCore/dataStoreContract";
 import { MEMORY_CONTRACT_VERSION } from "./hugoCore/memoryContract";
 import { FirestoreHugoLearningStore } from "./firestoreHugoLearningStore";
+import { FirestoreHugoLearningRuleStore } from "./firestoreHugoLearningRuleStore";
 import { LearningCorrection, LearningReference } from "./hugoCore/learningContract";
 import { HumanReviewInput, validateHumanReview } from "./hugoCore/humanReviewContract";
 import { hugoDateKey, hugoDayBounds } from "./hugoHistory";
@@ -27,6 +29,19 @@ const clean = (value: unknown, max = 1000) => String(value ?? "").trim().replace
 const conversationIdFor = (rootId: string, uid: string, scope: "GLOBAL" | "PAY0" = "PAY0") => scope === "GLOBAL" ? `${rootId}_${uid}_global` : `${rootId}_${uid}`;
 const hugoData = new FirestoreHugoDataStore(db);
 const hugoLearning = new FirestoreHugoLearningStore(db);
+
+export const reviewAgent007LearningRule = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async request => {
+    const { uid, rootId } = await actor(request);
+    const data = request.data || {};
+    if (!["APPROVE", "REVOKE"].includes(data.action)) throw new HttpsError("invalid-argument", "Acción de revisión inválida.");
+    return { ok: true, ...await new FirestoreHugoLearningRuleStore(db).review({ uid, rootId }, {
+      action: data.action, ruleId: clean(data.ruleId, 160),
+      supportingIds: Array.isArray(data.supportingIds) ? data.supportingIds.map((id: unknown) => clean(id, 160)) : undefined,
+    }) };
+  },
+);
 
 function displayName(user: any): string {
   return clean(user?.displayName || user?.name || user?.nombre || user?.firstName || user?.email?.split?.("@")[0] || "", 80) || "usuario";
@@ -80,9 +95,20 @@ export const listAgent007Recommendations = onCall(
 export const reconcileAgent007RecommendationsNow = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
-    const { rootId } = await actor(request);
+    const { uid, rootId } = await actor(request);
     const changed = await reconcileAgent007Recommendations(db, rootId);
-    return { ok: true, changed };
+    const ref = db.collection("agent007Observations").doc(), batch = db.batch();
+    batch.create(ref, { rootId, caseType: "ENGINEERING", caseId: "agent007:recommendation-review", phase: "OBSERVATION",
+      source: "SERVER_RECONCILIATION", intent: "Revisión de recomendaciones operativas",
+      humanDecision: "Revisión determinista solicitada por un superadmin; sin ejecución de modelos ni proveedores externos.",
+      outcome: `${changed} recomendaciones actualizadas`, actorUid: uid, actorRole: "superadmin",
+      engineeringAction: { name: "RECONCILE_RECOMMENDATIONS", changed, limit: 100, status: "EXECUTED" },
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null });
+    logActivityBatch(batch, db, { event: "AGENTE_007_OBSERVACION", rootId, actorUid: uid, actorRole: "superadmin",
+      referenceId: ref.id, referenceType: "agent007Observation", relatedEntityId: "agent007:recommendation-review", relatedEntityType: "ENGINEERING",
+      description: `Revisión operativa ejecutada: ${changed} recomendaciones actualizadas, hasta 100 pendientes revisadas.` });
+    await batch.commit();
+    return { ok: true, changed, observationId: ref.id };
   },
 );
 
@@ -186,6 +212,8 @@ export const sendAgent007Message = onCall(
     if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para María.");
     const startedAt = Date.now();
     const scope = normalizeHugoScope(request.data?.scope);
+    const correctionTopic = request.data?.correctionTopic;
+    if (correctionTopic !== undefined && (typeof correctionTopic !== "string" || !correctionTopic.trim() || correctionTopic.length > 80 || /[\x00-\x1f]/.test(correctionTopic))) throw new HttpsError("invalid-argument", "Confirma un tema específico antes de reutilizar correcciones.");
     const profile = classifyHugoProfile(text);
     const routingSignals = classifyHugoRoutingSignals(text, profile);
     const conversationId = conversationIdFor(rootId, uid, scope);
@@ -197,6 +225,7 @@ export const sendAgent007Message = onCall(
     const pay0 = new Pay0Connector(db, identity);
     const platform = new PlatformReadConnector(db, request.auth, user, identity);
     const router = new HugoToolRouter(identity, {
+      getEarningsByClientReport: input => executeEarningsReportTool(request, input),
       getSolicitud: ({ folio }) => pay0.getSolicitud(folio), searchSolicitudes: ({ limit }) => pay0.searchSolicitudes(limit), getLatestSolicitud: () => pay0.getLatestSolicitud(),
       getPago: ({ folio }) => pay0.getPago(folio), searchPagos: ({ limit }) => pay0.searchPagos(limit),
       searchReceivedPagos: ({ limit, beforePaymentId }) => pay0.searchReceivedPagos({ limit, beforePaymentId }), getPagoById: ({ paymentId }) => pay0.getPagoById(paymentId),
@@ -209,7 +238,7 @@ export const sendAgent007Message = onCall(
     });
     const modelRouter = new HugoModelRouter();
     const core = new HugoConversationCore(router, modelRouter, hugoData, hugoLearning);
-    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
+    const coreInput = { channel: "WEB", conversationId, identity, name, message: text, scope, profile, ...(correctionTopic ? { correctionTopic } : {}), routingSignals, commandReply: capability?.reply, promptVersion: "hugo-v2" as const,
       modelCapability: profile === "PROGRAMMER" ? "STRONG_EXTERNAL" as const : "FAST_EXTERNAL" as const };
     const traceId = hugoData.newTraceId();
     const result = await core.respond(coreInput).catch(async error => {
@@ -223,14 +252,14 @@ export const sendAgent007Message = onCall(
     });
     const reply = result.text;
     const source = result.source === "MODEL_RESPONSE" ? (result.model.provider === "OPENAI" ? "OPENAI" : "VERTEX_AI") : "HUGO_ENGINE";
-    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
+    const saved = await hugoData.saveTurn({ rootId, uid, conversationId, text, reply, source, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), ...(result.personalNotes?.length ? { personalNotes: result.personalNotes } : {}), scope, profile, capability: capability ? "REQUEST_IQ_PAYMENT_COMPLEMENT" : null,
       capabilityExecuted: capability?.executed === true, recentEntities: result.recentEntities, conversationState: result.conversationState,
       contextSummary: { folioConsultado: result.context.folioConsultado, solicitudes: result.context.solicitudes.length, pagos: result.context.pagos.length, dudas: result.context.dudasPendientes.length },
       traceId, trace: conversationTrace(traceId, coreInput, result, startedAt, capability) });
     for (const experienceId of result.learningUsage?.includedIds || []) {
       await hugoLearning.appendEvent(rootId, experienceId, "EXPERIENCE_RETRIEVED", uid, { traceId }).catch(() => undefined);
     }
-    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, source, scope, profile, createdAt: saved.createdAt } };
+    return { ok: true, conversationId, profile, scope, message: { id: saved.id, role: "assistant", text: reply, ...(result.reportExport ? { reportExport: result.reportExport } : {}), ...(result.correctionChoices?.length ? { correctionChoices: result.correctionChoices } : {}), ...(result.personalNotes?.length ? { personalNotes: result.personalNotes } : {}), source, scope, profile, createdAt: saved.createdAt } };
   },
 );
 
@@ -253,7 +282,7 @@ export const getHugoDashboard = onCall(
     }
     Object.values(byProvider).forEach((row: any) => { row.averageLatencyMs = row.requests ? Math.round(row.latencyMs / row.requests) : 0; delete row.latencyMs; });
     return { ok: true, scope: "GLOBAL", attention: attention.slice(0, 12), activity: traces.traces.slice(0, 12), consumption: byProvider,
-      providers: new HugoModelRouter().status(), capabilities: HUGO_CAPABILITIES, conversations: [{ id: conversationIdFor(rootId, uid, "GLOBAL"), scope: "GLOBAL", messageCount: globalMessages.length,
+      providers: await new HugoModelRouter().statusDetailed(), capabilities: HUGO_CAPABILITIES, conversations: [{ id: conversationIdFor(rootId, uid, "GLOBAL"), scope: "GLOBAL", messageCount: globalMessages.length,
         lastMessage: globalMessages.at(-1)?.text || null }], systems: publicHugoSystemCatalog() };
   },
 );
@@ -298,8 +327,8 @@ export const getAgent007Trace = onCall(
 export const listAgent007MemoryDiagnostics = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
-    const { rootId } = await actor(request);
-    return { ok: true, memories: await hugoData.listMemoryDiagnostics(rootId) };
+    const { uid, rootId } = await actor(request);
+    return { ok: true, memories: await hugoData.listMemoryDiagnostics(rootId, 50, uid) };
   },
 );
 
@@ -309,6 +338,13 @@ export const createAgent007MemoryCandidate = onCall(
     const { uid, user, rootId } = await actor(request);
     const kind = clean(request.data?.kind, 30);
     const content = clean(request.data?.content, 1000);
+    if (request.data?.responseCorrection !== undefined) {
+      const correction = request.data.responseCorrection;
+      if (kind !== "CONVERSATION_CORRECTION" || correction?.confirm !== true || !["PAY0", "GLOBAL"].includes(correction.scope) || typeof request.data.content !== "string" || request.data.content.length > 1000 || typeof correction.messageId !== "string") throw new HttpsError("invalid-argument", "Confirma la corrección de esta respuesta.");
+      if (typeof correction.expectedText !== "string" || correction.expectedText.length > 64000) throw new HttpsError("invalid-argument", "Respuesta original inválida.");
+      const result = await hugoData.correctResponse({ rootId, uid, messageId: correction.messageId, scope: correction.scope, content: request.data.content, expectedVersion: correction.expectedVersion, expectedText: correction.expectedText, ...(correction.rememberFor ? { rememberFor: correction.rememberFor } : {}) });
+      return { ok: true, ...result, status: "CONFIRMED", acknowledgement: "Corrección guardada para esta conversación como declaración tuya; no cambia datos ni reglas financieras." };
+    }
     if (!["USER_STATEMENT", "PREFERENCE", "DECISION", "EXPERIENCE"].includes(kind) || !content) throw new HttpsError("invalid-argument", "Tipo o contenido de memoria inválido.");
     const raw = request.data?.entityReference;
     const entityReference = raw ? { sourceSystem: clean(raw.sourceSystem, 40), entityType: clean(raw.entityType, 40), entityId: clean(raw.entityId, 160), displayReference: clean(raw.displayReference, 80) || undefined } : undefined;
@@ -333,7 +369,7 @@ export const reviewAgent007MemoryCandidate = onCall(
 );
 
 export const linkAgent007VerifiedExperience = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, user, rootId } = await actor(request);
     const observationId = clean(request.data?.observationId, 160), decisionId = clean(request.data?.decisionId, 160), outcomeId = clean(request.data?.outcomeId, 160);
@@ -345,7 +381,7 @@ export const linkAgent007VerifiedExperience = onCall(
 );
 
 export const createAgent007LearningExperience = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -358,7 +394,7 @@ export const createAgent007LearningExperience = onCall(
 );
 
 export const createAgent007LearningDraft = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const raw = request.data || {};
@@ -371,7 +407,7 @@ export const createAgent007LearningDraft = onCall(
 );
 
 export const linkAgent007LearningOutcome = onCall(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  { region: "us-central1", preserveExternalChanges: true, maxInstances: 20, concurrency: 80, timeoutSeconds: 30, memory: "256MiB" },
   async request => {
     const { uid, rootId } = await actor(request);
     const record = await hugoLearning.linkOutcome(rootId, clean(request.data?.experienceId, 160), clean(request.data?.outcomeId, 160), uid);
@@ -396,7 +432,15 @@ export const correctAgent007LearningExperience = onCall(
 export const listAgent007LearningDiagnostics = onCall(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
   async request => {
-    const { rootId } = await actor(request);
+    const { uid, rootId } = await actor(request);
+    const input = request.data == null ? {} : request.data;
+    if (typeof input !== "object" || Array.isArray(input)) throw new HttpsError("invalid-argument", "Parámetros de diagnóstico inválidos.");
+    if (input.mode !== undefined) {
+      if (input.mode !== "SUPERVISED_REVIEW" || Object.keys(input).some(key => !["mode", "candidateCursor", "ruleCursor", "focusedRuleId", "limit"].includes(key)))
+        throw new HttpsError("invalid-argument", "Modo de diagnóstico inválido.");
+      return { ok: true, mode: "SUPERVISED_REVIEW", ...await new FirestoreHugoLearningRuleStore(db).readReview({ uid, rootId }, input) };
+    }
+    if (Object.keys(input).length) throw new HttpsError("invalid-argument", "Parámetros de diagnóstico inválidos.");
     const records = await hugoLearning.list(rootId, 100);
     return { ok: true, boundedTo: 100, experiences: records.map(row => ({ id: row.experienceId, domain: row.domain, taskType: row.taskType, state: row.state,
       revision: row.revision, createdAt: row.createdAt, provenance: row.quality.provenance, outcome: row.quality.outcome, feedback: row.quality.feedback,

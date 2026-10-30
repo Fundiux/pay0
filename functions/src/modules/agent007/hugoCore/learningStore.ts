@@ -1,6 +1,7 @@
 import { LearningCorrection, LearningEffect, LearningEventType, LearningExperience, LearningLedgerEvent, LearningQuery, LearningRetrieval, LearningSplit } from "./learningContract";
 
 export interface HugoLearningStore {
+  resolveSupervisedRule?(identity: { uid: string; rootId: string }, query: LearningQuery, entityId: string, folio: string): Promise<{ ruleId: string; text: string } | null>;
   createDraftFromDecision(input: { rootId: string; decisionId: string; traceId?: string; domain: string; taskType: string; intent: string; questionClass: string; features: Record<string, string>; actorUid: string }): Promise<{ id: string; created: boolean; record: LearningExperience }>;
   createFromVerifiedMemory(input: { rootId: string; memoryId: string; traceId?: string; domain: string; taskType: string; intent: string; questionClass: string; features: Record<string, string>; actorUid: string }): Promise<{ id: string; created: boolean; record: LearningExperience }>;
   addCorrection(rootId: string, experienceId: string, correction: LearningCorrection, expectedBehavior: string): Promise<LearningExperience>;

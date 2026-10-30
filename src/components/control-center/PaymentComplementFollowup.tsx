@@ -14,7 +14,7 @@ export default function PaymentComplementFollowup() {
       : next[key] ? "¿Activar emisión Facturama para aplicaciones PPD nuevas? Puede emitir CFDI reales. No se enviará el histórico." : "¿Pausar nuevas emisiones Facturama?";
     if (!window.confirm(prompt)) return;
     setBusy(true);
-    try { await configurePaymentComplementAutomation({ ...next, confirmation: "AUTORIZO_REP_AUTOMATICO" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
+    try { await configurePaymentComplementAutomation({ provider: key === "iqEnabled" ? "IQ" : "FACTURAMA", enabled: next[key], confirmation: "AUTORIZO_REP_AUTOMATICO" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
   }
   async function setForm(id: string, value: string) {
     if (!value || !window.confirm("Confirma que esta es la forma del pago recibido. Se revalidará el complemento para emitirlo.")) return;

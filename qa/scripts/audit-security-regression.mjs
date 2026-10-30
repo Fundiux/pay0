@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { overdue } from "../../functions/lib/modules/paymentApplications/complementPolicy.js";
+import { assertAuthorized } from "../../functions/lib/utils/authGuard.js";
 
 const index = readFileSync("functions/src/index.ts", "utf8");
 const constancias = readFileSync("functions/src/modules/constancias/service.ts", "utf8");
@@ -23,13 +24,20 @@ for (const [label, source] of [["constancia", constancias], ["cotizacion", cotiz
 
 console.log("PASS upsertUser: perfil inexistente no puede autoaprovisionar privilegios");
 assert.match(materialityTrigger, /document: "uploads\/\{uploadId\}"/);
-assert.match(materialityTrigger, /linkSolicitudToMaterialityOperationCore/);
+assert.match(materialityTrigger, /import \{ refreshMaterialityProjectionFromSource \} from "\.\/service"/);
+assert.match(materialityTrigger, /await refreshMaterialityProjectionFromSource\(\{ rootId, solicitudId \}\)/);
+assert.match(materialityTrigger, /document: "pagoAplicaciones\/\{applicationId\}"/);
+assert.doesNotMatch(materialityTrigger, /auth:\s*\{\s*uid:\s*["']SYSTEM["']/);
 console.log("PASS Materialidad: documentos de Solicitud y Pago activan refresco de expediente");
 
 assert.match(privilegedIqHttp, /if \(!userSnap\.exists\) \{\s*throw new HttpsError\("permission-denied", "Perfil PAY0 no autorizado\."\);/s);
-assert.match(privilegedIqHttp, /if \(user\.active === false\) \{\s*throw new HttpsError\("permission-denied", "Usuario PAY0 inactivo\."\);/s);
+assert.match(privilegedIqHttp, /assertAuthorized\(\{ uid \}, user, \{ allowedRoles: \["superadmin", "admin", "operador"\], requiredModule: "pagos", requiredAction: \["create", "conciliate"\] \}\)/);
 assert.match(privilegedIqHttp, /const role = cleanText\(user\.role\)\.toLowerCase\(\);/);
 assert.doesNotMatch(privilegedIqHttp, /user\.role \?\? \(decoded as any\)\.role/);
+const iqPermission = { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] };
+assert.equal(assertAuthorized({ uid: "synthetic-admin" }, { role: "superadmin", active: true }, iqPermission), "superadmin");
+assert.throws(() => assertAuthorized({ uid: "synthetic-admin" }, { role: "superadmin", active: false }, iqPermission), error => error.code === "permission-denied");
+assert.throws(() => assertAuthorized(null, { role: "superadmin", active: true }, iqPermission), error => error.code === "unauthenticated");
 console.log("PASS IQ HTTP: perfil activo obligatorio; claims no elevan rol ni root");
 
 assert.match(telegramWebhook, /import \{ timingSafeEqual \} from "crypto"/);

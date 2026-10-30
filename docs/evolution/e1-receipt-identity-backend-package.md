@@ -1,0 +1,53 @@
+# Identidad documental: backend de registro
+
+Estado: DEPLOYED_NOT_VERIFIED. Usuario autorizó expresamente input80/ZIP78 y reversión. Backend publicado y verificado técnicamente; recorrido autenticado end-to-end del usuario PENDING. Input29dc/ZIPeaff queda SUPERSEDED_NOT_DEPLOYED y no se ejecutó.
+
+## Comportamiento y alcance
+
+Sólo parsePagoReceiptPdf y correctPagoReceiptSemanticField, grupo receipt-learning-overlay, BUNDLED_V1, 354 exports. Tres JS: receiptIdentificationDomain, receiptIdentification y dos hunks PDF que transmiten selectedClientId/selectedCompanyId. Semantics, policy3, importes, flags, createPago, conciliación, reglas, permisos e IAM permanecen intactos.
+
+Un nombre único sin señales fuertes queda como sugerencia: REQUIRES_REVIEW, CLIENT/COMPANY_SELECTION_REQUIRED y createPayload=null. Sólo IDs explícitos del catálogo activo autorizado producen READY manual; evidence distingue USER_SELECTED_AUTHORIZED_CATALOG_ENTRY, sin fingir corroboración OCR. Esto protege pestañas antiguas que auto-registraban cualquier READY. El matching fuerte anterior conserva auto con RFC/cuenta corroborados. Catálogo limitado a500; la advertencia por exceso conserva revisión.
+
+READY no garantiza creación financiera: createPago sigue rechazando RFC presente contradictorio con PAGO_RECEIPT_RFC_MISMATCH. Este paquete resuelve RFC/cuenta ausentes; no ofrece bypass de conflictos. metricIdentifiedAutomatically sigue contando READY, incluso manual; evidence diferencia la elección. No se modifica esa métrica.
+
+## Identidad y receta
+
+Fuente final bb8d94b06d6f9ed25299fffeb4169ea256136c91. Base publicada/rollback6e0dffaa8af33582f09c7caa0f1a071f751cf1529e616f56e1dbd795c49224d0. Patch completo72080009dbd0d7c446532a8096c8033ea1898fd60d1cf71d0503e47477e68937. ZIP78f7403fa7011069eafc1a99bd01c4388bc40e075d450d224e4c8a7dff79056b en .firebase/modular-release/receipt-identity-candidate-v3. Preserva951 archivos,1176 entradas/conjunto/orden, sin entradas nuevas; tres JS cambiados. index shim y bundle original intactos. sourceTree=null.
+
+Receta qa/scripts/build-receipt-identity-overlay.mjs: ocho argumentos ZIPbase, fuente baseline, TypeScript, patch, SHApatch, commit origen40, salida privada nueva y BUILD. Verifica tres emisores baseline antes del patch y exige patch de esos tres TS; BASELINE_ONLY no emite release. Nunca copia lib raíz completa. La fuente baseline está ligada a los emisores del ZIP6e0 y al pipeline anterior certificado.
+
+## Evidencia y pendientes
+
+Fuente raíz: NORMAL final,15 casos nuevos y78 con regresiones PASS; verify-authorization-policy PASS. Emulador fuente separado:98 identificación y33 creación canónica PASS, script0/cero acciones externas. No se atribuyen al ZIP.
+
+Startup y QA exactos v3 PASS; sin claims heredados de eaff. qa/scripts/receipt-identity-startup.cjs carga package.main con red bloqueada,354 exports/352 referencias y2 denegaciones. Admite reutilización explícita de dependencias privadas sólo con ZIP anterior/proofSHA, todos sus bytes, package/lock, rutas físicas y cierre offline verificados. Esa prueba adicional no sustituye npm ci literal del verificador canónico.
+
+qa/scripts/receipt-identity-artifact.cjs exige ZIP/runtime iguales antes/después y Firestore demo. Casos previstos: name-only noREADY/nullpayload con sugerencias, IDs autorizados READY, desconocidos/ajenos/inactivos, cambio tras auto y corrección con IDs;33 regresiones documentales,8 monetarios, P3 y correcciones privadas/flagsfalse. Sin proveedores, datos reales ni escrituras financieras.
+
+Comprobaciones backend y publicación autorizada terminadas; pendiente prueba autenticada del usuario. La autorización histórica29 no se transfiere.
+
+## UI y reversión
+
+Plataforma prepara gate UI compatible con6e0 usando evidence.client/company y los IDs del createPayload del servidor; verifiedMatches/candidates son opcionales y no existen en6e0. La UI publicada SSR00612 no tiene selección documental. La entrega UI es independiente y requiere su autorización exacta. Orden flexible seguro: backend con guardia servidor puede publicarse antes de UI, con autorización propia; las pestañas antiguas no crean casos name-only y requieren la nueva UI para confirmar. UI compatible puede publicarse por separado. La guardia servidor además impide auto-registro de name-only en pestañas antiguas.
+
+Rollback de familia: ambos backends a6e0 primero manteniendo UI gate; sólo después Hosting aSSR00612. Si sólo backend se publicó, no se revierte Hosting innecesariamente. Usar recibos scoped y configuración/IAM previos; conservar datos, análisis y correcciones. Ningún borrado ni cambio de flags ni rollback de chat/MEMORY. Reconciliar operaciones inciertas antes de reintentar PATCH.
+
+Resultados exactos v3: startup PASS exit0, proof `e1760227832b37a174631d56c663f2368e76ed3842a5ba136af9bdb9e27d06a9`; package.main/Firestore real PASS exit0, proof `bd3e18187a346159d1944c836ab1df6b67f6761945288341a58402005b23fd39`. Oldtab protegido por nullpayload/SELECTION_REQUIRED; sugerencias de nombre y luego IDs explícitos READY. Se verificaron33 regresiones documentales,8 casos monetarios, cambio tras auto, IDs en correct, opciones ajenas/inactivas y P3/correcciones privadas/flagsfalse. Cero proveedores y escrituras financieras; emulador cerrado. Preservación independiente raíz PASS en root-independent-preservation.json.
+
+## Input final y comprobaciones de entrega
+
+Commit de composición/patch/QA b498c77f3f48a024092e0297a3532fa6f28c36d6; sourceTree=null. Input privado receipt-identity-candidate-v3/release/input.json SHA80ebcd01d86fc713fcd280d5fad2fe47c0c9f8fafb02562a2cf2816f8167ed64. Baseline8fa3903aba4d64d86e0396d9dc1402048ee181df0759c7b107a60561c6e6ed49; base/rollback6e0 y patch7208 completos arriba.
+
+Verificador canónico inmutable PASS exit0, con npm ci --omit=dev literal en runtime privado nuevo,354 endpoints y2 denegaciones anónimas. Proof204d90151502a90bd66f78e87efd8f9ab839f65c849b9ae6038b0d145817d637, release/artifact-verification.json. No se sustituyó la instalación por un interceptor ni por el reuse adicional del startup.
+
+GET preflight2026-10-20T19:19:43Z PASS exit0: source6e0 descargada para ambos destinos, revisiones00017-wev/00006-jol, configuración/Run/IAM preservados, driftfalse,0operaciones,0negocio y0mutaciones. Proof088518c1eb85c55f27d5895ecf4b7e783a966342e8b9018a0bc6a8523202a071, release/fresh-preflight-3a60a8f6-8715-428a-8417-96b6551ceb00.json. La frescura se revalida en el ejecutor; este recibo no garantiza ausencia futura de cambios ni autoriza desplegar.
+
+La publicación backend v3 es independiente y segura antes de Hosting: el servidor exige selección explícita para nombre/manual y las pestañas antiguas quedan pendientes sin payload. La UI de selección sigue siendo otra entrega con aprobación propia, no requisito artificial para solicitar aprobación de las dos Functions. No usar input29dc/ZIPeaff ni su autorización histórica.
+
+## Publicación autorizada y verificación independiente
+
+Ejecutor raíz50086 terminó EXIT0, ambos CONFIGURATION_VERIFIED: parsepagoreceiptpdf-00018-zab y correctpagoreceiptsemanticfield-00007-qud. Input80ebcd01d86fc713fcd280d5fad2fe47c0c9f8fafb02562a2cf2816f8167ed64/ZIP78f7403fa7011069eafc1a99bd01c4388bc40e075d450d224e4c8a7dff79056b publicados tras autorización específica. Rollback6e0 preservado y NO utilizado; sin cambios financieros ni borrado de datos.
+
+Postverificador independiente EXIT0/PASS2026-10-20T21:37:11Z: ambas fuentes descargadas iguales al ZIP78, ACTIVE, revisiones listas/generaciones observadas, runtime/Run/IAM preservados, dos HTTP401 UNAUTHENTICATED y cero operaciones activas. Cero lecturas de negocio y cero mutaciones del verificador. Proof7aaaab44f1e6167108b738a7f1834ef681d434a1701f147e1b4df26caa9d9f0d; baseline publicada7933ff5e48ba642500a7fca48cfdbd928b10928387b4003babb5e6b8aae19efb. Directorio privado release/independent-post-publication-7badb878-d2d2-417c-907b-09b2e9fbbe11, archivos verification.json y published-baseline.json; fuentes exactas preservadas por destino.
+
+Esta evidencia certifica publicación y contrato técnico, no el recorrido productivo del usuario. La prueba end-to-end de selección/registro sigue PENDING; no se certifican conciliación real, IQ ni banco por las pruebas sintéticas o por rechazos anónimos. Hosting es otro paquete y no se atribuye su estado a este dossier.

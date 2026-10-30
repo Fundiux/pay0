@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "approvedSource": "4235980cae3fb139d97724a7d6cf13efb3e3b168",
+  "files": [
+    {
+      "path": "src/app/mat/usuarios/page.tsx",
+      "sha256": "29007ebbf102f96458cc9b32bb5139d3ed8a579b093f2bbdbdab2377850162db"
+    },
+    {
+      "path": "src/app/mat/clientes/page.tsx",
+      "sha256": "c1576121d88841d21b5773e0d91fffe8aafb66693821b7d73e6971a26edc9f14"
+    },
+    {
+      "path": "src/app/mat/mat.css",
+      "sha256": "21ffb544aea640db75ad6b81f03820bab2d3c016d2120c4d0478e1b5ba4e7e25"
+    },
+    {
+      "path": "src/components/mat/MatCarousel2D.tsx",
+      "sha256": "2b9b324e5ff25f404050b017a1de927aec87540f99bd032125d2e8e2648d03bf"
+    },
+    {
+      "path": "src/components/mat/MatShell.tsx",
+      "sha256": "175452f2dd4b8cb2bbe181e319168d50b15a911745fcd13ef8ff27fd15f55b7e"
+    },
+    {
+      "path": "src/components/mat/MatBottomNav.tsx",
+      "sha256": "ad5f893e206e1cac3adb6abc97082faf6ec0446c29e3c27e3f2f93913378deb7"
+    },
+    {
+      "path": "src/components/mat/MatHomeOverview.tsx",
+      "sha256": "2565b075de6500755699beedb9c49a52157474da41d85e456e84372ad4224450"
+    },
+    {
+      "path": "src/components/mat/MatOperationForm.tsx",
+      "sha256": "c348fb1b059f9f4c0f2afc5371ae0fcbca13a706498e485c0cc03e0ca873f1fe"
+    },
+    {
+      "path": "src/components/mat/MatSolicitudDocuments.tsx",
+      "sha256": "247d4306c6f033a849ec676bd58e83425e14e0311df31d198ed7614b441b6121"
+    },
+    {
+      "path": "src/components/mat/MatBalanceCard.tsx",
+      "sha256": "79efd3b8191c7f90459b747f8154788cdd1f0e3423c3b16772307c977661b34a"
+    },
+    {
+      "path": "src/services/telegramMiniApp.ts",
+      "sha256": "6bc6b23a24560470fa1432845c7576a237b0d3241db6e6f907d629b4e26c9643"
+    },
+    {
+      "path": "src/lib/telegramMiniApp.ts",
+      "sha256": "bf0f45cada5715d6c473203085207d5afd7bf63c826dcd710a81e4c1bdbdc883"
+    },
+    {
+      "path": "functions/src/modules/telegramMiniApp/callables.ts",
+      "sha256": "7f297f8d012db15a136aa58e9f031a3cb4e5e6ad04618a9c577980d43172cf06"
+    },
+    {
+      "path": "functions/src/modules/telegramMiniApp/service.ts",
+      "sha256": "75c03ec849e039f80ec79492d5f7c1b1d79be6caf5d59b4d692fe00ead325083"
+    },
+    {
+      "path": "config/hosting-miniapp/fullscreen-launch.js",
+      "sha256": "cf5bccb755d3cbf794eca8a93bb25d18c043eafe40b2e15db306fdee63665d33"
+    }
+  ]
+}

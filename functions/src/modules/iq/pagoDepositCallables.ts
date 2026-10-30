@@ -1,3 +1,7 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
+import { operationTiming } from "../../utils/operationTiming";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { enqueueAutomaticPagoCreation, isAutomaticPagoRecoveryDue, matchesPagoGeneration } from "./pagoImmediateDispatch";
 import { manualNoteAuthor, systemNoteAuthor } from "../notes/domain";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
@@ -19,7 +23,7 @@ import { evaluateIqCompanyDespachoGate } from "../paymentApplications/iqBusiness
 import { assertIqAuthorized } from "./authorization";
 import { assertAuthorized } from "../../utils/authGuard";
 
-import { loadEnabledIqAutomationRoots } from "./automationRuntime";
+import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import { runPagoDepositHttpCreateFlow } from "./pagoDepositHttpCreateFlow";
 import { resolveStoredIqClientIdForProfile } from "./iqClientProfileLink";
 import {
@@ -242,20 +246,8 @@ async function getAuthContext(request: {
   }
 
   const user = asRecord(userSnap.data());
-  const token = asRecord(request.auth?.token);
-
-  const role = cleanText(
-    token.role ??
-    token.userRole ??
-    user.role,
-  ).toLowerCase();
-
-  const rootId = cleanText(
-    token.rootId ??
-    token.root_id ??
-    user.rootId ??
-    uid,
-  );
+  const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
+  const rootId = cleanText(user.rootId ?? uid);
 
   return {
     uid,
@@ -1271,24 +1263,19 @@ function logPagoIqAutomationScopeSkipH4D63A1C(input: {
 }
 // H4_D63A_AUTOMATION_SCOPE_SKIP_HELPERS_END
 async function markPagoIqAutoCreateErrorH4D62C(input: {
-  pagoId: string;
-  error: unknown;
-  source: string;
+  pagoId: string; error: unknown; source: string; expectedUploadId?: string;
 }) {
-  const message = cleanText((input.error as any)?.message ?? input.error) || "Error desconocido.";
-
-  await db.collection("pagos").doc(input.pagoId).set(
-    {
-      iqDepositCreationStatus: "ERROR_RETRYABLE",
-      iqDepositFollowupStatus: "ERROR_RETRYABLE",
-      iqDepositAutoCreateLastError: message,
+  const ref = db.collection("pagos").doc(input.pagoId);
+  await db.runTransaction(async (tx) => {
+    const row = asRecord((await tx.get(ref)).data());
+    if (!shouldProcessPagoIqCreateQueueH4D62C(row) || row.iqDepositCreationRetryBlocked === true ||
+        (input.expectedUploadId && !matchesPagoGeneration(row, input.expectedUploadId))) return;
+    tx.set(ref, {
+      iqDepositAutoCreateLastError: cleanText((input.error as any)?.message) || "Error de despacho IQ.",
       iqDepositAutoCreateLastErrorAt: FieldValue.serverTimestamp(),
       iqDepositAutoCreateLastErrorSource: input.source,
-      iqDepositUpdatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  ).catch(() => undefined);
+    }, { merge: true });
+  });
 }
 
 type PagoIqOperationalActorH4D87 = {
@@ -1301,7 +1288,8 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   auth: AuthContext;
   actor: PagoIqOperationalActorH4D87;
   pagoId: string;
-  source: "SCHEDULER" | "TASK";
+  source: "SCHEDULER" | "TASK" | "AUTO_TASK";
+  expectedUploadId?: string;
   sessionHolders?: Map<string, {
     username: string;
     apiOrigin: string;
@@ -1309,7 +1297,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }>;
 }) {
   const pagoId = cleanText(input.pagoId);
-  const reconcileSource = input.source;
+  const reconcileSource = input.source === "AUTO_TASK" ? "SCHEDULER" : input.source;
   const pagoRef = db.collection("pagos").doc(pagoId);
   const existingPagoSnap = await pagoRef.get();
 
@@ -1318,6 +1306,9 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }
 
   const existingPago = asRecord(existingPagoSnap.data());
+  if (input.expectedUploadId && !matchesPagoGeneration(existingPago, input.expectedUploadId)) {
+    return { ok: true, pagoId, status: "SKIPPED_STALE_GENERATION", created: false };
+  }
   assertSameRoot(existingPago, input.auth.rootId, "Pago");
 
   const createEligible =
@@ -1373,6 +1364,9 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     persist: true,
   });
 
+  if (input.expectedUploadId && ctx.receiptUploadId !== input.expectedUploadId) {
+    return { ok: true, pagoId, status: "SKIPPED_STALE_RECEIPT", created: false };
+  }
   if (!ctx.ready) {
     throw new HttpsError(
       "failed-precondition",
@@ -1394,8 +1388,27 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
     input.sessionHolders.set(ctx.access.profileId, sessionHolder);
   }
 
+  const authorizeBeforePost = async () => {
+    const current = asRecord((await pagoRef.get()).data());
+    if (cleanText(current.rootId) !== input.auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+    try {
+      if (input.source === "TASK" && cleanText(current.iqDepositOnDemandRequestedByUid) !== input.actor.uid)
+        throw new HttpsError("permission-denied", "AUTH_INTENT_ACTOR_CHANGED");
+      await authorizeDeferredIntent({ uid: input.source === "TASK" ? input.actor.uid : input.auth.uid,
+        rootId: input.auth.rootId, module: "pagos", action: ["create", "conciliate"],
+        clientId: cleanText(current.clienteId || current.clientId), permission: "operatePagos" });
+    } catch (error) {
+      if ((error as any)?.code === "permission-denied") await pagoRef.set({
+        iqDepositAuthorizationStatus: "AUTH_STOPPED", iqDepositAuthorizationCheckedAt: FieldValue.serverTimestamp(),
+      }, {merge:true});
+      throw error;
+    }
+  };
+  await authorizeBeforePost();
   const httpResult = await runPagoDepositHttpCreateFlow({
+    authorizeBeforePost,
     sessionHolder,
+    expectedUploadId: input.expectedUploadId,
     pagoId: ctx.pagoId,
     actorUid: input.actor.uid,
     source: `CREATE_PAGO_IQ_DEPOSIT_HTTP_${input.source}`,
@@ -1533,6 +1546,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
   }
 
   await result.ctx.pagoRef.set(patch, { merge: true });
+  operationTiming("firestore_iq_update_at", pagoId);
 
   if (created) {
     // Deposit creation is recorded in structured IQ state and ActivityLog.
@@ -1545,7 +1559,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       pago: result.ctx.pago as Record<string, unknown>,
       iqId,
       source: `H4_D62C_CREATE_${input.source}`,
-      message: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
+      message: input.source !== "TASK" ? `Deposito IQ creado automaticamente y vinculado: ${iqId}` : `Deposito IQ creado manualmente y vinculado: ${iqId}`,
     }).catch(() => undefined);
 
     const reconciled = await reconcilePagoIqDepositCoreH4D44(input.auth, pagoId, reconcileSource, input.actor).catch((error: any) => ({
@@ -1566,7 +1580,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
       linked: true,
       iqId,
       reconciliation: reconciled,
-      message: input.source === "SCHEDULER" ? `Deposito IQ creado automaticamente: ${iqId}.` : `Deposito IQ creado manualmente: ${iqId}.`,
+      message: input.source !== "TASK" ? `Deposito IQ creado automaticamente: ${iqId}.` : `Deposito IQ creado manualmente: ${iqId}.`,
     };
   }
 
@@ -1609,7 +1623,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
 
       await pagoRef.collection("notas").add({
         rootId: input.auth.rootId,
-        text: input.source === "SCHEDULER" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
+        text: input.source !== "TASK" ? `Folio IQ recuperado automaticamente despues de resultado incierto: ${recoveredIqIdH4D62C}` : `Folio IQ recuperado manualmente despues de resultado incierto: ${recoveredIqIdH4D62C}`,
         ...systemNoteAuthor("IQ", "RECONCILIATION", input.actor.uid),
         createdAt: FieldValue.serverTimestamp(),
       }).catch(() => undefined);
@@ -1623,7 +1637,7 @@ async function createPagoIqDepositFromQueueCoreH4D62C(input: {
         recovered: true,
         iqId: recoveredIqIdH4D62C,
         reconciliation: recoveredH4D62C,
-        message: input.source === "SCHEDULER" ? `Deposito IQ creado y folio recuperado automaticamente: ${recoveredIqIdH4D62C}.` : `Deposito IQ creado y folio recuperado manualmente: ${recoveredIqIdH4D62C}.`,
+        message: input.source !== "TASK" ? `Deposito IQ creado y folio recuperado automaticamente: ${recoveredIqIdH4D62C}.` : `Deposito IQ creado y folio recuperado manualmente: ${recoveredIqIdH4D62C}.`,
       };
     }
   }
@@ -3207,6 +3221,7 @@ export const requestPagoIqSync = onCall(
 export const processIqPagoDepositOnDemandTask =
   onTaskDispatched(
     {
+      preserveExternalChanges: true,
       region: "us-central1",
       timeoutSeconds: 540,
       memory: "2GiB",
@@ -3723,9 +3738,51 @@ export const processIqPagoDepositOnDemandTask =
     },
   );
 // H4_D64_A2_PAGO_IQ_ON_DEMAND_END
+export const dispatchQueuedPagoIqCreation = onDocumentWritten(
+  { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (event) => {
+    const before = asRecord(event.data?.before.data());
+    const after = asRecord(event.data?.after.data());
+    if (!event.data?.after.exists || !shouldProcessPagoIqCreateQueueH4D62C(after)) return;
+    if (before.iqDepositCreationStatus === "QUEUED" &&
+        before.iqDepositCreationQueuedUploadId === after.iqDepositCreationQueuedUploadId) return;
+    const uploadId = cleanText(after.iqDepositCreationQueuedUploadId);
+    if (uploadId) await enqueueAutomaticPagoCreation(event.params.pagoId, uploadId);
+  },
+);
+
+export const processIqPagoDepositAutomaticTask = onTaskDispatched(
+  {
+    preserveExternalChanges: true,
+    maxInstances: 20,
+    region: "us-central1", timeoutSeconds: 540, memory: "2GiB",
+    secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
+    retryConfig: { maxAttempts: 3, minBackoffSeconds: 300, maxBackoffSeconds: 900, maxRetrySeconds: 1800 },
+    rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
+  },
+  async (request) => {
+    const { pagoId, uploadId } = asRecord(request.data);
+    if (typeof pagoId !== "string" || typeof uploadId !== "string" || !pagoId || !uploadId) return;
+    operationTiming("worker_started_at", pagoId);
+    const snap = await db.collection("pagos").doc(pagoId).get();
+    const row = asRecord(snap.data());
+    if (!snap.exists || !matchesPagoGeneration(row, uploadId) || !shouldProcessPagoIqCreateQueueH4D62C(row)) return;
+    const enabled = await readEnabledIqAutomationRoots({ process: "pagoCreate", purpose: "CREATION", respectWindow: false });
+    if (!enabled.has(cleanText(row.rootId))) return;
+    const auth = await buildPagoIqSystemAuthH4D44(row);
+    // No catch that downgrades the financial/IQ state on a duplicate or lock error.
+    // Failures before dispatch remain QUEUED and Cloud Tasks retries with backoff.
+    await createPagoIqDepositFromQueueCoreH4D62C({
+      auth, pagoId, source: "AUTO_TASK", expectedUploadId: uploadId,
+      actor: { uid: "system", name: "System", role: "system" },
+    });
+  },
+);
+
 // H4_D62C_PAGO_IQ_AUTO_CREATE_QUEUE_SCHEDULER
 export const processIqPagoDepositCreateQueue = onSchedule(
   {
+    preserveExternalChanges: true,
     schedule: "every 1 minutes",
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
@@ -3752,6 +3809,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
       .map((doc): Record<string, unknown> => ({ id: doc.id, ...asRecord(doc.data()) }))
       .filter((row) => enabledRoots.has(cleanText(row.rootId)))
       .filter((row) => shouldProcessPagoIqCreateQueueH4D62C(row))
+      .filter((row) => isAutomaticPagoRecoveryDue(row))
       .slice(0, 10);
 
     const sessionHolders = new Map<string, {
@@ -3775,6 +3833,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
             role: "system",
           },
           source: "SCHEDULER",
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
         });
       } catch (error: any) {
         // H4_D63A_CREATE_SCHEDULER_SCOPE_CATCH
@@ -3792,6 +3851,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
           pagoId,
           error,
           source: "SCHEDULER",
+          expectedUploadId: cleanText(row.iqDepositCreationQueuedUploadId) || undefined,
         });
       }
     }
@@ -4333,9 +4393,7 @@ const getHttpAuthContextH4D50F = async (req: any): Promise<{
     throw new HttpsError("permission-denied", "Perfil PAY0 no autorizado.");
   }
   const user = asRecord(userSnap.data());
-  if (user.active === false) {
-    throw new HttpsError("permission-denied", "Usuario PAY0 inactivo.");
-  }
+  assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
   const role = cleanText(user.role).toLowerCase();
   const rootId = cleanText(user.rootId ?? (role === "superadmin" ? uid : ""));
 

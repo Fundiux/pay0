@@ -1,0 +1,49 @@
+diff --git a/src/modules/agent007/hugoCore/reportSemantics.ts b/src/modules/agent007/hugoCore/reportSemantics.ts
+index 67c1356633db248d2f9213a075adabca2ef8b52b..f4e2b6ccb2a9a97713d25d40b87b85e7b18d3cb5 100644
+GIT binary patch
+delta 2204
+zcmb7F&u<e)6jqw5Dj+~j3W*9RFN+B~inGM2dZ^QMK_sm}2}A@WD%&WN-4|!*de)tt
+z%@1tLrBW}wReNlEsMJfO9*Qi~3lgF^RO+R-{tcC?{tKvY)=pRl4m5|%_|2R5zW2@d
+z-hQo~e>L#S4}+(mj!K07QYiI?TLc-`)=+i6A3XDR=dWY`3?9oIC(lj{Cr^$HT~>U{
+z$=De*n{dbmA3@<&=8vH;!;&9Qoa#I~`Q01&OcZdTkp)vc95T5+^n2S2Wu!r2Jybfy
+z9KjrvER?81D-YH>uBqO(#?^z=#@Cbx%wdi1q=x&k6unK*-SBD{>C_ZqT??#H6mui=
+zblls@a8uyB`v<=8dR~>;<mB)uTTW@b8gM1ng~zoBrJbqnfZBZW@br6aR)k0^A*;|h
+zeiWcv756@u;Z}ft6>BIp6}BF#8rQ_k>O2DXVpM*Z2b7R&^p57{=D=E>|HLAv?pg$E
+zVcWw1?7NFAcbV04U=_${&6-RKb*yBYg7xQ`ge+Q<@wcax^NV<I7x><z5F~mS3C$y*
+z&|Ur!d?X~<$0%h=hAAjiS}xq?wKcJ~E1@2vj}Zvzw}~MI>*#H8`bkvs0Cr$qNLs17
+zZfzl4p}(o6rK$OOhe|N;0jz71xaa@pGSs=^eXv&%Vl4vUa|4L91YRJBa-8k@dST7n
+zQF#N_WTO&7a!lWtHlcCTY5lQ0U_&8kf`T{}OCFsX?TimU7#yXDuV^r6CC`s8C;y(V
+zBwvnP|3JpL$<3Q%Gt`826CX5*TVoEJ#IK+OT2Ko`Yt^Wov*geG*<^8q4a39)jGJSw
+z(Z7|pM(6nG<H2^#H1#sq8kHn9k;_5XIQK&#ZL4XqR2E$Urv6J@dmH4faa%j2K5xU8
+zxCOVcy0BfhSIgx!+b#MSxaD#*S;NRIJ~mOB4F(x&o6O|MjLFV5vS?b2f~0m6%WRly
+zmkLuKR?20+@qUXj3ct2W9Vjej=1ceSQ%ux1HJiNx+Py<b+OLtN<czx&H@BZDLq_J=
+zh>Z+2Za<Nv5Zu1GZolv-6)KJn7sHh;R9AU~HdQc5<FE+hBzA4Y?m}JRrU>K6%}!Es
+zi76a40{R&!JIEEiYp?@z$+zc6+F5Ay_WPlnNb@Q}Iuhou++J8QL*Zr0F5TOIz?5~j
+z$V+nXQ6<biLiz?hZY~K%xMUmzJxDWV1a~ofM#%cuah=jk#SH!f%w#E4l3&m49yu^|
+z%4aVO4A{xTa~CfgUs6#-$a_zEDOFfktk@LNOamkTD5ef!MoXz?df<~kM#d%%tWDFl
+z=`UxJ5%4rQ>x#!sz8Q;>J7dG0C+Es<wmlx8^tqa+t}!2x!=$ENo7P9eFxPldZ)+;o
+zSV@O>c4RWA&ixflW5J#w*-l%mH8owJ@o1XI<gm>@=g#e`_6_rmEvnvalY-^5>GLqn
+z7%Ax5%FSLL=0t(;(4NjiVVWgxS!2%l3%#ZN@0&6lDygbBQbS*ToyXRV0q8Tme9KKv
+z=U}MMsbxML$zbm1^I3WheW{^EPK_2zc5^=++gCX0GFiOv>A>+$a={*W&FdSTa~J=9
+F=RX5&>&XBB
+
+delta 201
+zcmey@#MoN2VJ`FL&CF69ll7(9Ig@iTQ}aqvi|se><Nn3G*;ZgS(_}H>t&?Z#3rsE$
+zVcWb#tb}>8oz(itZPMD4A4!Eyp2saOQj=GjT9%j#(pZyUQk1ArmRdDAPF{NRdFfTm
+zlVz0VZ9cA~$T<0>vN}62mjV#jZ{}0YWZ})t&nwCB&&#P)uvJi;ET|zOn34#zTQ4Uy
+yFTEr~K}}6TfASxtXs}ToTF#7<Wp&m}HqlR-9HMJ8d5*5z=Eu4kjGImLy@UXt21W}2
+
+diff --git a/src/modules/agent007/hugoCore/contextBuilderV2.ts b/src/modules/agent007/hugoCore/contextBuilderV2.ts
+index cfe1e5b912d813d1d5389fea55b687d4cdff7b17..0eb20940c843fd3bb3b93d1258cc7c71b0260a65 100644
+GIT binary patch
+delta 201
+zcmeA?z_|PX<Ae@r9fhLQg8ZVAfYhSQ{1oS$#G=f!%;dz9%>2BK9hqXTsd*`xdFer^
+zg{7&*C3*#5RlfOoB^e6#3e^fod@CRam)gno;u@Qo#osde;IvEww{9JDlhg8xauZ85
+KH&2l)bprtW8BR_B
+
+delta 192
+zcmZ2}fU)xc<Ajcli!;S0b4v(qt`vXESg+)nmy(&BsF0SLoRO%InU|TInV6$csgRbL
+z2c%Q;6w>mGauZAP6&!&;*Vk9q#YLeYu_#d?HAkT+wIIK!Bvm0LRiU&bGbb}8F(tKF
+z0Vt-BoRgWFSCVQCQJS2e3(``g12i9OSz>NdK2Tw5QKo8s3Xqi#QU^6C4{mHxYBJaq
+LJ*CZ?Bum`@GsHzs
+

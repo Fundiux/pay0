@@ -113,6 +113,9 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
 
   DOCUMENTO_SOLICITUD_SUBIDO: eventEntry("DOCUMENTO_SOLICITUD_SUBIDO", "Documento de solicitud subido", "docs", "document", "success"),
   DOCUMENTO_SOLICITUD_DESACTIVADO: eventEntry("DOCUMENTO_SOLICITUD_DESACTIVADO", "Documento de solicitud desactivado", "docs", "document", "warning"),
+  COTIZACION_ENCOLADA: eventEntry("COTIZACION_ENCOLADA", "Cotizacion encolada", "solicitudes", "system"),
+  ORDEN_COMPRA_LEIDA_PARA_COTIZACION: eventEntry("ORDEN_COMPRA_LEIDA_PARA_COTIZACION", "OC leida para cotizacion", "solicitudes", "system"),
+  COTIZACION_FALLIDA_REINTENTO: eventEntry("COTIZACION_FALLIDA_REINTENTO", "Cotizacion pendiente de reintento", "solicitudes", "system", "warning"),
   COTIZACION_GENERADA: eventEntry("COTIZACION_GENERADA", "Cotizacion generada", "docs", "document", "success"),
   CONSTANCIA_RECEPCION_GENERADA: eventEntry("CONSTANCIA_RECEPCION_GENERADA", "Constancia de recepcion generada", "docs", "document", "success"),
   DOCUMENTO_DISPERSION_SUBIDO: eventEntry("DOCUMENTO_DISPERSION_SUBIDO", "Comprobante de dispersion subido", "docs", "document", "success"),
@@ -133,6 +136,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   FACTURA_EMITIDA: eventEntry("FACTURA_EMITIDA", "CFDI vinculado al expediente", "facturacion", "financial", "success"),
   OPERACION_RECUPERADA: eventEntry("OPERACION_RECUPERADA", "Operación reconciliada", "solicitudes", "repair", "success"),
   OPERACION_RECUPERACION_FALLIDA: eventEntry("OPERACION_RECUPERACION_FALLIDA", "Recuperación requiere atención", "solicitudes", "repair", "warning"),
+  OPERACION_RECUPERACION_OMITIDA: eventEntry("OPERACION_RECUPERACION_OMITIDA", "Recuperación no ejecutada o sustituida", "solicitudes", "repair", "warning"),
   GASTO_RECONOCIDO: eventEntry("GASTO_RECONOCIDO", "Gasto reconocido", "costos", "financial", "success"),
   GASTO_REVERTIDO: eventEntry("GASTO_REVERTIDO", "Gasto revertido", "costos", "financial", "warning"),
   COMPLEMENTO_PAGO_SEGUIMIENTO: eventEntry("COMPLEMENTO_PAGO_SEGUIMIENTO", "Seguimiento de complemento de pago", "facturacion", "document", "warning"),

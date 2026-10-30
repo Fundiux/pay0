@@ -1,6 +1,7 @@
 "use client";
 
 import { MouseEvent, useEffect, useState } from "react";
+import { CreditCard, FileText, House, Send, ScrollText } from "lucide-react";
 
 export type MatBottomNavItem = {
   key: string;
@@ -17,11 +18,6 @@ function getItemByTarget(items: MatBottomNavItem[], targetId: string) {
 function scrollToMatSection(targetId: string) {
   if (typeof window === "undefined") return false;
 
-  const target = document.getElementById(targetId);
-  if (!target) return false;
-
-  target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-
   if (window.history?.replaceState) {
     window.history.replaceState(null, "", `#${targetId}`);
   } else {
@@ -32,6 +28,8 @@ function scrollToMatSection(targetId: string) {
 
   return true;
 }
+
+const icons = { inicio: House, solicitudes: ScrollText, pagos: CreditCard, dispersiones: Send, docs: FileText };
 
 export function MatBottomNav({
   items,
@@ -78,7 +76,7 @@ export function MatBottomNav({
   }, [items]);
 
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+18px)] z-50 px-4">
+    <nav className="mat-bottom-nav pointer-events-none relative z-50 shrink-0 px-4">
       <div
         className="pointer-events-auto mx-auto grid w-full max-w-[560px] gap-1 rounded-[34px] border border-white/10 bg-[#050914]/82 p-1.5 shadow-2xl shadow-black/70 backdrop-blur-2xl ring-1 ring-cyan-300/5"
         style={{ gridTemplateColumns: `repeat(${Math.max(items.length, 1)}, minmax(0, 1fr))` }}
@@ -86,6 +84,7 @@ export function MatBottomNav({
         {items.map((item) => {
           const isActive = item.key === activeKey;
           const targetId = item.targetId || item.key;
+          const Icon = icons[item.key as keyof typeof icons] || FileText;
 
           function handleClick(event: MouseEvent<HTMLAnchorElement>) {
             if (item.disabled) {
@@ -114,8 +113,8 @@ export function MatBottomNav({
                     : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100"
               }`}
             >
-              <div className="text-sm font-black leading-none">{item.icon}</div>
-              <div className="mt-1 truncate text-[7px] font-black uppercase tracking-[0.08em]">{item.label}</div>
+              <Icon aria-hidden="true" size={19} strokeWidth={isActive ? 2.5 : 2} className="mx-auto" />
+              <div className="mt-1 truncate text-[9px] font-bold">{item.label}</div>
             </a>
           );
         })}

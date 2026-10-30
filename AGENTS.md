@@ -3,7 +3,7 @@
 ## Purpose and architecture
 
 PAY0 is a Spanish-language financial operations application. It is a Next.js
-14 App Router frontend backed directly by Firebase Authentication, Firestore,
+15 App Router frontend backed directly by Firebase Authentication, Firestore,
 Storage, and Firebase Cloud Functions v2. There is no separate REST server.
 
 - Frontend: `src/app/` routes, `src/components/` UI, `src/services/` Firebase
@@ -23,7 +23,7 @@ Functions through `src/lib/firebaseClient.ts`.
 ## Startup and verification
 
 Use Node 22 for the Functions package; the frontend currently builds with the
-repository lockfile and Next.js 14.
+repository lockfile and Next.js 15.5.27.
 
 ```powershell
 npm ci
@@ -47,10 +47,11 @@ npx playwright test --config playwright.config.mjs
 `playwright.config.mjs` is headed and optionally uses Opera GX; configure
 `PAY0_QA_BROWSER_PATH` if needed. It starts `npm run dev` automatically.
 
-Do not treat `npm run qa:pay0` as a reliable gate yet. Its materiality check
-still reads `pay0-archivo-tecnico/MATERIALIDAD-CANON.md`, which was deliberately
-archived outside Git during repository cleanup. It also writes audit output.
-Repair that test's fixture/source contract before enabling it as CI.
+The materiality check now exercises domain/transaction contracts with synthetic
+fixtures in `qa/scripts/check-materiality-canon.mjs`; it no longer depends on
+archived prose. Run it directly for that boundary. The broader `npm run qa:pay0`
+still writes audit output and has not been certified as an aggregate CI gate.
+Use focused checks and keep generated reports out of commits.
 
 ## Security and data rules
 
@@ -106,10 +107,28 @@ and terminal-status protections.
   cleaned up in a dedicated change, not propagated.
 - Keep `package-lock.json` and `functions/package-lock.json` aligned with their
   respective package manifests when dependencies change.
+- Before any `pay0-next16`, MAT Function, or `pay0-miniapp` release, run
+  `npm run qa:mat-release-contract`. The 15 file fingerprints in
+  `config/mat-release-contract.json` represent the MAT approved on 2026-10-28.
+  A deliberate MAT change needs review and a new fingerprint; never regenerate
+  the manifest merely to make a failing gate pass. A candidate without this
+  gate is not a valid release source, even if another feature works locally.
+- For App Hosting, the Firebase CLI's `Deploy complete` line is insufficient.
+  Check the new build is `READY`, its rollout `SUCCEEDED`, traffic serves that
+  build, and both `/mat/usuarios` and `/mat/clientes` show the approved UI.
+  Confirm `pay0-miniapp` still opens those routes after any launcher change.
 - `npm run firebase:deploy` deploys Firestore rules and indexes. Deploying
   Functions is performed from `functions/` with `npm run deploy`. Both target
   production, so never deploy, alter production data, or run a live IQ/WhatsApp
   action without explicit user approval.
+- Deploy Functions and App Hosting only from an up-to-date `main`. A deploy
+  publishes whatever tree it runs from, so deploying from a feature branch or
+  stale worktree silently removes production work that branch lacks. Merge the
+  change into `main` first, then deploy from `main`.
+- `config/release-baseline.json` lists the commits and code contracts every
+  release must contain; Functions predeploy and the App Hosting build both
+  check it. When a change reaches production, add it there. Never remove an
+  entry to make a deploy pass; bring the missing work into the branch instead.
 
 ## Git workflow
 

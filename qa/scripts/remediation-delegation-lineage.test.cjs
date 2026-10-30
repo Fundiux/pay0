@@ -49,7 +49,7 @@ function reset(){rows.clear();version=0;writes=0;beforeCommit=null;retries=0;for
  put('users/b',user('admin'));put('userClientAccess/b/clients/client',{...grant('b','a'),expiresAt:Timestamp.fromMillis(Date.now()-1)});assert.equal((await resolve('c')).allowed,false);
  reset();put('userClientAccess/b/clients/client',grant('b','c'));put('userClientAccess/c/clients/client',grant('c','b'));assert.equal((await resolve('c')).allowed,false);
  reset();put('userClientAccess/b/clients/client',grant('b','a'));const noCycle=request('b','a');put('clients/client',{rootId:'root',active:true,adminId:'root'});put('userClientAccess/a/clients/client',grant('a','root'));await assert.rejects(service.setUserClientAccessService(noCycle),e=>e.code==='permission-denied');
- reset();put('userClientAccess/c/clients/client',{active:true,permissions:{view:true,operate:true}});assert.equal((await resolve('c')).reason,'LEGACY_PROVENANCE_UNVERIFIED');
+ reset();put('userClientAccess/c/clients/client',{active:true,permissions:{view:true,operate:true}});assert.equal((await resolve('c')).reason,'LEGACY_PROVENANCE_UNVERIFIED');assert.equal((await resolve('c')).allowed,false);
  // A concurrent actor/parent change retries the full authorization transaction.
  for(const mutation of ['actor','parent','client','target']){
   reset();put('userClientAccess/b/clients/client',grant('b','a'));

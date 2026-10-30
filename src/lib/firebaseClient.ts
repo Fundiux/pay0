@@ -3,6 +3,7 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { initializeBrowserAppCheck } from "@/lib/firebaseAppCheck";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -15,16 +16,22 @@ const firebaseConfig = {
 
 export const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app, "gs://pay-0-system.firebasestorage.app");
-export const functions = getFunctions(app, "us-central1");
-
-// Bandera para activar emuladores desde .env.local o PowerShell
 const USE_EMULATORS =
   process.env.NEXT_PUBLIC_USE_EMULATORS === "1" ||
   process.env.NEXT_PUBLIC_USE_EMULATORS === "true";
 
+// Opt-in observation only. Public bearer documents are excluded before loading
+// the App Check SDK; SSR/emulators never initialize reCAPTCHA.
+export const appCheckInitialization = initializeBrowserAppCheck(app, {
+  mode: process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_MODE,
+  siteKey: process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY,
+  useEmulators: USE_EMULATORS,
+});
+
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app, "gs://pay-0-system.firebasestorage.app");
+export const functions = getFunctions(app, "us-central1");
 
 // Evita reconectar en hot reload
 declare global {

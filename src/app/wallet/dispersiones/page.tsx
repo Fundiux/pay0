@@ -286,7 +286,7 @@ function formatIncidentLabel(row: DispersionRow) {
   return status;
 }
 
-export default function WalletDispersionesPage() {
+export default function WalletDispersionesPage({ matCreateOnly = false, matClientId = "", onMatClose }: { matCreateOnly?: boolean; matClientId?: string; onMatClose?: () => void } = {}) {
   const { user } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
   const globalLoading = useGlobalLoading();
@@ -328,6 +328,17 @@ export default function WalletDispersionesPage() {
   const [customRange, setCustomRange] =
     useState<CustomRange>({});
   const [openDispersionModal, setOpenDispersionModal] = useState(false);
+  const openedMatDispersion = useRef(false);
+  const matEmbedRef = useRef(false);
+  const matFormHasOpenedRef = useRef(false);
+  useEffect(() => {
+    if (openDispersionModal && (matEmbedRef.current || matCreateOnly)) matFormHasOpenedRef.current = true;
+    else if (!openDispersionModal && matFormHasOpenedRef.current && (matEmbedRef.current || matCreateOnly)) {
+      matFormHasOpenedRef.current = false;
+      if (matCreateOnly) onMatClose?.();
+      else window.parent.postMessage("pay0:mat-form-close", window.location.origin);
+    }
+  }, [openDispersionModal, matCreateOnly, onMatClose]);
   const [openDispersionMassiveModal, setOpenDispersionMassiveModal] = useState(false);
   const [dispersionImportPreview, setDispersionImportPreview] = useState<any | null>(null);
   const [dispersionImportFileName, setDispersionImportFileName] = useState("");
@@ -889,6 +900,18 @@ export default function WalletDispersionesPage() {
     () => clients.find((client) => client.id === clientId) || null,
     [clients, clientId]
   );
+  useEffect(() => {
+    if (openedMatDispersion.current || !clients.length) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!matCreateOnly && params.get("nueva") !== "1") return;
+    const requestedClient = matCreateOnly ? matClientId : params.get("cliente") || "";
+    if (!clients.some((client) => client.id === requestedClient)) return;
+    openedMatDispersion.current = true;
+    matEmbedRef.current = !matCreateOnly && params.get("matEmbed") === "1";
+    setClientId(requestedClient);
+    setOpenDispersionModal(true);
+    if (!matCreateOnly) window.history.replaceState(null, "", window.location.pathname);
+  }, [clients, matCreateOnly, matClientId]);
   const range = useMemo(
     () =>
       getScopeRange(
@@ -2171,7 +2194,7 @@ export default function WalletDispersionesPage() {
   }, [clientId, dispersionImportBusy, dispersionImportSaving, handleDispersionImportFile]);
   return (
     <div
-      className="relative space-y-6"
+      className={`relative space-y-6${matEmbedRef.current ? " mat-embedded-page" : ""}${matCreateOnly ? " mat-native-create-only" : ""}`}
       onDragEnter={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -2386,6 +2409,7 @@ export default function WalletDispersionesPage() {
       <Modal
         open={openDispersionModal}
         title=""
+        ariaLabel="Nueva dispersión"
         onClose={() => {
           if (!saving) {
             setOpenDispersionModal(false);
@@ -2401,6 +2425,9 @@ export default function WalletDispersionesPage() {
         }}
         widthClassName="max-w-[430px]"
         bodyClassName="max-h-[calc(100vh-2rem)] overflow-y-auto px-5 py-3"
+        closeOnEscape={!saving}
+        closeOnBackdrop={!saving}
+        closeButtonDisabled={saving}
       >
         <div className="space-y-2">
           <div className="grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">
@@ -2649,6 +2676,7 @@ export default function WalletDispersionesPage() {
       <Modal
         open={openDispersionMassiveModal}
         title=""
+        ariaLabel="Importar dispersiones masivas"
         onClose={() => {
           if (!dispersionImportBusy && !dispersionImportSaving) {
             setOpenDispersionMassiveModal(false);
@@ -2660,6 +2688,9 @@ export default function WalletDispersionesPage() {
         }}
         widthClassName="max-w-[520px]"
         bodyClassName="max-h-[calc(100vh-2rem)] overflow-y-auto px-5 py-3"
+        closeOnEscape={!dispersionImportBusy && !dispersionImportSaving}
+        closeOnBackdrop={!dispersionImportBusy && !dispersionImportSaving}
+        closeButtonDisabled={dispersionImportBusy || dispersionImportSaving}
       >
         <div className="space-y-2">
           <div className="grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">

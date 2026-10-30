@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,22 +20,34 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install frontend dependencies
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Verify technology contract before installation
+        run: |
+          npm run test:technology
+          npm run qa:technology
+      - name: Install dependencies for public build fixture
         run: npm ci
-      - name: Verify authorization policy
-        run: node scripts/verify-authorization-policy.mjs
-      - name: Verify cumulative release baseline
-        run: npm run qa:release-baseline
+      - name: Verify installed frontend matches lockfile
+        run: npm ls --depth=0
+      - name: Verify canonical capability registrations
+        run: |
+          node scripts/verify-capability-registration.mjs
+          node --test qa/scripts/capability-registration.test.mjs
       - name: Configure public build-only environment
         run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
-      - name: Build frontend
-        run: npm run build
-      - name: Install Functions dependencies
-        run: npm ci
-        working-directory: functions
-      - name: Lint Functions
-        run: npm run lint
-        working-directory: functions
-      - name: Build Functions
-        run: npm run build
-        working-directory: functions
+      - name: Verify cumulative release baseline
+        run: npm run qa:release-baseline
+      - name: Verify approved MAT release contract
+        run: npm run qa:mat-release-contract
+      - name: Validate committed source candidate
+        run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
+      - name: Preserve candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-candidate-${{ github.sha }}
+          path: output/release-candidates/
+          if-no-files-found: ignore
+          retention-days: 14

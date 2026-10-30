@@ -1,0 +1,40 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{createHash}=require('node:crypto'),{createRequire}=require('node:module');
+const projectId=process.env.GCLOUD_PROJECT||'';
+assert(projectId.startsWith('demo-')&&/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||'')&&/^127\.0\.0\.1:\d+$/.test(process.env.FIREBASE_STORAGE_EMULATOR_HOST||''),'LOCAL_DEMO_EMULATORS_REQUIRED');
+const originalFetch=global.fetch;global.fetch=(url,...args)=>{assert(['127.0.0.1','localhost'].includes(new URL(typeof url==='string'?url:url.url||url).hostname),'EXTERNAL_FETCH_FORBIDDEN');return originalFetch(url,...args);};
+for(const protocol of ['http','https']){const api=require('node:'+protocol),request=api.request;api.request=function(url,...args){const host=typeof url==='string'||url instanceof URL?new URL(url).hostname:String(url.hostname||url.host||'').split(':')[0];assert(['127.0.0.1','localhost'].includes(host),'EXTERNAL_TRANSPORT_FORBIDDEN');return request.call(this,url,...args);};}
+const runtime=process.env.PAY0_RECEIPT_DROP_RUNTIME?path.resolve(process.env.PAY0_RECEIPT_DROP_RUNTIME):path.resolve('functions');
+assert(runtime===path.resolve('functions')||runtime.startsWith(path.resolve('.firebase/modular-release')+path.sep),'PRIVATE_RUNTIME_REQUIRED');
+const load=createRequire(path.join(runtime,'package.json')),admin=load('firebase-admin');
+admin.initializeApp({projectId,storageBucket:projectId+'.appspot.com'});const db=admin.firestore(),bucket=admin.storage().bucket(),api=load('./lib/index.js');
+const root='drop-flow-'+Date.now(),clientId=root+'-client',companyId=root+'-company',dispatchId=root+'-dispatch',operation=(root+'-OP').toUpperCase();
+const call=(name,data)=>api[name].run({auth:{uid:root,token:{}},data});let checks=0;const check=(value,label)=>{assert(value,label);checks++;};
+async function main(){
+ await db.doc('users/'+root).set({rootId:root,role:'superadmin',active:true,userNumber:3});
+ await db.doc('clients/'+clientId).set({rootId:root,active:true,createdBy:root,adminId:root,clientNumber:7,razonSocial:'Cliente Demo'});
+ await db.doc('companies/'+companyId).set({rootId:root,active:true,companyNumber:5,razonSocial:'Empresa Demo S de RL de CV',despachoId:dispatchId});
+ await db.doc('despachos/'+dispatchId).set({rootId:root,active:true,iqEnabled:false});
+ await db.doc('operationTypes/'+operation).set({rootId:root,active:true,category:'OPERACION',name:'Synthetic automatic operation'});
+ await db.doc(`clients/${clientId}/costos/${dispatchId}__${operation}`).set({active:true,assignedCost:5,pricingMode:'PERCENT',calculationBaseType:'TOTAL'});
+ await db.doc(`despachos/${dispatchId}/costos/${operation}`).set({active:true,baseCost:2,pricingMode:'PERCENT',calculationBaseType:'TOTAL'});
+ const {jsPDF}=require('jspdf'),pdf=new jsPDF();pdf.text(['Transferencia SPEI MXN','Ordenante: Cliente Demo','Beneficiario: Empresa Demo S. de R.L. de C.V.','Monto: $100.00','Fecha de operacion:','05/06/2026','Referencia: SYNTHETIC-DROP-1234','Concepto: synthetic fixture'],10,20);
+ const bytes=Buffer.from(pdf.output('arraybuffer')),sha=createHash('sha256').update(bytes).digest('hex'),request={originalName:'synthetic-drop.pdf',contentType:'application/pdf',sizeBytes:bytes.length,base64:bytes.toString('base64')};
+ const parsed=await call('parsePagoReceiptPdf',request),id=parsed.identification;
+ check(parsed.providerCalls===0,'Actual text PDF requires no OCR provider');check(parsed.receipt.date==='2026-06-05'&&parsed.receipt.dateVerified===true,'Mexican document date resolves without confirmation');
+ check(id.status==='READY'&&id.reasons.length===0,'Drop without identity IDs or operation selection resolves READY');check(id.resolvedOperationTypeKey===operation&&id.createPayload.operationTypeKey===operation,'Unique server operation is canonical');
+ check(id.createPayload.clienteId===clientId&&id.createPayload.companyId===companyId,'Unique authorized names identify canonical parties');
+ const created=await call('createPago',id.createPayload),payment=await db.doc('pagos/'+created.pagoId).get();
+ check(created.folio==='P1C7U3E5','Canonical folio sequence preserved');check(payment.get('registrationSource')==='RECEIPT_AUTOMATIC','Real canonical create records automatic source');
+ check(payment.get('montoTotal')===100&&payment.get('fechaPago').toDate().toISOString().slice(0,10)==='2026-06-05','Canonical amount and document date preserved');
+ check(payment.get('status')==='CONCILIACION_PENDIENTE','Automatic registration remains pending reconciliation');
+ const pending=await call('parsePagoReceiptPdf',request);check(pending.identification.status==='REGISTERED'&&pending.identification.receiptPending===true&&pending.identification.pagoId===created.pagoId,'Same drop resumes the existing pending upload');
+ const upload=await call('initPagoDocumentUpload',{pagoId:created.pagoId,documentType:'COMPROBANTE_PAGO',originalName:request.originalName,contentType:request.contentType,sizeBytes:bytes.length,sha256:sha});
+ await bucket.file(upload.storagePath).save(bytes,{contentType:'application/pdf'});await call('finalizePagoDocumentUpload',upload);
+ const identification=await db.doc('pagoReceiptIdentifications/'+id.id).get();check(identification.get('stage')==='RECEIPT_READY','Real uploaded PDF finalizes the same receipt');
+ const completed=await call('parsePagoReceiptPdf',request);check(completed.identification.status==='REGISTERED'&&!completed.identification.receiptPending,'Completed drop cannot create or reupload another payment');
+ await assert.rejects(()=>call('createPago',id.createPayload),e=>e.code==='already-exists');checks++;
+ check((await db.collection('pagos').where('rootId','==',root).get()).size===1,'Replay leaves exactly one payment');
+ check((await db.collection('pagoAplicaciones').where('rootId','==',root).get()).empty,'Registration does not reconcile or apply money');
+ console.log(JSON.stringify({test:'receipt-drop-auto-complete-flow',checks,result:'PASS',surface:process.env.PAY0_RECEIPT_DROP_RUNTIME?'EXACT_PACKAGE_MAIN':'NORMAL_FUNCTIONS_MAIN',syntheticPaymentCreates:1,externalActions:0,productionCalls:0}));
+}
+main().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await db.terminate();await admin.app().delete();});

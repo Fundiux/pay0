@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { attachGatewayConnection, ConnectionState, classifyRequestError, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
+import { attachGatewayConnection, boundToolData, ConnectionState, classifyRequestError, MAX_TOOL_DATA_BYTES, safeToolFailure, safeVoiceToolFailureOutput } from "../src/gatewayConnection.mjs";
+import { createHash } from "node:crypto";
 
 const TOKEN = "test-token-never-log-this", UID = "configured-canary-user", ROOT = "configured-root";
 const auth = { type: "authenticate", idToken: TOKEN };
@@ -10,6 +11,10 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 test("tool failures expose only the stable operational taxonomy", () => {
+  const tooLong = safeToolFailure(Error("VOICE_CORRECTION_TOO_LONG"));
+  assert.equal(tooLong.retryable, false);
+  assert.match(safeVoiceToolFailureOutput(tooLong).text, /1.000 caracteres/);
+  assert.match(safeVoiceToolFailureOutput(safeToolFailure(Error("VOICE_CORRECTION_NOT_PERSISTED"))).text, /No pude confirmar/);
   assert.deepEqual(safeToolFailure(Object.assign(Error("secret"), { code: "permission-denied" })), { errorCategory: "PERMISSION_DENIED", errorCode: "PERMISSION_DENIED", retryable: false });
   assert.deepEqual(safeToolFailure(Error("DEADLINE_EXCEEDED")), { errorCategory: "TIMEOUT", errorCode: "DEADLINE_EXCEEDED", retryable: true });
   assert.deepEqual(safeToolFailure(Error("UNAVAILABLE")), { errorCategory: "CONNECTOR_ERROR", errorCode: "UNAVAILABLE", retryable: true });
@@ -53,6 +58,92 @@ function assertCleared(h, expectedRealtime = 0) {
   assert.equal(snapshot.realtimeCreationAttempts, expectedRealtime);
   assert.equal(h.counts.realtime, expectedRealtime);
 }
+
+async function correctionTurn(h) {
+  await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "session.created", session: { id: "sess1" } });
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn1", type: "message", role: "user" } });
+  await sideband.receive({ type: "response.created", response: { id: "response1" } });
+  await sideband.receive({ type: "response.output_audio_transcript.done", response_id: "response1", transcript: "Respuesta anterior" });
+  await sideband.receive({ type: "response.done", response: { id: "response1", status: "completed", output: [] } });
+  await sideband.receive({ type: "conversation.item.created", item: { id: "turn2", type: "message", role: "user" } });
+  await sideband.receive({ type: "conversation.item.input_audio_transcription.completed", item_id: "turn2", transcript: "Prefiero el periodo antes del total." });
+  await sideband.receive({ type: "response.created", response: { id: "response2" } });
+  return sideband;
+}
+
+test("gateway real flow waits for history, preserves native session, and never announces durable memory before valid ACK", async () => {
+  const historyGate = deferred(), order = [], label = "Estilo personal", correction = "Prefiero el periodo antes del total.";
+  const topic = { kind: "TOPIC", id: createHash("sha256").update(JSON.stringify(label.toLocaleLowerCase("es-MX"))).digest("hex"), label };
+  let histories = 0, query;
+  const h = harness({
+    saveHistory: async (_token, input) => { order.push("history"); assert.equal(input.sessionId, "sess1"); assert.equal(input.gatewayCallId, "simulated-call"); histories++;
+      return histories === 1 ? historyGate.promise : { ok: true, appendOnly: true, appended: input.turns.length }; },
+    callable: async (_token, input) => {
+      order.push("delegate");
+      if (input.recordResponseCorrection) return { ...input.responseCorrection, persisted: true, scope: "SESSION", correctionId: "session_memory", version: 1,
+        correction: { content: correction }, route: "SESSION_CORRECTION", text: "Corrección de sesión guardada" };
+      if (input.requestVoiceTopicConfirmation) return { ok: true, delegationId: input.delegationId, route: "VOICE_TOPIC_CONFIRMATION", state: "PENDING", challengeId: "challenge", durablePersisted: false, confirmationText: `Confirmo recordar esta indicación para el tema: ${label}` };
+      if (input.confirmVoiceTopic) return { ok: true, delegationId: input.delegationId, route: "VOICE_TOPIC_CONFIRMATION", state: "DURABLE", challengeId: "challenge", durablePersisted: true, created: true, transcriptAuthority: "CLIENT_TRANSCRIPT_NOT_FACT", topic,
+        correction: { memoryId: "durable_memory", version: 2, content: correction, status: "CONFIRMED", scope: "USER_TOPIC", expiresAt: null, topic } };
+      query = input; return { route: "BRAIN_MODEL", text: "Resultado autorizado" };
+    },
+  });
+  const sideband = await correctionTurn(h);
+  const first = sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "session_tool", response_id: "response2", arguments: "{}" });
+  await flush(); assert.deepEqual(order, ["history"]); historyGate.resolve({ ok: true, appendOnly: true, appended: 2 }); await first;
+  async function tool(turn, transcript, name, callId) {
+    await sideband.receive({ type: "conversation.item.created", item: { id: turn, type: "message", role: "user" } });
+    await sideband.receive({ type: "conversation.item.input_audio_transcription.completed", item_id: turn, transcript });
+    await sideband.receive({ type: "response.function_call_arguments.done", name, call_id: callId, response_id: "response2", arguments: JSON.stringify({ confirmed: true, label: "forged" }) });
+  }
+  await tool("proposal", `Recuerda esta indicación para el tema: ${label}`, "request_voice_topic_memory", "request_tool");
+  const pending = JSON.parse(sideband.sent.filter(e => e.type === "conversation.item.create").at(-1).item.output);
+  assert.equal(pending.durablePersisted, false); assert.match(pending.text, /^Confirmo recordar/);
+  await tool("confirmation", `Confirmo recordar esta indicación para el tema: ${label}`, "confirm_voice_topic_memory", "confirm_tool");
+  const saved = JSON.parse(sideband.sent.filter(e => e.type === "conversation.item.create").at(-1).item.output);
+  assert.equal(saved.durablePersisted, true); assert.equal(saved.userCorrection.authority, "USER_STATEMENT_NOT_FACT");
+  await tool("query", "Responde usando mi tema", "delegate_to_hugo_core", "query_tool");
+  assert.equal(query.nativeSessionId, "sess1"); assert.equal(query.sessionId, "simulated-call");
+  assert(!JSON.stringify(h.logs).includes(correction)); assert(!JSON.stringify(h.logs).includes(label));
+  h.browser.close();
+});
+
+test("voice correction confirms only after matching persisted ACK in the same session", async () => {
+  const pending = deferred(); let sent;
+  const h = harness({ callable: async (_token, input) => { sent = input; return pending.promise; } });
+  const sideband = await correctionTurn(h);
+  const running = sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "correction_tool", response_id: "response2", arguments: JSON.stringify({ sessionId: "foreign", correction: "invented", rootId: "foreign" }) });
+  await flush();
+  assert.equal(sideband.sent.filter(event => event.type === "conversation.item.create").length, 0);
+  assert.equal(sent.responseCorrection.sessionId, "sess1");
+  assert.equal(sent.responseCorrection.responseId, "response1");
+  assert.equal(sent.responseCorrection.correction, "Prefiero el periodo antes del total.");
+  pending.resolve({ ...sent.responseCorrection, persisted: true, scope: "SESSION", correctionId: "correction1", version: 1,
+    correction: { content: sent.responseCorrection.correction }, route: "SESSION_CORRECTION", text: "Guardé tu corrección para esta sesión." });
+  await running;
+  const output = JSON.parse(sideband.sent.find(event => event.type === "conversation.item.create").item.output);
+  assert.equal(output.persisted, true);
+  assert.equal(output.userCorrection.authority, "USER_STATEMENT_NOT_FACT");
+  assert.equal(output.userCorrection.content, sent.responseCorrection.correction);
+  assert(!JSON.stringify(h.logs).includes(sent.responseCorrection.correction));
+  await sideband.receive({ type: "response.done", response: { id: "response2", status: "completed", output: [{ type: "function_call", call_id: "correction_tool" }] } });
+  assert.equal(sideband.sent.filter(event => event.type === "response.create").length, 1);
+  h.browser.close();
+});
+
+test("stale voice correction ACK cannot emit a persisted success", async () => {
+  const h = harness({ callable: async (_token, input) => ({ ...input.responseCorrection, correctionId: "correction1", version: 2,
+    correction: { content: input.responseCorrection.correction }, persisted: true, scope: "SESSION", text: "Guardado" }) });
+  const sideband = await correctionTurn(h);
+  await sideband.receive({ type: "response.function_call_arguments.done", name: "correct_current_voice_response", call_id: "correction_tool", response_id: "response2", arguments: "{}" });
+  const outputs = sideband.sent.filter(event => event.type === "conversation.item.create").map(event => JSON.parse(event.item.output));
+  assert.equal(outputs.length, 1);
+  assert(outputs.every(output => output.persisted !== true && !output.userCorrection));
+  assert(!h.logs.some(event => event.type === "gateway.tool_completed"));
+  h.browser.close();
+});
 
 async function assertRejectedThenCannotRecover(h) {
   await h.browser.receive(offer);
@@ -328,4 +419,84 @@ test("malformed messages and arbitrary error payloads are rejected with sanitize
   for (const sensitive of [TOKEN, TOKEN.toUpperCase(), UID, ROOT, "Bearer", offer.sdp]) assert.equal(output.includes(sensitive), false);
   assert.equal(classifyRequestError(Error("ARBITRARY_SECRET_VALUE")), "GATEWAY_REQUEST_FAILED");
   const malformed = harness(); await malformed.browser.raw("not-json-sensitive-payload"); await assertRejectedThenCannotRecover(malformed);
+});
+
+async function readToolOutput(result, name = "buscar_solicitudes", args = {}) {
+  let sent;
+  const h = harness({ callable: async (_token, input) => { sent = input; return result; } });
+  await h.browser.receive(auth); await h.browser.receive(offer);
+  const sideband = h.sidebands[0];
+  await sideband.receive({ type: "response.function_call_arguments.done", name, call_id: "read-1", response_id: "response1", arguments: JSON.stringify(args) });
+  const event = sideband.sent.find(item => item.type === "conversation.item.create");
+  h.browser.close();
+  return { sent, output: event && JSON.parse(event.item.output) };
+}
+
+test("general read tools deliver structured data to the model without model-supplied identity", async () => {
+  const data = { total: 2, montoTotal: 15080, mostrados: 1, items: [{ id: "sol-1", folio: "S1C4U3E1", cliente: "ACIER", monto: 7540 }], filtros: { cliente: "ACIER" },
+    interpretacion: [{ campo: "cliente", dicho: "asier", entendido: "ACIER", confianza: "APROXIMADA" }] };
+  const { sent, output } = await readToolOutput({ ok: true, route: "DETERMINISTIC_TOOL", tool: "findSolicitudes", sourceSystem: "PAY0", text: "Hay 2 solicitudes.", data,
+    trace: { secret: "internal" }, uid: "leak-uid", rootId: "leak-root", cost: 3 }, "buscar_solicitudes", { cliente: "asier", rootId: "foreign", uid: "foreign" });
+  assert.equal(sent.toolName, "findSolicitudes");
+  assert.deepEqual(sent.toolInput, { cliente: "asier" });
+  assert.equal(JSON.stringify(sent).includes("foreign"), false);
+  assert.deepEqual(output, { route: "DETERMINISTIC_TOOL", text: "Hay 2 solicitudes.", data });
+});
+
+test("results without data keep the previous output shape", async () => {
+  const { output } = await readToolOutput({ route: "DETERMINISTIC_TOOL", text: "Tienes acceso a PAY0.", sourceSystem: "PAY0" }, "get_authorized_capabilities");
+  assert.deepEqual(output, { route: "DETERMINISTIC_TOOL", text: "Tienes acceso a PAY0." });
+});
+
+test("structured data is bounded: items are trimmed and marked truncado", async () => {
+  const items = Array.from({ length: 20 }, (_, index) => ({ id: `sol-${index}`, cliente: "C".repeat(1500), monto: index }));
+  const { output } = await readToolOutput({ route: "DETERMINISTIC_TOOL", text: "Hay 40.", data: { total: 40, montoTotal: 1, mostrados: 20, items, filtros: {}, interpretacion: [] } });
+  assert.ok(Buffer.byteLength(JSON.stringify(output.data)) <= MAX_TOOL_DATA_BYTES);
+  assert.equal(output.data.truncado, true);
+  assert.equal(output.data.total, 40);
+  assert.ok(output.data.items.length > 0 && output.data.items.length < 20);
+  assert.equal(output.data.mostrados, output.data.items.length);
+  assert.deepEqual(output.data.items[0], items[0]);
+});
+
+test("bounding trims nested detail arrays, leaves small data intact and never throws", () => {
+  const small = { encontrada: true, solicitud: { id: "s", documentos: [] } };
+  assert.deepEqual(boundToolData(small), small);
+  assert.equal(boundToolData(undefined), undefined);
+  assert.equal(boundToolData(null), undefined);
+  const cyclic = {}; cyclic.self = cyclic;
+  assert.equal(boundToolData(cyclic), undefined);
+  const detail = { encontrada: true, solicitud: { id: "s", oc: { partidas: Array.from({ length: 400 }, () => ({ cantidad: 1, descripcion: "x".repeat(80), importe: 1 })) }, documentos: [{ tipo: "OC" }] } };
+  const bounded = boundToolData(detail);
+  assert.ok(Buffer.byteLength(JSON.stringify(bounded)) <= MAX_TOOL_DATA_BYTES);
+  assert.equal(bounded.truncado, true);
+  assert.equal(bounded.solicitud.id, "s");
+  assert.deepEqual(bounded.solicitud.documentos, [{ tipo: "OC" }]);
+  assert.ok(bounded.solicitud.oc.partidas.length > 0 && bounded.solicitud.oc.partidas.length < 400);
+  assert.deepEqual(boundToolData({ blob: "z".repeat(20000) }), { truncado: true });
+  assert.equal(detail.solicitud.oc.partidas.length, 400, "input is not mutated");
+});
+
+test("invalid general read input fails as a non-retryable validation without calling the backend", async () => {
+  const { sent, output } = await readToolOutput({ route: "X", text: "must-not-run" }, "ver_solicitud", { rootId: "foreign" });
+  assert.equal(sent, undefined);
+  assert.deepEqual(output, { status: "INVALID_INPUT", text: "Falta el dato a consultar: un id, folio o nombre." });
+  assert.deepEqual(safeToolFailure(Error("INVALID_TOOL_INPUT")), { errorCategory: "VALIDATION", errorCode: "INVALID_TOOL_INPUT", retryable: false });
+});
+
+test("end-call tool exists only when the browser declares END_CALL support", async () => {
+  const plain = harness(); await plain.browser.receive(auth); await plain.browser.receive(offer);
+  assert.equal(plain.browser.sent.at(-1).tools.includes("terminar_llamada"), false);
+  await plain.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-1", response_id: "r1", arguments: "{}" });
+  assert.equal(plain.sidebands[0].sent.length, 0); assert.equal(plain.browser.sent.some(event => event.type === "gateway.end_call_requested"), false);
+  let realtimeOptions;
+  const h = harness({ openRealtime: async (_sdp, _signal, options) => { realtimeOptions = options; return { callId: "simulated-call", answer: "simulated-answer" }; } });
+  await h.browser.receive({ ...auth, clientFeatures: ["END_CALL"] }); await h.browser.receive(offer);
+  assert.deepEqual(realtimeOptions, { endCall: true }); assert.ok(h.browser.sent.at(-1).tools.includes("terminar_llamada"));
+  await h.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-2", response_id: "r2", arguments: "{}" });
+  assert.equal(h.counts.delegate, 0);
+  const output = JSON.parse(h.sidebands[0].sent.find(event => event.type === "conversation.item.create").item.output);
+  assert.equal(output.route, "LOCAL"); assert.match(output.text, /Despídete/);
+  const ended = h.browser.sent.find(event => event.type === "gateway.end_call_requested");
+  assert.equal(ended.toolCallId, "end-2"); assert.equal(ended.responseId, "r2");
 });

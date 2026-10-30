@@ -80,8 +80,9 @@ function emptyBalance(label: string): MatHomeBalance {
   };
 }
 
-async function readBalance(db: Firestore, holderType: "USER" | "CLIENT", holderId: string): Promise<MatHomeBalance> {
+async function readBalance(db: Firestore, holderType: "USER" | "CLIENT", holderId: string, rootId: string): Promise<MatHomeBalance> {
   const summary = await readCanonicalBalanceSummary(db, holderType, holderId);
+  if (cleanText(summary.rootId) && cleanText(summary.rootId) !== rootId) throw new Error("MAT_LEDGER_SCOPE_DENIED");
 
   return {
     availableBalance: summary.availableBalance,
@@ -111,17 +112,18 @@ function movementTone(data: any): MatHomeTone {
   return "muted";
 }
 
-function movementToHomeItem(doc: any): MatHomeItem {
+function movementToHomeItem(doc: any, clientNames: Map<string, string>): MatHomeItem {
   const data = doc.data ? doc.data() : doc;
   const direction = cleanText(data?.direction).toUpperCase();
   const signed = direction === "IN" ? "+" : direction === "OUT" ? "-" : "";
   const type = cleanText(data?.movementType || "MOVIMIENTO").replace(/_/g, " ");
   const folio = getFolio(data, doc.id || "movimiento");
-  const caption = cleanText(data?.note || data?.sourceModule || data?.referenceType || "", "Movimiento");
+  const clientName = clientNames.get(cleanText(data?.clienteId));
+  const caption = `${folio} · ${type}`;
 
   return {
     id: doc.id || folio,
-    title: folio === (doc.id || "") ? type : folio,
+    title: clientName || type,
     caption,
     amount: `${signed}${formatMoney(data?.amount || 0)}`,
     status: movementStatus(data?.movementType),
@@ -134,9 +136,12 @@ async function readRecentMovements(
   db: Firestore,
   holderType: "USER" | "CLIENT",
   holderId: string,
+  rootId: string,
   limit = 8,
+  clientNames = new Map<string, string>(),
 ): Promise<MatHomeItem[]> {
   const statement = await readCanonicalStatement(db, holderType, holderId, 80);
+  if (cleanText(statement.summary.rootId) && cleanText(statement.summary.rootId) !== rootId) throw new Error("MAT_LEDGER_SCOPE_DENIED");
 
   return statement.rows
     .map((item) => ({
@@ -144,11 +149,12 @@ async function readRecentMovements(
       createdAt: item.createdAtMillis ? new Date(item.createdAtMillis) : null,
     }))
     .slice(0, limit)
-    .map((item) => movementToHomeItem(item));
+    .map((item) => movementToHomeItem(item, clientNames));
 }
 
 function isActiveDoc(data: any) {
-  return data?.active !== false && data?.disabled !== true && data?.status !== "DELETED";
+  return Boolean(data) && data.active !== false && data.disabled !== true && !data.isDeleted && !data.deletedAt &&
+    !["DELETED", "ELIMINADA", "INACTIVE", "INACTIVO"].includes(String(data.status || "").toUpperCase());
 }
 
 function canUserSeeClient(user: any, client: any) {
@@ -173,15 +179,22 @@ function canUserSeeClient(user: any, client: any) {
   return fields.includes(uid);
 }
 
-async function readVisibleClients(db: Firestore, user: any, limit = 6): Promise<MatHomeItem[]> {
+async function readVisibleClients(db: Firestore, user: any): Promise<MatHomeItem[]> {
   const rootId = cleanText(user?.rootId || user?.uid || user?.id);
-  const snap = await db.collection("clients").where("rootId", "==", rootId).limit(250).get();
+  const query = db.collection("clients").where("rootId", "==", rootId).limit(250);
+  const clients: any[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const snap = await (cursor ? query.startAfter(cursor) : query).get();
+    clients.push(...snap.docs.map(doc => ({ ...(doc.data() as any), id: doc.id })));
+    if (snap.docs.length < 250) break;
+    cursor = snap.docs[snap.docs.length - 1];
+    if (page === 19) throw new Error("MAT_CLIENT_SCOPE_LIMIT");
+  }
 
-  return snap.docs
-    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+  return clients
     .filter((client) => canUserSeeClient(user, client))
     .sort((a, b) => getClientName(a, a.id).localeCompare(getClientName(b, b.id), "es"))
-    .slice(0, limit)
     .map((client) => ({
       id: client.id,
       title: getClientName(client, client.id),
@@ -200,8 +213,8 @@ function solicitudToHomeItem(doc: any): MatHomeItem {
 
   return {
     id: doc.id || folio,
-    title: folio,
-    caption: `${getClientName(data, "Cliente")} | ${getCompanyName(data)}`,
+    title: cleanText(data?.clienteNombre || data?.clientName, getClientName(data, "Cliente")),
+    caption: `${folio} · ${getCompanyName(data)}`,
     amount: formatMoney(amount),
     status: cleanText(data?.status || "ACTIVA").toUpperCase(),
     tone: "info",
@@ -209,11 +222,12 @@ function solicitudToHomeItem(doc: any): MatHomeItem {
   };
 }
 
-async function readRecentSolicitudesForClient(db: Firestore, clienteId: string, limit = 5): Promise<MatHomeItem[]> {
+async function readRecentSolicitudesForClient(db: Firestore, clienteId: string, rootId: string, limit = 5): Promise<MatHomeItem[]> {
   const snap = await db.collection("solicitudes").where("clienteId", "==", clienteId).limit(60).get();
 
   return snap.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .filter((item) => item.rootId === rootId && !item.isDeleted && !item.deletedAt)
     .sort((a, b) => getMillis((b as any).createdAt) - getMillis((a as any).createdAt))
     .slice(0, limit)
     .map((item) => solicitudToHomeItem(item));
@@ -232,7 +246,7 @@ async function readRecentSolicitudesForUser(
     .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
     .filter((item) => {
       const clienteId = cleanText((item as any).clienteId || (item as any).clientId);
-      return !visibleClientIds.size || visibleClientIds.has(clienteId);
+      return visibleClientIds.has(clienteId);
     })
     .sort((a, b) => getMillis((b as any).createdAt) - getMillis((a as any).createdAt))
     .slice(0, limit)
@@ -246,8 +260,8 @@ function dispersionToHomeItem(doc: any): MatHomeItem {
 
   return {
     id: doc.id || folio,
-    title: folio,
-    caption: data?.fundingSource?.holderType === "USER" ? "Retiro de utilidad" : cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || data?.clienteNombre || "", "Dispersión"),
+    title: data?.fundingSource?.holderType === "USER" ? "Retiro de utilidad" : cleanText(data?.beneficiaryNombre || data?.beneficiarioNombre || "", "Beneficiario"),
+    caption: `${folio}${cleanText(data?.clienteNombre) ? ` · ${cleanText(data?.clienteNombre)}` : ""}`,
     amount: formatMoney(amount),
     status: cleanText(data?.status || "PROCESO").toUpperCase(),
     tone: cleanText(data?.incidenceStatus || data?.incidenciaStatus) ? "danger" : "warn",
@@ -255,7 +269,7 @@ function dispersionToHomeItem(doc: any): MatHomeItem {
   };
 }
 
-async function readRecentDispersionsForClient(db: Firestore, clienteId: string, limit = 5): Promise<MatHomeItem[]> {
+async function readRecentDispersionsForClient(db: Firestore, clienteId: string, rootId: string, limit = 5): Promise<MatHomeItem[]> {
   const byClienteId = await db.collection("clientDispersions").where("clienteId", "==", clienteId).limit(60).get();
   const byClientId = await db.collection("clientDispersions").where("clientId", "==", clienteId).limit(60).get();
 
@@ -265,7 +279,7 @@ async function readRecentDispersionsForClient(db: Firestore, clienteId: string, 
   });
 
   return Array.from(byId.values())
-    .filter(item => item.fundingSource?.holderType !== "USER")
+    .filter(item => item.rootId === rootId && !item.isDeleted && !item.deletedAt && item.fundingSource?.holderType !== "USER")
     .sort((a, b) => getMillis((b as any).createdAt) - getMillis((a as any).createdAt))
     .slice(0, limit)
     .map((item) => dispersionToHomeItem(item));
@@ -286,8 +300,9 @@ async function readRecentDispersionsForUser(
       try {
         assertDispersionFundingOwner({ rootId, uid: cleanText(user.uid || user.id), role: cleanText(user.role).toLowerCase(), dispersion: item });
       } catch { return false; }
+      if ((item as any).fundingSource?.holderType === "USER") return true;
       const clienteId = cleanText((item as any).clienteId || (item as any).clientId);
-      return !visibleClientIds.size || visibleClientIds.has(clienteId);
+      return visibleClientIds.has(clienteId);
     })
     .sort((a, b) => getMillis((b as any).createdAt) - getMillis((a as any).createdAt))
     .slice(0, limit)
@@ -306,6 +321,7 @@ export async function resolveInternalUserByTelegramId(db: Firestore, telegramUse
   if (telegramSnap.exists) {
     const telegramData = telegramSnap.data() || {};
 
+    if (!isActiveDoc(telegramData)) return null;
     if (telegramData.active !== false) {
       const uid = cleanText((telegramData as any).uid || (telegramData as any).userId || "");
 
@@ -314,15 +330,16 @@ export async function resolveInternalUserByTelegramId(db: Firestore, telegramUse
 
         if (userSnap.exists) {
           return {
+            ...(userSnap.data() as any),
             id: userSnap.id,
             uid: userSnap.id,
             telegramUserId: cleanTelegramUserId,
             telegramUsername: cleanText((telegramData as any).telegramUsername || (telegramData as any).username || ""),
-            ...(userSnap.data() as any),
           };
         }
       }
     }
+    return null;
   }
 
   const fallbackSnap = await db.collection("users").where("telegramUserId", "==", cleanTelegramUserId).limit(1).get();
@@ -331,9 +348,9 @@ export async function resolveInternalUserByTelegramId(db: Firestore, telegramUse
 
   const doc = fallbackSnap.docs[0];
   return {
+    ...(doc.data() as any),
     id: doc.id,
     uid: doc.id,
-    ...(doc.data() as any),
   };
 }
 
@@ -352,9 +369,11 @@ export async function resolveClientLinkByTelegramId(db: Firestore, telegramUserI
       ...(directSnap.data() as any),
     };
 
-    if (data.active !== false && cleanText(data.clientId || data.clienteId)) {
+    if (!isActiveDoc(data)) return null;
+    if (cleanText(data.clientId || data.clienteId)) {
       return data;
     }
+    return null;
   }
 
   const fallbackSnap = await db
@@ -365,7 +384,7 @@ export async function resolveClientLinkByTelegramId(db: Firestore, telegramUserI
 
   const active = fallbackSnap.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-    .find((item) => item.active !== false && cleanText(item.clientId || item.clienteId));
+    .find((item) => isActiveDoc(item) && cleanText(item.clientId || item.clienteId));
 
   return active || null;
 }
@@ -407,10 +426,12 @@ export async function buildMatUserHome({
     };
   }
 
-  const balance = await readBalance(db, "USER", user.id);
-  const movements = await readRecentMovements(db, "USER", user.id, 6);
-  const clients = await readVisibleClients(db, user, 6);
-  const visibleClientIds = new Set(clients.map((client) => client.id));
+  const balance = await readBalance(db, "USER", user.id, cleanText(user.rootId || user.id));
+  const visibleClients = await readVisibleClients(db, user);
+  const clientNames = new Map(visibleClients.map((client) => [client.id, client.title]));
+  const movements = await readRecentMovements(db, "USER", user.id, cleanText(user.rootId || user.id), 6, clientNames);
+  const visibleClientIds = new Set(visibleClients.map((client) => client.id));
+  const clients = visibleClients;
   const solicitudes = await readRecentSolicitudesForUser(db, user, visibleClientIds, 5);
   const dispersiones = await readRecentDispersionsForUser(db, user, visibleClientIds, 5);
 
@@ -480,9 +501,10 @@ export async function buildMatClientHome({
 
   const clienteId = cleanText(link?.clienteId || link?.clientId);
   const clientSnap = await db.collection("clients").doc(clienteId).get();
-  const client = clientSnap.exists ? { id: clientSnap.id, ...(clientSnap.data() as any) } : { id: clienteId };
+  const client = clientSnap.exists ? { id: clientSnap.id, ...(clientSnap.data() as any) } : null;
 
-  if (!isActiveDoc(client)) {
+  if (!isActiveDoc(client) || !cleanText(client?.rootId) ||
+      (cleanText(link.rootId) && cleanText(link.rootId) !== cleanText(client?.rootId))) {
     return {
       ok: true,
       status: "UNLINKED",
@@ -502,10 +524,10 @@ export async function buildMatClientHome({
     };
   }
 
-  const balance = await readBalance(db, "CLIENT", clienteId);
-  const movements = await readRecentMovements(db, "CLIENT", clienteId, 6);
-  const solicitudes = await readRecentSolicitudesForClient(db, clienteId, 5);
-  const dispersiones = await readRecentDispersionsForClient(db, clienteId, 5);
+  const balance = await readBalance(db, "CLIENT", clienteId, cleanText(client?.rootId));
+  const movements = await readRecentMovements(db, "CLIENT", clienteId, cleanText(client?.rootId), 6, new Map([[clienteId, getClientName(client, clienteId)]]));
+  const solicitudes = await readRecentSolicitudesForClient(db, clienteId, cleanText(client?.rootId), 5);
+  const dispersiones = await readRecentDispersionsForClient(db, clienteId, cleanText(client?.rootId), 5);
 
   const metrics: MatHomeMetric[] = [
     { label: "Disponible", value: formatMoney(balance.availableBalance) },

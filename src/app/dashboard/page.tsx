@@ -3,7 +3,7 @@
 import NoAccess from "@/components/NoAccess";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 
-import ActivityLog from "../../components/ActivityLog";
+import DashboardActivity from "../../components/DashboardActivity";
 import React, { useMemo, useState, useEffect } from "react";
 import { collection, query, where, Timestamp, getCountFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebaseClient";
@@ -335,13 +335,7 @@ export default function DashboardPage() {
 
         {canViewActividad && (
           <div className="relative z-10 mt-6 min-w-0">
-            <ActivityLog
-              adminId={adminId}
-              rootId={rootId}
-              from={range.from}
-              to={range.to}
-              hideAuthEvents={true}
-            />
+            <DashboardActivity from={range.from} to={range.to} />
           </div>
         )}
       </div>

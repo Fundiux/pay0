@@ -1,0 +1,305 @@
+diff --git a/src/modules/pagos/receiptIdentification.ts b/src/modules/pagos/receiptIdentification.ts
+index a9a7497..079dcbe 100644
+--- a/src/modules/pagos/receiptIdentification.ts
++++ b/src/modules/pagos/receiptIdentification.ts
+@@ -1,4 +1,5 @@
+ import { createHash } from "node:crypto";
++import { getReceiptActorCorrectionState } from "./receiptLearning";
+ import { FieldValue, type Firestore, type DocumentSnapshot } from "firebase-admin/firestore";
+ import { HttpsError } from "firebase-functions/v2/https";
+ import { requireClientOperationalAccess } from "../clientDelegations/access";
+@@ -28,7 +29,7 @@ async function allowedCompany(db: Firestore, actor: Actor, company: ReceiptCatal
+ }
+ 
+ /** Called only with bytes and parsed signals obtained by the server parser. */
+-export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown> }): Promise<ReceiptIdentificationResult> {
++export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor; receipt: ReceiptSignals; contentSha256: string; operationTypeKey?: string; analysisId?: string; readerVersion?: string; semanticReceipt?: Record<string, unknown>; correctionVersion?: number }): Promise<ReceiptIdentificationResult> {
+   const { db, actor, receipt } = input;
+   const operationTypeKey = clean(input.operationTypeKey).toUpperCase();
+   if (operationTypeKey.includes("/") || operationTypeKey.length > 100) throw new HttpsError("invalid-argument", "Tipo de operación inválido.");
+@@ -70,6 +71,12 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
+   const evidence = { client: clientMatch.evidence, company: companyMatch.evidence };
+   return db.runTransaction(async tx => {
+     const existing = await tx.get(ref);
++    if (input.analysisId && input.correctionVersion !== undefined) {
++      const analysis = await tx.get(db.doc(`pagoReceiptAnalyses/${input.analysisId}`));
++      if (!analysis.exists || analysis.get("rootId") !== actor.rootId || getReceiptActorCorrectionState(analysis.data() || {}, actor.uid).version !== input.correctionVersion) {
++        throw new HttpsError("aborted", "El comprobante cambió; vuelve a validar los datos actuales.");
++      }
++    }
+     if (existing.exists && existing.get("status") === "REGISTERED") {
+       const pagoId = clean(existing.get("pagoId"));
+       const pago = pagoId ? await tx.get(db.doc(`pagos/${pagoId}`)) : null;
+diff --git a/src/modules/pagos/receiptLearning.ts b/src/modules/pagos/receiptLearning.ts
+index 3e8e773..6374538 100644
+--- a/src/modules/pagos/receiptLearning.ts
++++ b/src/modules/pagos/receiptLearning.ts
+@@ -1,7 +1,7 @@
+ import { createHash } from "node:crypto";
+ 
+ export const RECEIPT_LEARNING_VERSION = "PAY0_RECEIPT_LEARNING_V1";
+-export const CORRECTABLE_RECEIPT_FIELDS = ["reference", "trackingKey", "folio", "transactionId"] as const;
++export const CORRECTABLE_RECEIPT_FIELDS = ["reference", "trackingKey", "folio", "transactionId", "transferAmount", "executionDate", "executionTime", "senderName", "beneficiaryName", "sourceBankName", "destinationBankName", "bankName", "sourceAccount", "destinationAccount", "concept"] as const;
+ export type CorrectableReceiptField = typeof CORRECTABLE_RECEIPT_FIELDS[number];
+ 
+ const clean = (value: unknown, max = 240) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+@@ -16,6 +16,7 @@ export function receiptPattern(input: { readerVersion: string; bankName?: unknow
+ }
+ 
+ export function sanitizedReceiptLearningContent(pattern: ReturnType<typeof receiptPattern>) {
++  if (pattern.fromField === pattern.toField) return `Patron documental candidato: correccion de extraccion en ${pattern.toField} de ${pattern.bank}. Confirmar siempre contra la evidencia del documento.`;
+   return `Patron documental candidato: la etiqueta ${pattern.label} de ${pattern.bank} puede corresponder a ${pattern.toField} en lugar de ${pattern.fromField}. Confirmar siempre contra la evidencia del documento.`;
+ }
+ 
+@@ -35,3 +36,65 @@ export function receiptMemoryId(rootId: string, patternKey: string): string {
+   if (!rootId || !patternKey) throw new Error("Receipt memory scope required");
+   return `receipt_${createHash("sha256").update(JSON.stringify([rootId, patternKey])).digest("hex")}`;
+ }
++
++
++const identifierFields = new Set(["reference", "trackingKey", "folio", "transactionId"]);
++/** Strict input normalization; never interpret an ambiguous localized amount/date. */
++export function normalizeReceiptCorrection(from: CorrectableReceiptField, to: CorrectableReceiptField, value: unknown): string | number {
++  if (from !== to && !(identifierFields.has(from) && identifierFields.has(to))) throw new Error("FIELD_MAPPING_INVALID");
++  if (typeof value !== "string" && typeof value !== "number") throw new Error("VALUE_INVALID");
++  const text = String(value).trim();
++  if (!text || text.length > 240 || /[\u0000-\u001f]/.test(text)) throw new Error("VALUE_INVALID");
++  if (to === "transferAmount") {
++    if (!/^\d+(?:\.\d{1,2})?$/.test(text)) throw new Error("AMOUNT_INVALID");
++    const amount = Number(text);
++    if (!(amount > 0) || !Number.isSafeInteger(Math.round(amount * 100))) throw new Error("AMOUNT_INVALID");
++    return amount;
++  }
++  if (to === "executionDate") {
++    if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text) throw new Error("DATE_INVALID");
++  }
++  if (to === "executionTime" && !/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(text)) throw new Error("TIME_INVALID");
++  if ((to === "sourceAccount" || to === "destinationAccount") && !/^\d{4,18}$/.test(text)) throw new Error("ACCOUNT_INVALID");
++  return text.replace(/\s+/g, " ");
++}
++
++const receiptKeys: Record<CorrectableReceiptField, string> = {
++  reference: "reference", trackingKey: "trackingKey", folio: "folio", transactionId: "transactionId",
++  transferAmount: "amount", executionDate: "date", executionTime: "time", senderName: "senderName", beneficiaryName: "beneficiaryName",
++  sourceBankName: "sourceBankName", destinationBankName: "destinationBankName", bankName: "bankName", sourceAccount: "account", destinationAccount: "destinationAccount", concept: "concept",
++};
++
++/** Apply only the durable human overlay. Original OCR evidence remains immutable. */
++export function applyReceiptCorrections(receiptInput: Record<string, any>, semanticInput: Record<string, any>, corrections: Record<string, any> = {}) {
++  const receipt = { ...receiptInput }, semanticReceipt = { ...semanticInput, fields: { ...semanticInput.fields } };
++  for (const [from, correction] of Object.entries(corrections).sort((a, b) => (a[1].version || 0) - (b[1].version || 0))) {
++    if (!isCorrectableReceiptField(from) || !isCorrectableReceiptField(correction.correctedField)) continue;
++    const to = correction.correctedField as CorrectableReceiptField;
++    const value = normalizeReceiptCorrection(from, to, correction.correctedValue);
++    if (from !== to) {
++      receipt[receiptKeys[from]] = "";
++      semanticReceipt.fields[from] = { ...semanticReceipt.fields[from], value: null, normalizedValue: null, decision: "MISSING", source: "HUMAN_CORRECTION", provenance: "HUMAN_CORRECTION", originalEvidence: semanticInput.fields?.[from] || null };
++    }
++    receipt[receiptKeys[to]] = value;
++    if (to === "transferAmount") receipt.amountVerified = true;
++    if (to === "executionDate") receipt.dateVerified = true;
++    semanticReceipt.fields[to] = { ...semanticReceipt.fields[to], value, normalizedValue: value, decision: "ACCEPTED", source: "HUMAN_CORRECTION", provenance: "HUMAN_CORRECTION", humanConfirmed: true, correctionId: correction.correctionId, humanCorrection: { actorUid: correction.actorUid, correctedAt: correction.correctedAt, originalValue: semanticInput.fields?.[to]?.value ?? null }, originalEvidence: semanticInput.fields?.[to] || null };
++  }
++  return { receipt, semanticReceipt };
++}
++
++
++/** OCR is shared by root; reviewed values belong exclusively to their actor. */
++export function getReceiptActorCorrectionState(analysis: Record<string, any>, uid: string): { corrections: Record<string, any>; version: number } {
++  const ownMap = analysis.humanCorrectionsByActor;
++  const hasOwnState = (ownMap && Object.prototype.hasOwnProperty.call(ownMap, uid)) || (analysis.correctionVersionsByActor && Object.prototype.hasOwnProperty.call(analysis.correctionVersionsByActor, uid));
++  if (hasOwnState) {
++    const version = analysis.correctionVersionsByActor?.[uid];
++    if (!Number.isSafeInteger(version) || version < 0 || (ownMap?.[uid] !== undefined && (!ownMap[uid] || typeof ownMap[uid] !== "object"))) throw new Error("INVALID_RECEIPT_CORRECTION_STATE");
++    return { corrections: Object.fromEntries(Object.entries(ownMap?.[uid] || {}).filter(([, correction]: [string, any]) => correction?.actorUid === uid)), version };
++  }
++  const version = Number(analysis.correctionVersion || 0);
++  if (!Number.isSafeInteger(version) || version < 0) throw new Error("INVALID_RECEIPT_CORRECTION_STATE");
++  return { corrections: Object.fromEntries(Object.entries(analysis.humanCorrections || {}).filter(([, correction]: [string, any]) => correction?.actorUid === uid)), version };
++}
+diff --git a/src/modules/pagos/receiptPdfCallables.ts b/src/modules/pagos/receiptPdfCallables.ts
+index ea4dd98..0218710 100644
+--- a/src/modules/pagos/receiptPdfCallables.ts
++++ b/src/modules/pagos/receiptPdfCallables.ts
+@@ -6,7 +6,7 @@ import { db, getMyUser, getRootId } from "../sharedCallables/helpers";
+ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+ import { identifyParsedReceipt } from "./receiptIdentification";
+ import { buildSemanticReceipt, RECEIPT_READER_VERSION } from "./receiptSemantics";
+-import { containsSensitiveLearningData, receiptMemoryId, isCorrectableReceiptField, memoryCanAdvise, receiptPattern, RECEIPT_LEARNING_VERSION, sanitizedReceiptLearningContent } from "./receiptLearning";
++import { getReceiptActorCorrectionState, CORRECTABLE_RECEIPT_FIELDS, applyReceiptCorrections, normalizeReceiptCorrection, containsSensitiveLearningData, receiptMemoryId, isCorrectableReceiptField, memoryCanAdvise, receiptPattern, RECEIPT_LEARNING_VERSION, sanitizedReceiptLearningContent } from "./receiptLearning";
+ 
+ let pdfParser: any;
+ let visionClient: any;
+@@ -51,16 +51,22 @@ type ReceiptData = {
+   dateVerified: boolean;
+ };
+ 
+-async function retrieveReceiptLearningContext(rootId: string, semantic: ReturnType<typeof buildSemanticReceipt>) {
++async function retrieveReceiptLearningContext(rootId: string, semantic: ReturnType<typeof buildSemanticReceipt>, effectiveSemantic = semantic) {
+   try {
+     const fields = semantic.fields || {}, candidates: Array<{ pattern: ReturnType<typeof receiptPattern>; targetDecision: string }> = [];
+-    for (const fromField of ["reference", "trackingKey", "folio", "transactionId"] as const) {
++    const identifiers = ["reference", "trackingKey", "folio", "transactionId"] as const;
++    for (const fromField of CORRECTABLE_RECEIPT_FIELDS) {
++      // Same-field feedback uses a fixed field label, never a personal value.
++      const pattern = receiptPattern({ readerVersion: semantic.readerVersion, bankName: fields.bankName?.normalizedValue, evidenceLabel: fromField.replace(/([a-z])([A-Z])/g, "$1 $2"), fromField, toField: fromField });
++      candidates.push({ pattern, targetDecision: effectiveSemantic.fields?.[fromField]?.decision || "MISSING" });
++    }
++    for (const fromField of identifiers) {
+       const source = fields[fromField];
+       if (!source?.label) continue;
+-      for (const toField of ["reference", "trackingKey", "folio", "transactionId"] as const) {
++      for (const toField of identifiers) {
+         if (fromField === toField) continue;
+         const pattern = receiptPattern({ readerVersion: semantic.readerVersion, bankName: fields.bankName?.normalizedValue, evidenceLabel: source.label, fromField, toField });
+-        candidates.push({ pattern, targetDecision: fields[toField]?.decision || "MISSING" });
++        candidates.push({ pattern, targetDecision: effectiveSemantic.fields?.[toField]?.decision || "MISSING" });
+       }
+     }
+     if (!candidates.length) return [];
+@@ -744,7 +750,7 @@ export const parsePagoReceiptPdf = onCall(
+ 
+     if (contentType === "application/pdf") {
+       try {
+-        const parsed = await getPdfParser()(buffer, { max: RECEIPT_PROCESSING_LIMITS.pdfPages });
++        const parsed = await getPdfParser()(new Uint8Array(buffer), { max: RECEIPT_PROCESSING_LIMITS.pdfPages });
+         const pages = Number(parsed?.numpages);
+         if (!Number.isInteger(pages) || pages < 1) throw new HttpsError("failed-precondition", "No se pudo verificar el numero de paginas del comprobante.");
+         if (pages > RECEIPT_PROCESSING_LIMITS.pdfPages) throw new HttpsError("invalid-argument", "El comprobante debe tener como maximo 5 paginas.");
+@@ -787,19 +793,30 @@ export const parsePagoReceiptPdf = onCall(
+ 
+     receipt = parseReceiptText(text);
+     semanticReceipt = buildSemanticReceipt(text, receipt);
+-    await analysisRef.set({
++    await db.runTransaction(async tx => {
++    const existing = await tx.get(analysisRef);
++    if (existing.exists && existing.data()?.receipt && existing.data()?.semanticReceipt) return;
++    tx.set(analysisRef, {
+       schemaVersion: 1, processingPolicyVersion: 2, readerVersion: RECEIPT_READER_VERSION, rootId, contentSha256,
+       contentType, textSource, receipt, semanticReceipt, textLength: text.length,
+       providerCalls: textSource === "VISION_OCR" ? 1 : 0,
+       createdAt: new Date(), updatedAt: new Date(),
+     }, { merge: false });
++    });
+     }
++    const latestAnalysis = await analysisRef.get();
++    const actorCorrectionState = getReceiptActorCorrectionState(latestAnalysis.data() || {}, uid);
++    const correctionVersion = actorCorrectionState.version;
++    const overlay = applyReceiptCorrections(latestAnalysis.get("receipt") || receipt, latestAnalysis.get("semanticReceipt") || semanticReceipt, actorCorrectionState.corrections);
++    receipt = overlay.receipt as ReceiptData;
++    semanticReceipt = overlay.semanticReceipt as ReturnType<typeof buildSemanticReceipt>;
+     const identification = await identifyParsedReceipt({ db,
+       actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
+       receipt, contentSha256, operationTypeKey: clean(data.operationTypeKey), analysisId,
+-      readerVersion: RECEIPT_READER_VERSION, semanticReceipt,
++      readerVersion: RECEIPT_READER_VERSION, semanticReceipt, correctionVersion,
++      
+     });
+-    const learningContext = await retrieveReceiptLearningContext(rootId, semanticReceipt);
++    const learningContext = await retrieveReceiptLearningContext(rootId, latestAnalysis.get("semanticReceipt") || semanticReceipt, semanticReceipt);
+ 
+     return {
+       ok: true,
+@@ -817,6 +834,7 @@ export const parsePagoReceiptPdf = onCall(
+       receipt,
+       semanticReceipt,
+       learningContext,
++      correctionVersion,
+       identification,
+     };
+   },
+@@ -830,29 +848,42 @@ export const correctPagoReceiptSemanticField = onCall(
+     const [user, rootId] = await Promise.all([getMyUser(uid), getRootId(uid)]);
+     assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
+     const analysisId = clean(request.data?.analysisId), fromField = clean(request.data?.field), toField = clean(request.data?.correctedField);
+-    const correctedValue = clean(request.data?.correctedValue);
+-    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField) || !correctedValue || correctedValue.length > 240)
++    let correctedValue: string | number;
++    if (!/^[a-f0-9]{64}$/.test(analysisId) || !isCorrectableReceiptField(fromField) || !isCorrectableReceiptField(toField))
+       throw new HttpsError("invalid-argument", "Correccion semantica invalida.");
++    try { correctedValue = normalizeReceiptCorrection(fromField, toField, request.data?.correctedValue); }
++    catch { throw new HttpsError("invalid-argument", "Valor o reclasificacion invalida."); }
++    const expectedVersion = request.data?.expectedCorrectionVersion;
++    if (expectedVersion !== undefined && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0)) throw new HttpsError("invalid-argument", "Version invalida.");
+     const analysisRef = db.doc(`pagoReceiptAnalyses/${analysisId}`), analysis = await analysisRef.get();
+     if (!analysis.exists || analysis.get("rootId") !== rootId) throw new HttpsError("not-found", "Interpretacion no encontrada.");
+-    const semantic = analysis.get("semanticReceipt") || {}, fields = semantic.fields || {}, auto = fields[fromField];
+-    if (!auto || auto.value == null) throw new HttpsError("failed-precondition", "El campo automatico no tiene evidencia corregible.");
+-    const pattern = receiptPattern({ readerVersion: clean(analysis.get("readerVersion")), bankName: fields.bankName?.normalizedValue, evidenceLabel: auto.label, fromField, toField });
++    const semantic = analysis.get("semanticReceipt") || {}, fields = semantic.fields || {}, auto = fields[fromField] || {};
++    if (fromField !== toField && auto.value == null) throw new HttpsError("failed-precondition", "El campo automatico no tiene evidencia reclasificable.");
++    const pattern = receiptPattern({ readerVersion: clean(analysis.get("readerVersion")), bankName: fields.bankName?.normalizedValue, evidenceLabel: fromField === toField ? fromField.replace(/([a-z])([A-Z])/g, "$1 $2") : auto.label, fromField, toField });
+     const content = sanitizedReceiptLearningContent(pattern);
+     if (containsSensitiveLearningData(content)) throw new HttpsError("failed-precondition", "La observacion no supero sanitizacion.");
+-    const correctionId = createHash("sha256").update([rootId, analysisId, fromField, toField, correctedValue].join("|")).digest("hex");
++    const initialActorState = getReceiptActorCorrectionState(analysis.data() || {}, uid);
++    const previousOverlay = initialActorState.corrections[fromField];
++    const sameCurrentCorrection = expectedVersion === undefined && previousOverlay?.actorUid === uid && previousOverlay?.correctedField === toField && previousOverlay?.correctedValue === correctedValue;
++    const baseVersion = expectedVersion ?? initialActorState.version;
++    const correctionId = sameCurrentCorrection ? String(previousOverlay.correctionId) : createHash("sha256").update(JSON.stringify([rootId, uid, analysisId, fromField, toField, correctedValue, baseVersion])).digest("hex");
+     const correctionRef = db.doc(`pagoReceiptCorrections/${correctionId}`), observationRef = db.doc(`agent007Observations/receipt_${correctionId}`), memoryRef = db.doc(`agent007Memory/${receiptMemoryId(rootId, pattern.key)}`);
+     const now = new Date().toISOString();
+     await db.runTransaction(async tx => {
+-      const [previousCorrection, previousMemory] = await Promise.all([tx.get(correctionRef), tx.get(memoryRef)]);
++      const [previousCorrection, previousMemory, currentAnalysis] = await Promise.all([tx.get(correctionRef), tx.get(memoryRef), tx.get(analysisRef)]);
++      if (!currentAnalysis.exists || currentAnalysis.get("rootId") !== rootId) throw new HttpsError("not-found", "Interpretacion no encontrada.");
+       // A retry of the same authorized correction is not new learning evidence.
+       if (previousCorrection.exists) return;
++      const currentActorState = getReceiptActorCorrectionState(currentAnalysis.data() || {}, uid);
++      const currentVersion = currentActorState.version;
++      if (baseVersion !== currentVersion) throw new HttpsError("aborted", "El comprobante cambio. Actualiza antes de corregir.");
++      const version = currentVersion + 1;
+       const memory = previousMemory.data();
+-      tx.set(correctionRef, { schemaVersion: 1, learningVersion: RECEIPT_LEARNING_VERSION, rootId, analysisId, documentFingerprint: analysis.get("contentSha256"), readerVersion: analysis.get("readerVersion"), field: fromField,
+-        autoResult: { rawValue: auto.rawValue ?? null, normalizedValue: auto.normalizedValue ?? auto.value, confidence: auto.confidence, evidence: { label: auto.label ?? null, excerpt: auto.excerpt ?? null } },
++      tx.set(correctionRef, { schemaVersion: 1, version, learningVersion: RECEIPT_LEARNING_VERSION, rootId, analysisId, documentFingerprint: analysis.get("contentSha256"), readerVersion: analysis.get("readerVersion"), field: fromField,
++        autoResult: { rawValue: auto.rawValue ?? null, normalizedValue: auto.normalizedValue ?? auto.value ?? null, confidence: auto.confidence ?? "NONE", evidence: { label: auto.label ?? null, excerpt: auto.excerpt ?? null } },
+         humanCorrection: { correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now }, finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" }, patternKey: pattern.key,
+         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: false });
+-      tx.set(analysisRef, { humanCorrections: { [fromField]: { correctionId, correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now } }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
++      tx.set(analysisRef, { correctionVersionsByActor: { [uid]: version }, humanCorrectionsByActor: { [uid]: { ...currentActorState.corrections, [fromField]: { version, correctionId, correctedField: toField, correctedValue, actorUid: uid, actorRole: String(user?.role || ""), correctedAt: now } } }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+       tx.set(observationRef, { rootId, agentId: "AGENTE_007", phase: "OBSERVATION", source: "PAYMENT_RECEIPT_HUMAN_CORRECTION", caseType: "PAYMENT_RECEIPT_PATTERN", caseId: pattern.key, intent: "Aprender clasificacion de etiqueta documental", humanDecision: `${fromField}->${toField}`, outcome: content,
+         pattern: { ...pattern, version: RECEIPT_LEARNING_VERSION }, actorUid: uid, actorRole: String(user?.role || ""), authorization: { role: String(user?.role || ""), scope: "rootId", rootId }, retrievalEligible: true,
+         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), expiresAt: null }, { merge: false });
+@@ -862,7 +893,17 @@ export const correctPagoReceiptSemanticField = onCall(
+     });
+     const memory = await memoryRef.get();
+     const learningContext = memory.exists && memory.get("rootId") === rootId ? [{ id: memory.id, status: memory.get("status"), content: memory.get("content"), advisory: memoryCanAdvise({ patternKey: pattern.key, memoryPatternKey: memory.get("receiptLearning.key"), memoryStatus: memory.get("status"), documentEvidenceDecision: fields[toField]?.decision || "MISSING" }) }] : [];
+-    return { ok: true, correctionId, observationId: observationRef.id, memoryId: memoryRef.id, patternKey: pattern.key, learningContext,
++    const latestAnalysis = await analysisRef.get();
++    const actorCorrectionState = getReceiptActorCorrectionState(latestAnalysis.data() || {}, uid);
++    const correctionVersion = actorCorrectionState.version;
++    const { receipt, semanticReceipt } = applyReceiptCorrections(latestAnalysis.get("receipt") || {}, latestAnalysis.get("semanticReceipt") || {}, actorCorrectionState.corrections);
++    const identification = await identifyParsedReceipt({ db,
++      actor: { uid, rootId, role: getUserRole(user) as "superadmin" | "admin" | "operador" },
++      receipt, semanticReceipt, contentSha256: clean(latestAnalysis.get("contentSha256")), analysisId,
++      readerVersion: clean(latestAnalysis.get("readerVersion")), correctionVersion,
++      operationTypeKey: clean(request.data?.operationTypeKey), 
++    });
++    return { ok: true, receipt, semanticReceipt, identification, correctionVersion, analysisId, correctionId, observationId: observationRef.id, memoryId: memoryRef.id, patternKey: pattern.key, learningContext,
+       finalResult: { field: toField, value: correctedValue, source: "HUMAN_CONFIRMED" } };
+   },
+ );
+diff --git a/.firebase/modular-release/document-learning-candidate/patch-source/src/receiptLearningEntry.ts b/src/receiptLearningEntry.ts
+new file mode 100644
+index 0000000..463f5dc
+--- /dev/null
++++ b/src/receiptLearningEntry.ts
+@@ -0,0 +1,17 @@
++export {};
++
++const original = require("./receipt-learning-baseline-index");
++const patched = require("./modules/pagos/receiptPdfCallables");
++const descriptors = Object.getOwnPropertyDescriptors(original);
++for (const name of ["parsePagoReceiptPdf", "correctPagoReceiptSemanticField"] as const) {
++  if (!Object.prototype.hasOwnProperty.call(descriptors, name) || typeof patched[name] !== "function") {
++    throw new Error("RECEIPT_EXPORT_CONTRACT");
++  }
++  descriptors[name] = {
++    enumerable: descriptors[name].enumerable,
++    configurable: descriptors[name].configurable,
++    writable: false,
++    value: patched[name],
++  };
++}
++module.exports = Object.defineProperties({}, descriptors);

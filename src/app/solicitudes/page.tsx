@@ -1,9 +1,13 @@
 "use client";
 import { useSolicitudNotes, solicitudNoteDisplayDate } from "@/lib/useSolicitudNotes";
+import { watchAuthorizedRelatedRecords } from "@/services/operationalReads";
 
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
 import { collection, query, where, onSnapshot, doc, getDoc} from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
@@ -99,6 +103,7 @@ const SolicitudRow = React.memo(({
   s,
   onApplyPago,
   onDelete,
+  onHide,
   onComment,
   onCancel,
   onReject,
@@ -122,11 +127,13 @@ const SolicitudRow = React.memo(({
   canUploadDocs,
   showIqFolio,
   showCreator,
+  creatorOptions,
   allSolicitudes,
   sustitucionIndex
 }: any) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<any[]>([]);
+  const [childrenError, setChildrenError] = useState("");
   const saldo = money2(Math.max(0, money2(s.monto || 0) - money2(s.totalAbonado || 0)));
 
   const statusUpper = String(s?.status || "").toUpperCase();
@@ -189,14 +196,9 @@ const SolicitudRow = React.memo(({
       return;
     }
 
-    const q = query(
-      collection(db, "pagoAplicaciones"),
-      where("solicitudId", "==", s.id),
-    );
-
-    return onSnapshot(q, (snap) => {
-      const rows = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as any))
+    setChildrenError("");
+    return watchAuthorizedRelatedRecords("pagoAplicaciones", s.id, (items) => {
+      const rows = items
         .sort(
           (a, b) =>
             Number(a?.createdAt?.seconds || 0) -
@@ -204,14 +206,15 @@ const SolicitudRow = React.memo(({
         );
 
       setChildren(rows);
-    });
+      setChildrenError("");
+    }, () => setChildrenError("No se pudo verificar el acceso a las aplicaciones. Actualiza la consulta."));
   }, [isExpanded, s.id]);
 
   return (
     <>
       <tr className={`border-b border-white/5 transition-colors text-[11px] group font-normal text-white hover:bg-white/[0.02] ${isTerminal || isHidden ? "opacity-55" : ""}`}>
         <td className="pay0-td-date w-[78px] max-w-[78px] px-2 text-sky-400" title={String(s.folio || "")}><div className="truncate">{s.folio}</div></td>
-        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s)}>{recordCreatorLabel(s)}</td> : null}
+        {showCreator ? <td className="pay0-td w-[118px] max-w-[118px] truncate text-slate-300" title={recordCreatorLabel(s, creatorOptions)}>{recordCreatorLabel(s, creatorOptions)}</td> : null}
         {showIqFolio ? (
           <td className="pay0-td w-[76px] max-w-[76px] truncate whitespace-nowrap px-1 text-center font-mono text-violet-300" title={String(s.iqFolio || s.iqId || "")}>
             {s.iqFolio || s.iqId || "---"}
@@ -350,7 +353,8 @@ const SolicitudRow = React.memo(({
               </>
             )}
 
-            {!isHidden && !isTerminal && (
+            {canCancel && !isTerminal && <button title={isHidden ? "Mostrar" : "Ocultar"} onClick={() => onHide(s.id, !isHidden)} className="text-slate-500 hover:text-sky-400 p-1"><Eye size={16} /></button>}
+            {canCancel && !isTerminal && (
               <button
                 title="Eliminar"
                 onClick={() => onDelete(s.id)}
@@ -516,7 +520,7 @@ const SolicitudRow = React.memo(({
             <div className="overflow-hidden">
               <table className="w-full text-left">
                 <tbody>
-                  {children.length > 0 ? (
+                  {childrenError ? <tr><td role="alert" className="p-3 text-amber-300">{childrenError}</td></tr> : children.length > 0 ? (
                     <>
                       <tr className="border-t border-white/5 bg-white/[0.02] text-[9px] uppercase text-slate-500">
                         <td className="p-2 pl-8 font-normal">Aplicación PAY0</td>
@@ -614,84 +618,6 @@ export default function SolicitudesPage() {
   const loadedSolicitudesRequestSeq = useRef<number | null>(null);
   const checkedCancellationIds = useRef(new Set<string>());
   const [cancellationErrors, setCancellationErrors] = useState<Record<string, string>>({});
-
-  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
-
-  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
-
-  useEffect(() => {
-
-    const onSolicitudCreatedLocal = async (event: Event) => {
-
-      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
-
-      const solicitudId = String(detail?.solicitudId || "").trim();
-
-      if (!solicitudId) return;
-
-  
-
-      try {
-
-        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
-
-        if (!snap.exists()) return;
-
-  
-
-        const incoming: any = { id: snap.id, ...snap.data() };
-
-  
-
-        setSolicitudes((prev: any[]) => {
-
-          const index = prev.findIndex((item: any) => item?.id === incoming.id);
-
-          if (index < 0) return [incoming, ...prev];
-
-  
-
-          const next = prev.slice();
-
-          next[index] = { ...prev[index], ...incoming };
-
-          return next;
-
-        });
-
-      } catch (error) {
-
-        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
-
-      }
-
-    };
-
-  
-
-    window.addEventListener(
-
-      "PAY0_SOLICITUD_CREATED_LOCAL",
-
-      onSolicitudCreatedLocal
-
-    );
-
-  
-
-    return () => {
-
-      window.removeEventListener(
-
-        "PAY0_SOLICITUD_CREATED_LOCAL",
-
-        onSolicitudCreatedLocal
-
-      );
-
-    };
-
-  }, []);
 
   const [pagos, setPagos] = useState<any[]>([]);
   const [applicationFoliosBySolicitud, setApplicationFoliosBySolicitud] = useState<Record<string, string[]>>({});
@@ -843,6 +769,7 @@ export default function SolicitudesPage() {
       if (cancelled || requestSeq !== solicitudesRequestSeq.current) return;
       loadedSolicitudesRequestSeq.current = requestSeq;
       setSolicitudes(page.items || []);
+      setDiscovery(operationDiscoverySeed(operationScopeKey, page.items || []));
       setCreatorOptions(page.creatorOptions || []);
       setSolicitudesCursor(page.nextCursor);
       setHasMoreSolicitudes(page.hasMore === true);
@@ -890,6 +817,106 @@ export default function SolicitudesPage() {
       }
     }
   }, [loadingMoreSolicitudes, solicitudesCursor, range, creatorUid, role]);
+
+  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
+  const operationScopeKey = `${uid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
+
+  useLiveOperationRows({
+    collectionName: "solicitudes", rows: solicitudes, setRows: setSolicitudes,
+    enabled: Boolean(uid && canViewSolicitudes),
+    discovery, scope: { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
+    scopeKey: operationScopeKey, onError: setPageMsg,
+  });
+
+  useEffect(() => {
+    const current = (row: any) => row ? solicitudes.find((item) => item.id === row.id) || null : null;
+    setDocsFor(current);
+    setCommentFor(current);
+    setApplyPagoFor(current);
+    setCancelSatFor(current);
+    setRejectFor(current);
+  }, [solicitudes]);
+
+  // A54-A9 UPSERT LOCAL DE SOLICITUD RECIEN CREADA
+
+  // Lee solo el documento creado y actualiza una fila; no refresca toda la tabla.
+
+  useEffect(() => {
+    let active = true;
+
+    const onSolicitudCreatedLocal = async (event: Event) => {
+
+      const detail = (event as CustomEvent<{ solicitudId?: string; folio?: string }>).detail;
+
+      const solicitudId = String(detail?.solicitudId || "").trim();
+
+      if (!solicitudId) return;
+
+
+
+      try {
+
+        const snap = await getDoc(doc(db, "solicitudes", solicitudId));
+
+        if (!active || !snap.exists()) return;
+
+
+
+        const incoming: any = { id: snap.id, ...snap.data() };
+
+
+
+        if (!operationBelongsToScope(incoming, "solicitudes", { uid: uid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
+        setSolicitudes((prev: any[]) => {
+
+          const index = prev.findIndex((item: any) => item?.id === incoming.id);
+
+          if (index < 0) return [incoming, ...prev];
+
+
+
+          const next = prev.slice();
+
+          next[index] = { ...prev[index], ...incoming };
+
+          return next;
+
+        });
+
+      } catch (error) {
+
+        console.warn("[PAY0_SOLICITUD_LOCAL_UPSERT_ERROR]", error);
+
+      }
+
+    };
+
+
+
+    window.addEventListener(
+
+      "PAY0_SOLICITUD_CREATED_LOCAL",
+
+      onSolicitudCreatedLocal
+
+    );
+
+
+
+    return () => {
+      active = false;
+
+      window.removeEventListener(
+
+        "PAY0_SOLICITUD_CREATED_LOCAL",
+
+        onSolicitudCreatedLocal
+
+      );
+
+    };
+
+  }, [operationScopeKey]);
 
   useEffect(() => {
     if (!uid || !canViewSolicitudes) {
@@ -1337,12 +1364,20 @@ export default function SolicitudesPage() {
     }
   };
 
-  const handleHide = async (id: string) => {
+  const handleHide = async (id: string, ocultar: boolean) => {
     try {
-      await changeSolicitudStatus({ solicitudId: id, ocultar: true });
+      await changeSolicitudStatus({ solicitudId: id, ocultar });
     } catch (e: any) {
       setPageMsg(e?.message || "No se pudo completar la accion.");
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Eliminar esta solicitud de forma logica y detener su trabajo pendiente? Se conservaran documentos e historial. No se cancelaran operaciones externas.")) return;
+    try {
+      const response = await changeSolicitudStatus({solicitudId:id,newStatus:"ELIMINADA"});
+      if ((response.data as any)?.isDeleted !== true) throw new Error("El backend no confirmo la eliminacion.");
+    } catch (error: any) { setPageMsg(error?.message || "No se pudo eliminar la solicitud."); }
   };
 
   const sendNote = async () => {    setPageMsg("");
@@ -1478,6 +1513,13 @@ export default function SolicitudesPage() {
             <div className="text-[14px] font-normal text-white">Suelta Ordenes de Compra o Facturas XML aqui</div>
             <div className="mt-1 text-[12px] text-slate-400">Varios XML, varios Excel o un Excel con varias pestanas</div>
           </div>
+        </div>
+      ) : null}
+      {isSuperAdmin(role) ? (
+        <div className="mb-3 flex justify-end">
+          <a href="/reportes#complementos-pago" className="rounded-xl border border-sky-400/30 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+            Proveedores y complementos de pago
+          </a>
         </div>
       ) : null}
       <header className="mb-2 grid min-w-0 grid-cols-1 gap-1.5 2xl:grid-cols-[380px_minmax(0,1fr)_auto] 2xl:items-center">
@@ -1654,12 +1696,14 @@ export default function SolicitudesPage() {
                   cancelSatSaving={cancelSatSaving}
                   cancellationError={cancellationErrors[s.id]}
                   onDocs={setDocsFor}
-                  onDelete={handleHide}
+                  onDelete={handleDelete}
+                  onHide={handleHide}
                   canComment={canCommentSolicitud}
                   canCancel={canCancelSolicitud}
                   canUploadDocs={canUploadDocsSolicitud}
                   showIqFolio={isSuperAdmin(role)}
                   showCreator={isSuperAdmin(role) || isAdmin(role)}
+                  creatorOptions={creatorOptions}
                   allSolicitudes={filteredSortedData}
                   sustitucionIndex={sustitucionIndex}
                 />

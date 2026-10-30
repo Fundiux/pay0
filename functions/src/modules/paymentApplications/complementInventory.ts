@@ -4,6 +4,7 @@ import { db } from "../sharedCallables/helpers";
 import { context } from "../controlCenter/callables";
 import { complementRequestId } from "./complementFollowup";
 import { assessLocalIqRecovery } from "./complementRecoveryPlan";
+import { belongsToPay0Dispatch } from "../facturama/issuerGuard";
 
 type Outcome = "PROCESSED" | "PENDING" | "ERROR" | "EXCLUDED";
 type Provider = "IQ" | "FACTURAMA" | "EMISOR";
@@ -28,7 +29,7 @@ function operationalTags(request: any): ("waitingB" | "requestedC" | "uncertainC
 }
 
 function providerFor(solicitud: any): Provider {
-  if (solicitud?.facturamaEnvironment === "PRODUCTION" && solicitud?.facturamaInvoiceId) return "FACTURAMA";
+  if (belongsToPay0Dispatch(solicitud?.rootId, solicitud?.despachoId) && solicitud?.facturamaEnvironment === "PRODUCTION" && solicitud?.facturamaInvoiceId) return "FACTURAMA";
   if ([solicitud?.iqId, solicitud?.iqFolio, solicitud?.folioIq, solicitud?.iqSolicitudId].some(value => clean(value))) return "IQ";
   return "EMISOR";
 }

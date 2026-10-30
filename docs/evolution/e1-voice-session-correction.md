@@ -1,0 +1,41 @@
+# Corrección conversacional en la misma sesión de voz
+
+Estado: implementación local validada; sin paquete productivo ni publicación, cambio de gateway, activación de reglas o llamadas a proveedores. La validación local no acredita sonido real ni una sesión productiva.
+
+El gateway conserva por socket autenticado las referencias de respuestas completas y transcripciones observadas en su sideband. La nueva herramienta `correct_current_voice_response` no recibe identificadores ni texto del modelo: utiliza la respuesta anterior observada y la transcripción del usuario en el turno actual. Mantiene las catorce herramientas anteriores.
+
+La sesión nativa de Realtime y el identificador de llamada del gateway son distintos. El adaptador valida ambos contra la historia persistida, además del dueño, raíz, turno HUGO completo y no interrumpido, turno USER con transcripción nativa y orden temporal. La historia procede del cliente: su procedencia se registra como `CLIENT_TRANSCRIPT_NOT_FACT`, no como evidencia independiente de una operación financiera.
+
+`delegateHugoVoiceTurn` reutiliza `persistConversationCorrection`: vuelve a autorizar al usuario dentro de la transacción y guarda una memoria canónica `USER_STATEMENT`, limitada a conversación/sesión. No crea un hecho, experiencia verificada, regla global ni aprobación de aprendizaje. Las correcciones de voz no se recuperan como contexto de texto ni de otro socket. El primer uso sólo por audio puede crear el padre de conversación propio después de validar la sesión en la misma transacción; no adopta padres ajenos.
+
+El gateway exige ACK de persistencia con los mismos identificadores, versión exactamente anterior más uno y contenido idéntico. Un ACK ausente, intercambiado o de versión distinta no produce confirmación de guardado. El resultado se devuelve al diálogo como indicación del usuario, con autoridad `USER_STATEMENT_NOT_FACT`, y se solicita la continuación audible mediante el mecanismo existente. El modelo recibe instrucciones para confirmar y reformular en la misma sesión, conservando herramientas, permisos y evidencia financiera autorizada. El contenido de la corrección nunca pasa a instrucciones de sistema.
+
+El límite es de 1.000 caracteres, sin truncamiento silencioso. Si la transcripción todavía no está persistida, la corrección falla de forma explícita; no confirma una escritura que no ocurrió. No se conserva audio ni se incluyen transcripciones en los logs del gateway.
+
+Verificación local: suite completa del gateway **57/57 PASS**, incluyendo continuación simulada antes/después del ACK y rechazo de ACK obsoleto; adaptador con Firestore falso **5/5 PASS**, con rechazo de raíz/dueño/sesión/llamada ajenos, turnos inexistentes o interrumpidos, transcripción alterada y versiones inválidas. Esta prueba del adaptador sustituye deliberadamente el helper común para aislar el resolver; no acredita su autorización real. La evidencia integrada del helper y el adaptador se registra por separado de esta suite aislada. La continuación con sideband simulado no acredita sonido real, calidad de transcripción ni operación productiva.
+
+Archivos propios: `voiceConversationCorrections.ts`, `voiceSessionCorrection.mjs`, integración mínima en `voiceDelegation.ts`, `gatewayConnection.mjs`, `realtimeTools.mjs`, `server.mjs` y sus pruebas. El helper canónico `conversationCorrections.ts` y la integración de texto se mantienen bajo responsabilidad del frente de Texto.
+
+## Dependencias de publicación y reversión
+
+Antes de habilitar este productor, deben estar publicados y verificados los lectores protegidos `listAgent007MemoryDiagnostics` y `reviewAgent007MemoryCandidate`, además del helper canónico compatible en el destino `delegateHugoVoiceTurn`. Su presencia en la fuente local no significa que estén desplegados. El gateway y el callable requieren sus propias capturas, artefactos, configuración/IAM, autorización y pruebas exactas; este commit local no las reemplaza.
+
+Una vez que pueda haber correcciones privadas, conservar los lectores protegidos aunque se reviertan callable y gateway. Revertir sólo el productor TEXT no detiene VOICE. Revertir VOICE contra sus recibos propios, sin borrar recuerdos ni convertir sus claves a ámbito global. [Guía de reversión compatible](e1-conversation-memory-rollback-compatibility.md).
+
+Esta implementación limita la corrección a la sesión de voz; no ofrece reutilización durable USER_TOPIC/CLIENT entre sesiones ni hereda automáticamente el contrato durable de TEXTO. Las catorce herramientas públicas anteriores, incluida la ruta de reportes R2, permanecen; la herramienta de corrección se añade sin reemplazarlas.
+
+Revisión final local: `node --test services/hugo-voice-gateway/test/*.test.mjs qa/scripts/voice-conversation-corrections.test.cjs`, **62/62 PASS**, cero skips y exit 0; log privado `tmp/voice-local-commit-regression.log`. Corresponde a 57 pruebas gateway y cinco del adaptador con helper sustituido. El build Functions NORMAL integrado actual pasó según la coordinación de raíz; no se atribuye ese build a un artefacto VOICE aislado. La suite del adaptador no certifica por sí sola autorización del helper común.
+
+## Preparación de tema personal por voz (OFF, no conectada)
+
+Estado B: **INCOMPLETE / BLOCKED_DEPENDENCY** para reutilización personal entre sesiones. La autorización de desarrollo local existe; el bloqueo es el contrato de confirmación y recuperación, no un permiso adicional del usuario.
+
+El helper común ofrece ahora `validateVoicePersonalTopic` como seam puro de preparación, sin callers productivos. Su gate es un argumento explícito booleano, desactivado por defecto; no es una variable de entorno ni habilita escrituras. Reutiliza `explicitCorrectionTopic` y exige coincidencia exacta normalizada con una confirmación server-owned del mismo dueño, raíz, sesión y turno de corrección, además de un turno de confirmación y procedencia `CLIENT_TRANSCRIPT_NOT_FACT`. Rechaza CLIENT y temas diferentes; no deriva clientes de transcripciones ni aplica similitud. Esta función no acredita por sí sola que la confirmación provenga realmente de Realtime: el futuro resolver debe cargarla y cotejarla dentro de la transacción autorizada.
+
+El guard existente de persistencia sigue rechazando `VOICE + rememberFor`; no se modificó el comportamiento de texto, la ruta SESSION, el gateway ni las confirmaciones audibles. No se ha activado voz durable.
+
+Siguiente unidad necesaria: acordar y resolver una confirmación explícita del tema desde turnos USER observados/persistidos; integrar ese proof con el helper existente y devolver ACK USER_TOPIC exacto sólo tras persistencia. Después, transportar un tema activo confirmado a consultas posteriores y permitir quitar/retirar el alcance. CLIENT requiere un resultado canónico autorizado vinculado a la misma sesión y cliente único; ese enlace no existe todavía. Un nombre pronunciado o un ID del modelo no lo sustituye.
+
+QA de preparación `qa/scripts/voice-durable-boundary.test.cjs`: **7/7 PASS**, incluyendo gate OFF/tipos truthy, normalización NFC exacta, separación owner/root, sesión/turno ajenos, confirmación ausente, tema distinto, CLIENT no autorizado y rechazo durable actual antes de tocar base. La suite existente de gateway y adaptador conserva **62/62 PASS**; selección conjunta **69/69 PASS**, sin skips ni proveedor. Es evidencia local de fuente con dependencias aisladas; no certifica un artefacto VOICE, Firestore real, sonido, persistencia durable ni publicación. No se ejecutó build compartido para esta preparación.
+El turno de confirmacion debe ser distinto del turno de correccion. El futuro resolver debe acreditar que la confirmacion fue posterior; este validator puro no acredita orden temporal ni autenticidad del proof.
+Verificacion posterior del commit `59a3e0c`: build Functions NORMAL local completo **PASS, exit 0**; el JS emitido del helper coincide exactamente con la transpilacion de su TS usando el tsconfig vigente. Regresion local final **69/69 PASS**, cero skips. Logs privados: `tmp/voice-topic-preparation-functions-build.log` y `tmp/voice-topic-preparation-regression-final.log`. Esta verificacion sustituye el pendiente de build de la preparacion anterior; no certifica un ZIP ni habilita persistencia durable o produccion.

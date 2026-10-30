@@ -358,6 +358,11 @@ async function resolveClientAccessWithLineage(
     return deniedAccess({ uid, role, rootId, clientId, client, reason: "DELEGATION_LINEAGE_INVALID" });
   }
   const grantorUid = cleanId(authority?.grantorUid || delegation.grantedBy || delegation.createdBy);
+  // An active row is not evidence of who authorized it. Legacy rows without
+  // provenance require a new grant through the authenticated delegation flow.
+  if (!grantorUid) {
+    return deniedAccess({ uid, role, rootId, clientId, client, reason: "LEGACY_PROVENANCE_UNVERIFIED" });
+  }
   if (grantorUid) {
     if (/[\/]/.test(grantorUid) || grantorUid === uid ||
         (authority?.source === "DELEGATED" && authority.parentPath !== `userClientAccess/${grantorUid}/clients/${clientId}`)) {

@@ -1,0 +1,5 @@
+{
+  "schema": "PAY0-OBSERVATION-PUBLISHER@1",
+  "source": "functions/src/modules/securityObservation/publisher.ts",
+  "sha256": "c519a82c626185a051ccbf3da6a0a8977351b763f1ef0843ef106e2112ece42b"
+}

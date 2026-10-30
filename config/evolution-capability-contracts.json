@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "entrypoint": "functions/src/index.ts",
+  "contracts": [
+    { "capability": "commission-distribution", "module": "./modules/commissionDistributions/callables", "symbol": "processPaymentCommissionDistribution" },
+    { "capability": "authorized-document-download", "module": "./modules/documents/authorizedDownload", "symbol": "getAuthorizedDocumentDownloadUrl" },
+    { "capability": "hugo-voice-delegation", "module": "./modules/agent007/voiceDelegation", "symbol": "delegateHugoVoiceTurn" },
+    { "capability": "solicitud-quotation", "module": "./modules/cotizaciones/callables", "symbol": "generateSolicitudQuotation" }
+  ]
+}

@@ -91,6 +91,51 @@ export const applyPagoToSolicitud = onCall(
   },
 );
 
+/**
+ * Compatibility reader for clients that still open the per-payment
+ * applications panel.  It is deliberately read-only: the current payment
+ * application pipeline remains the sole writer for this collection.
+ */
+export const listPagoApplicationsForPayment = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const actor = await resolveActor(request);
+    const pagoId = String(request.data?.pagoId || "").trim();
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(pagoId)) {
+      throw new HttpsError("invalid-argument", "pagoId invalido.");
+    }
+
+    const pagoSnap = await db.collection("pagos").doc(pagoId).get();
+    if (!pagoSnap.exists) throw new HttpsError("not-found", "Pago no existe.");
+    const pago = pagoSnap.data() || {};
+    const isOwner = actor.role === "superadmin" ||
+      (actor.role === "admin" && String(pago.adminId || "") === actor.uid) ||
+      (actor.role === "operador" && String(pago.createdBy || "") === actor.uid);
+    if (String(pago.rootId || "") !== actor.rootId || !isOwner) {
+      throw new HttpsError("permission-denied", "No autorizado para consultar las aplicaciones de este pago.");
+    }
+
+    const applications = await db.collection("pagoAplicaciones").where("pagoId", "==", pagoId).get();
+    return {
+      applications: applications.docs
+        .filter((doc) => String(doc.get("rootId") || "") === actor.rootId)
+        .map((doc) => {
+          const row = doc.data();
+          return {
+            id: doc.id,
+            pagoId,
+            solicitudId: String(row.solicitudId || ""),
+            montoAplicado: Number(row.montoAplicado || 0),
+            status: String(row.status || ""),
+            iqExecutionStatus: String(row.iqExecutionStatus || ""),
+            iqApplicationId: String(row.iqApplicationId || ""),
+            createdAt: { seconds: Number(row.createdAt?.seconds || 0) },
+          };
+        }),
+    };
+  },
+);
+
 export const preparePagoApplicationIqPlan = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
@@ -607,6 +652,11 @@ export const processPagoApplicationIqPlanOnDemandTask =
       }
 
       const plan = planSnap.data() || {};
+      if (cleanDispatchText(plan.iqExecutionDispatchRequestedBy) !== uid) {
+        await planRef.set({iqExecutionDispatchStatus: "AUTH_STOPPED", iqExecutionDispatchLastError: "El solicitante no coincide con la intenci?n vigente."}, {merge:true});
+        return;
+      }
+
 
       if (
         cleanDispatchText(
@@ -662,16 +712,9 @@ export const processPagoApplicationIqPlanOnDemandTask =
         )
           .toLowerCase();
 
-      const inactive =
-        !userSnap.exists ||
-        user.active === false ||
-        user.deleted === true ||
-        Boolean(user.deletedAt) ||
-        ![
-          "superadmin",
-          "admin",
-          "operador",
-        ].includes(currentRole);
+      let inactive = !userSnap.exists;
+      try { assertAuthorized({ uid }, user, {allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"]}); }
+      catch { inactive = true; }
 
       if (!hasPersistedIqOrigin && inactive) {
         await planRef.set(

@@ -6,6 +6,7 @@ import { claimIqComplementCanaryLookup, inspectIqComplementGate } from "./comple
 import { assertSource, dayMexico, millis, text } from "./complementPolicy";
 import { verifiedDocuments } from "./complementCanary";
 import * as providers from "./complementProviders";
+import { SafetyRuntime, reportProtectedFailure } from "../automationSafety/runtime";
 
 const pending = new Set(["PENDING", "PENDING_B", "PENDING_PROVIDER_CONTRACT"]);
 const code = (error: any) => /^[A-Z0-9_]+$/.test(error?.message || "") ? error.message : "REP_B_DAILY_FAILED";
@@ -133,6 +134,7 @@ export async function checkDueIqFollowup(requestId: string, now = new Date(), ad
     });
     return "RECEIVED";
   } catch (error) {
+    reportProtectedFailure(error);
     const failure = code(error);
     if (["REP_IQ_PERMISSION_REQUIRED", "REP_IQ_PROFILE_CHANGED"].includes(failure) || failure.startsWith("REP_GATE_")) {
       await finishBlocked(requestId, rootId, now, failure); return "BLOCKED";
@@ -156,7 +158,14 @@ export async function scanDueIqFollowups(now = new Date(), adapter = providers, 
       if (!eligible(row.data(), now)) continue;
       selected++;
       let result: string;
-      try { result = await checkDueIqFollowup(row.id, now, adapter); }
+      try {
+        const guarded = await new SafetyRuntime(db).run({ rootId: row.data().rootId, process: "REP", partition: "IQ",
+          operationType: "REP_FOLLOWUP", operationId: row.id, idempotencyKey: `${row.id}:${dayMexico(now)}`,
+          origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ",
+        }, () => checkDueIqFollowup(row.id, now, adapter), value => ["BLOCKED", "SKIPPED"].includes(value) ? "DEFERRED"
+          : ["WAITING_B", "RECEIVED"].includes(value) ? "SUCCEEDED" : "QUARANTINED");
+        result = guarded.admitted ? guarded.value || guarded.reason : guarded.reason;
+      }
       catch (error) {
         try { await finishException(row.id, row.data().rootId, code(error)); } catch { /* Keep the next daily attempt if Firestore is unavailable. */ }
         result = "EXCEPTION";

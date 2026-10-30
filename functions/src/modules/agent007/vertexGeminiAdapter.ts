@@ -48,14 +48,14 @@ export class VertexGeminiAdapter implements HugoModelAdapter {
       };
       const outputLimit = geminiMaxOutputTokens();
       const first = await generate(prompt, outputLimit);
-      if (first.text && first.finishReason === "STOP") return { ...base, modelVersion: first.modelVersion, text: first.text, attempts, tokenUsage: first.usage ? { input: first.usage.promptTokenCount, output: first.usage.candidatesTokenCount,
-        cachedInput: first.usage.cachedContentTokenCount, reasoning: first.usage.thoughtsTokenCount } : null };
+      if (first.text && first.finishReason === "STOP") return { ...base, modelVersion: first.modelVersion, text: first.text, attempts, tokenUsage: first.usage ? Object.fromEntries(Object.entries({ input: first.usage.promptTokenCount, output: first.usage.candidatesTokenCount,
+        cachedInput: first.usage.cachedContentTokenCount, reasoning: first.usage.thoughtsTokenCount }).filter(([, value]) => value !== undefined)) : null };
       if (first.finishReason === "MAX_TOKENS") {
         console.warn("[Hugo] Vertex output reached token limit; retrying compact response");
         const compactPrompt = `${prompt}\n\nINSTRUCCIÓN DE FORMATO OBLIGATORIA: Responde de nuevo de forma completa y compacta. Resume por estado, incluye como máximo 8 folios representativos, indica cuántos adicionales hay y termina todas las frases.`;
         const retry = await generate(compactPrompt, outputLimit);
-        if (retry.text && retry.finishReason === "STOP") return { ...base, modelVersion: retry.modelVersion, text: retry.text, attempts, tokenUsage: retry.usage ? { input: retry.usage.promptTokenCount, output: retry.usage.candidatesTokenCount,
-          cachedInput: retry.usage.cachedContentTokenCount, reasoning: retry.usage.thoughtsTokenCount } : null };
+        if (retry.text && retry.finishReason === "STOP") return { ...base, modelVersion: retry.modelVersion, text: retry.text, attempts, tokenUsage: retry.usage ? Object.fromEntries(Object.entries({ input: retry.usage.promptTokenCount, output: retry.usage.candidatesTokenCount,
+          cachedInput: retry.usage.cachedContentTokenCount, reasoning: retry.usage.thoughtsTokenCount }).filter(([, value]) => value !== undefined)) : null };
         console.warn("[Hugo] Discarded incomplete retry", retry.finishReason || "UNKNOWN");
       } else if (first.text) console.warn("[Hugo] Discarded non-final Vertex output", first.finishReason || "UNKNOWN");
       return { ...base, text: null, attempts, error: first.finishReason || "NO_FINAL_RESPONSE" };

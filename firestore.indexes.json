@@ -1,6 +1,48 @@
 {
     "indexes": [
         {
+            "collectionGroup": "hugoTeamTurns", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "conversationId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agentRuns", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "reportDay", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agentRuns", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "updatedAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agentIncidents", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agentIncidents", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "reportDay", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "agentProposals", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "pay0ActivityLog", "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },

@@ -1048,7 +1048,6 @@ export const seedUproAssetPortfolio = onCall(
   async (request) => {
     const { uid, rootId } = await context(request);
     const seedRef = db.doc(`assetSeeds/${hash(`${uid}:UPRO_V1`)}`);
-    const existing = await seedRef.get();
     const vehicles = [
       {
         key: "DUSTER",
@@ -1078,106 +1077,121 @@ export const seedUproAssetPortfolio = onCall(
         economicShareBps: 5_000,
       },
     ];
-    const batch = db.batch();
-    for (const vehicle of vehicles) {
-      const operationId = hash(`${uid}:UPRO_OPERATION:${vehicle.key}`),
-        positionId = hash(`${uid}:UPRO_POSITION:${vehicle.key}`);
-      batch.set(db.doc(`assetOperations/${operationId}`), {
-        ownerUid: uid,
-        rootId,
-        kind: "VEHICLE",
-        name: `U-PRO ${vehicle.name}`,
-        status: vehicle.liquidated ? "LIQUIDATED" : "ACTIVE",
-        totalAssetValueMinor: vehicle.principal * 2,
-        administrativeOwner: vehicle.administrativeOwner,
-        source: "MANUAL_CONFIRMED",
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-      batch.set(db.doc(`assetPositions/${positionId}`), {
-        ownerUid: uid,
-        rootId,
-        operationId,
-        kind: "VEHICLE",
-        name: vehicle.name,
-        status: vehicle.liquidated ? "LIQUIDATED" : "ACTIVE",
-        counterpartyName: "U-PRO",
-        economicShareBps: vehicle.economicShareBps,
-        metadata: {
-          dataset: "UPRO_V1",
-          dataClassification: "REAL",
-          administrativeOwner: vehicle.administrativeOwner,
-          financialTruthConfirmed: true,
-        },
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-      const openingId = hash(`${uid}:${positionId}:OPENING`);
-      batch.set(db.doc(`assetMovements/${openingId}`), {
-        ownerUid: uid,
-        rootId,
-        operationId,
-        positionId,
-        movementType: "VEHICLE_INVESTMENT",
-        amountMinor: vehicle.principal,
-        sequence: 0,
-        source: "MANUAL",
-        effectiveDate: "2026-09-20",
-        description: "Capital económico confirmado U-PRO",
-        createdBy: uid,
-        createdAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-      if (vehicle.liquidated) {
-        const returnId = hash(`${uid}:${positionId}:RETURN`),
-          profitId = hash(`${uid}:${positionId}:PROFIT`);
-        batch.set(db.doc(`assetMovements/${returnId}`), {
-          ownerUid: uid,
-          rootId,
-          operationId,
-          positionId,
-          movementType: "VEHICLE_PRINCIPAL_RETURN",
-          amountMinor: vehicle.principal,
-          sequence: 1,
-          source: "EXTERNAL_TRANSFER",
-          effectiveDate: "2026-09-20",
-          description: "Recuperación de capital confirmada U-PRO",
-          createdBy: uid,
-          createdAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-        batch.set(db.doc(`assetMovements/${profitId}`), {
-          ownerUid: uid,
-          rootId,
-          operationId,
-          positionId,
-          movementType: "VEHICLE_PROFIT",
-          amountMinor: vehicle.profit,
-          sequence: 2,
-          source: "EXTERNAL_TRANSFER",
-          effectiveDate: "2026-09-20",
-          description: "Utilidad realizada confirmada U-PRO",
-          createdBy: uid,
-          createdAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+    return db.runTransaction(async tx => {
+      const existing = await tx.get(seedRef);
+      if (existing.exists) return { ok: true, alreadySeeded: true };
+      // Read every deterministic target before writing; partial legacy data must
+      // be reconciled explicitly instead of being overwritten by an import.
+      const targetRefs = vehicles.flatMap(vehicle => {
+        const operationId = hash(`${uid}:UPRO_OPERATION:${vehicle.key}`);
+        const positionId = hash(`${uid}:UPRO_POSITION:${vehicle.key}`);
+        const movementKeys = vehicle.liquidated ? ["OPENING", "RETURN", "PROFIT"] : ["OPENING"];
+        return [db.doc(`assetOperations/${operationId}`), db.doc(`assetPositions/${positionId}`),
+          ...movementKeys.map(key => db.doc(`assetMovements/${hash(`${uid}:${positionId}:${key}`)}`))];
+      });
+      const targets = await Promise.all(targetRefs.map(ref => tx.get(ref)));
+      if (targets.some(snapshot => snapshot.exists)) {
+        throw new HttpsError("failed-precondition", "El portafolio contiene datos previos; requiere conciliación antes de importar.");
       }
-    }
-    batch.set(seedRef, {
-      ownerUid: uid,
-      rootId,
-      dataset: "UPRO_V1",
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    logActivityBatch(batch, db, {
-      event: "ASSET_PORTFOLIO_SEEDED",
-      rootId,
-      actorUid: uid,
-      actorRole: "user",
-      referenceId: seedRef.id,
-      referenceType: "assetSeed",
-      description:
-        "Portafolio U-PRO V1 cargado con propiedad económica confirmada.",
+      for (const vehicle of vehicles) {
+        const operationId = hash(`${uid}:UPRO_OPERATION:${vehicle.key}`),
+          positionId = hash(`${uid}:UPRO_POSITION:${vehicle.key}`);
+        tx.create(db.doc(`assetOperations/${operationId}`), {
+          ownerUid: uid,
+          rootId,
+          kind: "VEHICLE",
+          name: `U-PRO ${vehicle.name}`,
+          status: vehicle.liquidated ? "LIQUIDATED" : "ACTIVE",
+          totalAssetValueMinor: vehicle.principal * 2,
+          administrativeOwner: vehicle.administrativeOwner,
+          source: "MANUAL_CONFIRMED",
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        tx.create(db.doc(`assetPositions/${positionId}`), {
+          ownerUid: uid,
+          rootId,
+          operationId,
+          kind: "VEHICLE",
+          name: vehicle.name,
+          status: vehicle.liquidated ? "LIQUIDATED" : "ACTIVE",
+          counterpartyName: "U-PRO",
+          economicShareBps: vehicle.economicShareBps,
+          metadata: {
+            dataset: "UPRO_V1",
+            dataClassification: "REAL",
+            administrativeOwner: vehicle.administrativeOwner,
+            financialTruthConfirmed: true,
+          },
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        const openingId = hash(`${uid}:${positionId}:OPENING`);
+        tx.create(db.doc(`assetMovements/${openingId}`), {
+          ownerUid: uid,
+          rootId,
+          operationId,
+          positionId,
+          movementType: "VEHICLE_INVESTMENT",
+          amountMinor: vehicle.principal,
+          sequence: 0,
+          source: "MANUAL",
+          effectiveDate: "2026-09-20",
+          description: "Capital económico confirmado U-PRO",
+          createdBy: uid,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        if (vehicle.liquidated) {
+          const returnId = hash(`${uid}:${positionId}:RETURN`),
+            profitId = hash(`${uid}:${positionId}:PROFIT`);
+          tx.create(db.doc(`assetMovements/${returnId}`), {
+            ownerUid: uid,
+            rootId,
+            operationId,
+            positionId,
+            movementType: "VEHICLE_PRINCIPAL_RETURN",
+            amountMinor: vehicle.principal,
+            sequence: 1,
+            source: "EXTERNAL_TRANSFER",
+            effectiveDate: "2026-09-20",
+            description: "Recuperación de capital confirmada U-PRO",
+            createdBy: uid,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+          tx.create(db.doc(`assetMovements/${profitId}`), {
+            ownerUid: uid,
+            rootId,
+            operationId,
+            positionId,
+            movementType: "VEHICLE_PROFIT",
+            amountMinor: vehicle.profit,
+            sequence: 2,
+            source: "EXTERNAL_TRANSFER",
+            effectiveDate: "2026-09-20",
+            description: "Utilidad realizada confirmada U-PRO",
+            createdBy: uid,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      tx.create(seedRef, {
+        ownerUid: uid,
+        rootId,
+        dataset: "UPRO_V1",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      logActivityTx(tx, db, {
+        event: "ASSET_PORTFOLIO_SEEDED",
+        rootId,
+        actorUid: uid,
+        actorRole: "user",
+        referenceId: seedRef.id,
+        referenceType: "assetSeed",
+        description:
+          "Portafolio U-PRO V1 cargado con propiedad económica confirmada.",
+      });
+      return { ok: true, alreadySeeded: false };
     });
-    await batch.commit();
-    return { ok: true, alreadySeeded: existing.exists };
   },
 );

@@ -1,13 +1,19 @@
 "use client";
 
+import ReceiptEvidenceSummary from "@/components/pagos/ReceiptEvidenceSummary";
+import { beginOperationTiming } from "@/lib/operationTiming";
+
 import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { parsePagoReceiptPdfFile } from "@/services/pagoReceipt";
+import { correctPagoReceiptSemanticField, parsePagoReceiptPdfFile, receiptResolvedOperationTypeKey, receiptCanResumeRegisteredUpload, receiptCanReviewRegisteredIdentity, receiptIdentitySelections, type ReceiptCorrectionField } from "@/services/pagoReceipt";
 import { automaticReceiptPayload, automaticReceiptMissing } from "@/lib/receiptAutomaticRegistration";
+import { receiptOperationPreferenceKey, receiptOperationChoices, validReceiptOperationPreference, assertReceiptActorContext, type ReceiptActorContext } from "@/lib/receiptOperationPreference";
 import { automaticPaymentReviewMessage } from "@/lib/automaticPaymentReview";
+import { useLiveOperationRows } from "@/lib/useLiveOperationRows";
+import { operationDiscoverySeed, operationBelongsToScope, type OperationDiscoverySeed } from "@/lib/liveOperationRows";
 import { useSearchParams } from "next/navigation";
-import { collection, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query, where, type Query, type DocumentData } from "firebase/firestore";
 import {
   Ban,
   ChevronDown,
@@ -22,7 +28,7 @@ import {
   X,
 } from "lucide-react";
 
-import { db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebaseClient";
 import { usePagoNotes, pagoNoteDisplayDate } from "@/lib/usePagoNotes";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
@@ -333,7 +339,7 @@ function isIqPaymentApplicationBlocking(pago: any) {
   ].includes(executionStatus) && status !== "IQ_APPLIED";
 }
 
-export default function PagosPage() {
+export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCreateOnly?: boolean; onMatClose?: () => void } = {}) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const { profile } = useUserProfile();
@@ -374,10 +380,39 @@ export default function PagosPage() {
   const [sortConfig, setSortConfig] = useState({ key: "createdAt", dir: "desc" });
 
   const [openNewPago, setOpenNewPago] = useState(false);
+  const matEmbedRef = useRef(false);
+  const matFormHasOpenedRef = useRef(false);
+  useEffect(() => {
+    if (openNewPago && (matEmbedRef.current || matCreateOnly)) matFormHasOpenedRef.current = true;
+    else if (!openNewPago && matFormHasOpenedRef.current && (matEmbedRef.current || matCreateOnly)) {
+      matFormHasOpenedRef.current = false;
+      if (matCreateOnly) onMatClose?.();
+      else window.parent.postMessage("pay0:mat-form-close", window.location.origin);
+    }
+  }, [openNewPago, matCreateOnly, onMatClose]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedOperationTypeKey, setSelectedOperationTypeKey] = useState("");
   const [operationTypes, setOperationTypes] = useState<any[]>([]);
+  const [operationTypesLoaded, setOperationTypesLoaded] = useState(false);
+  const [receiptDefault, setReceiptDefault] = useState({ scope: "", key: "" });
+  const receiptPreferenceScope = receiptOperationPreferenceKey(String(rootId || ""), myUid);
+  const receiptContextRef = useRef<ReceiptActorContext>({ scope: receiptPreferenceScope, uid: myUid, epoch: 0 });
+  if (receiptContextRef.current.scope !== receiptPreferenceScope || receiptContextRef.current.uid !== myUid)
+    receiptContextRef.current = { scope: receiptPreferenceScope, uid: myUid, epoch: receiptContextRef.current.epoch + 1 };
+  const receiptContextEpoch = receiptContextRef.current.epoch;
+  const receiptTypeChoices = receiptOperationChoices(operationTypes, String(rootId || ""));
+  const receiptDefaultKey = operationTypesLoaded && receiptDefault.scope === receiptPreferenceScope ? validReceiptOperationPreference(receiptDefault.key, receiptTypeChoices) : "";
+  useEffect(() => {
+    setReceiptDefault({ scope: receiptPreferenceScope, key: "" });
+    if (!receiptPreferenceScope || !operationTypesLoaded) return;
+    try {
+      const saved = localStorage.getItem(receiptPreferenceScope);
+      const key = validReceiptOperationPreference(saved, receiptOperationChoices(operationTypes, String(rootId || "")));
+      if (saved && !key) localStorage.removeItem(receiptPreferenceScope);
+      setReceiptDefault({ scope: receiptPreferenceScope, key });
+    } catch { /* Browser storage may be unavailable; no implicit default. */ }
+  }, [receiptPreferenceScope, operationTypesLoaded, operationTypes, rootId]);
   const [montoTotal, setMontoTotal] = useState("");
   const [isMontoTotalFocused, setIsMontoTotalFocused] = useState(false);
   const [fechaPago, setFechaPago] = useState(() => getTodayDateInputValue());
@@ -393,6 +428,9 @@ export default function PagosPage() {
   const [receiptBatchBusy, setReceiptBatchBusy] = useState(false);
   const [receiptBatchCreating, setReceiptBatchCreating] = useState(false);
   const [receiptBatchItems, setReceiptBatchItems] = useState<any[]>([]);
+  useEffect(() => { setReceiptBatchItems([]); setReceiptBatchOpen(false); setReceiptBatchBusy(false); setReceiptBatchCreating(false); setIsPagoPageDragging(false); }, [receiptContextEpoch]);
+  function assertReceiptItemCurrent(item: any) { assertReceiptActorContext(item?.receiptContext, receiptContextRef.current, auth.currentUser?.uid); }
+  function receiptItemIsCurrent(item: any) { try { assertReceiptItemCurrent(item); return true; } catch { return false; } }
   const clientesRef = useRef<any[]>([]);
 
   const [saving, setSaving] = useState(false);
@@ -462,6 +500,19 @@ export default function PagosPage() {
     resetNewPagoForm();
     setOpenNewPago(true);
   }
+
+  // MAT opens the existing authorized payment form directly after route access resolves.
+  useEffect(() => {
+    if (!canCreatePagos) return;
+    if (matCreateOnly) {
+      if (!matFormHasOpenedRef.current) openNewPagoModal();
+      return;
+    }
+    if (new URLSearchParams(window.location.search).get("nuevo") !== "1") return;
+    matEmbedRef.current = new URLSearchParams(window.location.search).get("matEmbed") === "1";
+    openNewPagoModal();
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [canCreatePagos, matCreateOnly]);
 
   const RECEIPT_MATCH_LOW_VALUE_WORDS = new Set([
     "sa",
@@ -887,6 +938,8 @@ export default function PagosPage() {
   }
 
   async function analyzeReceiptBatch(files: File[]) {
+    const batchContext = { ...receiptContextRef.current };
+    if (!receiptItemIsCurrent({ receiptContext: batchContext })) return;
     const valid = files.filter(isPagoQuickPdf);
     const rejectedTypeCount = files.length - valid.length;
     const oversized = valid.filter((file) => file.size > 1 * 1024 * 1024);
@@ -901,12 +954,13 @@ export default function PagosPage() {
       return;
     }
 
-    const initialItems = accepted.map((file, index) => ({
+    const initialItems: Array<{ key: string; file: File; status: string; parsed: any; operationTypeKey: string; error: string; selectedClientId?: string; selectedCompanyId?: string; receiptContext: ReceiptActorContext }> = accepted.map((file, index) => ({
       key: receiptBatchKey(file, index),
       file,
       status: "PENDING",
       parsed: null,
-      operationTypeKey: selectedOperationTypeKey || "",
+      operationTypeKey: receiptDefaultKey || "",
+      receiptContext: { ...receiptContextRef.current },
       error: "",
     }));
 
@@ -930,57 +984,32 @@ export default function PagosPage() {
         if (currentIndex >= queue.length) return;
 
         const item = queue[currentIndex];
+        if (!receiptItemIsCurrent(item)) return;
 
         setReceiptBatchItems((current) =>
-          current.map((row) =>
+          receiptItemIsCurrent(item) ? (current.map((row) =>
             row.key === item.key
               ? { ...row, status: "ANALYZING" }
               : row,
-          ),
+          )) : current,
         );
 
         try {
-          const operationTypeKey = item.operationTypeKey;
-          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey });
+          const requestedOperationTypeKey = item.operationTypeKey;
+          const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: requestedOperationTypeKey, selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+          assertReceiptItemCurrent(item);
+          const operationTypeKey = receiptResolvedOperationTypeKey(requestedOperationTypeKey, parsed.identification);
 
-          const senderSignals = {
-            rfc: parsed.rfc,
-            account: parsed.account,
-          };
-
-          const beneficiarySignals = {
-            clabe: parsed.destinationAccount || parsed.clabe,
-            account: parsed.destinationAccount,
-          };
-
-          const clientMatch =
-            findUniqueReceiptCatalogMatch(
-              clientes,
-              parsed.senderName,
-              senderSignals,
-            );
-
-          const companyMatch =
-            findUniqueReceiptCatalogMatch(
-              companies,
-              parsed.beneficiaryName,
-              beneficiarySignals,
-            ) ||
-            findUniqueReceiptCatalogMatch(
-              companies,
-              parsed.shortName,
-              beneficiarySignals,
-            );
-
-          const analyzed = { ...item, parsed, clientMatch, companyMatch, operationTypeKey,
+          const analyzed = { ...item, parsed, operationTypeKey,
             status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
             error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
-          setReceiptBatchItems(current => current.map(row => row.key === item.key ? analyzed : row));
-          if (automaticReceiptPayload(parsed.identification, operationTypeKey) || parsed.identification?.receiptPending)
-            await registerReceiptItem(analyzed);
+          setReceiptBatchItems(current => receiptItemIsCurrent(item) ? (current.map(row => row.key === item.key ? analyzed : row)) : current);
+          if (receiptCanResumeRegisteredUpload(parsed.identification) || automaticReceiptPayload(parsed.identification, operationTypeKey)) await registerReceiptItem(analyzed);
+
         } catch (error: any) {
+          if (!receiptItemIsCurrent(item)) return;
           setReceiptBatchItems((current) =>
-            current.map((row) =>
+            receiptItemIsCurrent(item) ? (current.map((row) =>
               row.key === item.key
                 ? {
                     ...row,
@@ -990,15 +1019,16 @@ export default function PagosPage() {
                       "No se pudo analizar este comprobante.",
                   }
                 : row,
-            ),
+            )) : current,
           );
         }
       }
     }
 
     await Promise.all([worker(), worker(), worker()]);
+    if (!receiptItemIsCurrent({ receiptContext: batchContext })) return;
     setReceiptBatchBusy(false);
-    setPageMsg("Lote procesado. Los comprobantes identificados se registraron; revisa los pendientes.");
+    setPageMsg("Lote analizado. Revisa los datos y confirma los pagos que deseas registrar.");
   }
 
   function getReceiptBatchMissingFields(item: any): string[] {
@@ -1020,27 +1050,57 @@ export default function PagosPage() {
     return missing;
   }
 
-  async function revalidateReceiptItem(item: any) {
+  async function revalidateReceiptItem(item: any, registerAfterValidation = false) {
+    if (!receiptItemIsCurrent(item)) return;
     if (receiptBatchBusy || receiptBatchCreating || !item.file) return;
     setReceiptBatchBusy(true);
-    setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row));
+    setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row, status: "ANALYZING", error: "" } : row)) : rows);
     try {
-      const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || "") });
-      const analyzed = { ...item, parsed, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
+      const selections = receiptIdentitySelections(item, item.parsed?.identification, registerAfterValidation);
+      const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: String(item.operationTypeKey || ""), ...selections });
+      const operationTypeKey = receiptResolvedOperationTypeKey(String(item.operationTypeKey || ""), parsed.identification);
+      const analyzed = { ...item, ...selections, parsed, operationTypeKey, status: parsed.identification?.status === "REGISTERED" ? "DUPLICATE" : "READY",
         error: parsed.identification?.status === "REGISTERED" ? "El comprobante ya corresponde a un pago registrado." : "" };
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? analyzed : row));
-      if (automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || "")) || parsed.identification?.receiptPending)
-        await registerReceiptItem(analyzed);
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? analyzed : row)) : rows);
+      if (registerAfterValidation && (automaticReceiptPayload(parsed.identification, operationTypeKey) || receiptCanResumeRegisteredUpload(parsed.identification))) await registerReceiptItem(analyzed);
     } catch (error: any) {
-      setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row));
-    } finally { setReceiptBatchBusy(false); }
+      if (!receiptItemIsCurrent(item)) return;
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row, status: "ERROR", error: error?.message || "No se pudo validar." } : row)) : rows);
+    } finally { if (receiptItemIsCurrent(item)) setReceiptBatchBusy(false); }
+  }
+
+  async function correctReceiptField(item: any, field: ReceiptCorrectionField, value: string, correctedField: ReceiptCorrectionField = field) {
+    if (!receiptItemIsCurrent(item)) return;
+    const parsed = item.parsed;
+    if (!parsed?.analysisId || receiptBatchBusy || receiptBatchCreating) throw new Error("Espera a que termine la operación actual.");
+    setReceiptBatchBusy(true);
+    try {
+      const result = await correctPagoReceiptSemanticField({ assertContext: () => assertReceiptItemCurrent(item), analysisId: parsed.analysisId, field, correctedField, correctedValue: value,
+        expectedCorrectionVersion: parsed.correctionVersion, operationTypeKey: String(item.operationTypeKey || ""),
+        selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+      if (!result.receipt || !result.semanticReceipt || !result.identification) throw new Error("La corrección requiere una nueva validación del servidor.");
+      assertReceiptItemCurrent(item);
+      setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? (rows.map(row => row.key === item.key ? { ...row,
+        operationTypeKey: receiptResolvedOperationTypeKey(item.operationTypeKey, result.identification),
+        parsed: { ...parsed, ...result.receipt, semanticReceipt: result.semanticReceipt, identification: result.identification, correctionVersion: result.correctionVersion },
+        status: result.identification.status === "REGISTERED" ? "DUPLICATE" : "READY", error: "" } : row)) : rows);
+    } finally { if (receiptItemIsCurrent(item)) setReceiptBatchBusy(false); }
+  }
+
+  async function confirmReceiptItem(item: any) {
+    if (!receiptItemIsCurrent(item)) return;
+    if (receiptBatchBusy || receiptBatchCreating || !canCreatePagos || item.editingReceipt || item.status === "CREATED") return;
+    setReceiptBatchCreating(true);
+    try { await registerReceiptItem(item); } finally { if (receiptItemIsCurrent(item)) setReceiptBatchCreating(false); }
   }
 
   const receiptBatchCreationSummary = useMemo(() => {
     const readyToCreate = receiptBatchItems.filter(
       (row) =>
         row?.status === "READY" &&
-        !row?.createdPagoId &&
+        !row?.createdPagoId && !row?.editingReceipt &&
         getReceiptBatchMissingFields(row).length === 0,
     );
 
@@ -1086,12 +1146,15 @@ export default function PagosPage() {
   }
 
   async function registerReceiptItem(item: any) {
-    const update = (patch: Record<string, unknown>) => setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, ...patch } : row));
+    if (!receiptItemIsCurrent(item)) return false;
+    const update = (patch: Record<string, unknown>) => setReceiptBatchItems(rows => receiptItemIsCurrent(item) ? rows.map(row => row.key === item.key ? { ...row, ...patch } : row) : rows);
     let createdPagoId = "";
     const uploadExisting = async (pagoId: string) => {
+      assertReceiptItemCurrent(item);
       createdPagoId = pagoId;
       update({ status: "UPLOADING", createdPagoId: pagoId, error: "" });
-      await uploadPagoDoc({ pagoId, documentType: "COMPROBANTE_PAGO", customDocumentTypeLabel: "", file: item.file, onProgress: () => undefined });
+      await uploadPagoDoc({ assertContext: () => assertReceiptItemCurrent(item), pagoId, documentType: "COMPROBANTE_PAGO", customDocumentTypeLabel: "", file: item.file, onProgress: () => undefined });
+      assertReceiptItemCurrent(item);
       return pagoId;
     };
     try {
@@ -1099,27 +1162,30 @@ export default function PagosPage() {
       const identification = item.parsed?.identification;
       const payload = automaticReceiptPayload(identification, String(item.operationTypeKey || ""));
       let pagoId: string;
-      if (identification?.status === "REGISTERED" && identification.receiptPending === true && identification.pagoId) {
+      if (receiptCanResumeRegisteredUpload(identification)) {
         pagoId = await uploadExisting(identification.pagoId);
       } else {
         if (!payload) throw new Error("El comprobante requiere revisión antes del registro.");
         try {
-          pagoId = await createPagoWithReceipt({ ...payload, file: item.file, onPagoCreated: id => {
+          pagoId = await createPagoWithReceipt({ ...payload, assertContext: () => assertReceiptItemCurrent(item), file: item.file, onPagoCreated: id => {
             createdPagoId = id; update({ status: "UPLOADING", createdPagoId: id });
           } });
         } catch (error: any) {
+          if (!receiptItemIsCurrent(item)) return false;
           const code = String(error?.details?.code || error?.code || "").toUpperCase();
           if (createdPagoId || (!code.includes("ALREADY-EXISTS") && !code.includes("PAGO_RECEIPT_DUPLICATE"))) throw error;
           // A concurrent worker may have created this exact payment. Re-parse to obtain server-authorized recovery.
-          const parsed = await parsePagoReceiptPdfFile(item.file, { operationTypeKey: String(item.operationTypeKey || "") });
-          update({ parsed });
-          if (!parsed.identification?.receiptPending || !parsed.identification.pagoId) throw error;
+          const parsed = await parsePagoReceiptPdfFile(item.file, { assertContext: () => assertReceiptItemCurrent(item), operationTypeKey: String(item.operationTypeKey || ""), selectedClientId: item.selectedClientId, selectedCompanyId: item.selectedCompanyId });
+          update({ parsed, operationTypeKey: receiptResolvedOperationTypeKey(item.operationTypeKey, parsed.identification) });
+          if (!receiptCanResumeRegisteredUpload(parsed.identification)) throw error;
           pagoId = await uploadExisting(parsed.identification.pagoId);
         }
       }
+      assertReceiptItemCurrent(item);
       update({ status: "CREATED", createdPagoId: pagoId, error: "" });
       return true;
     } catch (error: any) {
+      if (!receiptItemIsCurrent(item)) return false;
       const code = String(error?.details?.code || error?.code || "").toUpperCase();
       update({ status: createdPagoId ? "UPLOAD_ERROR" : code.includes("ALREADY-EXISTS") || code.includes("PAGO_RECEIPT_DUPLICATE") ? "DUPLICATE" : "CREATE_ERROR",
         ...(createdPagoId ? { createdPagoId } : {}), error: error?.message || "No se pudo registrar el comprobante." });
@@ -1130,182 +1196,10 @@ export default function PagosPage() {
   async function createReadyReceiptBatch() {
     if (!canCreatePagos || receiptBatchBusy || receiptBatchCreating) return;
     const rows = receiptBatchCreationSummary.readyToCreate;
-    if (!rows.length) return;
+    if (!rows.length || !receiptItemIsCurrent(rows[0])) return;
     setReceiptBatchCreating(true);
-    try { for (const item of rows) await registerReceiptItem(item); }
-    finally { setReceiptBatchCreating(false); }
-  }
-
-  function openReceiptBatchItem(item: any) {
-    const parsed = item?.parsed;
-    if (!parsed || !item?.file) return;
-
-    resetNewPagoForm();
-    setComprobantePagoFile(item.file);
-    setOpenNewPago(true);
-
-    if (item.clientMatch?.item?.id) {
-      setSelectedClientId(String(item.clientMatch.item.id));
-    }
-
-    if (item.companyMatch?.item?.id) {
-      setSelectedCompanyId(String(item.companyMatch.item.id));
-    }
-
-    if (Number(parsed.amount || 0) > 0) {
-      setMontoTotal(String(parsed.amount));
-    }
-
-    // Un comprobante importado nunca debe heredar la fecha de hoy
-    // si la fecha real no fue detectada.
-    setFechaPago(parsed.date || "");
-    setPaymentTime(parsed.time || "12:00:00");
-    setPaymentForm("03");
-
-    if (parsed.currency) {
-      setMoneda(parsed.currency);
-    }
-
-    setNotaInicial("");
-    setReceiptLearningSignals({
-      detectedReference: String(parsed.reference || ""),
-      detectedConcept: String(parsed.concept || ""),
-      detectedBankName: String(parsed.bankName || ""),
-      detectedSenderName: String(parsed.senderName || ""),
-      detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-      detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
-      detectedDestinationAccount: String(parsed.destinationAccount || ""),
-      detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
-      detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
-      paymentTime: String(parsed.time || "12:00:00"),
-    });
-    setPageMsg(
-      item.clientMatch && item.companyMatch
-        ? "Comprobante del lote cargado con datos detectados."
-        : "Comprobante del lote cargado. Revisa los campos pendientes.",
-    );
-  }
-  async function openNewPagoModalFromPdf(file: File) {
-    setIsPagoPageDragging(false);
-    resetNewPagoForm();
-    setComprobantePagoFile(file);
-    setOpenNewPago(true);
-    setPageMsg("Leyendo comprobante de pago...");
-
-    try {
-      const parsed = await parsePagoReceiptPdfFile(file);
-
-      const senderSignals = {
-        rfc: parsed.rfc,
-        account: parsed.account,
-      };
-
-      const beneficiarySignals = {
-        clabe: parsed.destinationAccount || parsed.clabe,
-        account: parsed.destinationAccount,
-      };
-
-      const clientMatch =
-        findUniqueReceiptCatalogMatch(
-          clientes,
-          parsed.senderName,
-          senderSignals,
-        );
-
-      const companyMatch =
-        findUniqueReceiptCatalogMatch(
-          companies,
-          parsed.beneficiaryName,
-          beneficiarySignals,
-        ) ||
-        findUniqueReceiptCatalogMatch(
-          companies,
-          parsed.shortName,
-          beneficiarySignals,
-        );
-
-      if (clientMatch?.item?.id) {
-        setSelectedClientId(String(clientMatch.item.id));
-      }
-
-      if (companyMatch?.item?.id) {
-        setSelectedCompanyId(String(companyMatch.item.id));
-      }
-
-      if (Number(parsed.amount || 0) > 0) {
-        setMontoTotal(String(parsed.amount));
-      }
-
-      // Un comprobante importado nunca debe heredar la fecha de hoy
-      // si la fecha real no fue detectada.
-      setFechaPago(parsed.date || "");
-      setPaymentTime(parsed.time || "12:00:00");
-      setPaymentForm("03");
-
-      if (parsed.currency) {
-        setMoneda(parsed.currency);
-      }
-
-      const detectedDetails = [
-        parsed.senderName ? `Ordenante/Proveedor: ${parsed.senderName}` : "",
-        parsed.beneficiaryName ? `Beneficiario/Receptor: ${parsed.beneficiaryName}` : "",
-        parsed.bankName ? `Banco: ${parsed.bankName}` : "",
-        parsed.reference ? `Referencia: ${parsed.reference}` : "",
-        parsed.concept ? `Concepto: ${parsed.concept}` : "",
-        parsed.rfc ? `RFC detectado: ${parsed.rfc}` : "",
-        parsed.time ? `Hora detectada: ${parsed.time}` : "Hora no detectada: se usará 12:00:00",
-        parsed.clabe ? `CLABE detectada: ${parsed.clabe}` : "",
-        parsed.account ? `Cuenta origen detectada: ${parsed.account}` : "",
-        parsed.shortName ? `Nombre corto beneficiario: ${parsed.shortName}` : "",
-        parsed.destinationAccount
-          ? `Cuenta destino detectada: ${parsed.destinationAccount}`
-          : "",
-        clientMatch
-          ? `Match cliente: ${Math.round(clientMatch.score * 100)}%`
-          : "",
-        companyMatch
-          ? `Match empresa: ${Math.round(companyMatch.score * 100)}%`
-          : "",
-      ].filter(Boolean);
-
-      if (detectedDetails.length > 0) {
-        setNotaInicial(detectedDetails.join(" | "));
-      }
-
-      setReceiptLearningSignals({
-        detectedReference: String(parsed.reference || ""),
-        detectedConcept: String(parsed.concept || ""),
-        detectedBankName: String(parsed.bankName || ""),
-        detectedSenderName: String(parsed.senderName || ""),
-        detectedBeneficiaryName: String(parsed.beneficiaryName || ""),
-        detectedSourceAccount: String(parsed.account || parsed.clabe || ""),
-        detectedDestinationAccount: String(parsed.destinationAccount || ""),
-        detectedPayerRfc: String(parsed.payerRfc || parsed.rfc || ""),
-        detectedBeneficiaryRfc: String(parsed.beneficiaryRfc || ""),
-        paymentTime: String(parsed.time || "12:00:00"),
-      });
-
-      const unresolved = [
-        parsed.senderName && !clientMatch
-          ? `Cliente sin coincidencia suficientemente clara: ${parsed.senderName}.`
-          : "",
-        parsed.beneficiaryName && !companyMatch
-          ? `Empresa sin coincidencia suficientemente clara: ${parsed.beneficiaryName}.`
-          : "",
-        ...parsed.warnings,
-      ].filter(Boolean);
-
-      setPageMsg(
-        unresolved.length > 0
-          ? `Comprobante leido. Revisa: ${unresolved.join(" ")}`
-          : "Comprobante leido y datos principales prellenados.",
-      );
-    } catch (error: any) {
-      setPageMsg(
-        error?.message ||
-          "No se pudo leer automaticamente el comprobante. Puedes completar el pago manualmente.",
-      );
-    }
+    try { for (const item of rows) { if (!receiptItemIsCurrent(item)) return; await registerReceiptItem(item); } }
+    finally { if (receiptItemIsCurrent(rows[0])) setReceiptBatchCreating(false); }
   }
 
   function closeNewPagoModal() {
@@ -1387,6 +1281,25 @@ export default function PagosPage() {
 
   const range = useMemo(() => getScopeRange(mode, baseDate, customRange), [mode, baseDate, customRange]);
 
+  const [discovery, setDiscovery] = useState<OperationDiscoverySeed | null>(null);
+  const operationScopeKey = `${myUid}:${rootId}:${role}:${range.from.getTime()}:${range.to.getTime()}:${creatorUid}`;
+
+  useLiveOperationRows({
+    collectionName: "pagos", rows: pagos, setRows: setPagos,
+    enabled: Boolean(myUid && rootId && canViewPagos),
+    discovery, scope: { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined },
+    scopeKey: operationScopeKey,
+    onError: setPageMsg,
+  });
+
+  useEffect(() => {
+    const current = (row: any) => row ? pagos.find((item) => item.id === row.id) || null : null;
+    setNotesFor(current);
+    setApplyFor(current);
+    setViewAplicacionesFor(current);
+    setPagoDocsFor(current);
+  }, [pagos]);
+
   useEffect(() => {
     clientesRef.current = clientes;
   }, [clientes]);
@@ -1417,7 +1330,8 @@ export default function PagosPage() {
         cursorId: pagoCursor.id,
       } : { limit: 100, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined });
       if (requestSeq !== pagosRequestSeq.current) return;
-      setPagos((current) => append ? [...current, ...page.items] : page.items);
+      setPagos((current) => append ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))] : page.items);
+      if (!append) setDiscovery(operationDiscoverySeed(operationScopeKey, page.items));
       setCreatorOptions(page.creatorOptions || []);
       setPagoCursor(page.nextCursor);
       setHasMorePagos(page.hasMore);
@@ -1427,7 +1341,7 @@ export default function PagosPage() {
     } finally {
       if (requestSeq === pagosRequestSeq.current) { setLoadingPagos(false); setLoadingMorePagos(false); }
     }
-  }, [canViewPagos, rootId, myUid, pagoCursor, range, creatorUid, role]);
+  }, [canViewPagos, rootId, myUid, pagoCursor, range, creatorUid, role, operationScopeKey]);
 
   useEffect(() => { setPagoCursor(null); setHasMorePagos(false); setPagos([]); void loadPagosPage(false); return () => { pagosRequestSeq.current++; }; }, [canViewPagos, rootId, myUid, range, creatorUid, role]);
 
@@ -1456,88 +1370,6 @@ export default function PagosPage() {
       () => setCompanies([])
     );
   }, [canViewPagos, myUid, role]);
-
-  // Si un comprobante se analizo antes de que terminaran de cargar
-  // los catalogos, volver a hacer el match automaticamente.
-  useEffect(() => {
-    if (clientes.length === 0 && companies.length === 0) return;
-
-    setReceiptBatchItems((current) => {
-      let changed = false;
-
-      const next = current.map((row) => {
-        const parsed = row?.parsed;
-
-        if (!parsed || row?.status !== "READY") {
-          return row;
-        }
-
-        const senderSignals = {
-          rfc: parsed.rfc,
-          account: parsed.account,
-        };
-
-        const beneficiarySignals = {
-          clabe: parsed.destinationAccount || parsed.clabe,
-          account: parsed.destinationAccount,
-        };
-
-        const clientMatch =
-          clientes.length > 0
-            ? findUniqueReceiptCatalogMatch(
-                clientes,
-                parsed.senderName,
-                senderSignals,
-              )
-            : row.clientMatch || null;
-
-        const companyMatch =
-          companies.length > 0
-            ? findUniqueReceiptCatalogMatch(
-                companies,
-                parsed.beneficiaryName,
-                beneficiarySignals,
-              ) ||
-              findUniqueReceiptCatalogMatch(
-                companies,
-                parsed.shortName,
-                beneficiarySignals,
-              )
-            : row.companyMatch || null;
-
-        const currentClientId = String(
-          row?.clientMatch?.item?.id || "",
-        );
-        const nextClientId = String(
-          clientMatch?.item?.id || "",
-        );
-
-        const currentCompanyId = String(
-          row?.companyMatch?.item?.id || "",
-        );
-        const nextCompanyId = String(
-          companyMatch?.item?.id || "",
-        );
-
-        if (
-          currentClientId === nextClientId &&
-          currentCompanyId === nextCompanyId
-        ) {
-          return row;
-        }
-
-        changed = true;
-
-        return {
-          ...row,
-          clientMatch,
-          companyMatch,
-        };
-      });
-
-      return changed ? next : current;
-    });
-  }, [clientes, companies]);
 
   useEffect(() => {
     if (!canViewPagos || !rootId || !myUid) {
@@ -1680,14 +1512,17 @@ export default function PagosPage() {
   useEffect(() => {
     if (!canViewPagos || !myUid) {
       setOperationTypes([]);
+      setOperationTypesLoaded(false);
       return;
     }
 
+    setOperationTypesLoaded(false);
     const qy = query(collection(db, "operationTypes"), orderBy("name"));
 
     return onSnapshot(
       qy,
       (snap) => {
+        setOperationTypesLoaded(true);
         setOperationTypes(
           snap.docs
             .map((d) => ({ id: d.id, ...d.data() }))
@@ -1701,6 +1536,7 @@ export default function PagosPage() {
       },
       (error) => {
         console.error("No se pudieron cargar operationTypes.", error);
+        setOperationTypesLoaded(false);
         setOperationTypes([]);
       },
     );
@@ -1895,7 +1731,9 @@ export default function PagosPage() {
     operatorSelectedAccount?: string;
     file: File;
     onPagoCreated?: (pagoId: string) => void;
+    assertContext?: () => void;
   }) {
+    const requestSeq = pagosRequestSeq.current;
     const createPayload = {
       clienteId: input.clienteId,
       companyId: input.companyId,
@@ -1924,7 +1762,9 @@ export default function PagosPage() {
 
     let createdPago: any;
     try {
+      input.assertContext?.();
       createdPago = await createPago(createPayload);
+      input.assertContext?.();
     } catch (error: any) {
       const details = error?.details || error?.customData?.details || {};
       if (input.receiptIdentificationId || String(details?.code || "") !== "PAGO_RECEIPT_RFC_MISMATCH") throw error;
@@ -1943,7 +1783,9 @@ export default function PagosPage() {
         ].join("\n\n"),
       );
       if (!accepted) throw error;
+      input.assertContext?.();
       createdPago = await createPago({ ...createPayload, acceptRfcMismatch: true });
+      input.assertContext?.();
     }
 
     const createdPagoId = String(
@@ -1964,10 +1806,26 @@ export default function PagosPage() {
       );
     }
 
+    input.assertContext?.();
     input.onPagoCreated?.(createdPagoId);
+
+    // Publish only the new row; its document listener handles subsequent IQ writes.
+    void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
+      input.assertContext?.();
+      if (requestSeq !== pagosRequestSeq.current || !snapshot.exists()) return;
+      const row = { ...snapshot.data(), id: snapshot.id };
+      if (!operationBelongsToScope(row, "pagos", { uid: myUid || "", rootId: rootId || "", role, fromMillis: range.from.getTime(), toMillis: range.to.getTime(), creatorUid: isSuperAdmin(role) || isAdmin(role) ? creatorUid : undefined })) return;
+      setPagos((current) => current.some((item) => item.id === row.id) ? current : [row, ...current]);
+    }).catch(() => {
+      try { input.assertContext?.(); } catch { return; }
+      if (requestSeq === pagosRequestSeq.current) {
+        setPageMsg("Pago creado; no se pudo mostrar la fila. Revisa tu conexión y permisos.");
+      }
+    });
 
     const uploadReceipt = () =>
       uploadPagoDoc({
+        assertContext: input.assertContext,
         pagoId: createdPagoId,
         documentType: "COMPROBANTE_PAGO",
         customDocumentTypeLabel: "",
@@ -1986,6 +1844,8 @@ export default function PagosPage() {
   }
 
   const onCreatePago = async () => {
+    const releaseTiming = beginOperationTiming();
+    let createdId = "";
     if (!canCreatePagos) return;
     if (saving) return;
 
@@ -2053,6 +1913,7 @@ export default function PagosPage() {
           operatorSelectedBankName: String(selectedCompanyLearning?.bankName || selectedCompanyLearning?.banco || ""),
           operatorSelectedAccount: String(selectedCompanyLearning?.bankClabe || selectedCompanyLearning?.clabe || selectedCompanyLearning?.cuenta || ""),
           file: comprobantePagoFile,
+          onPagoCreated: (id) => { createdId = id; },
         });
 
         setSelectedClientId("");
@@ -2068,6 +1929,7 @@ export default function PagosPage() {
     setComprobantePagoFile(null);
         setOpenNewPago(false);
       });
+      if (createdId) releaseTiming(createdId);
     } catch (e: any) {
       const createdPagoId = String(e?.pagoId || "").trim();
       setPageMsg(
@@ -2261,16 +2123,16 @@ export default function PagosPage() {
 
     let pay0Result: any = null;
     try {
-      await globalLoading.run(undefined, async () => {
-        pay0Result = await applyPagoToSolicitudesAtomic({
+      pay0Result = await globalLoading.run(undefined, () => applyPagoToSolicitudesAtomic({
           pagoId: pago.id,
           idempotencyKey,
           aplicaciones: seleccionados.map((item) => ({
             solicitudId: item.solicitud.id,
             montoAplicado: item.monto,
           })),
-        });
+        }));
 
+        setIqFlowOpen(false);
         setIqFlow((current: any) => current ? {
           ...current,
           pay0Result,
@@ -2293,7 +2155,6 @@ export default function PagosPage() {
           stage: getIqFlowStage(planResult),
           message: "Plan IQ prevalidado. Revisa cada dato antes de confirmar.",
         } : current);
-      });
       applyRequestKeyRef.current = "";
     } catch (error: any) {
       setIqFlow((current: any) => current ? {
@@ -2545,7 +2406,7 @@ export default function PagosPage() {
 
   return (
     <div
-      className="relative w-full min-w-0 py-4 text-white font-normal"
+      className={`relative w-full min-w-0 py-4 text-white font-normal${matEmbedRef.current ? " mat-embedded-page mat-embedded-payment" : ""}${matCreateOnly ? " mat-native-create-only" : ""}`}
       onDragEnter={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -2588,6 +2449,18 @@ export default function PagosPage() {
           </div>
         </div>
       ) : null}
+
+      {canCreatePagos && <label className="mb-2 block text-xs text-slate-300">
+        Tipo predeterminado para comprobantes (recordar en este navegador)
+        <select aria-label="Tipo predeterminado para comprobantes" value={receiptDefaultKey} disabled={!operationTypesLoaded}
+          className="ml-2 rounded border border-white/10 bg-[#161d2b] px-2 py-1"
+          onChange={event => {
+            const key = validReceiptOperationPreference(event.target.value, receiptTypeChoices);
+            setReceiptDefault({ scope: receiptPreferenceScope, key });
+            if (!receiptPreferenceScope) return;
+            try { if (key) localStorage.setItem(receiptPreferenceScope, key); else localStorage.removeItem(receiptPreferenceScope); } catch { /* Session-only choice if storage is unavailable. */ }
+          }}><option value="">Sin predeterminado; resolver en el servidor</option>{receiptTypeChoices.map(row => <option key={row.key} value={row.key}>{row.name}</option>)}</select>
+      </label>}
 
       <header className="mb-2 grid min-w-0 grid-cols-1 gap-1.5 2xl:grid-cols-[380px_minmax(0,1fr)_auto] 2xl:items-center">
         <div className="relative w-full min-w-0 2xl:w-[380px]">
@@ -2632,6 +2505,20 @@ export default function PagosPage() {
       </header>
 
       {(isSuperAdmin(role) || isAdmin(role)) && <div className="mb-2 flex flex-wrap items-center gap-2"><RecordCreatorFilter value={creatorUid} onChange={setCreatorUid} options={creatorOptions} /></div>}
+      {iqFlow && !iqFlowOpen && iqFlow.pay0Result && (
+        <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
+          <span>{iqFlow.message}</span>
+          <button
+            type="button"
+            disabled={iqFlowBusy}
+            onClick={() => setIqFlowOpen(true)}
+            className="shrink-0 rounded-lg border border-sky-400/30 px-3 py-2 hover:bg-sky-500/20 disabled:opacity-50"
+          >
+            {iqFlowBusy ? "Preparando IQ…" : "Revisar aplicación IQ"}
+          </button>
+        </div>
+      )}
+
       {pageMsg && (
         <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}
@@ -2729,7 +2616,7 @@ export default function PagosPage() {
                   <tr
                     key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p)}>{recordCreatorLabel(p)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p, creatorOptions)}>{recordCreatorLabel(p, creatorOptions)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">
@@ -2955,7 +2842,7 @@ export default function PagosPage() {
       )}
 
       {receiptBatchOpen && (
-        <div className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-label="Revisión de comprobantes" className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="relative max-h-[88vh] w-[calc(100vw-2rem)] max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-[#161d2b] shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
@@ -3009,16 +2896,9 @@ export default function PagosPage() {
                 {receiptBatchItems.map((item) => {
                   const parsed = item.parsed || {};
                   const serverPayload = automaticReceiptPayload(parsed.identification, String(item.operationTypeKey || ""));
-                  const identifiedClient = serverPayload ? clientes.find(row => row.id === serverPayload.clienteId) : item.clientMatch?.item;
-                  const identifiedCompany = serverPayload ? companies.find(row => row.id === serverPayload.companyId) : item.companyMatch?.item;
-                  const clientName =
-                    identifiedClient
-                      ? clientLabel(identifiedClient)
-                      : "";
-                  const companyName =
-                    identifiedCompany
-                      ? receiptItemNames(identifiedCompany)[0] || ""
-                      : serverPayload?.empresaNombre || "";
+                  const verified = parsed.identification?.verifiedMatches;
+                  const clientName = verified?.client?.name || "Sin cliente verificado";
+                  const companyName = verified?.company?.name || "Sin empresa verificada";
                   const missingFields =
                     item.status === "READY"
                       ? getReceiptBatchMissingFields(item)
@@ -3038,53 +2918,45 @@ export default function PagosPage() {
                             {getReceiptBatchStatusLabel(item)}
                           </div>
 
-                          {item.status === "READY" && (
+                          {(item.status === "READY" || (item.status === "DUPLICATE" && receiptCanReviewRegisteredIdentity(parsed.identification))) && (
                             <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] text-slate-300 md:grid-cols-3">
-                              <div>
-                                <span className="text-slate-500">Cliente: </span>
-                                {clientName || parsed.senderName || "Sin detectar"}
+                              <div className="md:col-span-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                {(["client", "company"] as const).map(kind => {
+                                  const label = kind === "client" ? "Cliente" : "Empresa";
+                                  const selectedKey = kind === "client" ? "selectedClientId" : "selectedCompanyId";
+                                  const candidates = parsed.identification?.candidates?.[kind] || [];
+                                  return <div key={kind}>
+                                    <div className="text-slate-500">{label}</div>
+                                    <div className="text-slate-100">{kind === "client" ? clientName : companyName}</div>
+                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : "Coincidencia determinada por el servidor"}</div>}
+                                    {candidates.length > 0 && <select aria-label={`Seleccionar ${label.toLowerCase()}`} disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
+                                      value={item[selectedKey] || verified?.[kind]?.id || ""}
+                                      onChange={event => { const value = event.target.value; setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, [selectedKey]: value, status: "ANALYZING", parsed: { ...row.parsed, identification: undefined } } : row)); void revalidateReceiptItem({ ...item, [selectedKey]: value }, false); }}
+                                      className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs">
+                                      <option value="">Selecciona {label.toLowerCase()}</option>
+                                      {candidates.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                                    </select>}
+                                  </div>;
+                                })}
                               </div>
-                              <div>
-                                <span className="text-slate-500">Empresa: </span>
-                                {companyName || parsed.shortName || parsed.beneficiaryName || "Sin detectar"}
-                              </div>
-                              <div>
-                                <span className="text-slate-500">Monto: </span>
-                                {Number(parsed.amount || 0) > 0
-                                  ? `$${toCurrency(parsed.amount)}`
-                                  : "Sin detectar"}
-                              </div>
-                              <div>
-                                <span className="text-slate-500">Fecha: </span>
-                                {parsed.date || "Sin detectar"}
-                              </div>
-                              <div>
-                                <span className="text-slate-500">Banco: </span>
-                                {parsed.bankName || "Sin detectar"}
-                              </div>
-                              <div>
-                                <span className="text-slate-500">Referencia: </span>
-                                {parsed.reference || "Sin detectar"}
-                              </div>
+                              {parsed.identification?.status === "REQUIRES_REVIEW" && <p className="md:col-span-3 text-xs text-amber-200">Revisa o selecciona cliente y empresa antes de registrar.</p>}
+                              {parsed.semanticReceipt && <div className="md:col-span-3">
+                                <ReceiptEvidenceSummary receipt={parsed.semanticReceipt} disabled={receiptBatchBusy || receiptBatchCreating}
+                                  onCorrect={parsed.analysisId ? (field, value, correctedField) => correctReceiptField(item, field, value, correctedField) : undefined}
+                                  onEditingChange={editingReceipt => setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, editingReceipt } : row))} />
+                              </div>}
 
                               <div className="md:col-span-3">
                                 <div className="mb-1 text-slate-500">
                                   Tipo de operacion
                                 </div>
                                 <UiSelect
+                                  disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
                                   value={String(item.operationTypeKey || "")}
-                                  onChange={(value) =>
-                                    setReceiptBatchItems((current) =>
-                                      current.map((row) =>
-                                        row.key === item.key
-                                          ? {
-                                              ...row,
-                                              operationTypeKey: value,
-                                            }
-                                          : row,
-                                      ),
-                                    )
-                                  }
+                                  onChange={(value) => {
+                                    setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, operationTypeKey: value, parsed: { ...row.parsed, identification: undefined } } : row));
+                                    void revalidateReceiptItem({ ...item, operationTypeKey: value });
+                                  }}
                                   options={operationTypes.map((x: any) => ({
                                     value: String(x.key || x.id),
                                     label: String(x.name || x.key || "Operación sin nombre"),
@@ -3092,8 +2964,8 @@ export default function PagosPage() {
                                   placeholder="Selecciona tipo de operacion..."
                                 />
                                 <button type="button" className="mt-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs disabled:opacity-40"
-                                  disabled={receiptBatchBusy || receiptBatchCreating}
-                                  onClick={() => void revalidateReceiptItem(item)}>Validar y registrar</button>
+                                  disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
+                                  onClick={() => void revalidateReceiptItem(item, true)}>Revalidar datos</button>
                                 <p className="mt-1 text-[11px] text-slate-500">El tipo de operación determina los costos y no se deduce del comprobante.</p>
 
                                 {missingFields.length > 0 && (
@@ -3116,14 +2988,14 @@ export default function PagosPage() {
 
                         {["UPLOAD_ERROR", "CREATE_ERROR"].includes(item.status) && <button type="button"
                           className="rounded-xl border border-white/10 px-3 py-2 text-xs disabled:opacity-40"
-                          disabled={receiptBatchBusy || receiptBatchCreating} onClick={() => void revalidateReceiptItem(item)}>Revalidar y retomar</button>}
+                          disabled={receiptBatchBusy || receiptBatchCreating} onClick={() => void revalidateReceiptItem(item, true)}>Revalidar datos</button>}
                         <button
                           type="button"
-                          disabled={item.status !== "READY"}
-                          onClick={() => openReceiptBatchItem(item)}
+                          disabled={receiptBatchBusy || receiptBatchCreating || !canCreatePagos || item.editingReceipt || item.status === "CREATED" || (item.status !== "READY" && !parsed.identification?.receiptPending) || (!serverPayload && !parsed.identification?.receiptPending)}
+                          onClick={() => void confirmReceiptItem(item)}
                           className="rounded-xl border border-sky-400/30 bg-sky-500/15 px-4 py-2 text-[11px] text-sky-100 hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          Revisar
+                          {parsed.identification?.receiptPending ? "Adjuntar comprobante pendiente" : "Confirmar y registrar"}
                         </button>
                       </div>
                     </div>
@@ -3177,12 +3049,13 @@ export default function PagosPage() {
             }
           }}
         >
-          <div className="relative w-[calc(100vw-2rem)] max-w-[420px] overflow-visible rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[420px] overflow-y-auto rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl">
+            <h2 className="mb-4 text-lg font-black text-white">Nuevo pago</h2>
             <button
               type="button"
               onClick={closeNewPagoModal}
               disabled={saving}
-              className="absolute -right-2 -top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+              className="absolute right-4 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
               aria-label="Cerrar"
               title="Cerrar"
             >
@@ -3197,6 +3070,7 @@ export default function PagosPage() {
 
             <div className="grid grid-cols-1 gap-3 text-[13px] text-slate-300">
               <UiSelect
+                menuMode="inline"
                 value={selectedClientId}
                 onChange={(value) => {
                   setSelectedClientId(value);
@@ -3207,6 +3081,7 @@ export default function PagosPage() {
               />
 
               <UiSelect
+                menuMode="inline"
                 value={selectedCompanyId}
                 onChange={setSelectedCompanyId}
                 options={companyOptions}
@@ -3214,6 +3089,7 @@ export default function PagosPage() {
               />
 
               <UiSelect
+                menuMode="inline"
                 value={selectedOperationTypeKey}
                 onChange={setSelectedOperationTypeKey}
                 options={operationTypes.map((x: any) => ({
@@ -3258,12 +3134,14 @@ export default function PagosPage() {
               </div>
 
               <UiSelect
+                menuMode="inline"
                 value={moneda}
                 onChange={setMoneda}
                 options={currencyOptions}
                 placeholder="Selecciona moneda..."
               />
               <UiSelect
+                menuMode="inline"
                 value={paymentForm}
                 onChange={setPaymentForm}
                 options={[{ value: "01", label: "01 · Efectivo" }, { value: "02", label: "02 · Cheque nominativo" }, { value: "03", label: "03 · Transferencia" }, { value: "04", label: "04 · Tarjeta de crédito" }, { value: "28", label: "28 · Tarjeta de débito" }, { value: "29", label: "29 · Tarjeta de servicios" }]}

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
 
 /* Base */
 html,
@@ -1082,3 +1082,24 @@ table th.pay0-balance-heading { padding-left: 4px !important; padding-right: 4px
 .pay0-pagos-main-table .pay0-col-monto,
 .pay0-pagos-main-table .pay0-col-aplicado,
 .pay0-pagos-main-table .pay0-col-disponible { width: 84px !important; }
+
+/* The existing authorized form is the only visible content inside the MAT frame. */
+.mat-embedded-page > :not(.fixed.inset-0) { display: none !important; }
+.mat-embedded-page { min-height: 100dvh; background: #090e1b; }
+.mat-embedded-page > .fixed.inset-0,
+.mat-embedded-page > .fixed.inset-0 > .fixed.inset-0 { background: #090e1b !important; backdrop-filter: none !important; }
+
+/* Keep the canonical payment modal visible over MAT without a second page background. */
+html:has(.mat-embedded-payment),
+html:has(.mat-embedded-payment) body,
+html:has(.mat-embedded-payment) body div:has(.mat-embedded-payment),
+.mat-embedded-payment,
+.mat-embedded-payment > .fixed.inset-0 {
+  background: transparent !important;
+}
+html:has(.mat-embedded-payment) body nav,
+html:has(.mat-embedded-payment) body aside { display: none !important; }
+
+/* Native MAT operation forms keep the current MAT screen behind the dialog. */
+.mat-native-create-only > :not(.fixed.inset-0) { display: none !important; }
+.mat-native-create-only > .fixed.inset-0 { backdrop-filter: blur(4px); }

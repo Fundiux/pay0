@@ -1,13 +1,16 @@
 import { HugoModelAdapter, HugoModelRequest, HugoModelResponse, ModelOutput } from "./hugoCore/modelContract";
 import { VertexGeminiAdapter, geminiMaxOutputTokens } from "./vertexGeminiAdapter";
 import { OpenAiResponsesAdapter } from "./openAiResponsesAdapter";
+import { OllamaLocalAdapter } from "./ollamaLocalAdapter";
 
 const fallbackErrors = new Set(["RATE_LIMIT", "MAX_TOKENS", "MODEL_TIMEOUT", "PROVIDER_UNAVAILABLE", "VERTEX_UNAVAILABLE", "SERVICE_UNAVAILABLE"]);
 export class HugoModelRouter implements HugoModelAdapter {
-  constructor(private readonly gemini = new VertexGeminiAdapter(), private readonly openai = new OpenAiResponsesAdapter()) {}
-  status() { return { gemini: { status: "CONFIGURED", model: "gemini-2.5-flash", maxOutputTokens: geminiMaxOutputTokens() }, openai: { status: this.openai.isConfigured() ? "CONFIGURED" : "NOT_CONFIGURED", model: process.env.HUGO_OPENAI_MODEL || "gpt-6-sol", maxOutputTokens: Number(process.env.HUGO_OPENAI_MAX_OUTPUT_TOKENS || 8000) }, local: { status: "NOT_IMPLEMENTED", model: null, maxOutputTokens: null } }; }
+  constructor(private readonly gemini = new VertexGeminiAdapter(), private readonly openai = new OpenAiResponsesAdapter(), private readonly local = new OllamaLocalAdapter()) {}
+  status() { return { gemini: { status: "CONFIGURED", model: "gemini-2.5-flash", maxOutputTokens: geminiMaxOutputTokens() }, openai: { status: this.openai.isConfigured() ? "CONFIGURED" : "NOT_CONFIGURED", model: process.env.HUGO_OPENAI_MODEL || "gpt-6-sol", maxOutputTokens: Number(process.env.HUGO_OPENAI_MAX_OUTPUT_TOKENS || 8000) }, local: { status: this.local.isConfigured() ? "UNVERIFIED" : "NOT_CONFIGURED", model: process.env.HUGO_OLLAMA_MODEL || "llama3.2:3b", maxOutputTokens: 1200 } }; }
+  async statusDetailed() { return { ...this.status(), local: { ...this.status().local, ...await this.local.probe() } }; }
   async generate(input: { message: string; name: string; context: any; history: any[]; promptVersion?: string }): Promise<ModelOutput> { return this.gemini.generate(input); }
   async generateCanonical(request: HugoModelRequest): Promise<HugoModelResponse> {
+    if (request.generation.capability === "LOCAL") return this.local.generateCanonical(request);
     const needsStrongerReasoning = request.task.profile === "PROGRAMMER" || request.task.complexity === "HIGH";
     const primary = needsStrongerReasoning && this.openai.isConfigured() ? this.openai : this.gemini;
     const secondary = primary === this.openai ? this.gemini : this.openai;

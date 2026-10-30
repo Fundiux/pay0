@@ -4,7 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
-import { isOwnInvoiceIssuerCompany } from "./service";
+import { assertPay0Issuer, PAY0_ROOT_ID } from "./issuerGuard";
 import { importCompanyInvoiceCatalogCore, resolveCompanyInvoiceConcept } from "./companyCatalog";
 import { finalizeGlobalSatCatalogImportCore, initGlobalSatCatalogUploadCore } from "./satGlobalCatalog";
 
@@ -81,6 +81,7 @@ export const getFacturamaSandboxStatus = onCall(
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
     assertFacturacionAccess(request, user);
+    if (text(user?.rootId || uid, 128) !== PAY0_ROOT_ID) throw new HttpsError("permission-denied", "Facturama pertenece exclusivamente al despacho PAY0.");
     const username = text(FACTURAMA_SANDBOX_USERNAME.value(), 500);
     const password = text(FACTURAMA_SANDBOX_PASSWORD.value(), 500);
     const configured = Boolean(username && password);
@@ -119,6 +120,7 @@ export const getFacturamaProductionStatus = onCall(
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
     assertFacturacionAccess(request, user);
+    if (text(user?.rootId || uid, 128) !== PAY0_ROOT_ID) throw new HttpsError("permission-denied", "Facturama pertenece exclusivamente al despacho PAY0.");
     // The secret IDs are historical. Their values are the API credentials that
     // Facturama provisioned for PAY0; no credential is exposed to the browser.
     const username = text(FACTURAMA_SANDBOX_USERNAME.value(), 500);
@@ -157,15 +159,7 @@ export const saveFacturamaDraft = onCall(
       throw new HttpsError("invalid-argument", "Forma/metodo de pago o moneda invalida.");
     }
 
-    const companySnap = await db.doc(`companies/${companyId}`).get();
-    if (!companySnap.exists) throw new HttpsError("not-found", "Empresa emisora no encontrada.");
-    const company: any = companySnap.data() || {};
-    if (text(company.rootId, 128) !== rootId || company.active === false) {
-      throw new HttpsError("permission-denied", "Empresa emisora fuera de tu alcance o inactiva.");
-    }
-    if (!isOwnInvoiceIssuerCompany(company)) {
-      throw new HttpsError("failed-precondition", "Solo las empresas propias pueden emitir o preparar CFDI desde PAY0.");
-    }
+    const { company } = await assertPay0Issuer({ db, rootId, companyId });
     const companyRfc = text(company.rfc, 13).toUpperCase();
     if (!companyRfc) throw new HttpsError("failed-precondition", "La empresa emisora no tiene RFC configurado.");
 
@@ -179,7 +173,10 @@ export const saveFacturamaDraft = onCall(
 
     const existing = await db.collection("facturamaInvoices")
       .where("rootId", "==", rootId).where("idempotencyKey", "==", idempotencyKey).limit(1).get();
-    if (!existing.empty) return { ok: true, invoiceId: existing.docs[0].id, reused: true, status: existing.docs[0].data()?.status || "DRAFT" };
+    if (!existing.empty) {
+      if (existing.docs[0].data()?.companyId !== companyId) throw new HttpsError("failed-precondition", "La llave de idempotencia pertenece a otro emisor.");
+      return { ok: true, invoiceId: existing.docs[0].id, reused: true, status: existing.docs[0].data()?.status || "DRAFT" };
+    }
 
     const invoiceRef = db.collection("facturamaInvoices").doc();
     await invoiceRef.create({

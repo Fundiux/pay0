@@ -61,33 +61,57 @@ async function main() {
   check(parsed.amount === 1000.5 && receiptRegistrationReasons(parsed, operation).length === 0, 'Confirmed explicit receipt eligible');
   for (const [replace, expected] of [['$1,000', 1000], ['$1.000,50', 1000.5], ['$1,000.50', 1000.5], ['$100', 100]])
     check(parseReceiptText(body.replace('$1,000.50', replace)).amount === expected, 'Thousand and decimal formats retain magnitude');
+  const mexicanDate = parseReceiptText(body.replace('2026-09-27', '04/05/2026'));
+  check(mexicanDate.date === '2026-05-04' && mexicanDate.dateVerified === true && !receiptRegistrationReasons(mexicanDate, operation).includes('DATE_REQUIRES_REVIEW'), 'Mexican day/month date accepted without extra confirmation');
   for (const [text, reason] of [
-    [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'AMOUNT_REQUIRES_REVIEW'],
-    [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'AMOUNT_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: Pendiente de autorización'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: Programada'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', ''), 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('Estado: Aplicada', 'Estado: No aplicada'), 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No efectuada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No completada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: No liquidada', 'EXECUTION_REQUIRES_REVIEW'],
-    [body + '\nResultado: Desconocido', 'EXECUTION_REQUIRES_REVIEW'],
-    [body.replace('$1,000.50', '$1,00.50'), 'AMOUNT_REQUIRES_REVIEW'],
-    [body.replace('2026-09-27', '04/05/2026'), 'DATE_REQUIRES_REVIEW'],
+    [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'INVALID_AMOUNT'],
+    [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'INVALID_AMOUNT'],
+    [body.replace('$1,000.50', '$1,00.50'), 'INVALID_AMOUNT'],
+    [body.replace('Fecha: 2026-09-27', 'Fecha de operacion: 2026-09-27') + '\nFecha de operacion: 2026-09-28', 'DATE_REQUIRES_REVIEW'],
     [body.replace('2026-09-27', '2026-02-31'), 'MISSING_DATE'],
     [body.replace('SPEI MXN', 'SPEI USD MXN'), 'UNSUPPORTED_CURRENCY'],
     [body + '\nRFC ordenante: GHI030303EF3', 'CONFLICTING_RFC'],
   ]) check(receiptRegistrationReasons(parseReceiptText(text), operation).includes(reason), reason);
+  for (const text of [body.replace('Estado: Aplicada', 'Estado: Pendiente de autorización'), body.replace('Estado: Aplicada', 'Estado: Programada'),
+    body.replace('Estado: Aplicada', ''), body.replace('Estado: Aplicada', 'Estado: No aplicada'),
+    ...['No efectuada', 'No completada', 'No liquidada', 'Desconocido'].map(state => body + '\nResultado: ' + state)]) {
+    const receipt = parseReceiptText(text);
+    check(receipt.executionConfirmed === false, 'Unconfirmed execution remains evidence, never forged');
+    check(receiptRegistrationReasons(receipt, operation).length === 0, 'Execution wording does not block registration before reconciliation');
+  }
+  const unlabelled = parseReceiptText(body.replace('Monto: $1,000.50', '$1,000.50'));
+  check(unlabelled.amount === 1000.5 && unlabelled.amountVerified === false, 'Unique unlabelled amount retains low confidence');
+  check(receiptRegistrationReasons(unlabelled, operation).length === 0, 'Low confidence alone does not block a valid pending registration');
   for (const actor of actors) {
     const result = await identify({}, actor);
     check(result.status === 'READY' && result.createPayload.clienteId === clientId && result.createPayload.companyId === companyId, `${actor.role} exact authorized identity`);
   }
   for (const [overrides, reason] of [
-    [{ payerRfc: '', account: '****1234' }, 'CLIENT_INSUFFICIENT_IDENTITY_SIGNALS'],
     [{ senderName: 'Cliente Parecido', payerRfc: 'ABC010101AB1' }, 'CLIENT_IDENTITY_NOT_CORROBORATED'],
     [{ beneficiaryName: 'Empresa Parecida', beneficiaryRfc: '' }, 'COMPANY_INSUFFICIENT_IDENTITY_SIGNALS'],
-    [{ executionConfirmed: false }, 'EXECUTION_REQUIRES_REVIEW'],
   ]) check((await identify(overrides)).reasons.includes(reason), reason);
+  check((await identify({ amountVerified: false, executionConfirmed: false })).status === 'READY', 'Both advisory flags can remain false with exact authorized identities');
+  const nameOnly = await identify({ payerRfc: '', account: '****1234', beneficiaryRfc: '', destinationAccount: '' });
+  check(nameOnly.status === 'READY' && !!nameOnly.createPayload, 'Unique authorized names automatically propose registration without RFC or full account');
+  check(nameOnly.verifiedMatches.client.id === clientId && nameOnly.verifiedMatches.company.id === companyId, 'Name-only suggestions remain visible for explicit selection');
+  const legalClient = `${prefix}-legal-name-client`;
+  await db.doc(`clients/${legalClient}`).set({ rootId: root, active: true, razonSocial: 'Comercial Demo S. de R.L. de C.V.', clienteNombre: 'Nombre Legacy Demo' });
+  for (const senderName of ['Comercial Demo S de RL de CV', 'Nombre Legacy Demo']) {
+    const legal = await identify({ senderName, payerRfc: '', account: '' });
+    check(legal.status === 'READY' && legal.createPayload.clienteId === legalClient, 'Exact authorized legal suffix or legacy name resolves without invented RFC/account');
+  }
+  await db.doc(`clients/${legalClient}`).delete();
+  const noName = await identify({ senderName: 'Unknown Ordering Party', payerRfc: '', account: '' });
+  check(noName.status === 'REQUIRES_REVIEW' && !noName.createPayload, 'Unknown name still requires manual selection, never first catalog item');
+
+  check(nameOnly.evidence.client.includes('NORMALIZED_NAME_EXACT') && !nameOnly.evidence.client.includes('RFC_EXACT'), 'Name-only evidence never claims RFC equality');
+  const unknownNames = { ...parsed, senderName: 'Unknown Ordering Party', beneficiaryName: 'Unknown Beneficiary', payerRfc: '', beneficiaryRfc: '', account: '', destinationAccount: '' };
+  const manual = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-catalog`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: companyId });
+  check(manual.status === 'READY' && manual.createPayload.clienteId === clientId && manual.createPayload.companyId === companyId, 'Authorized manual catalog choice resolves absent OCR match');
+  check(manual.evidence.client.includes('USER_SELECTED_AUTHORIZED_CATALOG_ENTRY') && !manual.evidence.client.includes('RFC_EXACT') && !manual.evidence.company.includes('FULL_ACCOUNT_EXACT'), 'Manual selection evidence stays honest');
+  const deniedManualCompany = await identifyParsedReceipt({ db, actor: actors[0], receipt: unknownNames, contentSha256: `${sha}-manual-forged-company`, operationTypeKey: operation, selectedClientId: clientId, selectedCompanyId: 'foreign-company' });
+  check(deniedManualCompany.reasons.includes('COMPANY_INVALID_SELECTION') && !deniedManualCompany.createPayload, 'Foreign or forged company selection rejected');
+
   await db.doc(`clients/${clientId}-duplicate`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
   check((await identify()).reasons.includes('CLIENT_MULTIPLE_CANDIDATES'), 'Duplicate catalog identity never auto selects');
   await db.doc(`clients/${clientId}-duplicate`).delete();
@@ -95,7 +119,7 @@ async function main() {
   check((await identify()).status === 'REQUIRES_REVIEW', 'Inactive client excluded');
   await db.doc(`clients/${clientId}`).update({ active: true });
   await db.doc(`userCompanyAccess/${actors[1].uid}/companies/${companyId}`).update({ active: false });
-  check((await identify({}, actors[1])).reasons.includes('COMPANY_ACCESS_REQUIRES_REVIEW'), 'Revoked company access reviewed');
+  check(!(await identify({}, actors[1])).candidates.company.some(row => row.id === companyId), 'Revoked company access excluded before matching');
   await db.doc(`userCompanyAccess/${actors[1].uid}/companies/${companyId}`).update({ active: true });
   check((await identify({}, { ...actors[0], rootId: foreignRoot })).status === 'REQUIRES_REVIEW', 'Foreign root cannot match local identities');
   await denied(() => parsePagoReceiptPdf.run({ data: {} }), 'Anonymous parser rejected');
@@ -119,6 +143,24 @@ async function main() {
   check(reviewUi.exports.automaticPaymentReviewMessage({ status: 'REQUIRES_REVIEW', reason: 'AMOUNT_EXCEEDS_INVOICE' }).includes('saldo'), 'Automatic application exposes a human reason');
   check(!reviewUi.exports.automaticPaymentReviewMessage({ status: 'APPLIED' }), 'Completed application has no review badge');
   check(!reviewUi.exports.automaticPaymentReviewMessage({ status: 'REQUIRES_REVIEW', reason: 'internal-private-id' }).includes('internal-private-id'), 'Unknown internal identifiers never reach the badge');
+  check(ready.verifiedMatches.client.id === clientId && ready.verifiedMatches.company.id === companyId, 'Authorized catalog identities prefilled');
+  const incomplete = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-incomplete` });
+  check(incomplete.status === 'READY' && incomplete.resolvedOperationTypeKey === operation && incomplete.createPayload.operationTypeKey === operation, 'Unique active own catalog operation resolves automatically without inventing a default');
+  const duplicateClient = `${prefix}-duplicate-client`;
+  await db.doc(`clients/${duplicateClient}`).set({ rootId: root, active: true, razonSocial: 'Cliente Prueba', rfc: 'ABC010101AB1' });
+  const ambiguous = await identify({}, actors[0], `${sha}-ambiguous`);
+  check(ambiguous.reasons.includes('CLIENT_MULTIPLE_CANDIDATES') && ambiguous.candidates.client.length === 2 && !ambiguous.verifiedMatches.client, 'Ambiguous identities require explicit choice');
+  const selected = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-selected`, operationTypeKey: operation, selectedClientId: clientId });
+  check(selected.status === 'READY' && selected.verifiedMatches.client.id === clientId, 'Explicit verified candidate resolves ambiguity');
+  const forged = await identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-forged`, operationTypeKey: operation, selectedClientId: `${prefix}-foreign` });
+  check(forged.reasons.includes('CLIENT_INVALID_SELECTION') && !forged.createPayload, 'Arbitrary identity selection cannot create payment');
+  const restricted = await identify({}, actors[2], `${sha}-restricted`);
+  check(!restricted.candidates.client.some(row => row.id === duplicateClient), 'Unauthorized candidate never disclosed');
+  await db.doc(`clients/${duplicateClient}`).delete();
+  const analysisId = `${prefix}-analysis`;
+  await db.doc(`pagoReceiptAnalyses/${analysisId}`).set({ rootId: root, correctionVersionsByActor: { [actors[0].uid]: 2 } });
+  await assert.rejects(() => identifyParsedReceipt({ db, actor: actors[0], receipt: parsed, contentSha256: `${sha}-stale`, operationTypeKey: operation, analysisId, correctionVersion: 1 }), error => error.code === 'aborted'); checks++;
+  check(!(await db.doc(`pagoReceiptIdentifications/${createHash('sha256').update([root, actors[0].uid, `${sha}-stale`].join('|')).digest('hex')}`).get()).exists, 'Stale correction cannot publish identification');
   const idRef = db.doc(`pagoReceiptIdentifications/${ready.id}`), snap = await idRef.get();
   for (const field of ['clienteId', 'companyId', 'despachoId', 'operationTypeKey', 'concepto', 'referencia', 'paymentForm'])
     check(assert.throws(() => assertReceiptCreation(snap, actors[0], { ...ready.createPayload, [field]: 'forged' })) === undefined, `Reject ${field} tamper`);

@@ -12,6 +12,42 @@
     {
       "commit": "ca0cb423f2c15b19a33beb3a492cc6ef64c5f886",
       "capability": "Hugo Voice y herramientas canonicas PAY0"
+    },
+    {
+      "commit": "4235980cae3f",
+      "capability": "MAT actual integrada con Hugo"
+    },
+    {
+      "commit": "567fb2a4afa129f243472c853c4a1ec591323e23",
+      "capability": "Hugo voz con herramientas generales de consulta"
+    },
+    {
+      "commit": "a1a6da9f495aab4158caf31c7ec78f6122cc9b52",
+      "capability": "Hugo dice estados en espanol natural"
+    },
+    {
+      "commit": "cc169bc2580c7b6f6de4023f66432150a6b638bb",
+      "capability": "Hugo puede terminar la llamada"
+    },
+    {
+      "commit": "7da635b06321638f6d41851d02a6817457781421",
+      "capability": "Limite de 25 instancias en la creacion de solicitudes IQ"
+    },
+    {
+      "commit": "833d1575fa1fcd6336f4d045b44f35a7c7da407f",
+      "capability": "Cotizaciones con partidas, fecha y contacto de la OC"
+    },
+    {
+      "commit": "9f15afdcdc7a41482e9eaef56103294551c1992c",
+      "capability": "Totales de OC con etiquetas de IVA repetidas"
+    },
+    {
+      "commit": "0b304072a37f054c3027ef6cd206d1f5eaa4f746",
+      "capability": "Fecha de cotizacion dentro de 45 dias"
+    },
+    {
+      "commit": "2b7b9b07b4a81561ded1d3ee08c41a991870f879",
+      "capability": "Cotizaciones de OC sin clave SAT"
     }
   ],
   "requiredText": [
@@ -42,8 +78,23 @@
     },
     {
       "file": "src/services/beneficiaries.ts",
-      "text": "where(\"rootId\", \"==\", rootId)",
-      "capability": "Beneficiarios acotados al root autorizado"
+      "text": "watchAuthorizedRelatedRecords(\"clientBeneficiaries\", clientId",
+      "capability": "Beneficiarios consultados mediante autoridad recursiva en servidor"
+    },
+    {
+      "file": "src/services/beneficiaries.ts",
+      "text": "watchAuthorizedRelatedRecords(\"clientBeneficiaryMethods\", clientId",
+      "capability": "Metodos consultados mediante autoridad recursiva en servidor"
+    },
+    {
+      "file": "functions/src/modules/documents/relatedReads.ts",
+      "text": ".where(\"rootId\", \"==\", rootId)",
+      "capability": "Consultas relacionadas acotadas al root autenticado"
+    },
+    {
+      "file": "functions/src/modules/documents/relatedReads.ts",
+      "text": "await requireClientOperationalAccess({ uid, role, rootId, clientId: id, transaction, permission: \"viewBasic\" })",
+      "capability": "Ascendencia vigente comprobada antes de leer beneficiarios"
     },
     {
       "file": "functions/src/modules/financing/dispersionDispatchResolver.ts",
@@ -94,6 +145,51 @@
       "file": "qa/scripts/authorized-document-ui-integration.mjs",
       "text": "\"MATERIALIDAD\"",
       "capability": "BASE8601-01: Materialidad entrega documentos mediante URL HTTPS efimera"
+    },
+    {
+      "file": "src/components/hugo/HugoRealtimeVoice.tsx",
+      "text": "clientFeatures: [\"END_CALL\"]",
+      "capability": "Hugo cuelga la llamada desde el navegador"
+    },
+    {
+      "file": "src/lib/ordenCompraTotalResolver.ts",
+      "text": "dedupe.set(`${hit.kind}:${hit.valueCell}`, hit);",
+      "capability": "Totales de OC sin IVA duplicado"
+    },
+    {
+      "file": "functions/src/modules/iq/solicitudCreateQueueCallables.ts",
+      "text": "await enqueueQuotationForConfirmedIq({",
+      "capability": "La creacion en IQ encola la cotizacion"
+    },
+    {
+      "file": "functions/src/modules/iq/solicitudCreationCallables.ts",
+      "text": "await enqueueQuotationForConfirmedIq({",
+      "capability": "La creacion directa en IQ encola la cotizacion"
+    },
+    {
+      "file": "functions/src/modules/documents/canonicalPdf.ts",
+      "text": "\"cliente.contacto\": input.issuerContact",
+      "capability": "La cotizacion muestra el contacto de quien emite"
+    },
+    {
+      "file": "functions/src/modules/cotizaciones/callables.ts",
+      "text": "export function requirePricedQuoteLines",
+      "capability": "La cotizacion respeta precios e importes por partida"
+    },
+    {
+      "file": "functions/src/modules/cotizaciones/callables.ts",
+      "text": "export function resolveQuoteDocumentDate",
+      "capability": "La cotizacion usa la fecha de la OC dentro de 45 dias"
+    },
+    {
+      "file": "functions/src/modules/cotizaciones/callables.ts",
+      "text": "export async function ensureOcCommercialMetadata",
+      "capability": "Cotizaciones de OC sin clave SAT"
+    },
+    {
+      "file": "src/app/despachos/[id]/page.tsx",
+      "text": "Contacto para cotizaciones",
+      "capability": "Contacto de cotizaciones editable por empresa"
     }
   ],
   "forbiddenText": [
@@ -106,6 +202,11 @@
       "file": "src/app/pagos/page.tsx",
       "text": "backgroundUpload: true",
       "capability": "El comprobante de pago debe finalizar antes de continuar"
+    },
+    {
+      "file": "functions/src/modules/documents/canonicalPdf.ts",
+      "text": "\"cliente.contacto\": \"Operacion PAY0\"",
+      "capability": "La cotizacion no vuelve al contacto fijo Operacion PAY0"
     }
   ]
 }

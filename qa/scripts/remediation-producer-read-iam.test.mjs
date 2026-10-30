@@ -1,0 +1,71 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
+import {plan,bindingPolicy,setBinding,verify,recover,createHttp,ACCESS_ROLE,READ_ROLE,ACCOUNT,main} from '../../services/pay0-sentinel-observation/scripts/verify-producer-read-iam.mjs';
+import {fixtureName,DATABASE} from '../../services/pay0-sentinel-observation/scripts/producer-read-sdk.mjs';
+const p=plan('a'.repeat(32),Date.parse('2026-10-10T00:00:00Z'),'operator@example.test','pay0-security-canary-00006-6wv');
+const revision=`projects/pay-0-system/locations/us-central1/services/pay0-security-canary/revisions/${p.revision}`;
+const unrelated={role:'roles/example',members:['user:other@example.test']};
+function fixture(){let count=0,cleanup=false,time=p.startMs,sequence=0,lastJournal=null,failStage=null,accepted=false,conflicts=0,extraRole=false,drift=false;const calls=[],docs=new Map(),policies=new Map([[p.access.base,{version:3,etag:'e0',bindings:[structuredClone(unrelated)]}],[p.reader.base,{version:3,etag:'e0',bindings:[structuredClone(unrelated)]}]]);
+ const charge=()=>{if(++count>(cleanup?120:80))throw Error('LIMIT');};
+ const http={charge,beginCleanup(){cleanup=true;},async request(method,url,body,options={}){charge();calls.push({method,url,body:structuredClone(body),token:options.token});
+ if(failStage&&url.includes(failStage)){const once=failStage;failStage=null;throw Error('PRIVATE_FAILURE_'+once);}
+ const policyUrl=url.split('?')[0];if(policyUrl.endsWith(':getIamPolicy')){const base=policyUrl.slice(0,-13);assert.equal(method,'POST');if(base===p.access.base){assert.equal(url,base+':getIamPolicy?options.requestedPolicyVersion=3');assert.equal(body,null);}else assert.deepEqual(body,{options:{requestedPolicyVersion:3}});return{status:200,data:structuredClone(policies.get(base))};}
+ if(url.endsWith(':setIamPolicy')){const base=url.slice(0,-13);if(conflicts>0){conflicts--;const old=policies.get(base);old.etag='conflict'+sequence++;return{status:409};}policies.set(base,{...structuredClone(body.policy),etag:'e'+sequence++});return{status:200,data:{}};}
+ if(url.includes('/oauth2/v2/userinfo?'))return{status:200,data:{email:p.operatorEmail,verified_email:true}};
+ if(url.endsWith(':testIamPermissions'))return{status:200,data:{permissions:body.permissions}};
+ if(url.endsWith(ACCESS_ROLE)||url.endsWith(READ_ROLE))return{status:200,data:{stage:'GA',deleted:false,includedPermissions:url.endsWith(ACCESS_ROLE)?['iam.serviceAccounts.getAccessToken',...(extraRole?['iam.serviceAccounts.getOpenIdToken']:[])]:['datastore.entities.get','datastore.entities.list']}};
+ if(url===p.access.base)return{status:200,data:{email:ACCOUNT,uniqueId:'12345678901234567890',disabled:false}};
+ if(url.includes('run.googleapis.com'))return{status:200,data:url.includes('/revisions/')?{name:revision,serviceAccount:ACCOUNT,containers:[{env:[{name:'OBSERVATION_PUBLISHER_MODE',value:'DISABLED'}]}]}:{name:revision.split('/revisions/')[0],latestReadyRevision:revision,latestCreatedRevision:revision,trafficStatuses:[{revision:p.revision,percent:100}],invokerIamDisabled:false}};
+ if(url.endsWith(DATABASE))return{status:200,data:{name:DATABASE}};
+ if(url.endsWith(':generateAccessToken'))return{status:200,data:{accessToken:'SYNTHETIC_ACCESS_TOKEN_NO_REAL_CREDENTIAL',expireTime:new Date(time+600000).toISOString()}};
+ if(url.includes('/documents:commit')){if(options.token&&!accepted)return{status:403};const w=body.writes[0];if(w.delete)docs.delete(w.delete);else docs.set(w.update.name,{...w.update,updateTime:'2026-10-10T00:00:'+String(++sequence).padStart(2,'0')+'Z'});return{status:200,data:{writeResults:[{updateTime:w.delete?'2026-10-10T00:00:59Z':docs.get(w.update.name).updateTime}]}};}
+ if(url.includes('projects/pay-0-system/databases/(default)'))return{status:403};
+ const name=url.replace('https://firestore.googleapis.com/v1/','').split('?')[0];
+ if(method==='GET'){if(drift&&cleanup&&docs.has(name))docs.get(name).updateTime='2026-10-10T00:01:59Z';return{status:docs.has(name)?200:404,data:structuredClone(docs.get(name))};}
+ if(method==='DELETE'){const stamp=new URL(url).searchParams.get('currentDocument.updateTime');if(stamp!==docs.get(name)?.updateTime)return{status:412};docs.delete(name);return{status:200};}
+ throw Error('UNEXPECTED_ROUTE');}};
+ const dependencies={http,now:()=>time,wait:async ms=>{time+=ms;},sdk:()=>({close:async()=>{}}),probe:async(_h,_r,_k,budget)=>{assert.ok(budget>0&&budget<=20000);const positive=policies.get(p.reader.base).bindings.some(b=>b.condition?.title===p.positive.title);return positive?'ALLOWED_EXACT_FIXTURE':'DENIED';},journal:s=>{lastJournal={plan:p,...structuredClone(s)};}};
+ return{http,dependencies,policies,docs,calls,get count(){return count;},get journal(){return lastJournal;},fail:s=>failStage=s,accept:()=>accepted=true,conflicts:n=>conflicts=n,extraRole:()=>extraRole=true,drift:()=>drift=true,expire:()=>time=p.startMs+8*60000};}
+test('full synthetic sequence passes and removes only its own bindings/fixtures',async()=>{const f=fixture(),r=await verify(p,f.dependencies);assert.equal(r.passed,true);assert.equal(r.cleanupVerified,true);assert.equal(f.docs.size,0);for(const policy of f.policies.values())assert.deepEqual(policy.bindings,[unrelated]);assert.equal(f.journal.phase,'CLEANUP_VERIFIED');assert.ok(f.count<120);assert.ok(!JSON.stringify(r).includes(p.run));assert.ok(!JSON.stringify(r).includes('SYNTHETIC_ACCESS_TOKEN'));});
+test('CAS merges unrelated members and rejects changed own condition',()=>{const policy={etag:'a',version:3,bindings:[unrelated,{role:p.reader.role,members:['serviceAccount:other',p.reader.member],condition:p.positive}]};const removed=bindingPolicy(policy,p.reader,p.positive,true);assert.deepEqual(removed.bindings[0],unrelated);assert.deepEqual(removed.bindings[1].members,['serviceAccount:other']);assert.equal(policy.bindings[1].members.length,2);assert.throws(()=>bindingPolicy({...policy,bindings:[{...policy.bindings[1],condition:{...p.positive,expression:'true'}}]},p.reader,p.positive,true));});
+test('CAS conflict retries are bounded and preserve policy',async()=>{const f=fixture();f.conflicts(2);await setBinding(f.http,p.reader,p.positive,false);assert.equal(f.policies.get(p.reader.base).bindings[0].role,unrelated.role);assert.equal(f.calls.filter(c=>c.url.endsWith(':setIamPolicy')).length,3);});
+test('extra role permission refuses before fixture or grant',async()=>{const f=fixture();f.extraRole();const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(f.docs.size,0);assert.equal(f.calls.some(c=>c.url.endsWith(':setIamPolicy')),false);});
+test('unexpected accepted write is failure but exact acknowledged version cleans up',async()=>{const f=fixture();f.accept();const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(r.cleanupVerified,true);assert.equal(f.docs.size,0);});
+test('fixture same fields with changed updateTime is not deleted',async()=>{const f=fixture();f.drift();const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(r.cleanupVerified,false);assert.equal(f.docs.size,1);assert.equal(f.calls.filter(c=>c.method==='DELETE').length,0);});
+test('lost mint response cleans owned grant and seed',async()=>{const f=fixture();f.fail(':generateAccessToken');const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(r.cleanupVerified,true);assert.equal(f.docs.size,0);for(const policy of f.policies.values())assert.deepEqual(policy.bindings,[unrelated]);});
+test('expired fixed window starts no operational calls',async()=>{const f=fixture();f.expire();const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(f.count,0);assert.equal(p.expiry,'2026-10-10T00:20:00.000Z');});
+test('recovery removes recorded exact bindings with no mint/grant/probes',async()=>{const f=fixture();f.policies.get(p.reader.base).bindings.push({role:READ_ROLE,members:[p.reader.member],condition:p.positive});const saved={plan:p,attempted:[p.positive.title],fixtureVersions:{},seedAttempted:false};const r=await recover(saved,{http:f.http});assert.equal(r.cleanupVerified,true);assert.equal(f.calls.some(c=>c.url.includes('generateAccessToken')),false);assert.deepEqual(f.policies.get(p.reader.base).bindings,[unrelated]);});
+test('recovery rejects arbitrary fixture paths and unknown conditions',async()=>{const f=fixture();for(const saved of [{plan:p,attempted:['foreign'],fixtureVersions:{}},{plan:p,attempted:[],fixtureVersions:{'users/real':'2026-10-10T00:00:00Z'}}])await assert.rejects(recover(saved,{http:f.http}));assert.equal(f.count,0);});
+test('HTTP budget reserves cleanup calls and never prints error bodies',async()=>{let calls=0;const h=createHttp({operatorToken:'SYNTHETIC',fetchImpl:async()=>{calls++;return new Response('SYNTHETIC_PRIVATE_ERROR',{status:403});}});for(let i=0;i<80;i++)h.charge();assert.throws(()=>h.charge());h.beginCleanup();const r=await h.request('GET','https://iam.googleapis.com/v1/synthetic');assert.equal(r.status,403);assert.equal(r.data,null);assert.equal(calls,1);});
+test('separate Terraform root creates roles only and is disabled by default',()=>{const tf=fs.readFileSync('services/pay0-sentinel-observation/verification-infra/main.tf','utf8');assert.deepEqual([...tf.matchAll(/resource "([^"]+)"/g)].map(m=>m[1]),['google_project_iam_custom_role','google_project_iam_custom_role']);assert.match(tf,/default = false/);assert.ok(!/iam_member|iam_binding|google_service_account|google_firestore_database/.test(tf));});
+test('default CLI is offline',async()=>{const old=console.log;let value;console.log=x=>value=JSON.parse(x);try{await main([]);}finally{console.log=old;}assert.equal(value.mode,'DRY_RUN_NO_NETWORK');assert.equal(value.cloudActions,0);});
+
+test('cleanup worst-case CAS conflicts fit the reserved forty requests',async()=>{const f=fixture();const tuples=[[p.access,p.accessCondition],[p.reader,p.positive],[p.reader,p.negative]];for(const[t,c]of tuples)f.policies.get(t.base).bindings.push({role:t.role,members:[t.member],condition:c});f.http.beginCleanup();for(let i=0;i<80;i++)f.http.charge();for(const[t,c]of tuples){f.conflicts(2);await setBinding(f.http,t,c,true);}assert.equal(f.count,101);assert.deepEqual(f.policies.get(p.access.base).bindings,[unrelated]);assert.deepEqual(f.policies.get(p.reader.base).bindings,[unrelated]);});
+test('operator identity mismatch and disabled role refuse before writes',async()=>{for(const mode of ['identity','role']){const f=fixture(),request=f.http.request.bind(f.http);f.http.request=async(...args)=>{const r=await request(...args);if(mode==='identity'&&args[1].includes('/userinfo?'))r.data.email='someone@example.test';if(mode==='role'&&args[1].endsWith(READ_ROLE))r.data.stage='DISABLED';return r;};const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(f.calls.some(c=>c.url.endsWith(':setIamPolicy')||c.url.endsWith(':commit')),false);}});
+test('lost seed response leaves unknown version untouched for review',async()=>{const f=fixture(),request=f.http.request.bind(f.http);f.http.request=async(...args)=>{const r=await request(...args);if(args[1].endsWith(':commit'))throw Error('SYNTHETIC_LOST_RESPONSE');return r;};const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(r.cleanupVerified,false);assert.equal(f.docs.size,1);assert.equal(f.calls.some(c=>c.method==='DELETE'),false);});
+test('lost grant response still removes the exact attempted binding',async()=>{const f=fixture(),request=f.http.request.bind(f.http);let once=true;f.http.request=async(...args)=>{const r=await request(...args);if(once&&args[1].endsWith(':setIamPolicy')){once=false;throw Error('SYNTHETIC_LOST_RESPONSE');}return r;};const r=await verify(p,f.dependencies);assert.equal(r.passed,false);assert.equal(r.cleanupVerified,true);for(const policy of f.policies.values())assert.deepEqual(policy.bindings,[unrelated]);});
+test('HTTP rejects oversized successful bodies without returning data',async()=>{const h=createHttp({operatorToken:'SYNTHETIC',fetchImpl:async()=>new Response('x'.repeat(262145),{status:200})});await assert.rejects(h.request('GET','https://iam.googleapis.com/v1/synthetic'),/IAM_GATE_REFUSED/);});
+
+test('invalid token expiry refuses before constructing a credentialed SDK client',async()=>{
+ const f=fixture(),request=f.http.request.bind(f.http);let sdkCalls=0;
+ f.dependencies.sdk=()=>{sdkCalls++;throw Error('SDK_MUST_NOT_START');};
+ f.http.request=async(...args)=>{const r=await request(...args);if(args[1].endsWith(':generateAccessToken'))r.data.expireTime='invalid-expiration';return r;};
+ const result=await verify(p,f.dependencies);
+ assert.equal(result.passed,false);assert.equal(result.cleanupVerified,true);assert.equal(sdkCalls,0);assert.equal(f.docs.size,0);
+});
+
+test('negative update and delete probes bind to the acknowledged seed version',async()=>{
+ const f=fixture(),result=await verify(p,f.dependencies);assert.equal(result.passed,true);
+ const writes=f.calls.filter(c=>c.token&&c.url.endsWith(':commit')).map(c=>c.body.writes[0]);
+ assert.equal(writes.length,3);assert.deepEqual(writes[0].currentDocument,{exists:false});
+ const version=f.journal.fixtureVersions[fixtureName(p.run)];assert.equal(typeof version,'string');
+ assert.deepEqual(writes[1].currentDocument,{updateTime:version});
+ assert.deepEqual(writes[2].currentDocument,{updateTime:version});
+});
+
+test('empty service account policy omits bindings but retains CAS etag',async()=>{
+ const f=fixture();f.policies.set(p.access.base,{etag:'empty-v1',version:1});
+ const result=await verify(p,f.dependencies);assert.equal(result.passed,true);
+ assert.deepEqual(f.policies.get(p.access.base).bindings,[]);
+ const first=f.calls.find(c=>c.url===p.access.base+':setIamPolicy');
+ assert.equal(first.body.policy.etag,'empty-v1');assert.equal(first.body.policy.version,3);
+});

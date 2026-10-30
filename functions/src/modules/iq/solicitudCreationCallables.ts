@@ -1,3 +1,4 @@
+import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { requireIqAssociatedName } from "./associatedName";
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
@@ -15,6 +16,7 @@ import { enqueueIqReconciliationJob } from "./solicitudReconciliationCallables";
 import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
+import { enqueueQuotationForConfirmedIq } from "../cotizaciones/queueCallables";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -781,6 +783,24 @@ async function finalizeIqCreation(input: {
       { merge: true },
     );
   });
+
+  // The durable quotation reservation happens only after the IQ folio is
+  // committed.  It is intentionally outside the transaction because it also
+  // requests a Cloud Task; its idempotent key makes duplicate IQ deliveries safe.
+  if (input.status === "SUCCEEDED" && input.iqId) {
+    await enqueueQuotationForConfirmedIq({
+      solicitudId: input.solicitudId,
+      iqFolio: input.iqId,
+      requestedBy: input.auth.uid,
+      source: "IQ_CREATION_DIRECT",
+    }).catch(async (error) => {
+      await input.solicitudRef.set({
+        cotizacionAutoGenerateStatus: "FAILED_RETRYABLE",
+        cotizacionAutoGenerateLastError: `No se pudo reservar cotizacion: ${String((error as any)?.message || error).slice(0, 1200)}`,
+        cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+  }
 }
 
 async function publishIqNotification(input: {
@@ -964,6 +984,7 @@ export const createSolicitudIq = onCall(
     timeoutSeconds: 300,
     memory: "2GiB",
     concurrency: 1,
+    maxInstances: 25,
   },
   async (request) => {
     const perfStartedAtMs = Date.now();
@@ -1566,6 +1587,12 @@ export const createSolicitudIq = onCall(
       markPerf("credential_decrypt");
 
       browserResult = await runIqCreateInvoiceHttpA53({
+        authorizeBeforePost: async () => {
+          const current = (await solicitudRef.get()).data();
+          if (!current || current.rootId !== auth.rootId) throw new HttpsError("permission-denied", "AUTH_SCOPE_CHANGED");
+          await authorizeDeferredIntent({uid: auth.uid, rootId: auth.rootId, module: "solicitudes", action: "create",
+            clientId: cleanText(current.clienteId || current.clientId), permission: "operateSolicitudes"});
+        },
         erpUrl,
         username,
         password,
