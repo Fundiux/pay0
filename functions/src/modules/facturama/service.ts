@@ -89,7 +89,7 @@ function receiverIsComplete(receiver: ReturnType<typeof buildReceiver>) {
 export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
   auth: any;
   solicitudId: string;
-  source: "SOLICITUD_CREATE" | "OC_UPLOAD";
+  source: "SOLICITUD_CREATE" | "OC_UPLOAD" | "SAT_CATALOG_REVALIDATION";
 }) {
   const uid = text(input.auth?.uid, 128);
   const solicitudId = text(input.solicitudId, 128);

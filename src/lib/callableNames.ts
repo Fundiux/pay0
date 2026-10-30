@@ -65,6 +65,7 @@ export const CALLABLES = {
   cancelFacturamaProductionInvoice: "cancelFacturamaProductionInvoice",
   refreshFacturamaProductionCancellationStatus: "refreshFacturamaProductionCancellationStatus",
   reconcileFacturamaIssuedMetadata: "reconcileFacturamaIssuedMetadata",
+  revalidateFacturamaFiscalDrafts: "revalidateFacturamaFiscalDrafts",
   getFacturamaProductionCsdStatus: "getFacturamaProductionCsdStatus",
   registerFacturamaProductionCsd: "registerFacturamaProductionCsd",
 } as const;

@@ -58,6 +58,10 @@ export async function listFacturamaInvoices(companyId?: string) {
   return (await httpsCallable<{ limit: number; companyId?: string }, { ok: boolean; invoices: FacturamaInvoice[] }>(functions, "listFacturamaInvoices")({ limit: 20, companyId })).data;
 }
 
+export async function revalidateFacturamaFiscalDrafts(companyId: string, cursorId?: string) {
+  return (await httpsCallable<{ companyId: string; cursorId?: string }, { ok: boolean; reviewed: number; updated: number; skipped: number; failed: number; nextCursorId: string | null }>(functions, "revalidateFacturamaFiscalDrafts", { timeout: 120000 })({ companyId, cursorId })).data;
+}
+
 export async function importCompanyInvoiceCatalog(input: { companyId: string; version: string; originalName: string; sha256: string; workbookBase64: string }) {
   return (await httpsCallable<typeof input, { ok: boolean; reused: boolean; companyId: string; version: string; entryCount: number; statusCounts?: Record<string, number>; sourceSha256: string; satGlobalValidationStatus: string }>(functions, "importCompanyInvoiceCatalog")(input)).data;
 }
