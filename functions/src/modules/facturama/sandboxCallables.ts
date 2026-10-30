@@ -8,6 +8,7 @@ import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { assertPay0Issuer, fiscalIssuerReason, PAY0_DISPATCH_ID } from "./issuerGuard";
 import { logActivityBatch } from "../../utils/logActivity";
+import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -268,7 +269,7 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
           if (original.despachoId !== PAY0_DISPATCH_ID || originalInvoice.companyId !== (original.companyId || original.empresaId)) throw new Error("FACTURAMA_REPLACEMENT_ISSUER_SCOPE");
           const cancelResult = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(originalInvoice.facturamaCfdiId)}?${new URLSearchParams({ motive: "01", uuidReplacement: uuid }).toString()}`, { method: "DELETE" });
           const cancellationStatus = clean(cancelResult?.Status || cancelResult?.status, 32).toUpperCase() || "REQUESTED";
-          const cancellationTerminal = ["CANCELED", "ACEPTED", "EXPIRED"].includes(cancellationStatus);
+          const cancellationTerminal = isConfirmedFacturamaCancellation(cancellationStatus);
           await Promise.all([
             originalRef.set({
               uuidCfdiSustituido: clean(original.facturaUuid || original.uuidCfdi, 64).toUpperCase() || null,
@@ -363,7 +364,7 @@ export const cancelFacturamaProductionInvoice = onCall(
     const qs = new URLSearchParams({ motive, ...(replacement ? { uuidReplacement: replacement } : {}) });
     const result = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(inv.facturamaCfdiId)}?${qs.toString()}`, { method: "DELETE" });
     const externalStatus = clean(result?.Status || result?.status, 32).toUpperCase();
-    const terminal = ["CANCELED", "ACEPTED", "EXPIRED"].includes(externalStatus);
+    const terminal = isConfirmedFacturamaCancellation(externalStatus);
     await Promise.all([
       invRef.set({ cancellationStatus: externalStatus || "REQUESTED", cancellationMotive: motive, cancellationUuidReplacement: replacement || null, cancellationRequestedAt: FieldValue.serverTimestamp(), cancellationRequestedBy: uid, cancellationResponse: clean(result?.Message || result?.message, 500) || null, updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
       solSnap.ref.set({ facturamaCancellationStatus: externalStatus || "REQUESTED", motivoCancelacionSAT: motive, uuidCfdiSustituido: inv.uuid || sol.facturaUuid || null, uuidCfdiSustituto: replacement || null, ...(terminal ? { status: "CANCELADA" } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true }),

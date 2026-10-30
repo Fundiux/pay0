@@ -26,7 +26,7 @@ const warmupTimeoutMs = 60_000;
 // The current checkout exports 374 endpoints, including the MAT solicitud
 // documents callable and the Hugo team voice read and history callables.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 374;
+const expectedEndpointCount = 376;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
@@ -40,6 +40,8 @@ const requiredEndpoints = [
   "listOperationalDocuments", "getAuthorizedOperationalRecord", "listAuthorizedRelatedRecords",
   "createClientDispersionIq",
   "processIqDispersionCreate",
+  "importIqDispersionReceipt",
+  "revalidateFacturamaFiscalDrafts",
   "previewPaymentCommissionDistribution",
   "authorizeHugoVoiceGatewaySession",
   "loginWithUsername", "setMyUsername",

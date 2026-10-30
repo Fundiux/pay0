@@ -37,6 +37,7 @@ export const CALLABLES = {
   initDispersionDocumentUpload: "initDispersionDocumentUpload",
   finalizeDispersionDocumentUpload: "finalizeDispersionDocumentUpload",
   deactivateDispersionDocument: "deactivateDispersionDocument",
+  importIqDispersionReceipt: "importIqDispersionReceipt",
   createAdmin: "createAdmin",
   createOperador: "createOperador",
   ensureMaterialityClientCompany: "ensureMaterialityClientCompany",
@@ -64,6 +65,7 @@ export const CALLABLES = {
   cancelFacturamaProductionInvoice: "cancelFacturamaProductionInvoice",
   refreshFacturamaProductionCancellationStatus: "refreshFacturamaProductionCancellationStatus",
   reconcileFacturamaIssuedMetadata: "reconcileFacturamaIssuedMetadata",
+  revalidateFacturamaFiscalDrafts: "revalidateFacturamaFiscalDrafts",
   getFacturamaProductionCsdStatus: "getFacturamaProductionCsdStatus",
   registerFacturamaProductionCsd: "registerFacturamaProductionCsd",
 } as const;

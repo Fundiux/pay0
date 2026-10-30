@@ -8,6 +8,7 @@ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { lookupGlobalSatConcept } from "./satGlobalCatalog";
 import { getCanonicalCatalogAttestation } from "./canonicalCatalogAttestations";
+import { canonicalSatPairExists, canonicalSatSnapshotSourceSha256 } from "./canonicalSatKeys";
 import { assertPay0Issuer } from "./issuerGuard";
 
 const REQUIRED_HEADERS = [
@@ -201,25 +202,41 @@ export async function importCompanyInvoiceCatalogCore(request: any) {
   const reportedSha256 = text(request.data?.sha256, 64).toLowerCase();
   if (reportedSha256 && reportedSha256 !== actualSha256) throw new HttpsError("invalid-argument", "El hash informado no coincide con el archivo.");
   const [entries, companyResult] = await Promise.all([parseCompanyInvoiceCatalogWorkbook(buffer), getOwnCompanyOrThrow(companyId, rootId)]);
+  // Every automatically usable entry must exist in the pinned SAT snapshot or
+  // in the active global SAT import. This works for future company workbooks
+  // without adding each workbook hash to application code.
+  for (const entry of entries) {
+    if (entry.status !== "AUTORIZADO" || canonicalSatPairExists(entry.productCode, entry.unitCode)) continue;
+    const global = await lookupGlobalSatConcept(entry.productCode, entry.unitCode);
+    if (!global.product || !global.unit) {
+      throw new HttpsError("invalid-argument", `Clave SAT ${entry.productCode} o unidad ${entry.unitCode} no consta en la referencia SAT activa.`);
+    }
+  }
   const catalogRef = db.doc(`companyInvoiceCatalogs/${companyId}`);
   const existingSnap = await catalogRef.get();
   const existing: any = existingSnap.exists ? existingSnap.data() || {} : {};
   if (existingSnap.exists && text(existing.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Catálogo fuera de tu alcance.");
   if (existingSnap.exists && text(existing.sourceSha256, 64) === actualSha256) {
     const canonicalAttestation = getCanonicalCatalogAttestation(existing.companyRfc || companyResult.company.rfc, actualSha256);
-    const satGlobalValidationStatus = canonicalAttestation ? "VERIFIED_CANONICAL_SAT_SNAPSHOT" : String(existing.satGlobalValidationStatus || "PENDING_GLOBAL_SAT_CATALOG");
-    if (canonicalAttestation && existing.satGlobalValidationStatus !== satGlobalValidationStatus) {
+    const validatedBySnapshot = entries.filter((entry) => entry.status === "AUTORIZADO")
+      .every((entry) => canonicalSatPairExists(entry.productCode, entry.unitCode));
+    const satGlobalValidationStatus = canonicalAttestation || validatedBySnapshot
+      ? "VERIFIED_CANONICAL_SAT_SNAPSHOT"
+      : "VERIFIED_GLOBAL_SAT_CATALOG";
+    if (existing.satGlobalValidationStatus !== satGlobalValidationStatus || existing.version !== version || existing.originalName !== originalName) {
       await catalogRef.update({
+        version,
+        originalName,
         satGlobalValidationStatus,
-        canonicalSatAttestation: {
-          satSourceSha256: canonicalAttestation.satSourceSha256,
-          sourceLabel: canonicalAttestation.sourceLabel,
-          verificationMode: "IMMUTABLE_CANONICAL_SNAPSHOT",
-        },
+        canonicalSatAttestation: satGlobalValidationStatus === "VERIFIED_CANONICAL_SAT_SNAPSHOT" ? {
+          satSourceSha256: canonicalSatSnapshotSourceSha256(),
+          sourceLabel: canonicalAttestation?.sourceLabel || "PAY0_CFDI_40_PINNED_SAT_SNAPSHOT",
+          verificationMode: "CANONICAL_SAT_KEYS_VALIDATED_ON_IMPORT",
+        } : null,
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
-    return { ok: true, reused: true, companyId, version: existing.version, entryCount: Number(existing.entryCount || 0), sourceSha256: actualSha256, satGlobalValidationStatus };
+    return { ok: true, reused: true, companyId, version, entryCount: Number(existing.entryCount || 0), sourceSha256: actualSha256, satGlobalValidationStatus };
   }
 
   const importId = `${companyId}__${actualSha256}`;
@@ -242,9 +259,11 @@ export async function importCompanyInvoiceCatalogCore(request: any) {
   }, {});
   const issuerRfc = text(companyResult.company.rfc, 13).toUpperCase();
   const canonicalAttestation = getCanonicalCatalogAttestation(issuerRfc, actualSha256);
-  const satGlobalValidationStatus = canonicalAttestation
+  const satGlobalValidationStatus = canonicalAttestation || entries
+    .filter((entry) => entry.status === "AUTORIZADO")
+    .every((entry) => canonicalSatPairExists(entry.productCode, entry.unitCode))
     ? "VERIFIED_CANONICAL_SAT_SNAPSHOT"
-    : "PENDING_GLOBAL_SAT_CATALOG";
+    : "VERIFIED_GLOBAL_SAT_CATALOG";
   const now = FieldValue.serverTimestamp();
   await db.runTransaction(async (tx) => {
     const current = await tx.get(catalogRef);
@@ -259,10 +278,10 @@ export async function importCompanyInvoiceCatalogCore(request: any) {
       sourceSha256: actualSha256, integrityHashAlgorithm: "SHA-256", entryCount: entries.length, statusCounts: counts, entries,
       status: ACTIVE_STATUS,
       satGlobalValidationStatus,
-      canonicalSatAttestation: canonicalAttestation ? {
-        satSourceSha256: canonicalAttestation.satSourceSha256,
-        sourceLabel: canonicalAttestation.sourceLabel,
-        verificationMode: "IMMUTABLE_CANONICAL_SNAPSHOT",
+      canonicalSatAttestation: satGlobalValidationStatus === "VERIFIED_CANONICAL_SAT_SNAPSHOT" ? {
+        satSourceSha256: canonicalSatSnapshotSourceSha256(),
+        sourceLabel: canonicalAttestation?.sourceLabel || "PAY0_CFDI_40_PINNED_SAT_SNAPSHOT",
+        verificationMode: "CANONICAL_SAT_KEYS_VALIDATED_ON_IMPORT",
       } : null,
       automaticUseStatuses: ["AUTORIZADO"],
       importedBy: uid, importedAt: now, updatedAt: now,
@@ -302,10 +321,9 @@ export async function resolveCompanyInvoiceConcept(input: { rootId: string; comp
   if (unitCode && unitCode !== entry.unitCode) return { status: "SAT_UNIT_INVALID", productCode, unitCode, reason: "UNIT_DOES_NOT_MATCH_COMPANY_CATALOG" };
   const snapshot = { companyCatalogVersion: text(catalog.version, 80), companyCatalogSha256: text(catalog.sourceSha256, 64) };
   const canonicalAttestation = getCanonicalCatalogAttestation(catalog.companyRfc, snapshot.companyCatalogSha256);
-  // La atestación se deriva del RFC y del hash inmutable, no de una bandera
-  // editable. También permite operar con el catálogo canónico ya importado
-  // antes de esta mejora; la siguiente reimportación solo actualiza su UI.
-  if (canonicalAttestation) {
+  // El catálogo legado conserva su atestación por hash. Las nuevas versiones
+  // usan claves verificadas contra la referencia SAT incluida en PAY0.
+  if (canonicalAttestation || canonicalSatPairExists(entry.productCode, entry.unitCode)) {
     return { status: "VALID", productCode, unitCode: entry.unitCode, entry, ...snapshot };
   }
   const global = await lookupGlobalSatConcept(productCode, entry.unitCode);

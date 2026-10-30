@@ -59,7 +59,7 @@ function unavailable(row: any) {
 }
 // Same ownership contract as the document bridge. The source branch does not
 // contain dispersionFunding.ts; keep this write-domain boundary local.
-async function currentAuthority(uid: string, rootId: string, dispersionId: string, tx?: admin.firestore.Transaction) {
+export async function currentAuthority(uid: string, rootId: string, dispersionId: string, tx?: admin.firestore.Transaction) {
   if (![uid, rootId, dispersionId].every(validId)) throw new HttpsError("invalid-argument", "Referencia invalida.");
   const read = (path: string) => tx ? tx.get(db.doc(path)) : db.doc(path).get();
   const user = (await read(`users/${uid}`)).data();
@@ -366,7 +366,7 @@ export async function finalizeDispersionDocumentUploadCore(request: any) {
       description: `Comprobante de dispersion ${upload.dispersionFolio || dispersionId} subido.`,
       createdBy: uid,
       extra: {
-        source: "docs",
+        source: upload.source === "IQ_IMPORT" ? "IQ_IMPORT" : "docs",
         clientId: upload.clienteId || upload.clientId || null,
         clienteId: upload.clienteId || upload.clientId || null,
         clientName: upload.clienteNombre || upload.clientName || null,
