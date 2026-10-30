@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { assertAuthorized } from "../../utils/authGuard";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import { normalizeIqAssociatedName, requireIqAssociatedName } from "./associatedName";
 import {
@@ -254,10 +255,18 @@ export async function loadIqCanonicalUserAccess(input: {
   const allowedModules = record(access.allowedModules);
   const isSuperadmin = clean(input.role).toLowerCase() === "superadmin";
 
-  if (
-    !isSuperadmin &&
-    !moduleAllowed(allowedModules,input.moduleKey)
-  ) {
+  if (input.moduleKey === "dispersiones") {
+    const userSnap = await db.collection("users").doc(uid).get();
+    const user = record(userSnap.data());
+    if (!userSnap.exists || (clean(user.rootId) || uid) !== rootId) {
+      throw new HttpsError("permission-denied", "El usuario esta fuera de scope.");
+    }
+    assertAuthorized({ uid }, user, {
+      allowedRoles: ["superadmin", "admin", "operador"],
+      requiredModule: "wallet",
+      requiredAction: "dispersiones",
+    });
+  } else if (!isSuperadmin && !moduleAllowed(allowedModules,input.moduleKey)) {
     throw new HttpsError(
       "permission-denied",
       "El usuario no tiene habilitado el modulo IQ requerido.",
