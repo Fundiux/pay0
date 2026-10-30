@@ -114,6 +114,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   DOCUMENTO_SOLICITUD_SUBIDO: eventEntry("DOCUMENTO_SOLICITUD_SUBIDO", "Documento de solicitud subido", "docs", "document", "success"),
   DOCUMENTO_SOLICITUD_DESACTIVADO: eventEntry("DOCUMENTO_SOLICITUD_DESACTIVADO", "Documento de solicitud desactivado", "docs", "document", "warning"),
   COTIZACION_ENCOLADA: eventEntry("COTIZACION_ENCOLADA", "Cotizacion encolada", "solicitudes", "system"),
+  ORDEN_COMPRA_LEIDA_PARA_COTIZACION: eventEntry("ORDEN_COMPRA_LEIDA_PARA_COTIZACION", "OC leida para cotizacion", "solicitudes", "system"),
   COTIZACION_FALLIDA_REINTENTO: eventEntry("COTIZACION_FALLIDA_REINTENTO", "Cotizacion pendiente de reintento", "solicitudes", "system", "warning"),
   COTIZACION_GENERADA: eventEntry("COTIZACION_GENERADA", "Cotizacion generada", "docs", "document", "success"),
   CONSTANCIA_RECEPCION_GENERADA: eventEntry("CONSTANCIA_RECEPCION_GENERADA", "Constancia de recepcion generada", "docs", "document", "success"),

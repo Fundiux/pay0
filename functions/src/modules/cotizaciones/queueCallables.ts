@@ -8,7 +8,7 @@ import { assertAuthorized } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { enqueueIqOnDemandTaskH4D64 } from "../iq/iqOnDemandTaskQueue";
-import { generateCotizacionForSolicitudCore } from "./callables";
+import { ensureOcCommercialMetadata, generateCotizacionForSolicitudCore } from "./callables";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { finishRun, reserveRun } from "../agentOperations/engine";
 import { mexicoDayKey } from "../agentOperations/time";
@@ -35,6 +35,9 @@ type QueueInput = { solicitudId: string; iqFolio: string; requestedBy: string; s
 
 /** A transaction-backed reservation shared by both IQ success paths. */
 export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
+  // OCs without SAT codes have no stored metadata; store their commercial
+  // lines first so the job can be keyed to the active OC like any other.
+  await ensureOcCommercialMetadata(input.solicitudId, input.requestedBy);
   const solicitudRef = db.collection("solicitudes").doc(input.solicitudId);
   const reserved = await db.runTransaction(async (tx) => {
     const solicitudSnap = await tx.get(solicitudRef);

@@ -257,10 +257,14 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
     const unit = unitCandidate.toUpperCase();
     const description = String(row[descriptionIndex] || "").replace(/\s+/g, " ").trim().slice(0, 1000)
       || row.filter(cell => /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(String(cell || "")) && !isCodeHeader(cell)).map(cell => String(cell).trim()).sort((a, b) => b.length - a.length)[0] || "";
-    if (commercial && !description && !String(row[quantityIndex] || "").trim()) continue;
+    // Template rows left at quantity 0 with no concept are not lines.
+    if (commercial && !description && !Number(String(row[quantityIndex] || "").replace(/[^0-9.]/g, ""))) continue;
     const quantity = parseQuantity(row[quantityIndex]);
-    const amount = amountIndex >= 0 ? parseMoney(row[amountIndex]) : null;
     const statedUnitPrice = unitPriceIndex >= 0 ? parseMoney(row[unitPriceIndex]) : null;
+    // A workbook saved without recalculation keeps "=B23*H23" with no cached
+    // value; the amount is then the quantity times the stated unit price.
+    const statedAmount = amountIndex >= 0 ? parseMoney(row[amountIndex]) : null;
+    const amount = statedAmount ?? (statedUnitPrice !== null && quantity > 0 ? Math.round(Number((quantity * statedUnitPrice * 100).toPrecision(12))) / 100 : null);
     const unitPrice = statedUnitPrice ?? (amount !== null && quantity > 0 ? Math.round((amount / quantity) * 10000) / 10000 : null);
     items.push({ quantity, unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000), unitPrice, amount });
   }

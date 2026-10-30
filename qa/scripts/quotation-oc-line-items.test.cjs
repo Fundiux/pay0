@@ -48,6 +48,24 @@ const quoteLines = buffer => parseOcFiscalMetadataBuffer(buffer, true, undefined
   assert.equal(labelled.date, '2026-09-15', 'text dates are day first');
   assert.equal(requirePricedQuoteLines(labelled, 1160).items[0].unitPrice, 500);
 
+  // Saved without recalculation: amount and totals are formulas with no cached
+  // value, and template rows sit at quantity 0 with no concept.
+  const uncached = await quoteLines(await workbook([
+    ['Moneda', 'MXN - Pesos Mexicanos'],
+    ['FECHA:', { formula: 'TODAY()' }],
+    ['Cantidad', 'Clave Unidad', 'Clave Concepto', 'Concepto', 'PRECIO UNITARIO', 'Importe'],
+    [3, 'E48', '', 'Servicio de inteligencia de datos', 95500.333, { formula: 'A4*E4' }],
+    [0, '', '', '', 0, { formula: 'A5*E5' }],
+    ['', '', '', '', 0, { formula: 'A6*E6' }],
+    ['', '', '', '', 'Subtotal:', { formula: 'SUM(F4:F6)' }],
+    ['', '', '', '', 'IVA:', { formula: 'F7*0.16' }],
+    ['', '', '', '', 'TOTAL:', { formula: 'F7+F8' }],
+  ]));
+  assert.equal(uncached.items.length, 1, 'quantity-0 template rows are not lines');
+  assert.equal(uncached.items[0].amount, 286501, 'uncached amount is quantity times the stated unit price');
+  assert.equal(uncached.date, '', 'TODAY() is not a fixed OC date');
+  assert.equal(requirePricedQuoteLines(uncached, 332341.16).subtotal, 286501, 'uncached totals fall back to the solicitud total');
+
   assert.throws(() => requirePricedQuoteLines({ ...labelled, items: [{ ...labelled.items[0], amount: null, unitPrice: null }] }, 1160), /precio e importe/);
   assert.throws(() => requirePricedQuoteLines({ ...labelled, items: [{ ...labelled.items[0], amount: 900 }] }, 1160), /no cuadran/);
   assert.doesNotThrow(() => requirePricedQuoteLines({ ...labelled, items: [{ ...labelled.items[0], amount: 1000.01 }] }, 1160), 'a one-cent gap is tolerated');

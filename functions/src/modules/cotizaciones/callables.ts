@@ -149,6 +149,57 @@ export function requirePricedQuoteLines(
   return { items, subtotal, iva };
 }
 
+/**
+ * OCs without SAT codes never got their data stored at upload, because the
+ * upload flow keeps metadata only from the strict fiscal reader. A quotation
+ * needs no SAT code, so when nothing was stored the active OC is read here
+ * and its commercial lines are stored, once, only if they reconcile with the
+ * solicitud total. Existing metadata is never overwritten.
+ */
+export async function ensureOcCommercialMetadata(solicitudId: string, actorUid: string): Promise<"PRESENT" | "STORED"> {
+  const solicitudRef = db.collection("solicitudes").doc(solicitudId);
+  const solicitud: any = (await solicitudRef.get()).data() || {};
+  if (clean(solicitud.ocCommercialMetadataUploadId || solicitud.ocFiscalMetadataUploadId, 128)) return "PRESENT";
+  const rootId = clean(solicitud.rootId, 128);
+  const activeOc = await db.collection("uploads")
+    .where("rootId", "==", rootId).where("solicitudId", "==", solicitudId)
+    .where("documentType", "==", "ORDEN_COMPRA").where("active", "==", true).limit(1).get();
+  if (activeOc.empty) throw new HttpsError("failed-precondition", "Se requiere una Orden de Compra activa para generar la cotizacion.");
+  const ocUploadId = activeOc.docs[0].id;
+  const oc = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
+  const total = money(solicitud.total || solicitud.monto || solicitud.amount);
+  if (total <= 0) throw new HttpsError("failed-precondition", "La solicitud no tiene un importe total valido para la cotizacion.");
+  const statedTotal = roundCents(oc?.total);
+  if (Number.isFinite(statedTotal) && Math.abs(statedTotal - total) > 0.01)
+    throw new HttpsError("failed-precondition", `El total de la OC (${formatMoney(statedTotal)}) no coincide con la solicitud (${formatMoney(total)}).`);
+  const priced = requirePricedQuoteLines(oc, total);
+  await db.runTransaction(async tx => {
+    const current: any = (await tx.get(solicitudRef)).data() || {};
+    if (clean(current.ocCommercialMetadataUploadId || current.ocFiscalMetadataUploadId, 128)) return;
+    tx.set(solicitudRef, {
+      ocCommercialMetadataUploadId: ocUploadId,
+      ocCommercialMetadataSource: "ORDEN_COMPRA_XLSX_SIN_CLAVE_SAT",
+      ocCommercialItems: priced.items,
+      ocCommercialSubtotal: priced.subtotal,
+      ocCommercialIva: priced.iva,
+      ocCommercialTotal: total,
+      ...(!current.ocClientName && oc?.clientName ? { ocClientName: oc.clientName } : {}),
+      ...(!current.ocClientRfc && oc?.clientRfc ? { ocClientRfc: oc.clientRfc } : {}),
+      ...(!current.ocClientAddress && oc?.clientAddress ? { ocClientAddress: oc.clientAddress } : {}),
+      ...(!current.ocDeliveryLocation && oc?.deliveryLocation ? { ocDeliveryLocation: oc.deliveryLocation } : {}),
+      ocCommercialMetadataUpdatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+  await logActivity({
+    event: "ORDEN_COMPRA_LEIDA_PARA_COTIZACION", rootId, adminId: solicitud.adminId || rootId,
+    actorUid, actorRole: "system", entityType: "solicitudes", entityId: solicitudId, referenceId: solicitudId,
+    referenceFolio: solicitud.folio || solicitudId, referenceType: "solicitudDocument",
+    description: `Datos comerciales de la OC activa guardados para la cotizacion de ${solicitud.folio || solicitudId}; la OC no trae clave SAT.`,
+    createdBy: actorUid, extra: { source: "cotizaciones", activeOcUploadId: ocUploadId, lines: priced.items.length },
+  }).catch(() => undefined);
+  return "STORED";
+}
+
 export const QUOTE_DATE_WINDOW_DAYS = 45;
 
 function mexicoDay(ms: number): string {
@@ -241,6 +292,9 @@ export async function generateCotizacionForSolicitudCore(request: {
     if (!clientId) throw new HttpsError("failed-precondition", "La solicitud no tiene cliente valido.");
     if (!internalAutomation) {
       await requireClientOperationalAccess({ uid, role: role(user) as "superadmin" | "admin" | "operador", rootId, clientId, permission: "operateSolicitudes" });
+      // Only after authorization: store the commercial data of an OC without
+      // SAT codes, then start over with the stored data like any other OC.
+      if (!commercialUploadId && await ensureOcCommercialMetadata(solicitudId, uid) === "STORED") return generateCotizacionForSolicitudCore(request);
     }
 
     const replaceExisting = request.data?.replaceExisting === true;
