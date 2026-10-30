@@ -984,6 +984,7 @@ export const createSolicitudIq = onCall(
     timeoutSeconds: 300,
     memory: "2GiB",
     concurrency: 1,
+    maxInstances: 25,
   },
   async (request) => {
     const perfStartedAtMs = Date.now();
