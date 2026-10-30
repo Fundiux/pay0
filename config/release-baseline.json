@@ -52,6 +52,10 @@
     {
       "commit": "6b5b5deec2c192313a3f647e68cf400d6c5dd40d",
       "capability": "Dispersiones IQ: autorizacion por wallet, destinos mixtos y retencion de fallos seguros (Codex)"
+    },
+    {
+      "commit": "75c2460445d168539fcd36ac0c8bcbc4f7afb031",
+      "capability": "Recibos de dispersion IQ y revalidacion de borradores fiscales Facturama (Codex)"
     }
   ],
   "requiredText": [
