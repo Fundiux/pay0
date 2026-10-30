@@ -18,15 +18,15 @@ export function MatBalanceCard({
   rows?: Array<{ label: string; value: string }>;
 }) {
   return (
-    <section id={id} className="scroll-mt-4 overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.07] shadow-2xl shadow-black/30 backdrop-blur-xl">
-      <div className="relative p-5">
+    <section id={id} className="scroll-mt-4 overflow-hidden rounded-[26px] border border-cyan-200/15 bg-gradient-to-br from-[#123d51] via-[#142a3b] to-[#172238] shadow-xl shadow-black/25">
+      <div className="relative p-4">
         <div className="absolute right-[-40px] top-[-50px] h-32 w-32 rounded-full bg-cyan-300/10 blur-2xl" />
 
         <div className="relative flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/80">{title}</p>
-            <div className="mt-2 text-4xl font-black tracking-tight text-white">{amount}</div>
-            {subtitle ? <p className="mt-1 max-w-[220px] text-xs leading-5 text-slate-300">{subtitle}</p> : null}
+              <div className="mt-2 break-all text-[clamp(1.8rem,8vw,2.5rem)] font-black leading-none tracking-tight text-white">{amount}</div>
+              {subtitle ? <p className="mt-2 text-xs leading-5 text-slate-300">{subtitle}</p> : null}
           </div>
 
           {status ? <MatStatusPill label={status} tone={statusTone} /> : null}

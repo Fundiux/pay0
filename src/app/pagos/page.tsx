@@ -339,7 +339,7 @@ function isIqPaymentApplicationBlocking(pago: any) {
   ].includes(executionStatus) && status !== "IQ_APPLIED";
 }
 
-export default function PagosPage() {
+export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCreateOnly?: boolean; onMatClose?: () => void } = {}) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const { profile } = useUserProfile();
@@ -380,6 +380,16 @@ export default function PagosPage() {
   const [sortConfig, setSortConfig] = useState({ key: "createdAt", dir: "desc" });
 
   const [openNewPago, setOpenNewPago] = useState(false);
+  const matEmbedRef = useRef(false);
+  const matFormHasOpenedRef = useRef(false);
+  useEffect(() => {
+    if (openNewPago && (matEmbedRef.current || matCreateOnly)) matFormHasOpenedRef.current = true;
+    else if (!openNewPago && matFormHasOpenedRef.current && (matEmbedRef.current || matCreateOnly)) {
+      matFormHasOpenedRef.current = false;
+      if (matCreateOnly) onMatClose?.();
+      else window.parent.postMessage("pay0:mat-form-close", window.location.origin);
+    }
+  }, [openNewPago, matCreateOnly, onMatClose]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedOperationTypeKey, setSelectedOperationTypeKey] = useState("");
@@ -490,6 +500,19 @@ export default function PagosPage() {
     resetNewPagoForm();
     setOpenNewPago(true);
   }
+
+  // MAT opens the existing authorized payment form directly after route access resolves.
+  useEffect(() => {
+    if (!canCreatePagos) return;
+    if (matCreateOnly) {
+      if (!matFormHasOpenedRef.current) openNewPagoModal();
+      return;
+    }
+    if (new URLSearchParams(window.location.search).get("nuevo") !== "1") return;
+    matEmbedRef.current = new URLSearchParams(window.location.search).get("matEmbed") === "1";
+    openNewPagoModal();
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [canCreatePagos, matCreateOnly]);
 
   const RECEIPT_MATCH_LOW_VALUE_WORDS = new Set([
     "sa",
@@ -2383,7 +2406,7 @@ export default function PagosPage() {
 
   return (
     <div
-      className="relative w-full min-w-0 py-4 text-white font-normal"
+      className={`relative w-full min-w-0 py-4 text-white font-normal${matEmbedRef.current ? " mat-embedded-page mat-embedded-payment" : ""}${matCreateOnly ? " mat-native-create-only" : ""}`}
       onDragEnter={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -3026,12 +3049,13 @@ export default function PagosPage() {
             }
           }}
         >
-          <div className="relative w-[calc(100vw-2rem)] max-w-[420px] overflow-visible rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[420px] overflow-y-auto rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl">
+            <h2 className="mb-4 text-lg font-black text-white">Nuevo pago</h2>
             <button
               type="button"
               onClick={closeNewPagoModal}
               disabled={saving}
-              className="absolute -right-2 -top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+              className="absolute right-4 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
               aria-label="Cerrar"
               title="Cerrar"
             >
@@ -3046,6 +3070,7 @@ export default function PagosPage() {
 
             <div className="grid grid-cols-1 gap-3 text-[13px] text-slate-300">
               <UiSelect
+                menuMode="inline"
                 value={selectedClientId}
                 onChange={(value) => {
                   setSelectedClientId(value);
@@ -3056,6 +3081,7 @@ export default function PagosPage() {
               />
 
               <UiSelect
+                menuMode="inline"
                 value={selectedCompanyId}
                 onChange={setSelectedCompanyId}
                 options={companyOptions}
@@ -3063,6 +3089,7 @@ export default function PagosPage() {
               />
 
               <UiSelect
+                menuMode="inline"
                 value={selectedOperationTypeKey}
                 onChange={setSelectedOperationTypeKey}
                 options={operationTypes.map((x: any) => ({
@@ -3107,12 +3134,14 @@ export default function PagosPage() {
               </div>
 
               <UiSelect
+                menuMode="inline"
                 value={moneda}
                 onChange={setMoneda}
                 options={currencyOptions}
                 placeholder="Selecciona moneda..."
               />
               <UiSelect
+                menuMode="inline"
                 value={paymentForm}
                 onChange={setPaymentForm}
                 options={[{ value: "01", label: "01 · Efectivo" }, { value: "02", label: "02 · Cheque nominativo" }, { value: "03", label: "03 · Transferencia" }, { value: "04", label: "04 · Tarjeta de crédito" }, { value: "28", label: "28 · Tarjeta de débito" }, { value: "29", label: "29 · Tarjeta de servicios" }]}

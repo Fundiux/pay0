@@ -72,7 +72,7 @@ export const deactivateSolicitudDocument = onCall(
 );
 
 export const reprocessActiveSolicitudOc = onCall(
-  { cors: true, timeoutSeconds: 120, memory: "1GiB" },
+  { cors: true, timeoutSeconds: 120, memory: "1GiB", maxInstances: 20 },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
     assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });

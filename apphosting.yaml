@@ -1,0 +1,35 @@
+# Firebase public web configuration; no server secrets are included.
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyD91P9WzhJNIxuOredotPZbDoZbz7ftStM"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:751158244178:web:55bd61f902cd257b22408b"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "pay-0-system.firebaseapp.com"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "pay-0-system"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "pay-0-system.firebasestorage.app"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "751158244178"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_USE_EMULATORS
+    value: "false"
+    availability: [BUILD, RUNTIME]
+  - variable: PAY0_APPHOSTING_SOURCE_ARCHIVE
+    value: "1"
+    availability: [BUILD]
+  - variable: NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL
+    value: "https://hugo-voice-gateway-canary-o4tesftjlq-uc.a.run.app/voice"
+    availability: [BUILD, RUNTIME]

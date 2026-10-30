@@ -122,9 +122,35 @@ type OcFiscalMetadata = {
   cfdiUse: string; fiscalRegime: string; postalCode: string;
   paymentMethod: string; paymentForm: string; currency: string;
   deliveryLocation: string;
-  items: Array<{ quantity: number; unit: string; productCode: string; description: string }>;
+  items: OcLineItem[];
   subtotal?: number; iva?: number; total?: number;
+  /** OC issue date as YYYY-MM-DD, or "" when the OC does not state one. */
+  date: string;
+  /** OC number when the OC states one, or "". */
+  number: string;
 };
+
+export type OcLineItem = { quantity: number; unit: string; productCode: string; description: string; unitPrice: number | null; amount: number | null };
+
+/** Excel stores dates as serial days since 1899-12-30; Mexican text dates are day first. */
+export function parseOcDate(raw: string): string {
+  const value = String(raw || "").trim();
+  const iso = (year: number, month: number, day: number) => {
+    const at = new Date(Date.UTC(year, month - 1, day));
+    return at.getUTCFullYear() === year && at.getUTCMonth() === month - 1 && at.getUTCDate() === day && year >= 2000 && year <= 2100
+      ? at.toISOString().slice(0, 10) : "";
+  };
+  const serial = value.match(/^(\d{5})(?:\.\d+)?\b/);
+  if (serial) {
+    const at = new Date(Date.UTC(1899, 11, 30) + Number(serial[1]) * 86_400_000);
+    return iso(at.getUTCFullYear(), at.getUTCMonth() + 1, at.getUTCDate());
+  }
+  const isoText = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (isoText) return iso(Number(isoText[1]), Number(isoText[2]), Number(isoText[3]));
+  const dayFirst = value.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/);
+  if (dayFirst) return iso(Number(dayFirst[3].length === 2 ? `20${dayFirst[3]}` : dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1]));
+  return "";
+}
 
 function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
 function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
@@ -140,7 +166,7 @@ async function readOcCommercialMetadata(bucket: any, storagePath: string): Promi
 }
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
-export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = false, diagnostics?: Record<string, unknown>): Promise<OcFiscalMetadata | null> {
+export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = false, diagnostics?: Record<string, unknown>, quotationLines = false): Promise<OcFiscalMetadata | null> {
   try {
   const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
   const sharedXml = await zip.readText("xl/sharedStrings.xml");
@@ -200,9 +226,18 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
   // "Clave Concepto" contains the word Concepto, but it is the SAT code
   // column.  It must never win over the actual Concepto/Descripcion column.
   const descriptionIndex = headerIndex(cell => isDescriptionHeader(cell) && !isCodeHeader(cell));
+  // Some templates leave the unit price heading blank; the unit price is then
+  // derived from the line amount so a quote never loses its line pricing.
+  const unitPriceIndex = headerIndex(cell => /\b(PRECIO|P UNITARIO|V UNITARIO|VALOR UNITARIO|COSTO UNITARIO)\b/.test(normalized(cell)));
+  const amountIndex = headerIndex(cell => /^(IMPORTE|MONTO)\b/.test(normalized(cell)));
   const parseQuantity = (value: unknown) => Number(String(value || "1").replace(/[^0-9.,-]/g, "").replace(",", ".")) || 1;
+  const parseMoney = (value: unknown): number | null => {
+    const text = String(value ?? "").replace(/[$,\s]/g, "");
+    const parsed = text ? Number(text) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
   const rowsAfterHeader = header >= 0 ? rows.slice(header + 1) : rows;
-  const items: Array<{ quantity: number; unit: string; productCode: string; description: string }> = [];
+  const items: OcLineItem[] = [];
   for (const row of rowsAfterHeader) {
     const rowText = row.map(normalized).filter(Boolean).join(" ");
     if (/\b(SUBTOTAL|TOTAL|IVA|IMPUESTO|RETENCION)\b/.test(rowText)) {
@@ -222,8 +257,16 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
     const unit = unitCandidate.toUpperCase();
     const description = String(row[descriptionIndex] || "").replace(/\s+/g, " ").trim().slice(0, 1000)
       || row.filter(cell => /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(String(cell || "")) && !isCodeHeader(cell)).map(cell => String(cell).trim()).sort((a, b) => b.length - a.length)[0] || "";
-    if (commercial && !description && !String(row[quantityIndex] || "").trim()) continue;
-    items.push({ quantity: parseQuantity(row[quantityIndex]), unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000) });
+    // Template rows left at quantity 0 with no concept are not lines.
+    if (commercial && !description && !Number(String(row[quantityIndex] || "").replace(/[^0-9.]/g, ""))) continue;
+    const quantity = parseQuantity(row[quantityIndex]);
+    const statedUnitPrice = unitPriceIndex >= 0 ? parseMoney(row[unitPriceIndex]) : null;
+    // A workbook saved without recalculation keeps "=B23*H23" with no cached
+    // value; the amount is then the quantity times the stated unit price.
+    const statedAmount = amountIndex >= 0 ? parseMoney(row[amountIndex]) : null;
+    const amount = statedAmount ?? (statedUnitPrice !== null && quantity > 0 ? Math.round(Number((quantity * statedUnitPrice * 100).toPrecision(12))) / 100 : null);
+    const unitPrice = statedUnitPrice ?? (amount !== null && quantity > 0 ? Math.round((amount / quantity) * 10000) / 10000 : null);
+    items.push({ quantity, unit, productCode, description: String(description).replace(/\s+/g, " ").trim().slice(0, 1000), unitPrice, amount });
   }
   const firstItem = items.find(item => item.productCode && item.unit) || items[0];
   const code = firstItem?.productCode || "";
@@ -273,13 +316,21 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
   ].filter(Boolean);
   const clientAddress = addressParts.join(", ");
   const deliveryLocation = field("LUGAR DE ENTREGA") || field("LUGAR ENTREGA") || field("LUGAR DE PRESTACION") || field("DOMICILIO DE ENTREGA") || clientAddress;
+  const date = parseOcDate(field("FECHA"));
+  // Only an explicitly labelled short identifier counts as the OC number; a
+  // fiscal UUID or free text is never promoted to the quote reference.
+  const number = ["NO DE ORDEN", "NUMERO DE ORDEN", "NO ORDEN", "ORDEN DE COMPRA NO", "NO OC", "OC NO", "FOLIO"]
+    .map(label => field(label).trim().split(/\s+/)[0] || "")
+    .find(value => /^[A-Z0-9-]{1,30}$/i.test(value) && /\d/.test(value)) || "";
   // The OC supplies commercial quote data. Fiscal document classification
   // is validated independently from the invoice XML.
   const commercialValid = items.length > 0 && items.every(item => item.description && item.quantity > 0) &&
     Number.isFinite(subtotal) && Number.isFinite(iva) && Number.isFinite(total) && total > 0 &&
     Math.abs(subtotal + iva - total) <= 0.01 && currency === "MXN";
   if (diagnostics) Object.assign(diagnostics, { items: items.length, itemDescriptions: items.map(item => !!item.description), subtotal, iva, total, currency, commercialValid });
-  return (commercial ? commercialValid : code && unit) ? { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items, subtotal, iva, total } : null;
+  const metadata = { productCode: code, unitCode: unit, description, quantity, clientName, clientRfc, clientAddress, cfdiUse, fiscalRegime: regime, postalCode: postal, paymentMethod, paymentForm, currency, deliveryLocation, items, subtotal, iva, total, date, number };
+  if (quotationLines) return items.length ? metadata : null;
+  return (commercial ? commercialValid : code && unit) ? metadata : null;
   } catch (error) {
     if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
     throw error;
@@ -289,6 +340,17 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
 /** Commercial extraction permits missing SAT codes; fiscal consumers keep the strict default. */
 export async function parseOcCommercialMetadataBuffer(buffer: Buffer, diagnostics?: Record<string, unknown>): Promise<OcFiscalMetadata | null> {
   return parseOcFiscalMetadataBuffer(buffer, true, diagnostics);
+}
+
+/**
+ * Quote source read straight from the active OC file: priced lines, totals,
+ * date and number. It does not require currency or SAT codes, because the
+ * quotation only mirrors the commercial terms; validation happens in the
+ * quotation module.
+ */
+export async function readOcQuotationLines(storagePath: string): Promise<OcFiscalMetadata | null> {
+  const [buffer] = await admin.storage().bucket().file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+  return parseOcFiscalMetadataBuffer(buffer, true, undefined, true);
 }
 
 function cleanCfdiText(value: any): string {

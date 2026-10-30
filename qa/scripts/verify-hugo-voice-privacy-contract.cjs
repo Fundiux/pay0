@@ -9,6 +9,7 @@ const { pathToFileURL } = require("node:url");
   const gateway = await import(pathToFileURL(gatewayPath).href);
   const delegation = fs.readFileSync(path.join(root, "functions/src/modules/agent007/voiceDelegation.ts"), "utf8");
   const server = fs.readFileSync(path.join(root, "services/hugo-voice-gateway/src/server.mjs"), "utf8");
+  const instructions = fs.readFileSync(path.join(root, "services/hugo-voice-gateway/src/sessionInstructions.mjs"), "utf8");
   const tools = fs.readFileSync(path.join(root, "services/hugo-voice-gateway/src/realtimeTools.mjs"), "utf8");
 
   const attacks = [
@@ -33,8 +34,10 @@ const { pathToFileURL } = require("node:url");
   assert.match(delegation, /sensitiveResourceStored: false/);
   assert.match(delegation, /sourceTrace: safeVoiceSourceTrace\(result\.trace\)/);
   assert.doesNotMatch(delegation, /return \{ ok: true, delegationId, route, tool: directTool, sourceSystem: result\.sourceSystem, sourceTrace:/);
-  assert.match(server, /La personalidad nunca modifica la seguridad/);
-  assert.match(server, /no confirmes ni niegues existencia/);
+  assert.match(server, /buildSessionInstructions\(new Date\(\)\)/);
+  assert.match(instructions, /La personalidad nunca modifica la seguridad/);
+  assert.match(instructions, /no confirmes ni niegues existencia/);
+  assert.match(instructions, /nunca lo atribuyas a permisos/);
   assert.match(delegation, /matchStatus === "AMBIGUOUS"/);
   assert.match(delegation, /Necesito que indiques el nombre completo o correo/);
   assert.match(tools, /confirma antes de contar/);

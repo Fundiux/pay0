@@ -65,6 +65,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
   const startupTimerRef = useRef<number | null>(null);
   const gatewayTimerRef = useRef<number | null>(null);
   const historyRef = useRef<VoiceHistoryDraft | null>(null);
+  // Set when Hugo asks to hang up; the call ends after the goodbye audio finishes playing.
+  const endCallRef = useRef<{ heardGoodbye: boolean; timer: number } | null>(null);
   const frontendCommit = process.env.NEXT_PUBLIC_PAY0_BUILD_COMMIT || "unverified";
   const gatewayRevision = gatewayRuntime?.revision || "sin metadatos";
   const gatewayCommit = gatewayRuntime?.commit || "sin metadatos";
@@ -119,6 +121,8 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
     startingRef.current = false;
     startupRef.current?.abort();
     startupRef.current = null;
+    if (endCallRef.current) window.clearTimeout(endCallRef.current.timer);
+    endCallRef.current = null;
     if (startupTimerRef.current !== null) window.clearTimeout(startupTimerRef.current);
     if (gatewayTimerRef.current !== null) window.clearTimeout(gatewayTimerRef.current);
     startupTimerRef.current = null;
@@ -169,6 +173,13 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       setMuted(false);
       setState("IDLE");
     }
+  };
+
+  const finishRequestedCall = () => {
+    if (!endCallRef.current) return;
+    window.clearTimeout(endCallRef.current.timer);
+    endCallRef.current = null;
+    void stop();
   };
 
   useEffect(() => {
@@ -308,6 +319,9 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           if (audioRef.current) audioRef.current.muted = false;
           if (responseId) upsertTurn(`HUGO:${responseId}`, { turnId: turnId || responseId, responseId, speaker: "HUGO", text: "", timestampMs: Math.round(performance.now() - startedAt), durationMs: 0, interrupted: false, status: "IN_PROGRESS", transcriptionStatus: "REALTIME_NATIVE" });
         }
+        // Audio already playing when the hang-up arrives is not the goodbye; wait for a fresh start.
+        if (type === "output_audio_buffer.started" && endCallRef.current) endCallRef.current.heardGoodbye = true;
+        if (type === "output_audio_buffer.stopped" && endCallRef.current?.heardGoodbye) finishRequestedCall();
         if (type === "response.output_audio_transcript.delta" && responseId) {
           const assistant = historyRef.current?.turns.get(`HUGO:${responseId}`);
           if (assistant) { assistant.text += String(event.delta || ""); dirtyTurn(`HUGO:${responseId}`); }
@@ -372,7 +386,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
         gatewayRef.current = gateway;
         const timeout = window.setTimeout(() => reject(new Error("El gateway de voz no respondio a tiempo.")), 20000);
         gatewayTimerRef.current = timeout;
-        gateway.onopen = () => gateway.send(JSON.stringify({ type: "authenticate", idToken }));
+        gateway.onopen = () => gateway.send(JSON.stringify({ type: "authenticate", idToken, clientFeatures: ["END_CALL"] }));
         gateway.onerror = () => { window.clearTimeout(timeout); reject(new Error("No se pudo conectar con el gateway de voz.")); };
         gateway.onmessage = incoming => {
           let event: any;
@@ -389,6 +403,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
             const eventId = String(event.eventId || `${event.type}:${event.responseId || event.toolCallId || "none"}:${Date.now()}`);
             recordEvent({ eventId, type: String(event.type), turnId: event.turnId || null, responseId: event.responseId || null, timestampMs: Math.round(performance.now() - startedAt), detail: JSON.stringify({ latencyMs: event.latencyMs ?? null, confirmationMs: event.confirmationMs ?? null, durationMs: event.durationMs ?? null, tool: event.tool ?? null, code: event.code ?? null }).slice(0, 500) });
           }
+          if (event.type === "gateway.end_call_requested" && !endCallRef.current) endCallRef.current = { heardGoodbye: false, timer: window.setTimeout(finishRequestedCall, 15000) };
           if (event.type === "gateway.interruption_confirmed") {
             const interruptedResponseId = String(event.responseId || "");
             const active = interruptedResponseId ? historyRef.current?.turns.get(`HUGO:${interruptedResponseId}`) : null;

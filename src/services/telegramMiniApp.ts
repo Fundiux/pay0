@@ -92,6 +92,19 @@ export interface MatClientHomeResult {
   dispersiones: MatHomeItem[];
 }
 
+export interface MatSolicitudDocument {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+}
+
+export async function getMatSolicitudDocuments(input: VerifyTelegramMiniAppSessionInput & { solicitudId: string }): Promise<{ documents: MatSolicitudDocument[]; expiresInSeconds: number }> {
+  const callable = httpsCallable<typeof input, { documents: MatSolicitudDocument[]; expiresInSeconds: number }>(functions, "getMatSolicitudDocuments");
+  const result = await callable(input);
+  return result.data;
+}
+
 export async function verifyTelegramMiniAppSession(
   input: VerifyTelegramMiniAppSessionInput,
 ): Promise<VerifyTelegramMiniAppSessionResult> {

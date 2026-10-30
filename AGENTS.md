@@ -107,10 +107,28 @@ and terminal-status protections.
   cleaned up in a dedicated change, not propagated.
 - Keep `package-lock.json` and `functions/package-lock.json` aligned with their
   respective package manifests when dependencies change.
+- Before any `pay0-next16`, MAT Function, or `pay0-miniapp` release, run
+  `npm run qa:mat-release-contract`. The 15 file fingerprints in
+  `config/mat-release-contract.json` represent the MAT approved on 2026-10-28.
+  A deliberate MAT change needs review and a new fingerprint; never regenerate
+  the manifest merely to make a failing gate pass. A candidate without this
+  gate is not a valid release source, even if another feature works locally.
+- For App Hosting, the Firebase CLI's `Deploy complete` line is insufficient.
+  Check the new build is `READY`, its rollout `SUCCEEDED`, traffic serves that
+  build, and both `/mat/usuarios` and `/mat/clientes` show the approved UI.
+  Confirm `pay0-miniapp` still opens those routes after any launcher change.
 - `npm run firebase:deploy` deploys Firestore rules and indexes. Deploying
   Functions is performed from `functions/` with `npm run deploy`. Both target
   production, so never deploy, alter production data, or run a live IQ/WhatsApp
   action without explicit user approval.
+- Deploy Functions and App Hosting only from an up-to-date `main`. A deploy
+  publishes whatever tree it runs from, so deploying from a feature branch or
+  stale worktree silently removes production work that branch lacks. Merge the
+  change into `main` first, then deploy from `main`.
+- `config/release-baseline.json` lists the commits and code contracts every
+  release must contain; Functions predeploy and the App Hosting build both
+  check it. When a change reaches production, add it there. Never remove an
+  entry to make a deploy pass; bring the missing work into the branch instead.
 
 ## Git workflow
 

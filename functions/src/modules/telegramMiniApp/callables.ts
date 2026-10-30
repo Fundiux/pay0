@@ -191,3 +191,51 @@ export const getMatClientHome = onCall(
     });
   },
 );
+
+export const getMatSolicitudDocuments = onCall(
+  {
+    region: "us-central1",
+    secrets: [PAY0_TELEGRAM_USERS_BOT_TOKEN, PAY0_TELEGRAM_CLIENTS_BOT_TOKEN],
+  },
+  async (request) => {
+    const input = (request.data || {}) as VerifyTelegramMiniAppSessionInput & { solicitudId?: string };
+    const scope = normalizeScope(input.botScope);
+    const verified = validateRequestInitData(input, scope);
+    const solicitudId = String(input.solicitudId || "").trim();
+    if (!solicitudId) throw new HttpsError("invalid-argument", "solicitudId requerido.");
+
+    const home = scope === "USERS"
+      ? await buildMatUserHome({ db, telegramUserId: verified.telegramUserId, displayName: getTelegramDisplayName(verified.user), username: verified.user.username || "" })
+      : await buildMatClientHome({ db, telegramUserId: verified.telegramUserId, displayName: getTelegramDisplayName(verified.user), username: verified.user.username || "" });
+    if (!home.linked || !home.solicitudes.some((item) => item.id === solicitudId)) {
+      throw new HttpsError("permission-denied", "Solicitud fuera del alcance MAT.");
+    }
+    const solicitudSnap = await db.collection("solicitudes").doc(solicitudId).get();
+    const solicitud = solicitudSnap.data() || {};
+    const rootId = String(solicitud.rootId || "").trim();
+    if (!solicitudSnap.exists || !rootId || solicitud.isDeleted || solicitud.deletedAt ||
+      (scope === "USERS" && rootId !== (home as MatUserHomeResult).rootId) ||
+      (scope === "CLIENTS" && String(solicitud.clienteId || solicitud.clientId || "") !== (home as MatClientHomeResult).clienteId)) {
+      throw new HttpsError("permission-denied", "Solicitud fuera del alcance MAT.");
+    }
+
+    const uploads = await db.collection("uploads").where("rootId", "==", rootId).where("solicitudId", "==", solicitudId).limit(100).get();
+    const prefix = `roots/${rootId}/solicitudes/${solicitudId}/`;
+    const visible = uploads.docs.filter((doc) => {
+      const row = doc.data() || {};
+      return row.entityType === "solicitudes" && row.active === true &&
+        !["INACTIVE", "REPLACED"].includes(String(row.status || "").toUpperCase()) &&
+        String(row.storagePath || "").startsWith(prefix);
+    }).slice(0, 30);
+    const [{ getStorage }, { signGenerationBoundDownload }] = await Promise.all([
+      import("firebase-admin/storage"), import("../documents/generationBoundDownload"),
+    ]);
+    const bucket = getStorage().bucket();
+    const documents = await Promise.all(visible.map(async (doc) => {
+      const row = doc.data() || {};
+      const url = await signGenerationBoundDownload(bucket, String(row.storagePath), row.storageGeneration ?? null);
+      return { id: doc.id, name: String(row.originalName || row.filename || row.fileName || row.documentTypeLabel || row.documentType || "Documento"), type: String(row.documentTypeLabel || row.documentType || "Documento"), url };
+    }));
+    return { documents, expiresInSeconds: 300 };
+  },
+);

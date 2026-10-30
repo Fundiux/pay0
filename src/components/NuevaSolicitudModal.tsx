@@ -24,7 +24,7 @@ import { parseFacturaXmlFile, type ParsedFacturaXml } from "@/lib/facturaXmlPars
 import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
 
 // H4_D87_A57_A78_NUEVA_SOLICITUD_LEGACY_IQ_IMPORT_REMOVED
-export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function NuevaSolicitudModal({ open, onClose, variant = "default" }: { open: boolean; onClose: () => void; variant?: "default" | "mat" }) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const role = normalizeRole((profile as any)?.role) as any;
@@ -688,10 +688,11 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
       }}
       tabIndex={-1}
     >
-      <div className="relative w-[calc(100vw-2rem)] max-w-[520px] overflow-visible rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl">
+      <div className={variant === "mat" ? "relative max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-3xl border border-white/10 bg-[#161d2b] p-5 shadow-2xl" : "relative w-[calc(100vw-2rem)] max-w-[520px] overflow-visible rounded-3xl border border-white/10 bg-[#161d2b] p-6 shadow-2xl"}>
+          {variant === "mat" ? <h2 className="mb-4 text-lg font-black text-white">Nueva solicitud</h2> : null}
           <button
             type="button"
-            className="absolute -right-2 -top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+            className={variant === "mat" ? "absolute right-4 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400" : "absolute -right-2 -top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"}
             aria-label="Cerrar"
             title="Cerrar"
             onClick={closeModal}
@@ -701,6 +702,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
           </button>
 <form onSubmit={handleSave} className="relative grid grid-cols-1 gap-3 text-[13px] text-slate-300">
                     <UiSelect
+            menuMode={variant === "mat" ? "inline" : "absolute"}
             value={formData.clientId}
             onChange={(value) => {
               if (sourceDocumentLock) return;
@@ -718,6 +720,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
           />
 
           <UiSelect
+            menuMode={variant === "mat" ? "inline" : "absolute"}
             value={formData.companyId}
             onChange={(value) => {
               if (sourceDocumentLock) return;
@@ -736,6 +739,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
           />
 
           <UiSelect
+            menuMode={variant === "mat" ? "inline" : "absolute"}
             value={formData.operationTypeKey}
             onChange={(value) => {
               if (sourceDocumentLock) return;
@@ -757,6 +761,7 @@ export default function NuevaSolicitudModal({ open, onClose }: { open: boolean; 
           />
 
           <UiSelect
+            menuMode={variant === "mat" ? "inline" : "absolute"}
             value={formData.tipoFactura}
             onChange={(value) => {
               if (sourceDocumentLock) return;

@@ -39,6 +39,8 @@ jobs:
         run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
       - name: Verify cumulative release baseline
         run: npm run qa:release-baseline
+      - name: Verify approved MAT release contract
+        run: npm run qa:mat-release-contract
       - name: Validate committed source candidate
         run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
       - name: Preserve candidate evidence

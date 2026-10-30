@@ -3,7 +3,7 @@ import { functions } from "@/lib/firebaseClient";
 
 export type CompanyDepositAccount = { id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom?: string | null; validTo?: string | null };
 export type Company = {
-  id: string; rootId: string; despachoId: string; nombre: string; rfc: string; depositAlias?: string; depositClabes?: string[]; depositAccounts?: CompanyDepositAccount[]; active?: boolean; companyNumber?: number | null;
+  id: string; rootId: string; despachoId: string; nombre: string; rfc: string; depositAlias?: string; quotationContact?: string; depositClabes?: string[]; depositAccounts?: CompanyDepositAccount[]; active?: boolean; companyNumber?: number | null;
   isOwnCompany?: boolean; ownedByRoot?: boolean; pay0OwnCompany?: boolean; ownership?: string; companyOwnership?: string; companyType?: string;
 };
 
