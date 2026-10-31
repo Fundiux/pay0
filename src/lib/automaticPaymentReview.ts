@@ -8,6 +8,8 @@ const reasons: Record<string, string> = {
   DUPLICATE_INVOICE_IDENTITY: "Varias solicitudes contienen la misma identidad fiscal.",
   MULTIPLE_INVOICES_REQUIRE_ALLOCATION: "El importe requiere definir cómo repartirlo entre las facturas.",
   AMOUNT_EXCEEDS_INVOICE: "El importe supera el saldo de la factura identificada.",
+  NON_PRODUCTION_INVOICE: "La factura identificada proviene de un entorno de pruebas.",
+  AMBIGUOUS_INVOICE_FISCAL_SOURCE: "El origen fiscal de la factura es ambiguo.",
   APPLICATION_PERMISSION_DENIED: "Los permisos del usuario de origen requieren revisión.",
   APPLICATION_UNAUTHENTICATED: "El usuario de origen requiere revisión.",
   APPLICATION_FAILED_PRECONDITION: "El pago o la factura cambió y requiere revisión.",
@@ -17,5 +19,6 @@ const reasons: Record<string, string> = {
 };
 export function automaticPaymentReviewMessage(state: { status?: string; reason?: string } | undefined): string {
   if (state?.status !== "REQUIRES_REVIEW") return "";
-  return reasons[state.reason || ""] || "La aplicación automática requiere revisión manual.";
+  const reason = reasons[state.reason || ""] || "La aplicación automática requiere revisión manual.";
+  return `${reason} La aplicación manual sigue disponible.`;
 }

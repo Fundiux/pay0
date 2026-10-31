@@ -1587,6 +1587,17 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
       });
   };
 
+  // Solo usa datos ya cargados para explicar por que no aparece "Aplicar a folios".
+  const hasPendientesEnOtraEmpresa = (pago: any) =>
+    solicitudes.some(
+      (s) =>
+        !s?.oculto &&
+        !isSolicitudTerminal(s) &&
+        matchSolicitudWithCliente(s, pago?.clienteId, pago?.clienteNombre) &&
+        String(s?.companyId || "").trim() !== String(pago?.companyId || "").trim() &&
+        getSolicitudPendiente(s) > 0
+    );
+
   const foliosAplicables = useMemo(() => {
     if (!applyFor) return [];
 
@@ -2716,7 +2727,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                       </span>
                       {automaticPaymentReviewMessage(p.automaticApplication) && <div className="mt-1 text-[10px] text-amber-300"
                         title={automaticPaymentReviewMessage(p.automaticApplication)}>
-                        Aplicación por revisar
+                        Aplicación por revisar · manual disponible
                         <span className="sr-only">: {automaticPaymentReviewMessage(p.automaticApplication)}</span>
                       </div>}
                     </td><td className="pay0-td pay0-pagos-actions-cell text-center">
@@ -2818,6 +2829,18 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                             >
                               <Link2 size={16} />
                             </button>
+                          )}
+
+                        {canApplyPagos &&
+                          !iqApplicationBlocking &&
+                          (status === "CONCILIADO" || status === "APLICADO_PARCIAL") &&
+                          money2(p?.montoDisponible || 0) > 0 &&
+                          foliosPendientes.length === 0 && (
+                            <span className="max-w-[180px] text-right text-[10px] leading-tight text-slate-500">
+                              {hasPendientesEnOtraEmpresa(p)
+                                ? "Las solicitudes pendientes del cliente están en otra empresa"
+                                : "Sin solicitudes pendientes de este cliente con esta empresa"}
+                            </span>
                           )}
                       </div>
                     </td></tr>
