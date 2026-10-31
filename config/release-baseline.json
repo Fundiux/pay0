@@ -60,6 +60,10 @@
     {
       "commit": "96b0dc3c2b638197811a97f08480537eba160bd3",
       "capability": "Logo para cotizaciones por empresa emisora"
+    },
+    {
+      "commit": "63924ee0907ad11f194410bdeb24afd2285c191e",
+      "capability": "Aplicacion de pagos en IQ identifica al cliente por su perfil IQ (340ae4b3, publicada el 2026-10-24)"
     }
   ],
   "requiredText": [
@@ -212,6 +216,11 @@
       "file": "functions/src/modules/canonicalCenter/service.ts",
       "text": "loadCompanyQuotationLogo(rootId, companyId",
       "capability": "Las cotizaciones con diseno base usan el logo de la empresa emisora"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/iqExecution.ts",
+      "text": "resolveStoredIqClientIdForProfile(clientSnap.data() || {}, access)",
+      "capability": "La aplicacion de pagos en IQ resuelve el cliente por su perfil IQ"
     },
     {
       "file": "functions/src/modules/canonicalCenter/service.ts",
