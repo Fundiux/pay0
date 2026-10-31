@@ -1323,11 +1323,16 @@ async function runIqPaymentApplicationHttpDirect(params: {
     });
 
     let client: { id?: unknown; name?: unknown } | null = null;
+    // The IQ profile ID identifies the client; IQ names carry legal suffixes
+    // and spellings PAY0 does not (e.g. "S DE RL DE CV", YESSICA/YESSIKA).
+    let clientMatchedByProfile = false;
     try {
-      client = resolveIqDepositClientCatalogRow(
+      const resolvedClient = resolveIqDepositClientCatalogRow(
         catalogArray(partnerCatalog.client),
         { iqClientId: params.iqClientId, clientName: params.clienteName },
-      ).row;
+      );
+      client = resolvedClient.row;
+      clientMatchedByProfile = resolvedClient.strategy === "HTTP_CATALOG_PROFILE_ID";
     } catch {
       // An absent or ambiguous profile link must stop before the IQ POST.
     }
@@ -1420,6 +1425,7 @@ async function runIqPaymentApplicationHttpDirect(params: {
             expected: params.clienteName,
             selected: cleanText(client.name),
             ok:
+              clientMatchedByProfile ||
               normalizeName(client.name) ===
               normalizeName(params.clienteName),
             message: "Cliente validado por HTTP.",
@@ -1504,6 +1510,7 @@ async function runIqPaymentApplicationHttpDirect(params: {
           expected: params.clienteName,
           selected: cleanText(client.name),
           ok:
+            clientMatchedByProfile ||
             normalizeName(client.name) ===
             normalizeName(params.clienteName),
           message: "Cliente validado por HTTP.",
