@@ -2518,7 +2518,7 @@ export const listSolicitudes = onCall(
 );
 
 export const changePagoStatus = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, timeoutSeconds: 60, memory: "256MiB", maxInstances: 20 },
   async (request) => {
     const uid = requireAuth(request);
     const rootId = await getRootId(uid);
@@ -2675,7 +2675,7 @@ return { ok: true };
 );
 
 export const preparePagoFinancialPosting = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, timeoutSeconds: 60, memory: "256MiB", maxInstances: 20 },
   async (request) => {
     const uid = requireAuth(request);
     const me = await getMyUser(uid);

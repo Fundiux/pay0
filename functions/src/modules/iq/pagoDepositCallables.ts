@@ -2719,6 +2719,7 @@ export const processIqPagoDepositReconciliationQueue = onSchedule(
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",
+    maxInstances: 20,
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
   },
   async () => {
