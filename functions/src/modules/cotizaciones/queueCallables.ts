@@ -168,7 +168,7 @@ async function processJob(jobId: string) {
   }
 }
 
-export const processSolicitudQuotationOnDemandTask = onTaskDispatched({ region: "us-central1", timeoutSeconds: 540, memory: "1GiB", maxInstances: 2, concurrency: 1, retryConfig: { maxAttempts: 1, minBackoffSeconds: 60 } }, async (request) => { const jobId = clean((request.data as any)?.jobId, 128); if (jobId) await processJob(jobId); });
+export const processSolicitudQuotationOnDemandTask = onTaskDispatched({ region: "us-central1", timeoutSeconds: 540, memory: "1GiB", maxInstances: 50, concurrency: 1, retryConfig: { maxAttempts: 1, minBackoffSeconds: 60 } }, async (request) => { const jobId = clean((request.data as any)?.jobId, 128); if (jobId) await processJob(jobId); });
 
 export const processSolicitudQuotationQueue = onSchedule({ schedule: "every 5 minutes", timeZone: "America/Mexico_City", timeoutSeconds: 540, memory: "1GiB" }, async () => {
   const now = Timestamp.now();
