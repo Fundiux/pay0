@@ -153,6 +153,10 @@ const decide = (p = {}, rows = [invoice]) => domain.decideAutomaticPayment('paym
   check((await iq.continuePaymentApplicationImmediately(`${rootId}-iq`)).action,'PAUSED','missing IQ configuration no dispatch');
   await db.doc(`iqIntegrationConfigs/${rootId}`).set({enabled:false,automation:{aplicacionPagos:true}});
   check((await iq.continuePaymentApplicationImmediately(`${rootId}-iq`)).action,'PAUSED','IQ master gate');
+  await db.doc(`iqIntegrationConfigs/${rootId}`).set({enabled:true,automation:{aplicacionPagos:false}});
+  check((await iq.continuePaymentApplicationImmediately(`${rootId}-iq`)).action,'PAUSED','payment application flow gate');
+  await db.doc(`iqIntegrationConfigs/${rootId}`).set({enabled:true,automation:{aplicacionPagos:true}});
+  check((await iq.continuePaymentApplicationImmediately(`${rootId}-iq`)).action!=='PAUSED',true,'operating window does not pause payment application');
   check((await db.collection('paymentComplementJobs').get()).size,0,'REP never invoked by local application');
   console.log(JSON.stringify({ok:true,checks,concurrency:'PASS',financialTransaction:'PASS',scope:'PASS',ambiguousCases:'REVIEW',externalActions:0}));
 })().then(()=>process.exit(0)).catch(error=>{console.error(error);process.exit(1);});
