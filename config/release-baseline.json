@@ -80,6 +80,10 @@
     {
       "commit": "c5323461f0a84b534047bbf8ea41db577901dc45",
       "capability": "Aplicacion de pagos en IQ sin depender del horario operativo"
+    },
+    {
+      "commit": "11b58afb9864ac5a37f66a924c20c087a2cd4538",
+      "capability": "Pagos explica por que no se puede aplicar a folios"
     }
   ],
   "requiredText": [
@@ -282,6 +286,11 @@
       "file": "functions/src/modules/paymentApplications/callables.ts",
       "text": "if (!configSnap.exists || !config.enabled || config.automation.aplicacionPagos !== true) return { action: \"PAUSED\" };",
       "capability": "La aplicacion de pagos en IQ no espera la ventana operativa"
+    },
+    {
+      "file": "src/app/pagos/page.tsx",
+      "text": "Sin solicitudes pendientes de este cliente con esta empresa",
+      "capability": "Pagos muestra el motivo cuando no hay folios para aplicar"
     }
   ],
   "forbiddenText": [
