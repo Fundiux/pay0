@@ -4,7 +4,7 @@ import { onTaskDispatched } from "firebase-functions/tasks";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
-import { evaluateIqOperatingWindow, normalizeIqOperatingCalendarConfig } from "../iq/operatingCalendar";
+import { normalizeIqOperatingCalendarConfig } from "../iq/operatingCalendar";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertAuthorized } from "../../utils/authGuard";
 import {
@@ -1222,8 +1222,9 @@ export async function continuePaymentApplicationImmediately(pagoId: string) {
   if (!pago || !isPaymentApplicationAutomationCandidate(pago, cleanDispatchText(pago.rootId))) return { action: "SKIPPED" };
   const configSnap = await db.doc(`iqIntegrationConfigs/${pago.rootId}`).get();
   const config = normalizeIqOperatingCalendarConfig(configSnap.data());
-  if (!configSnap.exists || !config.enabled || config.automation.aplicacionPagos !== true ||
-      !evaluateIqOperatingWindow(config, new Date(), "CREATION").allowed) return { action: "PAUSED" };
+  // IQ registers payment applications at any time; the operating window only
+  // governs creating operations there, so it does not pause this flow.
+  if (!configSnap.exists || !config.enabled || config.automation.aplicacionPagos !== true) return { action: "PAUSED" };
   try {
     return await processPaymentApplicationAutomationCandidate({ rootId: pago.rootId, pagoId, pago });
   } catch (error) {
@@ -1264,12 +1265,13 @@ export const processIqPaymentApplicationExecution =
     },
     async () => {
       // Gate canonico:
-      // Master IQ + automation.aplicacionPagos + ventana + intervalo.
+      // Master IQ + automation.aplicacionPagos + intervalo. La aplicacion
+      // de pagos no depende del horario operativo de IQ.
       const enabledRoots =
         await loadEnabledIqAutomationRoots({
           process:
             "paymentApplicationExecution",
-          purpose: "CREATION",
+          respectWindow: false,
         });
 
       if (enabledRoots.size === 0) {
