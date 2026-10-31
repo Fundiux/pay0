@@ -68,6 +68,10 @@
     {
       "commit": "18fdeb2b6b1a40521945c92eab5c0a48b9aa9bff",
       "capability": "Registro contable de pagos de clientes con adelanto pendiente (OIL SPILL)"
+    },
+    {
+      "commit": "714fb5f7194a081c1a4696f1d5241e31051497e0",
+      "capability": "Aplicacion automatica de pagos por monto exacto dentro del mismo mes"
     }
   ],
   "requiredText": [
@@ -255,6 +259,11 @@
       "file": "src/lib/pay0MassiveLayout.ts",
       "text": "export function toPay0MassiveDispersionItem",
       "capability": "Dispersion masiva envia el destino completo por partida (Codex)"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
+      "text": "return result(\"READY\", \"EXACT_AMOUNT_SAME_MONTH\", 1, batch);",
+      "capability": "La aplicacion automatica relaciona pago y solicitud por monto exacto del mismo mes"
     }
   ],
   "forbiddenText": [
