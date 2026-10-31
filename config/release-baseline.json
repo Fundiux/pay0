@@ -76,6 +76,10 @@
     {
       "commit": "b6d71e288f0d580aac53e4b9c88649702928e66b",
       "capability": "Aplicacion automatica trata solicitudes sin moneda como MXN"
+    },
+    {
+      "commit": "c5323461f0a84b534047bbf8ea41db577901dc45",
+      "capability": "Aplicacion de pagos en IQ sin depender del horario operativo"
     }
   ],
   "requiredText": [
@@ -273,6 +277,11 @@
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
       "text": "const invoiceCurrency = (row: Row) => upper(row.moneda) || \"MXN\";",
       "capability": "Las solicitudes sin moneda se aplican como MXN"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/callables.ts",
+      "text": "if (!configSnap.exists || !config.enabled || config.automation.aplicacionPagos !== true) return { action: \"PAUSED\" };",
+      "capability": "La aplicacion de pagos en IQ no espera la ventana operativa"
     }
   ],
   "forbiddenText": [
