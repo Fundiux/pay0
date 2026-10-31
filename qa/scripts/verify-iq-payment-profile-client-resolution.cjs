@@ -96,6 +96,12 @@ const applicationSource = fs.readFileSync(
 );
 assert.match(applicationSource, /resolveStoredIqClientIdForProfile\(clientSnap\.data\(\) \|\| \{\}, access\)/);
 assert.match(applicationSource, /resolveIqDepositClientCatalogRow\(\s*catalogArray\(partnerCatalog\.client\)/);
+assert.match(applicationSource, /clientMatchedByProfile = resolvedClient\.strategy === "HTTP_CATALOG_PROFILE_ID";/);
+assert.equal(
+  (applicationSource.match(/ok:\s*clientMatchedByProfile \|\|\s*normalizeName\(client\.name\) ===/g) || []).length,
+  2,
+  "La validacion CLIENTE acepta el cliente identificado por perfil IQ aunque el nombre difiera.",
+);
 assert.doesNotMatch(
   paymentCallablesSource,
   /"iqDepositSync\.(?:iqClientId|clientMatchStrategy)"\s*:/,
