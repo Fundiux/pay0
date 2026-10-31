@@ -64,6 +64,10 @@
     {
       "commit": "63924ee0907ad11f194410bdeb24afd2285c191e",
       "capability": "Aplicacion de pagos en IQ identifica al cliente por su perfil IQ (340ae4b3, publicada el 2026-10-24)"
+    },
+    {
+      "commit": "18fdeb2b6b1a40521945c92eab5c0a48b9aa9bff",
+      "capability": "Registro contable de pagos de clientes con adelanto pendiente (OIL SPILL)"
     }
   ],
   "requiredText": [
@@ -221,6 +225,11 @@
       "file": "functions/src/modules/paymentApplications/iqExecution.ts",
       "text": "resolveStoredIqClientIdForProfile(clientSnap.data() || {}, access)",
       "capability": "La aplicacion de pagos en IQ resuelve el cliente por su perfil IQ"
+    },
+    {
+      "file": "functions/src/modules/deposits/financial.ts",
+      "text": "preparedAdvanceSettlement?.commit();",
+      "capability": "El adelanto se liquida despues de las lecturas del registro contable"
     },
     {
       "file": "functions/src/modules/canonicalCenter/service.ts",
