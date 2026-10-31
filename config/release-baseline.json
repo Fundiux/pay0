@@ -84,6 +84,10 @@
     {
       "commit": "11b58afb9864ac5a37f66a924c20c087a2cd4538",
       "capability": "Pagos explica por que no se puede aplicar a folios"
+    },
+    {
+      "commit": "32ba53867dbe1c72f367e1e4ee0093be3b69d6ef",
+      "capability": "Aplicacion de pagos en IQ valida el cliente por perfil IQ y no por nombre"
     }
   ],
   "requiredText": [
@@ -291,6 +295,11 @@
       "file": "src/app/pagos/page.tsx",
       "text": "Sin solicitudes pendientes de este cliente con esta empresa",
       "capability": "Pagos muestra el motivo cuando no hay folios para aplicar"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/iqExecution.ts",
+      "text": "clientMatchedByProfile = resolvedClient.strategy === \"HTTP_CATALOG_PROFILE_ID\";",
+      "capability": "El cliente identificado por perfil IQ pasa la validacion aunque el nombre difiera"
     }
   ],
   "forbiddenText": [
