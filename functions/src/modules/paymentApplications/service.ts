@@ -394,6 +394,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
     }
 
     const coverage = getPagoCoverageState(pago);
+    let automaticReason = "";
     if (params.automaticSourceDigest) {
       const user = await tx.get(db.doc(`users/${actor.uid}`));
       assertAuthorized({ uid: actor.uid }, user.data(), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
@@ -406,6 +407,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
       if (liveDecision.sourceDigest !== params.automaticSourceDigest || liveDecision.batch?.requestHash !== batch.requestHash) {
         throw new HttpsError("failed-precondition", "La coincidencia automática cambió; requiere revisión.");
       }
+      automaticReason = liveDecision.reason;
     }
     if (coverage.available <= 0) {
       throw new HttpsError(
@@ -775,7 +777,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
     tx.update(pagoRef, {
       ...coveragePatch,
       ...(params.automaticSourceDigest ? { automaticApplication: {
-        status: "APPLIED", reason: "EXACT_INVOICE_REFERENCE", sourceDigest: params.automaticSourceDigest,
+        status: "APPLIED", reason: automaticReason, sourceDigest: params.automaticSourceDigest,
         reservationId, matchedCount: batch.applications.length, updatedAt: FieldValue.serverTimestamp(),
       } } : {}),
       status: nextPagoStatus,
