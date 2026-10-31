@@ -49,6 +49,9 @@ const decide = (p = {}, rows = [invoice]) => domain.decideAutomaticPayment('paym
   check(byAmount({}, [{...amountInvoice, companyId: 'other'}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'amount match keeps company scope');
   check(byAmount({}, [{...amountInvoice, clienteId: 'other'}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'amount match keeps client scope');
   check(byAmount({moneda: 'USD'}).reason, 'NO_EXACT_INVOICE_REFERENCE', 'amount match keeps currency');
+  check(byAmount({}, [{...amountInvoice, moneda: undefined}]).reason, 'EXACT_AMOUNT_SAME_MONTH', 'invoice without currency is MXN');
+  check(byAmount({moneda: 'USD'}, [{...amountInvoice, moneda: undefined}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'invoice without currency is not USD');
+  check(decide({}, [{...invoice, moneda: undefined}]).status, 'READY', 'referenced invoice without currency is MXN');
   check(byAmount({referencia: invoice.folio}, [invoice, amountInvoice]).batch.applications[0].solicitudId, 'invoice-a', 'an exact reference is never overridden by amount');
   check(decide({automaticApplicationEligible: false}).status, 'WAITING', 'legacy excluded');
   check(decide({financialPostingStatus: 'PENDING'}).status, 'WAITING', 'posting required');

@@ -11,6 +11,9 @@ const clean = (value: unknown) => String(value ?? "").trim();
 const upper = (value: unknown) => clean(value).toUpperCase();
 const cents = (value: number) => Math.round(value * 100);
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+// Solicitudes created before currency capture carry no moneda; they are MXN,
+// as materiality, Hugo and the IQ importer already read them.
+const invoiceCurrency = (row: Row) => upper(row.moneda) || "MXN";
 const UUID_PATTERN = /^[A-F0-9]{8}-(?:[A-F0-9]{4}-){3}[A-F0-9]{12}$/;
 const MEXICO_MONTH = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit" });
 
@@ -99,7 +102,7 @@ export function decideAutomaticPayment(pagoId: string, pago: Row, candidates: Ro
   // not permission to redistribute its amount among the other invoices.
   if (matches.some(row => ["RECHAZADA", "CANCELADA", "ELIMINADA", "COMPLETADA"].includes(normalizeSolicitudBackendStatus(row.status)) || getSolicitudCoverageState(row).pending <= 0))
     return result("REQUIRES_REVIEW", "INVOICE_NOT_PAYABLE", matches.length);
-  if (matches.some(row => upper(row.moneda) !== currency)) return result("REQUIRES_REVIEW", "CURRENCY_MISMATCH", matches.length);
+  if (matches.some(row => invoiceCurrency(row) !== currency)) return result("REQUIRES_REVIEW", "CURRENCY_MISMATCH", matches.length);
   const distinct = new Set(matches.map(row => upper(row.facturaUuid || row.uuidCfdi)));
   if (distinct.size !== matches.length) return result("REQUIRES_REVIEW", "DUPLICATE_INVOICE_IDENTITY", matches.length);
   const available = cents(getPagoCoverageState(pago).available);
@@ -123,7 +126,7 @@ type DecisionResult = (status: AutomaticPaymentDecision["status"], reason: strin
 function decideByExactAmount(pagoId: string, pago: Row, sameOwner: Row[], currency: string, noMatchReason: string, result: DecisionResult): AutomaticPaymentDecision {
   const month = paymentMonth(pago), available = cents(getPagoCoverageState(pago).available);
   if (!month) return result("REQUIRES_REVIEW", noMatchReason);
-  const matches = sameOwner.filter(row => mexicoMonth(row.createdAt) === month && upper(row.moneda) === currency &&
+  const matches = sameOwner.filter(row => mexicoMonth(row.createdAt) === month && invoiceCurrency(row) === currency &&
     cents(getSolicitudCoverageState(row).pending) === available &&
     !["RECHAZADA", "CANCELADA", "ELIMINADA", "COMPLETADA"].includes(normalizeSolicitudBackendStatus(row.status)));
   if (!matches.length) return result("REQUIRES_REVIEW", noMatchReason);
