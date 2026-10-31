@@ -7,6 +7,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { canonicalCompanyCatalog, loadBaseQuotationBundle, loadCanonicalBundle, type CanonicalDocumentUse } from "../documents/canonicalBundle";
 import { PAY0_CANONICAL_STORAGE } from "./contracts";
+import { loadCompanyQuotationLogo } from "../companies/quotationLogo";
 import { DOCUMENT_TEMPLATE_TYPES, DOCUMENT_TEMPLATE_NAMES, globalTemplateBase, type DocumentTemplateType } from "./globalTemplateBase";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -415,7 +416,13 @@ export async function resolveCorporateDocumentBundle(rootId: string, companyId: 
   const resource = (await db.collection(store.resources).doc(id).get()).data();
   if (!resource?.activeVersion) {
     if (resource?.hasActivated) throw Error("CORPORATE_LOGO_ACTIVE_VERSION_REQUIRED");
-    return bundle;
+    // Issuers with no package of their own (base layout) show the logo set on their company record.
+    if (use !== "COTIZACION" || bundle.snapshot.templateId !== "PAY0-BASE-COTIZACION") return bundle;
+    const company = await loadCompanyQuotationLogo(rootId, companyId, (await db.collection("companies").doc(companyId).get()).data());
+    if (!company) return bundle;
+    return { ...bundle, logo: company.bytes, snapshot: { ...bundle.snapshot,
+      templateBundleSha256: sha(Buffer.concat([Buffer.from(bundle.html), Buffer.from(bundle.css), company.bytes])),
+      companyQuotationLogoSha256: company.sha256 } };
   }
   const version = (await versionRef(id, resource.activeVersion).get()).data();
   const artifact = version?.artifacts?.find((item: any) => ["image/png", "image/jpeg"].includes(item.contentType));

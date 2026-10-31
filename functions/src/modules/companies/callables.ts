@@ -6,6 +6,7 @@ import { nextSequenceTx } from "../sequences/service";
 import { db, getActivityAdminId, getMyUser, requireAuth, requireRole } from "../sharedCallables/helpers";
 import { assertValidCompanyIdentity, normalizeCompanyIdentity } from "./domain";
 import { buildCompanyActivePatch } from "./service";
+import { QUOTATION_LOGO_MAX_BYTES, storeCompanyQuotationLogo } from "./quotationLogo";
 
 export const createCompany = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
@@ -426,5 +427,65 @@ export const updateCompanyDepositIdentity = onCall(
       depositAlias,
       depositClabes,
     };
+  },
+);
+
+export const setCompanyQuotationLogo = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB", maxInstances: 5 },
+  async (request) => {
+    const callerUid = requireAuth(request);
+    const caller = await getMyUser(callerUid);
+    assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin"], requiredModule: "empresas", requiredAction: "view" });
+    requireRole(caller, ["superadmin"]);
+
+    const companyId = String(request.data?.companyId || "").trim();
+    const remove = request.data?.remove === true;
+    const contentBase64 = String(request.data?.contentBase64 || "");
+    if (!companyId) throw new HttpsError("invalid-argument", "companyId requerido.");
+    if (!remove && (!contentBase64 || contentBase64.length > Math.ceil(QUOTATION_LOGO_MAX_BYTES / 3) * 4 + 4))
+      throw new HttpsError("invalid-argument", "Selecciona una imagen PNG o JPG de hasta 1 MB.");
+
+    const companyRef = db.doc(`companies/${companyId}`);
+    const companySnap = await companyRef.get();
+    if (!companySnap.exists) throw new HttpsError("not-found", "Empresa no encontrada.");
+    const company: any = companySnap.data() || {};
+    const callerRootId = String((caller as any)?.rootId || callerUid);
+    // Unlike the deposit identity, the logo is stored under the company root, so it must have one.
+    if (String(company.rootId || "") !== callerRootId) throw new HttpsError("permission-denied", "Empresa fuera de tu root.");
+
+    let quotationLogo: Awaited<ReturnType<typeof storeCompanyQuotationLogo>> | null = null;
+    if (!remove) {
+      try {
+        quotationLogo = await storeCompanyQuotationLogo(callerRootId, companyId, Buffer.from(contentBase64, "base64"), String(request.data?.fileName || ""));
+      } catch (error: any) {
+        if (/^QUOTATION_LOGO_(SIZE|FORMAT)_INVALID$/.test(String(error?.message))) throw new HttpsError("invalid-argument", "Selecciona una imagen PNG o JPG de hasta 1 MB.");
+        throw error;
+      }
+    }
+
+    await companyRef.set({
+      quotationLogo: quotationLogo
+        ? { ...quotationLogo, uploadedAt: FieldValue.serverTimestamp(), uploadedBy: callerUid }
+        : FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: callerUid,
+    }, { merge: true });
+
+    await logActivity({
+      event: "COMPANY_QUOTATION_LOGO_UPDATE",
+      rootId: callerRootId,
+      adminId: getActivityAdminId(caller, callerUid, callerRootId),
+      actorUid: callerUid,
+      actorName: String((caller as any)?.email || callerUid),
+      actorUsername: String((caller as any)?.username || ""),
+      actorRole: String(getUserRole(caller) || ""),
+      referenceId: companyId,
+      referenceType: "company",
+      description: quotationLogo
+        ? `Logo para cotizaciones de ${String(company.nombre || companyId)} actualizado (${quotationLogo.sha256.slice(0, 12)})`
+        : `Logo para cotizaciones de ${String(company.nombre || companyId)} retirado`,
+    });
+
+    return { ok: true, companyId, sha256: quotationLogo?.sha256 || null };
   },
 );

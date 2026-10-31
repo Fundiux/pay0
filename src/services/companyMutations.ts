@@ -35,3 +35,18 @@ export async function updateCompanyDepositIdentityMutation(input: {
   invalidateCompanyCatalog();
   return res?.data;
 }
+
+/** Uploads (or removes) the logo the company shows on base-layout quotations. */
+export async function setCompanyQuotationLogoMutation(input: { companyId: string; file?: File; remove?: boolean }) {
+  let contentBase64 = "";
+  if (input.file) {
+    const bytes = new Uint8Array(await input.file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    contentBase64 = btoa(binary);
+  }
+  const fn = httpsCallable(functions, "setCompanyQuotationLogo");
+  const res: any = await fn({ companyId: input.companyId, remove: input.remove === true, contentBase64, fileName: input.file?.name || "" });
+  invalidateCompanyCatalog();
+  return res?.data;
+}

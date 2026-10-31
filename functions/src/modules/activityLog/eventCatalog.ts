@@ -132,6 +132,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
 
   COMPANY_CREATE: eventEntry("COMPANY_CREATE", "Empresa creada", "empresas", "business", "success"),
   COMPANY_TOGGLE: eventEntry("COMPANY_TOGGLE", "Empresa activada o desactivada", "empresas", "business", "warning"),
+  COMPANY_QUOTATION_LOGO_UPDATE: eventEntry("COMPANY_QUOTATION_LOGO_UPDATE", "Logo para cotizaciones actualizado", "empresas", "business"),
   FACTURA_BORRADOR_CREADO: eventEntry("FACTURA_BORRADOR_CREADO", "Borrador CFDI creado", "facturacion", "financial", "success"),
   FACTURA_EMITIDA: eventEntry("FACTURA_EMITIDA", "CFDI vinculado al expediente", "facturacion", "financial", "success"),
   OPERACION_RECUPERADA: eventEntry("OPERACION_RECUPERADA", "Operación reconciliada", "solicitudes", "repair", "success"),

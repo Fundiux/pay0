@@ -129,6 +129,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
 
   COMPANY_CREATE: eventEntry("COMPANY_CREATE", "Empresa creada", "empresas", "business", "success"),
   COMPANY_TOGGLE: eventEntry("COMPANY_TOGGLE", "Empresa activada o desactivada", "empresas", "business", "warning"),
+  COMPANY_QUOTATION_LOGO_UPDATE: eventEntry("COMPANY_QUOTATION_LOGO_UPDATE", "Logo para cotizaciones actualizado", "empresas", "business"),
 
   DESPACHO_CREATE: eventEntry("DESPACHO_CREATE", "Despacho creado", "despachos", "business", "success"),
   DESPACHO_UPDATE: eventEntry("DESPACHO_UPDATE", "Despacho actualizado", "despachos", "business"),

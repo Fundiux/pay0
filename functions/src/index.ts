@@ -2801,7 +2801,7 @@ export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnR
 
 export { addSolicitudNota, addPagoNota } from "./modules/notes/callables";
 export { repairUserNumbersByRootCallable } from "./modules/users/repairNumbers";
-export { createCompany, toggleCompanyActive, setDispatchCompanies, listCompaniesCanonical, updateCompanyDepositIdentity } from "./modules/companies/callables";
+export { createCompany, toggleCompanyActive, setDispatchCompanies, listCompaniesCanonical, updateCompanyDepositIdentity, setCompanyQuotationLogo } from "./modules/companies/callables";
 export { saveDespachoCallable, setUserDespachos, toggleDespachoActive } from "./modules/dispatches/callables";
 export { createManualAdjustment } from "./modules/balances/callables";
 export { createClientDispersion, createClientDispersionsMassive, grantClientAdvance, listScopedClientDispersions } from "./modules/financing/callables";

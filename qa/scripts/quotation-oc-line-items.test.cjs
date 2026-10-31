@@ -4,6 +4,7 @@ const { parseOcFiscalMetadataBuffer, parseOcDate } = require('../../functions/li
 const { requirePricedQuoteLines, quotationIssuerContact, resolveQuoteDocumentDate } = require('../../functions/lib/modules/cotizaciones/callables.js');
 const { stripOcTemplateHelp } = require('../../functions/lib/utils/ocTemplateText.js');
 const { loadBaseQuotationBundle } = require('../../functions/lib/modules/documents/canonicalBundle.js');
+const { inspectQuotationLogo, quotationLogoPrefix } = require('../../functions/lib/modules/companies/quotationLogo.js');
 
 async function workbook(rows) {
   const book = new ExcelJS.Workbook(), sheet = book.addWorksheet('OC');
@@ -105,5 +106,12 @@ const quoteLines = buffer => parseOcFiscalMetadataBuffer(buffer, true, undefined
   assert.equal(quotationIssuerContact({ depositAlias: 'Mercacobra' }), 'contacto@mercacobra.mx');
   assert.equal(quotationIssuerContact({ depositAlias: 'REFACCIONES Y TRABAJAOS' }), 'contacto@refaccionesytrabajaos.mx');
   assert.equal(quotationIssuerContact({}), '');
-  console.log('PASS quotation mirrors OC lines, prices, date and number; issuer contact falls back to the alias');
+
+  // Issuer logo on the company record: only real PNG/JPEG bytes up to 1 MB, stored under the company root.
+  assert.equal(inspectQuotationLogo(Buffer.from('89504e470d0a1a0a0000', 'hex')).contentType, 'image/png');
+  assert.equal(inspectQuotationLogo(Buffer.from('ffd8ffe000', 'hex')).extension, 'jpg');
+  assert.throws(() => inspectQuotationLogo(Buffer.from('%PDF-1.7')), /FORMAT_INVALID/, 'a PDF renamed as .png is rejected');
+  assert.throws(() => inspectQuotationLogo(Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(1024 * 1024)])), /SIZE_INVALID/);
+  assert.equal(quotationLogoPrefix('root1', 'co1'), 'company-quotation-logos/root1/co1/');
+  console.log('PASS quotation mirrors OC lines, prices, date and number; issuer contact falls back to the alias; issuer logo accepts only PNG/JPEG');
 })().catch(error => { console.error(error); process.exitCode = 1; });

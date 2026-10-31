@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { Power, PowerOff } from "lucide-react";
-import { createCompanyMutation, toggleCompanyActiveMutation, updateCompanyDepositIdentityMutation } from "@/services/companyMutations";
+import { createCompanyMutation, setCompanyQuotationLogoMutation, toggleCompanyActiveMutation, updateCompanyDepositIdentityMutation } from "@/services/companyMutations";
 import { useAuth } from "@/lib/useAuth";
 import { useUserProfile } from "@/lib/useUserProfile";
 
@@ -25,6 +25,7 @@ type CompanyRow = {
   rfc: string;
   depositAlias?: string;
   quotationContact?: string;
+  quotationLogo?: { fileName?: string; sizeBytes?: number; uploadedAt?: any };
   depositClabes?: string[];
   depositAccounts?: Array<{ id: string; clabe: string; status: "ACTIVA" | "INACTIVA"; validFrom?: string | null; validTo?: string | null }>;
   active: boolean;
@@ -82,6 +83,7 @@ export default function DespachoDetallePage() {
   const [quotationContact, setQuotationContact] = useState("");
   const [depositClabesText, setDepositClabesText] = useState("");
   const [depositSaving, setDepositSaving] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   useEffect(() => {
     if (!effectiveRootId || !despachoId) return;
@@ -208,6 +210,23 @@ export default function DespachoDetallePage() {
       setErr(e?.message || "No se pudo guardar la identificacion de deposito.");
     } finally {
       setDepositSaving(false);
+    }
+  }
+
+  async function changeQuotationLogo(file: File | null, remove = false) {
+    if (!depositEditorCompany || logoBusy || (!file && !remove)) return;
+    if (file && (!/^image\/(png|jpeg)$/.test(file.type) || file.size > 1024 * 1024)) {
+      setErr("El logo debe ser una imagen PNG o JPG de hasta 1 MB.");
+      return;
+    }
+    setLogoBusy(true);
+    setErr(null);
+    try {
+      await setCompanyQuotationLogoMutation({ companyId: depositEditorCompany.id, file: file || undefined, remove });
+    } catch (e: any) {
+      setErr(e?.message || "No se pudo guardar el logo.");
+    } finally {
+      setLogoBusy(false);
     }
   }
 
@@ -427,6 +446,40 @@ export default function DespachoDetallePage() {
                   />
                   <div className="mt-1 text-[10px] text-slate-500">
                     Aparece en el recuadro Contacto de las cotizaciones. Si lo dejas vacio se usa contacto@alias.mx.
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-xs text-slate-400">
+                    Logo para cotizaciones
+                  </div>
+                  {(() => {
+                    const logo = companies.find((row) => row.id === depositEditorCompany.id)?.quotationLogo;
+                    return (
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                        <span className="min-w-0 flex-1 truncate">
+                          {logoBusy ? "Guardando logo..." : logo ? `${logo.fileName || "Logo cargado"} · ${Math.ceil(Number(logo.sizeBytes || 0) / 1024)} KB` : "Sin logo"}
+                        </span>
+                        <label className={cx("cursor-pointer rounded-lg border border-sky-400/30 px-3 py-1 text-sky-100 hover:bg-sky-500/20", logoBusy && "pointer-events-none opacity-50")}>
+                          {logo ? "Reemplazar" : "Subir imagen"}
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            className="hidden"
+                            disabled={logoBusy}
+                            onChange={(e) => { const file = e.target.files?.[0] || null; e.target.value = ""; void changeQuotationLogo(file); }}
+                          />
+                        </label>
+                        {logo && (
+                          <button type="button" disabled={logoBusy} onClick={() => void changeQuotationLogo(null, true)} className="text-slate-400 hover:text-white disabled:opacity-50">
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    PNG o JPG de hasta 1 MB. Se guarda al seleccionarlo y aparece en las cotizaciones nuevas de empresas sin diseno propio.
                   </div>
                 </div>
 

@@ -200,6 +200,16 @@
       "capability": "Contacto de cotizaciones editable por empresa"
     },
     {
+      "file": "src/app/despachos/[id]/page.tsx",
+      "text": "Logo para cotizaciones",
+      "capability": "Logo para cotizaciones editable por empresa emisora"
+    },
+    {
+      "file": "functions/src/modules/canonicalCenter/service.ts",
+      "text": "loadCompanyQuotationLogo(rootId, companyId",
+      "capability": "Las cotizaciones con diseno base usan el logo de la empresa emisora"
+    },
+    {
       "file": "functions/src/modules/canonicalCenter/service.ts",
       "text": "if (use === \"COTIZACION\") return loadBaseQuotationBundle(",
       "capability": "Empresas sin plantilla propia cotizan con el diseno base y QR"
