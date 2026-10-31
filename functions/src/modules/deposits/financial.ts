@@ -2,7 +2,7 @@ import { FieldValue, type Firestore, type Transaction } from "firebase-admin/fir
 import { buildBalanceAccountPatchFromMovement, buildBalanceMovement } from "../balances/service";
 import { createBalanceMovementTx, readBalanceAccountTx, upsertBalanceAccountTx } from "../balances/repository";
 import { money2 } from "../shared/money";
-import { applyPendingAdvancesOnClientNetTx } from "../financing/service";
+import { preparePendingAdvancesOnClientNetTx } from "../financing/service";
 import type { BalanceMovementType, HolderType, Pay0Role } from "../shared/domain";
 import {
   applyForwardOnlyPaymentTx,
@@ -594,8 +594,9 @@ export async function postCanonicalPagoFinancials(
         );
       }
 
-      const advanceSettlement = clientBalanceEnabled
-        ? await applyPendingAdvancesOnClientNetTx({
+      // Advance writes are deferred until after the forward-only reads below.
+      const preparedAdvanceSettlement = clientBalanceEnabled
+        ? await preparePendingAdvancesOnClientNetTx({
             tx,
             db,
             rootId,
@@ -606,13 +607,14 @@ export async function postCanonicalPagoFinancials(
             actorUsername,
             actorRole,
           })
-        : {
-            pendingBeforeAmount: 0,
-            appliedAmount: 0,
-            releasedAmount: 0,
-            pendingAfterAmount: 0,
-            updatedAdvanceIds: [] as string[],
-          };
+        : null;
+      const advanceSettlement = preparedAdvanceSettlement?.result || {
+        pendingBeforeAmount: 0,
+        appliedAmount: 0,
+        releasedAmount: 0,
+        pendingAfterAmount: 0,
+        updatedAdvanceIds: [] as string[],
+      };
 
       const clientReleasedAmount = clientBalanceEnabled
         ? money2(advanceSettlement.releasedAmount)
@@ -922,6 +924,9 @@ export async function postCanonicalPagoFinancials(
               .toUpperCase() || null,
           credits: forwardOnlyCredits,
         });
+
+      // All transaction reads are done; the advance settlement can now write.
+      preparedAdvanceSettlement?.commit();
 
 tx.set(snapshotRef, {
         rootId,

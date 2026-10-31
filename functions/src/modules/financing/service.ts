@@ -42,6 +42,19 @@ function getCreatedAtSortableValue(value: any) {
 export async function applyPendingAdvancesOnClientNetTx(
   params: ApplyPendingAdvancesOnClientNetTxParams
 ): Promise<ApplyPendingAdvancesOnClientNetTxResult> {
+  const prepared = await preparePendingAdvancesOnClientNetTx(params);
+  prepared.commit();
+  return prepared.result;
+}
+
+/**
+ * Read phase of the advance settlement. Firestore transactions reject any
+ * read after a write, so callers that still need to read (forward-only
+ * dispatch accounts) must call commit() only after their last tx.get.
+ */
+export async function preparePendingAdvancesOnClientNetTx(
+  params: ApplyPendingAdvancesOnClientNetTxParams
+): Promise<{ result: ApplyPendingAdvancesOnClientNetTxResult; commit: () => void }> {
   const {
     tx,
     db,
@@ -56,14 +69,16 @@ export async function applyPendingAdvancesOnClientNetTx(
 
   const amount = money2(clientNetAmount);
 
+  const nothingToWrite = () => undefined;
+
   if (!clienteId || amount <= 0) {
-    return {
+    return { commit: nothingToWrite, result: {
       pendingBeforeAmount: 0,
       appliedAmount: 0,
       releasedAmount: amount,
       pendingAfterAmount: 0,
       updatedAdvanceIds: [],
-    };
+    } };
   }
 
   const advancesQuery = db
@@ -87,18 +102,19 @@ export async function applyPendingAdvancesOnClientNetTx(
   );
 
   if (!pendingAdvances.length) {
-    return {
+    return { commit: nothingToWrite, result: {
       pendingBeforeAmount: 0,
       appliedAmount: 0,
       releasedAmount: amount,
       pendingAfterAmount: 0,
       updatedAdvanceIds: [],
-    };
+    } };
   }
 
   let remainingNet = amount;
   let appliedAmount = 0;
   const updatedAdvanceIds: string[] = [];
+  const writes: Array<() => void> = [];
 
   for (const item of pendingAdvances) {
     if (remainingNet <= 0) break;
@@ -110,34 +126,36 @@ export async function applyPendingAdvancesOnClientNetTx(
     const nextPendingAmount = money2(pendingAmount - amountToApply);
     const nextStatus = nextPendingAmount <= 0 ? "LIQUIDADO_TOTAL" : "LIQUIDADO_PARCIAL";
 
-    tx.update(item.ref, {
-      pendingAmount: nextPendingAmount,
-      status: nextStatus,
-      lastLiquidatedPagoId: pagoId,
-      lastLiquidatedAmount: amountToApply,
-      lastLiquidatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    writes.push(() => {
+      tx.update(item.ref, {
+        pendingAmount: nextPendingAmount,
+        status: nextStatus,
+        lastLiquidatedPagoId: pagoId,
+        lastLiquidatedAmount: amountToApply,
+        lastLiquidatedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
 
-    logActivityTx(tx, db, {
-      event: "ADELANTO_LIQUIDADO",
-      rootId,
-      adminId: item.data.adminId || null,
-      actorUid,
-      actorUsername,
-      actorRole,
-      entityType: "clientAdvance",
-      entityId: item.id,
-      relatedEntityId: pagoId,
-      relatedEntityType: "pago",
-      amount: amountToApply,
-      referenceId: item.id,
-      referenceType: "clientAdvance",
-      description: `Adelanto ${item.id} liquidado con neto cliente del pago ${pagoId} por ${amountToApply}.`,
-      createdBy: actorUid,
-      extra: {
-        note: item.data.note || item.data.reason || null,
-      },
+      logActivityTx(tx, db, {
+        event: "ADELANTO_LIQUIDADO",
+        rootId,
+        adminId: item.data.adminId || null,
+        actorUid,
+        actorUsername,
+        actorRole,
+        entityType: "clientAdvance",
+        entityId: item.id,
+        relatedEntityId: pagoId,
+        relatedEntityType: "pago",
+        amount: amountToApply,
+        referenceId: item.id,
+        referenceType: "clientAdvance",
+        description: `Adelanto ${item.id} liquidado con neto cliente del pago ${pagoId} por ${amountToApply}.`,
+        createdBy: actorUid,
+        extra: {
+          note: item.data.note || item.data.reason || null,
+        },
+      });
     });
 
     remainingNet = money2(remainingNet - amountToApply);
@@ -148,11 +166,11 @@ export async function applyPendingAdvancesOnClientNetTx(
   const releasedAmount = money2(amount - appliedAmount);
   const pendingAfterAmount = money2(Math.max(0, pendingBeforeAmount - appliedAmount));
 
-  return {
+  return { commit: () => writes.forEach((write) => write()), result: {
     pendingBeforeAmount,
     appliedAmount,
     releasedAmount,
     pendingAfterAmount,
     updatedAdvanceIds,
-  };
+  } };
 }
