@@ -2642,6 +2642,7 @@ export const reconcilePendingPagoIqDepositsNow = onCall(
     timeoutSeconds: 540,
     memory: "2GiB",
     concurrency: 1,
+    maxInstances: 20,
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
   },
   async (request) => {
@@ -3788,6 +3789,7 @@ export const processIqPagoDepositCreateQueue = onSchedule(
     timeZone: DEFAULT_IQ_TIME_ZONE,
     timeoutSeconds: 540,
     memory: "2GiB",
+    maxInstances: 20,
     secrets: [IQ_CREDENTIALS_KEY, TELEGRAM_BOT_TOKEN],
   },
   async () => {
@@ -4116,6 +4118,7 @@ export const manualLinkPagoIqDeposit = onCall(
     timeoutSeconds: 240,
     memory: "2GiB",
     concurrency: 1,
+    maxInstances: 20,
     secrets: [TELEGRAM_BOT_TOKEN],
   },
   async (request) => {
@@ -4495,6 +4498,7 @@ export const manualLinkPagoIqDepositHttp = onRequest(
     timeoutSeconds: 240,
     memory: "2GiB",
     concurrency: 1,
+    maxInstances: 20,
     secrets: [TELEGRAM_BOT_TOKEN],
   },
   async (req, res) => {
