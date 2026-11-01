@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
 import { requireWhatsAppSuperadmin, WhatsAppConnectorAuthority } from "./whatsappConnectorAuthority";
 import {
   applyWhatsAppDestinationsToJob,
@@ -31,7 +32,21 @@ function toIso(value: any): string | null {
   return null;
 }
 
-const requireSuperadminUser = requireWhatsAppSuperadmin;
+// Delivery-route and destination actions keep their existing superadmin guard.
+// QR control (dashboard, chat sync, new QR) uses the binding-scoped connector authority.
+async function requireSuperadminUser(request: any) {
+  const uid = requireAuth(request);
+  const user = await getMyUser(uid);
+
+  if (!user || !isSuperadmin(user)) {
+    throw new HttpsError("permission-denied", "Solo superadmin puede operar WhatsApp QR.");
+  }
+
+  const rootId = await getRootId(uid);
+
+  return { uid, user, rootId };
+}
+
 const connectorAuthority = new WhatsAppConnectorAuthority(db);
 
 function userName(user: any): string {
@@ -41,7 +56,7 @@ function userName(user: any): string {
 export const getWhatsAppQrDashboard = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
-    const { rootId } = await requireSuperadminUser(request);
+    const { rootId } = await requireWhatsAppSuperadmin(request);
 
     const owned = await connectorAuthority.getOwned(request);
     const bindingId = owned.binding?.state === "ACTIVE" ? owned.binding.id : null;
