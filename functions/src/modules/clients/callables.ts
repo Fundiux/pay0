@@ -5,7 +5,7 @@ import { logActivity } from "../../utils/logActivity";
 import { nextSequenceTx } from "../sequences/service";
 import { db, getActivityAdminId, getMyUser, requireAuth, requireRole } from "../sharedCallables/helpers";
 import { resolveClientOperationalAccess } from "../clientDelegations/access";
-import { assertValidClientIdentity, getCanonicalClientDisplayName, normalizeClientIdentity } from "./domain";
+import { assertValidClientIdentity, getCanonicalClientDisplayName, normalizeClientIdentity, normalizeClientRfc, requiresUniqueClientRfc } from "./domain";
 import { buildClientActivePatch, buildClientIdentityPatch, buildClientSequenceFields, resolveClientSaveAdminId, resolveClientToggleAdminId } from "./service";
 import { IQ_PAYMENT_APPLICATION_SECRETS } from "../paymentApplications/iqExecution";
 import { syncIqClientById } from "./iqLinkCallable";
@@ -18,8 +18,26 @@ import {
   getClientCsfIntakeForSave,
 } from "./csfService";
 
-
-
+// One active client per RFC and root. Inside the creation transaction the
+// query is serialized with concurrent creations of the same RFC.
+async function assertClientRfcAvailable(
+  rootId: string,
+  rfc: string,
+  exceptClientId: string,
+  tx?: FirebaseFirestore.Transaction,
+) {
+  if (!requiresUniqueClientRfc(rfc)) return;
+  const query = db.collection("clients").where("rootId", "==", rootId).where("rfc", "==", rfc).limit(10);
+  const snap = tx ? await tx.get(query) : await query.get();
+  const existing = snap.docs.find(doc => doc.id !== exceptClientId && doc.get("active") !== false);
+  if (!existing) return;
+  const number = Number(existing.get("clientNumber") || existing.get("numeroCliente") || 0);
+  throw new HttpsError(
+    "already-exists",
+    `El RFC ${rfc} ya está registrado en el cliente ${getCanonicalClientDisplayName(existing.data(), existing.id)}${number ? ` (C${number})` : ""}.`,
+    { code: "CLIENT_RFC_DUPLICATE", clientId: existing.id },
+  );
+}
 
 
 export const saveClientCallable = onCall(
@@ -148,6 +166,10 @@ try { assertValidClientIdentity(identity); } catch (error: any) {
       if (callerRole !== "superadmin" && clientData?.adminId && String(clientData.adminId) !== effectiveAdminId) {
         throw new HttpsError("permission-denied", "Cliente fuera de tu admin.");
       }
+      // Existing duplicates stay editable until merged; only a changed RFC is checked.
+      if (normalizeClientRfc(clientData.rfc) !== rfc) {
+        await assertClientRfcAvailable(callerRootId, rfc, editingId);
+      }
 
       await clientRef.set(payload, { merge: true });
 
@@ -228,6 +250,7 @@ try { assertValidClientIdentity(identity); } catch (error: any) {
     let numeroCliente = 0;
 
     await db.runTransaction(async (tx) => {
+      await assertClientRfcAvailable(callerRootId, rfc, "", tx);
       const seq = await nextSequenceTx({
         db,
         tx,

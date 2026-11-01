@@ -2,6 +2,9 @@ export type CanonicalClientIdentity = { name: string; rfc: string; email: string
 
 export function normalizeClientName(value: unknown): string { return String(value ?? "").trim(); }
 export function normalizeClientRfc(value: unknown): string { return String(value ?? "").trim().toUpperCase(); }
+// SAT generic RFCs (publico en general / extranjero) are shared by design.
+const SHARED_CLIENT_RFCS = new Set(["XAXX010101000", "XEXX010101000"]);
+export function requiresUniqueClientRfc(rfc: string): boolean { return !!rfc && !SHARED_CLIENT_RFCS.has(rfc); }
 export function normalizeClientEmail(value: unknown): string { return String(value ?? "").trim().toLowerCase(); }
 export function normalizeClientWhatsapp(value: unknown): string {
   const digits = String(value ?? "").replace(/\D+/g, "");
