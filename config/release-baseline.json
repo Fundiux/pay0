@@ -309,6 +309,16 @@
       "file": "functions/src/modules/clients/callables.ts",
       "text": "await assertClientRfcAvailable(callerRootId, rfc, \"\", tx);",
       "capability": "El alta de clientes rechaza un RFC ya registrado"
+    },
+    {
+      "file": "functions/src/index.ts",
+      "text": "export { createWhatsAppConnectorEnrollment, consumeWhatsAppConnectorEnrollment, getWhatsAppConnectorBinding, revokeWhatsAppConnectorBinding, operateWhatsAppConnector } from \"./modules/documentDelivery/whatsappConnectorCallables\";",
+      "capability": "Inscripcion de conector WhatsApp propiedad del servidor (5 funciones publicadas el 2026-10-22)"
+    },
+    {
+      "file": "functions/src/modules/documentDelivery/whatsappQrCallables.ts",
+      "text": "const bindingId = owned.binding?.state === \"ACTIVE\" ? owned.binding.id : null;",
+      "capability": "El tablero y los comandos QR de WhatsApp usan la vinculacion activa del conector (publicado el 2026-10-22)"
     }
   ],
   "forbiddenText": [
