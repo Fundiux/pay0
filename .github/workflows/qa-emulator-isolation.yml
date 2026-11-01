@@ -1,0 +1,30 @@
+name: QA Firebase emulator isolation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            qa/emulator-isolation
+          sparse-checkout-cone-mode: false
+      - name: Build prepared emulator image
+        run: docker build --pull --tag pay0-qa-emulator-isolation:local qa/emulator-isolation
+      - name: Run isolated synthetic emulators
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME=/tmp docker run --rm --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 --user 65532:65532 \
+            --env HOME=/tmp --env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            pay0-qa-emulator-isolation:local

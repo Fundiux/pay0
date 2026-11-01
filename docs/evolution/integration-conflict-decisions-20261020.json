@@ -1,0 +1,166 @@
+{
+  "candidate": "fcfde14cf138d0683ce642aba5eb2238de2db10a",
+  "main": "46b7e263208cbf0b30db0b93b873f691ba57d55d",
+  "conflicts": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve technology and capability gates; retain main authorization verifier separately"
+    },
+    {
+      "file": "config/engineering-receipts-release.json",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "functions/src/index.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "functions/src/modules/controlCenter/recovery.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve terminal source rejection, generation budget and PAY0 issuer guard"
+    },
+    {
+      "file": "functions/src/modules/cotizaciones/callables.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve deleted-source rejection, exact root and client operational access"
+    },
+    {
+      "file": "functions/src/modules/pagos/receiptIdentification.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "functions/src/modules/pagos/receiptLearning.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "functions/src/modules/pagos/receiptPdfCallables.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/complementAutomation.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve tenant safety pause and transactional independent provider configuration"
+    },
+    {
+      "file": "qa/fixtures/receipt-corpus.README.md",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "qa/scripts/deploy-modular-hosting.test.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/engineering-control-emulator.test.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/evaluate-receipt-corpus.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "qa/scripts/modal-accessibility-browser.test.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/receipt-evidence-browser.test.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "qa/scripts/receipt-feedback-emulator.test.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "qa/scripts/remediation-delegations-emulator.test.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/remediation-ocr-quota.test.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/scoped-deployment.test.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/verify-modular-hosting-runtime.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "qa/scripts/verify-scoped-functions-artifact.cjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "scripts/capture-production-baseline.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "scripts/deploy-modular-hosting-execute.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "scripts/deploy-scoped-functions.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "scripts/prepare-release-candidate.mjs",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Retain release guard, regression coverage and exact artifact/rollback provenance rather than remove"
+    },
+    {
+      "file": "src/app/pagos/page.tsx",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "src/app/reportes/page.tsx",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve deployed operational recovery and engineering UI contracts"
+    },
+    {
+      "file": "src/components/Modal.tsx",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve nested modal focus restoration and close-policy contract"
+    },
+    {
+      "file": "src/components/control-center/EngineeringControl.tsx",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve deployed operational recovery and engineering UI contracts"
+    },
+    {
+      "file": "src/components/pagos/ReceiptEvidenceSummary.tsx",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    },
+    {
+      "file": "src/services/controlCenter.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve deployed operational recovery and engineering UI contracts"
+    },
+    {
+      "file": "src/services/pagoReceipt.ts",
+      "resolution": "PRESERVE_ACCUMULATED_CANDIDATE",
+      "reason": "Preserve semantic correction versioning, transactional dedup and scoped canonical registration"
+    }
+  ]
+}

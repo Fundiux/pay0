@@ -31,6 +31,8 @@ jobs:
         run: npm ci
       - name: Verify installed frontend matches lockfile
         run: npm ls --depth=0
+      - name: Verify authorization policy
+        run: node scripts/verify-authorization-policy.mjs
       - name: Verify canonical capability registrations
         run: |
           node scripts/verify-capability-registration.mjs
@@ -43,6 +45,16 @@ jobs:
         run: npm run qa:mat-release-contract
       - name: Validate committed source candidate
         run: node scripts/prepare-release-candidate.mjs --main-ref origin/main
+      - name: Verify cancellable voice startup and compiled gateway contract
+        run: |
+          node --test qa/scripts/voice-startup-lifecycle.test.cjs
+          node qa/scripts/verify-hugo-voice-runtime-contract.cjs
+          node qa/scripts/verify-hugo-voice-build-artifact.mjs
+      - name: Verify isolated Telegram delivery packages
+        run: |
+          node --test qa/scripts/remediation-telegram-transport.test.cjs
+          node --test qa/scripts/telegram-test-transport-scope.test.mjs
+          node --test qa/scripts/scoped-deployment.test.mjs qa/scripts/telegram-webhook-transition-policy.test.mjs qa/scripts/telegram-webhook-deployment-scope.test.mjs
       - name: Preserve candidate evidence
         if: always()
         uses: actions/upload-artifact@v4

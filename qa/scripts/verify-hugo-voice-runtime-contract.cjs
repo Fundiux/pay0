@@ -27,6 +27,9 @@ assert.ok(ts.isArrowFunction(tokenOperation) && tokenOperation.parameters.length
 assert.equal(tokenOperation.body.expression.getText(componentAst), "currentUser.getIdToken");
 assert.equal(tokenOperation.body.arguments.length, 0);
 assert.match(component, /const currentUser = auth\.currentUser;\s*if \(!currentUser\) throw new Error\(/);
+assert.match(component, /lateStream => lateStream\.getTracks\(\)\.forEach\(track => track\.stop\(\)\)/);
+assert.match(component, /STARTUP_TIMEOUT_MS = 45000/);
+assert.match(component, /Cancelar conexión/);
 assert.match(component, /new WebSocket\(gatewayUrl!\)/);
 assert.doesNotMatch(component, /createHugoRealtimeSession/);
 assert.doesNotMatch(component, /api\.openai\.com\/v1\/realtime\/calls/);
