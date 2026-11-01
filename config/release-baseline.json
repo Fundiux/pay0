@@ -88,6 +88,10 @@
     {
       "commit": "32ba53867dbe1c72f367e1e4ee0093be3b69d6ef",
       "capability": "Aplicacion de pagos en IQ valida el cliente por perfil IQ y no por nombre"
+    },
+    {
+      "commit": "67d2f4883bdd2de9491916cb3cd12ab11178766a",
+      "capability": "Bloqueo de clientes con RFC ya registrado"
     }
   ],
   "requiredText": [
@@ -300,6 +304,11 @@
       "file": "functions/src/modules/paymentApplications/iqExecution.ts",
       "text": "clientMatchedByProfile = resolvedClient.strategy === \"HTTP_CATALOG_PROFILE_ID\";",
       "capability": "El cliente identificado por perfil IQ pasa la validacion aunque el nombre difiera"
+    },
+    {
+      "file": "functions/src/modules/clients/callables.ts",
+      "text": "await assertClientRfcAvailable(callerRootId, rfc, \"\", tx);",
+      "capability": "El alta de clientes rechaza un RFC ya registrado"
     }
   ],
   "forbiddenText": [
