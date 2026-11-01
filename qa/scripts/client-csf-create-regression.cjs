@@ -154,6 +154,23 @@ async function runAuthorized(role, index) {
   await db.doc(`clientCsfIntakes/${foreignIntake}`).set({ rootId, createdBy: otherRootUid, sha256, parsed: parsed("5"), status: "PARSED" });
   await rejectsCode(save(otherRootUid, parsed("5").razonSocial, parsed("5").rfc, foreignIntake), "permission-denied");
 
+  await rejectsCode(save("admin-csf", "CLIENTE MANUAL DUPLICADO", "MAN010102AA"), "already-exists");
+  await rejectsCode(save("operador-csf", "OTRO NOMBRE MISMO RFC", parsed("2").rfc), "already-exists");
+  assert.equal((await save("admin-csf", "PUBLICO EN GENERAL A", "XAXX010101000")).created, true);
+  assert.equal((await save("admin-csf", "PUBLICO EN GENERAL B", "XAXX010101000")).created, true);
+  const duplicatePair = await Promise.allSettled([
+    save("admin-csf", "ALTA SIMULTANEA A", "SIM010101AA1"),
+    save("admin-csf", "ALTA SIMULTANEA B", "SIM010101AA1"),
+  ]);
+  assert.deepEqual(duplicatePair.map(row => row.status).sort(), ["fulfilled", "rejected"]);
+  assert.equal(duplicatePair.find(row => row.status === "rejected").reason.code, "already-exists");
+  const editable = await save("superadmin-csf", "CLIENTE EDITABLE", "EDI010101AA1");
+  await rejectsCode(clients.saveClientCallable.run({ auth: auth("superadmin-csf"), data: { editingId: editable.id, effectiveRootId: rootId, adminId: "superadmin-csf", name: "CLIENTE EDITABLE", rfc: "MAN010102AA", email: "", whatsapp: "" } }), "already-exists");
+  assert.equal((await clients.saveClientCallable.run({ auth: auth("superadmin-csf"), data: { editingId: editable.id, effectiveRootId: rootId, adminId: "superadmin-csf", name: "CLIENTE EDITADO", rfc: "EDI010101AA1", email: "", whatsapp: "" } })).updated, true);
+  await db.doc(`clients/${editable.id}`).update({ active: false });
+  assert.equal((await save("superadmin-csf", "CLIENTE REACTIVADO", "EDI010101AA1")).created, true);
+  await rejectsCode(clients.toggleClientActiveCallable.run({ auth: auth("superadmin-csf"), data: { id: editable.id, nextActive: true, adminId: "superadmin-csf" } }), "already-exists");
+
   const page = require("node:fs").readFileSync("src/app/clientes/page.tsx", "utf8");
   assert.match(page, /setEditing\(null\);[\s\S]*setCsfIntake\(result\)/);
   assert.match(page, /editingId: editing\?\.id \|\| null/);
@@ -165,6 +182,7 @@ async function runAuthorized(role, index) {
     createOnlyRoles: ["admin", "operador"],
     unauthorized403: true,
     crossRoot403: true,
+    duplicateRfcBlocked: true,
     entityDocumentManagerStillDenied: true,
     finalizedReplacementRequiresEdit: true,
     uiRemainsCreateMode: true,
