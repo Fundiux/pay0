@@ -388,6 +388,9 @@ export const toggleClientActiveCallable = onCall(
     if (callerRole !== "superadmin" && clientData?.adminId && String(clientData.adminId) !== effectiveAdminId) {
       throw new HttpsError("permission-denied", "Cliente fuera de tu admin.");
     }
+    if (nextActive && clientData.active === false) {
+      await assertClientRfcAvailable(callerRootId, normalizeClientRfc(clientData.rfc), id);
+    }
 
     await clientRef.set(
       buildClientActivePatch({ nextActive, updatedAt: FieldValue.serverTimestamp(), updatedBy: callerUid }),

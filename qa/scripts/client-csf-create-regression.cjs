@@ -169,6 +169,7 @@ async function runAuthorized(role, index) {
   assert.equal((await clients.saveClientCallable.run({ auth: auth("superadmin-csf"), data: { editingId: editable.id, effectiveRootId: rootId, adminId: "superadmin-csf", name: "CLIENTE EDITADO", rfc: "EDI010101AA1", email: "", whatsapp: "" } })).updated, true);
   await db.doc(`clients/${editable.id}`).update({ active: false });
   assert.equal((await save("superadmin-csf", "CLIENTE REACTIVADO", "EDI010101AA1")).created, true);
+  await rejectsCode(clients.toggleClientActiveCallable.run({ auth: auth("superadmin-csf"), data: { id: editable.id, nextActive: true, adminId: "superadmin-csf" } }), "already-exists");
 
   const page = require("node:fs").readFileSync("src/app/clientes/page.tsx", "utf8");
   assert.match(page, /setEditing\(null\);[\s\S]*setCsfIntake\(result\)/);
