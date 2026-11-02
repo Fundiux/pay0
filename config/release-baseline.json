@@ -112,6 +112,14 @@
     {
       "commit": "66a4dce4769240f32e04b99444939c90fabfcad6",
       "capability": "Reproceso de OC busca la OC activa dentro del root autorizado"
+    },
+    {
+      "commit": "f9b1c283",
+      "capability": "Control factura-pago entre solicitudes y pagos (lectura, Super Admin/admin en dashboard)"
+    },
+    {
+      "commit": "2e418e95",
+      "capability": "Control factura-pago visible en el dashboard y sin excepciones de solicitud sin pago"
     }
   ],
   "requiredText": [
