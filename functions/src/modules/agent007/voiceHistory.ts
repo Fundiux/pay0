@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
+import { appendHugoVoiceHistory } from "./voiceHistoryAppend";
 
 const clean = (value: unknown, max = 500) => String(value ?? "").trim().slice(0, max);
 const validId = (value: string) => Boolean(value && value.length <= 180 && !value.includes("/"));
@@ -23,6 +24,7 @@ export const saveHugoVoiceHistory = onCall(
   async request => {
     const actor = await identity(request), data = request.data || {}, sessionId = clean(data.sessionId, 180);
     if (!validId(sessionId)) throw new HttpsError("invalid-argument", "Sesion de voz invalida.");
+    if (data.appendOnly === true) return appendHugoVoiceHistory(db, actor, data);
     const requestedVoice = clean(data.voice, 32);
     const voice = ["cedar", "marin"].includes(requestedVoice) ? requestedVoice : "cedar";
     const turns = Array.isArray(data.turns) ? data.turns : [];
