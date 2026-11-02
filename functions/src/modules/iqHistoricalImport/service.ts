@@ -52,7 +52,7 @@ const clean = (value: unknown, max = 180) => String(value ?? "").trim().slice(0,
 function materializeTemporalFields(payload:Record<string,unknown>):Record<string,unknown>{const out={...payload};for(const field of P4_TEMPORAL_TIMESTAMP_FIELDS){const value=out[field];if(typeof value==="string"){const date=new Date(value);if(!Number.isFinite(date.getTime()))throw new P4EngineError("P4_HISTORICAL_DATE_REVIEW_REQUIRED",`Fecha histórica inválida en ${field}.`);out[field]=admin.firestore.Timestamp.fromDate(date);}}return out;}
 
 type Context = { uid: string; rootId: string };
-type Mode = "PLAN" | "APPROVE" | "PREVIEW_PHASE" | "PREVIEW_SCOPE" | "APPROVE_SCOPE" | "EXECUTE_SCOPE" | "RESUME_SCOPE" | "STATUS_SCOPE" | "VERIFY_SCOPE" | "ROLLBACK_SCOPE" | "PREVIEW_FINANCIAL_COMPONENT_ISOLATION" | "ISOLATE_FINANCIAL_COMPONENT" | "VERIFY_FINANCIAL_COMPONENT_ISOLATION" | "PREVIEW_RECONCILE_PROVENANCE_REPAIR" | "REPAIR_RECONCILE_PROVENANCE" | "VERIFY_RECONCILE_PROVENANCE_REPAIR" | "PREVIEW_CANONICAL_RECONCILIATION" | "PREVIEW_CANONICAL_RECONCILIATION_R1" | "PREVIEW_CANONICAL_RECONCILIATION_SCOPE" | "RECONCILE_CANONICAL" | "RECONCILE_CANONICAL_SCOPE" | "VERIFY_CANONICAL_RECONCILIATION" | "VERIFY_CANONICAL_RECONCILIATION_SCOPE" | "ROLLBACK_CANONICAL_RECONCILIATION" | "ROLLBACK_CANONICAL_RECONCILIATION_SCOPE" | "PREVIEW_R3_OPERATIONAL_POLICY" | "ACTIVATE_R3_OPERATIONAL_POLICY" | "VERIFY_R3_OPERATIONAL_POLICY" | "ROLLBACK_R3_OPERATIONAL_POLICY" | "EXECUTE" | "RESUME" | "STATUS" | "VERIFY" | "ROLLBACK";
+type Mode = "LIST_MANIFESTS" | "PLAN" | "APPROVE" | "PREVIEW_PHASE" | "PREVIEW_SCOPE" | "APPROVE_SCOPE" | "EXECUTE_SCOPE" | "RESUME_SCOPE" | "STATUS_SCOPE" | "VERIFY_SCOPE" | "ROLLBACK_SCOPE" | "PREVIEW_FINANCIAL_COMPONENT_ISOLATION" | "ISOLATE_FINANCIAL_COMPONENT" | "VERIFY_FINANCIAL_COMPONENT_ISOLATION" | "PREVIEW_RECONCILE_PROVENANCE_REPAIR" | "REPAIR_RECONCILE_PROVENANCE" | "VERIFY_RECONCILE_PROVENANCE_REPAIR" | "PREVIEW_CANONICAL_RECONCILIATION" | "PREVIEW_CANONICAL_RECONCILIATION_R1" | "PREVIEW_CANONICAL_RECONCILIATION_SCOPE" | "RECONCILE_CANONICAL" | "RECONCILE_CANONICAL_SCOPE" | "VERIFY_CANONICAL_RECONCILIATION" | "VERIFY_CANONICAL_RECONCILIATION_SCOPE" | "ROLLBACK_CANONICAL_RECONCILIATION" | "ROLLBACK_CANONICAL_RECONCILIATION_SCOPE" | "PREVIEW_R3_OPERATIONAL_POLICY" | "ACTIVATE_R3_OPERATIONAL_POLICY" | "VERIFY_R3_OPERATIONAL_POLICY" | "ROLLBACK_R3_OPERATIONAL_POLICY" | "EXECUTE" | "RESUME" | "STATUS" | "VERIFY" | "ROLLBACK";
 const DEFAULT_BUDGET: P4ExecutionBudget = { maxEntities: 25, maxWrites: 100, maxDurationMs: 45_000, maxErrors: 1, maxBatches: 5 };
 
 async function context(request: any): Promise<Context> {
@@ -79,6 +79,21 @@ function budget(input: any): P4ExecutionBudget {
 }
 
 const serial = (snap: FirebaseFirestore.DocumentSnapshot) => ({ id: snap.id, ...snap.data() });
+async function listManifests(ctx: Context) {
+  const snapshot = await manifests.where("rootId", "==", ctx.rootId).limit(50).get();
+  const rows = snapshot.docs.map(doc => {
+    const row = doc.data();
+    return {
+      manifestId: doc.id,
+      manifestHash: clean(row.manifestHash, 80),
+      status: clean(row.status, 60),
+      version: Number(row.version || 0),
+      createdAtMs: row.createdAt?.toMillis?.() || 0,
+      actionCount: Number(row.planningSummary?.actions || row.planningSummary?.totalActions || 0),
+    };
+  }).sort((a, b) => b.createdAtMs - a.createdAtMs).slice(0, 20);
+  return { ok: true, mode: "LIST_MANIFESTS", manifests: rows, readOnly: true };
+}
 const actionDoc = (runId: string, actionId: string) => runs.doc(runId).collection("actions").doc(actionId);
 function manifestFromRow(row: Record<string, any>): P4Manifest {
   return { manifestId: row.manifestId, manifestHash: row.manifestHash, status: row.status,
@@ -943,6 +958,7 @@ async function rollback(ctx: Context, data: any) {
 export const manageP4HistoricalIqImport = onCall({ region: "us-central1", timeoutSeconds: 540, memory: "1GiB", maxInstances: 1, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] }, async request => {
   try {
     const ctx = await context(request), mode = clean(request.data?.mode, 64).toUpperCase() as Mode;
+    if (mode === "LIST_MANIFESTS") return await listManifests(ctx);
     if (mode === "PLAN") return await plan(ctx, request.data);
     if (mode === "APPROVE") return await approve(ctx, request.data);
     if (mode === "PREVIEW_PHASE") return await previewPhase(ctx, request.data);
