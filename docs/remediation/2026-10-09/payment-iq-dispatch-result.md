@@ -1,0 +1,61 @@
+# Payment IQ dispatch result race characterization
+
+Read-only product review at d5bafcaa2ff33f0e051558b774d057010c0765f3. callables.ts SHA256 b3fa9bf1f016f0c7eeab03cb0403345bedfee2eadb07f43043d011f0d9975e5a. Only new QA and this document; no product/A7B edits, cloud, provider, SDK or builds.
+
+## Contract inspected
+
+Full enqueuePaymentApplicationIqExecution (callables.ts225-513), task handler534-871, shared iqOnDemandTaskQueue, and executePaymentApplicationIqPlan iqExecution.ts2087 onward were read. Enqueue transaction validates root/creator/hash/prevalidation and canonical status, refuses UNKNOWN/REJECTED, reuses SUCCEEDED/IN_PROGRESS or dispatch QUEUING/QUEUED/RUNNING. Otherwise NOT_EXECUTED/FAILED_SAFE can create a new dispatch generation and stable task ID. Cloud Tasks enqueue is outside TX, delay2s/deadline540s; later QUEUED or ENQUEUE_ERROR writes are unconditional merges. Queue exception does not prove that no task was created. No provider behavior was exercised.
+
+Task generation is compared once against the initial snapshot (618). RequestedBy mismatch is handled BEFORE generation comparison (610-612), with an unconditional AUTH_STOPPED write. All later dispatch writes (reused, auth/scope/pause, RUNNING, returned result815-835, error845-855) are unconditional merges. Payload does not carry canonical execution attempt. Final result write rereads neither dispatch generation/requester/hash nor iqExecutionAttemptId. Task catch also writes FAILED without a fence. Task maxConcurrentDispatches1/concurrency1 and maxAttempts1 reduce task overlap but do not serialize the callable enqueue acknowledgements against a running task.
+
+Executor reauthorizes, reads plan/access, claims canonical execution in TX, then invokes its provider port and finalizes with attempt/lock fences. d5bafca fixes its returned canonical result. Those fences do not cover the task's later dispatch merge: finalizer ownership and dispatch generation are separate contracts. These reproductions do not claim duplicate IQ POST or financial balance corruption. They show dispatch metadata can be overwritten, and dispatch status participates in enqueue admission.
+
+## Executable reproduction and limitations
+
+payment-iq-dispatch-result.test.cjs extracts the exact task arrow and five enqueue/normalizer functions via AST. Synthetic storage records versioned writes and transaction read versions; unexpected TX conflict fails the fixture rather than simulating unproved retry semantics. Executor/queue/auth are controlled ports, no real providers loaded or called. Fake authorization does NOT certify authorization. No natural Cloud Tasks ordering or latency claim.
+
+Seven assertions characterize current behavior (1bc965 PASS7); five are explicitly DEFECT assertions, so this is NOT a passing dispatch safety gate:
+
+- Current task control reaches COMPLETED; stale generation with same requester is omitted without writes.
+- Stale generation with different requester writes AUTH_STOPPED over the new dispatch before its generation check.
+- A late old result or error overwrites QUEUED for a newly admitted generation, retaining the new generation ID with the old status/message.
+- Delayed enqueue acknowledgement overwrites COMPLETED with QUEUED even within the same generation. Delay2s is not a lock on enqueue acknowledgement.
+- A complete controlled ordering invokes real enqueue and task bodies: enqueue starts task, acknowledgement throws uncertain error, actual enqueue catch stores ENQUEUE_ERROR; simulated canonical executor commits FAILED_SAFE, second real enqueue transaction admits generation3, then old result arrives and writes FAILED_SAFE over generation3 QUEUED. Only the canonical executor result/commit is simulated. This ordering needs no parallel provider tasks and no administrative mutation of dispatch state.
+
+First run1ab1e3 was5/6: test expected next.generation instead of actual next.browserResult.generation; that fixture assertion was swallowed by the real task catch, yielding FAILED. Corrected only the response-shape expectation; cbf4d0 passed6/6, then the full ordering was added and1bc965 passed7/7. All provider counters0. Current source unchanged.
+
+## Small proposed repair, not implemented
+
+Introduce a local transactional dispatch mutation helper with expected generation, planHash and requester; compare identity before ANY mutation, including auth stop, and omit stale work. For enqueue acknowledgement/error, additionally require current QUEUING so it cannot regress RUNNING/terminal dispatch within the same generation. For task RUNNING/terminal transitions, use a reviewed transition guard and current canonical state: compare returned attemptId to the current execution attempt where a result exists, and derive success/review metadata from canonical outcome if another completion won. An old exception must not replace a terminal success, even when generation matches. Do not reopen uncertain execution or retry POST. Reordering the initial generation check alone is insufficient because later awaited reads/execute/queue responses still race.
+
+Invert these defect assertions before a fix, add same-generation delayed error/success and attempt-change guards, test transaction retry with fresh generation and legacy payload compatibility. Scope callables dispatch glue plus its QA/doc; keep executor/finalizer provider logic and business admission policy unchanged. No new task payload required for generation protection; attempt fencing for result must use the returned attemptId/current plan, with explicit handling of missing historical fields. Further policy requires review, not guessed transitions. Historical A7B release-status and snapshot assertions remain open; no replacement release evidence is fabricated here.
+
+## Authorized candidate, pending full review
+
+Root reviews cc1427/127c4c authorized a bounded dispatch-only correction. Before source changes, the five DEFECT characterizations were inverted into safety requirements: d58536 failed exactly five, with two controls passing (2/7). This retains the earlier characterization history above; the fixture now requires prevention instead of recording unsafe behavior.
+
+writePaymentApplicationIqDispatch now rereads the plan in a transaction and requires nonempty expected generation/hash/requester/root and exact current identity. It guards every post-admission dispatch mutation; the original enqueue admission transaction remains unchanged with its existing root/creator/hash/status policy. Acknowledgement or enqueue error may update only QUEUING plus canonical NOT_EXECUTED/FAILED_SAFE. START/STOP require pending QUEUING/QUEUED plus those same canonical ready states. START returns ownership; an omitted stale/terminal transition never invokes the executor. Existing success reuse requires coherent IQ_APPLIED/SUCCEEDED and a persisted attempt, and cannot replace a terminal dispatch.
+
+Result completion requires RUNNING, current canonical execution status and top-level status equal the returned result's valid combination, and returned nonempty attemptId equal canonical attempt. Its message is read from the canonical plan. Catch records FAILED only while RUNNING and canonical ready (NOT_EXECUTED/FAILED_SAFE); it cannot replace canonical success/review/IN_PROGRESS or terminal dispatch. Therefore an exception after an unresolved claim leaves RUNNING/IN_PROGRESS untouched, requiring existing manual review instead of inventing failure/retry. Same-generation changed attempts/results are omitted, not silently reconciled to a guessed result.
+
+Legacy missing dispatch identity/status or terminal attempt is explicitly fail-closed for these metadata transitions; no fields are backfilled and no provider is invoked when START cannot be owned. This may leave historical inconsistent metadata unchanged and needs release inventory/review; no global historical compatibility is claimed. No payload change, task option change, automatic retry, provider logic change or business admission expansion. The enqueue response remains its established queued response even when a late acknowledgement is omitted; this patch protects durable state, not a new response API.
+
+Fixture now models version conflicts with bounded three attempts, discarding staged writes before rereading. 634abf passed the first seven fixed regressions; f9cd14 passed33 including delayed error, legacy missing fields, terminal/no-reopen, identity shifts, retry generation, returned-attempt mismatch and canonical catch protection. Tests stub authority/executor/queue and do not certify permissions or real Tasks delivery. No SDK/build/cloud/commit for this candidate yet; A7B historical claims remain open.
+
+Final focused run6a3fa2:39/39 PASS and diffcheckPASS. Added current root/hash/requester drift, terminal transaction retry seeing a new generation, and reuse with/without persisted attempt. Source/unit/doc frozen for root review before build or SDK.
+
+## Follow-up reviewed fixture precision and prepared SDK
+
+Root fullreview5c3d02 identified that the old-result/new-generation regression omitted result.status/attemptId. Updated it to canonical FAILED_SAFE/PREVALIDATED/a1 and matching canonical message before admitting the new generation, so malformed-result rejection cannot explain preservation. Added a fully valid matching result with changed generation/requester and RUNNING to isolate identity rejection. d30f68:40/40 PASS; product source unchanged.
+
+Prepared (not executed) payment-iq-dispatch-result-sdk.test.cjs and payment-iq-dispatch-result-emulator-run.ps1: pinned exact callables source and AST three-function helper extraction; no task/executor/provider modules loaded. Real Admin Firestore7.11.6, TypeScript pin; one random owned plan ref in demo-pay0-iq-dispatch, ports18261/19261/14461/14561. Three cases: injected ABORTED plus CAS generation change before retry proves START discards its staged write; valid current result commits canonical message; delayed ACK/error refuses to overwrite COMPLETED. No natural contention claim, queue/API permission certification or provider effects.
+
+Runner retains Prepare default, explicit Execute, cached CLI15.3.1/JAR, credential rejection, private4MiB logs,240s own-tree watchdog/HandlePS5 and port closure. Fixture loopback transport guards/120s watchdog/90s test and maxAttempts3 retained. Seed/create and mutation timestamps retained; result capture checks root/owner/generation/dispatch status/message but does not prove every field against an intervening same-owner writer. Cleanup uses the retained CAS timestamp without fresh adoption, exact owned-ref absence. No SDK/build/Prepare execution yet; historical fixtures remain unchanged.
+
+## Final approved evidence
+
+Root review052b87 includes SDK scope and115 synthetic assertions PASS (dispatch40 + finalizer30 + A1boundary45). Functions NORMAL4593 passed29df4d; authorization policy89ed75 passed. Prepare0db911 passed; root Execute24938 completedbc5644: three cases, one owned reference, CAS cleanup and exact absence verified, all four ports closed, cloudCalls0, injectedAborted=true. This is the helper AST plus real Firestore transactions, not full callable or real Cloud Tasks/provider execution. No natural contention claim.
+
+Private runtime .firebase/remediation-temp/payment-iq-dispatch-52f5bb77bf2a4472bc5fc0e1c07f8a4f. Aggregate-only inspectionf24999 corroborated the three fixed check enums and cleanup: stdout1609bytes SHA25689faa03bae0e9f3d1f03b61226c578b8b4d964b9284c1e2bd798849294547a55; stderr0bytes. Extracted callback SHA2562bce357f2fd473ae5143a02958d0ab43d06b7dcdcddaabc851061095024775f0; callables source3cd2b600865c2924bfe0307a584923f370f499a5efdde0d5ac57e2ce949d5564. SDKfixture e86829f1122a10bc8b77c31f44521e8cd8403e80ca69ead4579a067e6c6c14ed; runner9d631445e8f07d2a6c01937ecbab865bbb26c424d7236968074da269cd39621d. Sources were frozen throughout execution.
+
+Root authorized exactly five files for a coherent local commit after this evidence. Earlier preparation-only statements record their historical stage and are superseded by these explicit checks. No integration, push, cloud deployment or real IQ/notification effect. Legacy inconsistencies and A7B historical release assertions remain open as described above.
