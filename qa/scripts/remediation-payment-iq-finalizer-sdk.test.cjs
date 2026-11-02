@@ -8,7 +8,7 @@ test('canonical finalizer SDK',{skip:process.env.PAY0_IQ_FINALIZER_REAL_SDK!=='1
  for(const k of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','GCP_PROJECT','GOOGLE_CLOUD_QUOTA_PROJECT','FIREBASE_PROJECT_ID'])if(process.env[k])assert.equal(process.env[k],PROJECT);
  if(process.env.FIREBASE_CONFIG)assert.equal(JSON.parse(process.env.FIREBASE_CONFIG).projectId,PROJECT);
  const file='functions/src/modules/paymentApplications/iqExecution.ts',source=fs.readFileSync(file,'utf8');
- assert.equal(crypto.createHash('sha256').update(source).digest('hex'),'c0bae64f8e313c82f4c34ebf6fc8ac51b21b8c47ef4c422a371b4df8524e0fd0','SOURCE_PIN_MISMATCH');
+ assert.equal(crypto.createHash('sha256').update(source).digest('hex'),'993be01501b5d7feb518b708030176a8f2f04a6155048a4843a2059f6817d665','SOURCE_PIN_MISMATCH');
  const ts=require('typescript');assert.equal(ts.version,'5.9.3');
  const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true),names=['cleanText','cleanUpper','asRecord','executionResultFromPlan','compactBrowserResult','finalizeExecution'];
  const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&names.includes(n.name?.text));assert.equal(nodes.length,names.length);

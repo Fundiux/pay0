@@ -8,7 +8,7 @@ test('dispatch fence SDK',{skip:process.env.PAY0_IQ_DISPATCH_REAL_SDK!=='1',time
  for(const k of ['GCLOUD_PROJECT','GOOGLE_CLOUD_PROJECT','GCP_PROJECT','GOOGLE_CLOUD_QUOTA_PROJECT','FIREBASE_PROJECT_ID'])if(process.env[k])assert.equal(process.env[k],PROJECT);
  if(process.env.FIREBASE_CONFIG)assert.equal(JSON.parse(process.env.FIREBASE_CONFIG).projectId,PROJECT);
  const file='functions/src/modules/paymentApplications/callables.ts',source=fs.readFileSync(file,'utf8');
- assert.equal(crypto.createHash('sha256').update(source).digest('hex'),'3cd2b600865c2924bfe0307a584923f370f499a5efdde0d5ac57e2ce949d5564','SOURCE_PIN_MISMATCH');
+ assert.equal(crypto.createHash('sha256').update(source).digest('hex'),'3f30a325a679245e9e0a00348f758e69822f2b31d64fcc08c0ab0ba8dfb7b0b0','SOURCE_PIN_MISMATCH');
  const ts=require('typescript');assert.equal(ts.version,'5.9.3');
  const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true),names=['cleanDispatchText','cleanDispatchUpper','writePaymentApplicationIqDispatch'];
  const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&names.includes(n.name?.text));assert.equal(nodes.length,names.length);
