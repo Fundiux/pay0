@@ -74,3 +74,30 @@ export async function finalizeGlobalSatCatalogImport(input: { importId: string; 
   const callable = httpsCallable<typeof input, { ok: boolean; reused: boolean; importId: string; productCount: number; unitCount: number; sourceSha256?: string; effectiveAsOf?: string }>(functions, "finalizeGlobalSatCatalogImport", { timeout: 540000 });
   return (await callable(input)).data;
 }
+
+export type InvoicePaymentControlRow = {
+  solicitudId: string; solicitudFolio: string | null; status: string | null;
+  facturaSource: "SOLICITUD" | "FACTURAMA"; facturaUuid: string | null; facturaRef: string;
+};
+export type InvoicePaymentControlPagoRow = {
+  applicationId: string; pagoId: string; pagoFolio: string | null;
+  solicitudId: string; solicitudFolio: string | null; montoAplicado: number;
+};
+export type InvoicePaymentControlPagoSinAplicacion = { pagoId: string; pagoFolio: string | null; status: string | null };
+export type InvoicePaymentControlPagoEnSolicitudInactiva = InvoicePaymentControlPagoRow & { solicitudStatus: string | null };
+export type InvoicePaymentControlResult = {
+  ok: boolean; generatedAt: string; truncated: boolean; listedLimit: number;
+  summary: {
+    solicitudesActivas: number; solicitudesConFactura: number; solicitudesConPagoAplicado: number;
+    facturaSinPago: number; pagoSinFactura: number; montoPagadoSinFactura: number;
+    pagosSinAplicacion: number; pagoEnSolicitudInactiva: number; facturasSandboxIgnoradas: number;
+  };
+  facturaSinPago: InvoicePaymentControlRow[];
+  pagoSinFactura: InvoicePaymentControlPagoRow[];
+  pagosSinAplicacion: InvoicePaymentControlPagoSinAplicacion[];
+  pagoEnSolicitudInactiva: InvoicePaymentControlPagoEnSolicitudInactiva[];
+};
+
+export async function getInvoicePaymentControl() {
+  return (await httpsCallable<Record<string, never>, InvoicePaymentControlResult>(functions, "getInvoicePaymentControl", { timeout: 120000 })({})).data;
+}
