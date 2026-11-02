@@ -89,3 +89,13 @@ stderr is empty. Source SHA256 is
 extracted callback SHA256 is
 `1cd99554b5f8ce63a92f6bd5624c8d4fc9ab2e6565acb2828b95195687d536ef`.
 No integration, production deployment, real notification or fiscal call was run.
+
+## Integration into main (2026-11-02)
+
+The transactional replacement claim was re-applied to main on
+`fix/iq-hardening-from-october`. Main still writes the initial solicitud note
+after the creation transaction (the atomic initial-note change was not
+integrated), so the real-SDK fixture and runner above, which assume an
+in-transaction note, were not carried over. The node-level regression
+`qa/scripts/remediation-solicitud-replacement-claim.test.cjs` was adapted to
+main's postcommit note and is the gate for this change.
