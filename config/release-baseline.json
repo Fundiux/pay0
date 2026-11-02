@@ -319,6 +319,16 @@
       "file": "functions/src/modules/documentDelivery/whatsappQrCallables.ts",
       "text": "const bindingId = owned.binding?.state === \"ACTIVE\" ? owned.binding.id : null;",
       "capability": "El tablero y los comandos QR de WhatsApp usan la vinculacion activa del conector (publicado el 2026-10-22)"
+    },
+    {
+      "file": "functions/src/modules/agent007/voiceHistory.ts",
+      "text": "if (data.appendOnly === true) return appendHugoVoiceHistory(db, actor, data);",
+      "capability": "saveHugoVoiceHistory acepta historial incremental del gateway de voz (publicado el 2026-10-22)"
+    },
+    {
+      "file": "functions/src/modules/agent007/voiceHistoryAppend.ts",
+      "text": "/** Minimal receipt path for gateway-observed transcripts. Never resets usage/costs or reopens a closed session. */",
+      "capability": "El historial incremental de voz no reinicia uso, costos ni reabre sesiones cerradas"
     }
   ],
   "forbiddenText": [
