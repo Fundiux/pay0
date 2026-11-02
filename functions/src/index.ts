@@ -422,29 +422,30 @@ export const createSolicitud = onCall(
     const now = FieldValue.serverTimestamp();
     const solicitudRef = db.collection("solicitudes").doc();
 
-    let replacementSourceRef: FirebaseFirestore.DocumentReference | null = null;
-    let replacementSource: any = null;
-    if (replacementSourceId) {
-      const sourceSnap = await db.doc(`solicitudes/${replacementSourceId}`).get();
-      if (!sourceSnap.exists) throw new HttpsError("not-found", "La solicitud original a sustituir no existe.");
-      replacementSource = sourceSnap.data() || {};
-      if (String(replacementSource.rootId || "") !== rootId) throw new HttpsError("permission-denied", "La solicitud original esta fuera de alcance.");
-      if (String(replacementSource.facturamaEnvironment || "").toUpperCase() !== "PRODUCTION" || !String(replacementSource.facturamaInvoiceId || "").trim()) {
-        throw new HttpsError("failed-precondition", "Esta sustitucion automatica solo aplica a CFDI productivo emitido por Facturama.");
-      }
-      if (String(replacementSource.relatedSolicitudId || "").trim()) throw new HttpsError("already-exists", "La solicitud original ya tiene una sustitucion relacionada.");
-      if (!String(replacementSource.facturaUuid || replacementSource.uuidCfdi || "").trim()) throw new HttpsError("failed-precondition", "La solicitud original no tiene UUID productivo para sustituir.");
-      if (String(replacementSource.companyId || "") !== companyIdValue || String(replacementSource.clienteId || replacementSource.clientId || "") !== clienteId) {
-        throw new HttpsError("failed-precondition", "La sustitucion debe conservar emisor y receptor de la solicitud original.");
-      }
-      replacementSourceRef = sourceSnap.ref;
-    }
+    const replacementSourceRef = replacementSourceId ? db.doc(`solicitudes/${replacementSourceId}`) : null;
 
     let folio = "";
     let solicitudSequenceNumber = 0;
     let solicitudSequenceCounterPath = "";
 
     await db.runTransaction(async (tx) => {
+      // Read before nextSequenceTx stages writes. Every retry must observe the
+      // current claim and derive replacement fields from this same snapshot.
+      let replacementSource: any = null;
+      if (replacementSourceRef) {
+        const sourceSnap = await tx.get(replacementSourceRef);
+        if (!sourceSnap.exists) throw new HttpsError("not-found", "La solicitud original a sustituir no existe.");
+        replacementSource = sourceSnap.data() || {};
+        if (String(replacementSource.rootId || "") !== rootId) throw new HttpsError("permission-denied", "La solicitud original esta fuera de alcance.");
+        if (String(replacementSource.facturamaEnvironment || "").toUpperCase() !== "PRODUCTION" || !String(replacementSource.facturamaInvoiceId || "").trim()) {
+          throw new HttpsError("failed-precondition", "Esta sustitucion automatica solo aplica a CFDI productivo emitido por Facturama.");
+        }
+        if (String(replacementSource.relatedSolicitudId || "").trim()) throw new HttpsError("already-exists", "La solicitud original ya tiene una sustitucion relacionada.");
+        if (!String(replacementSource.facturaUuid || replacementSource.uuidCfdi || "").trim()) throw new HttpsError("failed-precondition", "La solicitud original no tiene UUID productivo para sustituir.");
+        if (String(replacementSource.companyId || "") !== companyIdValue || String(replacementSource.clienteId || replacementSource.clientId || "") !== clienteId) {
+          throw new HttpsError("failed-precondition", "La sustitucion debe conservar emisor y receptor de la solicitud original.");
+        }
+      }
       const seq = await nextSequenceTx({
         db,
         tx,

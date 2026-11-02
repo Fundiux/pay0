@@ -267,6 +267,64 @@ function dispatchResponse(params: {
   };
 }
 
+// Dispatch metadata is fenced independently of the canonical IQ execution claim.
+async function writePaymentApplicationIqDispatch(params: {
+  planId: string;
+  generation: string;
+  planHash: string;
+  requester: string;
+  rootId: string;
+  phase: "ENQUEUE" | "START" | "STOP" | "REUSED" | "RESULT" | "ERROR";
+  patch: Record<string, unknown>;
+  result?: { attemptId: string; status: string; iqExecutionStatus: string };
+}): Promise<boolean> {
+  const ref = db.collection("pagoApplicationIqPlans").doc(params.planId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+    const plan = snap.data() || {};
+    if (!params.generation || !params.planHash || !params.requester || !params.rootId ||
+        cleanDispatchText(plan.iqExecutionDispatchGeneration) !== params.generation ||
+        cleanDispatchText(plan.planHash).toLowerCase() !== params.planHash ||
+        cleanDispatchText(plan.iqExecutionDispatchRequestedBy) !== params.requester ||
+        cleanDispatchText(plan.rootId) !== params.rootId) return false;
+
+    const dispatch = cleanDispatchUpper(plan.iqExecutionDispatchStatus);
+    const execution = cleanDispatchUpper(plan.iqExecutionStatus);
+    const ready = ["NOT_EXECUTED", "FAILED_SAFE"].includes(execution);
+    const pending = ["QUEUING", "QUEUED"].includes(dispatch);
+    let patch = params.patch;
+    if (params.phase === "ENQUEUE") {
+      if (dispatch !== "QUEUING" || !ready) return false;
+    } else if (params.phase === "START" || params.phase === "STOP") {
+      if (!pending || !ready) return false;
+    } else if (params.phase === "REUSED") {
+      if ((!pending && dispatch !== "RUNNING") || execution !== "SUCCEEDED" ||
+          cleanDispatchUpper(plan.status) !== "IQ_APPLIED" ||
+          !cleanDispatchText(plan.iqExecutionAttemptId)) return false;
+    } else if (params.phase === "RESULT") {
+      const result = params.result;
+      const statuses: Record<string, string> = {
+        SUCCEEDED: "IQ_APPLIED",
+        FAILED_SAFE: "PREVALIDATED",
+        UNKNOWN_REVIEW_REQUIRED: "IQ_UNKNOWN_REVIEW_REQUIRED",
+        REJECTED_REVIEW_REQUIRED: "IQ_REJECTED_REVIEW_REQUIRED",
+      };
+      if (dispatch !== "RUNNING" || !result || !cleanDispatchText(result.attemptId) ||
+          cleanDispatchText(plan.iqExecutionAttemptId) !== result.attemptId ||
+          execution !== result.iqExecutionStatus || !statuses[execution] ||
+          cleanDispatchUpper(plan.status) !== statuses[execution] ||
+          result.status !== statuses[execution]) return false;
+      patch = { ...patch, iqExecutionDispatchMessage: cleanDispatchText(plan.iqExecutionMessage) };
+    } else {
+      // An exception is not evidence that a canonical success/review may be replaced.
+      if (dispatch !== "RUNNING" || !ready) return false;
+    }
+    tx.set(ref, patch, { merge: true });
+    return true;
+  });
+}
+
 async function enqueuePaymentApplicationIqExecution(
   actor: PaymentApplicationActor,
   data: Record<string, unknown>,
@@ -497,6 +555,11 @@ async function enqueuePaymentApplicationIqExecution(
     });
   }
 
+  const updateDispatch = (patch: Record<string, unknown>) => writePaymentApplicationIqDispatch({
+    planId, generation: claimed.generation, planHash, requester: actor.uid,
+    rootId: actor.rootId, phase: "ENQUEUE", patch,
+  });
+
   try {
     const enqueueResult =
       await enqueueIqOnDemandTaskH4D64({
@@ -513,7 +576,7 @@ async function enqueuePaymentApplicationIqExecution(
         dispatchDeadlineSeconds: 540,
       });
 
-    await planRef.set(
+    await updateDispatch(
       {
         iqExecutionDispatchStatus: "QUEUED",
         iqExecutionDispatchTaskId:
@@ -524,9 +587,7 @@ async function enqueuePaymentApplicationIqExecution(
           FieldValue.serverTimestamp(),
         updatedAt:
           FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+      });
 
     return dispatchResponse({
       planId,
@@ -539,7 +600,7 @@ async function enqueuePaymentApplicationIqExecution(
         "Ejecucion IQ encolada. PAY0 ya no espera al navegador.",
     });
   } catch (error: any) {
-    await planRef.set(
+    await updateDispatch(
       {
         iqExecutionDispatchStatus:
           "ENQUEUE_ERROR",
@@ -552,9 +613,7 @@ async function enqueuePaymentApplicationIqExecution(
           FieldValue.serverTimestamp(),
         updatedAt:
           FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    ).catch(() => undefined);
+      }).catch(() => undefined);
 
     throw error;
   }
@@ -652,8 +711,16 @@ export const processPagoApplicationIqPlanOnDemandTask =
       }
 
       const plan = planSnap.data() || {};
+      const updateDispatch = (
+        phase: "START" | "STOP" | "REUSED" | "RESULT" | "ERROR",
+        patch: Record<string, unknown>,
+        result?: { attemptId: string; status: string; iqExecutionStatus: string },
+      ) => writePaymentApplicationIqDispatch({
+        planId, generation, planHash, requester: uid,
+        rootId: cleanDispatchText(plan.rootId), phase, patch, result,
+      });
       if (cleanDispatchText(plan.iqExecutionDispatchRequestedBy) !== uid) {
-        await planRef.set({iqExecutionDispatchStatus: "AUTH_STOPPED", iqExecutionDispatchLastError: "El solicitante no coincide con la intenci?n vigente."}, {merge:true});
+        await updateDispatch("STOP",{iqExecutionDispatchStatus: "AUTH_STOPPED", iqExecutionDispatchLastError: "El solicitante no coincide con la intenci?n vigente."});
         return;
       }
 
@@ -675,7 +742,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
         cleanDispatchUpper(plan.iqExecutionStatus) ===
         "SUCCEEDED"
       ) {
-        await planRef.set(
+        await updateDispatch("REUSED",
           {
             iqExecutionDispatchStatus:
               "COMPLETED_REUSED",
@@ -683,9 +750,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+          });
 
         return;
       }
@@ -717,7 +782,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
       catch { inactive = true; }
 
       if (!hasPersistedIqOrigin && inactive) {
-        await planRef.set(
+        await updateDispatch("STOP",
           {
             iqExecutionDispatchStatus:
               "AUTH_STOPPED",
@@ -727,9 +792,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+          });
 
         return;
       }
@@ -742,7 +805,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
         !hasPersistedIqOrigin && cleanDispatchText(plan.rootId) !==
         currentRootId
       ) {
-        await planRef.set(
+        await updateDispatch("STOP",
           {
             iqExecutionDispatchStatus:
               "SCOPE_STOPPED",
@@ -752,9 +815,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+          });
 
         return;
       }
@@ -803,7 +864,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
           );
 
         if (!automationStillEnabled) {
-          await planRef.set(
+          await updateDispatch("STOP",
             {
               iqExecutionDispatchStatus:
                 "AUTOMATION_PAUSED",
@@ -814,9 +875,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
                 FieldValue.serverTimestamp(),
               updatedAt:
                 FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          );
+            });
 
           console.info(
             "H4_D87_A59_R3_AUTOMATION_PAUSED",
@@ -830,16 +889,16 @@ export const processPagoApplicationIqPlanOnDemandTask =
           return;
         }
       }
-      await planRef.set(
+      const ownsDispatch = await updateDispatch("START",
         {
           iqExecutionDispatchStatus: "RUNNING",
           iqExecutionDispatchStartedAt:
             FieldValue.serverTimestamp(),
           updatedAt:
             FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+        });
+
+      if (!ownsDispatch) return;
 
       try {
         const result =
@@ -855,7 +914,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
             result.iqExecutionStatus,
           );
 
-        await planRef.set(
+        await updateDispatch("RESULT",
           {
             iqExecutionDispatchStatus:
               resultStatus === "SUCCEEDED"
@@ -875,9 +934,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+          }, result);
       } catch (error: any) {
         const message =
           cleanDispatchText(
@@ -885,7 +942,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
             "La tarea IQ termino con error.",
           );
 
-        await planRef.set(
+        await updateDispatch("ERROR",
           {
             iqExecutionDispatchStatus: "FAILED",
             iqExecutionDispatchLastError:
@@ -896,9 +953,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        ).catch(() => undefined);
+          }).catch(() => undefined);
 
         console.error(
           "H4_D80_A7B_TASK_FAILED",

@@ -957,7 +957,7 @@ async function finalizeExecution(params: {
   const browserSummary = compactBrowserResult(browserResult);
   const byKey = new Map(browserResult.itemResults.map((item) => [cleanText(item.key), item]));
 
-  await db.runTransaction(async (tx) => {
+  return db.runTransaction<PaymentApplicationIqExecutionResult>(async (tx) => {
     const planSnap = await tx.get(planRef);
     const attemptSnap = await tx.get(attemptRef);
     if (!planSnap.exists || !attemptSnap.exists) {
@@ -968,7 +968,9 @@ async function finalizeExecution(params: {
       throw new HttpsError("aborted", "Otro intento IQ reemplazo el intento actual.");
     }
     if (cleanUpper(plan?.iqExecutionStatus) !== "IN_PROGRESS") {
-      if (cleanUpper(plan?.iqExecutionStatus) === "SUCCEEDED") return;
+      if (cleanUpper(plan?.iqExecutionStatus) === "SUCCEEDED") {
+        return executionResultFromPlan(claimed.planId, plan);
+      }
       throw new HttpsError("aborted", "El plan IQ ya no esta en estado de ejecucion.");
     }
 
@@ -1115,23 +1117,23 @@ async function finalizeExecution(params: {
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     }
-  });
 
-  return {
-    ok: true,
-    reused: false,
-    planId: claimed.planId,
-    planHash: claimed.planHash,
-    reservationId: claimed.reservationId,
-    attemptId: claimed.attemptId,
-    attemptNumber: claimed.attemptNumber,
-    status,
-    iqExecutionStatus: executionStatus,
-    iqActionExecuted: actionExecuted,
-    iqApplicationId: cleanText(browserResult.iqApplicationId),
-    message: cleanText(browserResult.message),
-    browserResult: browserSummary,
-  };
+    return {
+      ok: true,
+      reused: false,
+      planId: claimed.planId,
+      planHash: claimed.planHash,
+      reservationId: claimed.reservationId,
+      attemptId: claimed.attemptId,
+      attemptNumber: claimed.attemptNumber,
+      status,
+      iqExecutionStatus: executionStatus,
+      iqActionExecuted: actionExecuted,
+      iqApplicationId: cleanText(browserResult.iqApplicationId),
+      message: cleanText(browserResult.message),
+      browserResult: browserSummary,
+    };
+  });
 }
 
 // H4_D85_A10_A33_HTTP_DIRECT_PAYMENT_APPLICATION_EXECUTION

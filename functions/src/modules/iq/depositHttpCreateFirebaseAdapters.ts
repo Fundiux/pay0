@@ -155,6 +155,9 @@ function statePatch(
 export function createPagoAttemptLockAdapter(
   context: FirebasePagoAdapterContext,
 ): AttemptLockAdapter {
+  const issuedLeases = new WeakMap<AttemptLockLease, Readonly<{
+    executionToken: string; lockKey: string; lockedAtIso: string; leaseExpiresAtIso: string; expiryMs: number;
+  }>>();
   return {
     async acquire(input): Promise<AttemptLockLease> {
       const lockKey =
@@ -263,15 +266,22 @@ export function createPagoAttemptLockAdapter(
         );
       });
 
-      return {
+      const lease: AttemptLockLease = {
         lockKey,
         lockedAtIso: new Date(nowMs).toISOString(),
         leaseExpiresAtIso:
           new Date(leaseExpiresAtMs).toISOString(),
       };
+      issuedLeases.set(lease, Object.freeze({ ...lease, executionToken, expiryMs: leaseExpiresAtMs }));
+      return lease;
     },
 
     async release(lease): Promise<void> {
+      const binding = issuedLeases.get(lease);
+      const matchesIssuedLease = () => Boolean(binding) &&
+        lease.lockKey === binding!.lockKey && lease.lockedAtIso === binding!.lockedAtIso &&
+        lease.leaseExpiresAtIso === binding!.leaseExpiresAtIso;
+      if (!binding || !matchesIssuedLease()) return;
       const ref = pagoRef(context.pagoId);
 
       await db().runTransaction(async (transaction) => {
@@ -281,6 +291,8 @@ export function createPagoAttemptLockAdapter(
         }
 
         const data = snapshot.data() as Record<string, unknown>;
+        if (!matchesIssuedLease() || data.iqDepositCreationExecutionToken !== binding.executionToken ||
+            asMillis(data.iqDepositCreationLeaseExpiresAt) !== binding.expiryMs) return;
         const currentStatus = cleanText(
           data.iqDepositCreationStatus,
         ).toUpperCase();
