@@ -334,6 +334,11 @@
       "file": "functions/src/modules/agent007/voiceHistoryAppend.ts",
       "text": "/** Minimal receipt path for gateway-observed transcripts. Never resets usage/costs or reopens a closed session. */",
       "capability": "El historial incremental de voz no reinicia uso, costos ni reabre sesiones cerradas"
+    },
+    {
+      "file": "functions/src/modules/solicitudDocuments/service.ts",
+      "text": ".where(\"rootId\", \"==\", rootId)",
+      "capability": "El reprocesamiento de OC busca la OC activa dentro del root autorizado"
     }
   ],
   "forbiddenText": [

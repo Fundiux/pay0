@@ -936,6 +936,7 @@ export async function reprocessActiveSolicitudOcCore(request: any) {
   if (!solicitudId) throw new HttpsError("invalid-argument", "solicitudId requerido.");
   const { solicitudRef, solicitud } = await loadSolicitudOrThrow({ solicitudId, uid, user, rootId });
   const activeOc = await db.collection("uploads")
+    .where("rootId", "==", rootId)
     .where("solicitudId", "==", solicitudId)
     .where("documentType", "==", "ORDEN_COMPRA")
     .where("active", "==", true)
