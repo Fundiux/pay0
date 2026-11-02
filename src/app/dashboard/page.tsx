@@ -4,6 +4,7 @@ import NoAccess from "@/components/NoAccess";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 
 import DashboardActivity from "../../components/DashboardActivity";
+import { InvoicePaymentControl } from "@/components/dashboard/InvoicePaymentControl";
 import React, { useMemo, useState, useEffect } from "react";
 import { collection, query, where, Timestamp, getCountFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebaseClient";
@@ -332,6 +333,12 @@ export default function DashboardPage() {
           <Card title="Pendientes" value={counts.pendientes} color="#fbbf24" range={range} loading={loadingCounts} />
           <Card title="Pagadas" value={counts.pagadas} color="#34d399" range={range} loading={loadingCounts} />
         </div>
+
+        {(isSuperAdmin(role) || isAdmin(role)) && (
+          <div className="relative z-10 mt-6 min-w-0">
+            <InvoicePaymentControl />
+          </div>
+        )}
 
         {canViewActividad && (
           <div className="relative z-10 mt-6 min-w-0">

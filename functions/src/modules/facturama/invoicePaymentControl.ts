@@ -174,6 +174,7 @@ export function buildInvoicePaymentControl(input: InvoicePaymentControlInput) {
       solicitudesActivas: solicitudesActivas.length,
       solicitudesConFactura: solicitudesActivas.filter(row => invoiceBySolicitud.has(row.id)).length,
       solicitudesConPagoAplicado: solicitudesActivas.filter(row => appliedCentsBySolicitud.has(row.id)).length,
+      solicitudesSinPago: solicitudesActivas.filter(row => !appliedCentsBySolicitud.has(row.id)).length,
       facturaSinPago: facturaSinPagoAll.length,
       pagoSinFactura: pagoSinFacturaAll.length,
       montoPagadoSinFactura: fromCents(montoPagadoSinFactura),
@@ -208,8 +209,8 @@ export const getInvoicePaymentControl = onCall(
   async (request) => {
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
-    // Mismo alcance que el módulo de facturación: solo Super Admin.
-    assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"] });
+    // Resumen del dashboard: superadmin y admin con acceso al módulo dashboard.
+    assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin"], requiredModule: "dashboard", requiredAction: "view" });
     const rootId = clean(user?.rootId || uid, 128);
 
     const [solicitudes, invoices, applications, pagos] = await Promise.all([

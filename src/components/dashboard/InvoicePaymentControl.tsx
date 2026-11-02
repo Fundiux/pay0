@@ -42,7 +42,7 @@ export function InvoicePaymentControl() {
         <div>
           <h2 className="text-lg font-semibold text-white">Control factura ↔ pago</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-400">
-            Cruza las solicitudes con factura emitida contra los pagos aplicados a esas mismas solicitudes, en ambos sentidos. Es solo lectura.
+            Resumen de solicitudes con factura emitida contra pagos aplicados, en ambos sentidos, para saber cuántos pagos faltan por relacionar. Solo lectura.
           </p>
         </div>
         <button
@@ -61,10 +61,11 @@ export function InvoicePaymentControl() {
       {result && (
         <>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Tile label="Factura sin pago" value={count(result.summary.facturaSinPago)} tone={result.summary.facturaSinPago ? "warn" : "ok"} />
-            <Tile label="Pago sin factura" value={count(result.summary.pagoSinFactura)} tone={result.summary.pagoSinFactura ? "warn" : "ok"} />
+            <Tile label="Solicitudes sin pago" value={count(result.summary.solicitudesSinPago)} tone={result.summary.solicitudesSinPago ? "warn" : "ok"} />
+            <Tile label="Solicitudes con factura sin pago" value={count(result.summary.facturaSinPago)} tone={result.summary.facturaSinPago ? "warn" : "ok"} />
+            <Tile label="Pagos sin factura" value={count(result.summary.pagoSinFactura)} tone={result.summary.pagoSinFactura ? "warn" : "ok"} />
             <Tile label="Monto pagado sin factura" value={money(result.summary.montoPagadoSinFactura)} tone={result.summary.montoPagadoSinFactura ? "warn" : "ok"} />
-            <Tile label="Pagos sin aplicar" value={count(result.summary.pagosSinAplicacion)} tone={result.summary.pagosSinAplicacion ? "warn" : "neutral"} />
+            <Tile label="Pagos por relacionar" value={count(result.summary.pagosSinAplicacion)} tone={result.summary.pagosSinAplicacion ? "warn" : "neutral"} />
             <Tile label="Pagos en solicitud inactiva" value={count(result.summary.pagoEnSolicitudInactiva)} tone={result.summary.pagoEnSolicitudInactiva ? "warn" : "ok"} />
           </div>
           <p className="mt-3 text-xs text-slate-500">
