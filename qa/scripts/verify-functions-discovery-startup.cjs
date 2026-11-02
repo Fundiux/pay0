@@ -23,10 +23,11 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = process.platform === "win32" ? 25_000 : 7_000;
 const firebaseTimeoutMs = process.platform === "win32" ? 30_000 : 10_000;
 const warmupTimeoutMs = 60_000;
-// The current checkout exports 374 endpoints, including the MAT solicitud
-// documents callable and the Hugo team voice read and history callables.
+// The current checkout exports 382 endpoints, including the MAT solicitud
+// documents callable, the Hugo team voice read and history callables, and the
+// five server-owned WhatsApp connector enrollment callables live since 2026-10-22.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 377;
+const expectedEndpointCount = 382;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
@@ -58,6 +59,8 @@ const requiredEndpoints = [
   "reviewAgent007LearningRule",
   "sendHugoTeamTurn", "listHugoTeamTurns", "delegateHugoTeamVoiceTurn",
   "getMatSolicitudDocuments",
+  "createWhatsAppConnectorEnrollment", "consumeWhatsAppConnectorEnrollment", "getWhatsAppConnectorBinding",
+  "revokeWhatsAppConnectorBinding", "operateWhatsAppConnector",
 ];
 
 function fail(message) {

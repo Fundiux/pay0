@@ -1120,7 +1120,9 @@
                 { "fieldPath": "documentType", "order": "ASCENDING" },
                 { "fieldPath": "active", "order": "ASCENDING" }
             ]
-        }
+        },
+        { "collectionGroup": "whatsappQrConnectorCommands", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "bindingId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+        { "collectionGroup": "whatsappQrChats", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "bindingId", "order": "ASCENDING" }, { "fieldPath": "rootId", "order": "ASCENDING" }] }
     ],
     "fieldOverrides": [
         {

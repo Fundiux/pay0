@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
+import { requireWhatsAppSuperadmin, WhatsAppConnectorAuthority } from "./whatsappConnectorAuthority";
 import {
   applyWhatsAppDestinationsToJob,
   buildWhatsAppRouteId,
@@ -31,6 +32,8 @@ function toIso(value: any): string | null {
   return null;
 }
 
+// Delivery-route and destination actions keep their existing superadmin guard.
+// QR control (dashboard, chat sync, new QR) uses the binding-scoped connector authority.
 async function requireSuperadminUser(request: any) {
   const uid = requireAuth(request);
   const user = await getMyUser(uid);
@@ -44,6 +47,8 @@ async function requireSuperadminUser(request: any) {
   return { uid, user, rootId };
 }
 
+const connectorAuthority = new WhatsAppConnectorAuthority(db);
+
 function userName(user: any): string {
   return cleanText(user?.nombreUsuario || user?.displayName || user?.email || user?.username) || "superadmin";
 }
@@ -51,10 +56,12 @@ function userName(user: any): string {
 export const getWhatsAppQrDashboard = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
-    const { rootId } = await requireSuperadminUser(request);
+    const { rootId } = await requireWhatsAppSuperadmin(request);
 
-    const connectorSnap = await db.collection("whatsappQrConnectors").doc("default").get();
-    const connectorData = connectorSnap.exists ? connectorSnap.data() || {} : {};
+    const owned = await connectorAuthority.getOwned(request);
+    const bindingId = owned.binding?.state === "ACTIVE" ? owned.binding.id : null;
+    const connectorSnap = bindingId ? await db.collection("whatsappQrConnectors").doc(bindingId).get() : null;
+    const connectorData = connectorSnap?.exists ? connectorSnap.data() || {} : {};
 
     const jobsSnap = await db
       .collection("documentDeliveryJobs")
@@ -239,6 +246,7 @@ export const getWhatsAppQrDashboard = onCall(
           id: doc.id,
           rootId: cleanText(data.rootId || ""),
           connectorId: cleanText(data.connectorId || ""),
+          bindingId: cleanText(data.bindingId || ""),
           chatId: cleanText(data.chatId || ""),
           safeDocId: cleanText(data.safeDocId || doc.id),
           name: cleanText(data.name || data.chatId || ""),
@@ -255,6 +263,7 @@ export const getWhatsAppQrDashboard = onCall(
         (chat) =>
           chat.rootId === rootId &&
           chat.connectorId === "default" &&
+          (chat as any).bindingId === bindingId &&
           chat.active
       )
       .slice(0, 120);
@@ -288,7 +297,8 @@ export const getWhatsAppQrDashboard = onCall(
     return {
       ok: true,
       connector: {
-        id: "default",
+        id: bindingId,
+        externalAccountVerified: false,
         status: cleanText(connectorData.status || "DISCONNECTED") || "DISCONNECTED",
         qrDataUrl: cleanText(connectorData.qrDataUrl) || null,
         qrText: cleanText(connectorData.qrText) || null,
@@ -322,84 +332,7 @@ async function enqueueWhatsAppConnectorCommand(
   request: any,
   type: WhatsAppConnectorCommandType
 ) {
-  const { uid, user, rootId } = await requireSuperadminUser(request);
-
-  const connectorRef = db
-    .collection("whatsappQrConnectors")
-    .doc("default");
-
-  const connectorSnap = await connectorRef.get();
-  const connectorData =
-    connectorSnap.exists ? connectorSnap.data() || {} : {};
-
-  const connectorStatus = cleanText(
-    connectorData.status || "DISCONNECTED"
-  ).toUpperCase();
-
-  if (
-    type === "SYNC_CHATS" &&
-    connectorStatus !== "CONNECTED"
-  ) {
-    throw new HttpsError(
-      "failed-precondition",
-      "El conector WhatsApp no esta conectado."
-    );
-  }
-
-  const commandRef = db
-    .collection("whatsappQrConnectorCommands")
-    .doc();
-
-  const now =
-    admin.firestore.FieldValue.serverTimestamp();
-
-  const message =
-    type === "SYNC_CHATS"
-      ? "Solicitud de sincronizacion enviada al conector."
-      : "Solicitud de nuevo QR enviada al conector.";
-
-  const batch = db.batch();
-
-  batch.set(commandRef, {
-    connectorId: "default",
-    rootId,
-    type,
-    status: "PENDING",
-    requestedByUid: uid,
-    requestedByName: userName(user),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  batch.set(
-    connectorRef,
-    {
-      lastCommandId: commandRef.id,
-      lastCommandType: type,
-      lastCommandStatus: "PENDING",
-      lastCommandMessage: message,
-      lastCommandAt: now,
-      lastCommandFinishedAt: null,
-      ...(type === "NEW_QR"
-        ? {
-            qrText: null,
-            qrDataUrl: null,
-          }
-        : {}),
-      updatedAt: now,
-    },
-    { merge: true }
-  );
-
-  await batch.commit();
-
-  return {
-    ok: true,
-    commandId: commandRef.id,
-    type,
-    status: "PENDING",
-    message,
-  };
+  return connectorAuthority.enqueue(request, type);
 }
 
 export const requestWhatsAppChatsSync = onCall(
