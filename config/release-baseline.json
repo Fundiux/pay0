@@ -92,6 +92,26 @@
     {
       "commit": "67d2f4883bdd2de9491916cb3cd12ab11178766a",
       "capability": "Bloqueo de clientes con RFC ya registrado"
+    },
+    {
+      "commit": "803659448604b2f0570beabfbe9a4069e41c66f1",
+      "capability": "Aplicacion de pagos en IQ responde el resultado guardado del plan"
+    },
+    {
+      "commit": "6ee57285304b084b7f10baff988c1ac97fdada5d",
+      "capability": "Despacho de aplicaciones IQ protegido por generacion vigente"
+    },
+    {
+      "commit": "48296263fc9d468f103d37b5c6a303a85f2cedc2",
+      "capability": "Lease de depositos IQ solo lo libera quien lo tiene"
+    },
+    {
+      "commit": "6c664cf937cec06cbc1dd2477d240c936ecc3489",
+      "capability": "Reemplazo de solicitudes reclamado dentro de la transaccion"
+    },
+    {
+      "commit": "66a4dce4769240f32e04b99444939c90fabfcad6",
+      "capability": "Reproceso de OC busca la OC activa dentro del root autorizado"
     }
   ],
   "requiredText": [
