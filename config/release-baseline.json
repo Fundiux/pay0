@@ -211,6 +211,11 @@
       "capability": "La creacion directa en IQ encola la cotizacion"
     },
     {
+      "file": "functions/src/modules/iqHistoricalImport/service.ts",
+      "text": "if (mode === \"LIST_MANIFESTS\") return await listManifests(ctx);",
+      "capability": "La importacion historica P4 supervisada lista manifiestos en solo lectura (publicado el 2026-10-24)"
+    },
+    {
       "file": "functions/src/modules/documents/canonicalPdf.ts",
       "text": "\"cliente.contacto\": input.issuerContact",
       "capability": "La cotizacion muestra el contacto de quien emite"
