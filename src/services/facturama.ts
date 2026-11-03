@@ -88,7 +88,7 @@ export type InvoicePaymentControlPagoEnSolicitudInactiva = InvoicePaymentControl
 export type InvoicePaymentControlResult = {
   ok: boolean; generatedAt: string; truncated: boolean; listedLimit: number;
   summary: {
-    solicitudesActivas: number; solicitudesConFactura: number; solicitudesConPagoAplicado: number; solicitudesSinPago: number;
+    solicitudesActivas: number; solicitudesConFactura: number; solicitudesConPagoAplicado: number; solicitudesSinPago: number; solicitudesPagadasSinAplicacion: number;
     facturaSinPago: number; pagoSinFactura: number; montoPagadoSinFactura: number;
     pagosSinAplicacion: number; pagoEnSolicitudInactiva: number; facturasSandboxIgnoradas: number;
   };
