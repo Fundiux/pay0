@@ -62,6 +62,7 @@ export function InvoicePaymentControl() {
         <>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Tile label="Solicitudes sin pago" value={count(result.summary.solicitudesSinPago)} tone={result.summary.solicitudesSinPago ? "warn" : "ok"} />
+            <Tile label="Pagadas sin pago aplicado" value={count(result.summary.solicitudesPagadasSinAplicacion)} tone={result.summary.solicitudesPagadasSinAplicacion ? "warn" : "ok"} />
             <Tile label="Solicitudes con factura sin pago" value={count(result.summary.facturaSinPago)} tone={result.summary.facturaSinPago ? "warn" : "ok"} />
             <Tile label="Pagos sin factura" value={count(result.summary.pagoSinFactura)} tone={result.summary.pagoSinFactura ? "warn" : "ok"} />
             <Tile label="Monto pagado sin factura" value={money(result.summary.montoPagadoSinFactura)} tone={result.summary.montoPagadoSinFactura ? "warn" : "ok"} />

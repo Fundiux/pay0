@@ -9,8 +9,10 @@ import ControlCenterOverview from "@/components/control-center/ControlCenterOver
 import ControlCenterAnalytics from "@/components/control-center/ControlCenterAnalytics";
 import PaymentComplementFollowup from "@/components/control-center/PaymentComplementFollowup";
 import EngineeringControl from "@/components/control-center/EngineeringControl";
+import { InvoicePaymentControl } from "@/components/dashboard/InvoicePaymentControl";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
+import { isAdmin, isSuperAdmin } from "@/lib/roles";
 import { downloadSpreadsheetFile } from "@/lib/spreadsheetReader";
 import { CustomRange, DateScopeMode, getScopeRange, shiftBaseDate } from "@/lib/dateScope";
 import {
@@ -557,6 +559,12 @@ export default function ReportesPage() {
           {backfillError ? <p className="mt-3 text-sm text-rose-200">{backfillError}</p> : null}
           {backfillResult ? <p className="mt-3 text-sm text-amber-100">{backfillResult.dryRun ? "Simulación" : "Aplicado"}: {backfillResult.candidates} candidatos, {backfillResult.updated} actualizados, {backfillResult.skippedWithoutDate} sin fecha. {backfillResult.nextAfterPagoId ? "Hay otro lote disponible." : "No quedan más lotes."}</p> : null}
         </section>
+      ) : null}
+
+      {isSuperAdmin(profile?.role) || isAdmin(profile?.role) ? (
+        <div className="relative z-10 mb-5 min-w-0">
+          <InvoicePaymentControl />
+        </div>
       ) : null}
 
       <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#111827] p-2 sm:flex-row">
