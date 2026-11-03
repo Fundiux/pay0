@@ -120,6 +120,10 @@
     {
       "commit": "2e418e95",
       "capability": "Control factura-pago visible en el dashboard y sin excepciones de solicitud sin pago"
+    },
+    {
+      "commit": "e68f0f4b",
+      "capability": "Target de App Hosting pay0-next16 en firebase.json para el deploy por fuente con baseline verificado antes de empaquetar"
     }
   ],
   "requiredText": [
