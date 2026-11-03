@@ -14,6 +14,7 @@ functions/node_modules/
 .firebase/
 test-results/
 qa/reports/playwright-html/
+qa/reports/mat-playwright-html/
 qa/.auth/
 
 # Local QA/deployment artifacts
