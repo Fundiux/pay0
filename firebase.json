@@ -1,104 +1,120 @@
 {
-    "functions":  {
-                      "source":  "functions",
-                      "runtime":  "nodejs22",
-                      "predeploy":  [
-                                        "node qa/scripts/verify-release-baseline.mjs",
-                                        "node qa/scripts/verify-mat-release-contract.cjs",
-                                        "npm --prefix functions run build",
-                                        "npm run qa:functions-discovery",
-                                        "node qa/scripts/verify-client-csf-parser.cjs",
-                                        "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
-                                        "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
-                                        "node qa/scripts/verify-authorized-dispersion-capability.cjs",
-                                        "node qa/scripts/verify-simulated-dispersion-e2e.cjs",
-                                        "node qa/scripts/verify-hugo-voice-runtime-contract.cjs",
-                                        "npm run qa:client-csf-create",
-                                        "npm run qa:document-ui",
-                                        "npm run qa:document-access"
-                                    ]
-                  },
-    "firestore":  {
-                      "rules":  "firestore.rules",
-                      "indexes":  "firestore.indexes.json"
-                  },
-    "storage":  {
-                    "rules":  "storage.rules"
-                },
-    "emulators":  {
-                      "functions":  {
-                                        "host":  "127.0.0.1",
-                                        "port":  5001
-                                    },
-                      "firestore":  {
-                                        "host":  "127.0.0.1",
-                                        "port":  8080
-                                    },
-                      "ui":  {
-                                 "enabled":  true,
-                                 "host":  "127.0.0.1",
-                                 "port":  4000
-                             },
-                      "storage":  {
-                                      "host":  "127.0.0.1",
-                                      "port":  9199
-                                  },
-                      "singleProjectMode":  true,
-                      "auth":  {
-                                   "host":  "127.0.0.1",
-                                   "port":  9099
-                               }
-                  },
-    "hosting":  {
-                    "predeploy":  [
-                                       "npm run qa:frontend-build-env",
-                                       "node qa/scripts/verify-release-baseline.mjs",
-                                       "npm run qa:document-access"
-                                   ],
-                    "ignore":  [
-                                   "firebase.json",
-                                   "**/.*",
-                                   "**/node_modules/**",
-                                   "functions/node_modules/**",
-                                   "functions/lib/**",
-                                   "audit/**",
-                                   "*.zip",
-                                   ".env",
-                                   ".env.*"
-                               ],
-                    "site":  "pay-0-system",
-                    "headers":  [
-                                    {
-                                        "source":  "**",
-                                        "headers":  [
-                                                        { "key": "X-Content-Type-Options", "value": "nosniff" },
-                                                        { "key": "X-Frame-Options", "value": "DENY" },
-                                                        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-                                                        { "key": "Permissions-Policy", "value": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()" },
-                                                        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
-                                                    ]
-                                    }
-                                ],
-                    "frameworksBackend":  {
-                                              "region":  "us-central1"
-                                          },
-                    "source":  "."
-                },
-    "apphosting": {
-        "backendId": "pay0-next16",
-        "rootDir": "/",
-        "ignore": [
-            "node_modules",
-            ".git",
-            ".next",
-            ".firebase",
-            ".worktrees",
-            ".claude",
-            "__untracked_archive",
-            "functions/node_modules",
-            "functions/lib",
-            "firebase-debug.log",
-            "*.log"
-        ]
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "predeploy": [
+      "node qa/scripts/verify-release-baseline.mjs",
+      "node qa/scripts/verify-mat-release-contract.cjs",
+      "npm --prefix functions run build",
+      "npm run qa:functions-discovery",
+      "node qa/scripts/verify-client-csf-parser.cjs",
+      "node qa/scripts/verify-iq-payment-profile-client-resolution.cjs",
+      "node qa/scripts/verify-dispersion-dispatch-routing.cjs",
+      "node qa/scripts/verify-authorized-dispersion-capability.cjs",
+      "node qa/scripts/verify-simulated-dispersion-e2e.cjs",
+      "node qa/scripts/verify-hugo-voice-runtime-contract.cjs",
+      "npm run qa:client-csf-create",
+      "npm run qa:document-ui",
+      "npm run qa:document-access"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 5001
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 4000
+    },
+    "storage": {
+      "host": "127.0.0.1",
+      "port": 9199
+    },
+    "singleProjectMode": true,
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
     }
+  },
+  "hosting": {
+    "predeploy": [
+      "npm run qa:frontend-build-env",
+      "node qa/scripts/verify-release-baseline.mjs",
+      "npm run qa:document-access"
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/node_modules/**",
+      "functions/lib/**",
+      "audit/**",
+      "*.zip",
+      ".env",
+      ".env.*"
+    ],
+    "site": "pay-0-system",
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          },
+          {
+            "key": "Strict-Transport-Security",
+            "value": "max-age=31536000; includeSubDomains"
+          }
+        ]
+      }
+    ],
+    "frameworksBackend": {
+      "region": "us-central1"
+    },
+    "source": "."
+  },
+  "apphosting": {
+    "backendId": "pay0-next16",
+    "rootDir": "/",
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".next",
+      ".firebase",
+      ".worktrees",
+      ".claude",
+      "__untracked_archive",
+      "functions/node_modules",
+      "functions/lib",
+      "firebase-debug.log",
+      "*.log"
+    ],
+    "alwaysDeployFromSource": true
+  }
 }
