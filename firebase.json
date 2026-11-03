@@ -83,5 +83,22 @@
                                               "region":  "us-central1"
                                           },
                     "source":  "."
-                }
+                },
+    "apphosting": {
+        "backendId": "pay0-next16",
+        "rootDir": "/",
+        "ignore": [
+            "node_modules",
+            ".git",
+            ".next",
+            ".firebase",
+            ".worktrees",
+            ".claude",
+            "__untracked_archive",
+            "functions/node_modules",
+            "functions/lib",
+            "firebase-debug.log",
+            "*.log"
+        ]
+    }
 }
