@@ -3,7 +3,7 @@ if(!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||'')||process.
 if(!/^127\.0\.0\.1:\d+$/.test(process.env.FIREBASE_STORAGE_EMULATOR_HOST||''))throw Error('Local Storage emulator required; refusing network Storage access');
 global.fetch=async()=>{throw Error('EXTERNAL_NETWORK_FORBIDDEN');};
 const admin=require('../../functions/node_modules/firebase-admin');admin.initializeApp({projectId:'demo-pay0',storageBucket:'demo-pay0.appspot.com'});
-const db=admin.firestore(),root=`rep-${Date.now()}`,now=new Date(),stamp=admin.firestore.Timestamp;
+const db=admin.firestore(),root='Ab4z0RttIqXbZFT0NuWsDjBkt6J2',now=new Date(),stamp=admin.firestore.Timestamp;
 const api=require('../../functions/lib/modules/paymentApplications/complementAutomation');
 const follow=require('../../functions/lib/modules/paymentApplications/complementFollowup');
 const policy=require('../../functions/lib/modules/paymentApplications/complementPolicy');
@@ -73,7 +73,12 @@ async function run(){
  assert.equal(rejectedPosts,1,'observed 422 must never replay POST');global.fetch=oldFetch;
  global.fetch=async()=>({status:200,text:async()=>JSON.stringify({message:'success'})});
  const accepted=await provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'});
- assert.equal(accepted.message,'success');assert.equal(accepted.operationalError,null);global.fetch=oldFetch;
+ assert.equal(accepted.message,'success');assert.equal(accepted.operationalError,null);
+ global.fetch=async()=>({status:201,text:async()=>'{}'});
+ assert.equal((await provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'})).httpStatus,201,'any 2xx is an accepted request');
+ global.fetch=async()=>({status:404,text:async()=>'{}'});
+ assert.equal((await provider.requestIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'})).httpStatus,404,'404 means the complement already exists');
+ global.fetch=oldFetch;
  const {sanitizeIqOperationalError}=require('../../functions/lib/modules/paymentApplications/iqOperationalError');
  assert.equal(sanitizeIqOperationalError(['No permitido','Revisar depósito']),'No permitido; Revisar depósito');
  const sanitized=sanitizeIqOperationalError('Rechazado para usuario ana@example.com; URL https://iq.example/path?token=abc; Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature; password=secreto');
@@ -90,7 +95,9 @@ async function run(){
  assert.equal(depositFields.readIqRepDepositFields(withoutIndicator).canRequestRep.type,'absent');
  assert.equal(depositFields.readIqRepDepositFields({...withoutIndicator,can_request_rep:true}).canRequestRep.type,'absent','unobserved alias is not accepted');
  global.fetch=async()=>({ok:true,json:async()=>[{...historicalShape.eligibleIndicatorTrue,id:'220483'}]});
- await assert.rejects(provider.preflightIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),/IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED/);
+ assert.equal(await provider.preflightIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),'REQUEST');
+ global.fetch=async()=>({ok:true,json:async()=>[{...historicalShape.eligibleIndicatorFalse,id:'220483'}]});
+ assert.equal(await provider.preflightIqComplement({rootId:root,provider:'IQ',depositId:'220483',profileId:'profile',actorUid:root,clientId:root},{accessToken:'emulator-only'}),'WAIT');
  global.fetch=oldFetch;
  let posts=0,checks=0,emits=0,imports=0;
  mark('concurrent-execution');
@@ -208,11 +215,14 @@ async function run(){
  assert.equal((await db.doc(`paymentComplementJobs/${job}`).get()).data().status,'RECEIVED');
  for(const id of [root,root+'-2'])assert.equal((await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,id)}`).get()).data().status,'RECEIVED');
  const factId=root+'-fact';
- await db.doc(`solicitudes/${factId}`).set({rootId:root,folio:'SF',tipoFactura:'PPD',companyId:root,clienteId:root,facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice',facturaUuid:uuid,status:'PROCESANDO'});
+ await db.doc('despachos/vjq4SEnucenerXvoLqtK').set({rootId:root,active:true});
+ await db.doc(`companies/${root}`).set({rootId:root,despachoId:'vjq4SEnucenerXvoLqtK',isOwnCompany:true,facturamaEnabled:true,rfc:'TRO230717L64',active:true});
+ await db.doc(`facturamaIssuerConfigs/${root}`).set({rootId:root,companyId:root,csdRegistrationStatus:'REGISTERED_API_MULTIISSUER',csdRfc:'TRO230717L64'});
+ await db.doc(`solicitudes/${factId}`).set({rootId:root,folio:'SF',tipoFactura:'PPD',companyId:root,clienteId:root,despachoId:'vjq4SEnucenerXvoLqtK',facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice',facturaUuid:uuid,status:'PROCESANDO'});
  await db.doc(`pagos/${factId}`).set({rootId:root,folio:'PF',companyId:root,clienteId:root,status:'CONCILIADO',fechaPago:stamp.fromMillis(now.getTime()-86400000),moneda:'MXN'});
  await db.doc(`pagoAplicaciones/${factId}`).set({...app,solicitudId:factId,pagoId:factId,folio:'APF',iqPlanId:null,iqExecutionAttemptId:null,iqApplicationStatus:null,iqActionExecuted:false});
  await follow.reconcilePaymentComplement(factId);
- const factJob=job+'-fact';await db.doc(`paymentComplementJobs/${factJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:factId,status:'QUEUED'});
+ const factJob=job+'-fact';await db.doc(`paymentComplementJobs/${factJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:factId,actorUid:authorizedActor,clientId:root,status:'QUEUED'});
  const downloadFail={...adapter,importFacturamaComplement:async()=>{throw Error('DOWNLOAD_FAILED');}};
  await api.executeComplement(factJob,downloadFail);await api.executeComplement(factJob,downloadFail);assert.equal(emits,1);assert.equal((await db.doc(`paymentComplementJobs/${factJob}`).get()).data().status,'ISSUED_PENDING_FILES');
  // This fake job has no linked request, so use the proper linkage for recovery.

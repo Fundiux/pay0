@@ -303,6 +303,7 @@ export async function executeComplement(id: string, adapter = providers) {
       if (!afterSession.allowed) { await updateJob(id, { status: "PAUSED", gateReason: afterSession.reason }, `Consulta IQ pausada: ${afterSession.reason}.`); return; }
       const state = await adapter.preflightIqComplement(job, session);
       if (state === "AVAILABLE") { await updateJob(id, { status: "REQUESTED", alreadyAvailable: true, gateReason: null }, "IQ ya tiene un REP disponible; se verificará y descargará a las 19:00, sin duplicar la solicitud."); return; }
+      if (state === "WAIT") { await updateJob(id, { status: "PAUSED", gateReason: "IQ_REP_NOT_REQUESTABLE_YET" }, "IQ todavía no permite solicitar este complemento; Hugo volverá a revisar en la siguiente corrida diaria."); return; }
       await sourceFor(job.applicationId);
       const requestGate = await inspectIqComplementGate(job, "REQUEST");
       if (!requestGate.allowed) { await updateJob(id, { status: "PAUSED", gateReason: requestGate.reason }, `Hugo detectó un REP ausente, pero no puede solicitarlo: ${requestGate.reason}.`); return; }
@@ -337,8 +338,9 @@ export async function executeComplement(id: string, adapter = providers) {
     reportProtectedFailure(error);
     const latest = (await ref.get()).data();
     const retryableBeforeSend = ["RETRY_WAIT", "DEFERRED"].includes(classifyFailure(error).result);
-    await updateJob(id, { status: latest?.cfdiId ? "ISSUED_PENDING_FILES" : sending ? "UNKNOWN" : retryableBeforeSend ? "PAUSED" : "BLOCKED", error: errorCode(error) },
-      sending ? "Complemento requiere revisión: hubo un problema después de iniciar el envío. No se repetirá la emisión o solicitud automáticamente." : `Complemento bloqueado antes de enviar: ${errorCode(error)}.`);
+    const rejection = (error as any)?.observation?.operationalError || null;
+    await updateJob(id, { status: latest?.cfdiId ? "ISSUED_PENDING_FILES" : sending ? "UNKNOWN" : retryableBeforeSend ? "PAUSED" : "BLOCKED", error: errorCode(error), ...(rejection ? { iqRejection: rejection } : {}) },
+      sending ? `Complemento requiere revisión: hubo un problema después de iniciar el envío.${rejection ? ` IQ respondió: ${rejection}.` : ""} No se repetirá la emisión o solicitud automáticamente.` : `Complemento bloqueado antes de enviar: ${errorCode(error)}.`);
   }
 }
 async function markReceived(id: string, rows: any[]) {
@@ -507,9 +509,15 @@ export const enqueueAutomaticPaymentComplement = onDocumentWritten({ document: "
 export const executeAutomaticPaymentComplement = onDocumentWritten({ document: "paymentComplementJobs/{jobId}", region: "us-central1", retry: true, maxInstances: 1, concurrency: 1, timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS }, async event => {
   if (event.data?.after.data()?.status === "QUEUED") await protectedExecuteComplement(event.params.jobId);
 });
+// Stays under the safety circuit, which opens at 20 admissions in 10 minutes.
+const REP_DAILY_MAX_ADMITTED = 15;
+const REP_DAILY_SPACING_MS = 1100;
+const REP_OPEN_STATUSES = ["QUEUED", "PAUSED", "PREPARING", "SENDING", "REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES", "BLOCKED"];
+
 export async function runProtectedRepDaily(now = new Date(), adapter = providers) {
   return safety.run({ rootId: "SYSTEM", process: "REP", partition: "SCAN", operationType: "REP_DAILY",
     operationId: dayMexico(now), idempotencyKey: dayMexico(now), origin: "AUTOMATIC", technicalOrigin: "SCHEDULER",
+    policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 100 },
   }, async () => {
   const checkpointRef = db.doc("automationSafetyCheckpoints/rep-daily");
   const checkpoint = (await checkpointRef.get()).data() || {};
@@ -529,9 +537,11 @@ export async function runProtectedRepDaily(now = new Date(), adapter = providers
   const jobsFirst = checkpoint.nextPhase !== "FOLLOWUPS";
   if (!jobsFirst) await scanDueIqFollowups(now, adapter);
   let cursor: string | undefined = checkpoint.jobCursor;
-  // One page/run, durable cursor; never sweep the entire historical collection.
+  // Each open complement is looked up once a day, so a run covers every open job
+  // up to the budget. Closed jobs stay out of the page; the cursor resumes the rest.
   {
-    let query = jobs().orderBy(FieldPath.documentId()).limit(50); if (cursor) query = query.startAfter(cursor);
+    let admitted = 0;
+    let query = jobs().where("status", "in", REP_OPEN_STATUSES).orderBy(FieldPath.documentId()).limit(50); if (cursor) query = query.startAfter(cursor);
     const page = await query.get();
     for (const row of page.docs) {
       if (Date.now() >= deadline) return;
@@ -545,7 +555,8 @@ export async function runProtectedRepDaily(now = new Date(), adapter = providers
           // Resume after the admitted case, not after capacity-skipped cases.
           // This prevents the first slow/poison record from starving the rest.
           await checkpointRef.set({ jobCursor: row.id, nextPhase: "FOLLOWUPS", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-          return;
+          if (++admitted >= REP_DAILY_MAX_ADMITTED) return;
+          await new Promise(resolve => setTimeout(resolve, REP_DAILY_SPACING_MS));
         }
       } catch (error) {
         // A failed expediente must not prevent the other due B observations.
@@ -573,6 +584,20 @@ export const configurePaymentComplementAutomation = onCall({ region: "us-central
     return { ok: true };
   }
   const input = request.data || {};
+  if (input.provider === "IQ_REQUEST") {
+    const limit = Number(input.dailyLimit ?? 1);
+    if (typeof input.enabled !== "boolean" || !Number.isInteger(limit) || limit < 1 || limit > 25)
+      throw new HttpsError("invalid-argument", "Indica el estado y un límite diario de 1 a 25 solicitudes.");
+    if (input.enabled && input.confirmation !== "AUTORIZO_SOLICITUD_REP_IQ") throw new HttpsError("failed-precondition", "Confirma las solicitudes reales de complementos a IQ.");
+    const configRef = db.doc(`paymentComplementConfigs/${rootId}`);
+    await db.runTransaction(async tx => {
+      if (!(await tx.get(configRef)).exists) throw new HttpsError("failed-precondition", "Primero activa la automatización de complementos.");
+      tx.set(configRef, { iqRequestEnabled: input.enabled, iqRequestDailyLimit: limit, updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
+      logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: request.auth!.uid, actorRole: "superadmin",
+        referenceId: rootId, referenceType: "configuracion", description: `Solicitud de complementos a IQ ${input.enabled ? `activa, hasta ${limit} por día` : "pausada"}.` });
+    });
+    return { ok: true };
+  }
   const patchProvider = Object.prototype.hasOwnProperty.call(input, "provider") || Object.prototype.hasOwnProperty.call(input, "enabled");
   if (patchProvider) {
     if (!["IQ", "FACTURAMA"].includes(input.provider) || typeof input.enabled !== "boolean" ||

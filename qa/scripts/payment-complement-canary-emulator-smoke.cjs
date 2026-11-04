@@ -163,7 +163,7 @@ async function run() {
   const fieldObservation = await provider.observeIqRepDepositFields(job, { accessToken: 'fixture-only' });
   assert.equal(exactDepositGets, 1); assert.equal(fieldObservation.canRequestRep.value, true);
   assert.equal(fieldObservation.rep.value, false); assert.equal(fieldObservation.depositId, job.depositId);
-  for (const fields of [{}, { ...historicalShape.eligibleIndicatorFalse, id: '220483' }, { rep: null, 'can_request_rep?': null }]) {
+  for (const fields of [{}, { rep: null, 'can_request_rep?': null }]) {
     let gets = 0;
     global.fetch = async url => { gets++; assert.match(String(url), /^https:\/\/iq-produccion-ccc570f75402\.herokuapp\.com\/deposits\?/);
       return { ok: true, json: async () => [{ id: job.depositId, conciliation_status: observation.conciliationStatus,

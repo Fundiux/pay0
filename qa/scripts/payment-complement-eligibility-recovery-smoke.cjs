@@ -19,8 +19,8 @@ async function run() {
     db.doc(`paymentComplementConfigs/${root}`).set({ rootId: root, iqEnabled: true, iqLookupEnabled: true, activatedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 1000) }),
     db.doc(`iqUserAccess/${root}`).set({ rootId: root, active: true, iqEnabled: true, iqCredentialProfileId: "profile", allowedModules: { pagos: true } }),
     db.doc("iqCredentialProfiles/profile").set({ rootId: root, active: true, hasPassword: true, username: "smoke" }),
-    db.doc(`solicitudes/${root}`).set({ rootId: root, folio: "S1", iqFolio: "123", facturaUuid: uuid, status: "COMPLETADA" }),
-    db.doc(`pagos/${root}`).set({ rootId: root, folio: "P1", moneda: "MXN", status: "APLICADO_TOTAL" }),
+    db.doc(`solicitudes/${root}`).set({ rootId: root, folio: "S1", iqFolio: "123", facturaUuid: uuid, tipoFactura: "PPD", companyId: root, clienteId: root, status: "COMPLETADA" }),
+    db.doc(`pagos/${root}`).set({ rootId: root, folio: "P1", moneda: "MXN", companyId: root, clienteId: root, status: "APLICADO_TOTAL" }),
     db.doc(`pagoAplicaciones/${applicationId}`).set({ rootId: root, solicitudId: root, pagoId: root, folio: "AP1", invoiceType: "PPD", status: "APLICADA", montoAplicado: 58, numeroParcialidad: 1, saldoAnterior: 116, saldoInsoluto: 58, iqApplicationStatus: "IQ_APPLIED", iqActionExecuted: true }),
     db.doc(`paymentComplementJobs/${jobId}`).set({ rootId: root, provider: "IQ", applicationId, profileId: "profile", actorUid: root, clientId: root, depositId: "220486", status: "BLOCKED", error: "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED" }),
   ]);

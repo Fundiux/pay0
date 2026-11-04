@@ -75,11 +75,13 @@ export async function requestIqComplement(job: any, session: any) {
     message: body?.message === "success" ? "success" as const : null,
     operationalError: sanitizeIqOperationalError(body?.error ?? body?.errors ?? (body?.message === "success" ? null : body?.message)),
     providerStatus: typeof body?.status === "number" && Number.isInteger(body.status) ? body.status : null };
-  if (response.status !== 200 || observation.message !== "success")
+  // Same reading as IQ's own screen: any 2xx is accepted, and 404 means a
+  // complement already exists for this deposit, so only the lookup remains.
+  if (!(response.status >= 200 && response.status < 300) && response.status !== 404)
     throw Object.assign(Error(`IQ_REP_REQUEST_HTTP_${response.status}`), { observation });
   return observation;
 }
-export async function preflightIqComplement(job: any, session: any): Promise<"REQUEST" | "AVAILABLE"> {
+export async function preflightIqComplement(job: any, session: any): Promise<"REQUEST" | "AVAILABLE" | "WAIT"> {
   for (let offset = 0; offset < 10000; offset += 100) {
     await requireGate(job, "LOOKUP");
     const query = new URLSearchParams({ limit: "100", offset: String(offset), order_by_field: "id", order_by_direction: "desc" });
@@ -91,10 +93,11 @@ export async function preflightIqComplement(job: any, session: any): Promise<"RE
       const row = readIqRepDepositFields(matches[0]);
       if (row.conciliationStatus !== "Conciliado" || row.operationStatus !== "En Operacion") throw Error("IQ_REP_DEPOSIT_NOT_RECONCILED");
       if (row.rep.value === true) return "AVAILABLE";
-      if (row.canRequestRep.value !== true) throw Error("IQ_REP_REQUEST_STATE_REQUIRES_REVIEW");
-      // The field is observed only as an adapter condition, not as a provider
-      // contract. Even true cannot authorize a real generation request yet.
-      throw Error("IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED");
+      // IQ's server has the last word: true has been followed by a 422 before,
+      // so a rejection stays a single, recorded attempt.
+      if (row.canRequestRep.value === true) return "REQUEST";
+      if (row.canRequestRep.value === false) return "WAIT";
+      throw Error("IQ_REP_REQUEST_STATE_REQUIRES_REVIEW");
     }
     if (rows.length < 100) break;
   }

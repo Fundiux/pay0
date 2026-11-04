@@ -5,7 +5,7 @@ import { listPaymentComplementFollowup, refreshPaymentComplementFollowup, config
 const labels: Record<string, string> = { VOIDED: "Ya no aplica", NEEDS_FISCAL_DATA: "Faltan datos fiscales", WAITING_IQ_APPLICATION: "Esperando confirmación de aplicación IQ", PENDING_PROVIDER_CONTRACT: "Pendiente de solicitud al proveedor", REQUESTED: "Solicitado / esperando archivo", RECEIVED: "Recibido", QUEUED: "En cola", PAUSED: "Pausado por compuerta", PREPARING: "Validando", SENDING: "Enviando", BLOCKED: "Requiere datos o revisión", UNKNOWN: "Resultado incierto · no reenviar", ISSUED_PENDING_FILES: "Emitido · faltan archivos" };
 export default function PaymentComplementFollowup() {
   const [rows, setRows] = useState<ComplementFollowup[]>([]), [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [truncated, setTruncated] = useState(false);
-  const [automation, setAutomation] = useState({ iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false });
+  const [automation, setAutomation] = useState({ iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false, iqRequestEnabled: false, iqRequestDailyLimit: 5 });
   async function load() { const result = await listPaymentComplementFollowup(); setRows(result.rows); setTruncated(result.truncated); setAutomation(result.automation); }
   async function configure(key: "iqEnabled" | "facturamaEnabled") {
     const next = { ...automation, [key]: !automation[key] };
@@ -15,6 +15,13 @@ export default function PaymentComplementFollowup() {
     if (!window.confirm(prompt)) return;
     setBusy(true);
     try { await configurePaymentComplementAutomation({ provider: key === "iqEnabled" ? "IQ" : "FACTURAMA", enabled: next[key], confirmation: "AUTORIZO_REP_AUTOMATICO" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
+  }
+  async function configureIqRequest() {
+    const enabled = !automation.iqRequestEnabled;
+    const answer = enabled ? window.prompt("Esto enviará solicitudes reales de complemento a IQ después de aplicar pagos. ¿Cuántas por día? (1 a 25)", "1") : String(automation.iqRequestDailyLimit);
+    if (!answer || (!enabled && !window.confirm("¿Pausar las solicitudes de complementos a IQ? La búsqueda diaria continúa."))) return;
+    setBusy(true);
+    try { await configurePaymentComplementAutomation({ provider: "IQ_REQUEST", enabled, dailyLimit: Number(answer), confirmation: "AUTORIZO_SOLICITUD_REP_IQ" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
   }
   async function setForm(id: string, value: string) {
     if (!value || !window.confirm("Confirma que esta es la forma del pago recibido. Se revalidará el complemento para emitirlo.")) return;
@@ -31,7 +38,7 @@ export default function PaymentComplementFollowup() {
   return <section className="rounded-2xl border border-white/10 bg-slate-900 p-4 text-slate-200">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">Complementos de pago · seguimiento actual</h2><button disabled={busy} onClick={() => void refresh()} className="rounded-lg border border-sky-400/40 px-3 py-2 text-sm text-sky-300 disabled:opacity-50">{busy ? "Revisando…" : "Revisar aplicaciones e histórico"}</button></div>
     <p className="my-3 text-xs text-amber-200">IQ consulta REP existentes: {automation.iqLookupEnabled ? "habilitada por configuración" : "pausada"}; cada consulta también exige Master, perfil y permisos vigentes. La solicitud de REP tiene otra compuerta. Revisión diaria a las 19:00 (Ciudad de México), con aviso tras 7 días. El histórico no se envía automáticamente.</p>
-    <div className="mb-3 flex gap-3 text-xs">{(["iqEnabled", "facturamaEnabled"] as const).map(key => <button key={key} disabled={busy} onClick={() => void configure(key)} className="rounded border border-sky-400/40 px-3 py-2">{key === "iqEnabled" ? "IQ · nuevas solicitudes" : "Facturama"}: {automation[key] ? "activo · pausar" : "pausado · activar"}</button>)}</div>
+    <div className="mb-3 flex gap-3 text-xs">{(["iqEnabled", "facturamaEnabled"] as const).map(key => <button key={key} disabled={busy} onClick={() => void configure(key)} className="rounded border border-sky-400/40 px-3 py-2">{key === "iqEnabled" ? "IQ · nuevas solicitudes" : "Facturama"}: {automation[key] ? "activo · pausar" : "pausado · activar"}</button>)}<button disabled={busy} onClick={() => void configureIqRequest()} className="rounded border border-amber-400/40 px-3 py-2">IQ · solicitar complementos: {automation.iqRequestEnabled ? `activo (${automation.iqRequestDailyLimit} por día) · pausar` : "pausado · activar"}</button></div>
     {message && <p role="status" className="mb-3 text-sm">{message}</p>}
     <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr>{["Solicitud", "Pago", "Aplicación", "Parcialidad", "Importe", "Proveedor", "Estado"].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
       {!rows.length && <tr><td colSpan={7} className="p-3 text-slate-400">Sin seguimientos registrados. Revisa el histórico para incluir aplicaciones anteriores.</td></tr>}
