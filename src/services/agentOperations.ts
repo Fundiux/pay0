@@ -15,7 +15,7 @@ export type AgentOperations = {
   runs: Array<{ id: string; status: string; agentId: string; entityId: string; reason?: string }>;
   incidents: Array<{ id: string; status: string; cause: string; entityType?: string; entityId: string }>;
   proposals: Array<{ id: string; status: string; problem: string; evidence?: string[]; impact?: string; risk?: string; scope?: string; rollback?: string }>;
-  report: { day: string; reviewed: number; detected: number; incidents: number; generated: number; corrected: number; verified: number; escalated: number; retryable: number; causes: Array<{ cause: string; count: number }>; autonomy: AgentAutonomyReport; tokens: Array<{ provider: string; requests: number; input: number; output: number; reasoning: number }> };
+  report: { day: string; reviewed: number; detected: number; incidents: number; generated: number; corrected: number; verified: number; escalated: number; retryable: number; causes: Array<{ cause: string; count: number }>; autonomy?: AgentAutonomyReport; tokens?: Array<{ provider: string; requests: number; input: number; output: number; reasoning: number }> };
   reportScope: string;
 };
 
