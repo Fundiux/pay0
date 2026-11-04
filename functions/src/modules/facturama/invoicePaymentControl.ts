@@ -2,6 +2,7 @@ import { FieldPath, Query, QueryDocumentSnapshot } from "firebase-admin/firestor
 import { onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { db, getMyUser, requireAuth } from "../sharedCallables/helpers";
+import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 
 // Control de facturas emitidas contra pagos aplicados, en ambos sentidos:
 // - FACTURA_SIN_PAGO: solicitud con factura emitida y sin pago aplicado.
@@ -36,6 +37,7 @@ export type ControlInvoice = {
   sourceSolicitudId?: string | null;
   status?: string | null;
   uuid?: string | null;
+  cancellationStatus?: string | null;
 };
 
 export type ControlApplication = {
@@ -83,16 +85,20 @@ export function buildInvoicePaymentControl(input: InvoicePaymentControlInput) {
   const isActiveSolicitud = (row: ControlSolicitud | undefined) =>
     Boolean(row) && !INACTIVE_SOLICITUD_STATUSES.has(upper(row?.status));
 
-  // 1. Facturas emitidas por solicitud.
+  // 1. Facturas emitidas por solicitud. Un CFDI con cancelación confirmada ya no cuenta como emitido.
+  const canceledUuids = new Set(
+    input.invoices.filter(invoice => isConfirmedFacturamaCancellation(invoice.cancellationStatus)).map(invoice => clean(invoice.uuid, 80).toUpperCase()).filter(Boolean),
+  );
   const invoiceBySolicitud = new Map<string, { source: "SOLICITUD" | "FACTURAMA"; uuid: string | null; ref: string }>();
   for (const solicitud of input.solicitudes) {
     const uuid = clean(solicitud.facturaUuid || solicitud.uuidCfdi || solicitud.iqInvoiceUuid, 80);
-    if (uuid) invoiceBySolicitud.set(solicitud.id, { source: "SOLICITUD", uuid, ref: solicitud.id });
+    if (uuid && !canceledUuids.has(uuid.toUpperCase())) invoiceBySolicitud.set(solicitud.id, { source: "SOLICITUD", uuid, ref: solicitud.id });
   }
   let facturasSandboxIgnoradas = 0;
   for (const invoice of input.invoices) {
     const solicitudId = clean(invoice.sourceSolicitudId, 128);
     if (!solicitudId) continue;
+    if (isConfirmedFacturamaCancellation(invoice.cancellationStatus)) continue;
     const status = upper(invoice.status);
     if (!ISSUED_INVOICE_STATUSES.has(status)) {
       if (status.startsWith("SANDBOX")) facturasSandboxIgnoradas += 1;
@@ -217,7 +223,7 @@ export const getInvoicePaymentControl = onCall(
 
     const [solicitudes, invoices, applications, pagos] = await Promise.all([
       readAllByRoot<ControlSolicitud>(db.collection("solicitudes").where("rootId", "==", rootId).select("folio", "folioIq", "status", "facturaUuid", "uuidCfdi", "iqInvoiceUuid")),
-      readAllByRoot<ControlInvoice>(db.collection("facturamaInvoices").where("rootId", "==", rootId).select("sourceSolicitudId", "status", "uuid")),
+      readAllByRoot<ControlInvoice>(db.collection("facturamaInvoices").where("rootId", "==", rootId).select("sourceSolicitudId", "status", "uuid", "cancellationStatus")),
       readAllByRoot<ControlApplication>(db.collection("pagoAplicaciones").where("rootId", "==", rootId).select("pagoId", "solicitudId", "montoAplicado", "status")),
       readAllByRoot<ControlPago>(db.collection("pagos").where("rootId", "==", rootId).select("folio", "pagoFolio", "status")),
     ]);
