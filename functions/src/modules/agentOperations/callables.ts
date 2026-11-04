@@ -8,6 +8,7 @@ import { mexicoDayKey } from "./time";
 import { HugoModelRouter } from "../agent007/hugoModelRouter";
 import { draftAgentBlueprint, transitionProposal } from "./proposals";
 import { SYSTEMS } from "./systems";
+import { recordIntervention, resolveIncident } from "./incidentResolution";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -18,15 +19,36 @@ async function authorized(request: any) {
   return { uid, rootId: String(user?.rootId || uid) };
 }
 
+const average = (values: number[]) => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+
+/** Indicadores de autonomía: cuánto resuelven solos los agentes frente a cuánto requiere a una persona. */
+export function autonomyReport(todayRuns: Array<Record<string, any>>, recentIncidents: Array<Record<string, any>>, interventionsToday: number) {
+  const visible = recentIncidents.filter(row => row.reportingExcluded !== true);
+  const resolved = visible.filter(row => row.status === "RESOLVED");
+  const byAgent = resolved.filter(row => row.resolvedBy === "AGENTE" || row.resolvedBy === "ORQUESTADOR").length;
+  const byPerson = resolved.filter(row => row.resolvedBy === "PERSONA").length;
+  const finishedRuns = todayRuns.filter(row => ["SUCCEEDED", "ESCALATED", "BLOCKED", "FAILED_RETRYABLE"].includes(row.status));
+  return {
+    openIncidents: visible.filter(row => row.status === "OPEN").length,
+    resolvedByAgent: byAgent, resolvedByPerson: byPerson,
+    agentResolutionRate: byAgent + byPerson ? Math.round((byAgent / (byAgent + byPerson)) * 100) : null,
+    runsSucceeded: finishedRuns.filter(row => row.status === "SUCCEEDED").length, runsFinished: finishedRuns.length,
+    avgRunMs: average(finishedRuns.map(row => Number(row.durationMs)).filter(value => Number.isFinite(value) && value >= 0)),
+    avgTimeToResolveMs: average(resolved.map(row => Number(row.timeToResolveMs)).filter(value => Number.isFinite(value) && value >= 0)),
+    humanInterventionsToday: interventionsToday,
+  };
+}
+
 export async function loadAgentOperations(rootId: string) {
   const day = mexicoDayKey();
-  const [control, runs, dailyRuns, incidents, dailyIncidents, proposals] = await Promise.all([
+  const [control, runs, dailyRuns, incidents, dailyIncidents, proposals, dailyInterventions] = await Promise.all([
     db.collection("agentControls").doc(rootId).get(),
     db.collection("agentRuns").where("rootId", "==", rootId).orderBy("updatedAt", "desc").limit(100).get(),
     db.collection("agentRuns").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
     db.collection("agentIncidents").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(100).get(),
     db.collection("agentIncidents").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
     db.collection("agentProposals").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(100).get(),
+    db.collection("agentInterventions").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
   ]);
   const serialize = (snap: FirebaseFirestore.QuerySnapshot) => snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const runRows = serialize(runs) as Array<Record<string, any>>;
@@ -45,7 +67,8 @@ export async function loadAgentOperations(rootId: string) {
       verified: today.filter(row => row.toolId === "quotation-recovery" && row.status === "SUCCEEDED" && row.uploadId && ["RECOVERED_EXISTING", "RECOVERED_MISSING"].includes(row.resolution)).length,
       escalated: today.filter(row => ["ESCALATED", "BLOCKED"].includes(row.status)).length,
       retryable: today.filter(row => row.status === "FAILED_RETRYABLE").length,
-      causes },
+      causes,
+      autonomy: autonomyReport(today, serialize(incidents) as Array<Record<string, any>>, dailyInterventions.size) },
     reportScope: dailyRuns.size === 500 || dailyIncidents.size === 500 ? "Reporte parcial: se alcanzó el límite de 500 ejecuciones o incidencias del día." : "Ejecuciones e incidencias registradas hoy en America/Mexico_City; no equivale a todas las Solicitudes del sistema.",
   };
 }
@@ -60,6 +83,7 @@ export const setAgentKillSwitch = onCall({ cors: true, region: "us-central1" }, 
   if (typeof request.data?.enabled !== "boolean") throw new HttpsError("invalid-argument", "enabled requerido.");
   await db.collection("agentControls").doc(rootId).set({ killSwitch: request.data.enabled, changedBy: uid, changedAt: FieldValue.serverTimestamp() }, { merge: true });
   await db.collection("agentLedger").add({ rootId, actorUid: uid, agentId: "hugo", action: "KILL_SWITCH", result: request.data.enabled ? "ENABLED" : "DISABLED", at: FieldValue.serverTimestamp() });
+  await recordIntervention({ rootId, kind: "KILL_SWITCH", actorUid: uid, agentId: "hugo", reason: request.data.enabled ? "Kill switch activado." : "Kill switch desactivado." }).catch(error => console.error("INTERVENTION_LOG_FAILED", error));
   return { ok: true, enabled: request.data.enabled };
 });
 
@@ -70,7 +94,19 @@ export const reviewAgentProposal = onCall({ cors: true, region: "us-central1" },
   if (!/^[a-f0-9]{64}$/.test(proposalId) || !["PENDING_APPROVAL", "APPROVED", "REJECTED"].includes(status)) throw new HttpsError("invalid-argument", "Propuesta o estado inválido.");
   try { await transitionProposal({ rootId, proposalId, actorUid: uid, status }); }
   catch { throw new HttpsError("failed-precondition", "La transición de la propuesta no está permitida."); }
+  await recordIntervention({ rootId, kind: "PROPOSAL_REVIEWED", actorUid: uid, targetId: proposalId, reason: `Propuesta marcada ${status}.` }).catch(error => console.error("INTERVENTION_LOG_FAILED", error));
   return { ok: true, status, executeAutomatically: false };
+});
+
+export const resolveAgentIncident = onCall({ cors: true, region: "us-central1" }, async request => {
+  const { uid, rootId } = await authorized(request);
+  const incidentId = String(request.data?.incidentId || "").trim();
+  const reason = String(request.data?.reason || "").trim();
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(incidentId) || reason.length < 5) throw new HttpsError("invalid-argument", "Incidente y motivo (mínimo 5 caracteres) requeridos.");
+  const resolved = await resolveIncident(incidentId, { rootId, resolvedBy: "PERSONA", actorUid: uid, note: reason });
+  if (!resolved) throw new HttpsError("failed-precondition", "El incidente no existe, no pertenece a este root o ya está cerrado.");
+  await recordIntervention({ rootId, kind: "INCIDENT_RESOLVED", actorUid: uid, targetId: incidentId, reason }).catch(error => console.error("INTERVENTION_LOG_FAILED", error));
+  return { ok: true };
 });
 
 export const createAgentBlueprintDraft = onCall({ cors: true, region: "us-central1" }, async request => {

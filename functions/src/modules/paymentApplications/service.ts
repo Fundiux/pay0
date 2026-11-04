@@ -12,6 +12,7 @@ import {
   normalizeSolicitudBackendStatus,
 } from "../solicitudes/domain";
 import { logActivityTx } from "../../utils/logActivity";
+import { recordOperationalMetric } from "../operationalMetrics/service";
 import { db } from "../sharedCallables/helpers";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import {
@@ -361,7 +362,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
       actorUid: actor.uid,
       actorRole: actor.role,
     });
-  return db.runTransaction(async (tx) => {
+  const outcome: ReservationResult = await db.runTransaction(async (tx) => {
     const reservationSnap = await tx.get(reservationRef);
 
     if (reservationSnap.exists) {
@@ -608,6 +609,8 @@ export async function applyPaymentApplicationBatchAtomic(params: {
         totalAbonado: nuevoAbonado,
         parcialidadCount: numeroParcialidad,
         status: nuevoStatusSolicitud,
+        // Marca de cierre para medir el ciclo completo de la solicitud.
+        ...(nuevoPendiente === 0 ? { completedAt: FieldValue.serverTimestamp() } : {}),
         hasUnreadMsg: true,
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -862,4 +865,25 @@ export async function applyPaymentApplicationBatchAtomic(params: {
       result,
     };
   });
+
+  // Registro de cierre fuera de la transacción financiera: un fallo aquí nunca revierte ni bloquea la aplicación.
+  if (!outcome.reused) {
+    const source = params.automaticSourceDigest ? "AUTOMATION" : "HUMAN";
+    const completed: string[] = Array.isArray(outcome.result?.completedSolicitudIds) ? outcome.result.completedSolicitudIds : [];
+    await Promise.all(completed.map((solicitudId) =>
+      recordOperationalMetric({
+        rootId: actor.rootId,
+        stage: "RESOLVED",
+        channel: "PAY0",
+        caseType: "SOLICITUD",
+        correlationId: solicitudId,
+        adminId: actor.adminId,
+        clientId: paymentApplicationAccess.clientId,
+        actorUid: actor.uid,
+        source,
+        outcome: "COMPLETADA",
+      }).catch(() => undefined),
+    ));
+  }
+  return outcome;
 }

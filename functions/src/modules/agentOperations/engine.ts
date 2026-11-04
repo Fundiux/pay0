@@ -44,7 +44,7 @@ export async function reserveRun(input: RunInput) {
       tx.set(db.collection("agentIncidents").doc(`${id}-control`), { rootId: input.rootId, reportDay: row.reportDay || mexicoDayKey(), runId: id, correlationId: input.correlationId, entityType: input.entityType, entityId: input.entityId, status: "OPEN", cause: reason, evidence: input.evidence, createdAt: FieldValue.serverTimestamp() }, { merge: true });
       return { id, claimed: false, status: "BLOCKED" as const };
     }
-    tx.set(ref, { ...input, reportDay: row.reportDay || mexicoDayKey(), status: "RUNNING", attemptCount: attempt, lockUntil: Timestamp.fromMillis(Date.now() + MAX_RUN_MS), createdAt: row.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(ref, { ...input, reportDay: row.reportDay || mexicoDayKey(), status: "RUNNING", attemptCount: attempt, lockUntil: Timestamp.fromMillis(Date.now() + MAX_RUN_MS), startedAt: FieldValue.serverTimestamp(), createdAt: row.createdAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { id, claimed: true, status: "RUNNING" as const, attempt };
   });
 }
@@ -56,7 +56,8 @@ export async function finishRun(id: string, status: Extract<AgentRunStatus, "SUC
     if (!snap.exists || snap.get("status") !== "RUNNING") throw Error("RUN_NOT_RUNNING");
     const row = snap.data() || {};
     const auditRef = db.collection("agentLedger").doc(`${id}-${row.attemptCount}`);
-    tx.set(ref, { status, ...result, lockUntil: null, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const startedMs = Number(row.startedAt?.toMillis?.() || 0);
+    tx.set(ref, { status, ...result, lockUntil: null, durationMs: startedMs ? Math.max(0, Date.now() - startedMs) : null, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     tx.create(auditRef, { runId: id, rootId: row.rootId, correlationId: row.correlationId, actorUid: row.actorUid, agentId: row.agentId, toolId: row.toolId, entityType: row.entityType, entityId: row.entityId, inputEvidence: row.evidence, action: row.toolId, result: status, resolution: result.resolution || null, outputEvidence: result.evidence, uploadId: result.uploadId || null, reason: result.reason, at: FieldValue.serverTimestamp() });
     if (status === "BLOCKED" || status === "ESCALATED") tx.create(db.collection("agentIncidents").doc(`${id}-${row.attemptCount}`), { rootId: row.rootId, reportDay: mexicoDayKey(), runId: id, correlationId: row.correlationId, entityType: row.entityType, entityId: row.entityId, status: "OPEN", cause: result.reason, evidence: result.evidence, createdAt: FieldValue.serverTimestamp() });
     return String(row.rootId);

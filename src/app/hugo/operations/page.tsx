@@ -69,6 +69,7 @@ export default function AgentOperationsPage() {
         <section className={card}>
           <h2 className="font-semibold">Reporte operacional · {data.report.day}</h2>
           <p className="mt-2 text-sm">Solicitudes revisadas: {data.report.reviewed} · Ejecuciones: {data.report.detected} · Incidencias: {data.report.incidents} · Cotizaciones normales: {data.report.generated} · Correcciones: {data.report.corrected} · Verificadas: {data.report.verified} · Bloqueadas o escaladas: {data.report.escalated} · Reintentables: {data.report.retryable}</p>
+          <p className="mt-2 text-sm text-slate-300">Autonomía: incidentes abiertos {data.report.autonomy.openIncidents} · resueltos por agentes {data.report.autonomy.resolvedByAgent} · resueltos por personas {data.report.autonomy.resolvedByPerson}{data.report.autonomy.agentResolutionRate !== null ? ` · autonomía ${data.report.autonomy.agentResolutionRate}%` : ""} · intervenciones humanas hoy {data.report.autonomy.humanInterventionsToday}{data.report.autonomy.avgRunMs !== null ? ` · tiempo medio por ejecución ${(data.report.autonomy.avgRunMs / 1000).toFixed(1)} s` : ""}</p>
           <div className="mt-3 space-y-1 text-xs text-slate-300">{data.report.causes.map(row => <p key={row.cause}>{row.count} × {row.cause}</p>)}</div>
           <p className="mt-2 text-xs text-amber-300">{data.reportScope}</p>
         </section>

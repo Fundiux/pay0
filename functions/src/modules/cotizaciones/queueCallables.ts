@@ -12,6 +12,7 @@ import { ensureOcCommercialMetadata, generateCotizacionForSolicitudCore } from "
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { finishRun, reserveRun } from "../agentOperations/engine";
 import { mexicoDayKey } from "../agentOperations/time";
+import { resolveIncidentsForEntity } from "../agentOperations/incidentResolution";
 import { verifyQuotationEvidence } from "../agentOperations/quotationEvidence";
 import { isTerminalSolicitud } from "./quotationPolicy";
 import { observeSentinelEvent } from "../agentOperations/sentinel";
@@ -149,6 +150,8 @@ async function processJob(jobId: string) {
       tx.set(ref, { status: "SUCCEEDED", uploadId: verified.uploadId, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete(), nextRunAt: null }, { merge: true });
       tx.set(solicitudRef, { cotizacionAutoGenerateStatus: "READY", cotizacionAutoGenerateStage: "COMPLETED", cotizacionAutoGenerateJobId: jobId, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
+    // La corrección quedó verificada: los incidentes abiertos de esta solicitud los cerró el agente.
+    await resolveIncidentsForEntity({ rootId: claimed.rootId, entityId: claimed.solicitudId, resolvedBy: "AGENTE", note: "Cotización generada o recuperada y verificada en Storage." }).catch(error => console.error("INCIDENT_RESOLUTION_FAILED", error));
     await logActivity({ event: "COTIZACION_GENERADA", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: "Cotizacion generada por ejecucion automatica.", extra: { quotationJobId: jobId, iqFolio: claimed.iqFolio, uploadId: result.uploadId || null, automaticExecution: true } }).catch(() => undefined);
   } catch (error) {
     const message = clean((error as any)?.message || error, 1500);
