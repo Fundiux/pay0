@@ -46,6 +46,6 @@ assert.match(telegramWebhook, /if \(!secretsMatch\(expectedSecret, receivedSecre
 console.log("PASS Telegram webhook: secreto comparado en tiempo constante");
 
 const requestedAt = { toMillis: () => Date.parse("2026-09-01T12:00:00Z") };
-assert.equal(overdue(requestedAt, new Date("2026-09-07T23:00:00Z")), false);
-assert.equal(overdue(requestedAt, new Date("2026-09-08T12:00:00Z")), true);
-console.log("PASS Complementos: alerta operativa a los 7 días");
+assert.equal(overdue(requestedAt, new Date("2026-09-05T23:00:00Z")), false);
+assert.equal(overdue(requestedAt, new Date("2026-09-06T12:00:00Z")), true);
+console.log("PASS Complementos: alerta operativa a los 5 días");

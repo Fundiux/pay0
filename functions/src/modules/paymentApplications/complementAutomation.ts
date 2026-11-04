@@ -435,7 +435,7 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
     }
   } catch (error) { result = "QUARANTINED"; reportProtectedFailure(error); await updateJob(id, { error: errorCode(error), bReadState: "EXCEPTION", nextCheckAt: null },
     `Revisión B detenida por ${errorCode(error)}; resultado de solicitud C conservado, sin reenvío.`); }
-  if (!job.overdueAlertedAt && overdue(job.requestedAt, now)) await updateJob(id, { overdueAlertedAt: Timestamp.fromDate(now) }, `El complemento ${job.provider === "IQ" ? `del depósito IQ ${job.depositId}` : `de la aplicación ${job.applicationId}`} lleva 7 días sin recibirse. Solicítalo por WhatsApp al proveedor; PAY0 continuará la revisión diaria. No se envió WhatsApp automáticamente.`);
+  if (!job.overdueAlertedAt && overdue(job.requestedAt, now)) await updateJob(id, { overdueAlertedAt: Timestamp.fromDate(now) }, `El complemento ${job.provider === "IQ" ? `del depósito IQ ${job.depositId}` : `de la aplicación ${job.applicationId}`} lleva 5 días sin recibirse. ${job.provider === "IQ" ? "Pregunta por él en el grupo de WhatsApp de IQ" : "Solicítalo por WhatsApp al proveedor"}; PAY0 continuará la revisión diaria. No se envió WhatsApp automáticamente.`);
   return result;
 }
 
