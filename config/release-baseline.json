@@ -124,6 +124,18 @@
     {
       "commit": "e68f0f4b",
       "capability": "Target de App Hosting pay0-next16 en firebase.json para el deploy por fuente con baseline verificado antes de empaquetar"
+    },
+    {
+      "commit": "641021a2",
+      "capability": "Complementos IQ faltantes alertan a los 5 dias hacia el grupo de WhatsApp de IQ"
+    },
+    {
+      "commit": "9649a82d",
+      "capability": "Acuses de cancelacion IQ importados a los documentos de la solicitud"
+    },
+    {
+      "commit": "e6019254",
+      "capability": "Solicitud de complementos IQ detras de un interruptor explicito y revision diaria de todos los abiertos"
     }
   ],
   "requiredText": [
@@ -371,6 +383,21 @@
       "file": "functions/src/modules/solicitudDocuments/service.ts",
       "text": ".where(\"rootId\", \"==\", rootId)",
       "capability": "El reprocesamiento de OC busca la OC activa dentro del root autorizado"
+    },
+    {
+      "file": "functions/src/modules/iq/cancellationReceiptDomain.ts",
+      "text": "solicitudHadInvoice(solicitud) ? \"LOOKUP\" : \"NOT_APPLICABLE\"",
+      "capability": "El acuse IQ solo se busca cuando la solicitud tuvo factura"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/complementGates.ts",
+      "text": "config?.iqRequestEnabled === true",
+      "capability": "La solicitud de complementos IQ exige el interruptor explicito"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/complementPolicy.ts",
+      "text": ">= 5 * 86400000",
+      "capability": "Los complementos faltantes alertan a los 5 dias"
     }
   ],
   "forbiddenText": [

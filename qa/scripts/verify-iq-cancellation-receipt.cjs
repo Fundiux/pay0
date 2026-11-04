@@ -31,6 +31,16 @@ const run = (fetcher, iqFolio = "123") => fetchIqCancellationReceipt({ apiOrigin
   assert.equal(found.extension, "pdf");
   assert.deepEqual(methods, ["GET", "GET"], "nunca usa PATCH sobre la ruta que cancela");
 
+  const auth = [];
+  const redirected = await run(async (url, init) => {
+    auth.push([url.hostname, !!init.headers.Authorization]);
+    if (url.pathname === "/invoices/cancellation/123") return json(200, { url: `${origin}/rails/blob` });
+    if (url.pathname === "/rails/blob") return new Response(null, { status: 302, headers: { location: "https://iq3-production.s3.us-east-2.amazonaws.com/acuse?sig=1" } });
+    return new Response(Buffer.from("%PDF-1.7 acuse"), { status: 200 });
+  });
+  assert.equal(redirected.extension, "pdf", "IQ entrega el acuse por redirect a S3");
+  assert.deepEqual(auth.at(-1), ["iq3-production.s3.us-east-2.amazonaws.com", false], "el token de IQ no viaja a S3");
+
   const xml = await run(async url => url.pathname.startsWith("/invoices") ? json(200, { url: `${origin}/f` }) : new Response('<?xml version="1.0"?><Acuse/>', { status: 200 }));
   assert.equal(xml.extension, "xml");
   console.log("PASS acuse IQ: solo con factura, solo GET, hosts verificados y PDF o XML identificados.");
