@@ -19,6 +19,20 @@ async function authorized(request: any) {
   return { uid, rootId: String(user?.rootId || uid) };
 }
 
+/** Resumen de tokens por proveedor de IA (sin montos): permite ver dependencia de IAs externas. */
+export function tokenSummary(traces: Array<Record<string, any>>) {
+  const byProvider: Record<string, { requests: number; input: number; output: number; reasoning: number }> = {};
+  for (const row of traces) {
+    const key = String(row.modelProvider || "SIN_MODELO");
+    const entry = byProvider[key] || (byProvider[key] = { requests: 0, input: 0, output: 0, reasoning: 0 });
+    entry.requests += 1;
+    entry.input += Number(row.tokenUsage?.input || 0);
+    entry.output += Number(row.tokenUsage?.output || 0);
+    entry.reasoning += Number(row.tokenUsage?.reasoning || 0);
+  }
+  return Object.entries(byProvider).map(([provider, value]) => ({ provider, ...value })).sort((a, b) => b.requests - a.requests);
+}
+
 const average = (values: number[]) => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
 
 /** Indicadores de autonomía: cuánto resuelven solos los agentes frente a cuánto requiere a una persona. */
@@ -41,7 +55,8 @@ export function autonomyReport(todayRuns: Array<Record<string, any>>, recentInci
 
 export async function loadAgentOperations(rootId: string) {
   const day = mexicoDayKey();
-  const [control, runs, dailyRuns, incidents, dailyIncidents, proposals, dailyInterventions] = await Promise.all([
+  const dayStart = admin.firestore.Timestamp.fromDate(new Date(`${day}T00:00:00-06:00`));
+  const [control, runs, dailyRuns, incidents, dailyIncidents, proposals, dailyInterventions, dailyTraces] = await Promise.all([
     db.collection("agentControls").doc(rootId).get(),
     db.collection("agentRuns").where("rootId", "==", rootId).orderBy("updatedAt", "desc").limit(100).get(),
     db.collection("agentRuns").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
@@ -49,6 +64,7 @@ export async function loadAgentOperations(rootId: string) {
     db.collection("agentIncidents").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
     db.collection("agentProposals").where("rootId", "==", rootId).orderBy("createdAt", "desc").limit(100).get(),
     db.collection("agentInterventions").where("rootId", "==", rootId).where("reportDay", "==", day).limit(500).get(),
+    db.collection("agent007Traces").where("rootId", "==", rootId).where("timestamp", ">=", dayStart).orderBy("timestamp", "desc").limit(1000).get(),
   ]);
   const serialize = (snap: FirebaseFirestore.QuerySnapshot) => snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const runRows = serialize(runs) as Array<Record<string, any>>;
@@ -68,6 +84,7 @@ export async function loadAgentOperations(rootId: string) {
       escalated: today.filter(row => ["ESCALATED", "BLOCKED"].includes(row.status)).length,
       retryable: today.filter(row => row.status === "FAILED_RETRYABLE").length,
       causes,
+      tokens: tokenSummary(dailyTraces.docs.map(doc => doc.data())),
       autonomy: autonomyReport(today, serialize(incidents) as Array<Record<string, any>>, dailyInterventions.size) },
     reportScope: dailyRuns.size === 500 || dailyIncidents.size === 500 ? "Reporte parcial: se alcanzó el límite de 500 ejecuciones o incidencias del día." : "Ejecuciones e incidencias registradas hoy en America/Mexico_City; no equivale a todas las Solicitudes del sistema.",
   };

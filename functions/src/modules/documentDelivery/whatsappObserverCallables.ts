@@ -36,13 +36,14 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
   if (!groupChatId || rawObservers.length > MAX_OBSERVERS_PER_GROUP) throw new HttpsError("invalid-argument", "Grupo requerido y máximo 10 observadores por grupo.");
 
   const knownAgents = new Set(AGENTS.map(agent => agent.id));
-  const seenPhones = new Set<string>();
+  const seenAgents = new Set<string>();
   const observers = rawObservers.map((row: any) => {
+    // El número es solo informativo: cada agente se conectará con su propio QR (conector por agente).
     const agentId = clean(row?.agentId, 64), phone = normalizeClientWhatsapp(row?.phone);
     if (!knownAgents.has(agentId)) throw new HttpsError("invalid-argument", `Agente desconocido: ${agentId || "(vacío)"}.`);
-    if (phone.length < 10 || phone.length > 15) throw new HttpsError("invalid-argument", "Número de teléfono inválido.");
-    if (seenPhones.has(phone)) throw new HttpsError("invalid-argument", "Número repetido en el mismo grupo.");
-    seenPhones.add(phone);
+    if (phone && (phone.length < 10 || phone.length > 15)) throw new HttpsError("invalid-argument", "Número de teléfono inválido.");
+    if (seenAgents.has(agentId)) throw new HttpsError("invalid-argument", "Un agente solo puede aparecer una vez por grupo.");
+    seenAgents.add(agentId);
     return { agentId, phone };
   });
 

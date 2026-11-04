@@ -53,7 +53,7 @@ export function AgentObserversPanel() {
     <details className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
       <summary className="cursor-pointer text-lg font-semibold text-white">Agentes observadores por grupo</summary>
       <p className="mt-2 max-w-3xl text-sm text-slate-400">
-        Registra qué agente observa cada grupo y con qué número de teléfono. Solo guarda la configuración; todavía no se leen mensajes.
+        Registra qué agente observa cada grupo. El número es opcional y solo informativo: cada agente se conectará con su propio QR. Esto solo guarda la configuración; todavía no se leen mensajes.
       </p>
 
       {!state ? (
@@ -84,7 +84,7 @@ export function AgentObserversPanel() {
                   <input
                     value={row.phone}
                     onChange={e => setObservers(observers.map((item, i) => i === index ? { ...item, phone: e.target.value } : item))}
-                    placeholder="Teléfono (10 dígitos o con lada)"
+                    placeholder="Teléfono del agente (opcional)"
                     className="w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                   />
                   <button type="button" onClick={() => setObservers(observers.filter((_, i) => i !== index))} className="rounded-lg border border-rose-500/40 p-2 text-rose-200" aria-label="Quitar observador">
