@@ -3,6 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { ConversationInput, ConversationOutput } from "./hugoCore/conversationCore";
 import { db } from "../sharedCallables/helpers";
 import { FirestoreHugoDataStore } from "./firestoreHugoDataStore";
+import { estimateModelCostUsd } from "./modelCost";
 
 export function conversationTrace(traceId: string, input: ConversationInput, output: ConversationOutput, startedAt: number, capability?: { executed?: boolean } | null) {
   return {
@@ -27,7 +28,7 @@ export function conversationTrace(traceId: string, input: ConversationInput, out
     ...(output.intelligenceConfig ? { intelligenceConfig: output.intelligenceConfig } : {}),
     contextKinds: [...new Set(output.pieces.map(piece => piece.kind))], policyDecisions: [{ policy: "SUPERADMIN_ROOT_SCOPE", decision: "ALLOW" }, ...(output.responsePolicy ? [{ policy: output.responsePolicy, decision: "RESPONSE_REPLACED" }] : [])],
     action: capability ? { capability: "REQUEST_IQ_PAYMENT_COMPLEMENT", executed: capability.executed === true } : null,
-    latencyMs: Date.now() - startedAt, tokenUsage: output.model.tokenUsage, estimatedCost: null,
+    latencyMs: Date.now() - startedAt, tokenUsage: output.model.tokenUsage, estimatedCost: estimateModelCostUsd(output.model.provider, output.model.model, output.model.tokenUsage), estimatedCostCurrency: "USD",
     resultStatus: output.source, errorCode: output.model.error || null,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   };

@@ -2958,6 +2958,7 @@ export {
 } from "./modules/documentDelivery/whatsappQrCallables";
 
 export { releaseWhatsAppJobDeliveries, retryWhatsAppJobErrors, omitWhatsAppJob } from "./modules/documentDelivery/whatsappReleaseCallables";
+export { getWhatsAppAgentObservers, saveWhatsAppAgentObservers } from "./modules/documentDelivery/whatsappObserverCallables";
 export { getWhatsAppAutomationConfig, setWhatsAppAutomationEnabled } from "./modules/documentDelivery/whatsappAutomationCallables";
 export { processWhatsAppInvoiceAutomation } from "./modules/documentDelivery/whatsappAutomationTrigger";
 export { releaseForwardOnlyDispersionReservationOnTerminal } from "./modules/dispatchBalances/forwardOnlyTriggers";
@@ -3007,7 +3008,7 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
-export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
+export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { detectMissingSolicitudQuotations } from "./modules/cotizaciones/missingQuoteDetector";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
 
