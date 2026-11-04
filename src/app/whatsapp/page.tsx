@@ -1,5 +1,7 @@
 "use client";
 
+import { AgentObserversPanel } from "@/components/whatsapp/AgentObserversPanel";
+
 import {
   useEffect,
   useMemo,
@@ -2283,6 +2285,8 @@ export default function WhatsAppPage() {
           </div>
         </div>
       </details>
+
+      <AgentObserversPanel />
 
       {String(
         connector?.status || "",

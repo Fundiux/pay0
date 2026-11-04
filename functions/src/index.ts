@@ -2958,6 +2958,7 @@ export {
 } from "./modules/documentDelivery/whatsappQrCallables";
 
 export { releaseWhatsAppJobDeliveries, retryWhatsAppJobErrors, omitWhatsAppJob } from "./modules/documentDelivery/whatsappReleaseCallables";
+export { getWhatsAppAgentObservers, saveWhatsAppAgentObservers } from "./modules/documentDelivery/whatsappObserverCallables";
 export { getWhatsAppAutomationConfig, setWhatsAppAutomationEnabled } from "./modules/documentDelivery/whatsappAutomationCallables";
 export { processWhatsAppInvoiceAutomation } from "./modules/documentDelivery/whatsappAutomationTrigger";
 export { releaseForwardOnlyDispersionReservationOnTerminal } from "./modules/dispatchBalances/forwardOnlyTriggers";
