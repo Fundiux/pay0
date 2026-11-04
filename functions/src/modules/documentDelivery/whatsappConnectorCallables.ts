@@ -7,6 +7,7 @@ const options = { region: "us-central1", timeoutSeconds: 60, memory: "256MiB" as
 export const createWhatsAppConnectorEnrollment = onCall(options, request => authority.create(request));
 export const revokeWhatsAppConnectorBinding = onCall(options, request => authority.revoke(request));
 export const getWhatsAppConnectorBinding = onCall(options, request => authority.getOwned(request));
+export const listWhatsAppAgentConnectors = onCall(options, request => authority.listOwned(request));
 // Worker endpoints authenticate exclusively by the registered Ed25519 proof, never request root/default/heartbeat.
 const worker = async (run: () => Promise<unknown>) => {
   try { return await run(); }

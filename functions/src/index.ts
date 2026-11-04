@@ -3019,3 +3019,5 @@ export { listPagoNotes } from "./modules/notes/pagoReads";
 export { listSolicitudNotes } from "./modules/notes/solicitudReads";
 
 export { createWhatsAppConnectorEnrollment, consumeWhatsAppConnectorEnrollment, getWhatsAppConnectorBinding, revokeWhatsAppConnectorBinding, operateWhatsAppConnector } from "./modules/documentDelivery/whatsappConnectorCallables";
+export { listWhatsAppAgentConnectors } from "./modules/documentDelivery/whatsappConnectorCallables";
+export { getWhatsAppAgentActivity, purgeExpiredWhatsAppInboundMessages } from "./modules/documentDelivery/whatsappAgentActivity";

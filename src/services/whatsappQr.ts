@@ -247,3 +247,28 @@ export async function getWhatsAppAgentObservers() {
 export async function saveWhatsAppAgentObservers(input: { groupChatId: string; active: boolean; observers: WhatsAppAgentObserver[] }) {
   return (await httpsCallable<typeof input, { ok: boolean; observers: number }>(functions, "saveWhatsAppAgentObservers")(input)).data;
 }
+
+export type WhatsAppAgentConnector = {
+  bindingId: string; agentId: string; state: "ACTIVE" | "REVOKED"; generation: number;
+  status: string | null; lastSeenAtMs: number | null; qrDataUrl: string | null; error: string | null;
+};
+export type WhatsAppAgentActivityRow = {
+  agentId: string; chatId: string; sent: number; received: number; answered: number; unanswered: number;
+  avgResponseMs: number | null; medianResponseMs: number | null;
+};
+
+export async function listWhatsAppAgentConnectors() {
+  return (await httpsCallable<Record<string, never>, { ok: boolean; connectors: WhatsAppAgentConnector[] }>(functions, "listWhatsAppAgentConnectors")({})).data;
+}
+
+export async function createWhatsAppAgentEnrollment(agentId: string, publicKeyPem: string) {
+  return (await httpsCallable<{ agentId: string; publicKeyPem: string }, { ok: boolean; enrollment: Record<string, unknown> }>(functions, "createWhatsAppConnectorEnrollment")({ agentId, publicKeyPem })).data;
+}
+
+export async function revokeWhatsAppAgentConnector(bindingId: string) {
+  return (await httpsCallable<{ bindingId: string }, { ok: boolean }>(functions, "revokeWhatsAppConnectorBinding")({ bindingId })).data;
+}
+
+export async function getWhatsAppAgentActivity(days = 7) {
+  return (await httpsCallable<{ days: number }, { ok: boolean; days: number; truncated: boolean; totalMessages: number; rows: WhatsAppAgentActivityRow[] }>(functions, "getWhatsAppAgentActivity", { timeout: 120000 })({ days })).data;
+}
