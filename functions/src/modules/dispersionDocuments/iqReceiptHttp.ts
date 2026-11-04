@@ -40,12 +40,35 @@ async function readBounded(response: Response): Promise<Buffer> {
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
 }
 
-function identifyFile(bytes: Buffer): { contentType: string; extension: string } {
+export function identifyFile(bytes: Buffer): { contentType: string; extension: string } {
   if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") return { contentType: "application/pdf", extension: "pdf" };
   if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { contentType: "image/png", extension: "png" };
   if (bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return { contentType: "image/jpeg", extension: "jpg" };
   if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return { contentType: "image/webp", extension: "webp" };
   throw new Error("IQ_RECEIPT_FILE_TYPE_UNSUPPORTED");
+}
+
+export async function downloadIqFile(input: { rawUrl: string; origin: URL; token: string; fetcher: IqReceiptFetch }): Promise<Buffer> {
+  const fileUrl = new URL(input.rawUrl, input.origin);
+  if (!allowedFileUrl(fileUrl, input.origin)) throw new Error("IQ_RECEIPT_HOST_UNVERIFIED");
+
+  let current = fileUrl;
+  let response: Response | null = null;
+  for (let redirects = 0; redirects <= 2; redirects++) {
+    response = await input.fetcher(current, {
+      method: "GET",
+      headers: current.origin === input.origin.origin ? { Authorization: `Bearer ${input.token}` } : {},
+      redirect: "manual",
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    const location = response.headers.get("location");
+    if (!location) throw new Error("IQ_RECEIPT_REDIRECT_INVALID");
+    const next = new URL(location, current);
+    if (!allowedFileUrl(next, input.origin)) throw new Error("IQ_RECEIPT_HOST_UNVERIFIED");
+    current = next;
+  }
+  if (!response?.ok) throw new Error(`IQ_RECEIPT_DOWNLOAD_HTTP_${response?.status || 0}`);
+  return readBounded(response);
 }
 
 export async function fetchIqDispersionReceipt(input: {
@@ -78,26 +101,7 @@ export async function fetchIqDispersionReceipt(input: {
   const payload = await lookup.json() as { url?: unknown };
   const rawUrl = typeof payload.url === "string" ? payload.url.trim() : "";
   if (!rawUrl) return { status: "NOT_AVAILABLE" };
-  const fileUrl = new URL(rawUrl, origin);
-  if (!allowedFileUrl(fileUrl, origin)) throw new Error("IQ_RECEIPT_HOST_UNVERIFIED");
-
-  let current = fileUrl;
-  let response: Response | null = null;
-  for (let redirects = 0; redirects <= 2; redirects++) {
-    response = await input.fetcher(current, {
-      method: "GET",
-      headers: current.origin === origin.origin ? { Authorization: `Bearer ${token}` } : {},
-      redirect: "manual",
-    });
-    if (![301, 302, 303, 307, 308].includes(response.status)) break;
-    const location = response.headers.get("location");
-    if (!location) throw new Error("IQ_RECEIPT_REDIRECT_INVALID");
-    const next = new URL(location, current);
-    if (!allowedFileUrl(next, origin)) throw new Error("IQ_RECEIPT_HOST_UNVERIFIED");
-    current = next;
-  }
-  if (!response?.ok) throw new Error(`IQ_RECEIPT_DOWNLOAD_HTTP_${response?.status || 0}`);
-  const bytes = await readBounded(response);
+  const bytes = await downloadIqFile({ rawUrl, origin, token, fetcher: input.fetcher });
   const identified = identifyFile(bytes);
   return {
     status: "AVAILABLE",

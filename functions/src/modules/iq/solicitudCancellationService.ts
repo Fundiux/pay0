@@ -114,69 +114,18 @@ export type SolicitudIqCancellationRoutingResult =
       http: IqSolicitudCancellationHttpResult;
     };
 
-export async function requestSolicitudIqCancellationCore(input: {
+export type SolicitudIqProfile = {
+  operationalOwnerId: string;
+  profileId: string;
+  username: string;
+  password: string;
+};
+
+export async function loadSolicitudIqProfile(input: {
   solicitud: Record<string, unknown>;
   rootId: string;
-}): Promise<SolicitudIqCancellationRoutingResult> {
+}): Promise<SolicitudIqProfile> {
   const solicitud = asRecord(input.solicitud);
-
-  const despachoId = cleanText(
-    solicitud.despachoId ??
-      solicitud.dispatchId ??
-      asRecord(solicitud.iqSync).despachoId,
-  );
-
-  const companyId = cleanText(
-    solicitud.companyId ??
-      solicitud.empresaId,
-  );
-
-  if (!despachoId) {
-    throw new HttpsError(
-      "failed-precondition",
-      "La solicitud no conserva despacho para resolver su cancelacion.",
-    );
-  }
-
-  if (!companyId) {
-    throw new HttpsError(
-      "failed-precondition",
-      "La solicitud no conserva empresa para resolver su cancelacion.",
-    );
-  }
-
-  const gate = await evaluateIqDispatchGate({
-    db,
-    despachoId,
-    companyId,
-    rootId: input.rootId,
-  });
-
-  if (!gate.ok) {
-    if (gate.code === "IQ_PROVIDER_NOT_ALLOWED") {
-      return {
-        appliesToIq: false,
-        reason: gate.code,
-      };
-    }
-
-    throw new HttpsError(
-      "failed-precondition",
-      gate.message,
-    );
-  }
-
-  const iqFolio = cleanText(
-    solicitud.iqFolio ??
-      solicitud.iqId,
-  );
-
-  if (!iqFolio) {
-    throw new HttpsError(
-      "failed-precondition",
-      "La solicitud IQ no tiene folio IQ vigente para cancelar.",
-    );
-  }
 
   const operationalOwnerId = cleanText(
     solicitud.operationalOwnerId ??
@@ -244,7 +193,7 @@ export async function requestSolicitudIqCancellationCore(input: {
   }
 
   const username = cleanText(profile.username);
-  const erpUrl = normalizeErpUrl(cleanText(profile.erpUrl));
+  normalizeErpUrl(cleanText(profile.erpUrl));
 
   if (!username) {
     throw new HttpsError(
@@ -253,25 +202,98 @@ export async function requestSolicitudIqCancellationCore(input: {
     );
   }
 
-  let password = "";
+  return {
+    operationalOwnerId,
+    profileId,
+    username,
+    password: decryptSecret(profile),
+  };
+}
+
+export async function requestSolicitudIqCancellationCore(input: {
+  solicitud: Record<string, unknown>;
+  rootId: string;
+}): Promise<SolicitudIqCancellationRoutingResult> {
+  const solicitud = asRecord(input.solicitud);
+
+  const despachoId = cleanText(
+    solicitud.despachoId ??
+      solicitud.dispatchId ??
+      asRecord(solicitud.iqSync).despachoId,
+  );
+
+  const companyId = cleanText(
+    solicitud.companyId ??
+      solicitud.empresaId,
+  );
+
+  if (!despachoId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La solicitud no conserva despacho para resolver su cancelacion.",
+    );
+  }
+
+  if (!companyId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La solicitud no conserva empresa para resolver su cancelacion.",
+    );
+  }
+
+  const gate = await evaluateIqDispatchGate({
+    db,
+    despachoId,
+    companyId,
+    rootId: input.rootId,
+  });
+
+  if (!gate.ok) {
+    if (gate.code === "IQ_PROVIDER_NOT_ALLOWED") {
+      return {
+        appliesToIq: false,
+        reason: gate.code,
+      };
+    }
+
+    throw new HttpsError(
+      "failed-precondition",
+      gate.message,
+    );
+  }
+
+  const iqFolio = cleanText(
+    solicitud.iqFolio ??
+      solicitud.iqId,
+  );
+
+  if (!iqFolio) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La solicitud IQ no tiene folio IQ vigente para cancelar.",
+    );
+  }
+
+  const profile = await loadSolicitudIqProfile({
+    solicitud,
+    rootId: input.rootId,
+  });
 
   try {
-    password = decryptSecret(profile);
-
     const http = await runIqRequestInvoiceCancellationHttp({
-      username,
-      password,
+      username: profile.username,
+      password: profile.password,
       iqFolio,
     });
 
     return {
       appliesToIq: true,
       iqFolio,
-      operationalOwnerId,
-      profileId,
+      operationalOwnerId: profile.operationalOwnerId,
+      profileId: profile.profileId,
       http,
     };
   } finally {
-    password = "";
+    profile.password = "";
   }
 }

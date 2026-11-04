@@ -2976,6 +2976,7 @@ export {
   syncTodayIqInvoicesNow,
 } from "./modules/iq/solicitudInvoiceImportCallables";
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
+export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationReceiptImport";
 export {
   processIqPagoDepositCreateQueue,
   dispatchQueuedPagoIqCreation,

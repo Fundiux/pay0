@@ -24,6 +24,7 @@ export const MATERIALITY_DOCUMENT_TYPES = [
   "COMPROBANTE_TRANSFERENCIA",
   "ESTADO_CUENTA",
   "ACUSE_RECEPCION",
+  "ACUSE_CANCELACION_CFDI",
   "EVIDENCIA_ENTREGA",
   "EVIDENCIA_OPERATIVA",
   "OTRO",
@@ -110,6 +111,8 @@ export function getMaterialityDocumentLabel(type: unknown): string {
       return "Estado de Cuenta";
     case "ACUSE_RECEPCION":
       return "Acuse de Recepcion";
+    case "ACUSE_CANCELACION_CFDI":
+      return "Acuse de Cancelacion CFDI";
     case "EVIDENCIA_ENTREGA":
       return "Evidencia de Entrega";
     case "EVIDENCIA_OPERATIVA":

@@ -24,7 +24,7 @@ function clean(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function apiOrigin(): string {
+export function iqApiOrigin(): string {
   return clean(process.env.PAY0_IQ_API_ORIGIN) || DEFAULT_IQ_API_ORIGIN;
 }
 
@@ -80,7 +80,7 @@ export async function runIqRequestInvoiceCancellationHttp(input: {
   };
 
   const iqFolio = clean(input.iqFolio);
-  const origin = clean(input.apiOrigin) || apiOrigin();
+  const origin = clean(input.apiOrigin) || iqApiOrigin();
 
   if (!credentials.username || !credentials.password) {
     throw new Error("IQ_AUTH_CREDENTIALS_REQUIRED");

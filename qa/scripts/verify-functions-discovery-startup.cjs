@@ -23,11 +23,11 @@ const discoveryBinary = join(
 const maximumDiscoveryMs = process.platform === "win32" ? 25_000 : 7_000;
 const firebaseTimeoutMs = process.platform === "win32" ? 30_000 : 10_000;
 const warmupTimeoutMs = 60_000;
-// The current checkout exports 383 endpoints, including the dashboard invoice-payment control callable (2026-11-02), and the MAT solicitud
+// The current checkout exports 384 endpoints, including the daily IQ cancellation receipt check, the dashboard invoice-payment control callable (2026-11-02), and the MAT solicitud
 // documents callable, the Hugo team voice read and history callables, and the
 // five server-owned WhatsApp connector enrollment callables live since 2026-10-22.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 383;
+const expectedEndpointCount = 384;
 const requiredEndpoints = [
   "saveClientCallable",
   "parseClientCsfCallable",
