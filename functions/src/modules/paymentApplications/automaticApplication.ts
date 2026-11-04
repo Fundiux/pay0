@@ -5,6 +5,7 @@ import { assertAuthorized } from "../../utils/authGuard";
 import { db, getActivityAdminId, getRootId } from "../sharedCallables/helpers";
 import { applyPaymentApplicationBatchAtomic, type PaymentApplicationActor } from "./service";
 import { AUTOMATIC_CANDIDATE_LIMIT, automaticPaymentSourceDigest, decideAutomaticPayment, isAutomaticPaymentReady } from "./automaticDomain";
+import { isIqHistoricalImport, shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const permanent = new Set(["permission-denied", "unauthenticated", "not-found", "failed-precondition", "invalid-argument", "already-exists"]);
@@ -56,6 +57,7 @@ export const applyPaymentAutomaticallyOnReconciliation = onDocumentWritten(
   { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 120, memory: "256MiB", maxInstances: 2 },
   async event => {
     const before = event.data?.before.data() || {}, after = event.data?.after.data() || {};
+    if (shouldSuppressIqHistoricalImport(before, after)) return;
     if (!event.data?.after.exists || !isAutomaticPaymentReady(after) || automaticPaymentSourceDigest(before) === automaticPaymentSourceDigest(after)) return;
     // Transient delivery failures recover for a bounded period; old events must
     // not create indefinite billing or replay historical financial operations.
@@ -74,7 +76,7 @@ export const applyPaymentAutomaticallyOnReceipt = onDocumentWritten(
     const created = Date.parse(event.time);
     if (!Number.isFinite(created) || Date.now() - created > 20 * 60_000) return;
     const pago = (await db.doc(`pagos/${after.pagoId}`).get()).data();
-    if (!pago || pago.rootId !== after.rootId) return;
+    if (!pago || isIqHistoricalImport(pago) || pago.rootId !== after.rootId) return;
     await applyAutomaticPayment(after.pagoId, { retryReview: true });
   },
 );
@@ -83,6 +85,7 @@ export const applyPaymentsAutomaticallyOnInvoice = onDocumentWritten(
   { document: "solicitudes/{solicitudId}", region: "us-central1", retry: true, timeoutSeconds: 120, memory: "256MiB", maxInstances: 2 },
   async event => {
     const before = event.data?.before.data() || {}, after = event.data?.after.data() || {};
+    if (shouldSuppressIqHistoricalImport(before, after)) return;
     if (!event.data?.after.exists || !clean(after.rootId) || !clean(after.clienteId) || !clean(after.facturaUuid || after.uuidCfdi)) return;
     if (!["facturaUuid", "uuidCfdi", "facturaSerie", "facturaFolio", "facturamaEnvironment", "facturamaAutoDraftStatus", "facturaMetadataSource", "facturaUuidSandbox"].some(key => before[key] !== after[key])) return;
     const created = Date.parse(event.time);
