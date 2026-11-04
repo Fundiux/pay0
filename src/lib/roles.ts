@@ -368,6 +368,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
   const routeRules: RouteCandidate[] = [
     { href: "/administracion/recursos-corporativos", moduleKey: "corporateResources", actionKey: "view", superadminOnly: true },
     { href: "/integraciones/iq/diagnostico/pagos", superadminOnly: true },
+    { href: "/integraciones/iq/historico", superadminOnly: true },
     { href: "/integraciones/iq/automatizacion", superadminOnly: true },
   { href: "/integraciones/iq/diagnostico", superadminOnly: true },
     { href: "/integraciones/iq", superadminOnly: true },

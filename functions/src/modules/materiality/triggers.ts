@@ -1,4 +1,5 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { refreshMaterialityProjectionFromSource } from "./service";
@@ -89,6 +90,7 @@ export const refreshMaterialityFromPaymentApplication = onDocumentWritten(
   { document: "pagoAplicaciones/{applicationId}", region: "us-central1", retry: true, timeoutSeconds: 120, memory: "512MiB", maxInstances: 2 },
   async event => {
     const before = event.data?.before.data() || {}, after = event.data?.after.data() || {};
+    if (shouldSuppressIqHistoricalImport(before, after)) return;
     if (event.time && Date.now() - Date.parse(event.time) > 20 * 60_000) return;
     if (!["status", "solicitudId", "pagoId", "rootId"].some(key => changed(before, after, key))) return;
     const sources = [before, after].filter(row => text(row.rootId) && text(row.solicitudId));

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useMemo,
@@ -367,6 +368,10 @@ export default function IqIntegrationPage() {
             Super Admin / Usuarios.
           </p>
         </header>
+
+        <Link href="/integraciones/iq/historico" className="w-fit rounded border border-sky-700 px-4 py-2 text-sm text-sky-200">
+          Revisar sincronización inversa histórica
+        </Link>
 
         {message ? (
           <div

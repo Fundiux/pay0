@@ -3,6 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onTaskDispatched } from "firebase-functions/tasks";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 import { logger } from "firebase-functions";
 import { normalizeIqOperatingCalendarConfig } from "../iq/operatingCalendar";
 import { FieldValue } from "firebase-admin/firestore";
@@ -1300,6 +1301,7 @@ export const enqueuePaymentApplicationImmediately = onDocumentWritten(
   { document: "pagos/{pagoId}", region: "us-central1", timeoutSeconds: 120, memory: "512MiB", maxInstances: 2, retry: true },
   async event => {
     const before = event.data?.before.data() || {}, after = event.data?.after.data() || {};
+    if (shouldSuppressIqHistoricalImport(before, after)) return;
     if (!event.data?.after.exists || paymentApplicationAutomationSource(before) === paymentApplicationAutomationSource(after)) return;
     const created = Date.parse(event.time);
     if (!Number.isFinite(created) || Date.now() - created > 20 * 60_000) return;

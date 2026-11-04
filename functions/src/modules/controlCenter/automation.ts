@@ -5,6 +5,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db } from "../sharedCallables/helpers";
 import { buildControlCenterSnapshot } from "./callables";
 import { ANALYTIC_SOURCES, AnalyticSource, projectSource } from "./projections";
+import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 
 type ChangeLike = { before?: { exists?: boolean; data?: () => any }; after?: { exists?: boolean; data?: () => any } };
 
@@ -13,6 +14,7 @@ const clean = (value: unknown) => String(value ?? "").trim();
 export async function markControlCenterDirty(change: ChangeLike, module: string, documentId: string) {
   const after = change.after?.exists ? change.after.data?.() || {} : {};
   const before = change.before?.exists ? change.before.data?.() || {} : {};
+  if (shouldSuppressIqHistoricalImport(before, after)) return;
   const rootId = clean(after.rootId || before.rootId);
   if (!rootId) return;
 

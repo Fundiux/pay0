@@ -1,5 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { IQ_HISTORICAL_IMPORT_SOURCE } from "../iq/historicalImportGuard";
+import { resolveIqPay0Identity } from "../iq/iqPay0Identity";
 
 type Actor = { uid: string; rootId: string; role: string };
 export type CreatorOption = { uid: string; displayName: string; username: string; userNumber?: number };
@@ -32,7 +34,7 @@ export async function resolveRecordCreators(db: Firestore, actor: Actor, documen
   const snapshot = await directory.select("rootId", "displayName", "name", "nombreUsuario", "username", "userNumber", "numeroUsuario", "sequenceNumber").get();
   const labels = new Map<string, CreatorOption>();
   for (const doc of snapshot.docs) labels.set(doc.id, identity(doc.id, doc.data()));
-  const missing = [...new Set([actor.uid, ...documents.flatMap(doc => [doc.get("createdBy"), doc.get("actorUid"), doc.get("creatorId"), doc.get("ownerId")].map(text))])].filter(uid => uid && !uid.includes("/") && !labels.has(uid));
+  const missing = [...new Set([actor.uid, ...documents.flatMap(doc => [doc.get("createdBy"), doc.get("actorUid"), doc.get("creatorId"), doc.get("ownerId"), doc.get("adminId")].map(text))])].filter(uid => uid && !uid.includes("/") && !labels.has(uid));
   if (missing.length) {
     const people = await db.getAll(...missing.map(uid => db.doc(`users/${uid}`)), { fieldMask: ["rootId", "displayName", "name", "nombreUsuario", "username", "userNumber", "numeroUsuario", "sequenceNumber"] });
     for (const person of people) if (person.exists && text(person.get("rootId") || person.id) === actor.rootId) labels.set(person.id, identity(person.id, person.data() || {}));
@@ -44,6 +46,7 @@ export async function resolveRecordCreators(db: Firestore, actor: Actor, documen
 
 export function creatorDisplayFields(data: Record<string, any>, labels: Map<string, CreatorOption>, role: string) {
   if (!["superadmin", "admin"].includes(role)) return {};
+  if (text(data.source).toUpperCase() === IQ_HISTORICAL_IMPORT_SOURCE) return historicalRecordUser(data, labels);
   const uid = text(data.createdBy || data.actorUid || data.creatorId);
   // Persisted actor snapshots remain authoritative even after account deletion.
   const legacy = identity(uid, { displayName: data.createdByDisplayName || data.createdByName || data.creatorName,
@@ -62,4 +65,17 @@ export function creatorDisplayFields(data: Record<string, any>, labels: Map<stri
   const ownerSnapshot = sameOwner ? identity(uid, { displayName: data.operationalOwnerName }).displayName : "";
   return { createdByDisplayName: legacy.displayName || person?.displayName || ownerSnapshot || null,
     createdByUsername: legacy.username || person?.username || null };
+}
+
+/**
+ * Rows imported from IQ carry the IQ operator identity, not a PAY0 author:
+ * createdBy is usually absent and must never be guessed. Show the canonical
+ * PAY0 owner mapped from the IQ group/profile, or the row's adminId label.
+ */
+function historicalRecordUser(data: Record<string, any>, labels: Map<string, CreatorOption>) {
+  const canonical = resolveIqPay0Identity(data);
+  if (canonical) return { createdByDisplayName: canonical.pay0UserLabel, createdByUsername: null, recordUserUid: canonical.pay0UserId, iqUsername: canonical.iqUsername };
+  const adminId = text(data.adminId);
+  const owner = labels.get(adminId);
+  return { createdByDisplayName: owner?.displayName || owner?.username || null, createdByUsername: null, recordUserUid: adminId || null };
 }
