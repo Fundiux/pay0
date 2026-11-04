@@ -17,7 +17,8 @@ const MAX_LISTED_ROWS = 200;
 // Solo facturas timbradas en producción cuentan como emitidas. Las de sandbox se reportan aparte.
 const ISSUED_INVOICE_STATUSES = new Set(["PRODUCTION_ISSUED", "ISSUED", "EMITTED"]);
 const APPLIED_APPLICATION_STATUSES = new Set(["APLICADA", "APPLIED", "IQ_APPLIED"]);
-const PAID_SOLICITUD_STATUSES = new Set(["PAGADA", "PAGADO"]);
+// Estado canónico de cierre; una solicitud completada sin pago aplicado es una alerta de conciliación.
+const COMPLETED_SOLICITUD_STATUSES = new Set(["COMPLETADA"]);
 const INACTIVE_SOLICITUD_STATUSES = new Set(["CANCELADO", "CANCELADA", "RECHAZADO", "RECHAZADA", "ELIMINADA"]);
 const INACTIVE_PAGO_STATUSES = new Set(["CANCELADO", "CANCELADA", "RECHAZADO", "RECHAZADA", "ELIMINADA"]);
 
@@ -176,7 +177,7 @@ export function buildInvoicePaymentControl(input: InvoicePaymentControlInput) {
       solicitudesConFactura: solicitudesActivas.filter(row => invoiceBySolicitud.has(row.id)).length,
       solicitudesConPagoAplicado: solicitudesActivas.filter(row => appliedCentsBySolicitud.has(row.id)).length,
       solicitudesSinPago: solicitudesActivas.filter(row => !appliedCentsBySolicitud.has(row.id)).length,
-      solicitudesPagadasSinAplicacion: solicitudesActivas.filter(row => !appliedCentsBySolicitud.has(row.id) && PAID_SOLICITUD_STATUSES.has(upper(row.status))).length,
+      solicitudesCompletadasSinPago: solicitudesActivas.filter(row => !appliedCentsBySolicitud.has(row.id) && COMPLETED_SOLICITUD_STATUSES.has(upper(row.status))).length,
       facturaSinPago: facturaSinPagoAll.length,
       pagoSinFactura: pagoSinFacturaAll.length,
       montoPagadoSinFactura: fromCents(montoPagadoSinFactura),
