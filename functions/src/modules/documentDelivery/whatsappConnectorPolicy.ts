@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
 
-export type WorkerAction = "SYNC_CHATS" | "NEW_QR" | "HEARTBEAT";
+export type WorkerAction = "SYNC_CHATS" | "NEW_QR" | "HEARTBEAT" | "INBOUND_GROUP";
 
 export interface Enrollment {
   id: string;
@@ -293,7 +293,8 @@ function assertAction(value: unknown, code: string): asserts value is WorkerActi
   if (
     value !== "SYNC_CHATS" &&
     value !== "NEW_QR" &&
-    value !== "HEARTBEAT"
+    value !== "HEARTBEAT" &&
+    value !== "INBOUND_GROUP"
   ) {
     fail(code);
   }

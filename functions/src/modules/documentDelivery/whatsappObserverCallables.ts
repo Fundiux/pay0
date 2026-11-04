@@ -16,14 +16,18 @@ const configId = (rootId: string, chatId: string) => `${rootId}__${encodeURIComp
 
 export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
   const { rootId } = await requireWhatsAppSuperadmin(request);
-  const [configs, groups] = await Promise.all([
+  const [configs, groups, agentGroups] = await Promise.all([
     db.collection("whatsappAgentObservers").where("rootId", "==", rootId).limit(200).get(),
     db.collection("whatsappQrChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
+    db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
   ]);
+  // Los grupos pueden venir de la conexión histórica o de la de un agente; se muestran una sola vez.
+  const uniqueGroups = new Map<string, string>();
+  for (const doc of [...groups.docs, ...agentGroups.docs]) uniqueGroups.set(clean(doc.get("chatId"), 200), clean(doc.get("name"), 160));
   return {
     ok: true,
     agents: AGENTS.map(agent => ({ id: agent.id, name: agent.name })),
-    groups: groups.docs.map(doc => ({ chatId: clean(doc.get("chatId"), 200), name: clean(doc.get("name"), 160) })),
+    groups: [...uniqueGroups.entries()].map(([chatId, name]) => ({ chatId, name })),
     configs: configs.docs.map(doc => ({ groupChatId: doc.get("groupChatId"), groupName: doc.get("groupName") || "", active: doc.get("active") === true, observers: doc.get("observers") || [] })),
   };
 });
@@ -47,7 +51,11 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
     return { agentId, phone };
   });
 
-  const chat = await db.doc(`whatsappQrChats/${encodeURIComponent(groupChatId)}`).get();
+  let chat: FirebaseFirestore.DocumentSnapshot = await db.doc(`whatsappQrChats/${encodeURIComponent(groupChatId)}`).get();
+  if (!chat.exists) {
+    const viaAgent = await db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("chatId", "==", groupChatId).limit(1).get();
+    if (!viaAgent.empty) chat = viaAgent.docs[0];
+  }
   if (!chat.exists || chat.get("rootId") !== rootId || chat.get("isGroup") !== true) throw new HttpsError("failed-precondition", "El grupo no existe en los chats sincronizados de este root.");
 
   await db.doc(`whatsappAgentObservers/${configId(rootId, groupChatId)}`).set({

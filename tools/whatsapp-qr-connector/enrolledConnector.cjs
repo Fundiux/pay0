@@ -3,9 +3,14 @@
 // .env, default connector, historic session import, timers or browser at import.
 const { createAuthorityTransport } = require("./connectorAuthority.cjs");
 const readChats = require("./readChats.cjs");
-async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval }) {
+// Cada lote cabe holgadamente en el límite canónico de 64 KB del servidor.
+const MAX_BATCH_MESSAGES = 25, MAX_BATCH_BYTES = 40000, MAX_BUFFERED_MESSAGES = 1000;
+async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval, captureGroups = false }) {
   if (!transport?.getBinding() || !client || typeof resetLocalSession !== "function") throw Error("ENROLLED_DEPENDENCIES_REQUIRED");
   let ready = false, busy = false, stopped = false, pendingResetId = null;
+  // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
+  let observedChats = new Set();
+  const buffer = [];
   const timers = [];
   async function close() {
     stopped = true;
@@ -23,6 +28,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     busy = true;
     try {
       const response = await transport.operate("HEARTBEAT", { ready, poll: true });
+      observedChats = new Set(Array.isArray(response.observedChats) ? response.observedChats.filter(chat => typeof chat === "string") : []);
       const command = response.command;
       if (!command) return;
       if (command.type === "SYNC_CHATS") await synchronize(command.id);
@@ -53,16 +59,47 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // Preserve the recovered client's no inbound-response policy. Sending and
   // document/complement polling remain outside this enrolled control entry.
   client.on("message", async () => undefined);
+  // Captura opcional (apagada por defecto): solo grupos autorizados, sin responder ni enviar nada.
+  client.on("message_create", message => {
+    if (!captureGroups || stopped) return;
+    try {
+      const fromMe = !!message?.fromMe, chatId = String((fromMe ? message?.to : message?.from) || "");
+      const messageId = String(message?.id?._serialized || ""), timestampMs = Number(message?.timestamp) * 1000;
+      if (!chatId.endsWith("@g.us") || !observedChats.has(chatId) || !messageId || !Number.isSafeInteger(timestampMs) || timestampMs < 1) return;
+      const type = String(message?.type || "chat").slice(0, 40), author = message?.author || (fromMe ? "" : message?.from);
+      if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
+      buffer.push({ messageId, chatId, fromMe, timestampMs, type, ...(author ? { authorId: String(author).slice(0, 200) } : {}),
+        body: type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "" });
+    } catch { /* un mensaje ilegible nunca detiene el conector */ }
+  });
+  async function flush() {
+    if (!captureGroups || busy || stopped || !ready || buffer.length === 0) return;
+    busy = true;
+    const batch = [];
+    try {
+      let bytes = 0;
+      while (buffer.length && batch.length < MAX_BATCH_MESSAGES) {
+        const size = Buffer.byteLength(JSON.stringify(buffer[0]), "utf8");
+        if (batch.length && bytes + size > MAX_BATCH_BYTES) break;
+        bytes += size; batch.push(buffer.shift());
+      }
+      await transport.operate("INBOUND_GROUP", { messages: batch });
+    } catch {
+      // El servidor es idempotente por mensaje: se reintenta en el siguiente ciclo con un nonce nuevo.
+      buffer.unshift(...batch);
+    } finally { busy = false; }
+  }
   // Verify live server ownership/revocation BEFORE initializing WhatsApp.
   await status({ status: "DISCONNECTED" });
   await client.initialize();
   timers.push(setTimer(() => poll().catch(() => undefined), 10000));
+  if (captureGroups) timers.push(setTimer(() => flush().catch(() => undefined), 15000));
   timers.push(setTimer(async () => {
     if (busy || !ready || stopped) return;
     busy = true;
     try { await synchronize(); } catch { await close(); } finally { busy = false; }
   }, 60000));
-  return { poll, synchronize, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
+  return { poll, synchronize, flush, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
 }
 
 async function startExplicitly(config) {
@@ -76,7 +113,7 @@ async function startExplicitly(config) {
   if (path.dirname(sessionDir) !== sessionRoot) throw Error("SESSION_BOUNDARY_REJECTED");
   const client = new Client({ authStrategy: new LocalAuth({ clientId: binding.id, dataPath: sessionRoot }),
     puppeteer: { headless: true, ...(config.executablePath ? { executablePath: config.executablePath } : {}) } });
-  return runEnrolledConnector({ transport, client, encodeQr: qr => qrcode.toDataURL(qr, { margin: 1, width: 320 }),
+  return runEnrolledConnector({ transport, client, captureGroups: config.captureGroups === true, encodeQr: qr => qrcode.toDataURL(qr, { margin: 1, width: 320 }),
     resetLocalSession: async id => { if (id !== binding.id) throw Error("SESSION_ID_MISMATCH"); await fs.rm(sessionDir, { recursive: true, force: true }); } });
 }
 module.exports = { runEnrolledConnector, startExplicitly };
