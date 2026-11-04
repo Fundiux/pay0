@@ -136,6 +136,42 @@
     {
       "commit": "e6019254",
       "capability": "Solicitud de complementos IQ detras de un interruptor explicito y revision diaria de todos los abiertos"
+    },
+    {
+      "commit": "7e4e5380",
+      "capability": "Dashboard muestra solicitudes completadas sin pago aplicado"
+    },
+    {
+      "commit": "46f2b7e2",
+      "capability": "Metricas de autonomia de agentes: solicitudes, incidentes y corridas"
+    },
+    {
+      "commit": "e8560f90",
+      "capability": "Control factura-pago excluye CFDI cancelados"
+    },
+    {
+      "commit": "d1fe76a3",
+      "capability": "Observadores de agentes de WhatsApp configurables por grupo"
+    },
+    {
+      "commit": "905027ce",
+      "capability": "Uso de tokens de IA por proveedor y telefono opcional del observador"
+    },
+    {
+      "commit": "f7cd23ef",
+      "capability": "Hugo operaciones funciona con Functions anteriores a las metricas de autonomia"
+    },
+    {
+      "commit": "be83cbe2",
+      "capability": "Importacion historica IQ no dispara pagos, materialidad ni comisiones"
+    },
+    {
+      "commit": "c4b996c7",
+      "capability": "Filas importadas de IQ muestran al propietario canonico"
+    },
+    {
+      "commit": "77946aa4",
+      "capability": "Controles supervisados de importacion historica P4 solo para Super Admin"
     }
   ],
   "requiredText": [
