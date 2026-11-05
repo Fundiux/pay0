@@ -17,7 +17,7 @@ const test = (name, fn) => { fn(); cases.push(name); };
 
 test('summary-includes-counts-autonomy-and-providers', () => {
   const text = buildDailyAlertMessage(base());
-  for (const part of ['2026-11-04', 'Incidentes abiertos: 2', '75%', '8 de 10', '1.5 min', 'gemini: 7 llamadas', 'Sin cotización (2)', 'apagado']) assert(text.includes(part), part);
+  for (const part of ['2026-11-04', 'corte 20:00', 'Incidentes abiertos: 2', '75%', '8 de 10', '1.5 min', 'gemini: 7 llamadas', 'Sin cotización (2)', 'apagado']) assert(text.includes(part), part);
 });
 test('kill-switch-is-flagged', () => {
   assert(buildDailyAlertMessage({ ...base(), killSwitch: true }).includes('ACTIVADO'));

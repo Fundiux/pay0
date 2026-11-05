@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { sendTelegramMessage } from "../telegram/service";
+import { isCanonicalUserActive, normalizeCanonicalRole } from "../users/authorization";
 import { loadAgentOperations } from "./callables";
 import { mexicoDayKey } from "./time";
 
@@ -20,7 +21,7 @@ export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loa
   const openIncidents = operations.incidents.filter((row: Record<string, any>) => row.status === "OPEN").length;
   const tokens = (report.tokens ?? []).map(row => `${row.provider}: ${row.requests} llamadas`).join(", ") || "sin llamadas a IA";
   const lines = [
-    `Resumen diario de agentes (${report.day})`,
+    `Resumen diario de agentes (${report.day}, corte 20:00 hora de México)`,
     killSwitch ? "ATENCIÓN: el interruptor de emergencia está ACTIVADO; los agentes están detenidos." : "Interruptor de emergencia: apagado (agentes operando).",
     `Revisadas: ${report.reviewed} · Detectadas: ${report.detected} · Corregidas: ${report.corrected} · Escaladas: ${report.escalated} · Por reintentar: ${report.retryable}`,
     `Incidentes abiertos: ${openIncidents}`,
@@ -33,6 +34,7 @@ export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loa
   }
   lines.push(`IAs usadas hoy: ${tokens}`);
   if (report.causes.length) lines.push(`Causas frecuentes: ${report.causes.map((row: { cause: string; count: number }) => `${row.cause} (${row.count})`).join("; ")}`);
+  if (operations.reportScope) lines.push(operations.reportScope);
   return lines.join("\n").slice(0, 3900);
 }
 
@@ -48,8 +50,15 @@ export const sendAgentDailyStatusAlert = onSchedule(
     const byRoot = new Map<string, Array<{ id: string; chatId: string }>>();
     for (const doc of linked.docs) {
       const chatId = String(doc.get("chatId") || "").trim();
-      const rootId = String(doc.get("rootId") || doc.get("uid") || "").trim();
-      if (!chatId || !rootId) continue;
+      const uid = String(doc.get("uid") || "").trim();
+      if (!chatId || !uid) continue;
+      // role/rootId de telegramUsers se copian al vincular y pueden estar obsoletos: manda el documento canónico de users.
+      const user = (await db.collection("users").doc(uid).get()).data();
+      if (!user || !isCanonicalUserActive(user) || normalizeCanonicalRole(user.role ?? user.supervisorRole) !== "superadmin") {
+        console.error("AGENT_DAILY_ALERT_RECIPIENT_SKIPPED", doc.id);
+        continue;
+      }
+      const rootId = String(user.rootId || uid);
       byRoot.set(rootId, [...(byRoot.get(rootId) || []), { id: doc.id, chatId }]);
     }
     for (const [rootId, recipients] of byRoot) {
@@ -59,7 +68,11 @@ export const sendAgentDailyStatusAlert = onSchedule(
           // create() falla si ya se envió hoy a este destinatario: evita duplicados en reintentos del scheduler.
           const marker = db.collection("agentDailyAlerts").doc(`${rootId}__${day}__${recipient.id}`);
           try { await marker.create({ rootId, day, recipientId: recipient.id, status: "SENDING", createdAt: FieldValue.serverTimestamp() }); }
-          catch { continue; }
+          catch (error) {
+            const code = (error as { code?: unknown })?.code;
+            if (code !== 6 && code !== "already-exists") console.error("AGENT_DAILY_ALERT_MARKER_FAILED", rootId, recipient.id, String((error as Error)?.message || error).slice(0, 200));
+            continue;
+          }
           try {
             await sendTelegramMessage(TELEGRAM_BOT_TOKEN.value(), recipient.chatId, message);
             await marker.update({ status: "SENT", sentAt: FieldValue.serverTimestamp() });
