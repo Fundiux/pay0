@@ -319,7 +319,7 @@ export async function runP4Sync(plan: P4SyncPlan, onProgress: (progress: P4SyncP
   }
   if (!canaryCompleted) {
     const fresh = await refreshScope(plan, confirmed);
-    return stop("SIN_AVANCE", summaryOf(fresh), "Ninguna escritura avanzó en tres intentos. Revisa los registros pendientes.", fresh.preview.selected);
+    return stop("SIN_AVANCE", summaryOf(fresh), `Ninguna escritura avanzó en ${MAX_CANARY_ATTEMPTS} intentos. Revisa los registros pendientes.`, fresh.preview.selected);
   }
 
   // Lotes acotados hasta terminar, con el alcance fresco en cada ronda.

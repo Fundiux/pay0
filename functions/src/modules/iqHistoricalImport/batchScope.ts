@@ -60,7 +60,8 @@ function terminal(action:P4Action):boolean{
 }
 
 function assertHistoricalEvidence(manifest:P4Manifest,request:P4ScopeRequest,evidence?:P4HistoricalBatchEvidence):Set<string>{
-  if(!evidence?.certified||evidence.selectorVersion!==P4_SCOPE_SELECTOR_VERSION||evidence.sourceManifestId===""||evidence.sourceRunId==="")throw Object.assign(new Error(`Certified historical evidence missing for ${request.type}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INCOMPLETE"});
+  if(evidence?.certified&&evidence.selectorVersion!==P4_SCOPE_SELECTOR_VERSION)throw Object.assign(new Error(`Evidencia certificada con selector ${evidence.selectorVersion}; requiere recertificación para ${P4_SCOPE_SELECTOR_VERSION}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_VERSION_MISMATCH"});
+  if(!evidence?.certified||evidence.sourceManifestId===""||evidence.sourceRunId==="")throw Object.assign(new Error(`Certified historical evidence missing for ${request.type}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INCOMPLETE"});
   const content={selectorVersion:evidence.selectorVersion,sourceManifestId:evidence.sourceManifestId,sourceManifestHash:evidence.sourceManifestHash,sourceRunId:evidence.sourceRunId,actionIds:[...new Set(evidence.actionIds)].sort()};
   const expected=deterministicId(canonicalJson(content));if(evidence.evidenceHash!==expected)throw Object.assign(new Error("Historical evidence hash mismatch"),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INVALID"});
   const ids=new Set(content.actionIds);if(!ids.size||[...ids].some(id=>!manifest.actions.some(action=>action.actionId===id)))throw Object.assign(new Error("Historical evidence references absent actions"),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INVALID"});
@@ -76,9 +77,10 @@ export function buildExecutionScope(input:{manifest:P4Manifest;request:P4ScopeRe
   const roles=new Map<string,P4ScopeMemberRole>();for(const id of primaryIds)roles.set(id,"PRIMARY");
   const visit=(id:string)=>{const action=byId.get(id);if(!action)return;for(const dep of action.dependencies||[]){if(completed.has(dep)||roles.has(dep))continue;roles.set(dep,"EXTERNAL_DEPENDENCY");visit(dep);}};for(const id of primaryIds)visit(id);
   // A client has no operating date of its own: the planner adds it only because a
-  // primary row of this range needs it. Date-range scopes execute it as a member
-  // (clients sort first) instead of parking the whole range behind it.
-  if(request.type==="MONTH_BLOCK"||request.type==="CERTIFICATION_WINDOW")for(const [id,role] of roles){const action=byId.get(id);if(role==="EXTERNAL_DEPENDENCY"&&action?.entityType==="CLIENT"&&isWriteAction(action)&&!completed.has(id))roles.set(id,"CLIENT_DEPENDENCY");}
+  // primary row of this range needs it. Date-range scopes create such a client as
+  // a member (clients sort first) instead of parking the whole range behind it.
+  // Reconciling an existing client (RECONCILE) stays an external dependency.
+  if(request.type==="MONTH_BLOCK"||request.type==="CERTIFICATION_WINDOW")for(const [id,role] of roles){const action=byId.get(id);if(role==="EXTERNAL_DEPENDENCY"&&action?.entityType==="CLIENT"&&action.operation==="CREATE_HISTORICAL"&&!completed.has(id))roles.set(id,"CLIENT_DEPENDENCY");}
   const excluded:Array<{actionId:string;iqEntityId:string;reason:string}>=[];
   const selected=[...roles].map(([id,role])=>({action:byId.get(id)!,role})).filter(row=>{
     const reason=completed.has(row.action.actionId)?"COMPLETED":row.action.componentId&&isolated.has(row.action.componentId)?"FINANCIAL_COMPONENT_REVIEW":P4_PROTECTED_REVIEW_IQ_IDS.has(row.action.iqEntityId)?"PROTECTED_REVIEW":isReviewAction(row.action)?"REVIEW":terminal(row.action)?"TERMINAL":!isWriteAction(row.action)?"NO_CHANGE":"";
@@ -105,8 +107,9 @@ export function scopeQueue(scope:P4Scope,manifest:P4Manifest):P4Action[]{const b
 
 export function scopeCanaryQueue(scope:P4Scope,manifest:P4Manifest,completed:Set<string>):P4Action[]{
   const queue=scopeQueue(scope,manifest),byId=new Map(manifest.actions.map(action=>[action.actionId,action]));
-  // A dependency that needs no write (NO_OP/EXISTING) is satisfied by the current PAY0 state.
-  const satisfied=(id:string)=>completed.has(id)||(!!byId.get(id)&&!isWriteAction(byId.get(id)!));
+  // Same rule as the executor's dependencySatisfied: a reviewed dependency never
+  // satisfies; NO_OP/EXISTING is satisfied by the current PAY0 state.
+  const satisfied=(id:string)=>{const dependency=byId.get(id);if(!dependency||isReviewAction(dependency))return false;return completed.has(id)||["NO_OP","EXISTING"].includes(dependency.operation);};
   const candidate=queue.find(action=>!completed.has(action.actionId)&&(action.dependencies||[]).every(satisfied));
   return candidate?[candidate]:[];
 }

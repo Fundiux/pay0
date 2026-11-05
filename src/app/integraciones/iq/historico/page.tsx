@@ -19,6 +19,18 @@ const ERROR_COPY: Record<string, string> = {
   P4_SCOPE_NOT_APPROVED: "El alcance cambió desde que se preparó. Vuelve a preparar el periodo.",
   P4_SCOPE_APPROVAL_MISMATCH: "Se escribieron registros desde la última preparación y el alcance ya no coincide. Lo escrito se conserva; vuelve a preparar el periodo.",
   P4_MANIFEST_HASH_MISMATCH: "IQ cambió desde que se preparó el plan. Vuelve a preparar el periodo.",
+  P4_SCOPE_MANIFEST_MISMATCH: "El plan en el servidor ya no es el que se preparó. Vuelve a preparar el periodo.",
+  P4_SCOPE_NOT_FOUND: "El alcance ya no existe en el servidor. Vuelve a preparar el periodo.",
+  P4_SCOPE_APPROVAL_CONFIRMATION_REQUIRED: "El servidor no reconoció la confirmación del alcance. Vuelve a preparar el periodo.",
+  P4_SCOPE_BUDGET_EXCEEDS_APPROVAL: "El lote pidió más de lo aprobado. Vuelve a preparar el periodo.",
+  P4_SCOPE_FENCE_CONFLICT: "Otra ejecución tomó el control de este alcance. Espera y vuelve a preparar el periodo.",
+  P4_SCOPE_RANGE_INVALID: "El periodo no es válido para el servidor.",
+  P4_SCOPE_TYPE_INVALID: "El tipo de alcance no es válido. Avisa a soporte.",
+  P4_SCOPE_EXECUTION_MODE_INVALID: "El modo de ejecución no es válido. Avisa a soporte.",
+  P4_SCOPE_CALLER_SELECTION_FORBIDDEN: "La pantalla intentó elegir registros por su cuenta y el servidor lo rechazó. Avisa a soporte.",
+  P4_SCOPE_HISTORICAL_EVIDENCE_INCOMPLETE: "Este alcance requiere evidencia certificada que no existe. Usa un bloque de mes.",
+  P4_SCOPE_HISTORICAL_EVIDENCE_INVALID: "La evidencia certificada de este alcance no coincide. Usa un bloque de mes.",
+  P4_SCOPE_HISTORICAL_EVIDENCE_VERSION_MISMATCH: "La evidencia certificada es de una versión anterior del selector y requiere recertificación. Usa un bloque de mes.",
   P4_INTERNAL: "Error interno del motor. Nada quedó a medias; revisa los registros de la Function.",
   "deadline-exceeded": "La lectura de IQ tardó demasiado. Vuelve a intentar; lo ya escrito se conserva.",
 };
@@ -29,7 +41,7 @@ const STOP_COPY: Record<NonNullable<P4SyncResult["stoppedReason"]>, string> = {
   ALCANCE_CAMBIADO: "IQ o PAY0 cambiaron durante la sincronización y el servidor propone registros que no viste. Prepara de nuevo el periodo para revisarlos.",
   REQUIERE_REVISION: "Algunos registros confirmados dejaron de ser ejecutables. Suele ocurrir cuando dependen de otros aún no importados; prepara de nuevo el periodo.",
   SIN_AVANCE: "Ninguna escritura avanzó. Prepara de nuevo el periodo; si persiste, revisa los registros de la Function.",
-  TOPE_DE_LOTES: "Se alcanzó el tope de lotes por confirmación. Puedes continuar con lo pendiente.",
+  TOPE_DE_LOTES: "Lo escrito se conserva. Pulsa «Continuar con lo pendiente» para seguir con el mismo plan.",
 };
 
 function errorMessage(error: unknown): string {
@@ -80,7 +92,12 @@ export default function IqHistoricalImportPage() {
       const next = await prepareP4Sync({ month, block });
       setPlan(next);
       setFollowUp(nextFollowUp);
-      if (nextFollowUp > 0 && next.writes === 0) setProgress(current => current ? { ...current, phase: "COMPLETO", detail: "Periodo sincronizado. No quedan registros por escribir." } : current);
+      if (nextFollowUp > 0) {
+        // A follow-up layer with writes is a new plan to confirm: the previous
+        // run's result must not hide the button. Without writes, the period is done.
+        if (next.writes > 0) { setResult(null); setProgress(null); }
+        else setProgress(current => current ? { ...current, phase: "COMPLETO", detail: "Periodo sincronizado. No quedan registros por escribir." } : current);
+      }
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {

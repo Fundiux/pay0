@@ -84,6 +84,7 @@
     "qa:document-ui": "node --experimental-strip-types qa/scripts/authorized-document-ui-integration.mjs",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",
     "qa:functions-discovery": "node qa/scripts/verify-functions-discovery-startup.cjs",
+    "qa:iq-historical-chain": "npm --prefix functions run build && node --test qa/scripts/iq-historical-scope-selector.test.cjs && powershell -NoProfile -ExecutionPolicy Bypass -File qa/scripts/iq-historical-sync-chain-emulator-run.ps1",
     "qa:release-baseline": "node qa/scripts/verify-release-baseline.mjs",
     "qa:ecosystem-boundaries": "node qa/scripts/verify-ecosystem-boundaries.mjs",
     "qa:technology": "node scripts/verify-technology-baseline.mjs",

@@ -68,7 +68,15 @@ test("the page retries only after a batch cap, re-prepares after success without
   assert.match(page, /const canRetry = result\?\.stoppedReason === "TOPE_DE_LOTES"/);
   assert.match(page, /showConfirm = plan !== null && plan\.writes > 0 && \(!result \|\| canRetry\)/);
   assert.match(page, /if \(outcome\.ok && followUp < MAX_FOLLOW_UPS\)[\s\S]*await prepare\(followUp \+ 1\)/);
+  // A follow-up layer with writes clears the previous result so the confirm button is offered again;
+  // without writes it only closes the progress panel.
+  const prepare = page.slice(page.indexOf("async function prepare"), page.indexOf("async function confirm"));
+  assert.match(prepare, /if \(nextFollowUp > 0\) \{[\s\S]*if \(next\.writes > 0\) \{ setResult\(null\); setProgress\(null\); \}[\s\S]*else setProgress\(/);
   assert.ok(!/runP4Sync\([^)]*\)[\s\S]{0,200}runP4Sync\(/.test(page.slice(page.indexOf("async function confirm"))), "a follow-up layer needs a new confirmation");
+  for (const code of ["P4_SCOPE_MANIFEST_MISMATCH", "P4_SCOPE_NOT_FOUND", "P4_SCOPE_BUDGET_EXCEEDS_APPROVAL", "P4_SCOPE_FENCE_CONFLICT", "P4_SCOPE_HISTORICAL_EVIDENCE_VERSION_MISMATCH"]) {
+    assert.ok(page.includes(`${code}: "`), `ERROR_COPY covers ${code}`);
+  }
+  assert.ok(!service.includes("en tres intentos"), "the canary attempt count is interpolated, not hard-coded");
   assert.match(page, /P4_SCOPE_APPROVAL_MISMATCH: "Se escribieron registros/);
   assert.match(page, /Plan \{plan\.manifestId\} · alcance \{plan\.scopeId\}/);
   assert.match(page, /alreadySynced = plan !== null && plan\.writes === 0 && \(plan\.excluded\.completed > 0 \|\| plan\.excluded\.unchanged > 0\)/);
