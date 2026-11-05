@@ -19,9 +19,16 @@ export function iqAccountIdentity(account: Record<string, unknown>): { key: stri
   return value ? { key: iqAccountKey(value), last4: value.slice(-4) } : null;
 }
 
-export function methodAccountKey(method: Record<string, unknown>): string | null {
+export function methodAccountRef(method: Record<string, unknown>): { key: string; last4: string } | null {
   const value = digits(method.clabe) || digits(method.cardNumber);
-  return value.length >= 15 ? iqAccountKey(value) : null;
+  return value.length >= 15 ? { key: iqAccountKey(value), last4: value.slice(-4) } : null;
+}
+
+// A link is only valid for the account it was made with: any consumer must check
+// this before using iqAccountId, because a method can change its CLABE or card.
+export function iqLinkMatchesMethod(link: Record<string, unknown> | null | undefined, method: Record<string, unknown>): boolean {
+  const account = methodAccountRef(method);
+  return !!account && link?.status === "LINKED" && link.key === account.key;
 }
 
 export type IqCatalogRow = { beneficiaryId: number; accountId: number; beneficiaryName: string; conciliationStatus: string };
