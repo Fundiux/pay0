@@ -244,6 +244,10 @@
     {
       "commit": "599cc32c",
       "capability": "Catalogo IQ respeta interruptores, runtime de seguridad y conserva cursor ante errores"
+    },
+    {
+      "commit": "ce79690d",
+      "capability": "Tabla de dispersiones con anchos por columna y acciones legibles"
     }
   ],
   "requiredText": [
