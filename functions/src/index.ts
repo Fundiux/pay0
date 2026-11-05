@@ -1245,6 +1245,14 @@ const changeSolicitudStatusHandler = async (request: any) => {
         const existingCancellationStatus = String(data.iqCancellationStatus ?? "").trim().toUpperCase();
         const existingCancellationFolio = String(data.iqCancellationFolio ?? "").trim();
 
+        if (existingCancellationStatus === "CONFIRMED_REVIEW_REQUIRED") {
+          throw new HttpsError("failed-precondition", "IQ ya cancelo esta solicitud; requiere revision.");
+        }
+
+        if (data.facturamaCancellationReviewRequired === true) {
+          throw new HttpsError("failed-precondition", "El SAT ya cancelo esta factura; requiere revision.");
+        }
+
         const cancellationAlreadyPending =
           Boolean(activeIqFolio) &&
           existingCancellationFolio === activeIqFolio &&

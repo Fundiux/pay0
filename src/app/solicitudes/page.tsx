@@ -154,7 +154,8 @@ const SolicitudRow = React.memo(({
   const sustituyeFolio = String(s?._sustituyeFolio || "").trim();
   const sustitucionCompleta = statusUpper === "EN_SUSTITUCION" && (!!targetFolio || !!targetId) && !!uuidSustituto;
   const isIqCancellationPending = ["REQUESTED", "OUTCOME_UNKNOWN"].includes(String(s?.iqCancellationStatus || "").trim().toUpperCase());
-  const displayStatus = isIqCancellationPending ? "PENDIENTE CANCELACIÓN" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
+  const isCancellationReview = s?.facturamaCancellationReviewRequired === true || String(s?.iqCancellationStatus || "").trim().toUpperCase() === "CONFIRMED_REVIEW_REQUIRED";
+  const displayStatus = isCancellationReview ? "CANCELADA SAT: REVISAR ABONOS" : isIqCancellationPending ? "PENDIENTE CANCELACIÓN" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
   const canApplyFromPagos = canApplyPagoFromPagos(s);
 
   const sustitucionTrace = buildSustitucionSnapshot(s, allSolicitudes || [], sustitucionIndex);
@@ -271,6 +272,7 @@ const SolicitudRow = React.memo(({
                 className={`px-3 py-1 rounded-full text-[10px] uppercase border tracking-tighter min-w-[95px] h-6 inline-flex items-center justify-center ${
                   displayStatus === "SUSTITUIDA"
                     ? "bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20"
+                    : isCancellationReview ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                     : isIqCancellationPending ? "bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse"
                     : (statusColors[s.status] || "bg-white/5")
                 }`}
@@ -499,9 +501,9 @@ const SolicitudRow = React.memo(({
                         >
                           Completar datos
                         </button>
-                      ) : s?.facturamaCancellationReviewRequired === true || ["REJECTED", "NOT_APPLIED", "CONFIRMED_REVIEW_REQUIRED"].includes(String(s?.iqCancellationStatus || "")) ? (
+                      ) : ["REJECTED", "NOT_APPLIED"].includes(String(s?.iqCancellationStatus || "")) ? (
                         <span className="text-amber-300 uppercase font-normal text-[10px]" title={String(s?.iqCancellationRejectionComment || "")}>
-                          {s?.iqCancellationStatus === "REJECTED" ? "IQ rechazó la cancelación" : s?.iqCancellationStatus === "NOT_APPLIED" ? "Cancelación sin aplicar en IQ" : "Cancelada con abonos: revisar"}
+                          {s?.iqCancellationStatus === "REJECTED" ? "IQ rechazó la cancelación" : "Cancelación sin aplicar en IQ"}
                         </span>
                       ) : String(s?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" || String(s?.status || "").toUpperCase() === "EN_SUSTITUCION" ? (
                         <span className="text-slate-500 uppercase font-normal text-[10px]">Verificacion automatica</span>

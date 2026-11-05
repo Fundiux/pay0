@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { XMLValidator } from "fast-xml-parser";
+import { hasOpenCancellation } from "../../utils/solicitudCancellationState";
 
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export const text = (value: unknown) => String(value ?? "").trim();
@@ -27,6 +28,7 @@ export function assertSource(rootId: string, app: any, solicitud: any, pago: any
   if (!rootId || [app, solicitud, pago].some(row => !row || row.rootId !== rootId)) throw Error("REP_SCOPE_INVALID");
   if (app.status !== "APLICADA" || app.invoiceType !== "PPD" || solicitud.tipoFactura !== "PPD") throw Error("REP_NOT_APPLICABLE");
   if ([solicitud, pago].some(row => row.isDeleted === true || ["CANCELADA", "CANCELADO", "RECHAZADO", "RECHAZADA", "EN_SUSTITUCION"].includes(row.status))) throw Error("REP_SOURCE_CANCELLED");
+  if (hasOpenCancellation(solicitud)) throw Error("REP_SOURCE_CANCELLED");
   if (!solicitud.companyId || solicitud.companyId !== pago.companyId || !solicitud.clienteId || solicitud.clienteId !== pago.clienteId) throw Error("REP_PARTIES_MISMATCH");
   const paid = cents(app.montoAplicado), before = cents(app.saldoAnterior), after = cents(app.saldoInsoluto);
   if (![paid, before, after].every(Number.isSafeInteger) || paid <= 0 || after < 0 || before - paid !== after || !Number.isInteger(app.numeroParcialidad) || app.numeroParcialidad < 1) throw Error("REP_BALANCES_INVALID");

@@ -1,4 +1,5 @@
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
+import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import * as crypto from "crypto";
 import * as admin from "firebase-admin";
@@ -580,6 +581,7 @@ async function markCancelled(input: {
 }): Promise<void> {
   const solicitudRef = db.collection("solicitudes").doc(input.job.solicitudId);
   const now = FieldValue.serverTimestamp();
+  let reviewRequired = false;
 
   await db.runTransaction(async (tx: Transaction) => {
     const solicitudSnap = await tx.get(solicitudRef);
@@ -589,6 +591,12 @@ async function markCancelled(input: {
     }
 
     const solicitud = asRecord(solicitudSnap.data());
+    const applications = await tx.get(db.collection("pagoAplicaciones")
+      .where("rootId", "==", input.job.rootId)
+      .where("solicitudId", "==", input.job.solicitudId));
+    const appliedPayments = applications.docs.filter((row) => cleanText(row.data().status).toUpperCase() === "APLICADA").length;
+    reviewRequired = cleanText(solicitud.iqCancellationStatus) === "CONFIRMED_REVIEW_REQUIRED" ||
+      cancellationNeedsPaymentReview(solicitud, appliedPayments);
     const cancelledBy =
       cleanText(solicitud.iqCancellationRequestedBy) ||
       cleanText(solicitud.cancelledBy) ||
@@ -596,11 +604,9 @@ async function markCancelled(input: {
       "system";
 
     tx.set(solicitudRef, {
-      status: "CANCELADA",
-      cancelledBy,
-      cancelledAt: now,
-      iqOperationStatus: "CANCELADA",
-      iqCancellationStatus: "CONFIRMED",
+      ...(reviewRequired
+        ? { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED" }
+        : { status: "CANCELADA", cancelledBy, cancelledAt: now, iqOperationStatus: "CANCELADA", iqCancellationStatus: "CONFIRMED" }),
       iqCancelledAt: now,
       iqCancelledFolio: input.job.iqFolio,
       iqStatusMonitorStatus: "CANCELLED",
@@ -622,7 +628,7 @@ async function markCancelled(input: {
   });
 
   await safeLogActivity({
-    event: "IQ_SOLICITUD_CANCELADA",
+    event: reviewRequired ? "IQ_CANCELACION_REQUIERE_REVISION" : "IQ_SOLICITUD_CANCELADA",
     rootId: input.job.rootId,
     adminId: input.job.rootId,
     actorUid: "system",

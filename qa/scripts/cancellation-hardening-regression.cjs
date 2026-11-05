@@ -17,11 +17,12 @@ const auth = { uid: root, token: {} };
 const calls = { delete: 0, status: 0 };
 let deleteResponse = () => ({ Status: "pending" });
 let satStatus = "Vigente";
+let lockDuringDelete = null;
 
 global.fetch = async (url, init = {}) => {
   const text = String(url);
   const reply = (status, body) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) });
-  if (init.method === "DELETE") { calls.delete++; await new Promise(resolve => setTimeout(resolve, 50)); const answer = deleteResponse(); return reply(answer.httpStatus || 200, answer); }
+  if (init.method === "DELETE") { calls.delete++; lockDuringDelete = (await db.doc(`solicitudes/${text.match(/cfdi-([^?]+)/)[1]}`).get()).data().facturamaCancellationStatus; await new Promise(resolve => setTimeout(resolve, 50)); const answer = deleteResponse(); return reply(answer.httpStatus || 200, answer); }
   if (text.includes("/cfdi/status")) { calls.status++; return reply(200, { Status: satStatus }); }
   if (text.includes("/api/Acuse/pdf/")) return reply(200, { Content: Buffer.from("%PDF-1.7 acuse").toString("base64") });
   throw new Error(`EXTERNAL_NETWORK_FORBIDDEN ${text}`);
@@ -55,6 +56,7 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   await seed("doble");
   const results = await Promise.allSettled([cancel("doble"), cancel("doble")]);
   assert.equal(calls.delete, 1, "dos clics llegan una sola vez");
+  assert.equal(lockDuringDelete, "REQUESTED", "el candado de pagos cierra antes de llamar a Facturama");
   assert.equal(results.filter(row => row.status === "fulfilled").length, 1);
   assert.ok((await activity("doble")).includes("FACTURAMA_CANCELACION_SOLICITADA"));
 
@@ -75,6 +77,7 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   deleteResponse = () => ({ httpStatus: 400, Message: "No cancelable" });
   await assert.rejects(cancel("falla"), /No cancelable/);
   assert.equal((await db.doc("facturamaInvoices/falla").get()).data().cancellationStatus, "REQUEST_FAILED");
+  assert.equal(hasOpenCancellation((await db.doc("solicitudes/falla").get()).data()), false, "un rechazo reabre los pagos");
   assert.ok((await activity("falla")).includes("FACTURAMA_CANCELACION_FALLIDA"));
   deleteResponse = () => ({ Status: "pending" });
   await cancel("falla");

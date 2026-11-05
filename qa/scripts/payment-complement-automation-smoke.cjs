@@ -230,6 +230,16 @@ async function run(){
  const factSaved=await docs.saveComplementDocuments({rootId:root,solicitudId:factId,pagoId:factId,pagoFolio:'PF',applicationId:factId,invoiceUuid:uuid,installment:1,amountMinor:5800,balanceBefore:116,balanceAfter:58},repXml,Buffer.from('%PDF-1.4\n% PAY0 REP fact'));
  const factRecovery={...adapter,importFacturamaComplement:async()=>{imports++;return factSaved;}};
  await api.checkComplementDaily(factJob,new Date(now.getTime()+86400000),factRecovery);assert.equal(emits,1);assert.equal(imports,1);
+ const reviewId=root+'-review';
+ await db.doc(`solicitudes/${reviewId}`).set({rootId:root,folio:'SR',tipoFactura:'PPD',companyId:root,clienteId:root,despachoId:'vjq4SEnucenerXvoLqtK',facturamaEnvironment:'PRODUCTION',facturamaInvoiceId:'test-invoice',facturaUuid:uuid,status:'PROCESANDO'});
+ await db.doc(`pagos/${reviewId}`).set({rootId:root,folio:'PR',companyId:root,clienteId:root,status:'CONCILIADO',fechaPago:stamp.fromMillis(now.getTime()-86400000),moneda:'MXN'});
+ await db.doc(`pagoAplicaciones/${reviewId}`).set({...app,solicitudId:reviewId,pagoId:reviewId,folio:'APR',iqPlanId:null,iqExecutionAttemptId:null,iqApplicationStatus:null,iqActionExecuted:false});
+ await follow.reconcilePaymentComplement(reviewId);
+ await db.doc(`solicitudes/${reviewId}`).update({facturamaCancellationReviewRequired:true});
+ const reviewJob=job+'-review';await db.doc(`paymentComplementJobs/${reviewJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'PAUSED'});
+ const emitsBeforeReview=emits;await api.executeComplement(reviewJob,adapter);
+ assert.equal(emits,emitsBeforeReview,'a cancelled CFDI under review never gets a REP');
+ const reviewRow=(await db.doc(`paymentComplementJobs/${reviewJob}`).get()).data();assert.equal(reviewRow.status,'BLOCKED');assert.equal(reviewRow.error,'REP_SOURCE_CANCELLED');
  await assert.rejects(api.configurePaymentComplementAutomation.run({auth:{uid:'not-a-user',token:{}},data:{iqEnabled:true,facturamaEnabled:true}}));
  for(const [suffix,key] of [['one','rep1'],['two','rep2'],['three','rep1']]){
    const uploadId=`${root}-${suffix}`,ref=db.doc(`uploads/${uploadId}`);
