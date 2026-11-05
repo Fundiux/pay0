@@ -13,7 +13,7 @@ const FieldValue = admin.firestore.FieldValue;
 
 const PAGE = 100;
 const READ_SPACING_MS = 150;
-const RUN_BUDGET_MS = 220_000;
+const RUN_BUDGET_MS = 150_000;
 const METHODS_PER_RUN = 300;
 
 const text = (value: unknown) => String(value ?? "").trim();
