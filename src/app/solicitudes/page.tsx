@@ -499,6 +499,10 @@ const SolicitudRow = React.memo(({
                         >
                           Completar datos
                         </button>
+                      ) : ["REJECTED", "NOT_APPLIED"].includes(String(s?.iqCancellationStatus || "")) ? (
+                        <span className="text-amber-300 uppercase font-normal text-[10px]" title={String(s?.iqCancellationRejectionComment || "")}>
+                          {s?.iqCancellationStatus === "REJECTED" ? "IQ rechazó la cancelación" : "Cancelación sin aplicar en IQ"}
+                        </span>
                       ) : String(s?.facturamaCancellationStatus || "").toUpperCase() === "PENDING" || String(s?.status || "").toUpperCase() === "EN_SUSTITUCION" ? (
                         <span className="text-slate-500 uppercase font-normal text-[10px]">Verificacion automatica</span>
                       ) : (

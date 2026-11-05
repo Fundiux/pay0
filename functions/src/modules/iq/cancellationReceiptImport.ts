@@ -6,6 +6,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { iqCancellationReceiptAction } from "./cancellationReceiptDomain";
 import { fetchIqCancellationReceipt } from "./cancellationReceiptHttp";
+import { iqCancellationReconcileAction } from "./cancellationReconcileDomain";
 import { fetchIq } from "./iqHttpClient";
 import { loginIqHttpDirect, type IqHttpAuthSession } from "./iqHttpAuth";
 import { IQ_CANCELLATION_CREDENTIALS_KEY, loadSolicitudIqProfile } from "./solicitudCancellationService";
@@ -66,7 +67,76 @@ export async function saveIqCancellationReceipt(solicitudId: string, solicitud: 
   });
 }
 
+async function sessionFor(solicitud: Record<string, any>, sessions: Map<string, IqHttpAuthSession>) {
+  const profile = await loadSolicitudIqProfile({ solicitud, rootId: text(solicitud.rootId) });
+  let session = sessions.get(profile.profileId);
+  if (!session) {
+    session = await loginIqHttpDirect({ apiOrigin: iqApiOrigin(), credentials: { username: profile.username, password: profile.password }, requiredPermissions: "NONE" });
+    sessions.set(profile.profileId, session);
+  }
+  return session;
+}
+
+async function iqInvoiceRow(session: IqHttpAuthSession, iqFolio: string) {
+  const url = new URL("/invoices", session.apiOrigin);
+  url.searchParams.set("filter[id]", iqFolio);
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("offset", "0");
+  const response = await fetchIq(url, { method: "GET", headers: { Accept: "application/json", Authorization: `Bearer ${session.accessToken}` } }, { operation: "cancellation_reconcile" });
+  if (!response.ok) throw new Error(`IQ_CANCELLATION_LOOKUP_HTTP_${response.status}`);
+  const rows = await response.json() as Array<Record<string, unknown>>;
+  const matches = Array.isArray(rows) ? rows.filter(row => text(row.id) === iqFolio) : [];
+  if (matches.length !== 1) throw new Error("IQ_CANCELLATION_ROW_NOT_FOUND");
+  return matches[0];
+}
+
+// Once a solicitud has its invoice the status monitor stops, so this run is what
+// closes those cancellations. It only reads IQ and only moves an open request.
+export async function applyIqCancellationReconcile(ref: FirebaseFirestore.DocumentReference, row: Record<string, unknown>, iqFolio: string) {
+  await db.runTransaction(async tx => {
+    const solicitud = (await tx.get(ref)).data();
+    if (!solicitud || !["REQUESTED", "OUTCOME_UNKNOWN"].includes(text(solicitud.iqCancellationStatus))) return;
+    const action = iqCancellationReconcileAction({ cancellationStatus: solicitud.iqCancellationStatus, operationStatus: row.operation_status, requestedAtMs: millis(solicitud.iqCancellationRequestedAt) });
+    const now = FieldValue.serverTimestamp();
+    const folio = text(solicitud.folio || ref.id);
+    const audit = (event: string, description: string) => logActivityTx(tx, db, { event, rootId: text(solicitud.rootId), actorUid: "SYSTEM", actorRole: "system",
+      referenceId: ref.id, referenceFolio: solicitud.folio || null, referenceType: "solicitud", description });
+    if (action === "CONFIRM") {
+      tx.set(ref, { status: "CANCELADA", cancelledBy: text(solicitud.iqCancellationRequestedBy) || "system", cancelledAt: now, iqOperationStatus: "CANCELADA", iqCancellationStatus: "CONFIRMED",
+        iqCancelledAt: now, iqCancelledFolio: iqFolio, iqLastOperationStatus: text(row.operation_status) || "CANCELADA", iqStatusUpdatedAt: now }, { merge: true });
+      audit("IQ_SOLICITUD_CANCELADA", `Solicitud ${folio} cancelada en IQ. FOLIO IQ: ${iqFolio}`);
+    } else if (action === "PROMOTE") {
+      tx.set(ref, { iqCancellationStatus: "REQUESTED", iqCancellationRequestedAt: now }, { merge: true });
+    } else if (action === "REJECT") {
+      const comment = text(row.rejection_comments).slice(0, 500) || null;
+      tx.set(ref, { iqCancellationStatus: "REJECTED", iqCancellationRejectionComment: comment, iqCancellationRejectedAt: now }, { merge: true });
+      audit("IQ_CANCELACION_RECHAZADA", `IQ no aceptó cancelar ${folio}. FOLIO IQ: ${iqFolio}.${comment ? ` Motivo: ${comment}` : ""}`);
+    } else if (action === "NOT_APPLIED") {
+      tx.set(ref, { iqCancellationStatus: "NOT_APPLIED" }, { merge: true });
+      audit("IQ_CANCELACION_NO_APLICADA", `La cancelación de ${folio} no llegó a IQ; se puede volver a solicitar. FOLIO IQ: ${iqFolio}.`);
+    }
+  });
+}
+
+export async function reconcileIqCancellations(sessions: Map<string, IqHttpAuthSession>) {
+  const open = await db.collection("solicitudes").where("iqCancellationStatus", "in", ["REQUESTED", "OUTCOME_UNKNOWN"]).limit(MAX_LOOKUPS).get();
+  for (const row of open.docs) {
+    const solicitud = row.data();
+    const iqFolio = text(solicitud.iqCancellationFolio || solicitud.iqFolio || solicitud.iqId);
+    if (!text(solicitud.rootId) || !iqFolio || solicitud.isDeleted === true) continue;
+    try {
+      const session = await sessionFor(solicitud, sessions);
+      await applyIqCancellationReconcile(row.ref, await iqInvoiceRow(session, iqFolio), iqFolio);
+    } catch (error) {
+      console.error("IQ_CANCELLATION_RECONCILE_FAILED", row.id, text(error instanceof Error ? error.message : error).slice(0, 200));
+    }
+    await new Promise(resolve => setTimeout(resolve, LOOKUP_SPACING_MS));
+  }
+}
+
 export async function runIqCancellationReceiptCheck() {
+  const sessions = new Map<string, IqHttpAuthSession>();
+  await reconcileIqCancellations(sessions);
   const snap = await db.collection("solicitudes").where("iqCancellationStatus", "in", ["REQUESTED", "CONFIRMED"]).limit(MAX_SCAN).get();
   const lookups: FirebaseFirestore.QueryDocumentSnapshot[] = [];
   for (const row of snap.docs) {
@@ -78,17 +148,11 @@ export async function runIqCancellationReceiptCheck() {
   }
   lookups.sort((a, b) => millis(a.data().iqCancellationReceiptCheckedAt) - millis(b.data().iqCancellationReceiptCheckedAt));
 
-  const sessions = new Map<string, IqHttpAuthSession>();
   for (const row of lookups.slice(0, MAX_LOOKUPS)) {
     const solicitud = row.data();
     const iqFolio = text(solicitud.iqFolio ?? solicitud.iqId);
     try {
-      const profile = await loadSolicitudIqProfile({ solicitud, rootId: text(solicitud.rootId) });
-      let session = sessions.get(profile.profileId);
-      if (!session) {
-        session = await loginIqHttpDirect({ apiOrigin: iqApiOrigin(), credentials: { username: profile.username, password: profile.password }, requiredPermissions: "NONE" });
-        sessions.set(profile.profileId, session);
-      }
+      const session = await sessionFor(solicitud, sessions);
       const receipt = await fetchIqCancellationReceipt({
         apiOrigin: session.apiOrigin, accessToken: session.accessToken, iqFolio,
         fetcher: (url, init) => fetchIq(url, init, { operation: "cancellation_receipt" }),
