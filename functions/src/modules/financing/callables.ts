@@ -25,6 +25,7 @@ import { logActivity,
   logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
 import { assertDispersionFundingOwner } from "./dispersionFunding";
+import { initialCashReceiptStatus } from "../dispersionCashReceipt/domain";
 import {
   applyForwardOnlyDispersionTx,
   prepareForwardOnlyDispersionTx,
@@ -770,6 +771,7 @@ export const createClientDispersion = onCall(
         earningsDistributionId:
           `DISPERSION__${dispersionRef.id}`,
         status: "REGISTRADA",
+        cashReceiptStatus: initialCashReceiptStatus(operationTypeKey),
         note,
         reference,
         balanceMovementId:
@@ -1989,6 +1991,7 @@ export const createClientDispersionsMassive = onCall(
           earningsDistributionId:
             `DISPERSION__${dispersionRef.id}`,
           status: "REGISTRADA",
+          cashReceiptStatus: initialCashReceiptStatus(operationTypeKey),
           note: item.note,
           reference: item.reference,
           balanceMovementId:

@@ -36,7 +36,7 @@ function sha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-async function decodePngDataUrl(input: unknown): Promise<Buffer> {
+export async function decodePngDataUrl(input: unknown): Promise<Buffer> {
   const value = String(input || "");
   const match = value.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new HttpsError("invalid-argument", "Firma PNG invalida.");

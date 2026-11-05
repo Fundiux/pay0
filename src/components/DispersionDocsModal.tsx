@@ -13,6 +13,7 @@ import { runAuthorizedDocumentAction } from "@/lib/authorizedDocumentAction";
 import { CALLABLES } from "@/lib/callableNames";
 import {
   DISPERSION_DOCUMENT_TYPES,
+  SERVER_ONLY_DISPERSION_DOCUMENT_TYPES,
   uploadDispersionDoc,
 } from "@/lib/uploadDispersionDoc";
 
@@ -105,7 +106,7 @@ export default function DispersionDocsModal(props: {
         const rows = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
           .filter((x: any) => String(x.entityType || "") === "clientDispersions")
-          .filter((x: any) => String(x.documentType || "") === "COMPROBANTE_DISPERSION")
+          .filter((x: any) => ["COMPROBANTE_DISPERSION", "FIRMA_RECEPCION_EFECTIVO"].includes(String(x.documentType || "")))
           .sort((a: any, b: any) => {
             const at = Number(a.finalizedAt?.seconds || a.createdAt?.seconds || 0);
             const bt = Number(b.finalizedAt?.seconds || b.createdAt?.seconds || 0);
@@ -338,9 +339,15 @@ export default function DispersionDocsModal(props: {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeDocs.map((doc) => (
+                    {activeDocs.map((doc) => {
+                      const serverOnly = SERVER_ONLY_DISPERSION_DOCUMENT_TYPES.has(String(doc.documentType || ""));
+                      const signer = (doc as any).signatureCapture?.signerName ? String((doc as any).signatureCapture.signerName) : "";
+                      return (
                       <tr key={doc.id} className="border-t border-white/5 text-slate-300">
-                        <td className="px-3 py-2">{doc.documentTypeLabel || getTypeLabel(String(doc.documentType || ""))}</td>
+                        <td className="px-3 py-2">
+                          {doc.documentTypeLabel || getTypeLabel(String(doc.documentType || ""))}
+                          {signer ? <div className="text-[10px] text-slate-500">Firmo: {signer}{(doc as any).signatureCapture?.receiverMatches === false ? " · distinto del beneficiario" : ""}</div> : null}
+                        </td>
                         <td className="px-3 py-2 text-center">{doc.version || "---"}</td>
                         <td className="px-3 py-2 text-center">{doc.status || "---"}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{formatDate(doc.finalizedAt || doc.createdAt)}</td>
@@ -356,6 +363,10 @@ export default function DispersionDocsModal(props: {
                             >
                               <Download size={16} strokeWidth={1.8} />
                             </button>
+                            {serverOnly ? (
+                              <span className="text-[11px] text-slate-500" title="La firma no se desactiva; una nueva firma la reemplaza.">Firma sellada</span>
+                            ) : (
+                              <>
                             <button
                               type="button"
                               onClick={() => prepareDispersionWhatsapp(doc)}
@@ -375,10 +386,13 @@ export default function DispersionDocsModal(props: {
                             >
                               <Trash2 size={16} strokeWidth={1.8} />
                             </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

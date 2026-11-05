@@ -10,6 +10,7 @@ import {
   cleanText,
   formatMoney,
   getDispersionDocumentTypeLabel,
+  isServerOnlyDispersionDocumentType,
   normalizeDispersionDocumentType,
   safeDocId,
   sanitizeFilename,
@@ -160,6 +161,9 @@ export async function initDispersionDocumentUploadCore(request: any) {
   const sizeBytes = Number(data.sizeBytes || 0);
   const documentType = normalizeDispersionDocumentType(data.documentType || "COMPROBANTE_DISPERSION");
   const documentTypeLabel = getDispersionDocumentTypeLabel(documentType);
+  if (isServerOnlyDispersionDocumentType(documentType)) {
+    throw new HttpsError("failed-precondition", "La firma de recepcion solo se captura desde su link de firma.");
+  }
 
   if (!validId(dispersionId) || !originalName) {
     throw new HttpsError("invalid-argument", "dispersionId y originalName son obligatorios.");
@@ -420,6 +424,9 @@ export async function deactivateDispersionDocumentCore(request: any) {
   }
 
   const dispersionId = cleanText(upload.dispersionId || upload.entityId);
+  if (isServerOnlyDispersionDocumentType(upload.documentType)) {
+    throw new HttpsError("failed-precondition", "La firma de recepcion no se desactiva; una nueva firma la reemplaza.");
+  }
 
   await db.runTransaction(async tx => {
   const current = (await tx.get(uploadRef)).data();
