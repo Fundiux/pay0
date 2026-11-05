@@ -3008,12 +3008,12 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
         </div>
 
         <div className="pay0-table-wrap">
-          <table className="pay0-dispersiones-main-table pay0-table min-w-[1380px]">
+          <table className="pay0-dispersiones-main-table pay0-table">
             <colgroup className="pay0-dispersiones-colgroup">
               <col className="pay0-dis-col-folio" />
-              <col className="pay0-dis-col-folio" />
+              <col className="pay0-dis-col-folioiq" />
               <col className="pay0-dis-col-fecha" />
-              <col />
+              <col className="pay0-dis-col-cliente" />
               <col className="pay0-dis-col-beneficiario" />
               <col className="pay0-dis-col-tipo" />
               <col className="pay0-dis-col-banco" />
@@ -3070,11 +3070,11 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                       {row.clabe || row.cardNumber || row.destinationKind || "-"}
                     </td>
                     <td className="pay0-td-money text-white" title={formatMoney(row.amount)}>{formatMoney(row.amount)}</td>
-                    <td className="pay0-td" title={dispersionStatusText(row)}>
-                      {row.status || "-"}
+                    <td className="pay0-td pay0-dis-cell-estatus" title={dispersionStatusText(row)}>
+                      <div>{row.status || "-"}</div>
                       {cashReceiptStatusOfRow(row) ? (
                         <span
-                          className={`ml-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                          className={`pay0-dis-estatus-badge rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
                             cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED
                               ? "border-emerald-500/40 text-emerald-300"
                               : cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.PENDING
@@ -3102,10 +3102,10 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                         title="Comps"
                         aria-label={`Comps ${row.folio || "dispersión sin folio"}`}
                       >
-                        <Plus size={10} />
+                        <Plus size={14} />
                       </button>
                     </td>
-                    <td className="pay0-td text-center">
+                    <td className="pay0-td pay0-dis-cell-acciones text-center">
                       <div className="pay0-dis-actions flex items-center justify-center gap-1">
                         <button
                           type="button"
@@ -3211,7 +3211,7 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                                   row.folio,
                                 )
                               }
-                              className="rounded-lg border border-emerald-600 px-3 py-1 text-xs text-emerald-300 disabled:opacity-50"
+                              className="pay0-dis-iq rounded-lg border border-emerald-600 text-emerald-300 disabled:opacity-50"
                             >
                               {iqBusyId === row.id
                                 ? "Generando IQ..."

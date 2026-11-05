@@ -426,328 +426,85 @@ body {
   padding-right: 2px !important;
 }
 
-/* PAY0 - Dispersiones: layout canonico tabla principal */
+/* PAY0 - Dispersiones: layout canonico de la tabla principal (12 columnas).
+   Una sola fuente de anchos, por clase de columna y no por posicion. Las reglas
+   anteriores por nth-child eran de layouts con menos columnas y fijaban anchos
+   equivocados (Monto 56px, Estatus 132px). Si se agrega o quita una columna,
+   actualizar el colgroup de page.tsx y estos anchos juntos. */
 .pay0-dispersiones-main-table {
-  table-layout: fixed !important;
-  width: 100% !important;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1388px;
 }
 
-.pay0-dispersiones-main-table .pay0-dis-col-folio {
-  width: 7%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-fecha {
-  width: 7%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-beneficiario {
-  width: 19%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-tipo {
-  width: 7%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-banco {
-  width: 12%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-clabe {
-  width: 11%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-tarjeta {
-  width: 8%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-monto {
-  width: 8%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-estatus {
-  width: 6%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-incidencia {
-  width: 7%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-acciones {
-  width: 8%;
-}
+.pay0-dispersiones-main-table .pay0-dis-col-folio { width: 74px; }
+.pay0-dispersiones-main-table .pay0-dis-col-folioiq { width: 90px; }
+.pay0-dispersiones-main-table .pay0-dis-col-fecha { width: 136px; }
+.pay0-dispersiones-main-table .pay0-dis-col-cliente { width: 124px; }
+.pay0-dispersiones-main-table .pay0-dis-col-beneficiario { width: 130px; }
+.pay0-dispersiones-main-table .pay0-dis-col-tipo { width: 122px; }
+.pay0-dispersiones-main-table .pay0-dis-col-banco { width: 96px; }
+.pay0-dispersiones-main-table .pay0-dis-col-dato { width: 146px; }
+.pay0-dispersiones-main-table .pay0-dis-col-monto { width: 112px; }
+.pay0-dispersiones-main-table .pay0-dis-col-estatus { width: 122px; }
+.pay0-dispersiones-main-table .pay0-dis-col-docs { width: 56px; }
+.pay0-dispersiones-main-table .pay0-dis-col-acciones { width: 180px; }
 
 .pay0-dispersiones-main-table th,
 .pay0-dispersiones-main-table td {
-  vertical-align: middle !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  min-width: 0 !important;
-}
-
-.pay0-dispersiones-main-table th > *,
-.pay0-dispersiones-main-table td > * {
-  min-width: 0 !important;
-  max-width: 100% !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-}
-
-/* Folio, fecha, beneficiario y banco a la izquierda */
-.pay0-dispersiones-main-table th:nth-child(1),
-.pay0-dispersiones-main-table td:nth-child(1),
-.pay0-dispersiones-main-table th:nth-child(2),
-.pay0-dispersiones-main-table td:nth-child(2),
-.pay0-dispersiones-main-table th:nth-child(3),
-.pay0-dispersiones-main-table td:nth-child(3),
-.pay0-dispersiones-main-table th:nth-child(5),
-.pay0-dispersiones-main-table td:nth-child(5) {
-  text-align: left !important;
-}
-
-.pay0-dispersiones-main-table th:nth-child(1),
-.pay0-dispersiones-main-table td:nth-child(1),
-.pay0-dispersiones-main-table th:nth-child(2),
-.pay0-dispersiones-main-table td:nth-child(2) {
-  padding-left: 8px !important;
-  padding-right: 4px !important;
-}
-
-.pay0-dispersiones-main-table th:nth-child(3),
-.pay0-dispersiones-main-table td:nth-child(3),
-.pay0-dispersiones-main-table th:nth-child(5),
-.pay0-dispersiones-main-table td:nth-child(5) {
-  padding-left: 6px !important;
-  padding-right: 6px !important;
-}
-
-/* Tipo, CLABE, Tarjeta, Estatus, Incidencia y Acc. compactos */
-.pay0-dispersiones-main-table th:nth-child(4),
-.pay0-dispersiones-main-table td:nth-child(4),
-.pay0-dispersiones-main-table th:nth-child(6),
-.pay0-dispersiones-main-table td:nth-child(6),
-.pay0-dispersiones-main-table th:nth-child(7),
-.pay0-dispersiones-main-table td:nth-child(7),
-.pay0-dispersiones-main-table th:nth-child(9),
-.pay0-dispersiones-main-table td:nth-child(9),
-.pay0-dispersiones-main-table th:nth-child(10),
-.pay0-dispersiones-main-table td:nth-child(10),
-.pay0-dispersiones-main-table th:nth-child(11),
-.pay0-dispersiones-main-table td:nth-child(11) {
-  text-align: center !important;
-  padding-left: 3px !important;
-  padding-right: 3px !important;
-}
-
-/* Monto centrado y estable */
-.pay0-dispersiones-main-table th:nth-child(8),
-.pay0-dispersiones-main-table td:nth-child(8) {
-  text-align: center !important;
-  font-variant-numeric: tabular-nums;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
-}
-
-/* Incidencia siempre una linea */
-.pay0-dispersiones-main-table td:nth-child(10) div {
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-}
-
-/* Acciones compactas */
-.pay0-dispersiones-main-table .pay0-dis-actions {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 4px !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-actions button,
-.pay0-dispersiones-main-table .pay0-dis-actions span {
-  max-width: 100% !important;
-  min-width: 0 !important;
-  white-space: nowrap !important;
-  padding: 0.18rem 0.35rem !important;
-  font-size: 10px !important;
-  line-height: 1 !important;
-  border-radius: 0.45rem !important;
-}
-
-.pay0-dispersiones-main-table th:nth-child(11),
-.pay0-dispersiones-main-table td:nth-child(11) {
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-}
-
-/* T4-D6: columna DOCS canonica en Dispersiones */
-.pay0-dispersiones-main-table .pay0-dis-col-docs {
-  width: 58px;
-  min-width: 58px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-acciones {
-  width: 132px;
-  min-width: 132px;
-}
-
-.pay0-dispersiones-main-table th:nth-child(11),
-.pay0-dispersiones-main-table td:nth-child(11) {
-  width: 58px;
-  min-width: 58px;
-  max-width: 58px;
-  text-align: center;
-}
-
-.pay0-dispersiones-main-table th:nth-child(12),
-.pay0-dispersiones-main-table td:nth-child(12) {
-  width: 132px;
-  min-width: 132px;
-  max-width: 132px;
-  text-align: center;
-}
-
-/* UI-DISP-TABLE-COMPACT-FIX4 */
-.pay0-dispersiones-main-table .pay0-dis-col-dato {
-  width: 15%;
-}
-
-.pay0-dispersiones-main-table th:nth-child(10),
-.pay0-dispersiones-main-table td:nth-child(10) {
-  width: 58px !important;
-  min-width: 58px !important;
-  max-width: 58px !important;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-  text-align: center;
-}
-
-.pay0-dispersiones-main-table th:nth-child(11),
-.pay0-dispersiones-main-table td:nth-child(11) {
-  width: 132px !important;
-  min-width: 132px !important;
-  max-width: 132px !important;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-  text-align: center;
-}
-/* UI-DISP-NO-INCIDENCIA-FIX5 */
-.pay0-dispersiones-main-table .pay0-dis-col-dato {
-  width: 17%;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-docs {
-  width: 56px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-acciones {
-  width: 132px;
-}
-
-.pay0-dispersiones-main-table th:nth-child(9),
-.pay0-dispersiones-main-table td:nth-child(9) {
-  width: 56px !important;
-  min-width: 56px !important;
-  max-width: 56px !important;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-  text-align: center;
-}
-
-.pay0-dispersiones-main-table th:nth-child(10),
-.pay0-dispersiones-main-table td:nth-child(10) {
-  width: 132px !important;
-  min-width: 132px !important;
-  max-width: 132px !important;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-  text-align: center;
-}
-/* UI-DISP-TABLE-WIDTH-FIX6 START */
-.pay0-dispersiones-main-table .pay0-table {
-  table-layout: fixed;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-folio {
-  width: 82px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-fecha {
-  width: 138px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-beneficiario {
-  width: 275px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-tipo {
-  width: 72px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-banco {
-  width: 140px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-dato {
-  width: 190px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-monto {
-  width: 120px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-estatus {
-  width: 104px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-docs {
-  width: 62px;
-}
-
-.pay0-dispersiones-main-table .pay0-dis-col-acciones {
-  width: 118px;
-}
-
-.pay0-dispersiones-main-table .pay0-th {
-  padding-top: 9px !important;
-  padding-bottom: 9px !important;
-}
-
-.pay0-dispersiones-main-table .pay0-td,
-.pay0-dispersiones-main-table .pay0-td-date,
-.pay0-dispersiones-main-table .pay0-td-amount {
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
-}
-
-.pay0-dispersiones-main-table .pay0-td,
-.pay0-dispersiones-main-table .pay0-td-date,
-.pay0-dispersiones-main-table .pay0-td-amount,
-.pay0-dispersiones-main-table .pay0-th {
+  vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
 }
 
-.pay0-dispersiones-main-table th:nth-child(9),
-.pay0-dispersiones-main-table td:nth-child(9) {
-  text-align: center !important;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
+.pay0-dispersiones-main-table th:nth-child(n+9) { text-align: center; }
+.pay0-dispersiones-main-table th:nth-child(9) { text-align: right; }
+
+/* Estatus y Acciones muestran todo su contenido: pueden partir en lineas. */
+.pay0-dispersiones-main-table td.pay0-dis-cell-estatus,
+.pay0-dispersiones-main-table td.pay0-dis-cell-acciones {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 
-.pay0-dispersiones-main-table th:nth-child(10),
-.pay0-dispersiones-main-table td:nth-child(10) {
-  text-align: center !important;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
+.pay0-dispersiones-main-table .pay0-dis-estatus-badge {
+  display: inline-block;
+  margin-top: 2px;
+  margin-left: 0;
+  white-space: nowrap;
 }
-/* UI-DISP-TABLE-WIDTH-FIX6 END */
+
+.pay0-dispersiones-main-table .pay0-dis-actions {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 4px;
+}
+
+.pay0-dispersiones-main-table .pay0-dis-actions > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pay0-dispersiones-main-table .pay0-dis-actions svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.pay0-dispersiones-main-table .pay0-dis-actions .pay0-dis-iq {
+  padding: 0.2rem 0.5rem;
+  font-size: 11px;
+  line-height: 1rem;
+}
+/* UI-DISP-TABLE-LAYOUT-CANON END */
 
 /* PAY0-CANON-TABLE-ROW-COMPACT-1 */
 /* Visual-only table density canon. Do not change font size here. */
