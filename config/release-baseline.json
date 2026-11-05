@@ -184,6 +184,14 @@
     {
       "commit": "e01126fb",
       "capability": "Cancelaciones Facturama e IQ: un solo envio, abonos protegidos, seguimiento hasta el SAT y desenlaces IQ"
+    },
+    {
+      "commit": "7005519b",
+      "capability": "Pagos bloqueados con cancelacion en curso; confirmaciones con abonos quedan en revision; fallas de red en Facturama se siguen y PENDING expira a 7 dias"
+    },
+    {
+      "commit": "9cf41ebb",
+      "capability": "Complementos y re-cancelaciones detenidos en solicitudes bajo revision; candado de pagos dentro de la transaccion"
     }
   ],
   "requiredText": [
