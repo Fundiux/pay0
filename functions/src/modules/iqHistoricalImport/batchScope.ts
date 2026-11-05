@@ -1,12 +1,15 @@
 import { canonicalJson, deterministicId, type P4Action, type P4Manifest } from "./domain";
 import { isReviewAction, isWriteAction, P4_PROTECTED_REVIEW_IQ_IDS } from "./phasedExecution";
 
-export const P4_SCOPE_SELECTOR_VERSION = "P4_SCOPE_V8_3";
+// V8_4: client dependencies of a date-range scope are executable members, so a
+// month block can create the IQ clients its invoices, deposits and applications
+// need instead of leaving them EXTERNAL_DEPENDENCY_PENDING forever.
+export const P4_SCOPE_SELECTOR_VERSION = "P4_SCOPE_V8_4";
 export const P4_SCOPE_TIMEZONE = "America/Mexico_City";
 export const P4_SCOPE_MAX_BUDGET = Object.freeze({ maxActions: 25, maxWrites: 100, maxDurationMs: 480_000, maxErrors: 5, maxConcurrent: 1, maxRetries: 3 });
 
 export type P4ScopeType = "CANARY" | "CERTIFICATION_WINDOW" | "BATCH_B" | "BATCH_C" | "MONTH_BLOCK";
-export type P4ScopeMemberRole = "PRIMARY" | "EXTERNAL_DEPENDENCY";
+export type P4ScopeMemberRole = "PRIMARY" | "CLIENT_DEPENDENCY" | "EXTERNAL_DEPENDENCY";
 export type P4ScopeRequest = { type:P4ScopeType; range?:{start:string;end:string;timezone:string}; month?:string; block?:"01_10"|"11_20"|"21_END" };
 export type P4HistoricalBatchEvidence = { certified:boolean; selectorVersion:string; sourceManifestId:string; sourceManifestHash:string; sourceRunId:string; actionIds:string[]; evidenceHash:string };
 export type P4ScopeMember = { actionId:string; entityType:P4Action["entityType"]; iqEntityId:string; canonicalGroupId:string; componentId:string|null; operation:string; role:P4ScopeMemberRole; historicalDate:string|null; dependencies:string[]; order:number };
@@ -57,7 +60,8 @@ function terminal(action:P4Action):boolean{
 }
 
 function assertHistoricalEvidence(manifest:P4Manifest,request:P4ScopeRequest,evidence?:P4HistoricalBatchEvidence):Set<string>{
-  if(!evidence?.certified||evidence.selectorVersion!==P4_SCOPE_SELECTOR_VERSION||evidence.sourceManifestId===""||evidence.sourceRunId==="")throw Object.assign(new Error(`Certified historical evidence missing for ${request.type}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INCOMPLETE"});
+  if(evidence?.certified&&evidence.selectorVersion!==P4_SCOPE_SELECTOR_VERSION)throw Object.assign(new Error(`Evidencia certificada con selector ${evidence.selectorVersion}; requiere recertificación para ${P4_SCOPE_SELECTOR_VERSION}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_VERSION_MISMATCH"});
+  if(!evidence?.certified||evidence.sourceManifestId===""||evidence.sourceRunId==="")throw Object.assign(new Error(`Certified historical evidence missing for ${request.type}`),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INCOMPLETE"});
   const content={selectorVersion:evidence.selectorVersion,sourceManifestId:evidence.sourceManifestId,sourceManifestHash:evidence.sourceManifestHash,sourceRunId:evidence.sourceRunId,actionIds:[...new Set(evidence.actionIds)].sort()};
   const expected=deterministicId(canonicalJson(content));if(evidence.evidenceHash!==expected)throw Object.assign(new Error("Historical evidence hash mismatch"),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INVALID"});
   const ids=new Set(content.actionIds);if(!ids.size||[...ids].some(id=>!manifest.actions.some(action=>action.actionId===id)))throw Object.assign(new Error("Historical evidence references absent actions"),{code:"P4_SCOPE_HISTORICAL_EVIDENCE_INVALID"});
@@ -72,6 +76,11 @@ export function buildExecutionScope(input:{manifest:P4Manifest;request:P4ScopeRe
   else {const range=requestRange(request)!;primaryIds=new Set(manifest.actions.filter(action=>{const date=isoDate(action.historicalTime?.normalizedDate);return !!date&&date>=range.start&&date<=range.end;}).map(action=>action.actionId));}
   const roles=new Map<string,P4ScopeMemberRole>();for(const id of primaryIds)roles.set(id,"PRIMARY");
   const visit=(id:string)=>{const action=byId.get(id);if(!action)return;for(const dep of action.dependencies||[]){if(completed.has(dep)||roles.has(dep))continue;roles.set(dep,"EXTERNAL_DEPENDENCY");visit(dep);}};for(const id of primaryIds)visit(id);
+  // A client has no operating date of its own: the planner adds it only because a
+  // primary row of this range needs it. Date-range scopes create such a client as
+  // a member (clients sort first) instead of parking the whole range behind it.
+  // Reconciling an existing client (RECONCILE) stays an external dependency.
+  if(request.type==="MONTH_BLOCK"||request.type==="CERTIFICATION_WINDOW")for(const [id,role] of roles){const action=byId.get(id);if(role==="EXTERNAL_DEPENDENCY"&&action?.entityType==="CLIENT"&&action.operation==="CREATE_HISTORICAL"&&!completed.has(id))roles.set(id,"CLIENT_DEPENDENCY");}
   const excluded:Array<{actionId:string;iqEntityId:string;reason:string}>=[];
   const selected=[...roles].map(([id,role])=>({action:byId.get(id)!,role})).filter(row=>{
     const reason=completed.has(row.action.actionId)?"COMPLETED":row.action.componentId&&isolated.has(row.action.componentId)?"FINANCIAL_COMPONENT_REVIEW":P4_PROTECTED_REVIEW_IQ_IDS.has(row.action.iqEntityId)?"PROTECTED_REVIEW":isReviewAction(row.action)?"REVIEW":terminal(row.action)?"TERMINAL":!isWriteAction(row.action)?"NO_CHANGE":"";
@@ -97,7 +106,10 @@ export function assertScopeApproval(input:{scope:P4Scope;manifest:P4Manifest;sco
 export function scopeQueue(scope:P4Scope,manifest:P4Manifest):P4Action[]{const byId=new Map(manifest.actions.map(action=>[action.actionId,action]));return scope.members.map(member=>byId.get(member.actionId)).filter((action):action is P4Action=>!!action);}
 
 export function scopeCanaryQueue(scope:P4Scope,manifest:P4Manifest,completed:Set<string>):P4Action[]{
-  const queue=scopeQueue(scope,manifest);
-  const candidate=queue.find(action=>!completed.has(action.actionId)&&(action.dependencies||[]).every(id=>completed.has(id)));
+  const queue=scopeQueue(scope,manifest),byId=new Map(manifest.actions.map(action=>[action.actionId,action]));
+  // Same rule as the executor's dependencySatisfied: a reviewed dependency never
+  // satisfies; NO_OP/EXISTING is satisfied by the current PAY0 state.
+  const satisfied=(id:string)=>{const dependency=byId.get(id);if(!dependency||isReviewAction(dependency))return false;return completed.has(id)||["NO_OP","EXISTING"].includes(dependency.operation);};
+  const candidate=queue.find(action=>!completed.has(action.actionId)&&(action.dependencies||[]).every(satisfied));
   return candidate?[candidate]:[];
 }
