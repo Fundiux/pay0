@@ -2,18 +2,31 @@ export const MAX_DISPERSION_DOCUMENT_SIZE_BYTES = 1024 * 1024;
 
 export const DISPERSION_DOCUMENT_TYPES = [
   "COMPROBANTE_DISPERSION",
+  "FIRMA_RECEPCION_EFECTIVO",
 ] as const;
 
 export type DispersionDocumentType = typeof DISPERSION_DOCUMENT_TYPES[number];
 
+/** Document types only the server writes (signature links). Manual upload and deactivation reject them. */
+export const SERVER_ONLY_DISPERSION_DOCUMENT_TYPES: ReadonlySet<DispersionDocumentType> = new Set<DispersionDocumentType>([
+  "FIRMA_RECEPCION_EFECTIVO",
+]);
+
 export function normalizeDispersionDocumentType(input: any): DispersionDocumentType {
   const raw = String(input || "").trim().toUpperCase();
+  if (raw === "FIRMA_RECEPCION_EFECTIVO") return "FIRMA_RECEPCION_EFECTIVO";
   if (raw === "COMPROBANTE_DISPERSION") return "COMPROBANTE_DISPERSION";
   return "COMPROBANTE_DISPERSION";
 }
 
+export function isServerOnlyDispersionDocumentType(input: any): boolean {
+  return SERVER_ONLY_DISPERSION_DOCUMENT_TYPES.has(normalizeDispersionDocumentType(input));
+}
+
 export function getDispersionDocumentTypeLabel(type: DispersionDocumentType): string {
   switch (type) {
+    case "FIRMA_RECEPCION_EFECTIVO":
+      return "Firma de recepcion de efectivo";
     case "COMPROBANTE_DISPERSION":
     default:
       return "Comprobante de Dispersion";

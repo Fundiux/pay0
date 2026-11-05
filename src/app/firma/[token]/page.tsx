@@ -13,6 +13,10 @@ export default function PublicSignaturePage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasInkRef = useRef(false);
+  // A tap is not a signature: ink only counts after a stroke of real length.
+  const inkDistanceRef = useRef(0);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const MIN_INK_DISTANCE_PX = 40;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -69,6 +73,8 @@ export default function PublicSignaturePage() {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     hasInkRef.current = false;
+    inkDistanceRef.current = 0;
+    lastPointRef.current = null;
   }, [loading, error, done]);
 
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -86,7 +92,7 @@ export default function PublicSignaturePage() {
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     drawingRef.current = true;
-    hasInkRef.current = true;
+    lastPointRef.current = p;
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
   }
@@ -99,12 +105,17 @@ export default function PublicSignaturePage() {
     event.preventDefault();
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
+    const last = lastPointRef.current;
+    if (last) inkDistanceRef.current += Math.hypot(p.x - last.x, p.y - last.y);
+    lastPointRef.current = p;
+    if (inkDistanceRef.current >= MIN_INK_DISTANCE_PX) hasInkRef.current = true;
   }
 
   function end(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
     event.preventDefault();
     drawingRef.current = false;
+    lastPointRef.current = null;
     try {
       canvasRef.current?.releasePointerCapture(event.pointerId);
     } catch {}
@@ -119,6 +130,8 @@ export default function PublicSignaturePage() {
     ctx.fillRect(0, 0, rect.width, rect.height);
     ctx.strokeStyle = "#0f172a";
     hasInkRef.current = false;
+    inkDistanceRef.current = 0;
+    lastPointRef.current = null;
   }
 
   async function submit() {
@@ -136,7 +149,7 @@ export default function PublicSignaturePage() {
       return;
     }
     if (!hasInkRef.current) {
-      setError("Firma dentro del recuadro.");
+      setError("Firma dentro del recuadro con un trazo completo, no solo un punto.");
       return;
     }
 

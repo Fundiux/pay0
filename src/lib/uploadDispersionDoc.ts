@@ -11,7 +11,15 @@ export const DISPERSION_DOCUMENT_TYPES = [
     label: "Comprobante de Dispersion",
     accept: "application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp",
   },
+  // Written only by the public signature link; never uploaded by hand.
+  {
+    value: "FIRMA_RECEPCION_EFECTIVO",
+    label: "Firma de recepcion de efectivo",
+    accept: "",
+  },
 ] as const;
+
+export const SERVER_ONLY_DISPERSION_DOCUMENT_TYPES: ReadonlySet<string> = new Set(["FIRMA_RECEPCION_EFECTIVO"]);
 
 export type DispersionDocumentType = typeof DISPERSION_DOCUMENT_TYPES[number]["value"];
 

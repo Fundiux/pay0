@@ -120,6 +120,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   CONSTANCIA_RECEPCION_GENERADA: eventEntry("CONSTANCIA_RECEPCION_GENERADA", "Constancia de recepcion generada", "docs", "document", "success"),
   DOCUMENTO_DISPERSION_SUBIDO: eventEntry("DOCUMENTO_DISPERSION_SUBIDO", "Comprobante de dispersion subido", "docs", "document", "success"),
   DOCUMENTO_DISPERSION_DESACTIVADO: eventEntry("DOCUMENTO_DISPERSION_DESACTIVADO", "Comprobante de dispersion desactivado", "docs", "document", "warning"),
+  DISPERSION_FIRMA_EFECTIVO_LINK_CREADO: eventEntry("DISPERSION_FIRMA_EFECTIVO_LINK_CREADO", "Link de firma de efectivo creado", "dispersiones", "document", "info"),
+  DISPERSION_FIRMA_EFECTIVO_CAPTURADA: eventEntry("DISPERSION_FIRMA_EFECTIVO_CAPTURADA", "Firma de recepcion de efectivo capturada", "dispersiones", "document", "success"),
 
   BENEFICIARIO_CREADO: eventEntry("BENEFICIARIO_CREADO", "Beneficiario creado", "beneficiarios", "business", "success"),
   BENEFICIARIO_METODO_CREADO: eventEntry("BENEFICIARIO_METODO_CREADO", "Metodo de beneficiario creado", "beneficiarios", "business", "success"),
