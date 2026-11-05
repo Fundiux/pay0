@@ -46,4 +46,10 @@ async function reconnectLocalWorker(options) {
   await transport.operate("HEARTBEAT", { ready: false, poll: false });
   return transport;
 }
-module.exports = { createLocalWorker, consumeEnrollmentTransfer, reconnectLocalWorker };
+// Para arrancar el conector: devuelve la configuración de transporte con la llave y el vínculo guardados en la bóveda.
+async function loadWorkerRuntime(options) {
+  const vault = await privateVault(options, "load");
+  if (!vault.binding) throw Error("ENROLLMENT_TRANSFER_REQUIRED");
+  return { ...options, privateKeyPem: vault.privateKeyPem, binding: vault.binding };
+}
+module.exports = { createLocalWorker, consumeEnrollmentTransfer, reconnectLocalWorker, loadWorkerRuntime };
