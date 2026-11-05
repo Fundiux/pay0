@@ -10,7 +10,8 @@ import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecy
 import { assertPay0Issuer, fiscalIssuerReason, PAY0_DISPATCH_ID } from "./issuerGuard";
 import { logActivityBatch } from "../../utils/logActivity";
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
-import { facturamaCancellationBlock } from "./cancellationGuard";
+import { facturamaCancellationBlock, PENDING_WINDOW_MS } from "./cancellationGuard";
+import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -65,7 +66,7 @@ async function requestFacturama(baseUrl: string, path: string, init: RequestInit
   try { parsed = body ? JSON.parse(body) : null; } catch { parsed = body; }
   if (!response.ok) {
     const detail = clean(parsed?.Message || parsed?.message || parsed?.ModelState || body || `HTTP ${response.status}`, 1000);
-    throw new HttpsError(response.status === 401 || response.status === 403 ? "permission-denied" : "failed-precondition", `Facturama ${baseUrl.includes("apisandbox") ? "sandbox" : "producción"} rechazó la solicitud (${response.status}): ${detail}`);
+    throw Object.assign(new HttpsError(response.status === 401 || response.status === 403 ? "permission-denied" : "failed-precondition", `Facturama ${baseUrl.includes("apisandbox") ? "sandbox" : "producción"} rechazó la solicitud (${response.status}): ${detail}`), { providerStatus: response.status });
   }
   return parsed;
 }
@@ -363,11 +364,11 @@ export const cancelFacturamaProductionInvoice = onCall(
     const invRef = db.doc(`facturamaInvoices/${invoiceId}`); const invSnap = await invRef.get(); const inv: any = invSnap.data() || {};
     if (!invSnap.exists || clean(inv.rootId, 128) !== rootId || inv.environment !== "PRODUCTION" || !inv.facturamaCfdiId) throw new HttpsError("failed-precondition", "CFDI productivo Facturama no disponible.");
     if (inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
-    const applications = await db.collection("pagoAplicaciones").where("rootId", "==", rootId).where("solicitudId", "==", solicitudId).get();
-    const appliedPayments = applications.docs.filter(row => clean(row.data().status, 32).toUpperCase() === "APLICADA").length;
     // Two clicks or two users must reach Facturama only once.
     await db.runTransaction(async tx => {
       const latest: any = (await tx.get(invRef)).data() || {};
+      const applications = await tx.get(db.collection("pagoAplicaciones").where("rootId", "==", rootId).where("solicitudId", "==", solicitudId));
+      const appliedPayments = applications.docs.filter(row => clean(row.data().status, 32).toUpperCase() === "APLICADA").length;
       const reason = facturamaCancellationBlock({ solicitud: sol, invoice: latest, motive, appliedPayments });
       if (reason) throw new HttpsError("failed-precondition", reason);
       tx.set(invRef, { cancellationStatus: "REQUESTING", cancellationRequestedAt: FieldValue.serverTimestamp(), cancellationRequestedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -377,9 +378,13 @@ export const cancelFacturamaProductionInvoice = onCall(
     try {
       result = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(inv.facturamaCfdiId)}?${qs.toString()}`, { method: "DELETE" });
     } catch (error: any) {
+      // Only a 4xx proves it was not cancelled. After a timeout or a 5xx the DELETE
+      // may have landed, so it stays open and the scheduled check settles it.
+      const rejected = Number(error?.providerStatus) >= 400 && Number(error?.providerStatus) < 500;
       const failure = db.batch();
-      failure.set(invRef, { cancellationStatus: "REQUEST_FAILED", cancellationError: clean(error?.message || error, 500), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      logActivityBatch(failure, db, { event: "FACTURAMA_CANCELACION_FALLIDA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: `Facturama no aceptó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` });
+      failure.set(invRef, { cancellationStatus: rejected ? "REQUEST_FAILED" : "REQUEST_UNCERTAIN", cancellationMotive: motive, cancellationError: clean(error?.message || error, 500), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (!rejected) failure.set(solSnap.ref, { facturamaCancellationStatus: "PENDING", motivoCancelacionSAT: motive, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      logActivityBatch(failure, db, { event: rejected ? "FACTURAMA_CANCELACION_FALLIDA" : "FACTURAMA_CANCELACION_INCIERTA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: rejected ? `Facturama no aceptó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` : `No se confirmó si la cancelación de ${clean(sol.folio || solicitudId, 80)} llegó a Facturama; PAY0 verificará su estado.` });
       await failure.commit();
       throw error;
     }
@@ -435,6 +440,12 @@ async function refreshFacturamaCancellationCore(rootId: string, solicitudId: str
     const result = await requestFacturama(PRODUCTION_BASE_URL, `/cfdi/status?${query.toString()}`);
     const satStatus = clean(result?.Status || result?.status, 64).toUpperCase();
     const isCanceled = satStatus === "CANCELADO" || satStatus === "CANCELED";
+    const applications = isCanceled ? await db.collection("pagoAplicaciones").where("rootId", "==", rootId).where("solicitudId", "==", solicitudId).get() : null;
+    const appliedPayments = applications?.docs.filter(row => clean(row.data().status, 32).toUpperCase() === "APLICADA").length ?? 0;
+    const reviewRequired = isCanceled && cancellationNeedsPaymentReview(sol, appliedPayments);
+    const requestedAt = inv.cancellationRequestedAt?.toMillis?.() ?? 0;
+    const stillPending = !isCanceled && requestedAt > 0 && Date.now() - requestedAt < PENDING_WINDOW_MS;
+    const expired = !isCanceled && requestedAt > 0 && !stillPending;
     let receiptUploadId = clean(inv.cancellationReceiptUploadId, 128) || null;
     let receiptError: string | null = null;
     if (isCanceled && !receiptUploadId && inv.facturamaCfdiId) {
@@ -451,26 +462,28 @@ async function refreshFacturamaCancellationCore(rootId: string, solicitudId: str
     const patch = {
       // Vigente only means the SAT has not closed it yet: an open request stays
       // pending, or nothing would keep following it.
-      facturamaCancellationStatus: !isCanceled && inv.cancellationRequestedAt ? "PENDING" : satStatus || "UNKNOWN",
+      facturamaCancellationStatus: stillPending ? "PENDING" : expired ? "SIN_CONFIRMAR" : satStatus || "UNKNOWN",
+      // The key that reports a SAT rejection is unverified: keep the names to read it from a real response.
+      facturamaCancellationResponseKeys: result && typeof result === "object" ? Object.keys(result).slice(0, 20) : [],
       facturamaCancellationSatStatus: satStatus || "UNKNOWN",
       facturamaCancellationIsCancelable: clean(result?.IsCancelable || result?.isCancelable, 180) || null,
       facturamaCancellationCheckedAt: FieldValue.serverTimestamp(),
       facturamaCancellationCheckedBy: uid,
       ...(receiptUploadId ? { cancellationReceiptUploadId: receiptUploadId, cancellationReceiptStatus: "ACTIVE", cancellationReceiptDownloadedAt: FieldValue.serverTimestamp() } : {}),
       ...(receiptError ? { cancellationReceiptStatus: "PENDING_RETRY", cancellationReceiptError: receiptError } : {}),
-      ...(isCanceled ? { status: "CANCELADA", sustitucionStatus: "CANCELADA_SAT" } : {}),
+      ...(reviewRequired ? { facturamaCancellationReviewRequired: true } : isCanceled ? { status: "CANCELADA", sustitucionStatus: "CANCELADA_SAT" } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     };
     await Promise.all([
       solSnap.ref.set(patch, { merge: true }),
       invSnap?.exists ? invSnap.ref.set({ ...(isCanceled ? { cancellationStatus: "CANCELED" } : {}), cancellationSatStatus: satStatus || "UNKNOWN", cancellationCheckedAt: FieldValue.serverTimestamp(), cancellationCheckedBy: uid, ...(receiptUploadId ? { cancellationReceiptUploadId: receiptUploadId, cancellationReceiptStatus: "ACTIVE", cancellationReceiptDownloadedAt: FieldValue.serverTimestamp() } : {}), ...(receiptError ? { cancellationReceiptStatus: "PENDING_RETRY", cancellationReceiptError: receiptError } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true }) : Promise.resolve(),
     ]);
-    if (isCanceled && !["CANCELADA", "CANCELADO"].includes(clean(sol.status, 32).toUpperCase())) {
+    if (isCanceled && !["CANCELADA", "CANCELADO"].includes(clean(sol.status, 32).toUpperCase()) && sol.facturamaCancellationReviewRequired !== true) {
       const audit = db.batch();
-      logActivityBatch(audit, db, { event: "FACTURAMA_CANCELACION_CONFIRMADA", rootId, actorUid: uid, actorRole: uid === "system" ? "system" : "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: `El SAT confirmó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` });
+      logActivityBatch(audit, db, { event: reviewRequired ? "FACTURAMA_CANCELACION_REQUIERE_REVISION" : "FACTURAMA_CANCELACION_CONFIRMADA", rootId, actorUid: uid, actorRole: uid === "system" ? "system" : "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", amount: Number(sol.totalAbonado || 0), description: reviewRequired ? `El SAT canceló ${clean(sol.folio || solicitudId, 80)}, pero tiene abonos por ${Number(sol.totalAbonado || 0)}: requiere revisión.` : `El SAT confirmó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` });
       await audit.commit();
     }
-    return { ok: true, solicitudId, status: satStatus || "UNKNOWN", isCancelable: clean(result?.IsCancelable || result?.isCancelable, 180) || null, terminal: isCanceled };
+    return { ok: true, solicitudId, status: satStatus || "UNKNOWN", isCancelable: clean(result?.IsCancelable || result?.isCancelable, 180) || null, terminal: isCanceled && !reviewRequired };
 }
 
 export const refreshFacturamaProductionCancellationStatus = onCall(

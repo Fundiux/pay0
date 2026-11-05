@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 import { logActivityTx } from "../../utils/logActivity";
+import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { iqCancellationReceiptAction } from "./cancellationReceiptDomain";
 import { fetchIqCancellationReceipt } from "./cancellationReceiptHttp";
@@ -97,11 +98,17 @@ export async function applyIqCancellationReconcile(ref: FirebaseFirestore.Docume
     const solicitud = (await tx.get(ref)).data();
     if (!solicitud || !["REQUESTED", "OUTCOME_UNKNOWN"].includes(text(solicitud.iqCancellationStatus))) return;
     const action = iqCancellationReconcileAction({ cancellationStatus: solicitud.iqCancellationStatus, operationStatus: row.operation_status, requestedAtMs: millis(solicitud.iqCancellationRequestedAt) });
+    const applications = action === "CONFIRM" ? await tx.get(db.collection("pagoAplicaciones").where("rootId", "==", text(solicitud.rootId)).where("solicitudId", "==", ref.id)) : null;
+    const appliedPayments = applications?.docs.filter(row => text(row.data().status).toUpperCase() === "APLICADA").length ?? 0;
     const now = FieldValue.serverTimestamp();
     const folio = text(solicitud.folio || ref.id);
     const audit = (event: string, description: string) => logActivityTx(tx, db, { event, rootId: text(solicitud.rootId), actorUid: "SYSTEM", actorRole: "system",
       referenceId: ref.id, referenceFolio: solicitud.folio || null, referenceType: "solicitud", description });
-    if (action === "CONFIRM") {
+    if (action === "CONFIRM" && cancellationNeedsPaymentReview(solicitud, appliedPayments)) {
+      tx.set(ref, { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED", iqCancelledAt: now, iqCancelledFolio: iqFolio, iqLastOperationStatus: text(row.operation_status) || "CANCELADA", iqStatusUpdatedAt: now }, { merge: true });
+      logActivityTx(tx, db, { event: "IQ_CANCELACION_REQUIERE_REVISION", rootId: text(solicitud.rootId), actorUid: "SYSTEM", actorRole: "system", referenceId: ref.id, referenceFolio: solicitud.folio || null, referenceType: "solicitud",
+        amount: Number(solicitud.totalAbonado || 0), description: `IQ canceló ${folio}, pero tiene abonos por ${Number(solicitud.totalAbonado || 0)}: requiere revisión. FOLIO IQ: ${iqFolio}.` });
+    } else if (action === "CONFIRM") {
       tx.set(ref, { status: "CANCELADA", cancelledBy: text(solicitud.iqCancellationRequestedBy) || "system", cancelledAt: now, iqOperationStatus: "CANCELADA", iqCancellationStatus: "CONFIRMED",
         iqCancelledAt: now, iqCancelledFolio: iqFolio, iqLastOperationStatus: text(row.operation_status) || "CANCELADA", iqStatusUpdatedAt: now }, { merge: true });
       audit("IQ_SOLICITUD_CANCELADA", `Solicitud ${folio} cancelada en IQ. FOLIO IQ: ${iqFolio}`);
@@ -137,7 +144,7 @@ export async function reconcileIqCancellations(sessions: Map<string, IqHttpAuthS
 export async function runIqCancellationReceiptCheck() {
   const sessions = new Map<string, IqHttpAuthSession>();
   await reconcileIqCancellations(sessions);
-  const snap = await db.collection("solicitudes").where("iqCancellationStatus", "in", ["REQUESTED", "CONFIRMED"]).limit(MAX_SCAN).get();
+  const snap = await db.collection("solicitudes").where("iqCancellationStatus", "in", ["REQUESTED", "CONFIRMED", "CONFIRMED_REVIEW_REQUIRED"]).limit(MAX_SCAN).get();
   const lookups: FirebaseFirestore.QueryDocumentSnapshot[] = [];
   for (const row of snap.docs) {
     const action = iqCancellationReceiptAction(row.data());

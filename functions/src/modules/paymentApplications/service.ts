@@ -1,3 +1,4 @@
+import { hasOpenCancellation } from "../../utils/solicitudCancellationState";
 import { systemNoteAuthor } from "../notes/domain";
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, type DocumentData, type DocumentSnapshot } from "firebase-admin/firestore";
@@ -516,6 +517,13 @@ export async function applyPaymentApplicationBatchAtomic(params: {
         throw new HttpsError(
           "failed-precondition",
           `La solicitud ${requested.solicitudId} no esta apta para pago.`,
+        );
+      }
+
+      if (hasOpenCancellation(solicitud)) {
+        throw new HttpsError(
+          "failed-precondition",
+          `La solicitud ${requested.solicitudId} tiene una cancelacion en curso; no se pueden aplicar pagos.`,
         );
       }
 

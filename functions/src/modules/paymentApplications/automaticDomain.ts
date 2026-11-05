@@ -3,6 +3,7 @@ import { getPagoCoverageState } from "../deposits/foundation";
 import { normalizePagoStatus } from "../pagos/domain";
 import { getSolicitudCoverageState, normalizeSolicitudBackendStatus } from "../solicitudes/domain";
 import { normalizePaymentApplicationBatchInput, type NormalizedPaymentApplicationBatch } from "./domain";
+import { hasOpenCancellation } from "../../utils/solicitudCancellationState";
 
 type Row = Record<string, any>;
 export const AUTOMATIC_APPLICATION_REVISION = "ASTRA_V1";
@@ -54,6 +55,7 @@ function containsReference(reference: string, token: string): boolean {
 }
 
 function invoiceFiscalBlockReason(invoice: Row): string | null {
+  if (hasOpenCancellation(invoice)) return "CANCELLATION_IN_PROGRESS";
   // Fields written by issueFacturamaInvoice, its metadata reconciliation, the
   // IQ XML importer and the manual FACTURA_XML finalizer. A retained UUID never
   // overrides an explicitly non-production source or contradictory identity.

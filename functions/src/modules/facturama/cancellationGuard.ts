@@ -1,6 +1,6 @@
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 
-const PENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+export const PENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const upper = (value: unknown) => String(value ?? "").trim().toUpperCase();
 const millis = (value: any) => value?.toMillis?.() ?? 0;

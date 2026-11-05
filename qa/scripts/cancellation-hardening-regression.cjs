@@ -7,6 +7,7 @@ const admin = require("../../functions/node_modules/firebase-admin");
 admin.initializeApp({ projectId: "demo-pay0", storageBucket: "demo-pay0.appspot.com" });
 const facturama = require("../../functions/lib/modules/facturama/sandboxCallables.js");
 const iq = require("../../functions/lib/modules/iq/cancellationReceiptImport.js");
+const { hasOpenCancellation } = require("../../functions/lib/utils/solicitudCancellationState.js");
 
 const db = admin.firestore();
 const root = "Ab4z0RttIqXbZFT0NuWsDjBkt6J2";
@@ -20,7 +21,7 @@ let satStatus = "Vigente";
 global.fetch = async (url, init = {}) => {
   const text = String(url);
   const reply = (status, body) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) });
-  if (init.method === "DELETE") { calls.delete++; await new Promise(resolve => setTimeout(resolve, 50)); return reply(200, deleteResponse()); }
+  if (init.method === "DELETE") { calls.delete++; await new Promise(resolve => setTimeout(resolve, 50)); const answer = deleteResponse(); return reply(answer.httpStatus || 200, answer); }
   if (text.includes("/cfdi/status")) { calls.status++; return reply(200, { Status: satStatus }); }
   if (text.includes("/api/Acuse/pdf/")) return reply(200, { Content: Buffer.from("%PDF-1.7 acuse").toString("base64") });
   throw new Error(`EXTERNAL_NETWORK_FORBIDDEN ${text}`);
@@ -71,23 +72,64 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   await assert.rejects(cancel("doble"), /ya está cancelada/);
 
   await seed("falla");
-  deleteResponse = () => { throw new Error("TRANSPORT_LOST"); };
-  await assert.rejects(cancel("falla"), /TRANSPORT_LOST/);
+  deleteResponse = () => ({ httpStatus: 400, Message: "No cancelable" });
+  await assert.rejects(cancel("falla"), /No cancelable/);
   assert.equal((await db.doc("facturamaInvoices/falla").get()).data().cancellationStatus, "REQUEST_FAILED");
   assert.ok((await activity("falla")).includes("FACTURAMA_CANCELACION_FALLIDA"));
   deleteResponse = () => ({ Status: "pending" });
   await cancel("falla");
 
+  await seed("incierta");
+  deleteResponse = () => { throw new Error("TRANSPORT_LOST"); };
+  await assert.rejects(cancel("incierta"), /TRANSPORT_LOST/);
+  deleteResponse = () => ({ Status: "pending" });
+  assert.equal((await db.doc("facturamaInvoices/incierta").get()).data().cancellationStatus, "REQUEST_UNCERTAIN");
+  assert.equal((await db.doc("solicitudes/incierta").get()).data().facturamaCancellationStatus, "PENDING", "la pantalla y el seguimiento la siguen");
+  assert.ok((await activity("incierta")).includes("FACTURAMA_CANCELACION_INCIERTA"));
+  const deletes = calls.delete;
+  await assert.rejects(cancel("incierta"), /en curso/);
+  assert.equal(calls.delete, deletes, "no se repite una cancelación que pudo haber llegado");
+  deleteResponse = () => ({ httpStatus: 503, Message: "Caido" });
+  await seed("cinco");
+  await assert.rejects(cancel("cinco"), /Caido/);
+  assert.equal((await db.doc("facturamaInvoices/cinco").get()).data().cancellationStatus, "REQUEST_UNCERTAIN", "un 5xx tampoco prueba que no llegó");
+  deleteResponse = () => ({ Status: "pending" });
+
+  satStatus = "Vigente";
+  await seed("vencida", {}, { cancellationStatus: "REQUESTED", cancellationRequestedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 8 * 86400000) });
+  await refresh("vencida");
+  assert.equal((await db.doc("solicitudes/vencida").get()).data().facturamaCancellationStatus, "SIN_CONFIRMAR", "pendiente no es para siempre");
+
+  satStatus = "Cancelado";
+  await seed("con-abono-tardio", { motivoCancelacionSAT: "02", totalAbonado: 40 }, { cancellationStatus: "REQUESTED", cancellationRequestedAt: admin.firestore.Timestamp.now() });
+  const late = await refresh("con-abono-tardio");
+  assert.equal(late.terminal, false);
+  const lateRow = (await db.doc("solicitudes/con-abono-tardio").get()).data();
+  assert.equal(lateRow.status, "COMPLETADA", "con abonos no se cancela a ciegas");
+  assert.equal(lateRow.facturamaCancellationReviewRequired, true);
+  assert.equal(hasOpenCancellation(lateRow), true);
+  assert.ok((await activity("con-abono-tardio")).includes("FACTURAMA_CANCELACION_REQUIERE_REVISION"));
+  assert.equal((await db.doc("facturamaInvoices/con-abono-tardio").get()).data().cancellationStatus, "CANCELED", "fiscalmente sí quedó cancelada");
+
+  assert.equal(hasOpenCancellation({ iqCancellationStatus: "REQUESTED" }), true);
+  assert.equal(hasOpenCancellation({ facturamaCancellationStatus: "PENDING" }), true);
+  assert.equal(hasOpenCancellation({ iqCancellationStatus: "REJECTED" }), false, "un rechazo devuelve la solicitud a operación");
+
   const old = admin.firestore.Timestamp.fromMillis(Date.now() - 2 * 3600000);
-  const iqCase = async (id, cancellationStatus, operationStatus, comment) => {
+  const iqCase = async (id, cancellationStatus, operationStatus, comment, extra = {}) => {
     const ref = db.doc(`solicitudes/${id}`);
-    await ref.set({ rootId: root, folio: id, status: "COMPLETADA", iqCancellationStatus: cancellationStatus, iqCancellationRequestedAt: old });
+    await ref.set({ rootId: root, folio: id, status: "COMPLETADA", iqCancellationStatus: cancellationStatus, iqCancellationRequestedAt: old, ...extra });
     await iq.applyIqCancellationReconcile(ref, { operation_status: operationStatus, rejection_comments: comment }, "123");
     return (await ref.get()).data();
   };
   const confirmed = await iqCase("iq-confirma", "REQUESTED", "Cancelada");
   assert.equal(confirmed.status, "CANCELADA");
   assert.equal(confirmed.iqCancellationStatus, "CONFIRMED");
+  const reviewed = await iqCase("iq-abono", "REQUESTED", "Cancelada", "", { totalAbonado: 30, motivoCancelacionSAT: "02" });
+  assert.equal(reviewed.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED");
+  assert.equal(reviewed.status, "COMPLETADA", "con abonos queda para revisión");
+  assert.ok((await activity("iq-abono")).includes("IQ_CANCELACION_REQUIERE_REVISION"));
+  assert.equal((await iqCase("iq-sustitucion", "REQUESTED", "Cancelada", "", { totalAbonado: 30, motivoCancelacionSAT: "01" })).status, "CANCELADA", "la sustitución conserva sus abonos");
   const rejected = await iqCase("iq-rechaza", "REQUESTED", "En Operacion", "No procede");
   assert.equal(rejected.iqCancellationStatus, "REJECTED");
   assert.equal(rejected.status, "COMPLETADA", "un rechazo no cancela la solicitud");
