@@ -62,7 +62,10 @@ export async function checkDueIqFollowup(requestId: string, now = new Date(), ad
     db.doc(`pagoApplicationIqPlans/${app.iqPlanId}`).get(), db.doc(`pagoApplicationIqAttempts/${app.iqExecutionAttemptId}`).get(),
   ]);
   const solicitud = solicitudSnap.data(), pago = pagoSnap.data(), plan = planSnap.data(), attempt = attemptSnap.data();
-  try { assertSource(rootId, app, solicitud, pago); } catch (error) { await finishException(requestId, rootId, code(error)); return "EXCEPTION"; }
+  try { assertSource(rootId, app, solicitud, pago); } catch (error) {
+    if (code(error) === "REP_SOURCE_CANCELLATION_PENDING") return "SKIPPED";
+    await finishException(requestId, rootId, code(error)); return "EXCEPTION";
+  }
   if (!plan || plan.rootId !== rootId || plan.pagoId !== app.pagoId || !attempt || attempt.rootId !== rootId ||
       attempt.planId !== app.iqPlanId || attempt.profileId !== plan.iqExecutionProfileId || !pago?.moneda)
     { await finishException(requestId, rootId, "REP_IQ_CONTEXT_CHANGED"); return "EXCEPTION"; }

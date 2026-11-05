@@ -594,7 +594,7 @@ export async function markCancelled(input: {
 
     const solicitud = asRecord(solicitudSnap.data());
     alreadyClosed = ["CANCELADA", "CANCELADO"].includes(cleanText(solicitud.status).toUpperCase()) ||
-      cleanText(solicitud.iqCancellationStatus) === "CONFIRMED";
+      ["CONFIRMED", "CONFIRMED_REVIEW_REQUIRED"].includes(cleanText(solicitud.iqCancellationStatus));
     const applications = await tx.get(db.collection("pagoAplicaciones")
       .where("rootId", "==", input.job.rootId)
       .where("solicitudId", "==", input.job.solicitudId));

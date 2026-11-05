@@ -85,12 +85,19 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   deleteResponse = () => ({ Status: "pending" });
   await cancel("falla");
 
+  await seed("sustitucion-falla", { motivoCancelacionSAT: "01" });
+  deleteResponse = () => ({ httpStatus: 400, Message: "No cancelable" });
+  await assert.rejects(cancel("sustitucion-falla", "02"), /No cancelable/);
+  assert.equal((await db.doc("solicitudes/sustitucion-falla").get()).data().motivoCancelacionSAT, "01", "un rechazo no borra el 01 de una sustitución");
+  deleteResponse = () => ({ Status: "pending" });
+
   await seed("incierta");
   deleteResponse = () => { throw new Error("TRANSPORT_LOST"); };
   await assert.rejects(cancel("incierta"), /TRANSPORT_LOST/);
   deleteResponse = () => ({ Status: "pending" });
   assert.equal((await db.doc("facturamaInvoices/incierta").get()).data().cancellationStatus, "REQUEST_UNCERTAIN");
   assert.equal((await db.doc("solicitudes/incierta").get()).data().facturamaCancellationStatus, "PENDING", "la pantalla y el seguimiento la siguen");
+  assert.equal((await db.doc("solicitudes/incierta").get()).data().motivoCancelacionSAT, "02", "una falla incierta conserva el motivo");
   assert.ok((await activity("incierta")).includes("FACTURAMA_CANCELACION_INCIERTA"));
   const deletes = calls.delete;
   await assert.rejects(cancel("incierta"), /en curso/);

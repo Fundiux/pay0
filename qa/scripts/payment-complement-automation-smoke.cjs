@@ -244,6 +244,14 @@ async function run(){
  const pendingJob=job+'-pending-cancel';await db.doc(`paymentComplementJobs/${pendingJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'QUEUED'});
  await api.executeComplement(pendingJob,adapter);assert.equal(emits,emitsBeforeReview,'an undecided cancellation does not emit');
  const pendingRow=(await db.doc(`paymentComplementJobs/${pendingJob}`).get()).data();assert.equal(pendingRow.status,'PAUSED','an undecided cancellation can resume');assert.equal(pendingRow.gateReason,'REP_SOURCE_CANCELLATION_PENDING');
+ const deferred=await api.enqueueComplement(reviewId);assert.equal(deferred.result,'DEFERRED');assert.equal(deferred.reason,'REP_SOURCE_CANCELLATION_PENDING');
+ const checkJob=job+'-check-pending';await db.doc(`paymentComplementJobs/${checkJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'REQUESTED',cfdiId:'c1'});
+ await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,reviewId)}`).update({automationJobId:checkJob});
+ assert.equal(await api.checkComplementDaily(checkJob,new Date(now.getTime()+86400000),adapter),'DEFERRED');
+ assert.notEqual((await db.doc(`paymentComplementJobs/${checkJob}`).get()).data().bReadState,'EXCEPTION','an undecided cancellation is not an exception');
+ await db.doc(`solicitudes/${reviewId}`).update({iqCancellationStatus:'REJECTED'});
+ await api.executeComplement(pendingJob,adapter);assert.equal(emits,emitsBeforeReview+1,'a rejected cancellation resumes the paused complement');
+ assert.equal((await db.doc(`paymentComplementJobs/${pendingJob}`).get()).data().gateReason,null,'the pause reason is cleared');
  await assert.rejects(api.configurePaymentComplementAutomation.run({auth:{uid:'not-a-user',token:{}},data:{iqEnabled:true,facturamaEnabled:true}}));
  for(const [suffix,key] of [['one','rep1'],['two','rep2'],['three','rep1']]){
    const uploadId=`${root}-${suffix}`,ref=db.doc(`uploads/${uploadId}`);

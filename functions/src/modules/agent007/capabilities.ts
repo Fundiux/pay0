@@ -105,7 +105,13 @@ export async function executeRequestIqComplement(input: {
       reply: `No repetí la solicitud: el complemento está en ${existingJob?.status}. Ese estado requiere revisión para evitar duplicar un POST cuyo resultado podría ser incierto.`,
     };
   }
-  await enqueueComplement(clean(source.applicationId));
+  const enqueued = await enqueueComplement(clean(source.applicationId));
+  if (enqueued?.reason === "REP_SOURCE_CANCELLATION_PENDING") {
+    return {
+      executed: false,
+      reply: "No solicité el complemento: la solicitud tiene una cancelación en curso. Se podrá solicitar cuando se resuelva.",
+    };
+  }
   const refreshed = (
     await input.db.doc(`paymentComplementRequests/${source.id}`).get()
   ).data();

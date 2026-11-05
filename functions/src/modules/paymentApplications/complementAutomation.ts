@@ -186,7 +186,9 @@ export async function enqueueComplement(applicationId: string): Promise<EnqueueO
   // A previous IQ pipeline may already have imported a valid REP under the
   // Solicitud. Adopt that evidence before applying the prospective-send gate;
   // this path never performs an external request.
-  if (await adoptImportedIqComplement(applicationId, loaded)) return { result: "SUCCEEDED", reason: "REP_ADOPTED",
+  const adopted = await adoptImportedIqComplement(applicationId, loaded).catch(error => { if (error?.message === "REP_SOURCE_CANCELLATION_PENDING") return null; throw error; });
+  if (adopted === null) return { result: "DEFERRED", reason: "REP_SOURCE_CANCELLATION_PENDING" };
+  if (adopted) return { result: "SUCCEEDED", reason: "REP_ADOPTED",
     evidence: { kind: "ADOPTED", id: loaded.ref.id } };
   // Inspect activation before touching historical follow-up or source records.
   if (!config) return { result: "DEFERRED", reason: "REP_ACTIVATION_PENDING" };
@@ -332,7 +334,7 @@ export async function executeComplement(id: string, adapter = providers) {
       await markProtectedEffectIntent();
       const cfdiId = await adapter.emitFacturamaComplement(payload);
       await confirmProtectedEffect();
-      await updateJob(id, { status: "ISSUED_PENDING_FILES", cfdiId, requestedAt: FieldValue.serverTimestamp() });
+      await updateJob(id, { status: "ISSUED_PENDING_FILES", cfdiId, requestedAt: FieldValue.serverTimestamp(), gateReason: null });
       // Saving the provider ID precedes downloads; failures cannot reissue.
       const documents = await adapter.importFacturamaComplement(cfdiId, source);
       await markReceived(id, [{ source, documents }]);
@@ -346,7 +348,7 @@ export async function executeComplement(id: string, adapter = providers) {
     const latest = (await ref.get()).data();
     const retryableBeforeSend = ["RETRY_WAIT", "DEFERRED"].includes(classifyFailure(error).result);
     const rejection = (error as any)?.observation?.operationalError || null;
-    await updateJob(id, { status: latest?.cfdiId ? "ISSUED_PENDING_FILES" : sending ? "UNKNOWN" : retryableBeforeSend ? "PAUSED" : "BLOCKED", error: errorCode(error), ...(rejection ? { iqRejection: rejection } : {}) },
+    await updateJob(id, { status: latest?.cfdiId ? "ISSUED_PENDING_FILES" : sending ? "UNKNOWN" : retryableBeforeSend ? "PAUSED" : "BLOCKED", error: errorCode(error), gateReason: null, ...(rejection ? { iqRejection: rejection } : {}) },
       sending ? `Complemento requiere revisión: hubo un problema después de iniciar el envío.${rejection ? ` IQ respondió: ${rejection}.` : ""} No se repetirá la emisión o solicitud automáticamente.` : `Complemento bloqueado antes de enviar: ${errorCode(error)}.`);
   }
 }

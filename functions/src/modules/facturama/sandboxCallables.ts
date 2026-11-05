@@ -364,6 +364,7 @@ export const cancelFacturamaProductionInvoice = onCall(
     const invRef = db.doc(`facturamaInvoices/${invoiceId}`); const invSnap = await invRef.get(); const inv: any = invSnap.data() || {};
     if (!invSnap.exists || clean(inv.rootId, 128) !== rootId || inv.environment !== "PRODUCTION" || !inv.facturamaCfdiId) throw new HttpsError("failed-precondition", "CFDI productivo Facturama no disponible.");
     if (inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
+    let previousMotive: unknown = null;
     // Two clicks or two users must reach Facturama only once.
     await db.runTransaction(async tx => {
       const latest: any = (await tx.get(invRef)).data() || {};
@@ -372,6 +373,7 @@ export const cancelFacturamaProductionInvoice = onCall(
       const appliedPayments = applications.docs.filter(row => clean(row.data().status, 32).toUpperCase() === "APLICADA").length;
       const reason = facturamaCancellationBlock({ solicitud: current, invoice: latest, motive, appliedPayments });
       if (reason) throw new HttpsError("failed-precondition", reason);
+      previousMotive = current.motivoCancelacionSAT ?? null;
       tx.set(invRef, { cancellationStatus: "REQUESTING", cancellationRequestedAt: FieldValue.serverTimestamp(), cancellationRequestedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       // Payment applications read this same document in their transaction, so the
       // lock has to close here and not when Facturama answers.
@@ -387,7 +389,7 @@ export const cancelFacturamaProductionInvoice = onCall(
       const rejected = Number(error?.providerStatus) >= 400 && Number(error?.providerStatus) < 500;
       const failure = db.batch();
       failure.set(invRef, { cancellationStatus: rejected ? "REQUEST_FAILED" : "REQUEST_UNCERTAIN", cancellationMotive: motive, cancellationError: clean(error?.message || error, 500), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      failure.set(solSnap.ref, { facturamaCancellationStatus: rejected ? "REQUEST_FAILED" : "PENDING", ...(rejected ? { motivoCancelacionSAT: FieldValue.delete() } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      failure.set(solSnap.ref, { facturamaCancellationStatus: rejected ? "REQUEST_FAILED" : "PENDING", ...(rejected ? { motivoCancelacionSAT: previousMotive ?? FieldValue.delete() } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       logActivityBatch(failure, db, { event: rejected ? "FACTURAMA_CANCELACION_FALLIDA" : "FACTURAMA_CANCELACION_INCIERTA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: rejected ? `Facturama no aceptó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` : `No se confirmó si la cancelación de ${clean(sol.folio || solicitudId, 80)} llegó a Facturama; PAY0 verificará su estado.` });
       await failure.commit();
       throw error;
