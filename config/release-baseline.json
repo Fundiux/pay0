@@ -192,6 +192,10 @@
     {
       "commit": "9cf41ebb",
       "capability": "Complementos y re-cancelaciones detenidos en solicitudes bajo revision; candado de pagos dentro de la transaccion"
+    },
+    {
+      "commit": "514a93a0",
+      "capability": "Complementos en pausa ante cancelaciones no decididas y reanudables; estados de revision ordenados y etiquetados por origen"
     }
   ],
   "requiredText": [
