@@ -232,6 +232,18 @@
     {
       "commit": "833dbf14",
       "capability": "Canario alineado con el ejecutor, evidencia de otra version con codigo propio y capas de seguimiento confirmables"
+    },
+    {
+      "commit": "6b7a068d",
+      "capability": "Catalogo de beneficiarios IQ de solo lectura enlazado a metodos"
+    },
+    {
+      "commit": "34fa3a1a",
+      "capability": "Corrida nocturna del catalogo IQ acotada por tiempo"
+    },
+    {
+      "commit": "599cc32c",
+      "capability": "Catalogo IQ respeta interruptores, runtime de seguridad y conserva cursor ante errores"
     }
   ],
   "requiredText": [
