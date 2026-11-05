@@ -69,12 +69,14 @@ async function run(){
   await db.doc(`solicitudes/${root}-s5`).update({iqCancellationStatus:'REQUESTED'});
   const open=new Date(now.getTime()+72*60*60*1000);
   await scanDueIqFollowups(open,adapter);
+  assert.equal(attachmentGets,6,'a row waiting on a cancellation spends no IQ read');
   const waiting=(await five.ref.get()).data();
   assert.equal(waiting.bReadState,'BLOCKED');assert.equal(waiting.bReadReason,'REP_SOURCE_CANCELLATION_PENDING','the wait is visible');
   assert(waiting.nextCheckAt.toMillis()>open.getTime(),'an open cancellation does not keep the oldest slot');
   await db.doc(`solicitudes/${root}-s5`).update({iqCancellationStatus:'REJECTED'});
   await scanDueIqFollowups(new Date(now.getTime()+96*60*60*1000),adapter);
-  assert.notEqual((await five.ref.get()).data().bReadState,'BLOCKED','a rejected cancellation resumes the read');
+  assert.equal(attachmentGets,8,'a rejected cancellation resumes the read');
+  assert.equal((await five.ref.get()).data().bReadState,'WAITING_B');
   assert.equal(posts,0);
   console.log(JSON.stringify({ok:true,concurrentBReads:3,nextDayBReads:1,masterBlocksExternal:true,ap1UnknownPreserved:true,
     availableRepVerified:true,ambiguousCaseIsolated:true,cPosts:posts,externalNetworkCalls:0}));
