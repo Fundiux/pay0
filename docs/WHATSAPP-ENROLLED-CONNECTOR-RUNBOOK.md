@@ -32,9 +32,7 @@ coordinadora. No hay tareas programadas registradas ni secretos en el repositori
    probada antes de producción.
 5. Build de Functions (`cd functions; npm ci; npm run build`): el lanzador carga la política de firma desde
    `functions/lib/modules/documentDelivery/whatsappConnectorPolicy.js` (o la ruta `policyModule` del config).
-6. `baseUrl`: URL HTTPS tal que `POST <baseUrl>/<nombreDeFunción>` con cuerpo `{ "data": ... }` llegue a los
-   callables `consumeWhatsAppConnectorEnrollment` y `operateWhatsAppConnector`. **No verificada**: confirmar la
-   URL real de las Functions con la sesión coordinadora antes del primer uso.
+6. `baseUrl`: `https://us-central1-pay-0-system.cloudfunctions.net`. Es la URL estable donde `POST <baseUrl>/<nombreDeFunción>` con cuerpo `{ "data": ... }` llega a los callables `consumeWhatsAppConnectorEnrollment` y `operateWhatsAppConnector` (confirmada en producción por la sesión coordinadora, solo lectura, 2026-11-04). Las URLs `run.app` son por función y no sirven como base común.
 7. Para `consumeWhatsAppConnectorEnrollment`/`operateWhatsAppConnector` desplegadas en producción: ya lo están
    según la sesión coordinadora; `listWhatsAppAgentConnectors` y la captura de grupos **no** (siguen pendientes).
 
@@ -54,7 +52,7 @@ Ejemplo de `config.json` (rutas absolutas obligatorias; ningún secreto):
 
 ```json
 {
-  "baseUrl": "https://<url-https-de-las-functions>",
+  "baseUrl": "https://us-central1-pay-0-system.cloudfunctions.net",
   "pythonPath": "C:\\Users\\<usuario>\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
   "vaultPath": "C:\\Users\\<usuario>\\AppData\\Local\\PAY0\\WhatsAppConnector\\agents\\maria\\pay0-wa-worker-vault\\worker.dpapi",
   "sessionRoot": "C:\\Users\\<usuario>\\AppData\\Local\\PAY0\\WhatsAppConnector\\agents\\maria\\auth",
