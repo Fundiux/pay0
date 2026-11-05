@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const { iqCancellationReceiptAction } = require("../../functions/lib/modules/iq/cancellationReceiptDomain.js");
 const { fetchIqCancellationReceipt } = require("../../functions/lib/modules/iq/cancellationReceiptHttp.js");
+const { iqCancellationReconcileAction } = require("../../functions/lib/modules/iq/cancellationReconcileDomain.js");
+const { facturamaCancellationBlock } = require("../../functions/lib/modules/facturama/cancellationGuard.js");
 
 const origin = "https://iq.example.com";
 const base = { rootId: "root", iqFolio: "123" };
@@ -43,5 +45,27 @@ const run = (fetcher, iqFolio = "123") => fetchIqCancellationReceipt({ apiOrigin
 
   const xml = await run(async url => url.pathname.startsWith("/invoices") ? json(200, { url: `${origin}/f` }) : new Response('<?xml version="1.0"?><Acuse/>', { status: 200 }));
   assert.equal(xml.extension, "xml");
+  const now = 10 * 3600000;
+  const action = (cancellationStatus, operationStatus, requestedAtMs = 0) => iqCancellationReconcileAction({ cancellationStatus, operationStatus, requestedAtMs, now });
+  assert.equal(action("REQUESTED", "Cancelada"), "CONFIRM");
+  assert.equal(action("REQUESTED", "Pendiente Cancelación"), "KEEP");
+  assert.equal(action("REQUESTED", "Pendiente de cancelación"), "KEEP");
+  assert.equal(action("OUTCOME_UNKNOWN", "Pendiente Cancelacion"), "PROMOTE", "el intento incierto sí llegó a IQ");
+  assert.equal(action("REQUESTED", "En Operacion"), "REJECT");
+  assert.equal(action("REQUESTED", "En Operacion", now - 60000), "KEEP", "recién solicitada no se da por rechazada");
+  assert.equal(action("OUTCOME_UNKNOWN", "En Operacion"), "NOT_APPLIED");
+  assert.equal(action("REQUESTED", ""), "KEEP", "sin dato de IQ no se decide nada");
+
+  const block = (solicitud, invoice, motive, appliedPayments = 0) => facturamaCancellationBlock({ solicitud, invoice, motive, appliedPayments, now });
+  assert.match(block({ totalAbonado: 10 }, {}, "02"), /abonos/, "con abonos no se cancela sin sustitución");
+  assert.match(block({}, {}, "03", 1), /abonos/, "una aplicación cuenta aunque totalAbonado no esté al día");
+  assert.equal(block({ totalAbonado: 10 }, {}, "01"), null);
+  assert.match(block({ status: "CANCELADA" }, {}, "02"), /ya está cancelada/);
+  assert.match(block({}, { cancellationStatus: "CANCELED" }, "02"), /ya está cancelada/);
+  const requestedAt = { toMillis: () => now - 3600000 };
+  assert.match(block({}, { cancellationStatus: "REQUESTING", cancellationRequestedAt: requestedAt }, "02"), /en curso/, "doble clic no llega dos veces");
+  assert.equal(block({}, { cancellationStatus: "REQUEST_FAILED", cancellationRequestedAt: requestedAt }, "02"), null, "un rechazo se puede reintentar");
+
+  console.log("PASS cancelaciones: reglas de abonos, reclamo único y conciliación de estados IQ.");
   console.log("PASS acuse IQ: solo con factura, solo GET, hosts verificados y PDF o XML identificados.");
 })().catch(error => { console.error(error); process.exit(1); });
