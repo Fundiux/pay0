@@ -9,6 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const domain = require(path.resolve(here, "../../functions/lib/modules/dispersionCashReceipt/domain.js"));
 const documents = require(path.resolve(here, "../../functions/lib/modules/dispersionDocuments/domain.js"));
+const ink = require(path.resolve(here, "../../functions/lib/modules/signatureLinks/pngInk.js"));
+const fixtures = require(path.resolve(here, "./canonical-document-fixtures.cjs"));
 
 let checks = 0;
 const check = (fn) => { fn(); checks += 1; };
@@ -24,16 +26,23 @@ check(() => assert.equal(domain.isCashDispersion({}), false));
 check(() => assert.equal(domain.initialCashReceiptStatus("EFECTIVO"), "PENDIENTE_FIRMA"));
 check(() => assert.equal(domain.initialCashReceiptStatus("TDC"), null));
 
-// Derived status: legacy cash rows without the field are pending; FIRMADA wins.
-check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO" }), "PENDIENTE_FIRMA"));
+// Derived status: stamped rows are pending, FIRMADA wins, and cash rows that
+// predate the feature (no field) are exempt rather than pending.
+check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", cashReceiptStatus: "PENDIENTE_FIRMA" }), "PENDIENTE_FIRMA"));
+check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO" }), "SIN_FIRMA_ANTERIOR"));
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", cashReceiptStatus: "FIRMADA" }), "FIRMADA"));
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", cashReceipt: { status: "firmada" } }), "FIRMADA"));
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "TRANSFERENCIA", cashReceiptStatus: "FIRMADA" }), null));
+check(() => assert.equal(domain.cashReceiptStatusLabel("PENDIENTE_FIRMA"), "Pendiente de firma"));
+check(() => assert.equal(domain.cashReceiptStatusLabel("SIN_FIRMA_ANTERIOR"), "Sin firma (anterior)"));
+check(() => assert.equal(domain.cashReceiptStatusLabel(null), ""));
 
-// Completion gate: cash is finished only when signed; terminal rows never are.
+// Completion gate: stamped cash is finished only when signed; legacy cash is
+// exempt; terminal rows never are.
 check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "TRANSFERENCIA", status: "REGISTRADA" }), true));
-check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "REGISTRADA" }), false));
+check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "REGISTRADA", cashReceiptStatus: "PENDIENTE_FIRMA" }), false));
 check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "REGISTRADA", cashReceiptStatus: "FIRMADA" }), true));
+check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "REGISTRADA" }), true));
 check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "CANCELADA", cashReceiptStatus: "FIRMADA" }), false));
 check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "TRANSFERENCIA", status: "DEVUELTA" }), false));
 
@@ -53,10 +62,20 @@ check(() => assert.equal(
 ));
 check(() => assert.equal(domain.cashReceiptAcceptanceText({ amount: "12.5" }), "Recibi la cantidad de $12.50 MXN en efectivo, completa y a mi entera satisfaccion."));
 
-// Signer name validation.
+// Signer name and replacement reason validation.
 check(() => assert.equal(domain.validateSignerName("  Ana   Ruiz "), "Ana Ruiz"));
 check(() => assert.throws(() => domain.validateSignerName("A"), /SIGNER_NAME_REQUIRED/));
 check(() => assert.throws(() => domain.validateSignerName("12345"), /SIGNER_NAME_INVALID/));
+check(() => assert.equal(domain.validateReplacementReason(" Firma ilegible "), "Firma ilegible"));
+check(() => assert.throws(() => domain.validateReplacementReason("ok"), /REPLACEMENT_REASON_REQUIRED/));
+
+// Ink detection: a blank canvas has no ink even though it is a valid PNG; the
+// synthetic stroke does.
+check(() => assert.equal(ink.pngHasSignatureInk(fixtures.blankCanvasPng()), false));
+check(() => assert.equal(ink.pngHasSignatureInk(fixtures.signaturePng()), true));
+check(() => assert.equal(ink.measurePngInk(fixtures.blankCanvasPng()).inkPixels, 0));
+check(() => assert.ok(ink.measurePngInk(fixtures.signaturePng()).inkPixels > 500));
+check(() => assert.throws(() => ink.measurePngInk(Buffer.from("not a png"))));
 
 // Document type registry: the signature is a recognised, server-only dispersion document.
 check(() => assert.equal(documents.normalizeDispersionDocumentType("FIRMA_RECEPCION_EFECTIVO"), "FIRMA_RECEPCION_EFECTIVO"));

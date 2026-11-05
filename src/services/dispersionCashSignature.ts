@@ -5,9 +5,13 @@ import { CALLABLES } from "@/lib/callableNames";
 export const CASH_RECEIPT_STATUS = {
   PENDING: "PENDIENTE_FIRMA",
   SIGNED: "FIRMADA",
+  /** Cash dispersions created before the receipt existed; exempt, not pending. */
+  LEGACY: "SIN_FIRMA_ANTERIOR",
 } as const;
 
 export type CashReceiptStatus = typeof CASH_RECEIPT_STATUS[keyof typeof CASH_RECEIPT_STATUS];
+
+export const CASH_RECEIPT_MISMATCH_MARK = "(FIRMA DISTINTA DEL BENEFICIARIO)";
 
 /** Mirrors functions/src/modules/dispersionCashReceipt/domain.ts for display only. */
 export function isCashDispersionRow(row: any): boolean {
@@ -18,28 +22,34 @@ export function isCashDispersionRow(row: any): boolean {
 export function cashReceiptStatusOfRow(row: any): CashReceiptStatus | null {
   if (!isCashDispersionRow(row)) return null;
   const stored = String(row?.cashReceiptStatus || row?.cashReceipt?.status || "").trim().toUpperCase();
-  return stored === CASH_RECEIPT_STATUS.SIGNED ? CASH_RECEIPT_STATUS.SIGNED : CASH_RECEIPT_STATUS.PENDING;
+  if (stored === CASH_RECEIPT_STATUS.SIGNED) return CASH_RECEIPT_STATUS.SIGNED;
+  if (stored === CASH_RECEIPT_STATUS.PENDING) return CASH_RECEIPT_STATUS.PENDING;
+  return CASH_RECEIPT_STATUS.LEGACY;
 }
 
 export function cashReceiptStatusLabel(status: CashReceiptStatus | null): string {
   if (status === CASH_RECEIPT_STATUS.SIGNED) return "Firmada";
   if (status === CASH_RECEIPT_STATUS.PENDING) return "Pendiente de firma";
+  if (status === CASH_RECEIPT_STATUS.LEGACY) return "Sin firma (anterior)";
   return "";
 }
 
-export async function createDispersionCashSignatureLink(dispersionId: string) {
+export function cashReceiverMismatch(row: any): boolean {
+  return cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED && row?.cashReceipt?.receiverMatches === false;
+}
+
+export async function createDispersionCashSignatureLink(dispersionId: string, reason?: string) {
   const fn = httpsCallable<
-    { dispersionId: string; origin?: string },
+    { dispersionId: string; origin?: string; reason?: string },
     { ok: boolean; token: string; url: string; folio: string; alreadySigned: boolean; expiresAtMillis: number }
   >(functions, CALLABLES.createDispersionCashSignatureLink);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return (await fn({ dispersionId, origin })).data;
+  return (await fn({ dispersionId, origin, ...(reason ? { reason } : {}) })).data;
 }
 
 export type DispersionCashSignatureRequest = {
   ok: boolean;
   dispersionFolio?: string | null;
-  clienteNombre?: string | null;
   expectedReceiverName?: string | null;
   amount: number;
   currency: string;

@@ -134,7 +134,12 @@ export default function DispersionDocsModal(props: {
 
   if (!open) return null;
 
-  const activeDocs = docs.filter((doc) => doc.active !== false && String(doc.status || "") !== "INACTIVE");
+  // Replaced cash-receipt signatures stay visible as history; comprobantes keep
+  // showing only their current version.
+  const activeDocs = docs.filter((doc) =>
+    (doc.active !== false && String(doc.status || "") !== "INACTIVE") ||
+    (SERVER_ONLY_DISPERSION_DOCUMENT_TYPES.has(String(doc.documentType || "")) && String(doc.status || "") === "REPLACED"),
+  );
   const iqFolio = String(dispersion?.iqDispersionFolio || dispersion?.iqDispersionId || "").trim();
 
 
@@ -342,29 +347,35 @@ export default function DispersionDocsModal(props: {
                     {activeDocs.map((doc) => {
                       const serverOnly = SERVER_ONLY_DISPERSION_DOCUMENT_TYPES.has(String(doc.documentType || ""));
                       const signer = (doc as any).signatureCapture?.signerName ? String((doc as any).signatureCapture.signerName) : "";
+                      const replaced = String(doc.status || "") === "REPLACED";
                       return (
-                      <tr key={doc.id} className="border-t border-white/5 text-slate-300">
+                      <tr key={doc.id} className={`border-t border-white/5 ${replaced ? "text-slate-500" : "text-slate-300"}`}>
                         <td className="px-3 py-2">
                           {doc.documentTypeLabel || getTypeLabel(String(doc.documentType || ""))}
-                          {signer ? <div className="text-[10px] text-slate-500">Firmo: {signer}{(doc as any).signatureCapture?.receiverMatches === false ? " · distinto del beneficiario" : ""}</div> : null}
+                          {replaced ? <span className="ml-1 text-[10px] uppercase tracking-wider text-slate-500">historial</span> : null}
+                          {signer ? <div className="text-[10px] text-slate-500">Firmo: {signer}{(doc as any).signatureCapture?.receiverMatches === false ? " · FIRMA DISTINTA DEL BENEFICIARIO" : ""}</div> : null}
                         </td>
                         <td className="px-3 py-2 text-center">{doc.version || "---"}</td>
-                        <td className="px-3 py-2 text-center">{doc.status || "---"}</td>
+                        <td className="px-3 py-2 text-center">{replaced ? "REEMPLAZADA" : doc.status || "---"}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{formatDate(doc.finalizedAt || doc.createdAt)}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => downloadDoc(doc)}
-                              disabled={downloadingId === doc.id}
-                              className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-emerald-400 disabled:opacity-40"
-                              title="Descargar"
-                              aria-label="Descargar"
-                            >
-                              <Download size={16} strokeWidth={1.8} />
-                            </button>
+                            {replaced ? null : (
+                              <button
+                                type="button"
+                                onClick={() => downloadDoc(doc)}
+                                disabled={downloadingId === doc.id}
+                                className="inline-flex items-center justify-center p-1 text-slate-500 transition-colors duration-150 hover:text-emerald-400 disabled:opacity-40"
+                                title="Descargar"
+                                aria-label="Descargar"
+                              >
+                                <Download size={16} strokeWidth={1.8} />
+                              </button>
+                            )}
                             {serverOnly ? (
-                              <span className="text-[11px] text-slate-500" title="La firma no se desactiva; una nueva firma la reemplaza.">Firma sellada</span>
+                              <span className="text-[11px] text-slate-500" title="La firma no se desactiva; una nueva firma la reemplaza y la anterior queda como historial.">
+                                {replaced ? "Historial (sin descarga)" : "Firma sellada"}
+                              </span>
                             ) : (
                               <>
                             <button

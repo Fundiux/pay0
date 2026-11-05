@@ -19,6 +19,10 @@ export default function PublicCashSignaturePage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasInkRef = useRef(false);
+  // A tap is not a signature: ink only counts after a stroke of real length.
+  const inkDistanceRef = useRef(0);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const MIN_INK_DISTANCE_PX = 40;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +74,8 @@ export default function PublicCashSignaturePage() {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     hasInkRef.current = false;
+    inkDistanceRef.current = 0;
+    lastPointRef.current = null;
   }, [loading, error, done, info]);
 
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -87,7 +93,7 @@ export default function PublicCashSignaturePage() {
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     drawingRef.current = true;
-    hasInkRef.current = true;
+    lastPointRef.current = p;
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
   }
@@ -100,12 +106,17 @@ export default function PublicCashSignaturePage() {
     event.preventDefault();
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
+    const last = lastPointRef.current;
+    if (last) inkDistanceRef.current += Math.hypot(p.x - last.x, p.y - last.y);
+    lastPointRef.current = p;
+    if (inkDistanceRef.current >= MIN_INK_DISTANCE_PX) hasInkRef.current = true;
   }
 
   function end(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
     event.preventDefault();
     drawingRef.current = false;
+    lastPointRef.current = null;
     try {
       canvasRef.current?.releasePointerCapture(event.pointerId);
     } catch {}
@@ -120,6 +131,8 @@ export default function PublicCashSignaturePage() {
     ctx.fillRect(0, 0, rect.width, rect.height);
     ctx.strokeStyle = "#0f172a";
     hasInkRef.current = false;
+    inkDistanceRef.current = 0;
+    lastPointRef.current = null;
   }
 
   async function submit() {
@@ -133,7 +146,7 @@ export default function PublicCashSignaturePage() {
       return;
     }
     if (!hasInkRef.current) {
-      setError("Firma dentro del recuadro.");
+      setError("Firma dentro del recuadro con un trazo completo, no solo un punto.");
       return;
     }
 
@@ -169,7 +182,8 @@ export default function PublicCashSignaturePage() {
             Firma recibida. El recibo de la dispersion {done.folio} quedo guardado en PAY0.
             {done.receiverMatches ? null : (
               <div className="mt-2 text-xs text-amber-200">
-                El nombre firmado no coincide con el beneficiario registrado; PAY0 lo dejo marcado para revision.
+                El nombre firmado no coincide con el beneficiario registrado. La firma quedo guardada y la dispersion
+                aparece en PAY0 con la marca &quot;FIRMA DISTINTA DEL BENEFICIARIO&quot; para que el equipo la verifique.
               </div>
             )}
           </div>
@@ -181,7 +195,6 @@ export default function PublicCashSignaturePage() {
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-200">
               <div>Dispersion: <span className="font-semibold text-white">{info.dispersionFolio || "---"}</span></div>
-              <div>Cliente: <span className="font-semibold text-white">{info.clienteNombre || "---"}</span></div>
               <div>Beneficiario: <span className="font-semibold text-white">{info.expectedReceiverName || "---"}</span></div>
               <div className="mt-2 text-base">
                 Monto recibido: <span className="font-bold text-emerald-300">{formatMoney(info.amount, info.currency)}</span>

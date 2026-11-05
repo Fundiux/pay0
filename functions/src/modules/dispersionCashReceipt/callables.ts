@@ -21,6 +21,7 @@ import {
   receiverNamesMatch,
   toMoney,
   upperText,
+  validateReplacementReason,
   validateSignerName,
 } from "./domain";
 
@@ -29,9 +30,23 @@ if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const REQUESTS = "dispersionSignatureRequests";
 const TOKEN_RE = /^[A-Za-z0-9_-]{24,160}$/;
+const CALL_OPTIONS = { cors: true, maxInstances: 20 } as const;
 
 function sha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
+}
+
+/**
+ * The raw token travels only in the link. At rest we keep its SHA-256 as the
+ * request id, so neither the request rows nor the dispersion ever hold a value
+ * that could open the signing page.
+ */
+function requestIdOf(token: string): string {
+  return sha256(Buffer.from(token, "utf8"));
+}
+
+function requestRef(token: string) {
+  return db.collection(REQUESTS).doc(requestIdOf(token));
 }
 
 function username(user: any, uid: string): string {
@@ -61,12 +76,21 @@ function assertSignableDispersion(dispersion: any) {
   if (isTerminalDispersionStatus(dispersion?.status) || upperText(dispersion?.status) !== "REGISTRADA") {
     throw new HttpsError("failed-precondition", "La dispersion ya no admite firma de recepcion.");
   }
+  if (upperText(dispersion?.incidentStatus) === "SOLICITADA") {
+    throw new HttpsError("failed-precondition", "La dispersion tiene una incidencia pendiente; resuelvela antes de capturar la firma.");
+  }
   if (dispersion?.fundingSource?.holderType === "USER") {
     throw new HttpsError("failed-precondition", "Los retiros de utilidad no usan firma de recepcion.");
   }
   if (!(toMoney(dispersion?.amount) > 0)) {
     throw new HttpsError("failed-precondition", "La dispersion no tiene un monto valido.");
   }
+}
+
+function assertPendingRequest(row: any) {
+  if (!row) throw new HttpsError("not-found", "Link de firma invalido.");
+  if (row.status !== "PENDING") throw new HttpsError("failed-precondition", "Este link ya fue usado o cancelado.");
+  if (millis(row.expiresAt) < Date.now()) throw new HttpsError("deadline-exceeded", "Este link ya expiro.");
 }
 
 async function recoverAbandonedReservation(ref: FirebaseFirestore.DocumentReference) {
@@ -82,15 +106,17 @@ async function recoverAbandonedReservation(ref: FirebaseFirestore.DocumentRefere
 /**
  * Creates a one-time public link so whoever receives the cash can sign.
  * The link freezes the amount and the expected receiver; any newer link for the
- * same dispersion cancels the previous pending ones.
+ * same dispersion cancels the previous pending ones. A signed dispersion is
+ * final: only a superadmin may open a new link over it, and must say why.
  */
 export const createDispersionCashSignatureLink = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { ...CALL_OPTIONS, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = cleanText(request.auth?.uid, 128);
     if (!uid) throw new HttpsError("unauthenticated", "Usuario no autenticado.");
     const dispersionId = cleanText(request.data?.dispersionId, 128);
     if (!dispersionId) throw new HttpsError("invalid-argument", "dispersionId requerido.");
+    const rawReason = cleanText(request.data?.reason, 300);
 
     const userSnap = await db.doc(`users/${uid}`).get();
     if (!userSnap.exists) throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
@@ -98,6 +124,7 @@ export const createDispersionCashSignatureLink = onCall(
     const rootId = cleanText(user.rootId || uid, 128);
 
     const token = randomBytes(32).toString("base64url");
+    const requestId = requestIdOf(token);
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + CASH_RECEIPT_LINK_TTL_MS);
     let folio = dispersionId;
     let alreadySigned = false;
@@ -105,17 +132,29 @@ export const createDispersionCashSignatureLink = onCall(
     await db.runTransaction(async (tx) => {
       const { dispersion, user: currentUser } = await currentAuthority(uid, rootId, dispersionId, tx);
       assertSignableDispersion(dispersion);
-      if (cashReceiptStatusOf(dispersion) === CASH_RECEIPT_STATUS.SIGNED) alreadySigned = true;
       folio = folioOf(dispersion, dispersionId);
+
+      let replacementReason: string | null = null;
+      if (cashReceiptStatusOf(dispersion) === CASH_RECEIPT_STATUS.SIGNED) {
+        alreadySigned = true;
+        if (String(getUserRole(currentUser) || "").toLowerCase() !== "superadmin") {
+          throw new HttpsError("permission-denied", "La dispersion ya tiene firma de recepcion. Solo un superadmin puede generar un nuevo link.");
+        }
+        try {
+          replacementReason = validateReplacementReason(rawReason);
+        } catch {
+          throw new HttpsError("invalid-argument", "Indica el motivo para reemplazar una firma ya capturada.");
+        }
+      }
 
       const pending = await tx.get(
         db.collection(REQUESTS).where("rootId", "==", rootId).where("dispersionId", "==", dispersionId).where("status", "==", "PENDING"),
       );
       pending.docs.forEach((doc) => {
-        tx.update(doc.ref, { status: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(), cancelledBy: uid, replacedByToken: token });
+        tx.update(doc.ref, { status: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(), cancelledBy: uid, replacedByRequestId: requestId });
       });
 
-      tx.set(db.collection(REQUESTS).doc(token), {
+      tx.set(db.collection(REQUESTS).doc(requestId), {
         kind: "DISPERSION_EFECTIVO",
         rootId,
         dispersionId,
@@ -127,6 +166,8 @@ export const createDispersionCashSignatureLink = onCall(
         currency: currencyOf(dispersion),
         acceptanceVersion: CASH_RECEIPT_VERSION,
         status: "PENDING",
+        replacesSignedReceipt: alreadySigned,
+        replacementReason,
         createdBy: uid,
         createdUsername: username(currentUser, uid),
         createdAt: FieldValue.serverTimestamp(),
@@ -147,9 +188,11 @@ export const createDispersionCashSignatureLink = onCall(
         referenceFolio: folio,
         referenceType: "DISPERSION",
         amount: toMoney(dispersion.amount),
-        description: `Link de firma de recepcion de efectivo creado para la dispersion ${folio}.`,
+        description: alreadySigned
+          ? `Nuevo link de firma de recepcion para la dispersion ${folio}, que ya tenia firma. Motivo: ${replacementReason}`
+          : `Link de firma de recepcion de efectivo creado para la dispersion ${folio}.`,
         createdBy: uid,
-        extra: { cancelledPendingLinks: pending.size, alreadySigned },
+        extra: { requestId, cancelledPendingLinks: pending.size, alreadySigned, replacementReason },
       });
     });
 
@@ -166,24 +209,20 @@ export const createDispersionCashSignatureLink = onCall(
   },
 );
 
-/** Public read for the signing page: shows what is being signed, never who created the link. */
+/** Public read for the signing page: shows what is being signed, never who created the link or the client. */
 export const getDispersionCashSignatureRequest = onCall(
-  { cors: true, timeoutSeconds: 30, memory: "256MiB" },
+  { ...CALL_OPTIONS, timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const token = cleanText(request.data?.token, 160);
     if (!TOKEN_RE.test(token)) throw new HttpsError("not-found", "Link de firma invalido.");
-    const ref = db.collection(REQUESTS).doc(token);
+    const ref = requestRef(token);
     await recoverAbandonedReservation(ref);
-    const snap = await ref.get();
-    if (!snap.exists) throw new HttpsError("not-found", "Link de firma invalido.");
-    const row: any = snap.data() || {};
-    if (row.status !== "PENDING") throw new HttpsError("failed-precondition", "Este link ya fue usado o cancelado.");
-    if (millis(row.expiresAt) < Date.now()) throw new HttpsError("deadline-exceeded", "Este link ya expiro.");
+    const row: any = (await ref.get()).data();
+    assertPendingRequest(row);
 
     return {
       ok: true,
       dispersionFolio: row.dispersionFolio || null,
-      clienteNombre: row.clienteNombre || null,
       expectedReceiverName: row.expectedReceiverName || null,
       amount: toMoney(row.amount),
       currency: upperText(row.currency) || "MXN",
@@ -200,7 +239,7 @@ export const getDispersionCashSignatureRequest = onCall(
  * name and the drawing; amount and beneficiary come from the dispersion.
  */
 export const submitDispersionCashSignature = onCall(
-  { cors: true, timeoutSeconds: 90, memory: "1GiB" },
+  { ...CALL_OPTIONS, timeoutSeconds: 90, memory: "1GiB" },
   async (request) => {
     const token = cleanText(request.data?.token, 160);
     if (!TOKEN_RE.test(token)) throw new HttpsError("invalid-argument", "Link de firma invalido.");
@@ -213,15 +252,14 @@ export const submitDispersionCashSignature = onCall(
     if (request.data?.acceptedReceipt !== true) {
       throw new HttpsError("failed-precondition", "Debes confirmar que recibiste el efectivo para firmar.");
     }
-    const png = await decodePngDataUrl(request.data?.signatureDataUrl);
 
-    const tokenRef = db.collection(REQUESTS).doc(token);
+    // Validate the token before touching the image so an unusable link never
+    // pays for PNG decoding.
+    const tokenRef = requestRef(token);
+    const requestId = tokenRef.id;
     await recoverAbandonedReservation(tokenRef);
-    const tokenSnap = await tokenRef.get();
-    if (!tokenSnap.exists) throw new HttpsError("not-found", "Link de firma invalido.");
-    const tokenRow: any = tokenSnap.data() || {};
-    if (tokenRow.status !== "PENDING") throw new HttpsError("failed-precondition", "Este link ya fue usado o cancelado.");
-    if (millis(tokenRow.expiresAt) < Date.now()) throw new HttpsError("deadline-exceeded", "Este link ya expiro.");
+    const tokenRow: any = (await tokenRef.get()).data();
+    assertPendingRequest(tokenRow);
 
     const dispersionId = cleanText(tokenRow.dispersionId, 128);
     const rootId = cleanText(tokenRow.rootId, 128);
@@ -234,6 +272,8 @@ export const submitDispersionCashSignature = onCall(
     if (toMoney(dispersion.amount) !== toMoney(tokenRow.amount) || currencyOf(dispersion) !== upperText(tokenRow.currency)) {
       throw new HttpsError("failed-precondition", "El monto de la dispersion cambio. Solicita un nuevo enlace.");
     }
+
+    const png = await decodePngDataUrl(request.data?.signatureDataUrl);
 
     const folio = folioOf(dispersion, dispersionId);
     const amount = toMoney(dispersion.amount);
@@ -316,6 +356,7 @@ export const submitDispersionCashSignature = onCall(
         integritySealStatus: "HASH_SERVER_GENERATED",
         integritySealVersion: "PAY0-MATERIALIDAD-V1",
         source: "PUBLIC_SIGNATURE_LINK",
+        signatureRequestId: requestId,
         signatureCapture: {
           source: "PUBLIC_LINK",
           ...acceptance,
@@ -392,7 +433,7 @@ export const submitDispersionCashSignature = onCall(
             acceptanceVersion: CASH_RECEIPT_VERSION,
             signedAt: FieldValue.serverTimestamp(),
             linkCreatedBy: actorUid,
-            token,
+            requestId,
           },
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
@@ -420,10 +461,11 @@ export const submitDispersionCashSignature = onCall(
           referenceType: "dispersionDocument",
           amount,
           description: `Firma de recepcion de efectivo capturada para la dispersion ${folio} por ${signerName}` +
-            (receiverMatches ? "." : ` (distinto del beneficiario ${expected || "sin nombre"}).`),
+            (receiverMatches ? "." : ` (FIRMA DISTINTA DEL BENEFICIARIO ${expected || "sin nombre"}).`),
           createdBy: actorUid,
           extra: {
             source: "dispersionCashReceipt",
+            requestId,
             uploadId,
             version: finalVersion,
             signerName,

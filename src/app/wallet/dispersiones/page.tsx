@@ -48,8 +48,10 @@ import { Ban,
 } from "lucide-react";
 import {
   CASH_RECEIPT_STATUS,
+  CASH_RECEIPT_MISMATCH_MARK,
   cashReceiptStatusLabel,
   cashReceiptStatusOfRow,
+  cashReceiverMismatch,
   createDispersionCashSignatureLink,
 } from "@/services/dispersionCashSignature";
 import DispersionDocsModal from "@/components/DispersionDocsModal";
@@ -1184,32 +1186,50 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
     const base = String(row.status || "").trim();
     const receipt = cashReceiptStatusOfRow(row);
     if (!receipt) return base;
-    return `${base || "-"} · ${cashReceiptStatusLabel(receipt).toUpperCase()}`;
+    const mark = cashReceiverMismatch(row) ? ` ${CASH_RECEIPT_MISMATCH_MARK}` : "";
+    return `${base || "-"} · ${cashReceiptStatusLabel(receipt).toUpperCase()}${mark}`;
   }
 
+  // A signed receipt is final: only a superadmin may open a new link over it,
+  // and a pending incident blocks the signature until it is resolved.
   function canCreateCashSignatureLink(row: DispersionRow): boolean {
+    const receipt = cashReceiptStatusOfRow(row);
+    if (receipt === null) return false;
+    if (receipt === CASH_RECEIPT_STATUS.SIGNED && !isSuperadmin) return false;
     return (
       row.fundingSource?.holderType !== "USER" &&
       String(row.status || "").trim().toUpperCase() === "REGISTRADA" &&
-      cashReceiptStatusOfRow(row) !== null
+      String(row.incidentStatus || "").trim().toUpperCase() !== "SOLICITADA"
     );
   }
 
   async function handleCreateCashSignatureLink(row: DispersionRow) {
     const alreadySigned = cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED;
-    const confirmed = window.confirm(
-      alreadySigned
-        ? `La dispersion ${row.folio || row.id} ya tiene firma. ¿Generar un nuevo link para reemplazarla con una nueva version?`
-        : `Generar link de firma de recepcion de efectivo para ${row.folio || row.id} por ${formatMoney(row.amount)}?\n\nEl link sirve una sola vez. Puedes enviarlo a quien recibe o abrirlo en tu telefono para que firme al entregar.`,
-    );
-    if (!confirmed) return;
+    let reason = "";
+    if (alreadySigned) {
+      const answer = window.prompt(
+        `La dispersion ${row.folio || row.id} ya tiene firma de recepcion. La firma actual quedara como historial y la nueva la reemplazara.\n\nEscribe el motivo (queda en la bitacora):`,
+        "",
+      );
+      if (answer === null) return;
+      reason = answer.trim();
+      if (reason.length < 5) {
+        setError("Indica un motivo de al menos 5 caracteres para reemplazar la firma.");
+        return;
+      }
+    } else {
+      const confirmed = window.confirm(
+        `Generar link de firma de recepcion de efectivo para ${row.folio || row.id} por ${formatMoney(row.amount)}?\n\nEl link sirve una sola vez. Puedes enviarlo a quien recibe o abrirlo en tu telefono para que firme al entregar.`,
+      );
+      if (!confirmed) return;
+    }
 
     setSignatureBusyId(row.id);
     setError("");
     setSuccess("");
 
     try {
-      const result = await createDispersionCashSignatureLink(row.id);
+      const result = await createDispersionCashSignatureLink(row.id, reason || undefined);
       let copied = false;
       try {
         await navigator.clipboard?.writeText(result.url);
@@ -3057,16 +3077,20 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                           className={`ml-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
                             cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED
                               ? "border-emerald-500/40 text-emerald-300"
-                              : "border-amber-500/40 text-amber-300"
+                              : cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.PENDING
+                                ? "border-amber-500/40 text-amber-300"
+                                : "border-slate-500/40 text-slate-400"
                           }`}
                           title={
                             cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED
-                              ? `Firmado por ${row.cashReceipt?.signerName || "-"}${row.cashReceipt?.receiverMatches === false ? " (distinto del beneficiario)" : ""}`
-                              : "Efectivo: no se da por terminada hasta que exista la firma de recepcion"
+                              ? `Firmado por ${row.cashReceipt?.signerName || "-"}${cashReceiverMismatch(row) ? ` ${CASH_RECEIPT_MISMATCH_MARK}` : ""}`
+                              : cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.PENDING
+                                ? "Efectivo: no se da por terminada hasta que exista la firma de recepcion"
+                                : "Efectivo anterior al recibo firmado: no cuenta como pendiente"
                           }
                         >
                           {cashReceiptStatusLabel(cashReceiptStatusOfRow(row))}
-                          {row.cashReceipt?.receiverMatches === false ? " ⚠" : ""}
+                          {cashReceiverMismatch(row) ? " ⚠" : ""}
                         </span>
                       ) : null}
                     </td>
@@ -3129,7 +3153,7 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                             }`}
                             title={
                               cashReceiptStatusOfRow(row) === CASH_RECEIPT_STATUS.SIGNED
-                                ? "Firma de recepcion capturada. Generar nuevo link reemplaza la firma."
+                                ? "Firma de recepcion capturada. Solo superadmin puede generar un nuevo link, con motivo."
                                 : "Generar link de firma de recepcion de efectivo"
                             }
                             aria-label={`Link de firma de efectivo ${row.folio || "dispersión sin folio"}`}

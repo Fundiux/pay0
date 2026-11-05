@@ -11,7 +11,11 @@ export const CASH_RECEIPT_LINK_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 export const CASH_RECEIPT_STATUS = {
   PENDING: "PENDIENTE_FIRMA",
   SIGNED: "FIRMADA",
+  /** Cash dispersions created before the feature: no receipt was ever required. */
+  LEGACY: "SIN_FIRMA_ANTERIOR",
 } as const;
+
+export const CASH_RECEIPT_REPLACEMENT_REASON_MIN = 5;
 
 export type CashReceiptStatus = typeof CASH_RECEIPT_STATUS[keyof typeof CASH_RECEIPT_STATUS];
 
@@ -67,29 +71,50 @@ export function initialCashReceiptStatus(operationTypeKey: unknown): CashReceipt
 }
 
 /**
- * Derived receipt status. Cash dispersions created before this feature carry no
- * field and are still pending; a stored FIRMADA always wins.
+ * Derived receipt status. A stored FIRMADA always wins; PENDIENTE_FIRMA is only
+ * stamped at creation from the deploy onwards, so cash dispersions without the
+ * field predate the feature and are exempt (SIN_FIRMA_ANTERIOR), not pending.
  */
 export function cashReceiptStatusOf(row: any): CashReceiptStatus | null {
   if (!isCashDispersion(row)) return null;
   const stored = upperText(row?.cashReceiptStatus || row?.cashReceipt?.status);
   if (stored === CASH_RECEIPT_STATUS.SIGNED) return CASH_RECEIPT_STATUS.SIGNED;
-  return CASH_RECEIPT_STATUS.PENDING;
+  if (stored === CASH_RECEIPT_STATUS.PENDING) return CASH_RECEIPT_STATUS.PENDING;
+  return CASH_RECEIPT_STATUS.LEGACY;
 }
 
 export function isCashReceiptSigned(row: any): boolean {
   return cashReceiptStatusOf(row) === CASH_RECEIPT_STATUS.SIGNED;
 }
 
+export function isCashReceiptPending(row: any): boolean {
+  return cashReceiptStatusOf(row) === CASH_RECEIPT_STATUS.PENDING;
+}
+
 /**
  * A dispersion counts as finished (terminada / conciliada) only when it is not
- * cash, or when its cash receipt has been signed. Terminal statuses (cancelled,
- * returned) are not "finished deliveries" either.
+ * cash, or when its cash receipt is not pending (signed, or exempt because it
+ * predates the receipt). Terminal statuses (cancelled, returned) are not
+ * "finished deliveries" either.
  */
 export function isDispersionDeliveryComplete(row: any): boolean {
   if (isTerminalDispersionStatus(row?.status)) return false;
   if (!isCashDispersion(row)) return true;
-  return isCashReceiptSigned(row);
+  return !isCashReceiptPending(row);
+}
+
+/** Status text shown in lists and exports next to the dispersion status. */
+export function cashReceiptStatusLabel(status: CashReceiptStatus | null): string {
+  if (status === CASH_RECEIPT_STATUS.SIGNED) return "Firmada";
+  if (status === CASH_RECEIPT_STATUS.PENDING) return "Pendiente de firma";
+  if (status === CASH_RECEIPT_STATUS.LEGACY) return "Sin firma (anterior)";
+  return "";
+}
+
+export function validateReplacementReason(value: unknown): string {
+  const reason = cleanText(value, 300);
+  if (reason.length < CASH_RECEIPT_REPLACEMENT_REASON_MIN) throw new Error("REPLACEMENT_REASON_REQUIRED");
+  return reason;
 }
 
 export function expectedReceiverName(row: any): string {

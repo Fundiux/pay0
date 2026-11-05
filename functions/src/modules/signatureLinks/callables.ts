@@ -8,6 +8,7 @@ import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { receiptAcceptance } from "./acceptance";
+import { pngHasSignatureInk } from "./pngInk";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -54,6 +55,14 @@ export async function decodePngDataUrl(input: unknown): Promise<Buffer> {
   } catch {
     throw new HttpsError("invalid-argument", "El archivo no contiene una imagen PNG válida.");
   }
+  // A structurally valid PNG can still be a blank canvas; require real ink.
+  let inked = false;
+  try {
+    inked = pngHasSignatureInk(buffer);
+  } catch {
+    throw new HttpsError("invalid-argument", "El archivo no contiene una imagen PNG válida.");
+  }
+  if (!inked) throw new HttpsError("invalid-argument", "La firma esta en blanco. Firma dentro del recuadro.");
   return buffer;
 }
 
