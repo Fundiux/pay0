@@ -172,6 +172,18 @@
     {
       "commit": "77946aa4",
       "capability": "Controles supervisados de importacion historica P4 solo para Super Admin"
+    },
+    {
+      "commit": "77bd6fd2",
+      "capability": "Alerta diaria de estado de agentes al superadmin por Telegram"
+    },
+    {
+      "commit": "a5762695",
+      "capability": "La alerta diaria valida destinatarios contra el usuario canonico y registra fallas del marcador"
+    },
+    {
+      "commit": "e01126fb",
+      "capability": "Cancelaciones Facturama e IQ: un solo envio, abonos protegidos, seguimiento hasta el SAT y desenlaces IQ"
     }
   ],
   "requiredText": [
