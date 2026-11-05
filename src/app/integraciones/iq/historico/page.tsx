@@ -14,12 +14,22 @@ import {
 const ERROR_COPY: Record<string, string> = {
   P4_PLAN_BUDGET_EXCEEDED: "IQ devolvió demasiados registros para un solo bloque. Intenta más tarde o con otro bloque.",
   P4_PLAN_INVALID_RANGE: "El periodo no es válido.",
+  P4_PLAN_PROFILE_AUTH_BLOCKED: "IQ rechazó la sesión de lectura. Revisa las credenciales del perfil IQ e intenta de nuevo.",
   P4_SCOPE_LOCKED: "Otra sincronización sigue en curso sobre este periodo. Espera unos minutos y vuelve a intentar.",
   P4_SCOPE_NOT_APPROVED: "El alcance cambió desde que se preparó. Vuelve a preparar el periodo.",
-  P4_SCOPE_APPROVAL_MISMATCH: "Ya existe una aprobación distinta para este periodo. Vuelve a preparar el periodo.",
+  P4_SCOPE_APPROVAL_MISMATCH: "Se escribieron registros desde la última preparación y el alcance ya no coincide. Lo escrito se conserva; vuelve a preparar el periodo.",
   P4_MANIFEST_HASH_MISMATCH: "IQ cambió desde que se preparó el plan. Vuelve a preparar el periodo.",
   P4_INTERNAL: "Error interno del motor. Nada quedó a medias; revisa los registros de la Function.",
   "deadline-exceeded": "La lectura de IQ tardó demasiado. Vuelve a intentar; lo ya escrito se conserva.",
+};
+
+const STOP_COPY: Record<NonNullable<P4SyncResult["stoppedReason"]>, string> = {
+  CANARIO_FALLIDO: "El primer registro no pudo escribirse. Revisa el error en los registros de la Function antes de intentar de nuevo.",
+  REGISTROS_FALLIDOS: "Un lote tuvo errores. Lo escrito se conserva; revisa los registros fallidos antes de volver a preparar el periodo.",
+  ALCANCE_CAMBIADO: "IQ o PAY0 cambiaron durante la sincronización y el servidor propone registros que no viste. Prepara de nuevo el periodo para revisarlos.",
+  REQUIERE_REVISION: "Algunos registros confirmados dejaron de ser ejecutables. Suele ocurrir cuando dependen de otros aún no importados; prepara de nuevo el periodo.",
+  SIN_AVANCE: "Ninguna escritura avanzó. Prepara de nuevo el periodo; si persiste, revisa los registros de la Function.",
+  TOPE_DE_LOTES: "Se alcanzó el tope de lotes por confirmación. Puedes continuar con lo pendiente.",
 };
 
 function errorMessage(error: unknown): string {
@@ -41,10 +51,14 @@ const PHASE_COPY: Record<P4SyncProgress["phase"], string> = {
   DETENIDO: "Detenido",
 };
 
+/** Capas de dependencia por sesión: clientes, luego sus facturas y pagos, luego aplicaciones. */
+const MAX_FOLLOW_UPS = 4;
+
 export default function IqHistoricalImportPage() {
   const [month, setMonth] = useState("2026-09");
   const [block, setBlock] = useState<P4Block>("01_10");
   const [plan, setPlan] = useState<P4SyncPlan | null>(null);
+  const [followUp, setFollowUp] = useState(0);
   const [progress, setProgress] = useState<P4SyncProgress | null>(null);
   const [result, setResult] = useState<P4SyncResult | null>(null);
   const [busy, setBusy] = useState<"" | "preparar" | "sincronizar">("");
@@ -52,16 +66,21 @@ export default function IqHistoricalImportPage() {
 
   function reset() {
     setPlan(null);
+    setFollowUp(0);
     setProgress(null);
     setResult(null);
     setError("");
   }
 
-  async function prepare() {
+  async function prepare(nextFollowUp = 0) {
     setBusy("preparar");
-    reset();
+    setError("");
+    if (nextFollowUp === 0) reset();
     try {
-      setPlan(await prepareP4Sync({ month, block }));
+      const next = await prepareP4Sync({ month, block });
+      setPlan(next);
+      setFollowUp(nextFollowUp);
+      if (nextFollowUp > 0 && next.writes === 0) setProgress(current => current ? { ...current, phase: "COMPLETO", detail: "Periodo sincronizado. No quedan registros por escribir." } : current);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -75,7 +94,16 @@ export default function IqHistoricalImportPage() {
     setError("");
     setResult(null);
     try {
-      setResult(await runP4Sync(plan, setProgress));
+      const outcome = await runP4Sync(plan, setProgress);
+      setResult(outcome);
+      // Lo recién escrito puede destrabar registros que dependían de ello
+      // (por ejemplo facturas de un cliente nuevo). Se vuelve a leer IQ y, si
+      // hay escrituras nuevas, se pide otra confirmación; nunca se auto-aprueba.
+      if (outcome.ok && followUp < MAX_FOLLOW_UPS) {
+        setBusy("");
+        await prepare(followUp + 1);
+        return;
+      }
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -83,8 +111,10 @@ export default function IqHistoricalImportPage() {
     }
   }
 
-  const nothingToWrite = plan !== null && plan.writes === 0;
-  const finished = result?.ok === true;
+  const alreadySynced = plan !== null && plan.writes === 0 && (plan.excluded.completed > 0 || plan.excluded.unchanged > 0);
+  const nothingPending = plan !== null && plan.writes === 0 && !alreadySynced;
+  const canRetry = result?.stoppedReason === "TOPE_DE_LOTES";
+  const showConfirm = plan !== null && plan.writes > 0 && (!result || canRetry);
 
   return <main className="mx-auto max-w-3xl space-y-6 px-4 py-8 text-slate-100">
     <div>
@@ -107,24 +137,24 @@ export default function IqHistoricalImportPage() {
           </select>
         </label>
       </div>
-      <button type="button" disabled={!!busy || !/^2026-\d{2}$/.test(month)} onClick={prepare} className="mt-4 rounded bg-sky-700 px-4 py-2 text-sm disabled:opacity-50">
+      <button type="button" disabled={!!busy || !/^2026-\d{2}$/.test(month)} onClick={() => prepare(0)} className="mt-4 rounded bg-sky-700 px-4 py-2 text-sm disabled:opacity-50">
         {busy === "preparar" ? "Leyendo IQ…" : "Sincronizar"}
       </button>
       {busy === "preparar" && <p className="mt-2 text-xs text-slate-400">Esto lee IQ completo para el periodo y puede tardar varios minutos. Aún no se escribe nada.</p>}
     </section>
 
     {plan && <section className="space-y-4 rounded-xl border border-slate-700 bg-slate-900 p-5">
-      <h2 className="font-semibold">Lo que va a hacer para {monthLabel(plan.period.month)}, del {dayLabel(plan.range.start)} al {dayLabel(plan.range.end)}</h2>
-      {nothingToWrite
-        ? <p className="text-sm text-emerald-300">Este periodo ya está sincronizado. No hay nada que escribir.</p>
-        : <ul className="grid gap-2 text-sm sm:grid-cols-2">
-          <li>Solicitudes nuevas: <strong>{plan.planned.solicitudes}</strong></li>
-          <li>Pagos nuevos: <strong>{plan.planned.pagos}</strong></li>
-          <li>Aplicaciones de pago nuevas: <strong>{plan.planned.aplicaciones}</strong></li>
-          <li>Clientes nuevos: <strong>{plan.planned.clientes}</strong></li>
-          {plan.planned.conciliaciones > 0 && <li>Registros existentes que se completan: <strong>{plan.planned.conciliaciones}</strong></li>}
-          <li>Total de escrituras en PAY0: <strong>{plan.writes}</strong></li>
-        </ul>}
+      <h2 className="font-semibold">{followUp > 0 ? "Registros que dependían de lo recién escrito" : "Lo que va a hacer"} para {monthLabel(plan.period.month)}, del {dayLabel(plan.range.start)} al {dayLabel(plan.range.end)}</h2>
+      {alreadySynced && <p className="text-sm text-emerald-300">Este periodo ya está sincronizado. No hay nada que escribir.</p>}
+      {nothingPending && <p className="text-sm text-slate-300">No hay registros de IQ pendientes de importar en este periodo.</p>}
+      {plan.writes > 0 && <ul className="grid gap-2 text-sm sm:grid-cols-2">
+        <li>Solicitudes nuevas: <strong>{plan.planned.solicitudes}</strong></li>
+        <li>Pagos nuevos: <strong>{plan.planned.pagos}</strong></li>
+        <li>Aplicaciones de pago nuevas: <strong>{plan.planned.aplicaciones}</strong></li>
+        <li>Clientes nuevos: <strong>{plan.planned.clientes}</strong></li>
+        {plan.planned.conciliaciones > 0 && <li>Registros existentes que se completan: <strong>{plan.planned.conciliaciones}</strong></li>}
+        <li>Total de escrituras en PAY0: <strong>{plan.writes}</strong></li>
+      </ul>}
       <details className="text-sm text-slate-300">
         <summary className="cursor-pointer text-slate-400">Qué se deja fuera y por qué</summary>
         <ul className="mt-2 space-y-1">
@@ -132,13 +162,15 @@ export default function IqHistoricalImportPage() {
           <li>Ya existen en PAY0 sin cambios: {plan.excluded.unchanged}</li>
           <li>Cancelados o rechazados en IQ: {plan.excluded.terminal}</li>
           <li>Dependen de registros de otro periodo aún no importados: {plan.excluded.dependency}</li>
-          <li>Requieren revisión manual (cliente ambiguo, montos o fechas inconsistentes): {plan.excluded.review}</li>
+          <li>Requieren revisión manual (cliente aún no existe en PAY0, montos o fechas inconsistentes): {plan.excluded.review}</li>
           {plan.excluded.other > 0 && <li>Otros: {plan.excluded.other}</li>}
         </ul>
         {plan.excluded.dependency > 0 && <p className="mt-2 text-amber-300">Para traer los que dependen de otro periodo, sincroniza primero el bloque anterior y vuelve a este.</p>}
+        {plan.excluded.review > 0 && plan.planned.clientes > 0 && <p className="mt-2 text-amber-300">Los registros de clientes nuevos se destraban al confirmar: primero se crean los clientes y después se te mostrarán sus solicitudes, pagos y aplicaciones para confirmarlos.</p>}
+        <p className="mt-2 break-all font-mono text-xs text-slate-500">Plan {plan.manifestId} · alcance {plan.scopeId}</p>
       </details>
-      {!nothingToWrite && !finished && <button type="button" disabled={!!busy} onClick={confirm} className="rounded bg-amber-700 px-4 py-2 text-sm disabled:opacity-50">
-        {busy === "sincronizar" ? "Sincronizando…" : result ? "Reintentar lo pendiente" : `Confirmar y escribir ${plan.writes} registros`}
+      {showConfirm && <button type="button" disabled={!!busy} onClick={confirm} className="rounded bg-amber-700 px-4 py-2 text-sm disabled:opacity-50">
+        {busy === "sincronizar" ? "Sincronizando…" : canRetry ? "Continuar con lo pendiente" : `Confirmar y escribir ${plan.writes} registros`}
       </button>}
     </section>}
 
@@ -146,8 +178,9 @@ export default function IqHistoricalImportPage() {
       <h2 className="font-semibold">{PHASE_COPY[progress.phase]}</h2>
       <p className="text-slate-300">{progress.detail}</p>
       <p>Escritos: <strong>{progress.completed}</strong> · Pendientes: <strong>{progress.pending}</strong> · Fallidos: <strong className={progress.failed ? "text-rose-300" : ""}>{progress.failed}</strong></p>
-      {result && !result.ok && <p className="text-amber-300">Motivo: {result.stoppedReason}. Lo ya escrito se conserva; puedes reintentar y sólo continuará lo pendiente.</p>}
-      {finished && <p className="text-emerald-300">Periodo sincronizado. Los registros aparecen en Solicitudes y Pagos con su fecha original y su dueño en IQ.</p>}
+      {result && !result.ok && result.stoppedReason && <p className="text-amber-300">{STOP_COPY[result.stoppedReason]}</p>}
+      {result?.ok && progress.phase === "COMPLETO" && <p className="text-emerald-300">Los registros escritos aparecen en Solicitudes y Pagos con su fecha original y su dueño en IQ.</p>}
+      <p className="break-all font-mono text-xs text-slate-500">Plan {result?.manifestId || plan?.manifestId} · alcance {progress.scopeId} · lote {progress.round}{result?.stoppedAt ? ` · paro: ${result.stoppedAt}` : ""}</p>
     </section>}
 
     {error && <p role="alert" className="rounded border border-rose-800 bg-rose-950/40 p-3 text-sm text-rose-200">{error}</p>}
