@@ -75,7 +75,7 @@ function getEncryptionKey(): Buffer {
   return crypto.createHash("sha256").update(trimmed).digest();
 }
 
-function decryptSecret(data: Record<string, unknown>): string {
+export function decryptSecret(data: Record<string, unknown>): string {
   const ciphertext = cleanText(data.passwordCiphertext);
   const iv = cleanText(data.passwordIv);
   const tag = cleanText(data.passwordTag);
