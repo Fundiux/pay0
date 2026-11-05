@@ -196,6 +196,42 @@
     {
       "commit": "514a93a0",
       "capability": "Complementos en pausa ante cancelaciones no decididas y reanudables; estados de revision ordenados y etiquetados por origen"
+    },
+    {
+      "commit": "6e911a1f",
+      "capability": "Cancelaciones no decididas difieren complementos y re-cancelaciones; motivo previo restaurado tras rechazo"
+    },
+    {
+      "commit": "60c1bc97",
+      "capability": "Seguimiento diario de complementos IQ lee hasta diez casos y bloquea reanudable ante cancelacion abierta"
+    },
+    {
+      "commit": "7e23d72a",
+      "capability": "Firma de recepcion para dispersiones en efectivo con link publico por token"
+    },
+    {
+      "commit": "904660e3",
+      "capability": "Firma de efectivo: pruebas de callables en emulador, firma en blanco rechazada, incidencias y reemplazo protegidos, token hasheado"
+    },
+    {
+      "commit": "d955f513",
+      "capability": "Firma de solicitudes decodifica la imagen tras validar el token y acota instancias y dimensiones"
+    },
+    {
+      "commit": "12c74b78",
+      "capability": "Importacion historica IQ por periodo con una confirmacion"
+    },
+    {
+      "commit": "3570956d",
+      "capability": "Selector P4 V8_4 ejecuta clientes dependientes dentro de bloques de mes"
+    },
+    {
+      "commit": "93eaf8eb",
+      "capability": "La cadena de importacion historica re-previsualiza y re-aprueba el alcance antes de cada escritura"
+    },
+    {
+      "commit": "833dbf14",
+      "capability": "Canario alineado con el ejecutor, evidencia de otra version con codigo propio y capas de seguimiento confirmables"
     }
   ],
   "requiredText": [
