@@ -7,6 +7,11 @@ export function hasOpenCancellation(solicitud: Record<string, any>): boolean {
     solicitud.facturamaCancellationReviewRequired === true;
 }
 
+// The provider already cancelled it and a person has to decide about its payments.
+export function cancellationUnderReview(solicitud: Record<string, any>): boolean {
+  return upper(solicitud.iqCancellationStatus) === "CONFIRMED_REVIEW_REQUIRED" || solicitud.facturamaCancellationReviewRequired === true;
+}
+
 // A provider can confirm a cancellation after payments were applied. Only a SAT 01
 // substitution keeps them valid, so anything else needs a person to decide.
 export function cancellationNeedsPaymentReview(solicitud: Record<string, any>, appliedPayments: number): boolean {

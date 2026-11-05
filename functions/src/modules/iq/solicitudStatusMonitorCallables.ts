@@ -575,13 +575,15 @@ async function publishSuperadminRejectionNotification(input: {
   }).catch(() => undefined);
 }
 
-async function markCancelled(input: {
+export async function markCancelled(input: {
   job: IqStatusJob;
   match: IqInvoiceMarkerMatch;
 }): Promise<void> {
   const solicitudRef = db.collection("solicitudes").doc(input.job.solicitudId);
   const now = FieldValue.serverTimestamp();
   let reviewRequired = false;
+  let alreadyClosed = false;
+  let reviewAmount = 0;
 
   await db.runTransaction(async (tx: Transaction) => {
     const solicitudSnap = await tx.get(solicitudRef);
@@ -591,6 +593,8 @@ async function markCancelled(input: {
     }
 
     const solicitud = asRecord(solicitudSnap.data());
+    alreadyClosed = ["CANCELADA", "CANCELADO"].includes(cleanText(solicitud.status).toUpperCase()) ||
+      cleanText(solicitud.iqCancellationStatus) === "CONFIRMED";
     const applications = await tx.get(db.collection("pagoAplicaciones")
       .where("rootId", "==", input.job.rootId)
       .where("solicitudId", "==", input.job.solicitudId));
@@ -602,8 +606,10 @@ async function markCancelled(input: {
       cleanText(solicitud.cancelledBy) ||
       cleanText(input.job.requestedBy) ||
       "system";
+    const totalAbonado = Number(solicitud.totalAbonado || 0);
+    reviewAmount = totalAbonado;
 
-    tx.set(solicitudRef, {
+    if (!alreadyClosed) tx.set(solicitudRef, {
       ...(reviewRequired
         ? { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED" }
         : { status: "CANCELADA", cancelledBy, cancelledAt: now, iqOperationStatus: "CANCELADA", iqCancellationStatus: "CONFIRMED" }),
@@ -627,6 +633,8 @@ async function markCancelled(input: {
     }, { merge: true });
   });
 
+  if (alreadyClosed) return;
+
   await safeLogActivity({
     event: reviewRequired ? "IQ_CANCELACION_REQUIERE_REVISION" : "IQ_SOLICITUD_CANCELADA",
     rootId: input.job.rootId,
@@ -640,8 +648,10 @@ async function markCancelled(input: {
     referenceType: "solicitud",
     entityId: input.job.solicitudId,
     entityType: "solicitud",
-    amount: input.job.amount,
-    description: `Solicitud ${input.job.solicitudFolio} cancelada en IQ. FOLIO IQ: ${input.job.iqFolio}`,
+    amount: reviewRequired ? reviewAmount : input.job.amount,
+    description: reviewRequired
+      ? `IQ canceló ${input.job.solicitudFolio}, pero tiene abonos por ${reviewAmount}: requiere revisión. FOLIO IQ: ${input.job.iqFolio}`
+      : `Solicitud ${input.job.solicitudFolio} cancelada en IQ. FOLIO IQ: ${input.job.iqFolio}`,
     extra: {
       iqId: input.job.iqFolio,
       iqProfileId: input.job.profileId,

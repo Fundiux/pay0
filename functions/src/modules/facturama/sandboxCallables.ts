@@ -387,7 +387,7 @@ export const cancelFacturamaProductionInvoice = onCall(
       const rejected = Number(error?.providerStatus) >= 400 && Number(error?.providerStatus) < 500;
       const failure = db.batch();
       failure.set(invRef, { cancellationStatus: rejected ? "REQUEST_FAILED" : "REQUEST_UNCERTAIN", cancellationMotive: motive, cancellationError: clean(error?.message || error, 500), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      failure.set(solSnap.ref, { facturamaCancellationStatus: rejected ? "REQUEST_FAILED" : "PENDING", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      failure.set(solSnap.ref, { facturamaCancellationStatus: rejected ? "REQUEST_FAILED" : "PENDING", ...(rejected ? { motivoCancelacionSAT: FieldValue.delete() } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       logActivityBatch(failure, db, { event: rejected ? "FACTURAMA_CANCELACION_FALLIDA" : "FACTURAMA_CANCELACION_INCIERTA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: rejected ? `Facturama no aceptó la cancelación de ${clean(sol.folio || solicitudId, 80)}.` : `No se confirmó si la cancelación de ${clean(sol.folio || solicitudId, 80)} llegó a Facturama; PAY0 verificará su estado.` });
       await failure.commit();
       throw error;

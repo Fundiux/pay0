@@ -240,6 +240,10 @@ async function run(){
  const emitsBeforeReview=emits;await api.executeComplement(reviewJob,adapter);
  assert.equal(emits,emitsBeforeReview,'a cancelled CFDI under review never gets a REP');
  const reviewRow=(await db.doc(`paymentComplementJobs/${reviewJob}`).get()).data();assert.equal(reviewRow.status,'BLOCKED');assert.equal(reviewRow.error,'REP_SOURCE_CANCELLED');
+ await db.doc(`solicitudes/${reviewId}`).update({facturamaCancellationReviewRequired:false,iqCancellationStatus:'REQUESTED'});
+ const pendingJob=job+'-pending-cancel';await db.doc(`paymentComplementJobs/${pendingJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'QUEUED'});
+ await api.executeComplement(pendingJob,adapter);assert.equal(emits,emitsBeforeReview,'an undecided cancellation does not emit');
+ const pendingRow=(await db.doc(`paymentComplementJobs/${pendingJob}`).get()).data();assert.equal(pendingRow.status,'PAUSED','an undecided cancellation can resume');assert.equal(pendingRow.gateReason,'REP_SOURCE_CANCELLATION_PENDING');
  await assert.rejects(api.configurePaymentComplementAutomation.run({auth:{uid:'not-a-user',token:{}},data:{iqEnabled:true,facturamaEnabled:true}}));
  for(const [suffix,key] of [['one','rep1'],['two','rep2'],['three','rep1']]){
    const uploadId=`${root}-${suffix}`,ref=db.doc(`uploads/${uploadId}`);

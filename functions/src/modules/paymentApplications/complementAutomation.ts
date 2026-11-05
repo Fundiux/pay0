@@ -181,7 +181,8 @@ export async function enqueueComplement(applicationId: string): Promise<EnqueueO
   if (!initial?.rootId) return { result: "QUARANTINED", reason: "REP_APPLICATION_MISSING" };
   const config = (await db.doc(`paymentComplementConfigs/${initial.rootId}`).get()).data();
   await reconcilePaymentComplement(applicationId);
-  const loaded = await sourceFor(applicationId);
+  const loaded = await sourceFor(applicationId).catch(error => { if (error?.message === "REP_SOURCE_CANCELLATION_PENDING") return null; throw error; });
+  if (!loaded) return { result: "DEFERRED", reason: "REP_SOURCE_CANCELLATION_PENDING" };
   // A previous IQ pipeline may already have imported a valid REP under the
   // Solicitud. Adopt that evidence before applying the prospective-send gate;
   // this path never performs an external request.
@@ -281,6 +282,8 @@ export async function executeComplement(id: string, adapter = providers) {
   if (!job) return;
   let sending = false;
   try {
+    // Read outside a transaction: a cancellation that closes right after this
+    // read is not seen here. Only a SAT 01 substitution can have payments then.
     const { source, app, solicitud, pago } = await sourceFor(job.applicationId);
     if (source.rootId !== job.rootId) throw Error("REP_JOB_SCOPE");
     if (source.provider !== job.provider) throw Error("REP_PROVIDER_MISMATCH");
@@ -335,6 +338,10 @@ export async function executeComplement(id: string, adapter = providers) {
       await markReceived(id, [{ source, documents }]);
     }
   } catch (error) {
+    if (errorCode(error) === "REP_SOURCE_CANCELLATION_PENDING") {
+      await updateJob(id, { status: "PAUSED", gateReason: "REP_SOURCE_CANCELLATION_PENDING" }, "La solicitud tiene una cancelación en curso; el complemento espera su resultado.");
+      return;
+    }
     reportProtectedFailure(error);
     const latest = (await ref.get()).data();
     const retryableBeforeSend = ["RETRY_WAIT", "DEFERRED"].includes(classifyFailure(error).result);
@@ -435,7 +442,9 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
       await assertPay0Issuer({ db, rootId: job.rootId, companyId: text(solicitud.companyId) });
       await markReceived(id, [{ source: sources[0], documents: await adapter.importFacturamaComplement(job.cfdiId, sources[0]) }]); return "SUCCEEDED";
     }
-  } catch (error) { result = "QUARANTINED"; reportProtectedFailure(error); await updateJob(id, { error: errorCode(error), bReadState: "EXCEPTION", nextCheckAt: null },
+  } catch (error) {
+    if (errorCode(error) === "REP_SOURCE_CANCELLATION_PENDING") return "DEFERRED";
+    result = "QUARANTINED"; reportProtectedFailure(error); await updateJob(id, { error: errorCode(error), bReadState: "EXCEPTION", nextCheckAt: null },
     `Revisión B detenida por ${errorCode(error)}; resultado de solicitud C conservado, sin reenvío.`); }
   if (!job.overdueAlertedAt && overdue(job.requestedAt, now)) await updateJob(id, { overdueAlertedAt: Timestamp.fromDate(now) }, `El complemento ${job.provider === "IQ" ? `del depósito IQ ${job.depositId}` : `de la aplicación ${job.applicationId}`} lleva 5 días sin recibirse. ${job.provider === "IQ" ? "Pregunta por él en el grupo de WhatsApp de IQ" : "Solicítalo por WhatsApp al proveedor"}; PAY0 continuará la revisión diaria. No se envió WhatsApp automáticamente.`);
   return result;

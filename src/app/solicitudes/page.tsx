@@ -155,7 +155,7 @@ const SolicitudRow = React.memo(({
   const sustitucionCompleta = statusUpper === "EN_SUSTITUCION" && (!!targetFolio || !!targetId) && !!uuidSustituto;
   const isIqCancellationPending = ["REQUESTED", "OUTCOME_UNKNOWN"].includes(String(s?.iqCancellationStatus || "").trim().toUpperCase());
   const isCancellationReview = s?.facturamaCancellationReviewRequired === true || String(s?.iqCancellationStatus || "").trim().toUpperCase() === "CONFIRMED_REVIEW_REQUIRED";
-  const displayStatus = isCancellationReview ? "CANCELADA SAT: REVISAR ABONOS" : isIqCancellationPending ? "PENDIENTE CANCELACIÓN" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
+  const displayStatus = isCancellationReview ? `CANCELADA ${s?.facturamaCancellationReviewRequired === true ? "SAT" : "IQ"}: REVISAR ABONOS` : isIqCancellationPending ? "PENDIENTE CANCELACIÓN" : (sustitucionCompleta ? "SUSTITUIDA" : s.status);
   const canApplyFromPagos = canApplyPagoFromPagos(s);
 
   const sustitucionTrace = buildSustitucionSnapshot(s, allSolicitudes || [], sustitucionIndex);
@@ -501,6 +501,8 @@ const SolicitudRow = React.memo(({
                         >
                           Completar datos
                         </button>
+                      ) : isCancellationReview ? (
+                        <span className="text-amber-300 uppercase font-normal text-[10px]">Revisar abonos antes de cerrar</span>
                       ) : ["REJECTED", "NOT_APPLIED"].includes(String(s?.iqCancellationStatus || "")) ? (
                         <span className="text-amber-300 uppercase font-normal text-[10px]" title={String(s?.iqCancellationRejectionComment || "")}>
                           {s?.iqCancellationStatus === "REJECTED" ? "IQ rechazó la cancelación" : "Cancelación sin aplicar en IQ"}

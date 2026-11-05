@@ -7,6 +7,8 @@ const admin = require("../../functions/node_modules/firebase-admin");
 admin.initializeApp({ projectId: "demo-pay0", storageBucket: "demo-pay0.appspot.com" });
 const facturama = require("../../functions/lib/modules/facturama/sandboxCallables.js");
 const iq = require("../../functions/lib/modules/iq/cancellationReceiptImport.js");
+const monitor = require("../../functions/lib/modules/iq/solicitudStatusMonitorCallables.js");
+const api = require("../../functions/lib/index.js");
 const { hasOpenCancellation } = require("../../functions/lib/utils/solicitudCancellationState.js");
 
 const db = admin.firestore();
@@ -78,6 +80,7 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   await assert.rejects(cancel("falla"), /No cancelable/);
   assert.equal((await db.doc("facturamaInvoices/falla").get()).data().cancellationStatus, "REQUEST_FAILED");
   assert.equal(hasOpenCancellation((await db.doc("solicitudes/falla").get()).data()), false, "un rechazo reabre los pagos");
+  assert.equal((await db.doc("solicitudes/falla").get()).data().motivoCancelacionSAT, undefined, "un rechazo no deja el motivo escrito");
   assert.ok((await activity("falla")).includes("FACTURAMA_CANCELACION_FALLIDA"));
   deleteResponse = () => ({ Status: "pending" });
   await cancel("falla");
@@ -141,6 +144,28 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   assert.equal((await iqCase("iq-noaplica", "OUTCOME_UNKNOWN", "En Operacion")).iqCancellationStatus, "NOT_APPLIED");
   assert.equal((await iqCase("iq-espera", "REQUESTED", "Pendiente Cancelacion")).iqCancellationStatus, "REQUESTED");
   assert.ok((await activity("iq-rechaza")).includes("IQ_CANCELACION_RECHAZADA"));
+
+  const monitorCase = async (id, solicitud) => {
+    const ref = db.doc(`solicitudes/${id}`), jobRef = db.doc(`iqStatusJobs/${id}`);
+    await ref.set({ rootId: root, folio: id, status: "COMPLETADA", ...solicitud });
+    await monitor.markCancelled({ job: { ref: jobRef, solicitudId: id, solicitudFolio: id, rootId: root, iqFolio: "123", amount: 10, profileId: "p", marker: "m", requestedBy: "system" }, match: { operationStatus: "Cancelada", rowText: "" } });
+    return { row: (await ref.get()).data(), job: (await jobRef.get()).data() };
+  };
+  assert.equal((await monitorCase("mon-normal", {})).row.status, "CANCELADA");
+  const monitorReview = await monitorCase("mon-abono", { totalAbonado: 20, motivoCancelacionSAT: "02" });
+  assert.equal(monitorReview.row.status, "COMPLETADA", "el monitor sigue la misma regla de abonos");
+  assert.equal(monitorReview.row.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED");
+  assert.equal((await monitorCase("mon-revision", { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED" })).row.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED", "no pisa una revisión");
+  const closedBefore = (await activity("mon-cerrada")).length;
+  const monitorClosed = await monitorCase("mon-cerrada", { status: "CANCELADA", iqCancellationStatus: "CONFIRMED", cancelledBy: "original" });
+  assert.equal(monitorClosed.row.cancelledBy, "original", "una fila terminal no se reescribe");
+  assert.equal(monitorClosed.job.status, "CANCELLED", "el trabajo sí se cierra");
+  assert.equal((await activity("mon-cerrada")).length, closedBefore);
+
+  for (const [id, extra, message] of [["rev-iq", { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED" }, /IQ ya cancelo/], ["rev-sat", { facturamaCancellationReviewRequired: true }, /SAT ya cancelo/]]) {
+    await db.doc(`solicitudes/${id}`).set({ rootId: root, adminId: root, createdBy: root, folio: id, status: "PROCESANDO", totalAbonado: 0, iqFolio: "123", ...extra });
+    await assert.rejects(api.changeSolicitudStatus.run({ auth, data: { solicitudId: id, newStatus: "CANCELADA", motivoCancelacionSAT: "02" } }), message);
+  }
 
   console.log("PASS cancelaciones: un solo envio, abonos protegidos, seguimiento hasta el SAT y desenlaces IQ.");
   process.exit(0);
