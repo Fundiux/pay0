@@ -109,7 +109,7 @@ export async function executeRequestIqComplement(input: {
   if (enqueued?.reason === "REP_SOURCE_CANCELLATION_PENDING") {
     return {
       executed: false,
-      reply: "No solicité el complemento: la solicitud tiene una cancelación en curso. Se podrá solicitar cuando se resuelva.",
+      reply: `No solicité el complemento de ${clean(source.solicitudFolio || source.applicationFolio || source.applicationId)}: la solicitud tiene una cancelación en curso. Se podrá solicitar cuando se resuelva.`,
     };
   }
   const refreshed = (

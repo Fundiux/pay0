@@ -370,7 +370,7 @@ export default function IqIntegrationPage() {
         </header>
 
         <Link href="/integraciones/iq/historico" className="w-fit rounded border border-sky-700 px-4 py-2 text-sm text-sky-200">
-          Revisar sincronización inversa histórica
+          Sincronizar periodo desde IQ
         </Link>
 
         {message ? (

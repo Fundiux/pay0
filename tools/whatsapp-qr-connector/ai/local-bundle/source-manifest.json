@@ -1,0 +1,57 @@
+{
+  "createdAtUtc": "2026-10-21T10:59:14.348Z",
+  "scope": "LOCAL_MODEL_ROUTER_NO_BUSINESS_TOOLS",
+  "entrypointSha256": "e9d1adef9f4d5de9ffc08968d72eb9d6d91752ef2e53bfa1d6ba8ef39f1bdd06",
+  "sources": [
+    {
+      "path": "C:/Users/ebarr/Desktop/pay0-system/functions/src/modules/agent007/hugoCore/hugoV2Prompt.ts",
+      "sha256": "192d92c656ce1a9e8f12f38557203928a757a41be4e80d2452e8ba136e0eb9b1",
+      "overlay": false
+    },
+    {
+      "path": "C:/Users/ebarr/Desktop/pay0-system/functions/src/modules/agent007/hugoCore/modelContract.ts",
+      "sha256": "4db3683ccd1f9138b8f1682a33247193fc29ea09965b35c893a31cac987ff4ad",
+      "overlay": false
+    },
+    {
+      "path": "C:/Users/ebarr/Desktop/pay0-system/functions/src/modules/agent007/hugoCore/runtimeContract.ts",
+      "sha256": "8cc2ec9e249ef5844ac83b041fdb02312340a0d6ecd0353eac0ba4e31e692b6e",
+      "overlay": false
+    },
+    {
+      "path": "C:/Users/ebarr/Desktop/pay0-system/functions/src/modules/agent007/hugoModelRouter.ts",
+      "sha256": "6e30cde352cbef5414b8621d34aaad834b2231ac82671085a3551c169f64a7b3",
+      "overlay": false
+    },
+    {
+      "path": "C:/Users/ebarr/Desktop/pay0-system/functions/src/modules/agent007/openAiResponsesAdapter.ts",
+      "sha256": "a2cb8822a621df2abd1486776de7d43fa77cb8716074cc703755deb57a06bc73",
+      "overlay": false
+    },
+    {
+      "path": "C:\\Users\\ebarr\\.codex\\.chatgpt-projects\\g-p-69fba34a72408191b274bbb88d38802e\\recovery\\ai-bridge\\local-engine-entry.ts",
+      "sha256": "a3e0d9604ee4ca6e38544220d8fdefb539d300e562b03514b2784989295eac41",
+      "overlay": false
+    },
+    {
+      "path": "C:\\Users\\ebarr\\Desktop\\pay0-system\\functions\\src\\modules\\agent007\\hugoCore\\hugoV2Prompt.ts",
+      "sha256": "192d92c656ce1a9e8f12f38557203928a757a41be4e80d2452e8ba136e0eb9b1",
+      "overlay": false
+    },
+    {
+      "path": "C:\\Users\\ebarr\\Desktop\\pay0-system\\functions\\src\\modules\\agent007\\hugoCore\\legacyPrompt.ts",
+      "sha256": "4efdf12566566d7a6eca84d3766d837bb6866049acd61ea8f6d932b5cdfa274f",
+      "overlay": true
+    },
+    {
+      "path": "C:\\Users\\ebarr\\Desktop\\pay0-system\\functions\\src\\modules\\agent007\\openAiResponsesAdapter.ts",
+      "sha256": "a2cb8822a621df2abd1486776de7d43fa77cb8716074cc703755deb57a06bc73",
+      "overlay": false
+    },
+    {
+      "path": "C:\\Users\\ebarr\\Desktop\\pay0-system\\functions\\src\\modules\\agent007\\vertexGeminiAdapter.ts",
+      "sha256": "d3f711f8a4d291ea4e420028e7b7530b0550925ff2f92c7eefcdf3a27dc7a1e4",
+      "overlay": false
+    }
+  ]
+}

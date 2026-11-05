@@ -2833,6 +2833,7 @@ export { generateSolicitudQuotation, getPublicQuotationVerification } from "./mo
 export { getPublicConstanciaVerification, generateSolicitudReceiptCertificate } from "./modules/constancias/service";
 export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoAmountForRetry, deactivatePagoDocument } from "./modules/pagoDocuments/callables";
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
+export { createDispersionCashSignatureLink, getDispersionCashSignatureRequest, submitDispersionCashSignature } from "./modules/dispersionCashReceipt/callables";
 export { importIqDispersionReceipt } from "./modules/dispersionDocuments/iqReceiptImport";
 
 export { telegramWebhook } from "./modules/telegram/webhook";

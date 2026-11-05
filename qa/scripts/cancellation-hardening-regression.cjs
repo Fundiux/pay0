@@ -162,7 +162,11 @@ const activity = async id => (await Promise.all(["activityLog", "pay0ActivityLog
   const monitorReview = await monitorCase("mon-abono", { totalAbonado: 20, motivoCancelacionSAT: "02" });
   assert.equal(monitorReview.row.status, "COMPLETADA", "el monitor sigue la misma regla de abonos");
   assert.equal(monitorReview.row.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED");
-  assert.equal((await monitorCase("mon-revision", { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED" })).row.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED", "no pisa una revisión");
+  const reviewBefore = (await activity("mon-revision")).length;
+  const monitorReviewed = await monitorCase("mon-revision", { iqCancellationStatus: "CONFIRMED_REVIEW_REQUIRED", iqCancelledFolio: "original" });
+  assert.equal(monitorReviewed.row.iqCancellationStatus, "CONFIRMED_REVIEW_REQUIRED", "no pisa una revisión");
+  assert.equal(monitorReviewed.row.iqCancelledFolio, "original", "conserva el folio de la revisión");
+  assert.equal((await activity("mon-revision")).length, reviewBefore, "no vuelve a auditar una revisión");
   const closedBefore = (await activity("mon-cerrada")).length;
   const monitorClosed = await monitorCase("mon-cerrada", { status: "CANCELADA", iqCancellationStatus: "CONFIRMED", cancelledBy: "original" });
   assert.equal(monitorClosed.row.cancelledBy, "original", "una fila terminal no se reescribe");
