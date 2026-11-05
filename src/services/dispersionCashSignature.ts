@@ -21,6 +21,8 @@ export function isCashDispersionRow(row: any): boolean {
 
 export function cashReceiptStatusOfRow(row: any): CashReceiptStatus | null {
   if (!isCashDispersionRow(row)) return null;
+  // Commission withdrawals paid to a user never carry a client receipt.
+  if (row?.fundingSource?.holderType === "USER") return null;
   const stored = String(row?.cashReceiptStatus || row?.cashReceipt?.status || "").trim().toUpperCase();
   if (stored === CASH_RECEIPT_STATUS.SIGNED) return CASH_RECEIPT_STATUS.SIGNED;
   if (stored === CASH_RECEIPT_STATUS.PENDING) return CASH_RECEIPT_STATUS.PENDING;

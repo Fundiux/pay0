@@ -33,6 +33,8 @@ check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIV
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", cashReceiptStatus: "FIRMADA" }), "FIRMADA"));
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", cashReceipt: { status: "firmada" } }), "FIRMADA"));
 check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "TRANSFERENCIA", cashReceiptStatus: "FIRMADA" }), null));
+check(() => assert.equal(domain.cashReceiptStatusOf({ operationTypeKey: "EFECTIVO", fundingSource: { holderType: "USER" } }), null));
+check(() => assert.equal(domain.isDispersionDeliveryComplete({ operationTypeKey: "EFECTIVO", status: "REGISTRADA", fundingSource: { holderType: "USER" } }), true));
 check(() => assert.equal(domain.cashReceiptStatusLabel("PENDIENTE_FIRMA"), "Pendiente de firma"));
 check(() => assert.equal(domain.cashReceiptStatusLabel("SIN_FIRMA_ANTERIOR"), "Sin firma (anterior)"));
 check(() => assert.equal(domain.cashReceiptStatusLabel(null), ""));
@@ -76,6 +78,11 @@ check(() => assert.equal(ink.pngHasSignatureInk(fixtures.signaturePng()), true))
 check(() => assert.equal(ink.measurePngInk(fixtures.blankCanvasPng()).inkPixels, 0));
 check(() => assert.ok(ink.measurePngInk(fixtures.signaturePng()).inkPixels > 500));
 check(() => assert.throws(() => ink.measurePngInk(Buffer.from("not a png"))));
+// Oversized exports are refused before inflating; proportional ink threshold holds.
+check(() => assert.throws(() => ink.measurePngInk(fixtures.blankCanvasPng(2600, 100)), /PNG_DIMENSIONS/));
+check(() => assert.throws(() => ink.measurePngInk(fixtures.blankCanvasPng(2000, 2000)), /PNG_DIMENSIONS/));
+check(() => assert.ok(ink.pngHasSignatureInk(fixtures.blankCanvasPng(2560, 1000)) === false));
+check(() => assert.equal(ink.MAX_SIGNATURE_PNG_PIXELS, 3_000_000));
 
 // Document type registry: the signature is a recognised, server-only dispersion document.
 check(() => assert.equal(documents.normalizeDispersionDocumentType("FIRMA_RECEPCION_EFECTIVO"), "FIRMA_RECEPCION_EFECTIVO"));

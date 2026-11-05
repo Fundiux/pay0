@@ -233,6 +233,10 @@ async function main() {
   const finalRow = await dispersionRow(dispersionId);
   same(finalRow.cashReceipt.uploadId, resigned.uploadId, "Dispersion points to the replacement");
   same(finalRow.cashReceipt.version, 2, "Dispersion receipt version advanced");
+  same(finalRow.cashReceipt.replacesSignedReceipt, true, "Receipt records that it replaced a signed one");
+  same(finalRow.cashReceipt.replacementReason, "Firma ilegible, se vuelve a capturar", "Receipt keeps the replacement reason");
+  same(current.replacementReason, "Firma ilegible, se vuelve a capturar", "Upload keeps the replacement reason");
+  same(upload.replacesSignedReceipt, false, "First signature was not a replacement");
 
   // --- Admin with direct client access may open a link; legacy cash rows too --
   const adminId = await seedDispersion();

@@ -7,6 +7,12 @@ import { inflateSync } from "zlib";
 
 export const MIN_SIGNATURE_INK_PIXELS = 50;
 export const MIN_SIGNATURE_INK_SPAN_PX = 6;
+// Ink must also scale with the canvas: a tiny block on a large export is not a stroke.
+export const MIN_SIGNATURE_INK_RATIO = 0.0003;
+// Signature pads export at most a few megapixels (e.g. 2560x1280 at 3x dpr);
+// anything larger only buys CPU and memory for whoever holds a token.
+export const MAX_SIGNATURE_PNG_SIDE = 2560;
+export const MAX_SIGNATURE_PNG_PIXELS = 3_000_000;
 
 export type PngInkMeasure = {
   width: number;
@@ -52,7 +58,8 @@ export function measurePngInk(buffer: Buffer): PngInkMeasure {
   const bitDepth = header[8], colorType = header[9], interlace = header[12];
   const channels = CHANNELS[colorType];
   if (!channels || bitDepth !== 8 || interlace !== 0) throw new Error("PNG_UNSUPPORTED");
-  if (width < 1 || height < 1 || width > 4096 || height > 4096) throw new Error("PNG_DIMENSIONS");
+  if (width < 1 || height < 1 || width > MAX_SIGNATURE_PNG_SIDE || height > MAX_SIGNATURE_PNG_SIDE || width * height > MAX_SIGNATURE_PNG_PIXELS)
+    throw new Error("PNG_DIMENSIONS");
 
   const stride = width * channels;
   const expected = (stride + 1) * height;
@@ -107,6 +114,7 @@ export function measurePngInk(buffer: Buffer): PngInkMeasure {
 /** True when the drawing has enough ink to count as a signature stroke. */
 export function pngHasSignatureInk(buffer: Buffer): boolean {
   const ink = measurePngInk(buffer);
-  return ink.inkPixels >= MIN_SIGNATURE_INK_PIXELS &&
+  const required = Math.max(MIN_SIGNATURE_INK_PIXELS, Math.ceil(ink.width * ink.height * MIN_SIGNATURE_INK_RATIO));
+  return ink.inkPixels >= required &&
     Math.max(ink.spanX, ink.spanY) >= MIN_SIGNATURE_INK_SPAN_PX;
 }

@@ -275,6 +275,8 @@ export const submitDispersionCashSignature = onCall(
 
     const png = await decodePngDataUrl(request.data?.signatureDataUrl);
 
+    const replacesSignedReceipt = tokenRow.replacesSignedReceipt === true;
+    const replacementReason = cleanText(tokenRow.replacementReason, 300) || null;
     const folio = folioOf(dispersion, dispersionId);
     const amount = toMoney(dispersion.amount);
     const currency = currencyOf(dispersion);
@@ -357,6 +359,8 @@ export const submitDispersionCashSignature = onCall(
         integritySealVersion: "PAY0-MATERIALIDAD-V1",
         source: "PUBLIC_SIGNATURE_LINK",
         signatureRequestId: requestId,
+        replacesSignedReceipt,
+        replacementReason,
         signatureCapture: {
           source: "PUBLIC_LINK",
           ...acceptance,
@@ -434,6 +438,8 @@ export const submitDispersionCashSignature = onCall(
             signedAt: FieldValue.serverTimestamp(),
             linkCreatedBy: actorUid,
             requestId,
+            replacesSignedReceipt,
+            replacementReason,
           },
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
@@ -466,6 +472,8 @@ export const submitDispersionCashSignature = onCall(
           extra: {
             source: "dispersionCashReceipt",
             requestId,
+            replacesSignedReceipt,
+            replacementReason,
             uploadId,
             version: finalVersion,
             signerName,

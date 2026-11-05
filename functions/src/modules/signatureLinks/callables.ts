@@ -8,7 +8,7 @@ import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecycle";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { receiptAcceptance } from "./acceptance";
-import { pngHasSignatureInk } from "./pngInk";
+import { MAX_SIGNATURE_PNG_PIXELS, MAX_SIGNATURE_PNG_SIDE, pngHasSignatureInk } from "./pngInk";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -46,7 +46,7 @@ export async function decodePngDataUrl(input: unknown): Promise<Buffer> {
   if (buffer.length < 500) throw new HttpsError("invalid-argument", "Firma vacia o invalida.");
   if (buffer.length > 1024 * 1024) throw new HttpsError("invalid-argument", "La firma excede 1 MB.");
   const width = buffer.readUInt32BE(16), height = buffer.readUInt32BE(20);
-  if (width < 16 || height < 16 || width > 4096 || height > 4096)
+  if (width < 16 || height < 16 || width > MAX_SIGNATURE_PNG_SIDE || height > MAX_SIGNATURE_PNG_SIDE || width * height > MAX_SIGNATURE_PNG_PIXELS)
     throw new HttpsError("invalid-argument", "Dimensiones de firma inválidas.");
   try {
     const { PDFDocument } = await import("pdf-lib");
@@ -62,7 +62,7 @@ export async function decodePngDataUrl(input: unknown): Promise<Buffer> {
   } catch {
     throw new HttpsError("invalid-argument", "El archivo no contiene una imagen PNG válida.");
   }
-  if (!inked) throw new HttpsError("invalid-argument", "La firma esta en blanco. Firma dentro del recuadro.");
+  if (!inked) throw new HttpsError("invalid-argument", "La firma está en blanco. Firma dentro del recuadro.");
   return buffer;
 }
 
@@ -77,7 +77,7 @@ async function recoverAbandonedReservation(ref: FirebaseFirestore.DocumentRefere
 }
 
 export const createSolicitudSignatureLink = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { cors: true, maxInstances: 20, concurrency: 8, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
     const user = await getMyUser(uid);
@@ -130,7 +130,7 @@ export const createSolicitudSignatureLink = onCall(
 );
 
 export const getSolicitudSignatureRequest = onCall(
-  { cors: true, timeoutSeconds: 30, memory: "256MiB" },
+  { cors: true, maxInstances: 20, concurrency: 8, timeoutSeconds: 30, memory: "256MiB" },
   async (request) => {
     const token = clean(request.data?.token, 160);
     if (!/^[A-Za-z0-9_-]{24,160}$/.test(token)) throw new HttpsError("not-found", "Link de firma inválido.");
@@ -152,14 +152,12 @@ export const getSolicitudSignatureRequest = onCall(
 );
 
 export const submitSolicitudSignature = onCall(
-  { cors: true, timeoutSeconds: 90, memory: "1GiB" },
+  { cors: true, maxInstances: 20, concurrency: 4, timeoutSeconds: 90, memory: "1GiB" },
   async (request) => {
     const token = clean(request.data?.token, 160);
     if (!/^[A-Za-z0-9_-]{24,160}$/.test(token)) throw new HttpsError("invalid-argument", "Link de firma inválido.");
     const acceptance = receiptAcceptance(request.data);
     const { signerName, signerRole } = acceptance;
-    const png = await decodePngDataUrl(request.data?.signatureDataUrl);
-
     if (!signerName) throw new HttpsError("invalid-argument", "Nombre de quien firma requerido.");
 
     const tokenRef = db.collection("signatureRequests").doc(token);
@@ -183,6 +181,10 @@ export const submitSolicitudSignature = onCall(
         clean(tokenRow.companyId, 128) !== clean(solicitud.companyId, 128)) throw new HttpsError("permission-denied", "El expediente cambió de ámbito. Solicita un nuevo enlace.");
     if (["CANCELADA", "CANCELADO", "RECHAZADA", "RECHAZADO", "ELIMINADA"].includes(clean(solicitud.status).toUpperCase()))
       throw new HttpsError("failed-precondition", "La solicitud ya no admite firma.");
+
+    // Decode the image only once the link and its authority are proven valid,
+    // so an unusable token never pays for PNG inflation and pixel scanning.
+    const png = await decodePngDataUrl(request.data?.signatureDataUrl);
 
     const documentSha256 = sha256(png);
     const uploadId = db.collection("uploads").doc().id;

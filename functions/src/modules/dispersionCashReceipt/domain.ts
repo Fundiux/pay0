@@ -77,6 +77,8 @@ export function initialCashReceiptStatus(operationTypeKey: unknown): CashReceipt
  */
 export function cashReceiptStatusOf(row: any): CashReceiptStatus | null {
   if (!isCashDispersion(row)) return null;
+  // Commission withdrawals paid to a user never carry a client receipt.
+  if (row?.fundingSource?.holderType === "USER") return null;
   const stored = upperText(row?.cashReceiptStatus || row?.cashReceipt?.status);
   if (stored === CASH_RECEIPT_STATUS.SIGNED) return CASH_RECEIPT_STATUS.SIGNED;
   if (stored === CASH_RECEIPT_STATUS.PENDING) return CASH_RECEIPT_STATUS.PENDING;
