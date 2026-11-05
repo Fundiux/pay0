@@ -244,6 +244,7 @@ async function run(){
  const pendingJob=job+'-pending-cancel';await db.doc(`paymentComplementJobs/${pendingJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'QUEUED'});
  await api.executeComplement(pendingJob,adapter);assert.equal(emits,emitsBeforeReview,'an undecided cancellation does not emit');
  const pendingRow=(await db.doc(`paymentComplementJobs/${pendingJob}`).get()).data();assert.equal(pendingRow.status,'PAUSED','an undecided cancellation can resume');assert.equal(pendingRow.gateReason,'REP_SOURCE_CANCELLATION_PENDING');
+ // These two deferrals also pass through branches that existed before the pending code.
  const deferred=await api.enqueueComplement(reviewId);assert.equal(deferred.result,'DEFERRED');assert.equal(deferred.reason,'REP_SOURCE_CANCELLATION_PENDING');
  const checkJob=job+'-check-pending';await db.doc(`paymentComplementJobs/${checkJob}`).set({rootId:root,provider:'FACTURAMA',applicationId:reviewId,actorUid:authorizedActor,clientId:root,status:'REQUESTED',cfdiId:'c1'});
  await db.doc(`paymentComplementRequests/${follow.complementRequestId(root,reviewId)}`).update({automationJobId:checkJob});

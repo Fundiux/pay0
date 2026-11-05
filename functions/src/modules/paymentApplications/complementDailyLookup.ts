@@ -63,7 +63,7 @@ export async function checkDueIqFollowup(requestId: string, now = new Date(), ad
   ]);
   const solicitud = solicitudSnap.data(), pago = pagoSnap.data(), plan = planSnap.data(), attempt = attemptSnap.data();
   try { assertSource(rootId, app, solicitud, pago); } catch (error) {
-    if (code(error) === "REP_SOURCE_CANCELLATION_PENDING") return "SKIPPED";
+    if (code(error) === "REP_SOURCE_CANCELLATION_PENDING") { await finishBlocked(requestId, rootId, now, "REP_SOURCE_CANCELLATION_PENDING"); return "BLOCKED"; }
     await finishException(requestId, rootId, code(error)); return "EXCEPTION";
   }
   if (!plan || plan.rootId !== rootId || plan.pagoId !== app.pagoId || !attempt || attempt.rootId !== rootId ||
@@ -175,6 +175,9 @@ export async function scanDueIqFollowups(now = new Date(), adapter = providers, 
       }
       outcomes[result] = (outcomes[result] || 0) + 1;
       if (selected >= maxCases) break;
+      // The safety runtime spaces admissions by 1 s: without this wait the next
+      // case gets CAPACITY and each complement would not be read every day.
+      await new Promise(resolve => setTimeout(resolve, 1100));
     }
     if (page.size < 50 || selected >= maxCases) break;
     cursor = page.docs.at(-1);
