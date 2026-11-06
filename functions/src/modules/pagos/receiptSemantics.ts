@@ -83,7 +83,7 @@ export function buildSemanticReceipt(text: string, receipt: LegacyReceipt): Sema
   const referenceLine = evidenceLine(lines, [/^referencia(?: numerica)?\b/]);
   const folio = identifierEvidence(lines, /^folio(?: electronico)?\b\s*[:\-]?\s*/);
   const transaction = identifierEvidence(lines, /^(?:numero de |no\.\s*(?:de )?)(?:transaccion|operacion)\b\s*[:\-]?\s*/);
-  const dateLine = evidenceLine(lines, [/fecha.*(?:operacion|transferencia|pago|ejecucion)/, /^fecha\s*[:\-]/]);
+  const dateLine = evidenceLine(lines, [/fecha.*(?:operacion|transferencia|pago|ejecucion)/, /^fecha\s*[:\-]/, /^fecha y hora de captura\b/]);
   const reviewReasons: string[] = [];
   // Preserve per-field extraction confidence without requiring bank execution
   // confirmation before a receipt can enter the reconciliation workflow.

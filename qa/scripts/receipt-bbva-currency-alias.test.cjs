@@ -17,3 +17,10 @@ test('a learned alias cannot override a contradicting RFC', () => {
   assert.equal(receiptIdentityContradicts(company, { name: company.name, rfc: 'XYZ010101AB1' }, { party: 'COMPANY' }), true);
   assert.equal(receiptIdentityContradicts(company, { name: company.name, rfc: 'ACA180724QV3' }, { party: 'COMPANY' }), false);
 });
+
+test('a BBVA capture date is detected evidence, not inferred', () => {
+  const { buildSemanticReceipt } = require('../../functions/lib/modules/pagos/receiptSemantics.js');
+  const text = 'Importe: $ 46,965.72\nFecha y Hora de Captura: 05/11/2026 17:15:58\nReferencia numérica: 051126';
+  const semantic = buildSemanticReceipt(text, parseReceiptText(text));
+  assert.equal(semantic.fields.executionDate.provenance, 'DETECTED');
+});
