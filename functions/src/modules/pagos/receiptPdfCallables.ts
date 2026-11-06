@@ -654,7 +654,8 @@ export function parseReceiptText(textRaw: string): ReceiptData {
   ]);
 
   const currency =
-    /\b(?:mxn|m\.n\.|pesos\s+mexicanos)\b/i.test(text) && !/\b(?:usd|eur|dolares|euros)\b/i.test(normalizedText)
+    !/\b(?:usd|eur|dolares|euros)\b/i.test(normalizedText) &&
+    (/\b(?:mxn|m\.n\.|pesos\s+mexicanos)\b/i.test(text) || (/\bSPEI\b/i.test(text) && /\$\s*\d/.test(text)))
       ? "MXN"
       : "";
 
