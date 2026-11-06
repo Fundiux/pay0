@@ -39,3 +39,29 @@ test('a BBVA capture date is detected evidence, not inferred', () => {
   const semantic = buildSemanticReceipt(text, parseReceiptText(text));
   assert.equal(semantic.fields.executionDate.provenance, 'DETECTED');
 });
+
+test('alias trust needs two consecutive registrations to the same target and dies with a cancelled pago', async () => {
+  const { readReceiptAliasesTx, writeReceiptAliasesTx, retractReceiptAliasesForPago, receiptAliasId, RECEIPT_ALIAS_MIN_STREAK } = require('../../functions/lib/modules/pagos/receiptIdentification.js');
+  const store = new Map();
+  const db = {
+    doc: path => ({ path, delete: async () => store.delete(path) }),
+    collection: () => ({ where: (_f, _op, pagoId) => ({ get: async () => ({ docs: [...store].filter(([, v]) => v.pagoIds.includes(pagoId)).map(([path, v]) => ({ get: k => v[k], ref: { delete: async () => store.delete(path) } })) }) }) }),
+  };
+  const tx = { get: async ref => { const v = store.get(ref.path); return { exists: !!v, get: k => v?.[k], data: () => v }; }, set: (ref, v) => store.set(ref.path, v) };
+  const register = async (pagoId, clienteId) => {
+    const reads = await readReceiptAliasesTx(tx, db, 'r1', { senderName: 'INSERVICE TELECOM S DE RL DE CV', clienteId, companyId: 'co' });
+    writeReceiptAliasesTx(tx, { uid: 'u', rootId: 'r1' }, pagoId, reads);
+  };
+  const key = `receiptIdentityAliases/${receiptAliasId('r1', 'CLIENT', 'INSERVICE TELECOM S DE RL DE CV')}`;
+  await register('p1', 'c1');
+  assert.equal(store.get(key).streak, 1);
+  assert.ok(store.get(key).streak < RECEIPT_ALIAS_MIN_STREAK);
+  await register('p2', 'c1');
+  assert.equal(store.get(key).streak, 2);
+  await register('p3', 'c2');
+  assert.deepEqual([store.get(key).targetId, store.get(key).streak], ['c2', 1]);
+  await register('p4', 'c2');
+  assert.equal(await retractReceiptAliasesForPago(db, 'other-root', 'p4'), 0);
+  assert.equal(await retractReceiptAliasesForPago(db, 'r1', 'p4'), 1);
+  assert.equal(store.has(key), false);
+});

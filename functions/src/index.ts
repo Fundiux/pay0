@@ -3,7 +3,7 @@ import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx } from "./modules/pagos/receiptIdentification";
+import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, retractReceiptAliasesForPago } from "./modules/pagos/receiptIdentification";
 import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
@@ -2116,6 +2116,7 @@ export const createPago = onCall(
     let pagoSequenceNumber = 0;
     let pagoSequenceCounterPath = "";
     let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
+    let receiptAliasReads: Awaited<ReturnType<typeof readReceiptAliasesTx>> = [];
 
     await db.runTransaction(async (tx) => {
       await assertCreatePagoAuthorityTx({ db, tx, uid, rootId, clientId: String(clienteId), companyId: String(companyId), despachoId: companyDespachoId, auth: request.auth });
@@ -2133,6 +2134,7 @@ export const createPago = onCall(
         const registered = earlierIdentifications.docs.find(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
         if (registered) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: registered.get("createPayload.clienteId") === clienteId && registered.get("createPayload.companyId") === companyId ? registered.get("pagoId") || null : null });
         const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
+        receiptAliasReads = await readReceiptAliasesTx(tx, db, rootId, { senderName: verifiedPayload.detectedSenderName, beneficiaryName: verifiedPayload.detectedBeneficiaryName, clienteId: String(clienteId), companyId: String(companyId) });
         validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
         if (validatedReceiptAnalysisId) {
           const receiptAnalysis = await tx.get(db.doc(`pagoReceiptAnalyses/${validatedReceiptAnalysisId}`));
@@ -2315,7 +2317,7 @@ export const createPago = onCall(
       if (receiptContentClaimRef) tx.set(receiptContentClaimRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), pagoId: ref.id, type: "RECEIPT_CONTENT", createdAt: FieldValue.serverTimestamp() });
       if (receiptIdentificationRef) {
         tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
-        writeReceiptAliasesTx(tx, db, { uid, rootId }, { senderName: request.data?.detectedSenderName, beneficiaryName: request.data?.detectedBeneficiaryName, clienteId: String(clienteId), companyId: String(companyId) });
+        writeReceiptAliasesTx(tx, { uid, rootId }, ref.id, receiptAliasReads);
       }
 
       logActivityTx(tx, db, {
@@ -2642,6 +2644,7 @@ export const changePagoStatus = onCall(
     }
 
       await ref.update(patch);
+      if (nextStatus === "RECHAZADO" || nextStatus === "CANCELADO") await retractReceiptAliasesForPago(db, rootId, String(pagoId)).catch(error => console.error("receipt alias retraction failed", { pagoId, error: String(error?.message || error) }));
 
       if (nextStatus === "CONCILIADO") {
 

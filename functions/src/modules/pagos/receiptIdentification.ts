@@ -66,7 +66,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
   const aliasFor = async (party: "CLIENT" | "COMPANY", name: unknown, items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }, selected: string) => {
     if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return { id: selected, learned: false };
     const alias = await db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`).get();
-    const target = alias.exists && alias.get("rootId") === actor.rootId ? items.find(item => item.id === alias.get("targetId")) : undefined;
+    const target = alias.exists && alias.get("rootId") === actor.rootId && Number(alias.get("streak") || 0) >= RECEIPT_ALIAS_MIN_STREAK ? items.find(item => item.id === alias.get("targetId")) : undefined;
     return target && receiptAliasAllowed(items, target, signals, { party }) ? { id: target.id, learned: true } : { id: selected, learned: false };
   };
   const selectedClient = await aliasFor("CLIENT", receipt.senderName, authorizedClients, clientSignals, clean(input.selectedClientId));
@@ -153,15 +153,40 @@ export function receiptAliasId(rootId: string, party: "CLIENT" | "COMPANY", name
   return createHash("sha256").update(JSON.stringify([rootId, party, normalizeReceiptName(name)])).digest("hex");
 }
 
+/** An alias is trusted only after this many consecutive registrations to the same target. */
+export const RECEIPT_ALIAS_MIN_STREAK = 2;
+type AliasParty = "CLIENT" | "COMPANY";
+const aliasEntries = (input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) =>
+  ([["CLIENT", input.senderName, input.clienteId], ["COMPANY", input.beneficiaryName, input.companyId]] as [AliasParty, unknown, string][])
+    .filter(([, name, targetId]) => !!normalizeReceiptName(name) && !!targetId);
+
+/** Read phase of the registration transaction: current alias state, before any write. */
+export async function readReceiptAliasesTx(tx: FirebaseFirestore.Transaction, db: Firestore, rootId: string, input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) {
+  return Promise.all(aliasEntries(input).map(async ([party, name, targetId]) => {
+    const ref = db.doc(`receiptIdentityAliases/${receiptAliasId(rootId, party, name)}`);
+    const prior = await tx.get(ref);
+    return { ref, party, name, targetId, prior: prior.exists && prior.get("rootId") === rootId ? prior.data() || null : null };
+  }));
+}
+
 /** Learn the name-to-entity link only from a registered payment, never from OCR alone. */
-export function writeReceiptAliasesTx(tx: FirebaseFirestore.Transaction, db: Firestore, actor: { uid: string; rootId: string }, input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) {
-  for (const [party, name, targetId] of [["CLIENT", input.senderName, input.clienteId], ["COMPANY", input.beneficiaryName, input.companyId]] as const) {
-    if (!normalizeReceiptName(name) || !targetId) continue;
-    tx.set(db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`), {
+export function writeReceiptAliasesTx(tx: FirebaseFirestore.Transaction, actor: { uid: string; rootId: string }, pagoId: string, reads: Awaited<ReturnType<typeof readReceiptAliasesTx>>) {
+  for (const { ref, party, name, targetId, prior } of reads) {
+    const same = prior?.targetId === targetId;
+    const pagoIds = same ? [...(Array.isArray(prior?.pagoIds) ? prior!.pagoIds : []), pagoId].slice(-5) : [pagoId];
+    tx.set(ref, {
       rootId: actor.rootId, party, name: clean(name).slice(0, 240), targetId, confirmedBy: actor.uid,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+      streak: same ? Number(prior?.streak || 0) + 1 : 1, pagoIds, updatedAt: FieldValue.serverTimestamp(),
+    });
   }
+}
+
+/** A cancelled or rejected payment withdraws every alias it helped to build. */
+export async function retractReceiptAliasesForPago(db: Firestore, rootId: string, pagoId: string) {
+  const rows = await db.collection("receiptIdentityAliases").where("pagoIds", "array-contains", pagoId).get();
+  const own = rows.docs.filter(row => row.get("rootId") === rootId);
+  await Promise.all(own.map(row => row.ref.delete()));
+  return own.length;
 }
 
 export function receiptRegisteredPatch(pagoId: string) {
