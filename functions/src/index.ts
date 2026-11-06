@@ -3,7 +3,7 @@ import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch } from "./modules/pagos/receiptIdentification";
+import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx } from "./modules/pagos/receiptIdentification";
 import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
@@ -2313,7 +2313,10 @@ export const createPago = onCall(
       }
 
       if (receiptContentClaimRef) tx.set(receiptContentClaimRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), pagoId: ref.id, type: "RECEIPT_CONTENT", createdAt: FieldValue.serverTimestamp() });
-      if (receiptIdentificationRef) tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
+      if (receiptIdentificationRef) {
+        tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
+        writeReceiptAliasesTx(tx, db, { uid, rootId }, { senderName: request.data?.detectedSenderName, beneficiaryName: request.data?.detectedBeneficiaryName, clienteId: String(clienteId), companyId: String(companyId) });
+      }
 
       logActivityTx(tx, db, {
         event: "PAGO_CREADO",

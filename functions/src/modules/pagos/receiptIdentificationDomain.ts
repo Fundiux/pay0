@@ -40,6 +40,11 @@ function assessIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, o
   });
 }
 
+/** A learned alias may never override a valid RFC or full-account contradiction. */
+export function receiptIdentityContradicts(item: ReceiptCatalogItem, signals: IdentitySignals, options: IdentityOptions = {}) {
+  return assessIdentity([item], signals, options).some(row => row.conflict);
+}
+
 /** Exact names can identify; missing metadata is not contradictory evidence. */
 export function matchReceiptIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, options: IdentityOptions = {}): IdentityMatch {
   const assessed = assessIdentity(items, signals, options);
