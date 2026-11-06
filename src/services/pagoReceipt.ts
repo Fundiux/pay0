@@ -32,7 +32,7 @@ export function receiptHasStrongAutomaticIdentity(identification?: Pick<ReceiptI
     const id = hasMatches ? identification?.verifiedMatches?.[kind]?.id : kind === "client" ? identification?.createPayload?.clienteId : identification?.createPayload?.companyId;
     const evidence = hasMatches ? identification?.verifiedMatches?.[kind]?.evidence : identification?.evidence?.[kind];
     return typeof id === "string" && !!id.trim() && Array.isArray(evidence) &&
-      !evidence.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") && !evidence.includes("USER_SELECTED_VERIFIED_CANDIDATE") &&
+      !evidence.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") && !evidence.includes("USER_SELECTED_VERIFIED_CANDIDATE") && !evidence.includes("LEARNED_ALIAS") &&
       (evidence.includes("RFC_EXACT") || evidence.includes("FULL_ACCOUNT_EXACT"));
   });
 }

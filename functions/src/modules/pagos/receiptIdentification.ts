@@ -4,7 +4,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { getReceiptActorCorrectionState } from "./receiptLearning";
 import { resolveReceiptOperationType } from "./receiptOperationType";
-import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptIdentityContradicts, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
+import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptAliasAllowed, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
 
 type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -64,15 +64,15 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     if (candidate.isActive !== false && await allowedCompany(db, actor, candidate)) authorizedCompanies.push(candidate);
   }
   const aliasFor = async (party: "CLIENT" | "COMPANY", name: unknown, items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }, selected: string) => {
-    if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return selected;
+    if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return { id: selected, learned: false };
     const alias = await db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`).get();
     const target = alias.exists && alias.get("rootId") === actor.rootId ? items.find(item => item.id === alias.get("targetId")) : undefined;
-    return target && !receiptIdentityContradicts(target, signals, { party }) ? target.id : selected;
+    return target && receiptAliasAllowed(items, target, signals, { party }) ? { id: target.id, learned: true } : { id: selected, learned: false };
   };
   const selectedClient = await aliasFor("CLIENT", receipt.senderName, authorizedClients, clientSignals, clean(input.selectedClientId));
   const selectedCompany = await aliasFor("COMPANY", receipt.beneficiaryName, authorizedCompanies, companySignals, clean(input.selectedCompanyId));
-  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, selectedClient, { party: "CLIENT" });
-  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, selectedCompany, { party: "COMPANY" });
+  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, selectedClient.id, { party: "CLIENT", ...(selectedClient.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });
+  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, selectedCompany.id, { party: "COMPANY", ...(selectedCompany.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });
   const clientMatch = clientSelection.match, companyMatch = companySelection.match;
   const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
   if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
@@ -159,7 +159,7 @@ export function writeReceiptAliasesTx(tx: FirebaseFirestore.Transaction, db: Fir
     if (!normalizeReceiptName(name) || !targetId) continue;
     tx.set(db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`), {
       rootId: actor.rootId, party, name: clean(name).slice(0, 240), targetId, confirmedBy: actor.uid,
-      confirmations: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
 }

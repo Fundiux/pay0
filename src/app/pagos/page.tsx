@@ -2951,7 +2951,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                                   return <div key={kind}>
                                     <div className="text-slate-500">{label}</div>
                                     <div className="text-slate-100">{kind === "client" ? clientName : companyName}</div>
-                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : "Coincidencia determinada por el servidor"}</div>}
+                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : verified[kind].evidence?.includes("LEARNED_ALIAS") ? `${label} reconocido por un registro anterior; revisa que sea correcto` : "Coincidencia determinada por el servidor"}</div>}
                                     {candidates.length > 0 && <select aria-label={`Seleccionar ${label.toLowerCase()}`} disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
                                       value={item[selectedKey] || verified?.[kind]?.id || ""}
                                       onChange={event => { const value = event.target.value; setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, [selectedKey]: value, status: "ANALYZING", parsed: { ...row.parsed, identification: undefined } } : row)); void revalidateReceiptItem({ ...item, [selectedKey]: value }, false); }}
