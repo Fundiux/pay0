@@ -4,7 +4,7 @@ import { parseCalendarDay } from "./search";
 
 const invalid = (): never => { throw Error("HUGO_TOOL_INVALID_INPUT"); };
 const ORDEN = new Set(["RECIENTES", "ANTIGUAS", "MONTO_DESC", "MONTO_ASC"]);
-const FUENTES = new Set(["PAGOS", "FACTURADO", "SALDO"]);
+const FUENTES = new Set(["PAGOS", "FACTURADO", "SALDO", "CANCELADAS", "SUSTITUCIONES"]);
 const TIPOS = new Set(["USUARIO", "CLIENTE", "EMPRESA", "TODOS"]);
 const RANGE = ["desde", "hasta", "monto", "montoMin", "montoMax", "orden", "limite", "soloConteo"];
 const KEYS: Record<HugoGeneralReadToolName, Set<string>> = {

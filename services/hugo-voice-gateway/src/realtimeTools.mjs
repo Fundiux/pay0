@@ -32,8 +32,8 @@ const readTools = [
     parameters: objectSchema({ texto: str("Nombre, usuario o correo tal como se dijo."), tipo: { type: "string", enum: PERSON_TYPES, description: "TODOS por defecto." },
       limite: { type: "integer", minimum: 1, maximum: 20, description: "5 por defecto." } }, ["texto"]) },
   { type: "function", name: "resumen_por_cliente",
-    description: "Ranking y totales POR CLIENTE. fuente PAGOS = cuánto ha pagado cada cliente (quién paga más); FACTURADO = cuánto se le ha facturado; SALDO = cuánto debe cada cliente en facturas sin pagar (quién solicita facturas y no las paga). Úsala para 'qué cliente pagó más en octubre', 'cuánto nos debe cada cliente' o 'quién debe más'. Sólo lectura. Para un solo cliente usa buscar_pagos o buscar_solicitudes con su nombre.",
-    parameters: objectSchema({ fuente: { type: "string", enum: ["PAGOS", "FACTURADO", "SALDO"], description: "PAGOS, FACTURADO o SALDO." }, desde: rangeProps.desde, hasta: rangeProps.hasta,
+    description: "Ranking y totales POR CLIENTE. fuente PAGOS = cuánto ha pagado cada cliente (quién paga más); FACTURADO = cuánto se le ha facturado; SALDO = cuánto debe cada cliente en facturas sin pagar (quién solicita facturas y no las paga); CANCELADAS = facturas canceladas por cliente con su porcentaje sobre lo emitido (quién cancela más); SUSTITUCIONES = canceladas por sustitución, o sea refacturación (quién pide más sustituciones). Úsala para 'qué cliente pagó más en octubre', 'cuánto nos debe cada cliente' o 'quién debe más'. Sólo lectura. Para un solo cliente usa buscar_pagos o buscar_solicitudes con su nombre.",
+    parameters: objectSchema({ fuente: { type: "string", enum: ["PAGOS", "FACTURADO", "SALDO", "CANCELADAS", "SUSTITUCIONES"], description: "PAGOS, FACTURADO, SALDO, CANCELADAS o SUSTITUCIONES." }, desde: rangeProps.desde, hasta: rangeProps.hasta,
       orden: { type: "string", enum: ["MAYOR", "MENOR"], description: "MAYOR por defecto." }, limite: listProps.limite }, ["fuente"]) },
 ];
 const READ_TOOL_MAP = {
@@ -55,7 +55,7 @@ export function readToolInput(name, args = {}) {
   if (name === "ver_solicitud") { if (!input.id && !input.folio) throw Error("INVALID_TOOL_INPUT"); return input; }
   const limite = cleanLimit(source.limite);
   if (name === "resumen_por_cliente") {
-    if (!["PAGOS", "FACTURADO", "SALDO"].includes(source.fuente)) throw Error("INVALID_TOOL_INPUT");
+    if (!["PAGOS", "FACTURADO", "SALDO", "CANCELADAS", "SUSTITUCIONES"].includes(source.fuente)) throw Error("INVALID_TOOL_INPUT");
     input.fuente = source.fuente;
     for (const key of ["desde", "hasta"]) { const value = cleanDate(source[key]); if (value) input[key] = value; }
     if (["MAYOR", "MENOR"].includes(source.orden)) input.orden = source.orden;

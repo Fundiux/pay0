@@ -1,6 +1,7 @@
 // Pure search over an already-authorized, root-scoped snapshot. No Firestore
 // imports: the loader owns I/O and root scoping, this module owns semantics.
 import { HUGO_READ_LIMITS } from "./contract";
+import { isConfirmedFacturamaCancellation } from "../../facturama/cancellationStatus";
 import type {
   FindPeopleInput, FindPeopleResult, GetSolicitudDetailInput, GetSolicitudDetailResult, MatchNote, Orden, PagoItem, PersonMatch,
   SearchPagosInput, SearchPagosResult, SearchSolicitudesInput, SearchSolicitudesResult, SolicitudDetail, SolicitudItem, SummarizeByClientInput, SummarizeByClientResult,
@@ -8,7 +9,7 @@ import type {
 
 export type RawRow = { id: string; [k: string]: any };
 // aplicaciones = pagoAplicaciones rows (pagoId + solicitudId + montoAplicado); only needed by getSolicitudDetail.
-export type ReadSnapshot = { solicitudes: RawRow[]; pagos: RawRow[]; users: RawRow[]; clients: RawRow[]; companies: RawRow[]; uploads?: RawRow[]; aplicaciones?: RawRow[]; now?: Date };
+export type ReadSnapshot = { solicitudes: RawRow[]; pagos: RawRow[]; users: RawRow[]; clients: RawRow[]; companies: RawRow[]; uploads?: RawRow[]; aplicaciones?: RawRow[]; facturas?: RawRow[]; now?: Date };
 
 export const FUZZY_THRESHOLD = 0.72;
 export const FUZZY_TIE_MARGIN = 0.03;
@@ -509,31 +510,66 @@ export function findPeople(snapshot: ReadSnapshot, input: FindPeopleInput): Find
 // ---------- per-client summary ----------
 const DEAD_STATUS = /CANCEL|RECHAZ|ELIMIN|ANUL/;
 const isInvoiced = (row: RawRow) => [row.facturaUuid, row.uuidCfdi, row.facturaTotal].some(value => value !== undefined && value !== null && value !== "");
+const uuidKey = (value: unknown) => (text(value, 80) || "").toUpperCase();
 // What the client still owes on one invoiced solicitud: invoice total (or the solicitud amount) minus what payments already covered.
 const solicitudSaldo = (row: RawRow) => round2((amount(row.facturaTotal) ?? solicitudAmount(row) ?? 0) - (amount(row.totalAbonado) ?? 0));
+const invoiceDate = (row: RawRow) => toMillis(row.facturaFecha) ?? solicitudDate(row);
+type Group = { cliente: string; operaciones: number; monto: number; moneda: string; oldest: number | null };
+function addToGroup(groups: Map<string, Group>, key: string, base: { cliente: string; moneda: string }, value: number, millis: number | null) {
+  const group = groups.get(key) || { ...base, operaciones: 0, monto: 0, oldest: null };
+  group.operaciones += 1; group.monto = round2(group.monto + value);
+  if (millis !== null && (group.oldest === null || millis < group.oldest)) group.oldest = millis;
+  groups.set(key, group);
+}
 export function summarizeByClient(snapshot: ReadSnapshot, input: SummarizeByClientInput): SummarizeByClientResult {
-  const ctx = context(snapshot), pagos = input.fuente === "PAGOS", filtros: Record<string, unknown> = { fuente: input.fuente };
-  let rows = (pagos ? live(snapshot.pagos) : live(snapshot.solicitudes)).filter(row => !DEAD_STATUS.test(String(statusOf(row) || "").toUpperCase()));
-  if (!pagos) rows = rows.filter(isInvoiced);
-  rows = applyAmountAndDates(rows, input, pagos ? pagoAmount : solicitudAmount, pagos ? pagoDate : row => toMillis(row.facturaFecha) ?? solicitudDate(row), filtros);
-  const valueOf = (row: RawRow) => pagos ? pagoAmount(row) ?? 0 : input.fuente === "SALDO" ? solicitudSaldo(row) : amount(row.facturaTotal) ?? solicitudAmount(row) ?? 0;
-  const dateOf = (row: RawRow) => pagos ? pagoDate(row) : toMillis(row.facturaFecha) ?? solicitudDate(row);
-  const groups = new Map<string, { cliente: string; operaciones: number; monto: number; moneda: string; oldest: number | null }>();
-  for (const row of rows) {
-    const value = valueOf(row);
-    if (input.fuente === "SALDO" && value <= 0.01) continue;
-    const moneda = currencyOf(row), key = `${clientKeyOf(row, ctx) || "sin-cliente"}|${moneda}`, millis = dateOf(row);
-    const group = groups.get(key) || { cliente: snapshotClient(row) || clientRecordName(ctx.clients.get(clientIdOf(row) || "")) || "Sin cliente", operaciones: 0, monto: 0, moneda, oldest: null };
-    group.operaciones += 1; group.monto = round2(group.monto + value);
-    if (millis !== null && (group.oldest === null || millis < group.oldest)) group.oldest = millis;
-    groups.set(key, group);
+  const ctx = context(snapshot), fuente = input.fuente, filtros: Record<string, unknown> = { fuente };
+  const clientName = (row: RawRow) => snapshotClient(row) || clientRecordName(ctx.clients.get(clientIdOf(row) || "")) || "Sin cliente";
+  const groups = new Map<string, Group>(), advertencias: string[] = [];
+  const facturas = live(snapshot.facturas);
+  const canceledUuids = new Set(facturas.filter(invoice => isConfirmedFacturamaCancellation(invoice.cancellationStatus)).map(invoice => uuidKey(invoice.uuid)).filter(Boolean));
+  const emitidas = new Map<string, number>(), canceladasPorCliente = new Map<string, number>();
+  if (fuente === "PAGOS") {
+    const rows = applyAmountAndDates(live(snapshot.pagos).filter(row => !DEAD_STATUS.test(String(statusOf(row) || "").toUpperCase())), input, pagoAmount, pagoDate, filtros);
+    for (const row of rows) addToGroup(groups, `${clientKeyOf(row, ctx) || "sin-cliente"}|${currencyOf(row)}`, { cliente: clientName(row), moneda: currencyOf(row) }, pagoAmount(row) ?? 0, pagoDate(row));
+  } else if (fuente === "SALDO" || fuente === "FACTURADO") {
+    // Cancelled/rejected solicitudes and CFDIs whose cancellation Facturama confirmed are neither debt nor billing.
+    const rows = applyAmountAndDates(live(snapshot.solicitudes).filter(row => isInvoiced(row) && !DEAD_STATUS.test(String(statusOf(row) || "").toUpperCase())
+      && !canceledUuids.has(uuidKey(first(row.facturaUuid, row.uuidCfdi)))), input, solicitudAmount, invoiceDate, filtros);
+    for (const row of rows) {
+      const value = fuente === "SALDO" ? solicitudSaldo(row) : amount(row.facturaTotal) ?? solicitudAmount(row) ?? 0;
+      if (fuente === "SALDO" && value <= 0.01) continue;
+      addToGroup(groups, `${clientKeyOf(row, ctx) || "sin-cliente"}|${currencyOf(row)}`, { cliente: clientName(row), moneda: currencyOf(row) }, value, invoiceDate(row));
+    }
+    if (!facturas.length) advertencias.push("No se pudo cruzar con el estado de cancelación de Facturama; las facturas canceladas en trámite aún cuentan.");
+  } else {
+    // CANCELADAS / SUSTITUCIONES: invoices with SAT-confirmed cancellation, attributed to the client of their solicitud.
+    const bySolicitud = byId(live(snapshot.solicitudes));
+    const { fromMs, toMs } = mexicoDayRange(input.desde, input.hasta);
+    const inRange = (millis: number | null) => (fromMs === undefined && toMs === undefined) || (millis !== null && (fromMs === undefined || millis >= fromMs) && (toMs === undefined || millis < toMs));
+    if (input.desde) filtros.desde = input.desde;
+    if (input.hasta) filtros.hasta = input.hasta;
+    for (const invoice of facturas) {
+      const solicitud = bySolicitud.get(text(invoice.sourceSolicitudId) || "");
+      if (!solicitud) continue;
+      const key = `${clientKeyOf(solicitud, ctx) || "sin-cliente"}|${currencyOf(solicitud)}`;
+      if (inRange(invoiceDate(solicitud))) emitidas.set(key, (emitidas.get(key) || 0) + 1);
+      if (!isConfirmedFacturamaCancellation(invoice.cancellationStatus)) continue;
+      if (fuente === "SUSTITUCIONES" && String(invoice.cancellationMotive ?? "").trim() !== "01") continue;
+      const millis = toMillis(invoice.cancellationRequestedAt) ?? toMillis(invoice.updatedAt);
+      if (!inRange(millis)) continue;
+      canceladasPorCliente.set(key, (canceladasPorCliente.get(key) || 0) + 1);
+      addToGroup(groups, key, { cliente: clientName(solicitud), moneda: currencyOf(solicitud) }, amount(solicitud.facturaTotal, invoice.total) ?? solicitudAmount(solicitud) ?? 0, millis);
+    }
+    advertencias.push("Emitidas se cuenta por fecha de factura y canceladas por fecha de cancelación; el porcentaje es una aproximación del periodo.");
+    advertencias.push("Solo cuenta cancelaciones confirmadas por el SAT en facturas de Facturama ligadas a una solicitud.");
   }
-  const ordered = [...groups.values()].sort((a, b) => input.orden === "MENOR" ? a.monto - b.monto : b.monto - a.monto);
+  const ordered = [...groups.entries()].sort(([, a], [, b]) => input.orden === "MENOR" ? a.monto - b.monto : b.monto - a.monto);
   const limite = limitOf(input.limite);
   Object.assign(filtros, { orden: input.orden || "MAYOR", limite });
-  const items = ordered.slice(0, limite).map(group => ({ cliente: group.cliente, operaciones: group.operaciones, monto: group.monto, moneda: group.moneda, masAntigua: group.oldest === null ? null : mexicoDate(group.oldest) }));
-  const advertencias = ["No excluye facturas CFDI canceladas en Facturama; revisa las más antiguas antes de cobrar."];
-  if (new Set(ordered.map(group => group.moneda)).size > 1) advertencias.push("Hay más de una moneda; los montos no se suman entre monedas.");
-  if (input.fuente === "SALDO") advertencias.push("Saldo = total de la factura menos lo abonado registrado en la solicitud.");
-  return { fuente: input.fuente, clientes: ordered.length, montoTotal: round2(ordered.reduce((sum, group) => sum + group.monto, 0)), mostrados: items.length, items, filtros, advertencias };
+  const cancellationView = fuente === "CANCELADAS" || fuente === "SUSTITUCIONES";
+  const items = ordered.slice(0, limite).map(([key, group]) => ({ cliente: group.cliente, operaciones: group.operaciones, monto: group.monto, moneda: group.moneda, masAntigua: group.oldest === null ? null : mexicoDate(group.oldest),
+    ...(cancellationView ? { emitidas: emitidas.get(key) || 0, porcentajeCancelado: emitidas.get(key) ? round2(((canceladasPorCliente.get(key) || 0) / (emitidas.get(key) || 1)) * 100) : null } : {}) }));
+  if (new Set(ordered.map(([, group]) => group.moneda)).size > 1) advertencias.push("Hay más de una moneda; los montos no se suman entre monedas.");
+  if (fuente === "SALDO") advertencias.push("Saldo = total de la factura menos lo abonado registrado en la solicitud. No incluye facturas con cancelación confirmada.");
+  return { fuente, clientes: ordered.length, montoTotal: round2(ordered.reduce((sum, [, group]) => sum + group.monto, 0)), mostrados: items.length, items, filtros, advertencias };
 }

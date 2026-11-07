@@ -115,7 +115,7 @@ export function summarizeHugoReadResult(tool: string, data: any) {
     return `${plural(Number(data.total), `${noun[0]} coincide`, `${noun[1]} coinciden`)}; monto total ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}.`;
   }
   if (tool === "summarizeByClient") {
-    const label = ({ PAGOS: "recibido en pagos", FACTURADO: "facturado", SALDO: "pendiente de pago en facturas" } as Record<string, string>)[String(data?.fuente)] || "total";
+    const label = ({ PAGOS: "recibido en pagos", FACTURADO: "facturado", SALDO: "pendiente de pago en facturas", CANCELADAS: "en facturas canceladas", SUSTITUCIONES: "en facturas sustituidas" } as Record<string, string>)[String(data?.fuente)] || "total";
     if (!data?.clientes) return "No hay clientes con movimientos para ese periodo.";
     return `${plural(Number(data.clientes), "cliente", "clientes")}; ${label} ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}. ${(data.advertencias || []).join(" ")}`.trim();
   }

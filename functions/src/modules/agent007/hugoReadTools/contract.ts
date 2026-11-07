@@ -75,9 +75,10 @@ export type FindPeopleInput = { texto: string; tipo?: "USUARIO" | "CLIENTE" | "E
 export type PersonMatch = { tipo: "USUARIO" | "CLIENTE" | "EMPRESA"; id: string; nombre: string; detalle: string | null; confianza: number };
 export type FindPeopleResult = { coincidencias: PersonMatch[] };
 
-// Per-client totals. PAGOS = money received, FACTURADO = invoiced solicitudes, SALDO = invoiced minus applied (what the client still owes).
-export type SummarizeByClientInput = DateRange & { fuente: "PAGOS" | "FACTURADO" | "SALDO"; orden?: "MAYOR" | "MENOR"; limite?: number };
-export type ClientSummaryItem = { cliente: string; operaciones: number; monto: number; moneda: string; masAntigua: string | null };
+// Per-client totals. PAGOS = money received, FACTURADO = invoiced solicitudes, SALDO = invoiced minus applied (what the client still owes), CANCELADAS = SAT-confirmed cancellations, SUSTITUCIONES = those cancelled by substitution (motive 01).
+export type SummarizeByClientInput = DateRange & { fuente: "PAGOS" | "FACTURADO" | "SALDO" | "CANCELADAS" | "SUSTITUCIONES"; orden?: "MAYOR" | "MENOR"; limite?: number };
+export type ClientSummaryItem = { cliente: string; operaciones: number; monto: number; moneda: string; masAntigua: string | null;
+  emitidas?: number; porcentajeCancelado?: number | null }; // CANCELADAS/SUSTITUCIONES only: invoices issued in the period and the share cancelled
 export type SummarizeByClientResult = { fuente: SummarizeByClientInput["fuente"]; clientes: number; montoTotal: number; mostrados: number; items: ClientSummaryItem[];
   filtros: Record<string, unknown>; advertencias: string[] };
 
