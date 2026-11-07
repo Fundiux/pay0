@@ -87,3 +87,19 @@ test('the amount-reference key carries the clave so two different claves can be 
   assert.notEqual(a.find(item => item.kind === 'amtref').trackingKey, b.find(item => item.kind === 'amtref').trackingKey);
   assert.equal(receiptCrossClientDuplicateIds({ rootId: 'r1', amount: 100, date: '2026-11-05', reference: '051126', trackingKey: '' }).find(item => item.kind === 'amtref').trackingKey, '');
 });
+
+test('cancelling a pago releases its receipt claims and registered identification, only within its root', async () => {
+  const { releaseReceiptDuplicateKeys } = require('../../functions/lib/modules/pagos/receiptIdentification.js');
+  const store = {
+    pagoReceiptDedup: { a: { rootId: 'r', pagoId: 'p1' }, b: { rootId: 'r', pagoId: 'p1' }, c: { rootId: 'r', pagoId: 'p2' }, d: { rootId: 'other', pagoId: 'p1' } },
+    pagoReceiptIdentifications: { i1: { rootId: 'r', pagoId: 'p1', status: 'REGISTERED' }, i2: { rootId: 'other', pagoId: 'p1', status: 'REGISTERED' } },
+  };
+  const db = { collection: name => ({ where: (field, _op, value) => ({ get: async () => ({ docs: Object.entries(store[name]).filter(([, row]) => row[field] === value).map(([id, row]) => ({
+    get: key => row[key],
+    ref: { delete: async () => { delete store[name][id]; }, set: async patch => { Object.assign(store[name][id], { ...patch, status: patch.status }); } },
+  })) }) }) }) };
+  assert.equal(await releaseReceiptDuplicateKeys(db, 'r', 'p1'), 3);
+  assert.deepEqual(Object.keys(store.pagoReceiptDedup).sort(), ['c', 'd']);
+  assert.equal(store.pagoReceiptIdentifications.i1.status, 'RELEASED');
+  assert.equal(store.pagoReceiptIdentifications.i2.status, 'REGISTERED');
+});

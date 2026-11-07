@@ -189,6 +189,19 @@ export async function retractReceiptAliasesForPago(db: Firestore, rootId: string
   return own.length;
 }
 
+/** A cancelled or rejected payment frees its receipt so it can be registered again, e.g. to the right client. */
+export async function releaseReceiptDuplicateKeys(db: Firestore, rootId: string, pagoId: string) {
+  const claims = await db.collection("pagoReceiptDedup").where("pagoId", "==", pagoId).get();
+  const identifications = await db.collection("pagoReceiptIdentifications").where("pagoId", "==", pagoId).get();
+  const ownClaims = claims.docs.filter(row => row.get("rootId") === rootId);
+  const ownIdentifications = identifications.docs.filter(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
+  await Promise.all([
+    ...ownClaims.map(row => row.ref.delete()),
+    ...ownIdentifications.map(row => row.ref.set({ status: "RELEASED", releasedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true })),
+  ]);
+  return ownClaims.length + ownIdentifications.length;
+}
+
 export function receiptRegisteredPatch(pagoId: string) {
   return { status: "REGISTERED", stage: "REGISTERED_AWAITING_RECEIPT", pagoId, metricRegisteredAutomatically: true, registeredAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
 }
