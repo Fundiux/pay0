@@ -65,3 +65,17 @@ test('alias trust needs two consecutive registrations to the same target and die
   assert.equal(await retractReceiptAliasesForPago(db, 'r1', 'p4'), 1);
   assert.equal(store.has(key), false);
 });
+
+test('cross-client duplicate keys catch a resent receipt whatever the file or client', () => {
+  const { receiptCrossClientDuplicateIds } = require('../../functions/lib/modules/pagos/receiptIdentification.js');
+  const first = receiptCrossClientDuplicateIds({ rootId: 'r1', amount: 46965.72, date: '2026-11-05', reference: '051126', trackingKey: 'BNET01002611050032896467' });
+  assert.equal(first.length, 2);
+  // Same transfer re-read from a screenshot: formatting differs, identity does not.
+  const resent = receiptCrossClientDuplicateIds({ rootId: 'r1', amount: 46965.720, date: '2026-11-05', reference: '05-11-26'.replace(/-/g, ''), trackingKey: 'bnet 01002611050032896467' });
+  assert.deepEqual(resent, first);
+  // Only the tracking key is needed when the reference or date were misread.
+  assert.equal(receiptCrossClientDuplicateIds({ rootId: 'r1', amount: 1, date: '', reference: '', trackingKey: 'BNET01002611050032896467' })[0], first[0]);
+  // Never shared across roots, and weak evidence yields no key.
+  assert.notEqual(receiptCrossClientDuplicateIds({ rootId: 'r2', amount: 46965.72, date: '2026-11-05', reference: '051126', trackingKey: 'BNET01002611050032896467' })[0], first[0]);
+  assert.deepEqual(receiptCrossClientDuplicateIds({ rootId: 'r1', amount: 10, date: '2026-11-05', reference: '12', trackingKey: 'ABC' }), []);
+});

@@ -192,3 +192,18 @@ export async function retractReceiptAliasesForPago(db: Firestore, rootId: string
 export function receiptRegisteredPatch(pagoId: string) {
   return { status: "REGISTERED", stage: "REGISTERED_AWAITING_RECEIPT", pagoId, metricRegisteredAutomatically: true, registeredAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
 }
+
+/**
+ * Keys that identify the same bank transfer whoever it was assigned to, so a receipt
+ * resent weeks later (even as another file or a screenshot) is caught across clients.
+ */
+export function receiptCrossClientDuplicateIds(input: { rootId: string; amount: number; date: string; reference: unknown; trackingKey: unknown }): string[] {
+  const hash = (parts: unknown[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+  const tracking = normalizeReceiptReference(input.trackingKey);
+  const reference = normalizeReceiptReference(input.reference);
+  const cents = Math.round(Number(input.amount) * 100);
+  const ids: string[] = [];
+  if (tracking.length >= 8) ids.push(`track_${hash([input.rootId, tracking])}`);
+  if (reference.length >= 4 && input.date && Number.isSafeInteger(cents) && cents > 0) ids.push(`amtref_${hash([input.rootId, cents, input.date, reference])}`);
+  return ids;
+}

@@ -3,7 +3,7 @@ import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, retractReceiptAliasesForPago } from "./modules/pagos/receiptIdentification";
+import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, retractReceiptAliasesForPago, receiptCrossClientDuplicateIds } from "./modules/pagos/receiptIdentification";
 import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
@@ -2117,6 +2117,7 @@ export const createPago = onCall(
     let pagoSequenceCounterPath = "";
     let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
     let receiptAliasReads: Awaited<ReturnType<typeof readReceiptAliasesTx>> = [];
+    let receiptCrossClientRefs: FirebaseFirestore.DocumentReference[] = [];
 
     await db.runTransaction(async (tx) => {
       await assertCreatePagoAuthorityTx({ db, tx, uid, rootId, clientId: String(clienteId), companyId: String(companyId), despachoId: companyDespachoId, auth: request.auth });
@@ -2146,6 +2147,16 @@ export const createPago = onCall(
         validatedReceiptReaderVersion = String(verifiedPayload.receiptReaderVersion || "").trim();
         validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
           ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
+      }
+      if (receiptIdentificationRef) {
+        const trackingEvidence = (validatedReceiptSemantic as any)?.fields?.trackingKey;
+        receiptCrossClientRefs = receiptCrossClientDuplicateIds({ rootId, amount: montoTotalNum, date: fechaPagoKey, reference: referenciaValue, trackingKey: trackingEvidence?.normalizedValue ?? trackingEvidence?.value })
+          .map(id => db.doc(`pagoReceiptDedup/${id}`));
+        const crossClientSnaps = await Promise.all(receiptCrossClientRefs.map(item => tx.get(item)));
+        const crossClientHit = crossClientSnaps.find(item => item.exists && item.get("rootId") === rootId);
+        if (crossClientHit) {
+          throw new HttpsError("already-exists", `Este comprobante ya fue registrado (pago ${crossClientHit.get("pagoId")}, fecha ${crossClientHit.get("fechaPagoKey") || "sin fecha"}). Revisa antes de acreditarlo otra vez.`, { code: "PAGO_RECEIPT_DUPLICATE", pagoId: String(crossClientHit.get("pagoId") || "") || null, crossClient: true });
+        }
       }
       if (receiptDuplicateRef) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
@@ -2286,6 +2297,9 @@ export const createPago = onCall(
         hasUnreadMsg: !!String(notaInicial || "").trim(),
       });
 
+      for (const crossRef of receiptCrossClientRefs) {
+        tx.set(crossRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), fechaPagoKey, referencia: referenciaValue, pagoId: ref.id, createdAt: FieldValue.serverTimestamp() });
+      }
       if (receiptDuplicateRef) {
         tx.set(receiptDuplicateRef, {
           rootId,
