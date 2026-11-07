@@ -52,7 +52,7 @@ Número de Referencia: 13407
 Concepto de Pago: 13407
 Fecha de Aplicación: 21/Oct./2026
 Clave de Rastreo: 7875APR1202610215916297304`,
-    expect: { senderName: 'PC DIRECTO SA DE CV', payerRfc: 'PDI071206LC7', beneficiaryName: 'Sistemas Setubal', destinationAccount: '659455001000001266', amount: 44776, date: '2026-10-21', reference: '13407' },
+    expect: { senderName: 'PC DIRECTO SA DE CV', payerRfc: 'PDI071206LC7', beneficiaryName: 'Sistemas Setubal', destinationAccount: '659455001000001266', amount: 44776, date: '2026-10-21', reference: '7875APR1202610215916297304' },
   },
   wrappedNameAndMn: {
     text: `Confirmación de Transacción
@@ -78,3 +78,9 @@ for (const [name, { text, expect }] of Object.entries(samples)) {
     for (const [key, value] of Object.entries(expect)) assert.equal(parsed[key], value, key);
   });
 }
+
+test('masked source accounts are kept, a name with a masked tail is not an account', () => {
+  const base = ['Importe: $100.00', 'Fecha de Operación: 21/Oct./2026', 'Referencia: 123456', 'SPEI', ''].join(String.fromCharCode(10));
+  for (const mask of ['XXXXXX1234', '******1234']) assert.equal(parseReceiptText(`${base}Cuenta origen: ${mask}`).account, mask);
+  assert.equal(parseReceiptText(`${base}Cuenta Origen ACME SA DE CV - *0012`).account, '');
+});

@@ -158,7 +158,6 @@ function extractLabeled(lines: string[], labels: RegExp[]): string {
   return "";
 }
 
-const LEGAL_SUFFIX = /(?:S\.?\s*A\.?\s*(?:P\.?\s*I\.?\s*)?DE\s+C\.?\s*V\.?|S\.?\s+DE\s+R\.?\s*L\.?\s+DE\s+C\.?\s*V\.?|S\.?\s*C\.?|A\.?\s*C\.?)$/i;
 /** Banks print "NAME - ACCOUNT" or "ACCOUNT - NAME" in one value; split it without guessing. */
 function splitNameAndAccount(value: string): { name: string; account: string } {
   const parts = clean(value).split(/\s+[-–]\s+/).map(clean).filter(Boolean);
@@ -168,6 +167,7 @@ function splitNameAndAccount(value: string): { name: string; account: string } {
 }
 /** A name that wraps onto a second line is joined only when that line completes a legal suffix. */
 function joinWrappedName(lines: string[], name: string): string {
+  const LEGAL_SUFFIX = /(?:S\.?\s*A\.?\s*(?:P\.?\s*I\.?\s*)?DE\s+C\.?\s*V\.?|S\.?\s+DE\s+R\.?\s*L\.?\s+DE\s+C\.?\s*V\.?|S\.?\s*C\.?|A\.?\s*C\.?)$/i;
   if (!name || LEGAL_SUFFIX.test(name)) return name;
   const index = lines.findIndex(line => clean(line).endsWith(name));
   const next = index >= 0 ? clean(lines[index + 1] || "") : "";
@@ -641,7 +641,7 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     /^cuenta\s+(?:origen|cargo)\s+(.+)$/i,
   ]));
   // A masked or unreadable account ("NAME - *0012") must not be kept as an account number.
-  const sourceAccount = /\d{4}/.test(sourceAccountRaw) && !/[A-Za-z]{3}/.test(sourceAccountRaw) ? sourceAccountRaw : "";
+  const sourceAccount = /^[\dXx*]+$/.test(sourceAccountRaw) && /\d{4}/.test(sourceAccountRaw) ? sourceAccountRaw : "";
   const sourceBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:origen|emisor|ordenante)\s*[:\-]\s*(.+)$/i]);
   const destinationBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:destino|receptor|beneficiario)\s*[:\-]\s*(.+)$/i]);
 
@@ -678,11 +678,12 @@ export function parseReceiptText(textRaw: string): ReceiptData {
       /^folio\s+electronico\s*[:\-]\s*(.+)$/i,
     ]) ||
     extractLabeled(lines, [
+      /^(?:referencia|referencia\s+numerica|clave\s+de\s+rastreo|rastreo|folio|movimiento|num\.?\s*transaccion|numero\s+de\s+transaccion|numero\s+de\s+operacion|no\.\s*operacion)\s*[:\-]\s*(.+)$/i,
+    ]) ||
+    // Bank wording without a clave de rastreo; the clave stays the preferred, unique reference.
+    extractLabeled(lines, [
       /^(?:numero\s+de\s+referencia|referencia\s+numerica)\s*[:\-]\s*(.+)$/i,
       /^(?:numero\s+de\s+referencia|referencia\s+numerica)\s+([A-Z0-9][A-Z0-9-]{3,})$/i,
-    ]) ||
-    extractLabeled(lines, [
-      /^(?:referencia|referencia\s+numerica|clave\s+de\s+rastreo|rastreo|folio|movimiento|num\.?\s*transaccion|numero\s+de\s+transaccion|numero\s+de\s+operacion|no\.\s*operacion)\s*[:\-]\s*(.+)$/i,
     ]);
 
   const concept = extractLabeled(lines, [
