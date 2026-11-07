@@ -197,13 +197,13 @@ export function receiptRegisteredPatch(pagoId: string) {
  * Keys that identify the same bank transfer whoever it was assigned to, so a receipt
  * resent weeks later (even as another file or a screenshot) is caught across clients.
  */
-export function receiptCrossClientDuplicateIds(input: { rootId: string; amount: number; date: string; reference: unknown; trackingKey: unknown }): string[] {
+export function receiptCrossClientDuplicateIds(input: { rootId: string; amount: number; date: string; reference: unknown; trackingKey: unknown }): { id: string; kind: "track" | "amtref"; trackingKey: string }[] {
   const hash = (parts: unknown[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
   const tracking = normalizeReceiptReference(input.trackingKey);
   const reference = normalizeReceiptReference(input.reference);
   const cents = Math.round(Number(input.amount) * 100);
-  const ids: string[] = [];
-  if (tracking.length >= 8) ids.push(`track_${hash([input.rootId, tracking])}`);
-  if (reference.length >= 4 && input.date && Number.isSafeInteger(cents) && cents > 0) ids.push(`amtref_${hash([input.rootId, cents, input.date, reference])}`);
+  const ids: { id: string; kind: "track" | "amtref"; trackingKey: string }[] = [];
+  if (tracking.length >= 8) ids.push({ id: `track_${hash([input.rootId, tracking])}`, kind: "track", trackingKey: tracking });
+  if (reference.length >= 4 && input.date && Number.isSafeInteger(cents) && cents > 0) ids.push({ id: `amtref_${hash([input.rootId, cents, input.date, reference])}`, kind: "amtref", trackingKey: tracking.length >= 8 ? tracking : "" });
   return ids;
 }
