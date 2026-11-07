@@ -1167,7 +1167,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
       } else {
         if (!payload) throw new Error("El comprobante requiere revisión antes del registro.");
         try {
-          pagoId = await createPagoWithReceipt({ ...payload, assertContext: () => assertReceiptItemCurrent(item), file: item.file, onPagoCreated: id => {
+          pagoId = await createPagoWithReceipt({ ...payload, assertContext: () => assertReceiptItemCurrent(item), file: item.file, onDuplicateWarning: message => update({ duplicateWarning: message }), onPagoCreated: id => {
             createdPagoId = id; update({ status: "UPLOADING", createdPagoId: id });
           } });
         } catch (error: any) {
@@ -1717,6 +1717,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
     setComprobantePagoFile(nextFile);
   }
   async function createPagoWithReceipt(input: {
+    onDuplicateWarning?: (message: string) => void;
     clienteId: string;
     companyId: string;
     despachoId: string;
@@ -1819,6 +1820,12 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
 
     input.assertContext?.();
     input.onPagoCreated?.(createdPagoId);
+    // A match on amount, date and reference without a clave de rastreo registers the pago but must be reviewed before acreditar.
+    const duplicateWarning = String(createdPago?.duplicateWarning || createdPago?.data?.duplicateWarning || "").trim();
+    if (duplicateWarning) {
+      if (input.onDuplicateWarning) input.onDuplicateWarning(duplicateWarning);
+      else setPageMsg(duplicateWarning);
+    }
 
     // Publish only the new row; its document listener handles subsequent IQ writes.
     void getDoc(doc(db, "pagos", createdPagoId)).then((snapshot) => {
@@ -2627,7 +2634,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                   <tr
                     key={p.id}
                     className={`group ${index % 2 === 0 ? "" : ""}`}
-                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div></td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p, creatorOptions)}>{recordCreatorLabel(p, creatorOptions)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
+                  ><td className="pay0-td-date text-sky-400 text-left"><div>{getPagoFolio(p)}</div>{p?.receiptDuplicateWarning && <div className="mt-0.5 text-[10px] text-amber-300" title={String(p.receiptDuplicateWarning)}>Posible reenvío: revisar</div>}</td>{(isSuperAdmin(role) || isAdmin(role)) && <td className="pay0-td max-w-[118px] truncate text-left text-slate-300" title={recordCreatorLabel(p, creatorOptions)}>{recordCreatorLabel(p, creatorOptions)}</td>}<td className="pay0-td text-sky-200 text-center">{/* IQ2G_H4_D43G_PAGOS_IQ_ROW_AFTER_FOLIO */}<div className="font-mono text-[11px]">{getPagoIqFolio(p)}</div></td>
 <td className="pay0-td text-center"><PaymentRelationIndicator payment={p} /></td><td className="pay0-td text-slate-300 text-center"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-slate-200">{getPagoIqStatus(p)}</span></td><td className="pay0-td-date text-center">{tsToDateText(p?.createdAt)}</td><td className="pay0-td text-white text-left">
                       <div>{p?.clienteNombre || "---"}</div>
                     </td><td className="pay0-td text-slate-300 text-left">
@@ -2951,7 +2958,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                                   return <div key={kind}>
                                     <div className="text-slate-500">{label}</div>
                                     <div className="text-slate-100">{kind === "client" ? clientName : companyName}</div>
-                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : "Coincidencia determinada por el servidor"}</div>}
+                                    {verified?.[kind] && <div className="text-[10px] text-emerald-300">{verified[kind].evidence?.includes("USER_SELECTED_AUTHORIZED_CATALOG_ENTRY") ? `${label} seleccionado; acceso validado` : verified[kind].evidence?.includes("LEARNED_ALIAS") ? `${label} reconocido por un registro anterior; revisa que sea correcto` : "Coincidencia determinada por el servidor"}</div>}
                                     {candidates.length > 0 && <select aria-label={`Seleccionar ${label.toLowerCase()}`} disabled={receiptBatchBusy || receiptBatchCreating || item.editingReceipt}
                                       value={item[selectedKey] || verified?.[kind]?.id || ""}
                                       onChange={event => { const value = event.target.value; setReceiptBatchItems(rows => rows.map(row => row.key === item.key ? { ...row, [selectedKey]: value, status: "ANALYZING", parsed: { ...row.parsed, identification: undefined } } : row)); void revalidateReceiptItem({ ...item, [selectedKey]: value }, false); }}
@@ -2998,6 +3005,10 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                                 )}
                               </div>
                             </div>
+                          )}
+
+                          {item.duplicateWarning && (
+                            <div className="mt-2 text-[11px] text-amber-300">{String(item.duplicateWarning)}</div>
                           )}
 
                           {["ERROR", "CREATE_ERROR", "UPLOAD_ERROR", "DUPLICATE"].includes(
@@ -3254,6 +3265,9 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                 <div className="text-[11px] text-slate-400">
                   {getPagoFolio(applyFor)} - {applyFor?.clienteNombre || "---"} - Disponible: ${toCurrency(applyFor?.montoDisponible)}
                 </div>
+                {applyFor?.receiptDuplicateWarning && (
+                  <div className="mt-1 text-[11px] text-amber-300">{String(applyFor.receiptDuplicateWarning)}</div>
+                )}
               </div>
 
               <button

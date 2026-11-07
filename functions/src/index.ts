@@ -3,7 +3,7 @@ import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx } from "./modules/pagos/receiptIdentification";
+import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, releaseReceiptForTerminalPago, receiptCrossClientDuplicateIds } from "./modules/pagos/receiptIdentification";
 import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
@@ -2116,6 +2116,9 @@ export const createPago = onCall(
     let pagoSequenceNumber = 0;
     let pagoSequenceCounterPath = "";
     let receiptContentClaimRef: FirebaseFirestore.DocumentReference | null = null;
+    let receiptAliasReads: Awaited<ReturnType<typeof readReceiptAliasesTx>> = [];
+    let receiptCrossClientRefs: { ref: FirebaseFirestore.DocumentReference; kind: "track" | "amtref"; trackingKey: string }[] = [];
+    let receiptDuplicateWarning = "";
 
     await db.runTransaction(async (tx) => {
       await assertCreatePagoAuthorityTx({ db, tx, uid, rootId, clientId: String(clienteId), companyId: String(companyId), despachoId: companyDespachoId, auth: request.auth });
@@ -2133,6 +2136,7 @@ export const createPago = onCall(
         const registered = earlierIdentifications.docs.find(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
         if (registered) throw new HttpsError("already-exists", "Este archivo ya corresponde a un pago registrado.", { code: "PAGO_RECEIPT_DUPLICATE", pagoId: registered.get("createPayload.clienteId") === clienteId && registered.get("createPayload.companyId") === companyId ? registered.get("pagoId") || null : null });
         const verifiedPayload = receiptIdentificationSnap.get("createPayload") || {};
+        receiptAliasReads = await readReceiptAliasesTx(tx, db, rootId, { senderName: verifiedPayload.detectedSenderName, beneficiaryName: verifiedPayload.detectedBeneficiaryName, clienteId: String(clienteId), companyId: String(companyId) });
         validatedReceiptAnalysisId = String(verifiedPayload.receiptAnalysisId || "").trim();
         if (validatedReceiptAnalysisId) {
           const receiptAnalysis = await tx.get(db.doc(`pagoReceiptAnalyses/${validatedReceiptAnalysisId}`));
@@ -2145,7 +2149,37 @@ export const createPago = onCall(
         validatedReceiptSemantic = verifiedPayload.receiptSemantic && typeof verifiedPayload.receiptSemantic === "object"
           ? verifiedPayload.receiptSemantic as Record<string, unknown> : null;
       }
-      if (receiptDuplicateRef) {
+      if (receiptIdentificationRef) {
+        const trackingEvidence = (validatedReceiptSemantic as any)?.fields?.trackingKey;
+        receiptCrossClientRefs = receiptCrossClientDuplicateIds({ rootId, amount: montoTotalNum, date: fechaPagoKey, reference: referenciaValue, trackingKey: trackingEvidence?.normalizedValue ?? trackingEvidence?.value })
+          .map(item => ({ ref: db.doc(`pagoReceiptDedup/${item.id}`), kind: item.kind, trackingKey: item.trackingKey }));
+        const crossClientSnaps = await Promise.all(receiptCrossClientRefs.map(item => tx.get(item.ref)));
+        // A matching clave de rastreo always blocks. Amount+date+reference with a clave missing on either side only warns:
+        // two transfers with different claves are different operations, and without both claves it cannot be proven.
+        const crossClientHit = crossClientSnaps.find((snap, index) => {
+          if (!snap.exists || snap.get("rootId") !== rootId) return false;
+          if (receiptCrossClientRefs[index].kind === "track") return true;
+          const priorClave = String(snap.get("trackingKey") || "");
+          return !!priorClave && priorClave === receiptCrossClientRefs[index].trackingKey;
+        });
+        const softHitIndex = crossClientSnaps.findIndex((snap, index) => snap.exists && snap.get("rootId") === rootId && receiptCrossClientRefs[index].kind === "amtref" && (!snap.get("trackingKey") || !receiptCrossClientRefs[index].trackingKey));
+        if (!crossClientHit && softHitIndex >= 0) {
+          const sameParty = crossClientSnaps[softHitIndex].get("clienteId") === String(clienteId) && crossClientSnaps[softHitIndex].get("companyId") === String(companyId);
+          receiptDuplicateWarning = sameParty
+            ? `Posible reenvío: coincide con el pago ${crossClientSnaps[softHitIndex].get("pagoId")} (mismo monto, fecha y referencia, sin clave de rastreo para confirmarlo). Revísalo antes de acreditar.`
+            : "Posible reenvío: coincide con otro pago (mismo monto, fecha y referencia, sin clave de rastreo para confirmarlo). Revísalo antes de acreditar.";
+        }
+        if (crossClientHit) {
+          // Another client's pago id and date stay hidden, as in the content-claim path.
+          const sameParty = crossClientHit.get("clienteId") === String(clienteId) && crossClientHit.get("companyId") === String(companyId);
+          throw new HttpsError("already-exists", sameParty
+            ? `Este comprobante ya fue registrado (pago ${crossClientHit.get("pagoId")}, fecha ${crossClientHit.get("fechaPagoKey") || "sin fecha"}). Revisa antes de acreditarlo otra vez.`
+            : "Este comprobante ya fue registrado en otro pago. Revisa antes de acreditarlo otra vez.",
+          { code: "PAGO_RECEIPT_DUPLICATE", pagoId: sameParty ? String(crossClientHit.get("pagoId") || "") || null : null, crossClient: true });
+        }
+      }
+      // A warned receipt (amount+date+reference without a clave) is let through even for the same client, keeping the earlier legacy claim.
+      if (receiptDuplicateRef && !receiptDuplicateWarning) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
 
         if (duplicateSnap.exists) {
@@ -2267,6 +2301,7 @@ export const createPago = onCall(
           rfcMismatches: receiptRfcMismatches,
         },
         receiptDuplicateId: receiptDuplicateId || null,
+        ...(receiptDuplicateWarning ? { receiptDuplicateWarning } : {}),
         moneda: String(moneda || "MXN"),
         comprobantes: [],
         createdBy: uid,
@@ -2284,7 +2319,12 @@ export const createPago = onCall(
         hasUnreadMsg: !!String(notaInicial || "").trim(),
       });
 
-      if (receiptDuplicateRef) {
+      for (const crossRef of receiptCrossClientRefs) {
+        // A warned (unproven) match keeps the earlier amtref claim instead of replacing it.
+        if (receiptDuplicateWarning && crossRef.kind === "amtref") continue;
+        tx.set(crossRef.ref, { rootId, trackingKey: crossRef.trackingKey, clienteId: String(clienteId), companyId: String(companyId), fechaPagoKey, referencia: referenciaValue, pagoId: ref.id, createdAt: FieldValue.serverTimestamp() });
+      }
+      if (receiptDuplicateRef && !receiptDuplicateWarning) {
         tx.set(receiptDuplicateRef, {
           rootId,
           clienteId: String(clienteId),
@@ -2315,7 +2355,7 @@ export const createPago = onCall(
       if (receiptContentClaimRef) tx.set(receiptContentClaimRef, { rootId, clienteId: String(clienteId), companyId: String(companyId), pagoId: ref.id, type: "RECEIPT_CONTENT", createdAt: FieldValue.serverTimestamp() });
       if (receiptIdentificationRef) {
         tx.set(receiptIdentificationRef, receiptRegisteredPatch(ref.id), { merge: true });
-        writeReceiptAliasesTx(tx, db, { uid, rootId }, { senderName: request.data?.detectedSenderName, beneficiaryName: request.data?.detectedBeneficiaryName, clienteId: String(clienteId), companyId: String(companyId) });
+        writeReceiptAliasesTx(tx, { uid, rootId }, ref.id, receiptAliasReads);
       }
 
       logActivityTx(tx, db, {
@@ -2380,6 +2420,7 @@ export const createPago = onCall(
       ok: true,
       pagoId: ref.id,
       folio,
+      ...(receiptDuplicateWarning ? { duplicateWarning: receiptDuplicateWarning } : {}),
       _perf: {
         totalMs: __perfTotalMs,
         stages: __perf,
@@ -2642,6 +2683,7 @@ export const changePagoStatus = onCall(
     }
 
       await ref.update(patch);
+      if (nextStatus === "RECHAZADO" || nextStatus === "CANCELADO") await releaseReceiptForTerminalPago(db, rootId, String(pagoId), "changePagoStatus");
 
       if (nextStatus === "CONCILIADO") {
 

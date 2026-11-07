@@ -24,7 +24,7 @@ const rfcs = (item: ReceiptCatalogItem) => [item.rfc, item.RFC, item.taxId, item
 const accounts = (item: ReceiptCatalogItem) => [item.clabe, item.CLABE, item.bankClabe, item.cuenta, item.account, item.accountNumber, ...(Array.isArray(item.depositClabes) ? item.depositClabes : [])].map(fullReceiptAccount).filter(Boolean);
 
 type IdentitySignals = { name?: string; rfc?: string; account?: string };
-type IdentityOptions = { party?: "CLIENT" | "COMPANY" };
+type IdentityOptions = { party?: "CLIENT" | "COMPANY"; selectionEvidence?: string };
 function assessIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, options: IdentityOptions) {
   const wantedName = normalizeReceiptName(signals.name), wantedRfc = rfc(signals.rfc), wantedAccount = fullReceiptAccount(signals.account);
   return items.filter(item => item.active !== false && item.isActive !== false).map(item => {
@@ -40,9 +40,9 @@ function assessIdentity(items: ReceiptCatalogItem[], signals: IdentitySignals, o
   });
 }
 
-/** A learned alias may never override a valid RFC or full-account contradiction. */
-export function receiptIdentityContradicts(item: ReceiptCatalogItem, signals: IdentitySignals, options: IdentityOptions = {}) {
-  return assessIdentity([item], signals, options).some(row => row.conflict);
+/** A learned alias may never override an RFC/full-account that contradicts its target or belongs to another entity. */
+export function receiptAliasAllowed(items: ReceiptCatalogItem[], target: ReceiptCatalogItem, signals: IdentitySignals, options: IdentityOptions = {}) {
+  return !assessIdentity(items, signals, options).some(row => row.item.id === target.id ? row.conflict : row.rfcExact || row.accountExact);
 }
 
 /** Exact names can identify; missing metadata is not contradictory evidence. */
@@ -69,7 +69,7 @@ export function selectReceiptIdentity(items: ReceiptCatalogItem[], signals: Iden
   if (!selectedId) return { match: automatic, candidates };
   const selected = assessed.find(row => row.item.id === selectedId);
   if (!selected) return { match: { ...automatic, status: "REQUIRES_REVIEW" as const, id: null, reasons: ["INVALID_SELECTION"] }, candidates };
-  return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };
+  return { match: { status: "EXACT" as const, id: selected.item.id, reasons: [], evidence: [...selected.evidence, options.selectionEvidence || "USER_SELECTED_AUTHORIZED_CATALOG_ENTRY"], candidateCount: 1 }, candidates };
 }
 
 export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTypeKey: string) {

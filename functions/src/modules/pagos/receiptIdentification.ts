@@ -4,7 +4,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { getReceiptActorCorrectionState } from "./receiptLearning";
 import { resolveReceiptOperationType } from "./receiptOperationType";
-import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptIdentityContradicts, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
+import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptAliasAllowed, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
 
 type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -64,15 +64,15 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     if (candidate.isActive !== false && await allowedCompany(db, actor, candidate)) authorizedCompanies.push(candidate);
   }
   const aliasFor = async (party: "CLIENT" | "COMPANY", name: unknown, items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }, selected: string) => {
-    if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return selected;
+    if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return { id: selected, learned: false };
     const alias = await db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`).get();
-    const target = alias.exists && alias.get("rootId") === actor.rootId ? items.find(item => item.id === alias.get("targetId")) : undefined;
-    return target && !receiptIdentityContradicts(target, signals, { party }) ? target.id : selected;
+    const target = alias.exists && alias.get("rootId") === actor.rootId && Number(alias.get("streak") || 0) >= RECEIPT_ALIAS_MIN_STREAK ? items.find(item => item.id === alias.get("targetId")) : undefined;
+    return target && receiptAliasAllowed(items, target, signals, { party }) ? { id: target.id, learned: true } : { id: selected, learned: false };
   };
   const selectedClient = await aliasFor("CLIENT", receipt.senderName, authorizedClients, clientSignals, clean(input.selectedClientId));
   const selectedCompany = await aliasFor("COMPANY", receipt.beneficiaryName, authorizedCompanies, companySignals, clean(input.selectedCompanyId));
-  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, selectedClient, { party: "CLIENT" });
-  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, selectedCompany, { party: "COMPANY" });
+  const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, selectedClient.id, { party: "CLIENT", ...(selectedClient.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });
+  const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, selectedCompany.id, { party: "COMPANY", ...(selectedCompany.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });
   const clientMatch = clientSelection.match, companyMatch = companySelection.match;
   const reasons = [...receiptRegistrationReasons(receipt, operationTypeKey), ...clientMatch.reasons.map(reason => `CLIENT_${reason}`), ...companyMatch.reasons.map(reason => `COMPANY_${reason}`)];
   if (clients.size > 500 || companies.size > 500) reasons.push("CATALOG_REQUIRES_REVIEW");
@@ -153,17 +153,76 @@ export function receiptAliasId(rootId: string, party: "CLIENT" | "COMPANY", name
   return createHash("sha256").update(JSON.stringify([rootId, party, normalizeReceiptName(name)])).digest("hex");
 }
 
+/** An alias is trusted only after this many consecutive registrations to the same target. */
+export const RECEIPT_ALIAS_MIN_STREAK = 2;
+type AliasParty = "CLIENT" | "COMPANY";
+const aliasEntries = (input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) =>
+  ([["CLIENT", input.senderName, input.clienteId], ["COMPANY", input.beneficiaryName, input.companyId]] as [AliasParty, unknown, string][])
+    .filter(([, name, targetId]) => !!normalizeReceiptName(name) && !!targetId);
+
+/** Read phase of the registration transaction: current alias state, before any write. */
+export async function readReceiptAliasesTx(tx: FirebaseFirestore.Transaction, db: Firestore, rootId: string, input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) {
+  return Promise.all(aliasEntries(input).map(async ([party, name, targetId]) => {
+    const ref = db.doc(`receiptIdentityAliases/${receiptAliasId(rootId, party, name)}`);
+    const prior = await tx.get(ref);
+    return { ref, party, name, targetId, prior: prior.exists && prior.get("rootId") === rootId ? prior.data() || null : null };
+  }));
+}
+
 /** Learn the name-to-entity link only from a registered payment, never from OCR alone. */
-export function writeReceiptAliasesTx(tx: FirebaseFirestore.Transaction, db: Firestore, actor: { uid: string; rootId: string }, input: { senderName?: unknown; beneficiaryName?: unknown; clienteId: string; companyId: string }) {
-  for (const [party, name, targetId] of [["CLIENT", input.senderName, input.clienteId], ["COMPANY", input.beneficiaryName, input.companyId]] as const) {
-    if (!normalizeReceiptName(name) || !targetId) continue;
-    tx.set(db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`), {
+export function writeReceiptAliasesTx(tx: FirebaseFirestore.Transaction, actor: { uid: string; rootId: string }, pagoId: string, reads: Awaited<ReturnType<typeof readReceiptAliasesTx>>) {
+  for (const { ref, party, name, targetId, prior } of reads) {
+    const same = prior?.targetId === targetId;
+    const pagoIds = same ? [...(Array.isArray(prior?.pagoIds) ? prior!.pagoIds : []), pagoId].slice(-5) : [pagoId];
+    tx.set(ref, {
       rootId: actor.rootId, party, name: clean(name).slice(0, 240), targetId, confirmedBy: actor.uid,
-      confirmations: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+      streak: same ? Number(prior?.streak || 0) + 1 : 1, pagoIds, updatedAt: FieldValue.serverTimestamp(),
+    });
   }
+}
+
+/** A cancelled or rejected payment withdraws every alias it helped to build. */
+export async function retractReceiptAliasesForPago(db: Firestore, rootId: string, pagoId: string) {
+  const rows = await db.collection("receiptIdentityAliases").where("pagoIds", "array-contains", pagoId).get();
+  const own = rows.docs.filter(row => row.get("rootId") === rootId);
+  await Promise.all(own.map(row => row.ref.delete()));
+  return own.length;
+}
+
+/** A cancelled or rejected payment frees its receipt so it can be registered again, e.g. to the right client. */
+export async function releaseReceiptDuplicateKeys(db: Firestore, rootId: string, pagoId: string) {
+  const claims = await db.collection("pagoReceiptDedup").where("pagoId", "==", pagoId).get();
+  const identifications = await db.collection("pagoReceiptIdentifications").where("pagoId", "==", pagoId).get();
+  const ownClaims = claims.docs.filter(row => row.get("rootId") === rootId);
+  const ownIdentifications = identifications.docs.filter(row => row.get("rootId") === rootId && row.get("status") === "REGISTERED");
+  await Promise.all([
+    ...ownClaims.map(row => row.ref.delete()),
+    ...ownIdentifications.map(row => row.ref.set({ status: "RELEASED", releasedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true })),
+  ]);
+  return ownClaims.length + ownIdentifications.length;
+}
+
+/** Every writer of a CANCELADO/RECHAZADO pago calls this after its write commits; failures are logged, never thrown. */
+export async function releaseReceiptForTerminalPago(db: Firestore, rootId: string, pagoId: string, source: string) {
+  await retractReceiptAliasesForPago(db, rootId, pagoId).catch(error => console.error("receipt alias retraction failed", { pagoId, source, error: String(error?.message || error) }));
+  await releaseReceiptDuplicateKeys(db, rootId, pagoId).catch(error => console.error("receipt duplicate release failed", { pagoId, source, error: String(error?.message || error) }));
 }
 
 export function receiptRegisteredPatch(pagoId: string) {
   return { status: "REGISTERED", stage: "REGISTERED_AWAITING_RECEIPT", pagoId, metricRegisteredAutomatically: true, registeredAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
+}
+
+/**
+ * Keys that identify the same bank transfer whoever it was assigned to, so a receipt
+ * resent weeks later (even as another file or a screenshot) is caught across clients.
+ */
+export function receiptCrossClientDuplicateIds(input: { rootId: string; amount: number; date: string; reference: unknown; trackingKey: unknown }): { id: string; kind: "track" | "amtref"; trackingKey: string }[] {
+  const hash = (parts: unknown[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+  const tracking = normalizeReceiptReference(input.trackingKey);
+  const reference = normalizeReceiptReference(input.reference);
+  const cents = Math.round(Number(input.amount) * 100);
+  const ids: { id: string; kind: "track" | "amtref"; trackingKey: string }[] = [];
+  if (tracking.length >= 8) ids.push({ id: `track_${hash([input.rootId, tracking])}`, kind: "track", trackingKey: tracking });
+  if (reference.length >= 4 && input.date && Number.isSafeInteger(cents) && cents > 0) ids.push({ id: `amtref_${hash([input.rootId, cents, input.date, reference])}`, kind: "amtref", trackingKey: tracking.length >= 8 ? tracking : "" });
+  return ids;
 }
