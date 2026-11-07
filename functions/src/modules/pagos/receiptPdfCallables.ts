@@ -158,6 +158,22 @@ function extractLabeled(lines: string[], labels: RegExp[]): string {
   return "";
 }
 
+/** Banks print "NAME - ACCOUNT" or "ACCOUNT - NAME" in one value; split it without guessing. */
+function splitNameAndAccount(value: string): { name: string; account: string } {
+  const parts = clean(value).split(/\s+[-–]\s+/).map(clean).filter(Boolean);
+  const account = parts.map(part => part.replace(/[\s-]/g, "")).find(part => /^\d{10,18}$/.test(part)) || "";
+  const name = parts.find(part => /[A-Za-zÁÉÍÓÚÑ]{2}/.test(part) && !/^[\d*xX\s]+$/.test(part)) || "";
+  return { name, account };
+}
+/** A name that wraps onto a second line is joined only when that line completes a legal suffix. */
+function joinWrappedName(lines: string[], name: string): string {
+  const LEGAL_SUFFIX = /(?:S\.?\s*A\.?\s*(?:P\.?\s*I\.?\s*)?DE\s+C\.?\s*V\.?|S\.?\s+DE\s+R\.?\s*L\.?\s+DE\s+C\.?\s*V\.?|S\.?\s*C\.?|A\.?\s*C\.?)$/i;
+  if (!name || LEGAL_SUFFIX.test(name)) return name;
+  const index = lines.findIndex(line => clean(line).endsWith(name));
+  const next = index >= 0 ? clean(lines[index + 1] || "") : "";
+  return next && !/[:]/.test(next) && next.length <= 60 && LEGAL_SUFFIX.test(next) ? `${name} ${next}` : name;
+}
+
 function firstMatch(text: string, patterns: RegExp[]): string {
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -418,8 +434,8 @@ function parseTimeValue(value: string): string {
 
 function labeledRfcs(lines: string[], party: "payer" | "beneficiary"): string[] {
   const labels = party === "payer"
-    ? /^(?:rfc\s+(?:ordenante|emisor|remitente|pagador|cliente)|(?:ordenante|emisor|remitente|pagador|cliente)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i
-    : /^(?:rfc\s+(?:beneficiario|receptor)|(?:beneficiario|receptor)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i;
+    ? /^(?:rfc(?:\s+o\s+curp)?\s+(?:del\s+)?(?:ordenante|emisor|remitente|pagador|cliente)|(?:ordenante|emisor|remitente|pagador|cliente)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i
+    : /^(?:rfc(?:\s+o\s+curp)?\s+(?:del\s+)?(?:beneficiario|receptor)|(?:beneficiario|receptor)\s+rfc)\s*[:\-]\s*([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})$/i;
   return [...new Set(lines.map(line => firstMatch(line, [labels]).toUpperCase()).filter(Boolean))];
 }
 function detectReceiptContentType(input: {
@@ -568,17 +584,26 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     .replace(/\r/g, "\n")
     .replace(/\n{2,}/g, "\n");
 
-  const lines = text
+  const rawLines = text
     .split("\n")
     .map(clean)
     .filter(Boolean);
+  // A label broken across two lines ("Fecha" / "aplicación: 30/10/2026") reads as one.
+  const lines: string[] = [];
+  for (let i = 0; i < rawLines.length; i += 1) {
+    if (/^(?:fecha|tipo de|referencias? del|rfc)$/i.test(rawLines[i]) && /^[a-záéíóúñ ]{3,30}:/i.test(rawLines[i + 1] || "")) {
+      lines.push(`${rawLines[i]} ${rawLines[i + 1]}`);
+      i += 1;
+    } else lines.push(rawLines[i]);
+  }
 
-  const senderName =
+  const senderNameRaw =
     extractLabeled(lines, [
       /^(?:cliente|titular)\s*[:\-]\s*(.+)$/i,
       /^(?:ordenante|remitente|emisor|nombre\s+del\s+ordenante|nombre\s+ordenante|titular\s+origen|cliente\s+ordenante|proveedor)\s*[:\-]\s*(.+)$/i,
       /^(?:de|origen)\s*[:\-]\s*(.+)$/i,
     ]) ||
+    splitNameAndAccount(extractLabeled(lines, [/^cuenta\s+(?:origen|cargo)\s*[:\-]?\s+(.+)$/i])).name ||
     detectHeaderCompany(lines);
 
   const beneficiaryName =
@@ -594,33 +619,40 @@ export function parseReceiptText(textRaw: string): ReceiptData {
         /^beneficiario\s*[:\-]\s*(.+)$/i,
       ],
       5,
-    );
+    ) ||
+    splitNameAndAccount(extractLabeled(lines, [/^cuenta\s+(?:destino|abono)\s*[:\-]?\s+(.+)$/i])).name;
+  const senderName = joinWrappedName(lines, senderNameRaw);
 
   const shortName = extractLabeled(lines, [
     /^nombre\s+corto\s*[:\-]\s*(.+)$/i,
     /^alias\s*[:\-]\s*(.+)$/i,
   ]);
 
-  const normalizeAccount = (value: string) => /^[\d Xx*\-]+$/.test(value) ? value.replace(/[\s-]/g, "") : value;
+  const normalizeAccount = (value: string) => /^[\d Xx*\-]+$/.test(value) ? value.replace(/[\s-]/g, "") : splitNameAndAccount(value).account || value;
   const destinationAccount = normalizeAccount(extractLabeled(lines, [
     /^cuenta\s+de\s+dep[oÃƒÂ³]sito\s*[:\-]\s*(.+)$/i,
     /^cuenta\s+destino\s*[:\-]\s*(.+)$/i,
     /^(?:cuenta|clabe)(?:\s+interbancaria)?\s+(?:de\s+)?(?:destino|beneficiario|receptor|abono|deposito)\s*[:\-]\s*(.+)$/i,
+    /^cuenta\s+(?:destino|abono)\s+(.+)$/i,
+    /^clabe,?\s+pl[aá]stico\s+o\s+celular\s*[:\-]\s*(.+)$/i,
   ]));
-  const sourceAccount = normalizeAccount(extractLabeled(lines, [
+  const sourceAccountRaw = normalizeAccount(extractLabeled(lines, [
     /^(?:cuenta|clabe)(?:\s+interbancaria)?\s+(?:de\s+)?(?:origen|ordenante|emisor|cargo)\s*[:\-]\s*(.+)$/i,
+    /^cuenta\s+(?:origen|cargo)\s+(.+)$/i,
   ]));
+  // A masked or unreadable account ("NAME - *0012") must not be kept as an account number.
+  const sourceAccount = /^[\dXx*]+$/.test(sourceAccountRaw) && /\d{4}/.test(sourceAccountRaw) ? sourceAccountRaw : "";
   const sourceBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:origen|emisor|ordenante)\s*[:\-]\s*(.+)$/i]);
   const destinationBankName = extractLabeled(lines, [/^(?:banco|institucion)\s+(?:de\s+)?(?:destino|receptor|beneficiario)\s*[:\-]\s*(.+)$/i]);
 
   const amountRaw = extractReceiptAmount(lines, text);
   // Confidence remains evidence; a usable amount does not confirm bank execution.
-  const amountLabel = /^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\b\s*(?:mxn|mxp|m\.n\.)?\s*[:\-]?\s*/;
+  const amountLabel = /^(?:importe(?:\s+total(?:\s+del?\s+deposito)?)?|monto(?:\s+(?:pagado|transferido|de\s+la\s+operacion))?|total\s+operado)\b\s*(?:mxn|mxp|mn|m\.n\.)?\s*[:\-]?\s*/;
   const explicitAmounts = lines.flatMap((line, index) => {
     const match = normalize(line).match(amountLabel);
     if (!match) return [];
     const value = normalize(line).slice(match[0].length) || normalize(lines[index + 1] || "");
-    const money = value.match(/^(?:mxn|mxp|m\.n\.)?\s*\$?\s*(\d[\d,. ]*)\s*(?:mxn|mxp|m\.n\.)?$/);
+    const money = value.match(/^(?:mxn|mxp|mn|m\.n\.)?\s*\$?\s*(\d[\d,. ]*)\s*(?:mxn|mxp|mn|m\.n\.)?$/);
     // Missing or malformed explicit amounts also invalidate conflicting receipts.
     return [money ? parseMoney(money[1]) : 0];
   });
@@ -647,6 +679,11 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     ]) ||
     extractLabeled(lines, [
       /^(?:referencia|referencia\s+numerica|clave\s+de\s+rastreo|rastreo|folio|movimiento|num\.?\s*transaccion|numero\s+de\s+transaccion|numero\s+de\s+operacion|no\.\s*operacion)\s*[:\-]\s*(.+)$/i,
+    ]) ||
+    // Bank wording without a clave de rastreo; the clave stays the preferred, unique reference.
+    extractLabeled(lines, [
+      /^(?:numero\s+de\s+referencia|referencia\s+numerica)\s*[:\-]\s*(.+)$/i,
+      /^(?:numero\s+de\s+referencia|referencia\s+numerica)\s+([A-Z0-9][A-Z0-9-]{3,})$/i,
     ]);
 
   const concept = extractLabeled(lines, [
