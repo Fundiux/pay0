@@ -4,6 +4,7 @@ import { ResponseContinuationRegistry } from "./responseContinuationRegistry.mjs
 import { END_CALL_TOOL, delegationForRealtimeTool, realtimeToolNames } from "./realtimeTools.mjs";
 import { createVoiceSessionCorrection } from "./voiceSessionCorrection.mjs";
 import { createVoiceTopicFlow } from "./voiceTopicFlow.mjs";
+import { isPhantomTranscript, userAskedToEndCall } from "./voiceTurnGuards.mjs";
 
 export const ConnectionState = Object.freeze({ NEW: "NEW", AUTHENTICATING: "AUTHENTICATING", AUTHORIZED: "AUTHORIZED", REALTIME_STARTING: "REALTIME_STARTING", REALTIME_ACTIVE: "REALTIME_ACTIVE", REJECTED: "REJECTED", CLOSED: "CLOSED" });
 const safeErrorCodes = new Set(["CANARY_NOT_ALLOWED", "UNAUTHENTICATED", "AUTHENTICATION_TIMEOUT", "AUTHENTICATION_CANCELLED", "AUTHENTICATION_FAILED", "AUTHORIZATION_SCOPE_INVALID", "PERMISSION_DENIED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "HUGO_VOICE_FORBIDDEN", "DUPLICATE_AUTHENTICATION", "OFFER_NOT_AUTHORIZED", "INVALID_OFFER", "INVALID_MESSAGE", "GATEWAY_BUILD_METADATA_MISSING", "REALTIME_SECRET_FAILED", "REALTIME_CALL_FAILED", "SIDEBAND_TIMEOUT", "SIDEBAND_CONNECT_FAILED"]);
@@ -72,7 +73,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
   const socketBinding = Object.freeze({ socket: browser, gatewaySessionId: randomUUID() });
   const allowedUids = new Set(canaryUids);
   let state = ConnectionState.NEW, authorizedContext = null, token = "", sideband = null, sessionId = "", turnId = "", responseId = "";
-  let pendingAuthenticationCleanup = null, realtimeController = null, realtimeCreationAttempts = 0, endCallSupported = false;
+  let pendingAuthenticationCleanup = null, realtimeController = null, realtimeCreationAttempts = 0, endCallSupported = false, lastUserTranscript = "";
   const sessionToolNames = () => endCallSupported ? [...realtimeToolNames, END_CALL_TOOL.name] : realtimeToolNames;
   const connectedAt = Date.now();
   let activeResponse = null, pendingInterruption = null, lastSpeechStoppedAt = null;
@@ -152,6 +153,13 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
         nativeSessionId = item.session.id;
       }
       if (type === "conversation.item.input_audio_transcription.completed") {
+        lastUserTranscript = typeof item.transcript === "string" ? item.transcript : "";
+        if (isPhantomTranscript(item.transcript, item.logprobs)) {
+          // Echo or noise: stop the auto-created reply instead of letting Hugo answer a phrase nobody said.
+          if (activeResponse) { sideband.send(JSON.stringify({ type: "response.cancel", response_id: activeResponse.id })); sideband.send(JSON.stringify({ type: "output_audio_buffer.clear" })); }
+          log("gateway.phantom_transcript_ignored", { sessionId, turnId: item.item_id || turnId || null, cancelledResponseId: activeResponse?.id || null });
+          return;
+        }
         voiceCorrections.observeUser({ turnId: item.item_id, transcript: item.transcript });
         topicFlow.observeUser({ turnId: item.item_id, transcript: item.transcript });
       }
@@ -243,6 +251,7 @@ export function attachGatewayConnection(browser, { verifyIdToken, authorize, can
           const correctionOrigin = delegation.recordResponseCorrection ? voiceCorrections.prepare({ sessionId: nativeSessionId, turnId }) : null;
           let result;
           if (delegation.voiceTopicAction) result = await topicFlow.execute(delegation.voiceTopicAction, context);
+          else if (delegation.endCall && !userAskedToEndCall(lastUserTranscript)) { delegation.endCall = false; log("gateway.end_call_refused", { sessionId, turnId }); result = { route: "LOCAL", text: "El usuario no pidió terminar la llamada. No te despidas; sigue la conversación." }; }
           else if (delegation.endCall) result = { route: "LOCAL", text: "La llamada se cerrará cuando termines de hablar. Despídete en una sola frase breve." };
           else {
             if (saveHistory && nativeSessionId) {
