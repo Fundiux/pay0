@@ -248,6 +248,42 @@
     {
       "commit": "ce79690d",
       "capability": "Tabla de dispersiones con anchos por columna y acciones legibles"
+    },
+    {
+      "commit": "c5805e85",
+      "capability": "Comprobantes SPEI asumen MXN y aprenden alias de cliente y empresa"
+    },
+    {
+      "commit": "8df04789",
+      "capability": "Fecha de captura bancaria se muestra como evidencia detectada"
+    },
+    {
+      "commit": "180bfcf6",
+      "capability": "Alias de comprobante no choca con RFC o cuenta de otra entidad"
+    },
+    {
+      "commit": "e8537679",
+      "capability": "Alias confiable tras dos registros consecutivos y retirado al cancelar"
+    },
+    {
+      "commit": "43770869",
+      "capability": "Comprobante reenviado se bloquea entre clientes por clave o monto, fecha y referencia"
+    },
+    {
+      "commit": "a4d5339b",
+      "capability": "Claves de rastreo distintas no son duplicado y el pago de otro cliente queda oculto"
+    },
+    {
+      "commit": "9b6089fa",
+      "capability": "Pago cancelado libera su comprobante y coincidencia sin clave solo avisa"
+    },
+    {
+      "commit": "fb6aa436",
+      "capability": "Aviso de posible reenvio visible y liberacion en todo pago terminal, incluido IQ"
+    },
+    {
+      "commit": "490de082",
+      "capability": "Lectura de comprobantes Banregio, Santander, PC Directo y montos MN"
     }
   ],
   "requiredText": [
