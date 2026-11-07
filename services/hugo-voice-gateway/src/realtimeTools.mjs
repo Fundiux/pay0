@@ -31,12 +31,17 @@ const readTools = [
     description: "Resuelve un nombre dicho por voz a usuarios, clientes o empresas de PAY0 visibles, con su confianza. Úsala cuando no sepas si un nombre es cliente, empresa o usuario, o cuando una búsqueda no encontró un nombre y quieres las coincidencias más cercanas. Sólo lectura.",
     parameters: objectSchema({ texto: str("Nombre, usuario o correo tal como se dijo."), tipo: { type: "string", enum: PERSON_TYPES, description: "TODOS por defecto." },
       limite: { type: "integer", minimum: 1, maximum: 20, description: "5 por defecto." } }, ["texto"]) },
+  { type: "function", name: "resumen_por_cliente",
+    description: "Ranking y totales POR CLIENTE. fuente PAGOS = cuánto ha pagado cada cliente (quién paga más); FACTURADO = cuánto se le ha facturado; SALDO = cuánto debe cada cliente en facturas sin pagar (quién solicita facturas y no las paga). Úsala para 'qué cliente pagó más en octubre', 'cuánto nos debe cada cliente' o 'quién debe más'. Sólo lectura. Para un solo cliente usa buscar_pagos o buscar_solicitudes con su nombre.",
+    parameters: objectSchema({ fuente: { type: "string", enum: ["PAGOS", "FACTURADO", "SALDO"], description: "PAGOS, FACTURADO o SALDO." }, desde: rangeProps.desde, hasta: rangeProps.hasta,
+      orden: { type: "string", enum: ["MAYOR", "MENOR"], description: "MAYOR por defecto." }, limite: listProps.limite }, ["fuente"]) },
 ];
 const READ_TOOL_MAP = {
   buscar_solicitudes: ["findSolicitudes", "Buscar solicitudes con filtros.", ["folio", "cliente", "empresa", "creadoPor", "estado", "factura"]],
   ver_solicitud: ["getSolicitudDetail", "Ver el detalle de una solicitud.", ["id", "folio"]],
   buscar_pagos: ["findPagos", "Buscar pagos con filtros.", ["folio", "cliente", "empresa", "pagador", "creadoPor", "estado"]],
   buscar_personas: ["findPeople", "Buscar usuarios, clientes o empresas por nombre.", ["texto"]],
+  resumen_por_cliente: ["summarizeByClient", "Resumir pagos, facturas o saldo por cliente.", []],
 };
 const cleanText = value => typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, MAX_TEXT) : "";
 const cleanDate = value => { const text = typeof value === "string" ? value.trim() : ""; return /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) && new Date(`${text}T00:00:00Z`).toISOString().startsWith(text) ? text : undefined; };
@@ -49,6 +54,14 @@ export function readToolInput(name, args = {}) {
   for (const key of READ_TOOL_MAP[name][2]) { const value = cleanText(source[key]); if (value) input[key] = value; }
   if (name === "ver_solicitud") { if (!input.id && !input.folio) throw Error("INVALID_TOOL_INPUT"); return input; }
   const limite = cleanLimit(source.limite);
+  if (name === "resumen_por_cliente") {
+    if (!["PAGOS", "FACTURADO", "SALDO"].includes(source.fuente)) throw Error("INVALID_TOOL_INPUT");
+    input.fuente = source.fuente;
+    for (const key of ["desde", "hasta"]) { const value = cleanDate(source[key]); if (value) input[key] = value; }
+    if (["MAYOR", "MENOR"].includes(source.orden)) input.orden = source.orden;
+    if (limite !== undefined) input.limite = limite;
+    return input;
+  }
   if (name === "buscar_personas") {
     if (!input.texto) throw Error("INVALID_TOOL_INPUT");
     if (PERSON_TYPES.includes(source.tipo)) input.tipo = source.tipo;

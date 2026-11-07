@@ -1,9 +1,10 @@
 import { HUGO_GENERAL_READ_TOOL_NAMES, HUGO_READ_LIMITS } from "./contract";
-import type { FindPeopleInput, GetSolicitudDetailInput, HugoGeneralReadToolName, SearchPagosInput, SearchSolicitudesInput } from "./contract";
+import type { FindPeopleInput, GetSolicitudDetailInput, HugoGeneralReadToolName, SearchPagosInput, SearchSolicitudesInput, SummarizeByClientInput } from "./contract";
 import { parseCalendarDay } from "./search";
 
 const invalid = (): never => { throw Error("HUGO_TOOL_INVALID_INPUT"); };
 const ORDEN = new Set(["RECIENTES", "ANTIGUAS", "MONTO_DESC", "MONTO_ASC"]);
+const FUENTES = new Set(["PAGOS", "FACTURADO", "SALDO"]);
 const TIPOS = new Set(["USUARIO", "CLIENTE", "EMPRESA", "TODOS"]);
 const RANGE = ["desde", "hasta", "monto", "montoMin", "montoMax", "orden", "limite", "soloConteo"];
 const KEYS: Record<HugoGeneralReadToolName, Set<string>> = {
@@ -11,6 +12,7 @@ const KEYS: Record<HugoGeneralReadToolName, Set<string>> = {
   findPagos: new Set(["folio", "cliente", "empresa", "pagador", "creadoPor", "estado", "conciliado", ...RANGE]),
   getSolicitudDetail: new Set(["id", "folio"]),
   findPeople: new Set(["texto", "tipo", "limite"]),
+  summarizeByClient: new Set(["fuente", "desde", "hasta", "orden", "limite"]),
 };
 const TEXT_KEYS = new Set(["folio", "cliente", "empresa", "creadoPor", "estado", "factura", "pagador", "texto"]);
 
@@ -37,6 +39,8 @@ export function validateHugoReadInput(name: HugoGeneralReadToolName, raw: unknow
     if (key === "id") { const id = textValue(value); if (id.length > 160 || id.includes("/") || id === "." || id === "..") invalid(); out.id = id; continue; }
     if (key === "desde" || key === "hasta") { const day = textValue(value); if (!parseCalendarDay(day)) invalid(); out[key] = day; continue; }
     if (key === "monto" || key === "montoMin" || key === "montoMax") { out[key] = amountValue(value); continue; }
+    if (key === "fuente") { if (typeof value !== "string" || !FUENTES.has(value)) invalid(); out.fuente = value; continue; }
+    if (key === "orden" && name === "summarizeByClient") { if (value !== "MAYOR" && value !== "MENOR") invalid(); out.orden = value; continue; }
     if (key === "orden") { if (typeof value !== "string" || !ORDEN.has(value)) invalid(); out.orden = value; continue; }
     if (key === "tipo") { if (typeof value !== "string" || !TIPOS.has(value)) invalid(); out.tipo = value; continue; }
     if (key === "limite") { if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > HUGO_READ_LIMITS.maxItems) invalid(); out.limite = value; continue; }
@@ -47,5 +51,6 @@ export function validateHugoReadInput(name: HugoGeneralReadToolName, raw: unknow
   if (typeof out.montoMin === "number" && typeof out.montoMax === "number" && out.montoMin > out.montoMax) invalid();
   if (name === "getSolicitudDetail" && !out.id && !out.folio) invalid();
   if (name === "findPeople" && !out.texto) invalid();
-  return out as SearchSolicitudesInput | SearchPagosInput | GetSolicitudDetailInput | FindPeopleInput;
+  if (name === "summarizeByClient" && !out.fuente) invalid();
+  return out as SearchSolicitudesInput | SearchPagosInput | GetSolicitudDetailInput | FindPeopleInput | SummarizeByClientInput;
 }

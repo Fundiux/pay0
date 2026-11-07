@@ -3,7 +3,7 @@
 import { HUGO_READ_LIMITS } from "./contract";
 import type {
   FindPeopleInput, FindPeopleResult, GetSolicitudDetailInput, GetSolicitudDetailResult, MatchNote, Orden, PagoItem, PersonMatch,
-  SearchPagosInput, SearchPagosResult, SearchSolicitudesInput, SearchSolicitudesResult, SolicitudDetail, SolicitudItem,
+  SearchPagosInput, SearchPagosResult, SearchSolicitudesInput, SearchSolicitudesResult, SolicitudDetail, SolicitudItem, SummarizeByClientInput, SummarizeByClientResult,
 } from "./contract";
 
 export type RawRow = { id: string; [k: string]: any };
@@ -504,4 +504,36 @@ export function findPeople(snapshot: ReadSnapshot, input: FindPeopleInput): Find
   // Nothing clears the threshold: return the closest few as low-confidence candidates for the model to confirm.
   const chosen = strong.length ? strong : scored.filter(row => row.score >= SUGGESTION_FLOOR).slice(0, 3);
   return { coincidencias: chosen.slice(0, limite).map(({ candidate, score }) => ({ tipo: candidate.tipo, id: candidate.id, nombre: candidate.nombre, detalle: candidate.detalle, confianza: Math.round(score * 100) / 100 })) };
+}
+
+// ---------- per-client summary ----------
+const DEAD_STATUS = /CANCEL|RECHAZ|ELIMIN|ANUL/;
+const isInvoiced = (row: RawRow) => [row.facturaUuid, row.uuidCfdi, row.facturaTotal].some(value => value !== undefined && value !== null && value !== "");
+// What the client still owes on one invoiced solicitud: invoice total (or the solicitud amount) minus what payments already covered.
+const solicitudSaldo = (row: RawRow) => round2((amount(row.facturaTotal) ?? solicitudAmount(row) ?? 0) - (amount(row.totalAbonado) ?? 0));
+export function summarizeByClient(snapshot: ReadSnapshot, input: SummarizeByClientInput): SummarizeByClientResult {
+  const ctx = context(snapshot), pagos = input.fuente === "PAGOS", filtros: Record<string, unknown> = { fuente: input.fuente };
+  let rows = (pagos ? live(snapshot.pagos) : live(snapshot.solicitudes)).filter(row => !DEAD_STATUS.test(String(statusOf(row) || "").toUpperCase()));
+  if (!pagos) rows = rows.filter(isInvoiced);
+  rows = applyAmountAndDates(rows, input, pagos ? pagoAmount : solicitudAmount, pagos ? pagoDate : row => toMillis(row.facturaFecha) ?? solicitudDate(row), filtros);
+  const valueOf = (row: RawRow) => pagos ? pagoAmount(row) ?? 0 : input.fuente === "SALDO" ? solicitudSaldo(row) : amount(row.facturaTotal) ?? solicitudAmount(row) ?? 0;
+  const dateOf = (row: RawRow) => pagos ? pagoDate(row) : toMillis(row.facturaFecha) ?? solicitudDate(row);
+  const groups = new Map<string, { cliente: string; operaciones: number; monto: number; moneda: string; oldest: number | null }>();
+  for (const row of rows) {
+    const value = valueOf(row);
+    if (input.fuente === "SALDO" && value <= 0.01) continue;
+    const moneda = currencyOf(row), key = `${clientKeyOf(row, ctx) || "sin-cliente"}|${moneda}`, millis = dateOf(row);
+    const group = groups.get(key) || { cliente: snapshotClient(row) || clientRecordName(ctx.clients.get(clientIdOf(row) || "")) || "Sin cliente", operaciones: 0, monto: 0, moneda, oldest: null };
+    group.operaciones += 1; group.monto = round2(group.monto + value);
+    if (millis !== null && (group.oldest === null || millis < group.oldest)) group.oldest = millis;
+    groups.set(key, group);
+  }
+  const ordered = [...groups.values()].sort((a, b) => input.orden === "MENOR" ? a.monto - b.monto : b.monto - a.monto);
+  const limite = limitOf(input.limite);
+  Object.assign(filtros, { orden: input.orden || "MAYOR", limite });
+  const items = ordered.slice(0, limite).map(group => ({ cliente: group.cliente, operaciones: group.operaciones, monto: group.monto, moneda: group.moneda, masAntigua: group.oldest === null ? null : mexicoDate(group.oldest) }));
+  const advertencias = ["No excluye facturas CFDI canceladas en Facturama; revisa las más antiguas antes de cobrar."];
+  if (new Set(ordered.map(group => group.moneda)).size > 1) advertencias.push("Hay más de una moneda; los montos no se suman entre monedas.");
+  if (input.fuente === "SALDO") advertencias.push("Saldo = total de la factura menos lo abonado registrado en la solicitud.");
+  return { fuente: input.fuente, clientes: ordered.length, montoTotal: round2(ordered.reduce((sum, group) => sum + group.monto, 0)), mostrados: items.length, items, filtros, advertencias };
 }

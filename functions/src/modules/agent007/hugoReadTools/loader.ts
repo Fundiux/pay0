@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { HugoGeneralReadToolName } from "./contract";
-import { findPagos, findPeople, findSolicitudes, getSolicitudDetail, resolveSolicitudForDetail } from "./search";
+import { findPagos, findPeople, findSolicitudes, getSolicitudDetail, resolveSolicitudForDetail, summarizeByClient } from "./search";
 import type { RawRow, ReadSnapshot } from "./search";
 import { validateHugoReadInput } from "./validate";
 
@@ -41,6 +41,7 @@ export async function runHugoReadTool(db: Firestore, rootId: string, name: HugoG
   const input = validateHugoReadInput(name, rawInput);
   if (name === "findSolicitudes") return findSolicitudes(await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "users", "clients", "companies"] }), input);
   if (name === "findPagos") return findPagos(await loadReadSnapshot(db, rootId, { collections: ["pagos", "users", "clients", "companies"] }), input);
+  if (name === "summarizeByClient") return summarizeByClient(await loadReadSnapshot(db, rootId, { collections: [input.fuente === "PAGOS" ? "pagos" : "solicitudes", "clients"] }), input);
   if (name === "findPeople") return findPeople(await loadReadSnapshot(db, rootId, { collections: PEOPLE_COLLECTIONS[input.tipo || "TODOS"] }), input);
   const base = await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "pagos", "users", "clients", "companies"] });
   const target = resolveSolicitudForDetail(base, input).row;

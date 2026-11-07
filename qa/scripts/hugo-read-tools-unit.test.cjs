@@ -174,3 +174,28 @@ test('loader scopes by rootId and fails closed on a foreign row', async () => {
   await assert.rejects(loadReadSnapshot(fakeDb({ users: [{ id: 'x', rootId: 'other-root' }] }), root, { collections: ['users'] }), /HUGO_READ_ROOT_MISMATCH/);
   await assert.rejects(loadReadSnapshot(fakeDb({}), 'a/b'), /HUGO_READ_ROOT_MISMATCH/);
 });
+
+test('summarizeByClient ranks payments and computes what each client still owes', () => {
+  const { summarizeByClient } = search;
+  const inv = (id, extra) => ({ id, rootId: root, currency: 'MXN', status: 'PROCESANDO', facturaUuid: `uuid-${id}`, ...extra });
+  const snap = { users, clients, companies, pagos,
+    solicitudes: [
+      inv('f1', { clienteId: 'c-dmr', facturaTotal: 1000, totalAbonado: 400, facturaFecha: ts('2026-10-03T12:00:00Z') }),
+      inv('f2', { clienteId: 'c-dmr', facturaTotal: 500, totalAbonado: 500, facturaFecha: ts('2026-10-04T12:00:00Z') }),
+      inv('f3', { clienteId: 'c-bet', monto: 300, facturaFecha: ts('2026-09-20T12:00:00Z') }),
+      inv('f4', { clienteId: 'c-bet', facturaTotal: 9000, status: 'CANCELADA' }),
+      { id: 'f5', rootId: root, clienteId: 'c-bet', monto: 77, status: 'PROCESANDO', currency: 'MXN' },
+      inv('f6', { clienteId: 'c-dmr', facturaTotal: 5000, isDeleted: true }),
+    ] };
+  const saldo = summarizeByClient(snap, { fuente: 'SALDO' });
+  assert.deepEqual(saldo.items.map(item => [item.cliente, item.monto, item.operaciones, item.masAntigua]),
+    [['BETA SOLUCIONES SA DE CV', 300, 1, '2026-09-20'], ['DESARROLLO Y CONSTRUCCIONES DMR SA DE CV', 600, 1, '2026-10-03']].sort((a, b) => b[1] - a[1]));
+  assert.equal(saldo.montoTotal, 900);
+  assert.ok(saldo.advertencias.some(text => /CFDI/.test(text)));
+  assert.equal(summarizeByClient(snap, { fuente: 'FACTURADO', desde: '2026-10-01', hasta: '2026-10-31' }).montoTotal, 1500);
+  const pagado = summarizeByClient(snap, { fuente: 'PAGOS', orden: 'MAYOR', limite: 1 });
+  assert.equal(pagado.mostrados, 1); assert.equal(pagado.items[0].monto, 700);
+  assert.equal(validateHugoReadInput('summarizeByClient', { fuente: 'SALDO', orden: 'MENOR' }).orden, 'MENOR');
+  assert.throws(() => validateHugoReadInput('summarizeByClient', {}), /HUGO_TOOL_INVALID_INPUT/);
+  assert.throws(() => validateHugoReadInput('summarizeByClient', { fuente: 'SALDO', rootId: 'x' }), /HUGO_TOOL_INVALID_INPUT/);
+});
