@@ -3,7 +3,7 @@ import { changeSolicitudVisibilityCore } from "./modules/solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "./modules/sharedCallables/recordCreators";
 import { buildIqOriginIdentityPatch, captureIqOriginIdentity } from "./modules/iq/originIdentity";
 import { manualNoteAuthor } from "./modules/notes/domain";
-import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, retractReceiptAliasesForPago, releaseReceiptDuplicateKeys, receiptCrossClientDuplicateIds } from "./modules/pagos/receiptIdentification";
+import { assertReceiptCreation, receiptRegisteredPatch, writeReceiptAliasesTx, readReceiptAliasesTx, releaseReceiptForTerminalPago, receiptCrossClientDuplicateIds } from "./modules/pagos/receiptIdentification";
 import { getReceiptActorCorrectionState } from "./modules/pagos/receiptLearning";
 
 import {
@@ -2178,7 +2178,8 @@ export const createPago = onCall(
           { code: "PAGO_RECEIPT_DUPLICATE", pagoId: sameParty ? String(crossClientHit.get("pagoId") || "") || null : null, crossClient: true });
         }
       }
-      if (receiptDuplicateRef) {
+      // A warned receipt (amount+date+reference without a clave) is let through even for the same client, keeping the earlier legacy claim.
+      if (receiptDuplicateRef && !receiptDuplicateWarning) {
         const duplicateSnap = await tx.get(receiptDuplicateRef);
 
         if (duplicateSnap.exists) {
@@ -2323,7 +2324,7 @@ export const createPago = onCall(
         if (receiptDuplicateWarning && crossRef.kind === "amtref") continue;
         tx.set(crossRef.ref, { rootId, trackingKey: crossRef.trackingKey, clienteId: String(clienteId), companyId: String(companyId), fechaPagoKey, referencia: referenciaValue, pagoId: ref.id, createdAt: FieldValue.serverTimestamp() });
       }
-      if (receiptDuplicateRef) {
+      if (receiptDuplicateRef && !receiptDuplicateWarning) {
         tx.set(receiptDuplicateRef, {
           rootId,
           clienteId: String(clienteId),
@@ -2682,10 +2683,7 @@ export const changePagoStatus = onCall(
     }
 
       await ref.update(patch);
-      if (nextStatus === "RECHAZADO" || nextStatus === "CANCELADO") {
-        await retractReceiptAliasesForPago(db, rootId, String(pagoId)).catch(error => console.error("receipt alias retraction failed", { pagoId, error: String(error?.message || error) }));
-        await releaseReceiptDuplicateKeys(db, rootId, String(pagoId)).catch(error => console.error("receipt duplicate release failed", { pagoId, error: String(error?.message || error) }));
-      }
+      if (nextStatus === "RECHAZADO" || nextStatus === "CANCELADO") await releaseReceiptForTerminalPago(db, rootId, String(pagoId), "changePagoStatus");
 
       if (nextStatus === "CONCILIADO") {
 

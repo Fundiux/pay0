@@ -31,6 +31,7 @@ import {
   toIqAuthContext,
   type IqHttpAuthSession,
 } from "./iqHttpAuth";
+import { releaseReceiptForTerminalPago } from "../pagos/receiptIdentification";
 import {
   resolveIqDepositCatalogHttp,
 } from "./iqDepositHttpCatalogResolver";
@@ -1948,6 +1949,7 @@ async function resolvePagoIqDepositHistoricalH4D58E(
   }
 
   await ctx.pagoRef.set(patch, { merge: true });
+  if (selectedTerminalOutcomeH4D64A6) await releaseReceiptForTerminalPago(db, auth.rootId, ctx.pagoId, "IQ_HISTORICAL_ADOPTION");
 
   const financialPostingH4D65A0 = selectedConciliated
     ? await postPagoFinancialsAfterIqConciliationH4D65A0({
@@ -2551,6 +2553,7 @@ async function reconcilePagoIqDepositCoreH4D44(
   }
 
   await ctx.pagoRef.set(patch, { merge: true });
+  if (terminalRejectedH4D58H) await releaseReceiptForTerminalPago(db, auth.rootId, pagoId, "IQ_RECONCILE");
 
   const financialPostingH4D65A0 = shouldPostFinancialsH4D65A0
     ? await postPagoFinancialsAfterIqConciliationH4D65A0({

@@ -202,6 +202,12 @@ export async function releaseReceiptDuplicateKeys(db: Firestore, rootId: string,
   return ownClaims.length + ownIdentifications.length;
 }
 
+/** Every writer of a CANCELADO/RECHAZADO pago calls this after its write commits; failures are logged, never thrown. */
+export async function releaseReceiptForTerminalPago(db: Firestore, rootId: string, pagoId: string, source: string) {
+  await retractReceiptAliasesForPago(db, rootId, pagoId).catch(error => console.error("receipt alias retraction failed", { pagoId, source, error: String(error?.message || error) }));
+  await releaseReceiptDuplicateKeys(db, rootId, pagoId).catch(error => console.error("receipt duplicate release failed", { pagoId, source, error: String(error?.message || error) }));
+}
+
 export function receiptRegisteredPatch(pagoId: string) {
   return { status: "REGISTERED", stage: "REGISTERED_AWAITING_RECEIPT", pagoId, metricRegisteredAutomatically: true, registeredAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
 }
