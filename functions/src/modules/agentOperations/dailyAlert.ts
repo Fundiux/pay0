@@ -3,7 +3,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { sendTelegramMessage } from "../telegram/service";
-import { isCanonicalUserActive, normalizeCanonicalRole } from "../users/authorization";
+import { loadSuperadminAlertRecipients } from "./alertRecipients";
+import { countOpenUnmatchedPayments } from "../paymentApplications/unmatchedPaymentReview";
 import { loadAgentOperations } from "./callables";
 import { mexicoDayKey } from "./time";
 
@@ -15,7 +16,7 @@ const minutes = (ms: number | null) => (ms === null || ms === undefined ? "sin d
 const percent = (value: number | null) => (value === null || value === undefined ? "sin datos" : `${value}%`);
 
 /** Texto del resumen diario para el dueño; función pura para poder probarla sin Firebase. */
-export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loadAgentOperations>>): string {
+export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loadAgentOperations>>, unmatched?: { a: number; b: number }): string {
   const { report, killSwitch } = operations;
   const autonomy = report.autonomy;
   const openIncidents = operations.incidents.filter((row: Record<string, any>) => row.status === "OPEN").length;
@@ -26,6 +27,7 @@ export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loa
     `Revisadas: ${report.reviewed} · Detectadas: ${report.detected} · Corregidas: ${report.corrected} · Escaladas: ${report.escalated} · Por reintentar: ${report.retryable}`,
     `Incidentes abiertos: ${openIncidents}`,
   ];
+  if (unmatched) lines.push(unmatched.a + unmatched.b === 0 ? "Pagos sin solicitud: ninguno." : `Pagos sin solicitud: ${unmatched.a} · Pagos que no coinciden con sus facturas pendientes: ${unmatched.b}`);
   if (autonomy) {
     lines.push(
       `Autonomía: ${percent(autonomy.agentResolutionRate)} resuelto por agentes (${autonomy.resolvedByAgent} agentes, ${autonomy.resolvedByPerson} personas)`,
@@ -46,24 +48,10 @@ export const sendAgentDailyStatusAlert = onSchedule(
   { schedule: "every day 20:00", timeZone: "America/Mexico_City", secrets: [TELEGRAM_BOT_TOKEN], memory: "512MiB", timeoutSeconds: 300 },
   async () => {
     const day = mexicoDayKey();
-    const linked = await db.collection("telegramUsers").where("role", "==", "superadmin").where("active", "==", true).limit(20).get();
-    const byRoot = new Map<string, Array<{ id: string; chatId: string }>>();
-    for (const doc of linked.docs) {
-      const chatId = String(doc.get("chatId") || "").trim();
-      const uid = String(doc.get("uid") || "").trim();
-      if (!chatId || !uid) continue;
-      // role/rootId de telegramUsers se copian al vincular y pueden estar obsoletos: manda el documento canónico de users.
-      const user = (await db.collection("users").doc(uid).get()).data();
-      if (!user || !isCanonicalUserActive(user) || normalizeCanonicalRole(user.role ?? user.supervisorRole) !== "superadmin") {
-        console.error("AGENT_DAILY_ALERT_RECIPIENT_SKIPPED", doc.id);
-        continue;
-      }
-      const rootId = String(user.rootId || uid);
-      byRoot.set(rootId, [...(byRoot.get(rootId) || []), { id: doc.id, chatId }]);
-    }
+    const byRoot = await loadSuperadminAlertRecipients();
     for (const [rootId, recipients] of byRoot) {
       try {
-        const message = buildDailyAlertMessage(await loadAgentOperations(rootId));
+        const message = buildDailyAlertMessage(await loadAgentOperations(rootId), await countOpenUnmatchedPayments(rootId).catch(() => undefined));
         for (const recipient of recipients) {
           // create() falla si ya se envió hoy a este destinatario: evita duplicados en reintentos del scheduler.
           const marker = db.collection("agentDailyAlerts").doc(`${rootId}__${day}__${recipient.id}`);

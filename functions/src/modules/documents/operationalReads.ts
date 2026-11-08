@@ -13,7 +13,31 @@ const kinds = {
   clientDispersions: { module: "wallet", action: "dispersiones", permission: "viewBasic" },
 } as const;
 type Kind = keyof typeof kinds;
+export type OperationalRecordKind = Kind;
 const identifier = documentId;
+
+/**
+ * Who may read a record of the root: the superadmin, its admin or creator, or an actor delegated on the client.
+ * Shared by the authorized single reads and by server-side lists that must apply the same visibility.
+ */
+export async function isOperationalRecordVisible(collection: Kind, actor: { uid: string; role: any; rootId: string }, row: Record<string, any>, transaction?: admin.firestore.Transaction): Promise<boolean> {
+  const policy = kinds[collection];
+  let allowed = actor.role === "superadmin" || [row.adminId, row.createdBy].includes(actor.uid)
+    || (collection === "clientDispersions" && (row.operadorId === actor.uid || row.fundingSource?.holderType === "USER"));
+  if (!allowed) {
+    const aliases = [...new Set([row.clientId, row.clienteId].filter(identifier))];
+    for (const clientId of aliases) {
+      try {
+        await requireClientOperationalAccess({ uid: actor.uid, role: actor.role, rootId: actor.rootId, clientId, transaction, permission: policy.permission });
+        allowed = true;
+        break;
+      } catch (error: any) {
+        if (!["permission-denied", "not-found", "failed-precondition"].includes(error?.code)) throw error;
+      }
+    }
+  }
+  return allowed;
+}
 
 async function authorizedSnapshot(transaction: admin.firestore.Transaction, auth: any, collection: Kind, id: string) {
   const profile = (await transaction.get(db.doc(`users/${auth.uid}`))).data();
@@ -24,21 +48,7 @@ async function authorizedSnapshot(transaction: admin.firestore.Transaction, auth
   const row = snapshot.data();
   if (!row || !identifier(rootId) || row.rootId !== rootId) throw new HttpsError("permission-denied", "Registro no disponible.");
   if (collection === "clientDispersions") assertDispersionFundingOwner({ uid: auth.uid, role, rootId, dispersion: row });
-  let allowed = role === "superadmin" || [row.adminId, row.createdBy].includes(auth.uid)
-    || (collection === "clientDispersions" && (row.operadorId === auth.uid || row.fundingSource?.holderType === "USER"));
-  if (!allowed) {
-    const aliases = [...new Set([row.clientId, row.clienteId].filter(identifier))];
-    for (const clientId of aliases) {
-      try {
-        await requireClientOperationalAccess({ uid: auth.uid, role, rootId, clientId, transaction, permission: policy.permission });
-        allowed = true;
-        break;
-      } catch (error: any) {
-        if (!["permission-denied", "not-found", "failed-precondition"].includes(error?.code)) throw error;
-      }
-    }
-  }
-  if (!allowed) throw new HttpsError("permission-denied", "Registro no disponible.");
+  if (!(await isOperationalRecordVisible(collection, { uid: auth.uid, role, rootId }, row, transaction))) throw new HttpsError("permission-denied", "Registro no disponible.");
   return snapshot;
 }
 

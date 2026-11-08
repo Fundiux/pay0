@@ -2854,6 +2854,7 @@ export {
   diagnosePagoApplicationIqMethods,
 } from "./modules/paymentApplications/callables";
 export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnReceipt, applyPaymentsAutomaticallyOnInvoice } from "./modules/paymentApplications/automaticApplication";
+export { notifyUnmatchedPayment, listPagosSinSolicitud, decidePagoSinSolicitud } from "./modules/paymentApplications/unmatchedPaymentReview";
 
 export { addSolicitudNota, addPagoNota } from "./modules/notes/callables";
 export { repairUserNumbersByRootCallable } from "./modules/users/repairNumbers";
