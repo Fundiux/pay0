@@ -1,10 +1,10 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { HugoGeneralReadToolName } from "./contract";
-import { findPagos, findPeople, findSolicitudes, getSolicitudDetail, resolveSolicitudForDetail } from "./search";
+import { findPagos, findPeople, findSolicitudes, getSolicitudDetail, resolveSolicitudForDetail, summarizeByClient } from "./search";
 import type { RawRow, ReadSnapshot } from "./search";
 import { validateHugoReadInput } from "./validate";
 
-type BaseCollection = "solicitudes" | "pagos" | "users" | "clients" | "companies";
+type BaseCollection = "solicitudes" | "pagos" | "users" | "clients" | "companies" | "facturamaInvoices";
 export type LoadSnapshotOptions = { collections?: BaseCollection[]; solicitudIds?: string[] };
 const BASE: BaseCollection[] = ["solicitudes", "pagos", "users", "clients", "companies"];
 const safeId = (value: unknown) => typeof value === "string" && !!value && value.length <= 160 && !value.includes("/");
@@ -28,11 +28,11 @@ export async function loadReadSnapshot(db: Firestore, rootId: string, opts: Load
   const ids = [...new Set(opts.solicitudIds || [])];
   if (ids.some(id => !safeId(id)) || ids.length > 10) throw Error("HUGO_TOOL_INVALID_INPUT");
   const related = (collection: string) => Promise.all(ids.map(id => rootRows(db.collection(collection).where("rootId", "==", rootId).where("solicitudId", "==", id), rootId))).then(rows => rows.flat());
-  const [solicitudes, pagos, users, clients, companies, uploads, aplicaciones] = await Promise.all([
-    read("solicitudes"), read("pagos"), read("users"), read("clients"), read("companies"),
+  const [solicitudes, pagos, users, clients, companies, facturas, uploads, aplicaciones] = await Promise.all([
+    read("solicitudes"), read("pagos"), read("users"), read("clients"), read("companies"), read("facturamaInvoices"),
     ids.length ? related("uploads") : Promise.resolve(undefined), ids.length ? related("pagoAplicaciones") : Promise.resolve(undefined),
   ]);
-  return { solicitudes, pagos, users, clients, companies, ...(uploads ? { uploads } : {}), ...(aplicaciones ? { aplicaciones } : {}), now: new Date() };
+  return { solicitudes, pagos, users, clients, companies, ...(wanted.has("facturamaInvoices") ? { facturas } : {}), ...(uploads ? { uploads } : {}), ...(aplicaciones ? { aplicaciones } : {}), now: new Date() };
 }
 
 const PEOPLE_COLLECTIONS: Record<string, BaseCollection[]> = { USUARIO: ["users"], CLIENTE: ["clients"], EMPRESA: ["companies"], TODOS: ["users", "clients", "companies"] };
@@ -41,6 +41,7 @@ export async function runHugoReadTool(db: Firestore, rootId: string, name: HugoG
   const input = validateHugoReadInput(name, rawInput);
   if (name === "findSolicitudes") return findSolicitudes(await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "users", "clients", "companies"] }), input);
   if (name === "findPagos") return findPagos(await loadReadSnapshot(db, rootId, { collections: ["pagos", "users", "clients", "companies"] }), input);
+  if (name === "summarizeByClient") return summarizeByClient(await loadReadSnapshot(db, rootId, { collections: input.fuente === "PAGOS" ? ["pagos", "clients"] : ["solicitudes", "clients", "facturamaInvoices"] }), input);
   if (name === "findPeople") return findPeople(await loadReadSnapshot(db, rootId, { collections: PEOPLE_COLLECTIONS[input.tipo || "TODOS"] }), input);
   const base = await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "pagos", "users", "clients", "companies"] });
   const target = resolveSolicitudForDetail(base, input).row;

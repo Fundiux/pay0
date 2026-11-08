@@ -174,3 +174,43 @@ test('loader scopes by rootId and fails closed on a foreign row', async () => {
   await assert.rejects(loadReadSnapshot(fakeDb({ users: [{ id: 'x', rootId: 'other-root' }] }), root, { collections: ['users'] }), /HUGO_READ_ROOT_MISMATCH/);
   await assert.rejects(loadReadSnapshot(fakeDb({}), 'a/b'), /HUGO_READ_ROOT_MISMATCH/);
 });
+
+test('summarizeByClient ranks payments and computes what each client still owes', () => {
+  const { summarizeByClient } = search;
+  const inv = (id, extra) => ({ id, rootId: root, currency: 'MXN', status: 'PROCESANDO', facturaUuid: `uuid-${id}`, ...extra });
+  const fac = (id, extra) => ({ id, rootId: root, ...extra });
+  const facturas = [
+    fac('fa-f1', { sourceSolicitudId: 'f1', uuid: 'UUID-F1', cancellationStatus: 'NONE' }),
+    fac('fa-f7', { sourceSolicitudId: 'f7', uuid: 'UUID-F7', cancellationStatus: 'CANCELED', cancellationMotive: '01', cancellationRequestedAt: ts('2026-10-10T12:00:00Z') }),
+    fac('fa-f8', { sourceSolicitudId: 'f8', uuid: 'UUID-F8', cancellationStatus: 'CANCELED', cancellationMotive: '02', cancellationRequestedAt: ts('2026-10-12T12:00:00Z') }),
+    fac('fa-f9', { sourceSolicitudId: 'f9', uuid: 'UUID-F9', cancellationStatus: 'REQUESTED', cancellationMotive: '01' }),
+    fac('fa-lost', { sourceSolicitudId: 'missing', uuid: 'UUID-X', cancellationStatus: 'CANCELED', cancellationMotive: '01', cancellationRequestedAt: ts('2026-10-12T12:00:00Z') }),
+  ];
+  const snap = { users, clients, companies, pagos, facturas,
+    solicitudes: [
+      inv('f1', { clienteId: 'c-dmr', facturaTotal: 1000, totalAbonado: 400, facturaFecha: ts('2026-10-03T12:00:00Z') }),
+      inv('f2', { clienteId: 'c-dmr', facturaTotal: 500, totalAbonado: 500, facturaFecha: ts('2026-10-04T12:00:00Z') }),
+      inv('f3', { clienteId: 'c-bet', monto: 300, facturaFecha: ts('2026-09-20T12:00:00Z') }),
+      inv('f4', { clienteId: 'c-bet', facturaTotal: 9000, status: 'CANCELADA' }),
+      { id: 'f5', rootId: root, clienteId: 'c-bet', monto: 77, status: 'PROCESANDO', currency: 'MXN' },
+      inv('f6', { clienteId: 'c-dmr', facturaTotal: 5000, isDeleted: true }),
+      inv('f7', { clienteId: 'c-bet', facturaTotal: 800, facturaFecha: ts('2026-10-02T12:00:00Z') }),
+      inv('f8', { clienteId: 'c-bet', facturaTotal: 200, facturaFecha: ts('2026-10-05T12:00:00Z') }),
+      inv('f9', { clienteId: 'c-dmr', facturaTotal: 100, facturaFecha: ts('2026-10-06T12:00:00Z') }),
+    ] };
+  const saldo = summarizeByClient(snap, { fuente: 'SALDO' });
+  assert.deepEqual(saldo.items.map(item => [item.cliente, item.monto, item.operaciones, item.masAntigua]),
+    [['DESARROLLO Y CONSTRUCCIONES DMR SA DE CV', 700, 2, '2026-10-03'], ['BETA SOLUCIONES SA DE CV', 300, 1, '2026-09-20']]);
+  assert.equal(saldo.montoTotal, 1000); // f7/f8 cancelled by the SAT are not debt; f9 (cancellation only requested) still is
+  assert.equal(summarizeByClient(snap, { fuente: 'FACTURADO', desde: '2026-10-01', hasta: '2026-10-31' }).montoTotal, 1600);
+  const canceladas = summarizeByClient(snap, { fuente: 'CANCELADAS', desde: '2026-10-01', hasta: '2026-10-31' });
+  assert.deepEqual(canceladas.items.map(item => [item.cliente, item.operaciones, item.monto, item.emitidas, item.porcentajeCancelado]), [['BETA SOLUCIONES SA DE CV', 2, 1000, 2, 100]]);
+  const sustituciones = summarizeByClient(snap, { fuente: 'SUSTITUCIONES', desde: '2026-10-01', hasta: '2026-10-31' });
+  assert.deepEqual(sustituciones.items.map(item => [item.cliente, item.operaciones, item.monto, item.porcentajeCancelado]), [['BETA SOLUCIONES SA DE CV', 1, 800, 50]]);
+  assert.equal(summarizeByClient(snap, { fuente: 'CANCELADAS', desde: '2026-11-01' }).clientes, 0);
+  const pagado = summarizeByClient(snap, { fuente: 'PAGOS', orden: 'MAYOR', limite: 1 });
+  assert.equal(pagado.mostrados, 1); assert.equal(pagado.items[0].monto, 700);
+  assert.equal(validateHugoReadInput('summarizeByClient', { fuente: 'SALDO', orden: 'MENOR' }).orden, 'MENOR');
+  assert.throws(() => validateHugoReadInput('summarizeByClient', {}), /HUGO_TOOL_INVALID_INPUT/);
+  assert.throws(() => validateHugoReadInput('summarizeByClient', { fuente: 'SALDO', rootId: 'x' }), /HUGO_TOOL_INVALID_INPUT/);
+});

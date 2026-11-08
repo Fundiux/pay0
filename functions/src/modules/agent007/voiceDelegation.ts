@@ -114,6 +114,11 @@ export function summarizeHugoReadResult(tool: string, data: any) {
     if (!data?.total) return `Sin coincidencias para esos filtros.${data?.sugerencias?.length ? ` Nombres cercanos: ${data.sugerencias.join(", ")}.` : ""}`;
     return `${plural(Number(data.total), `${noun[0]} coincide`, `${noun[1]} coinciden`)}; monto total ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}.`;
   }
+  if (tool === "summarizeByClient") {
+    const label = ({ PAGOS: "recibido en pagos", FACTURADO: "facturado", SALDO: "pendiente de pago en facturas", CANCELADAS: "en facturas canceladas", SUSTITUCIONES: "en facturas sustituidas" } as Record<string, string>)[String(data?.fuente)] || "total";
+    if (!data?.clientes) return "No hay clientes con movimientos para ese periodo.";
+    return `${plural(Number(data.clientes), "cliente", "clientes")}; ${label} ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}. ${(data.advertencias || []).join(" ")}`.trim();
+  }
   if (tool === "getSolicitudDetail") return data?.encontrada ? `Solicitud ${data.solicitud?.folio || "sin folio"}: estado ${data.solicitud?.estado || "no registrado"}, ${data.solicitud?.monto == null ? "monto no registrado" : money(data.solicitud.monto, data.solicitud.moneda || "MXN")}.`
     : data?.candidatos?.length ? `No hay una solicitud única; ${plural(data.candidatos.length, "candidata", "candidatas")}.` : "No encontré esa solicitud dentro del alcance autorizado.";
   const rows = Array.isArray(data?.coincidencias) ? data.coincidencias : [];
@@ -174,7 +179,7 @@ export const delegateHugoVoiceTurn = onCall(
         if (code === "HUGO_READ_ROOT_MISMATCH") { await recordSecurityBlock(uid, requestedTool, "ROOT_SCOPE", "ROOT_MISMATCH").catch(() => undefined); throw new HttpsError("permission-denied", "Consulta bloqueada por alcance de datos."); }
         throw error;
       }
-      const resultCount = Number(data?.total ?? data?.coincidencias?.length ?? (data?.encontrada ? 1 : 0)) || 0;
+      const resultCount = Number(data?.total ?? data?.clientes ?? data?.coincidencias?.length ?? (data?.encontrada ? 1 : 0)) || 0;
       await dataStore.saveVoiceOperationalState({ rootId, uid, diagnostic: diagnostic("OK", { errorCategory: null, errorCode: null, retryable: false, authorization: "ALLOWED", connectorStatus: "HEALTHY", resultCount }) }).catch(() => undefined);
       const latencyMs = Date.now() - started;
       const ledger = { rootId, ownerUid: uid, sessionId, turnId, responseId: responseId || null, delegationId, toolCallId, route: "DETERMINISTIC_TOOL",

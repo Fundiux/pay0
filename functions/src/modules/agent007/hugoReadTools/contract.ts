@@ -3,7 +3,7 @@
 // returns structured data (not prose) so the model can chain follow-up calls
 // with the returned ids and keep conversational context itself.
 
-export const HUGO_GENERAL_READ_TOOL_NAMES = ["findSolicitudes", "getSolicitudDetail", "findPagos", "findPeople"] as const;
+export const HUGO_GENERAL_READ_TOOL_NAMES = ["findSolicitudes", "getSolicitudDetail", "findPagos", "findPeople", "summarizeByClient"] as const;
 export type HugoGeneralReadToolName = typeof HUGO_GENERAL_READ_TOOL_NAMES[number];
 
 // Dates are calendar days (AAAA-MM-DD) in America/Mexico_City, inclusive.
@@ -74,6 +74,13 @@ export type SearchPagosResult = Omit<SearchSolicitudesResult, "items"> & { items
 export type FindPeopleInput = { texto: string; tipo?: "USUARIO" | "CLIENTE" | "EMPRESA" | "TODOS"; limite?: number };
 export type PersonMatch = { tipo: "USUARIO" | "CLIENTE" | "EMPRESA"; id: string; nombre: string; detalle: string | null; confianza: number };
 export type FindPeopleResult = { coincidencias: PersonMatch[] };
+
+// Per-client totals. PAGOS = money received, FACTURADO = invoiced solicitudes, SALDO = invoiced minus applied (what the client still owes), CANCELADAS = SAT-confirmed cancellations, SUSTITUCIONES = those cancelled by substitution (motive 01).
+export type SummarizeByClientInput = DateRange & { fuente: "PAGOS" | "FACTURADO" | "SALDO" | "CANCELADAS" | "SUSTITUCIONES"; orden?: "MAYOR" | "MENOR"; limite?: number };
+export type ClientSummaryItem = { cliente: string; operaciones: number; monto: number; moneda: string; masAntigua: string | null;
+  emitidas?: number; porcentajeCancelado?: number | null }; // CANCELADAS/SUSTITUCIONES only: invoices issued in the period and the share cancelled
+export type SummarizeByClientResult = { fuente: SummarizeByClientInput["fuente"]; clientes: number; montoTotal: number; mostrados: number; items: ClientSummaryItem[];
+  filtros: Record<string, unknown>; advertencias: string[] };
 
 // Limits shared by backend validation and the gateway schemas.
 export const HUGO_READ_LIMITS = { maxItems: 20, defaultItems: 5, maxText: 120 } as const;

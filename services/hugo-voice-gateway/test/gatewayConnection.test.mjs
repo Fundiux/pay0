@@ -493,10 +493,21 @@ test("end-call tool exists only when the browser declares END_CALL support", asy
   const h = harness({ openRealtime: async (_sdp, _signal, options) => { realtimeOptions = options; return { callId: "simulated-call", answer: "simulated-answer" }; } });
   await h.browser.receive({ ...auth, clientFeatures: ["END_CALL"] }); await h.browser.receive(offer);
   assert.deepEqual(realtimeOptions, { endCall: true }); assert.ok(h.browser.sent.at(-1).tools.includes("terminar_llamada"));
+  await h.sidebands[0].receive({ type: "conversation.item.input_audio_transcription.completed", item_id: "u-end", transcript: "Ya es todo, cuelga por favor." });
   await h.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-2", response_id: "r2", arguments: "{}" });
   assert.equal(h.counts.delegate, 0);
   const output = JSON.parse(h.sidebands[0].sent.find(event => event.type === "conversation.item.create").item.output);
   assert.equal(output.route, "LOCAL"); assert.match(output.text, /Despídete/);
   const ended = h.browser.sent.find(event => event.type === "gateway.end_call_requested");
   assert.equal(ended.toolCallId, "end-2"); assert.equal(ended.responseId, "r2");
+});
+
+test("Hugo cannot hang up unless the last thing the user said asked for it", async () => {
+  const h = harness();
+  await h.browser.receive({ ...auth, clientFeatures: ["END_CALL"] }); await h.browser.receive(offer);
+  await h.sidebands[0].receive({ type: "conversation.item.input_audio_transcription.completed", item_id: "u-1", transcript: "Dime los pagos de octubre." });
+  await h.sidebands[0].receive({ type: "response.function_call_arguments.done", name: "terminar_llamada", call_id: "end-3", response_id: "r3", arguments: "{}" });
+  const output = JSON.parse(h.sidebands[0].sent.find(event => event.type === "conversation.item.create").item.output);
+  assert.match(output.text, /no pidió terminar/);
+  assert.equal(h.browser.sent.some(event => event.type === "gateway.end_call_requested"), false);
 });
