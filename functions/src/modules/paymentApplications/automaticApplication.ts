@@ -6,6 +6,7 @@ import { db, getActivityAdminId, getRootId } from "../sharedCallables/helpers";
 import { applyPaymentApplicationBatchAtomic, type PaymentApplicationActor } from "./service";
 import { AUTOMATIC_CANDIDATE_LIMIT, automaticPaymentSourceDigest, decideAutomaticPayment, isAutomaticPaymentReady } from "./automaticDomain";
 import { isIqHistoricalImport, shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
+import { syncUnmatchedReview } from "./unmatchedPaymentReview";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const permanent = new Set(["permission-denied", "unauthenticated", "not-found", "failed-precondition", "invalid-argument", "already-exists"]);
@@ -40,6 +41,8 @@ export async function applyAutomaticPayment(pagoId: string, options: { retryRevi
     const decision = decideAutomaticPayment(pagoId, pago, candidates.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     if (!decision.batch) {
       await recordDecision(pagoId, sourceDigest, { status: decision.status, reason: decision.reason, matchedCount: decision.matchedCount });
+      // The list and alert are informative; a failure there must never break the automatic application.
+      await syncUnmatchedReview(pagoId, decision.reason).catch(error => console.error("UNMATCHED_REVIEW_SYNC_FAILED", pagoId, String((error as Error)?.message || error).slice(0, 200)));
       return { status: decision.status, reason: decision.reason };
     }
     const result = await applyPaymentApplicationBatchAtomic({ actor, batch: decision.batch, automaticSourceDigest: sourceDigest });

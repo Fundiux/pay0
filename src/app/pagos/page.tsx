@@ -58,6 +58,7 @@ import { CustomRange, DateScopeMode, getScopeRange, isTsWithinRange, shiftBaseDa
 import { PaymentRelationIndicator } from "@/components/PaymentRelationIndicator"; // H4-D67-A1B_RELATION_COLUMN
 import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
 import RecordCreatorFilter from "@/components/RecordCreatorFilter";
+import PagosSinSolicitudPanel from "@/components/pagos/PagosSinSolicitudPanel";
 import CompactBalanceCells from "@/components/CompactBalanceCells";
 import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
@@ -2467,6 +2468,8 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
           </div>
         </div>
       ) : null}
+
+      {canConciliatePagos && !matCreateOnly && <PagosSinSolicitudPanel />}
 
       {canCreatePagos && <label className="mb-2 block text-xs text-slate-300">
         Tipo predeterminado para comprobantes (recordar en este navegador)
