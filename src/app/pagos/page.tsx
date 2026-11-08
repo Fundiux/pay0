@@ -2469,7 +2469,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
         </div>
       ) : null}
 
-      {canConciliatePagos && !matCreateOnly && <PagosSinSolicitudPanel />}
+      {canCreatePagos && !matCreateOnly && <PagosSinSolicitudPanel />}
 
       {canCreatePagos && <label className="mb-2 block text-xs text-slate-300">
         Tipo predeterminado para comprobantes (recordar en este navegador)

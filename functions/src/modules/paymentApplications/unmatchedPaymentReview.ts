@@ -7,6 +7,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { loadSuperadminAlertRecipients } from "../agentOperations/alertRecipients";
 import { getPagoCoverageState } from "../deposits/foundation";
 import { normalizePagoStatus } from "../pagos/domain";
+import { isOperationalRecordVisible } from "../documents/operationalReads";
 import { db, getActivityAdminId, getMyUser, getRootId, requireAuth, requireRole } from "../sharedCallables/helpers";
 import { sendTelegramMessage } from "../telegram/service";
 import {
@@ -156,25 +157,28 @@ export const notifyUnmatchedPayment = onDocumentWritten(
   },
 );
 
-type ReviewActor = { uid: string; rootId: string; role: "superadmin" | "admin"; adminId: string; displayName: string };
+type ReviewActor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador"; adminId: string; displayName: string };
 
 async function resolveReviewActor(request: any): Promise<ReviewActor> {
   const uid = requireAuth(request);
   const me = await getMyUser(uid);
-  const role = requireRole(me, ["superadmin", "admin"]) as ReviewActor["role"];
-  assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin"], requiredModule: "pagos", requiredAction: ["conciliate"] });
+  const role = requireRole(me, ["superadmin", "admin", "operador"]) as ReviewActor["role"];
+  // Every role that registers pagos can review them; a per-user revocation of pagos.create still excludes the user.
+  assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create"] });
   const rootId = await getRootId(uid);
   return { uid, rootId, role, adminId: getActivityAdminId(me, uid, rootId), displayName: clean(me?.name || me?.displayName || me?.email) || uid };
 }
 
-// A superadmin sees the whole root; an admin only the pagos that belong to them.
-const canSeePago = (actor: ReviewActor, pago: Record<string, any>) =>
-  clean(pago.rootId) === actor.rootId && (actor.role === "superadmin" || clean(pago.adminId) === actor.uid);
+// Same visibility as the pagos reads: superadmin in the root, the admin or creator of the pago, or a delegate of the client.
+const canSeePago = async (actor: ReviewActor, pago: Record<string, any>, transaction?: FirebaseFirestore.Transaction) =>
+  clean(pago.rootId) === actor.rootId && isOperationalRecordVisible("pagos", actor, pago, transaction);
 
 export const listPagosSinSolicitud = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
   const actor = await resolveReviewActor(request);
-  const snapshot = await db.collection("pagos").where("rootId", "==", actor.rootId).where("unmatchedReview.open", "==", true).limit(201).get();
-  const pagos = snapshot.docs.filter(doc => canSeePago(actor, doc.data()));
+  const READ_LIMIT = 500;
+  const snapshot = await db.collection("pagos").where("rootId", "==", actor.rootId).where("unmatchedReview.open", "==", true).limit(READ_LIMIT + 1).get();
+  const pagos: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  for (const doc of snapshot.docs.slice(0, READ_LIMIT)) if (await canSeePago(actor, doc.data())) pagos.push(doc);
   const clientIds = [...new Set(pagos.map(doc => clean(doc.get("clienteId"))).filter(Boolean))];
   const names = new Map<string, string>();
   for (let index = 0; index < clientIds.length; index += 100) {
@@ -190,7 +194,7 @@ export const listPagosSinSolicitud = onCall({ cors: true, timeoutSeconds: 60, me
       latestDecision: decision ? { option: clean(decision.option), decidedByName: clean(decision.decidedByName), decidedAt: isoOrNull(decision.decidedAt), note: clean(decision.note) } : null,
     };
   });
-  return { ok: true, rows, truncated: snapshot.size > 200 };
+  return { ok: true, rows, truncated: snapshot.size > READ_LIMIT || pagos.length > 200 };
 });
 
 export const decidePagoSinSolicitud = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
@@ -206,7 +210,7 @@ export const decidePagoSinSolicitud = onCall({ cors: true, timeoutSeconds: 60, m
   return db.runTransaction(async tx => {
     const [pagoSnap, decisionSnap] = await Promise.all([tx.get(pagoRef), tx.get(decisionRef)]);
     const pago = pagoSnap.data();
-    if (!pago || !canSeePago(actor, pago)) throw new HttpsError("permission-denied", "No autorizado para decidir sobre este pago.");
+    if (!pago || !(await canSeePago(actor, pago, tx))) throw new HttpsError("permission-denied", "No autorizado para decidir sobre este pago.");
     const existing = decisionSnap.data();
     if (existing) {
       if (existing.pagoId === pagoId && existing.option === option && existing.note === note && existing.decidedBy === actor.uid) return { ok: true, reused: true, decisionId };
