@@ -11,8 +11,11 @@ export const UNMATCHED_SOLICITUD_LIMIT = 300;
  * invoice exists is exactly that situation. Flip this single constant to change it.
  */
 export const OPEN_SOLICITUD_WITHOUT_INVOICE_IS_PENDING = true;
-/** Automatic-application review reasons that mean "no invoice was identified for this pago". */
-export const UNMATCHED_REVIEW_REASONS: ReadonlySet<string> = new Set(["MISSING_INVOICE_REFERENCE", "NO_EXACT_INVOICE_REFERENCE"]);
+/**
+ * Automatic-application review reasons that mean "no invoice was identified for this pago".
+ * CANDIDATE_LIMIT is included so a client with too many solicitudes is never left forgotten; it is always case B.
+ */
+export const UNMATCHED_REVIEW_REASONS: ReadonlySet<string> = new Set(["MISSING_INVOICE_REFERENCE", "NO_EXACT_INVOICE_REFERENCE", "CANDIDATE_LIMIT"]);
 export const UNMATCHED_DECISION_OPTIONS = ["FACTURAR_PUE", "ESPERAR_FACTURA", "APLICAR_A_FACTURA_EXISTENTE", "DEVOLVER"] as const;
 export type UnmatchedDecisionOption = typeof UNMATCHED_DECISION_OPTIONS[number];
 
@@ -35,6 +38,6 @@ export function classifyUnmatchedPayment(input: { pago: Row; reason: string; sol
   if (!UNMATCHED_REVIEW_REASONS.has(reason)) return { case: null, pendingCount: 0 };
   const pendingCount = solicitudes.filter(row => clean(row.rootId) === clean(pago.rootId) && clean(row.clienteId) === clean(pago.clienteId) &&
     clean(row.companyId || row.empresaId) === clean(pago.companyId) && countsAsPendingInvoice(row)).length;
-  // Not every solicitud of the client was read, so "no pending invoice" cannot be proven.
-  return { case: limitReached || pendingCount > 0 ? "B" : "A", pendingCount };
+  // Not every solicitud of the client was read (or the automatic matcher gave up), so "no pending invoice" cannot be proven.
+  return { case: limitReached || reason === "CANDIDATE_LIMIT" || pendingCount > 0 ? "B" : "A", pendingCount };
 }

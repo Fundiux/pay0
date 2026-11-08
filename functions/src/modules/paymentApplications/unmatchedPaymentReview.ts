@@ -37,8 +37,10 @@ function paymentDay(pago: Record<string, any>): string {
 
 /**
  * Pagos creados antes de que el código esté activo nunca se clasifican ni avisan: el corte es el primer
- * evento tras el despliegue. Sin documento de corte no hay clasificación retroactiva.
+ * evento tras el despliegue. Ese primer evento evalúa un pago que ya existe, así que el corte se compara
+ * con una ventana de gracia (ver ACTIVATION_GRACE_MS). Sin documento de corte no hay clasificación retroactiva.
  */
+const ACTIVATION_GRACE_MS = 30 * 60_000; // ventana de 20 min del disparador más el procesamiento del comprobante
 async function reviewActivatedAt(): Promise<number> {
   const ref = db.doc("unmatchedPaymentReviewConfig/global");
   let snapshot = await ref.get();
@@ -70,7 +72,7 @@ export async function syncUnmatchedReview(pagoId: string, reason: string): Promi
     return classifyUnmatchedPayment({ pago, reason, solicitudes: solicitudes.docs.slice(0, UNMATCHED_SOLICITUD_LIMIT).map(doc => ({ ...doc.data(), id: doc.id })),
       limitReached: solicitudes.size > UNMATCHED_SOLICITUD_LIMIT });
   };
-  if (current?.open !== true && (!millis(pago.createdAt) || millis(pago.createdAt) < await reviewActivatedAt())) return;
+  if (current?.open !== true && (!millis(pago.createdAt) || millis(pago.createdAt) < await reviewActivatedAt() - ACTIVATION_GRACE_MS)) return;
   const result = await classified();
   if (!result.case) { if (current?.open === true) await closeUnmatchedReview(pagoId, "NO_LONGER_UNMATCHED"); return; }
   await db.runTransaction(async tx => {

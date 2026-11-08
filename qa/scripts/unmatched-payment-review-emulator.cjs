@@ -26,6 +26,7 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   check(classify([], {limitReached: true}).case, 'B', 'a client above the read limit is never case A');
   check(classify([pending], {reason: 'NO_EXACT_INVOICE_REFERENCE'}).case, 'B', 'a reference that points nowhere is also unmatched');
   check(classify([], {reason: 'CURRENCY_MISMATCH'}).case, null, 'other review reasons are not unmatched');
+  check(classify([], {reason: 'CANDIDATE_LIMIT'}).case, 'B', 'a client the matcher gave up on is never case A');
   check(classify([pending]).pendingCount, 1, 'pending count');
   const message = review.buildUnmatchedPaymentMessage('A', {cliente: 'ACME SA', monto: 1234.5, moneda: 'MXN', fecha: '2026-11-05', folio: 'P1'});
   check(message.includes('Estos pagos no cuentan con solicitud aún.') && message.includes('ACME SA') && message.includes('P1'), true, 'message names client, amount, date and folio');
@@ -53,6 +54,16 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   await newPago('old', {createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 7200_000)});
   await review.syncUnmatchedReview('old', 'MISSING_INVOICE_REFERENCE');
   check((await db.doc('pagos/old').get()).get('unmatchedReview'), undefined, 'a pago created before activation is never classified');
+  // Without a pre-seeded cutover the first event creates it now, and the pago it is evaluating already exists.
+  await db.doc('unmatchedPaymentReviewConfig/global').delete();
+  await newPago('recent', {clienteId: 'c2', createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 5 * 60_000)});
+  await newPago('dayold', {clienteId: 'c2', createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 24 * 3600_000)});
+  await review.syncUnmatchedReview('recent', 'MISSING_INVOICE_REFERENCE');
+  check((await db.doc('pagos/recent').get()).get('unmatchedReview.case'), 'A', 'the first pago after deploy is classified even though its event creates the cutover');
+  check((await db.doc('unmatchedPaymentReviewConfig/global').get()).exists, true, 'the first event created the cutover');
+  await review.syncUnmatchedReview('dayold', 'MISSING_INVOICE_REFERENCE');
+  check((await db.doc('pagos/dayold').get()).get('unmatchedReview'), undefined, 'a pago a day older than the first event is never classified');
+  await db.doc('unmatchedPaymentReviewConfig/global').set({activatedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 3600_000)});
 
   // Alerts: once per pago+case, never for exact matches, never twice.
   const sent = [];
