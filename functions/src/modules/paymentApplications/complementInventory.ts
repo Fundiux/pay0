@@ -24,7 +24,8 @@ function operationalTags(request: any): ("waitingB" | "requestedC" | "uncertainC
   else if (request.externalRequestSent === true || ["REQUESTED", "ATTACHMENT_PENDING"].includes(request.status)) tags.push("requestedC");
   else if (request.nextCheckAt && request.provider === "IQ" && ["PENDING", "PENDING_B", "PENDING_PROVIDER_CONTRACT"].includes(request.status)) tags.push("waitingB");
   if (request.repAttachmentStatus === "REP_ATTACHMENT_AVAILABLE" || request.bReadState === "ATTACHMENT_AVAILABLE") tags.push("attachmentAvailable");
-  if (["EXCEPTION", "BLOCKED"].includes(request.bReadState) || ["BLOCKED", "REVIEW_REQUIRED"].includes(request.automationStatus)) tags.push("exceptionBlocked");
+  const waitingCancellation = request.bReadReason === "REP_SOURCE_CANCELLATION_PENDING";
+  if (!waitingCancellation && (["EXCEPTION", "BLOCKED"].includes(request.bReadState) || ["BLOCKED", "REVIEW_REQUIRED"].includes(request.automationStatus))) tags.push("exceptionBlocked");
   return tags;
 }
 
