@@ -1,21 +1,17 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { defineSecret } from "firebase-functions/params";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { logActivityTx } from "../../utils/logActivity";
-import { loadSuperadminAlertRecipients } from "../agentOperations/alertRecipients";
 import { getPagoCoverageState } from "../deposits/foundation";
 import { normalizePagoStatus } from "../pagos/domain";
 import { isOperationalRecordVisible } from "../documents/operationalReads";
 import { db, getActivityAdminId, getMyUser, getRootId, requireAuth, requireRole } from "../sharedCallables/helpers";
-import { sendTelegramMessage } from "../telegram/service";
 import {
   classifyUnmatchedPayment, UNMATCHED_DECISION_OPTIONS, UNMATCHED_SOLICITUD_LIMIT,
   type UnmatchedCase, type UnmatchedDecisionOption,
 } from "./unmatchedPaymentDomain";
 
-const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
 const clean = (value: unknown) => String(value ?? "").trim();
 const MEXICO_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" });
 
@@ -97,63 +93,19 @@ export async function countOpenUnmatchedPayments(rootId: string): Promise<{ a: n
   return { a, b };
 }
 
-export function buildUnmatchedPaymentMessage(kind: UnmatchedCase, row: { cliente: string; monto: number; moneda: string; fecha: string; folio: string }): string {
-  const currency = /^[A-Z]{3}$/.test(row.moneda) ? row.moneda : "MXN";
-  const amount = new Intl.NumberFormat("es-MX", { style: "currency", currency }).format(row.monto);
-  return [
-    kind === "A" ? "Pago sin solicitud" : "Pago que no coincide con sus facturas pendientes",
-    kind === "A" ? "Estos pagos no cuentan con solicitud aún." : "El cliente tiene facturas pendientes, pero este pago no coincide con ninguna.",
-    `Cliente: ${row.cliente}`, `Monto: ${amount}`, `Fecha: ${row.fecha}`, `Folio: ${row.folio}`,
-    "Revísalo en Pagos, sección Pagos sin solicitud.",
-  ].join("\n");
-}
-
-type Deliver = (chatId: string, text: string) => Promise<unknown>;
-const deliverWithBot: Deliver = (chatId, text) => sendTelegramMessage(TELEGRAM_BOT_TOKEN.value(), chatId, text);
-
-export async function sendUnmatchedAlert(pagoId: string, pago: Record<string, any>, kind: UnmatchedCase, deliver: Deliver = deliverWithBot) {
-  const rootId = clean(pago.rootId);
-  const recipients = (await loadSuperadminAlertRecipients()).get(rootId) || [];
-  if (!recipients.length) return;
-  const message = buildUnmatchedPaymentMessage(kind, { cliente: clientName((await db.doc(`clients/${clean(pago.clienteId)}`).get()).data()),
-    monto: Number(pago.montoTotal) || 0, moneda: clean(pago.moneda), fecha: paymentDay(pago), folio: clean(pago.folio) || pagoId });
-  for (const recipient of recipients) {
-    // create() fails when this pago+case was already sent to this recipient: retries and trigger re-fires never duplicate.
-    const marker = db.collection("pagoSinSolicitudAlerts").doc(`${rootId}__${pagoId}__${kind}__${recipient.id}`);
-    try { await marker.create({ rootId, pagoId, case: kind, recipientId: recipient.id, status: "SENDING", createdAt: FieldValue.serverTimestamp() }); }
-    catch (error) {
-      const code = (error as { code?: unknown })?.code;
-      if (code !== 6 && code !== "already-exists") console.error("UNMATCHED_PAYMENT_ALERT_MARKER_FAILED", rootId, recipient.id);
-      continue;
-    }
-    try {
-      await deliver(recipient.chatId, message);
-      await marker.update({ status: "SENT", sentAt: FieldValue.serverTimestamp() });
-    } catch (error) {
-      await marker.update({ status: "FAILED", error: String((error as Error)?.message || error).slice(0, 300) }).catch(() => undefined);
-      console.error("UNMATCHED_PAYMENT_ALERT_SEND_FAILED", rootId, recipient.id);
-    }
-  }
-}
-
-/** Closes a review once the pago is fully applied, and alerts once when a pago enters the list. */
-export async function handleUnmatchedPaymentWrite(pagoId: string, before: Record<string, any> | undefined, after: Record<string, any> | undefined,
-  send: typeof sendUnmatchedAlert = sendUnmatchedAlert): Promise<"CLOSED" | "ALERTED" | "IGNORED"> {
-  const review = after?.unmatchedReview;
-  if (!after || review?.open !== true) return "IGNORED";
+/** Closes a review once the pago is fully applied. It never notifies: the open list is reported in the dashboard and the 20:00 daily summary. */
+export async function handleUnmatchedPaymentWrite(pagoId: string, after: Record<string, any> | undefined): Promise<"CLOSED" | "IGNORED"> {
+  if (!after || after.unmatchedReview?.open !== true) return "IGNORED";
   if (normalizePagoStatus(after.status) === "APLICADO_TOTAL" || getPagoCoverageState(after).available <= 0) { await closeUnmatchedReview(pagoId, "APPLIED"); return "CLOSED"; }
-  if (before?.unmatchedReview?.open === true && before.unmatchedReview.case === review.case) return "IGNORED";
-  if (review.case !== "A" && review.case !== "B") return "IGNORED";
-  await send(pagoId, after, review.case);
-  return "ALERTED";
+  return "IGNORED";
 }
 
 export const notifyUnmatchedPayment = onDocumentWritten(
-  { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 120, memory: "256MiB", maxInstances: 2, secrets: [TELEGRAM_BOT_TOKEN] },
+  { document: "pagos/{pagoId}", region: "us-central1", retry: true, timeoutSeconds: 120, memory: "256MiB", maxInstances: 2 },
   async event => {
     const created = Date.parse(event.time);
     if (!Number.isFinite(created) || Date.now() - created > 20 * 60_000) return;
-    await handleUnmatchedPaymentWrite(event.params.pagoId, event.data?.before.data(), event.data?.after.data());
+    await handleUnmatchedPaymentWrite(event.params.pagoId, event.data?.after.data());
   },
 );
 

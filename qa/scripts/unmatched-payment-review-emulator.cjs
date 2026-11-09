@@ -6,6 +6,7 @@ const db = admin.firestore();
 global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
 const domain = require('../../functions/lib/modules/paymentApplications/unmatchedPaymentDomain');
 const review = require('../../functions/lib/modules/paymentApplications/unmatchedPaymentReview');
+const pendingLib = require('../../functions/lib/modules/agentOperations/pendingItems');
 const recipientsLib = require('../../functions/lib/modules/agentOperations/alertRecipients');
 let checks = 0;
 function check(actual, expected, label) { assert.deepEqual(actual, expected, label); checks++; }
@@ -29,9 +30,10 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   check(classify([], {reason: 'CURRENCY_MISMATCH'}).case, null, 'other review reasons are not unmatched');
   check(classify([], {reason: 'CANDIDATE_LIMIT'}).case, 'B', 'a client the matcher gave up on is never case A');
   check(classify([pending]).pendingCount, 1, 'pending count');
-  const message = review.buildUnmatchedPaymentMessage('A', {cliente: 'ACME SA', monto: 1234.5, moneda: 'MXN', fecha: '2026-11-05', folio: 'P1'});
-  check(message.includes('Estos pagos no cuentan con solicitud aún.') && message.includes('ACME SA') && message.includes('P1'), true, 'message names client, amount, date and folio');
-  check(/\b(iban|clabe|rfc|token|swift)\b|cuenta (bancaria|clabe)/i.test(message), false, 'message carries no sensitive data');
+  // No Telegram: the module neither exports an alert sender nor references the bot or its secret.
+  check(['sendUnmatchedAlert', 'buildUnmatchedPaymentMessage'].filter(name => name in review), [], 'the review module exports no alert sender');
+  const source = require('fs').readFileSync(require.resolve('../../functions/lib/modules/paymentApplications/unmatchedPaymentReview'), 'utf8');
+  check(/telegram|sendTelegramMessage|TELEGRAM_BOT_TOKEN|alertRecipients/i.test(source), false, 'the review module never reaches Telegram nor its secret');
 
   // Fixtures.
   await db.doc(`users/${rootId}`).set({rootId, role: 'superadmin', active: true, name: 'Dueña'});
@@ -67,30 +69,21 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   check((await db.doc('pagos/dayold').get()).get('unmatchedReview'), undefined, 'a pago a day older than the first event is never classified');
   await db.doc('unmatchedPaymentReviewConfig/global').set({activatedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 3600_000)});
 
-  // Alerts: once per pago+case, never for exact matches, never twice.
-  const sent = [];
-  const alerting = {send: async (pagoId, pago, kind) => { sent.push([pagoId, kind]); }};
+  // Closing: a pago that enters or changes list is never notified; only full application closes it.
   const open = (kind) => ({...pagoBase, unmatchedReview: {open: true, case: kind}});
-  check(await review.handleUnmatchedPaymentWrite('pe', undefined, {...pagoBase, status: 'APLICADO_TOTAL', montoDisponibleSolicitudes: 0}, alerting.send), 'IGNORED', 'an exactly matched pago has no review and no alert');
-  check(await review.handleUnmatchedPaymentWrite('pe', {...pagoBase}, open('A'), alerting.send), 'ALERTED', 'entering the list alerts');
-  check(await review.handleUnmatchedPaymentWrite('pe', open('A'), {...open('A'), notes: 1}, alerting.send), 'IGNORED', 'a re-fired write of the same case does not alert');
-  check(await review.handleUnmatchedPaymentWrite('pe', open('A'), open('B'), alerting.send), 'ALERTED', 'a new case alerts once');
-  check(sent.length, 2, 'two alerts in total');
+  check(await review.handleUnmatchedPaymentWrite('pe', {...pagoBase, status: 'APLICADO_TOTAL', montoDisponibleSolicitudes: 0}), 'IGNORED', 'an exactly matched pago has no review');
+  check(await review.handleUnmatchedPaymentWrite('pe', open('A')), 'IGNORED', 'entering the list changes nothing and sends nothing');
+  check(await review.handleUnmatchedPaymentWrite('pe', open('B')), 'IGNORED', 'a new case sends nothing either');
+  check((await db.collection('pagoSinSolicitudAlerts').limit(1).get()).size, 0, 'no alert marker is ever written');
   await newPago('pc', {unmatchedReview: {open: true, case: 'A'}});
-  check(await review.handleUnmatchedPaymentWrite('pc', open('A'), {...open('A'), status: 'APLICADO_TOTAL', montoDisponibleSolicitudes: 0}, alerting.send), 'CLOSED', 'a fully applied pago leaves the list');
+  check(await review.handleUnmatchedPaymentWrite('pc', {...open('A'), status: 'APLICADO_TOTAL', montoDisponibleSolicitudes: 0}), 'CLOSED', 'a fully applied pago leaves the list');
   check((await db.doc('pagos/pc').get()).get('unmatchedReview.open'), false, 'the review is closed in the document');
+  await newPago('pg', {unmatchedReview: {open: true, case: 'B'}});
+  check(await review.handleUnmatchedPaymentWrite('pg', {...open('B'), montoDisponibleSolicitudes: 0}), 'CLOSED', 'a pago with nothing available also leaves the list');
 
-  // Alert delivery markers: recipients are canonical superadmins and a repeat sends nothing.
+  // Recipients of the daily summary.
   await db.doc('telegramUsers/t1').set({role: 'superadmin', active: true, uid: rootId, chatId: '111'});
   await db.doc('telegramUsers/t2').set({role: 'superadmin', active: true, uid: adminUid, chatId: '222'});
-  const delivered = [];
-  const deliver = async (chatId, text) => { delivered.push([chatId, text]); };
-  await review.sendUnmatchedAlert('pd', {...pagoBase, montoTotal: 300}, 'A', deliver);
-  check(delivered.map(row => row[0]), ['111'], 'the root owner receives it and a non-superadmin link does not');
-  await review.sendUnmatchedAlert('pd', {...pagoBase, montoTotal: 300}, 'A', deliver);
-  check(delivered.length, 1, 'a retry never resends the same pago and case');
-  await review.sendUnmatchedAlert('pd', {...pagoBase, montoTotal: 300}, 'B', deliver);
-  check(delivered.length, 2, 'the other case is a separate alert');
 
   // Recipients ignore the role copied into the link: the root owner and canonical superadmins receive it.
   const rootB = `${rootId}-b`;
@@ -160,5 +153,24 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   check([asOperador.includes('pd2'), asOperador.includes('pd3'), asOperador.includes('pd4')], [false, true, true], 'an operador sees only the pagos they created');
   check((await list(otherRoot)).rows.length, 0, 'another root sees none');
   await rejects(list(revokedUid), 'permission-denied', 'a user whose pagos.create was revoked cannot list');
+
+  // Pending items for the daily summary and the dashboard: root-scoped counts, each one independent.
+  const days = n => admin.firestore.Timestamp.fromMillis(Date.now() - n * 24 * 3600_000);
+  const job = (id, extra) => db.doc(`paymentComplementJobs/${id}`).set({rootId, ...extra});
+  await job('j1', {status: 'PAUSED'}); await job('j2', {status: 'BLOCKED'}); await job('j3', {status: 'RECEIVED'});
+  await job('j4', {status: 'REQUESTED', requestedAt: days(6)}); await job('j5', {status: 'REQUESTED', requestedAt: days(2)});
+  await db.doc('paymentComplementJobs/jx').set({rootId: otherRoot, status: 'PAUSED'});
+  await db.doc('clientDispersions/d1').set({rootId, status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('clientDispersions/d2').set({rootId, status: 'REGISTRADA', cashReceiptStatus: 'FIRMADA'});
+  await db.doc('clientDispersions/d3').set({rootId, status: 'CANCELADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('clientDispersions/dx').set({rootId: otherRoot, status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('solicitudes/x1').set({rootId, iqCancellationStatus: 'CONFIRMED_REVIEW_REQUIRED'});
+  await db.doc('solicitudes/x2').set({rootId, iqCancellationStatus: 'CONFIRMED'});
+  await db.doc('solicitudes/x3').set({rootId: otherRoot, iqCancellationStatus: 'CONFIRMED_REVIEW_REQUIRED'});
+  check(await pendingLib.loadPendingItems(rootId), {complementsHeld: 2, complementsLate: 1, cashUnsigned: 1, cancellationReview: 1}, 'each pending count is root-scoped and exact');
+  check(await pendingLib.loadPendingItems(`${rootId}-empty`), {complementsHeld: 0, complementsLate: 0, cashUnsigned: 0, cancellationReview: 0}, 'a root with nothing pending reports zeros');
+  await rejects(run(pendingLib.getPendingOperationsSummary, adminUid, {}), 'permission-denied', 'an admin cannot read the pending summary');
+  await rejects(run(pendingLib.getPendingOperationsSummary, operadorUid, {}), 'permission-denied', 'an operador cannot read the pending summary');
+  check((await run(pendingLib.getPendingOperationsSummary, rootId, {})).items.cashUnsigned, 1, 'the superadmin reads their own root only');
   console.log('UNMATCHED PAYMENT REVIEW OK', checks);
 })().catch(error => { console.error(error); process.exit(1); });
