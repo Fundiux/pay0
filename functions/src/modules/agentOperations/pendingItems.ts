@@ -1,14 +1,15 @@
 import * as admin from "firebase-admin";
 import { onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
-import { getMyUser, requireAuth } from "../sharedCallables/helpers";
+import { cashReceiptStatusOf, CASH_RECEIPT_STATUS } from "../dispersionCashReceipt/domain";
+import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
 /** A requested complement that IQ has not delivered after this many days is reported as late. */
 export const COMPLEMENT_LATE_DAYS = 5;
-const HELD_COMPLEMENT_STATUSES = ["PAUSED", "BLOCKED", "UNKNOWN"];
+const HELD_COMPLEMENT_STATUSES = ["PAUSED", "BLOCKED", "UNKNOWN", "REQUEST_STATE_UNKNOWN"];
 
 export type PendingItems = {
   /** Complement jobs held (paused, blocked or in an unknown state). */
@@ -21,6 +22,15 @@ export type PendingItems = {
   cancellationReview?: number;
 };
 
+/** Cash dispersions read per root; the receipt rules (users paid in cash are exempt) cannot be expressed in a count query. */
+const CASH_READ_LIMIT = 500;
+async function countUnsignedCash(rootId: string): Promise<number> {
+  const snapshot = await db.collection("clientDispersions").where("rootId", "==", rootId).where("cashReceiptStatus", "==", CASH_RECEIPT_STATUS.PENDING)
+    .where("status", "==", "REGISTRADA").limit(CASH_READ_LIMIT).get();
+  if (snapshot.size >= CASH_READ_LIMIT) console.error("PENDING_CASH_READ_LIMIT_REACHED", CASH_READ_LIMIT);
+  return snapshot.docs.filter(doc => cashReceiptStatusOf(doc.data()) === CASH_RECEIPT_STATUS.PENDING).length;
+}
+
 const countOf = async (query: FirebaseFirestore.Query) => (await query.count().get()).data().count;
 
 /**
@@ -32,7 +42,7 @@ export async function loadPendingItems(rootId: string, now = Date.now()): Promis
   const readers: Array<[keyof PendingItems, () => Promise<number>]> = [
     ["complementsHeld", () => countOf(db.collection("paymentComplementJobs").where("rootId", "==", rootId).where("status", "in", HELD_COMPLEMENT_STATUSES))],
     ["complementsLate", () => countOf(db.collection("paymentComplementJobs").where("rootId", "==", rootId).where("status", "==", "REQUESTED").where("requestedAt", "<", late))],
-    ["cashUnsigned", () => countOf(db.collection("clientDispersions").where("rootId", "==", rootId).where("cashReceiptStatus", "==", "PENDIENTE_FIRMA").where("status", "==", "REGISTRADA"))],
+    ["cashUnsigned", () => countUnsignedCash(rootId)],
     ["cancellationReview", () => countOf(db.collection("solicitudes").where("rootId", "==", rootId).where("iqCancellationStatus", "==", "CONFIRMED_REVIEW_REQUIRED"))],
   ];
   const result: PendingItems = {};
@@ -48,5 +58,5 @@ export const getPendingOperationsSummary = onCall({ cors: true, region: "us-cent
   const uid = requireAuth(request);
   const user = await getMyUser(uid);
   assertAuthorized(request.auth, user, { allowedRoles: ["superadmin"], requiredModule: "solicitudes", requiredAction: "view" });
-  return { ok: true, items: await loadPendingItems(String(user?.rootId || uid)) };
+  return { ok: true, items: await loadPendingItems(await getRootId(uid)) };
 });

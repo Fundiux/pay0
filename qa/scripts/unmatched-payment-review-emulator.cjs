@@ -157,17 +157,18 @@ const pagoBase = {rootId, adminId: adminUid, clienteId: 'c1', companyId: 'e1', m
   // Pending items for the daily summary and the dashboard: root-scoped counts, each one independent.
   const days = n => admin.firestore.Timestamp.fromMillis(Date.now() - n * 24 * 3600_000);
   const job = (id, extra) => db.doc(`paymentComplementJobs/${id}`).set({rootId, ...extra});
-  await job('j1', {status: 'PAUSED'}); await job('j2', {status: 'BLOCKED'}); await job('j3', {status: 'RECEIVED'});
+  await job('j1', {status: 'PAUSED'}); await job('j2', {status: 'BLOCKED'}); await job('j3', {status: 'RECEIVED'}); await job('j6', {status: 'REQUEST_STATE_UNKNOWN'});
   await job('j4', {status: 'REQUESTED', requestedAt: days(6)}); await job('j5', {status: 'REQUESTED', requestedAt: days(2)});
   await db.doc('paymentComplementJobs/jx').set({rootId: otherRoot, status: 'PAUSED'});
-  await db.doc('clientDispersions/d1').set({rootId, status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
-  await db.doc('clientDispersions/d2').set({rootId, status: 'REGISTRADA', cashReceiptStatus: 'FIRMADA'});
-  await db.doc('clientDispersions/d3').set({rootId, status: 'CANCELADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
-  await db.doc('clientDispersions/dx').set({rootId: otherRoot, status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('clientDispersions/d1').set({rootId, operationTypeKey: 'EFECTIVO', status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('clientDispersions/d2').set({rootId, operationTypeKey: 'EFECTIVO', status: 'REGISTRADA', cashReceiptStatus: 'FIRMADA'});
+  await db.doc('clientDispersions/d3').set({rootId, operationTypeKey: 'EFECTIVO', status: 'CANCELADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
+  await db.doc('clientDispersions/d4').set({rootId, status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA', operationTypeKey: 'EFECTIVO', fundingSource: {holderType: 'USER'}});
+  await db.doc('clientDispersions/dx').set({rootId: otherRoot, operationTypeKey: 'EFECTIVO', status: 'REGISTRADA', cashReceiptStatus: 'PENDIENTE_FIRMA'});
   await db.doc('solicitudes/x1').set({rootId, iqCancellationStatus: 'CONFIRMED_REVIEW_REQUIRED'});
   await db.doc('solicitudes/x2').set({rootId, iqCancellationStatus: 'CONFIRMED'});
   await db.doc('solicitudes/x3').set({rootId: otherRoot, iqCancellationStatus: 'CONFIRMED_REVIEW_REQUIRED'});
-  check(await pendingLib.loadPendingItems(rootId), {complementsHeld: 2, complementsLate: 1, cashUnsigned: 1, cancellationReview: 1}, 'each pending count is root-scoped and exact');
+  check(await pendingLib.loadPendingItems(rootId), {complementsHeld: 3, complementsLate: 1, cashUnsigned: 1, cancellationReview: 1}, 'each pending count is root-scoped and exact');
   check(await pendingLib.loadPendingItems(`${rootId}-empty`), {complementsHeld: 0, complementsLate: 0, cashUnsigned: 0, cancellationReview: 0}, 'a root with nothing pending reports zeros');
   await rejects(run(pendingLib.getPendingOperationsSummary, adminUid, {}), 'permission-denied', 'an admin cannot read the pending summary');
   await rejects(run(pendingLib.getPendingOperationsSummary, operadorUid, {}), 'permission-denied', 'an operador cannot read the pending summary');
