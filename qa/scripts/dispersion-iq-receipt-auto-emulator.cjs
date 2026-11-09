@@ -82,7 +82,9 @@ async function main() {
   same(domain.decideReceiptAuto({ ...base, iqGenerationStatus: "IQ_PARCIAL" }, root, now).reason, "NOT_PROCESSED_BY_IQ", "Only IQ-processed dispersions");
   same(domain.decideReceiptAuto({ ...base, iqDispersionFolio: "0" }, root, now).reason, "NO_UNIQUE_FOLIO", "Folio must be valid");
   same(domain.decideReceiptAuto({ ...base, iqReceiptStatus: "READY" }, root, now).reason, "HAS_RECEIPT", "Existing receipt is skipped");
-  same(domain.decideReceiptAuto({ ...base, iqGenerationUpdatedAt: Timestamp.fromMillis(now - 8 * 86400000) }, root, now).action, "EXPIRED", "Old dispersion leaves the window");
+  same(domain.decideReceiptAuto({ ...base, iqGenerationUpdatedAt: Timestamp.fromMillis(now - 8 * 86400000) }, root, now).reason, "OUTSIDE_WINDOW", "Untried old dispersion is skipped");
+  same(domain.decideReceiptAuto({ ...base, iqReceiptAutoStatus: "WAITING", iqGenerationUpdatedAt: Timestamp.fromMillis(now - 8 * 86400000) }, root, now).action, "EXPIRED", "Tried old dispersion expires");
+  same(domain.decideReceiptAuto({ ...base, iqGenerationUpdatedAt: undefined }, root, now).reason, "NO_GENERATION_TIME", "No timestamp is never checked or expired");
 
   // --- Gate: the IQ master switch and the dispersiones flow ---------------------
   await db.doc(`iqIntegrationConfigs/${root}`).set({ enabled: false, automation: { dispersiones: true } });
@@ -149,15 +151,27 @@ async function main() {
   same((await activeReceipts(flaky.id)).length, 1, "Receipt imported once IQ answers");
   same((await auditEvents(flaky.id)).length, 1, "One audit event after the retry");
 
-  // --- Window: stop looking and report pending -----------------------------------
-  const old = await seed({ iqGenerationUpdatedAt: Timestamp.fromMillis(now - 9 * 86400000) });
+  // --- Window: history is never touched; only rows this job tried expire ----------
+  const history = await seed({ iqGenerationUpdatedAt: Timestamp.fromMillis(now - 30 * 86400000) });
+  const noTime = await seed({ iqGenerationUpdatedAt: null });
+  const tried = await seed({ iqGenerationUpdatedAt: Timestamp.fromMillis(now - 9 * 86400000), iqReceiptAutoStatus: "WAITING", iqReceiptAutoNextCheckAt: Timestamp.fromMillis(now) });
+  const historyBefore = await row(history.id), noTimeBefore = await row(noTime.id);
   const callsOld = fetchCalls.length;
   result = await scan(now + 100 * 60000);
-  same(result.counts.EXPIRED, 1, "Old dispersion leaves the window");
-  const oldRow = await row(old.id);
-  same(oldRow.iqReceiptStatus, "PENDING_NOT_FOUND", "Reported as pending");
-  same(oldRow.iqReceiptAutoStatus, "EXPIRED", "Auto status closed");
-  check(!fetchCalls.slice(callsOld).includes(old.folio), "Expired dispersion is not queried");
+  same(result.counts.EXPIRED, 1, "Only the row this job tried expires");
+  const triedRow = await row(tried.id);
+  same(triedRow.iqReceiptStatus, "PENDING_NOT_FOUND", "Tried row reported as pending");
+  same(triedRow.iqReceiptAutoStatus, "EXPIRED", "Tried row closed");
+  assert.deepEqual(await row(history.id), historyBefore); checks++;
+  assert.deepEqual(await row(noTime.id), noTimeBefore); checks++;
+  check(!fetchCalls.slice(callsOld).some((f) => [history.folio, noTime.folio, tried.folio].includes(f)), "Old and untimed dispersions are never queried");
+  same((await auditEvents(history.id)).length + (await auditEvents(noTime.id)).length, 0, "No import event for untouched history");
+  let pendingEvents = 0;
+  for (const collection of await db.listCollections()) {
+    const snap = await collection.where("event", "==", "IQ_COMPROBANTE_DISPERSION_PENDIENTE").get().catch(() => ({ docs: [] }));
+    for (const doc of snap.docs) { check([history.id, noTime.id].every((id) => doc.data().referenceId !== id), "No pending event for untouched history"); pendingEvents++; }
+  }
+  same(pendingEvents, 1, "Exactly one pending event, for the tried row");
 
   // --- Kill switch ----------------------------------------------------------------
   const killed = await seed();

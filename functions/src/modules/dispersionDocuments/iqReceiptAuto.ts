@@ -7,7 +7,7 @@ import { loadEnabledIqAutomationRoots } from "../iq/automationRuntime";
 import { IQ_CREDENTIALS_KEY, buildDispersionSchedulerAuth } from "../iq/dispersionCreationCallables";
 import { importIqDispersionReceiptCore } from "./iqReceiptImport";
 import {
-  RECEIPT_AUTO_MAX_PER_ROOT, RECEIPT_AUTO_PAGE_SIZE, RECEIPT_AUTO_RECHECK_MS,
+  RECEIPT_AUTO_EXPIRE_PER_RUN, RECEIPT_AUTO_MAX_PER_ROOT, RECEIPT_AUTO_PAGE_SIZE, RECEIPT_AUTO_RECHECK_MS, RECEIPT_AUTO_WINDOW_MS,
   decideReceiptAuto, receiptAutoFolio,
 } from "./iqReceiptAutoDomain";
 
@@ -88,22 +88,27 @@ export async function runIqDispersionReceiptScan(rootId: string, nowMs = Date.no
   const runtime = (configSnap.data()?.automationRuntime?.dispersionReceipt || {}) as Record<string, unknown>;
   const storedCursorId = clean(runtime.scanCursorId);
   const cursorSnap = storedCursorId ? await db.doc(`clientDispersions/${storedCursorId}`).get() : null;
-  const base = db.collection("clientDispersions").where("rootId", "==", rootId).where("iqGenerationStatus", "==", "IQ_GENERADA").limit(RECEIPT_AUTO_PAGE_SIZE);
+  // Only dispersions generated inside the search window are ever read, oldest first.
+  const cutoff = admin.firestore.Timestamp.fromMillis(nowMs - RECEIPT_AUTO_WINDOW_MS);
+  const base = db.collection("clientDispersions").where("rootId", "==", rootId).where("iqGenerationStatus", "==", "IQ_GENERADA")
+    .where("iqGenerationUpdatedAt", ">=", cutoff).orderBy("iqGenerationUpdatedAt").limit(RECEIPT_AUTO_PAGE_SIZE);
   let snap = cursorSnap?.exists && clean(cursorSnap.data()?.rootId) === rootId ? await base.startAfter(cursorSnap).get() : await base.get();
   // Cursor stale or end reached: restart from the first page in the same run.
   if (snap.empty && storedCursorId) snap = await base.get();
 
   const counts: Record<string, number> = {};
+  // Report as pending only what this job tried and IQ never delivered; untouched history is never read here.
+  const stale = await db.collection("clientDispersions").where("rootId", "==", rootId).where("iqReceiptAutoStatus", "==", "WAITING")
+    .where("iqGenerationUpdatedAt", "<", cutoff).limit(RECEIPT_AUTO_EXPIRE_PER_RUN).get();
+  for (const doc of stale.docs) {
+    if (decideReceiptAuto(doc.data(), rootId, nowMs).action !== "EXPIRED") continue;
+    await giveUp(rootId, doc.id, doc.data());
+    counts.EXPIRED = (counts.EXPIRED || 0) + 1;
+  }
   let handled = 0, holdCursor = false, stopped = false;
   for (const doc of snap.docs) {
     const principal = doc.data();
-    const decision = decideReceiptAuto(principal, rootId, nowMs);
-    if (decision.action === "EXPIRED") {
-      await giveUp(rootId, doc.id, principal);
-      counts.EXPIRED = (counts.EXPIRED || 0) + 1;
-      continue;
-    }
-    if (decision.action !== "CHECK") continue;
+    if (decideReceiptAuto(principal, rootId, nowMs).action !== "CHECK") continue;
     if (handled >= RECEIPT_AUTO_MAX_PER_ROOT) { holdCursor = true; break; }
     // The safety runtime admits one IQ operation per second; wait instead of deferring the rest of the page.
     if (handled > 0) await new Promise((resolve) => setTimeout(resolve, ITEM_SPACING_MS));

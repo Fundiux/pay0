@@ -1130,7 +1130,9 @@
             ]
         },
         { "collectionGroup": "whatsappQrConnectorCommands", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "bindingId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
-        { "collectionGroup": "whatsappQrChats", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "bindingId", "order": "ASCENDING" }, { "fieldPath": "rootId", "order": "ASCENDING" }] }
+        { "collectionGroup": "whatsappQrChats", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "bindingId", "order": "ASCENDING" }, { "fieldPath": "rootId", "order": "ASCENDING" }] },
+        { "collectionGroup": "clientDispersions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "rootId", "order": "ASCENDING" }, { "fieldPath": "iqGenerationStatus", "order": "ASCENDING" }, { "fieldPath": "iqGenerationUpdatedAt", "order": "ASCENDING" }] },
+        { "collectionGroup": "clientDispersions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "rootId", "order": "ASCENDING" }, { "fieldPath": "iqReceiptAutoStatus", "order": "ASCENDING" }, { "fieldPath": "iqGenerationUpdatedAt", "order": "ASCENDING" }] }
     ],
     "fieldOverrides": [
         {
