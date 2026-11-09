@@ -292,6 +292,14 @@
     {
       "commit": "095443b5",
       "capability": "Pagos sin solicitud: clasificacion, lista, decision por rol y alertas al dueno del root"
+    },
+    {
+      "commit": "114e535e",
+      "capability": "Complementos: espera por cancelacion en curso y frenos de seguridad diferidos en la busqueda diaria"
+    },
+    {
+      "commit": "96cca700",
+      "capability": "Pendientes en dashboard y resumen diario; pagos sin solicitud sin aviso inmediato"
     }
   ],
   "requiredText": [
