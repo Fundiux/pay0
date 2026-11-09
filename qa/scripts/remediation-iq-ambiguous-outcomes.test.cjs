@@ -26,7 +26,7 @@ const invoice=extract('solicitudHttpCreateA53.ts','runIqCreateInvoiceHttpA53',{
 const dispersion=extract('dispersionHttpCreateCore.ts','runIqCreateDispersionHttpH4D85A50',{
  clean,DEFAULT_IQ_API_ORIGIN:'https://fake.invalid',login:async()=> 'token',fetchJson:async()=>({json:{beneficiaries:[{id:2,name:'B'}],clients:[{id:1,name:'C'}]}}),
  buildWizardUrl:()=>new URL('https://fake.invalid/wizard'),resolvePartner:()=>({id:1,name:'P'}),positiveInt:Number,operationTypeId:()=>1,
- beneficiarySearchTerm:()=> 'B',findUniqueByNormalizedNames:rows=>rows[0],asRows:value=>value||[],rowId:row=>row.id,rowName:row=>row.name,
+ beneficiarySearchTerm:()=> 'B',selectStoredIqBeneficiary:()=>null,findUniqueByNormalizedNames:rows=>rows[0],asRows:value=>value||[],rowId:row=>row.id,rowName:row=>row.name,
  resolveBeneficiaryAccount:()=>({id:4}),resolveSalePercentage:()=>({id:5,label:'1%'}),money:Number,fetchIq:provider,
  resultBase:()=>({}),normalize:value=>clean(value).toUpperCase(),recoverCreatedId:async()=>({iqId:'100'}),
 });

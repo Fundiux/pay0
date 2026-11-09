@@ -3034,6 +3034,8 @@ export {
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
 export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationReceiptImport";
 export { syncIqBeneficiaryCatalog } from "./modules/beneficiaries/iqCatalogSync";
+export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger";
+export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
 export {
   processIqPagoDepositCreateQueue,
   dispatchQueuedPagoIqCreation,
