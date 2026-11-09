@@ -21,6 +21,7 @@ export type IqAutomationProcessKey =
   | "pagoReconciliation"
   // H4_D87_A58_A46_DISPERSION_CREATE_CONTRACT
   | "dispersionCreate"
+  | "dispersionReceipt"
   | "paymentApplicationExecution";
 
 type IqAutomationFlowKey =
@@ -42,6 +43,7 @@ function automationFlowForProcess(
       return "pagos";
 
     case "dispersionCreate":
+    case "dispersionReceipt":
       return "dispersiones";
 
     case "paymentApplicationExecution":

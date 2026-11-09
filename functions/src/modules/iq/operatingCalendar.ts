@@ -34,6 +34,7 @@ export type IqAutomationProcessIntervals = {
   pagoCreate: number;
   pagoReconciliation: number;
   dispersionCreate: number;
+  dispersionReceipt: number;
   paymentApplicationExecution: number;
 };
 
@@ -227,6 +228,12 @@ export function normalizeIqOperatingCalendarConfig(
       dispersionCreate: clampInteger(
         intervalInput.dispersionCreate,
         5,
+        5,
+        1440,
+      ),
+      dispersionReceipt: clampInteger(
+        intervalInput.dispersionReceipt,
+        15,
         5,
         1440,
       ),
