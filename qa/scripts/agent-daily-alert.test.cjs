@@ -31,4 +31,35 @@ test('message-stays-under-telegram-limit', () => {
   const data = base(); data.report.causes = Array.from({ length: 5 }, (_, i) => ({ cause: 'x'.repeat(2000), count: i }));
   assert(buildDailyAlertMessage(data).length <= 3900);
 });
+test('open-incidents-are-detailed-by-cause-and-type', () => {
+  const data = base();
+  data.incidents = [
+    { status: 'OPEN', cause: 'REP_SIN_XML', entityType: 'paymentComplementJob' }, { status: 'OPEN', cause: 'REP_SIN_XML', entityType: 'paymentComplementJob' },
+    { status: 'OPEN', cause: 'Sin cotización', entityType: 'solicitud' }, { status: 'RESOLVED', cause: 'Resuelta antes', entityType: 'solicitud' },
+  ];
+  const text = buildDailyAlertMessage(data);
+  assert(text.includes('Incidentes abiertos: 3') && text.includes('REP_SIN_XML [paymentComplementJob] (2)') && text.includes('Sin cotización [solicitud]'));
+  assert(!text.includes('Resuelta antes'), 'resolved incidents are not detailed');
+});
+test('incident-detail-is-capped', () => {
+  const data = base();
+  data.incidents = Array.from({ length: 9 }, (_, i) => ({ status: 'OPEN', cause: `causa ${i}`, entityType: 'solicitud' }));
+  const text = buildDailyAlertMessage(data);
+  assert(text.includes('y 4 tipos más') && !text.includes('causa 8'));
+});
+test('pending-items-are-reported-and-zero-or-unreadable-are-omitted', () => {
+  const text = buildDailyAlertMessage(base(), { a: 1, b: 2 }, { complementsHeld: 4, complementsLate: 1, cashUnsigned: 0, cancellationReview: undefined });
+  for (const part of ['Pagos sin solicitud: 1', 'Complementos de pago detenidos en IQ: 4', 'más de 5 días sin llegar: 1']) assert(text.includes(part), part);
+  assert(!text.includes('efectivo') && !text.includes('cancelación en revisión'));
+  const all = buildDailyAlertMessage(base(), undefined, { cashUnsigned: 2, cancellationReview: 3 });
+  assert(all.includes('Dispersiones en efectivo sin recibo firmado: 2') && all.includes('Solicitudes con cancelación en revisión: 3'));
+  assert(!buildDailyAlertMessage(base(), undefined, undefined).includes('Complementos'));
+});
+test('full-message-stays-under-limit-with-everything', () => {
+  const data = base();
+  data.incidents = Array.from({ length: 30 }, (_, i) => ({ status: 'OPEN', cause: 'y'.repeat(500) + i, entityType: 'z'.repeat(200) }));
+  data.report.causes = Array.from({ length: 5 }, (_, i) => ({ cause: 'x'.repeat(2000), count: i }));
+  const text = buildDailyAlertMessage(data, { a: 3, b: 4 }, { complementsHeld: 4, complementsLate: 1, cashUnsigned: 2, cancellationReview: 3 });
+  assert(text.length <= 3900 && text.includes('Complementos de pago detenidos en IQ: 4'));
+});
 console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases }));

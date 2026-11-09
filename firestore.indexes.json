@@ -9,6 +9,14 @@
             ]
         },
         {
+            "collectionGroup": "paymentComplementJobs", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "requestedAt", "order": "ASCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "hugoTeamTurns", "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "conversationId", "order": "ASCENDING" },
