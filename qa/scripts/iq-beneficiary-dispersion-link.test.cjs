@@ -42,6 +42,22 @@ test("el flujo de dispersión conserva la verificación en vivo y usa el víncul
   assert.match(core, /selectStoredIqBeneficiary\(asRows\(beneficiaryPayload\.beneficiaries\), stored\?\.beneficiaryId, rowId\)/, "el id guardado se busca dentro de lo que IQ devuelve");
   assert.match(core, /const stored = verified \? undefined : input\.item\.storedLink;/, "el instrumento verificado de comisiones conserva su camino");
   assert.match(core, /resolveBeneficiaryAccount\(\s*asRows\(detailPayload\.beneficiary_accounts\)[\s\S]*?storedHit \? stored\?\.accountId : undefined/, "la cuenta sigue verificándose contra el destino");
-  assert.match(callables, /\.\.\.storedIqLink\(method, access\.profileAlias\)/, "el tramo pasa el vínculo del perfil que envía");
+  assert.match(callables, /\.\.\.storedIqLink\(method, access\.profileAlias, clean\(/, "el tramo pasa el vínculo del perfil que envía y el destino real");
   assert.match(callables, /iqCreationFailureReason:/, "se guarda la razón específica");
+});
+
+test("un vínculo con nombre distinto o de otra cuenta del método no se usa", () => {
+  assert.deepEqual(storedIqLink(method({ ...linked, nameDiffers: true }), "RR"), {}, "nombre distinto: se conserva el comportamiento actual");
+  assert.deepEqual(storedIqLink(method({ ...linked, nameDiffers: false }), "RR", clabe), { storedLink: { beneficiaryId: "900", accountId: "5001" } }, "el destino coincide con la huella");
+  assert.deepEqual(storedIqLink(method(linked, { cardNumber: "4111111111111111" }), "RR", "4111111111111111"), {}, "método con CLABE y tarjeta: pagar a la tarjeta no usa el vínculo de la CLABE");
+  assert.deepEqual(storedIqLink(method(linked, { cardNumber: "4111111111111111" }), "RR", clabe), { storedLink: { beneficiaryId: "900", accountId: "5001" } }, "pagar a la CLABE sí");
+});
+
+test("el vínculo en vivo exige coincidencia de todos los dígitos", () => {
+  const core = fs.readFileSync("functions/src/modules/iq/dispersionHttpCreateCore.ts", "utf8");
+  const ports = fs.readFileSync("functions/src/modules/beneficiaries/iqLinkPorts.ts", "utf8");
+  assert.match(core, /fullDigitsMatched/, "la resolución informa si coincidió el número completo");
+  assert.match(ports, /if \(!found\.fullDigitsMatched\) return \{ found: "AMBIGUOUS"/, "solo cuatro dígitos va a revisión, no a vínculo");
+  assert.match(ports, /absenceProof: "NAME"/, "la búsqueda por nombre no prueba ausencia");
+  assert.match(ports, /clabeDigits \? "TRANSFERENCIA" : "TDC"/, "tipo de operación según la cuenta que se usó");
 });

@@ -7,6 +7,8 @@ global.fetch = async () => { throw new Error("EXTERNAL_NETWORK_FORBIDDEN"); };
 const { catalogsForClient, evaluateCreateGate, createReservationId } = require("../../functions/lib/modules/beneficiaries/iqLinkDomain.js");
 const { iqAccountKey } = require("../../functions/lib/modules/beneficiaries/iqCatalogDomain.js");
 const { linkOrCreateMethod } = require("../../functions/lib/modules/beneficiaries/iqLinkService.js");
+const { redriveCatalog } = require("../../functions/lib/modules/beneficiaries/iqLinkRedrive.js");
+const { linkMethodsToCatalog } = require("../../functions/lib/modules/beneficiaries/iqCatalogSync.js");
 
 const run = `lnk${Date.now()}`;
 const rootId = `${run}-root`;
@@ -19,19 +21,19 @@ const newClabe = () => `0121800${String(++seq).padStart(3, "0")}${String(Date.no
 const calls = { lookup: 0, create: 0 };
 let lookupResults = [], createResult = null;
 const ports = {
-  liveLookup: async () => { calls.lookup++; return lookupResults.length > 1 ? lookupResults.shift() : lookupResults[0] ?? { found: false }; },
+  liveLookup: async () => { calls.lookup++; return lookupResults.length > 1 ? lookupResults.shift() : lookupResults[0] ?? { found: false, absenceProof: "ACCOUNT" }; },
   create: async () => { calls.create++; if (createResult instanceof Error) throw createResult; return createResult; },
 };
-const reset = () => { calls.lookup = 0; calls.create = 0; lookupResults = [{ found: false }]; createResult = { outcome: "OUTCOME_UNKNOWN" }; };
+const reset = () => { calls.lookup = 0; calls.create = 0; lookupResults = [{ found: false, absenceProof: "ACCOUNT" }]; createResult = { outcome: "OUTCOME_UNKNOWN" }; };
 
 async function setup(name, { clabe = newClabe(), beneficiaryRoot = rootId, linked = true, benName = "Juan Perez" } = {}) {
   const clientId = `${run}-${name}-c`, benId = `${run}-${name}-b`, methodId = `${run}-${name}-m`;
-  await db.doc(`clients/${clientId}`).set({ rootId, iqLinksByProfile: linked ? { "p-rr": { status: "LINKED", clientId: "77", profileId: "p-rr", profileAlias: "RR", partnerName: "RR", active: true } } : {} });
+  await db.doc(`clients/${clientId}`).set({ rootId, iqLinksByProfile: linked ? { "p-rr": { status: "LINKED", clientId: "77", profileId: "p-rr", profileAlias: "RR", partnerName: "RR", partnerId: "1", active: true } } : {} });
   await db.doc(`clientBeneficiaries/${benId}`).set({ rootId: beneficiaryRoot, clientId, nombre: benName });
   await db.doc(`clientBeneficiaryMethods/${methodId}`).set({ rootId, clientId, beneficiaryId: benId, clabe, destinationKind: "CLABE", active: true });
   return { clientId, benId, methodId, clabe };
 }
-const catalogRow = (clabe, accountId, beneficiaryId, name, status = "Conciliado") => db.doc(`iqBeneficiaryCatalog/${rootId}_${catalog}_${accountId}`).set({ rootId, catalog, key: iqAccountKey(clabe), last4: clabe.slice(-4), beneficiaryId, beneficiaryName: name, accountId, conciliationStatus: status });
+const catalogRow = (clabe, accountId, beneficiaryId, name, status = "Conciliado", partnerId = 1) => db.doc(`iqBeneficiaryCatalog/${rootId}_${catalog}_${accountId}`).set({ rootId, catalog, key: iqAccountKey(clabe), last4: clabe.slice(-4), partnerId, beneficiaryId, beneficiaryName: name, accountId, conciliationStatus: status });
 const entry = async methodId => (await db.doc(`clientBeneficiaryMethods/${methodId}`).get()).get("iqLinksByCatalog")?.[catalog];
 const activities = async (methodId) => (await db.collection("pay0ActivityLog").where("referenceId", "==", methodId).get()).docs.map(d => d.get("event"));
 const setMaster = enabled => db.doc(`iqIntegrationConfigs/${rootId}`).set({ enabled });
@@ -76,7 +78,7 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   reset();
   const c = await setup("c");
   const outC = await link(c.methodId);
-  eq([outC.status, outC.createState, calls.lookup, calls.create], ["NOT_FOUND", "IQ_MASTER_OFF", 0, 0], "interruptor maestro apagado: no se consulta IQ");
+  eq([outC.status, outC.createState, calls.lookup, calls.create], ["PENDING_RETRY", "IQ_MASTER_OFF", 0, 0], "interruptor maestro apagado: no se consulta IQ");
 
   // 4. catalog stale: the live lookup finds it, nothing is created
   await setMaster(true); reset();
@@ -120,11 +122,11 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 4002, iqAccountId: 9002, iqBeneficiaryName: "Luis" };
   const h = await setup("h");
   const outH = await link(h.methodId);
-  eq([outH.status, outH.createState, calls.create], ["NOT_FOUND", "DAILY_LIMIT_REACHED", 0], "el límite diario detiene la creación sin tocar IQ");
+  eq([outH.status, outH.createState, calls.create], ["PENDING_RETRY", "DAILY_LIMIT_REACHED", 0], "el límite diario detiene la creación sin tocar IQ");
   await setCreate({ enabled: true, contractVerified: true, dailyLimit: 50 });
 
   // 9. "ya existe" is a link
-  reset(); lookupResults = [{ found: false }, { found: true, iqBeneficiaryId: 4100, iqAccountId: 9100, iqBeneficiaryName: "Rosa" }]; createResult = { outcome: "EXISTS" };
+  reset(); lookupResults = [{ found: false, absenceProof: "ACCOUNT" }, { found: true, iqBeneficiaryId: 4100, iqAccountId: 9100, iqBeneficiaryName: "Rosa" }]; createResult = { outcome: "EXISTS" };
   const i = await setup("i");
   const outI = await link(i.methodId);
   eq([outI.status, (await entry(i.methodId)).iqAccountId, calls.create], ["LINKED", 9100, 1], "'ya existe' termina vinculando, sin bucle de error");
@@ -149,7 +151,7 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
 
   // 11b. "not now" from the safety runtime writes nothing and gives the slot back
   reset();
-  const frozen = new SafetyRuntime(db, () => 1_900_000_000_000);
+  const frozen = new SafetyRuntime(db, ((at) => () => at)(clock + 1));
   const early = await setup("early");
   const before = (await db.doc(`iqBeneficiaryCreateCounters/${rootId}_${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date())}`).get()).get("count");
   await linkOrCreateMethod({ methodId: early.methodId, ports, safety: frozen });
@@ -174,6 +176,99 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   const n = await setup("n", { beneficiaryRoot: "otro-root" });
   eq((await link(n.methodId)).skipped, "OWNERSHIP_MISMATCH", "beneficiario de otro root: no se vincula");
   eq((await entry(n.methodId)), undefined, "sin escritura");
+
+
+  // ---- second review ----
+  const rawEntry = async methodId => (await db.doc(`clientBeneficiaryMethods/${methodId}`).get()).get("iqLinksByCatalog")?.[catalog];
+  const entryField = (methodId, field, value) => db.doc(`clientBeneficiaryMethods/${methodId}`).update(new admin.firestore.FieldPath("iqLinksByCatalog", catalog, field), value);
+  const redrive = nowMs => redriveCatalog({ catalog, ports, nowMs, safety, spacingMs: 0, limit: 100 });
+  const hours = n => Date.now() + n * 3_600_000;
+
+  // The earlier cases opened the runtime circuit on purpose (unknown outcomes); start the new ones from a clean scope.
+  for (const name of ["automationSafetyScopes", "automationSafetyEvents"]) for (const doc of (await db.collection(name).get()).docs) await db.recursiveDelete(doc.ref);
+
+  // R1. a temporary stop is not a permanent NOT_FOUND: the master switch comes on and the re-drive links it
+  await setMaster(false); reset();
+  const r1 = await setup("r1");
+  const outR1 = await link(r1.methodId);
+  eq([outR1.status, outR1.createState], ["PENDING_RETRY", "IQ_MASTER_OFF"], "interruptor maestro apagado: reintentable");
+  eq((await rawEntry(r1.methodId)).attempts, 1, "primer intento");
+  await redrive(hours(2));
+  eq([calls.lookup, (await rawEntry(r1.methodId)).status], [0, "PENDING_RETRY"], "con el interruptor aún apagado el barrido espera sin tocar IQ");
+  await setMaster(true); reset();
+  lookupResults = [{ found: true, iqBeneficiaryId: 612, iqAccountId: 6120, iqBeneficiaryName: "Juan Perez" }];
+    await redrive(hours(8));
+  eq([(await rawEntry(r1.methodId)).status, (await rawEntry(r1.methodId)).iqAccountId], ["LINKED", 6120], "al encender el interruptor, el barrido vincula lo que quedó pendiente");
+
+  // R2. a bulk import behind a kill switch is not lost
+  await db.doc("automationSafetyControls/master").set({ paused: true }); reset();
+  const bulk = [];
+  for (let n = 0; n < 4; n++) bulk.push(await setup(`bulk${n}`));
+  for (const item of bulk) eq((await link(item.methodId)).createState, "SAFETY_KILL_SWITCH", "pausa de emergencia: queda pendiente");
+  await db.doc("automationSafetyControls/master").delete(); reset();
+  lookupResults = [{ found: true, iqBeneficiaryId: 620, iqAccountId: 6200, iqBeneficiaryName: "Juan Perez" }];
+  await redrive(hours(8));
+  eq(await Promise.all(bulk.map(async item => (await rawEntry(item.methodId)).status)), ["LINKED", "LINKED", "LINKED", "LINKED"], "los 4 se vinculan al reanudar");
+
+  // R3. failed lookups retry up to a cap; waiting for a switch never counts
+  const realLookup = ports.liveLookup;
+  ports.liveLookup = async () => { calls.lookup++; throw new Error("IQ_UNREACHABLE"); };
+  reset();
+  const r3 = await setup("r3");
+  eq((await link(r3.methodId)).createState, "LOOKUP_FAILED", "consulta fallida: reintentable");
+  await entryField(r3.methodId, "attempts", 20);
+  const exhausted = await link(r3.methodId, Date.now() + 40 * 60_000);
+  eq([exhausted.status, exhausted.createState], ["NOT_FOUND", "RETRY_EXHAUSTED"], "tras el tope deja de reintentar");
+  ports.liveLookup = realLookup;
+  await setMaster(false);
+  const r3b = await setup("r3b");
+  await link(r3b.methodId);
+  await entryField(r3b.methodId, "attempts", 30);
+  const waiting = await link(r3b.methodId, Date.now() + 2 * 3_600_000);
+  eq([waiting.status, (await rawEntry(r3b.methodId)).attempts], ["PENDING_RETRY", 1], "esperar un interruptor no consume intentos");
+  await setMaster(true); reset();
+
+  // R4. a name-only search never proves the account is missing
+  lookupResults = [{ found: false, absenceProof: "NAME" }]; createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x" };
+  const r4 = await setup("r4");
+  const outR4 = await link(r4.methodId);
+  eq([outR4.createState, calls.create], ["ABSENCE_NOT_PROVEN", 0], "búsqueda solo por nombre: no se crea");
+  eq((await db.collection("iqBeneficiaryCreateReservations").where("methodId", "==", r4.methodId).get()).size, 0, "sin reserva");
+
+  // R5. the same CLABE under another IQ associate is neither a link nor a review
+  await setMaster(false); reset();
+  const r5 = await setup("r5");
+  await catalogRow(r5.clabe, 7001, 701, "Juan Perez", "Conciliado", 2);
+  eq((await link(r5.methodId)).createState, "IQ_MASTER_OFF", "solo hay filas de otro asociado: no hay vínculo");
+  const r5b = await setup("r5b");
+  await catalogRow(r5b.clabe, 7002, 702, "Juan Perez", "Conciliado", 2);
+  await catalogRow(r5b.clabe, 7003, 703, "Juan Perez", "Conciliado", 1);
+  const outR5b = await link(r5b.methodId);
+  eq([outR5b.status, (await rawEntry(r5b.methodId)).iqBeneficiaryId], ["LINKED", 703], "se vincula con la fila de su asociado, sin revisión falsa");
+  await setMaster(true);
+
+  // R6. the nightly sweep does not erase what the trigger found
+  const r6 = await setup("r6");
+  await db.doc(`clientBeneficiaryMethods/${r6.methodId}`).set({ iqLinksByCatalog: { [catalog]: { status: "LINKED", key: iqAccountKey(r6.clabe), last4: r6.clabe.slice(-4), iqBeneficiaryId: 800, iqAccountId: 8000, source: "LIVE_LOOKUP", nameDiffers: false } } }, { merge: true });
+  const r6b = await setup("r6b");
+  await db.doc(`clientBeneficiaryMethods/${r6b.methodId}`).set({ iqLinksByCatalog: { [catalog]: { status: "PENDING_RETRY", reason: "IQ_MASTER_OFF", attempts: 1, key: iqAccountKey(r6b.clabe), last4: r6b.clabe.slice(-4), source: "CATALOG" } } }, { merge: true });
+  const r6c = await setup("r6c");
+  await catalogRow(r6c.clabe, 8100, 810, "Juan Perez", "Conciliado", 1);
+  await db.doc(`iqBeneficiaryCatalogState/${rootId}_${catalog}`).set({ methodCursor: null }, { merge: true });
+  await linkMethodsToCatalog({ rootId, catalog, limit: 500 });
+  const e6 = await rawEntry(r6.methodId);
+  eq([e6.status, e6.source, e6.iqAccountId], ["LINKED", "LIVE_LOOKUP", 8000], "el barrido no pisa un vínculo hallado en vivo");
+  eq((await rawEntry(r6b.methodId)).status, "PENDING_RETRY", "ni un reintento pendiente");
+  const e6c = await rawEntry(r6c.methodId);
+  eq([e6c.status, e6c.source], ["LINKED", "CATALOG"], "lo que sí trae el catálogo, el barrido lo vincula");
+
+  // R7. ownership: the beneficiary must belong to the method's client; clients without an IQ link need no beneficiary read
+  const r7 = await setup("r7");
+  await db.doc(`clientBeneficiaries/${r7.benId}`).update({ clientId: "otro-cliente" });
+  eq((await link(r7.methodId)).skipped, "OWNERSHIP_MISMATCH", "beneficiario de otro cliente");
+  const r7b = await setup("r7b", { linked: false });
+  await db.doc(`clientBeneficiaries/${r7b.benId}`).delete();
+  eq((await link(r7b.methodId)).skipped, "NO_IQ_CLIENT_LINK", "cliente sin vínculo IQ: ni se lee el beneficiario");
 
   console.log(`PASS vinculación de beneficiarios IQ: ${checks} verificaciones en emulador.`);
   process.exit(0);

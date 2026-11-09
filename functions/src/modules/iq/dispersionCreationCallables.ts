@@ -1933,7 +1933,11 @@ export async function runCreateClientDispersionIqCore(input: {
           access.associatedName,
         clientCandidates,
         beneficiaryCandidates,
-        ...storedIqLink(method, access.profileAlias),
+        ...storedIqLink(method, access.profileAlias, clean(
+          destination.kind === "CLABE"
+            ? (method.clabe ?? method.CLABE ?? method.bankClabe)
+            : (method.cardNumber ?? method.numeroTarjeta ?? method.tarjeta),
+        )),
         clientIqId:
           clean(
             record(client.iqLink).clientId ??

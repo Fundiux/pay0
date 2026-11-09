@@ -69,6 +69,8 @@ export type IqBeneficiaryInstrumentResolution = {
   partnerName: string;
   clientIqId: string;
   verifiedAt: string;
+  // True only when IQ exposed the full account number and it equals the expected one; otherwise the match was on the last four digits.
+  fullDigitsMatched: boolean;
 };
 
 type AnyRow = Record<string, unknown>;
@@ -1497,6 +1499,9 @@ export async function resolveIqBeneficiaryInstrument(input: {
   if (!beneficiaryId) throw new Error("IQ_BENEFICIARY_ID_INVALID");
   const detailPayload = resolvedDuplicate?.detail ?? await loadDetail(beneficiaryId);
   const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(asRows(detailPayload.beneficiary_accounts), input.expectedDestinationLast4, input.expectedDestinationDigits);
+  const expectedFull = digits(input.expectedDestinationDigits);
+  const accountRow = asRows((resolvedDuplicate?.detail ?? detailPayload).beneficiary_accounts).find((row) => String(rowId(row)) === String(account.id));
+  const fullDigitsMatched = expectedFull.length >= 15 && !!accountRow && flattenStrings(accountRow).some((value) => digits(value) === expectedFull);
   return {
     status: "VERIFIED",
     iqBeneficiaryId: String(beneficiaryId),
@@ -1508,5 +1513,6 @@ export async function resolveIqBeneficiaryInstrument(input: {
     partnerName: partner.name,
     clientIqId: String(clientId),
     verifiedAt: new Date().toISOString(),
+    fullDigitsMatched,
   };
 }

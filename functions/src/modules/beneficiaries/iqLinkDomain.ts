@@ -1,11 +1,11 @@
 import { createHash } from "crypto";
 
-import { iqCatalogForAlias, iqLinkMatchesMethod, type IqLinkDecision } from "./iqCatalogDomain";
+import { iqAccountKey, iqCatalogForAlias, iqLinkMatchesMethod, type IqLinkDecision } from "./iqCatalogDomain";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const asRecord = (value: unknown): Record<string, any> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
 
-export type ClientCatalogProfile = { catalog: string; profileId: string; profileAlias: string; partnerName: string; clientIqId: string };
+export type ClientCatalogProfile = { catalog: string; profileId: string; profileAlias: string; partnerName: string; partnerId: string; clientIqId: string };
 
 // A client is linked to IQ per credential profile; the beneficiary catalog is the IQ data group of that
 // profile. RR and BETELL 1 collapse to one catalog, so only one profile per catalog is kept (the first by id).
@@ -17,7 +17,7 @@ export function catalogsForClient(client: Record<string, unknown> | null | undef
     const catalog = iqCatalogForAlias(link.profileAlias);
     const clientIqId = clean(link.clientId);
     if (!catalog || !clientIqId || link.active === false || clean(link.status).toUpperCase() !== "LINKED" || byCatalog.has(catalog)) continue;
-    byCatalog.set(catalog, { catalog, profileId: clean(link.profileId) || profileId, profileAlias: clean(link.profileAlias), partnerName: clean(link.partnerName), clientIqId });
+    byCatalog.set(catalog, { catalog, profileId: clean(link.profileId) || profileId, profileAlias: clean(link.profileAlias), partnerName: clean(link.partnerName), partnerId: clean(link.partnerId), clientIqId });
   }
   return [...byCatalog.values()];
 }
@@ -59,10 +59,27 @@ export function buildLinkEntry(input: LinkEntryInput, checkedAt: unknown) {
 
 // The link a dispersion may use: same IQ data group as the profile that sends it, still LINKED and made
 // for the method's current CLABE or card. Anything else returns nothing and the dispersion resolves by name.
-export function storedIqLink(method: Record<string, unknown>, profileAlias: unknown): { storedLink?: { beneficiaryId: string; accountId: string } } {
+export function storedIqLink(method: Record<string, unknown>, profileAlias: unknown, destinationDigits?: unknown): { storedLink?: { beneficiaryId: string; accountId: string } } {
   const catalog = iqCatalogForAlias(profileAlias);
   const link = catalog ? asRecord(asRecord(method.iqLinksByCatalog)[catalog]) : null;
   const beneficiaryId = clean(link?.iqBeneficiaryId), accountId = clean(link?.iqAccountId);
-  if (!link || !iqLinkMatchesMethod(link, method) || !/^\d+$/.test(beneficiaryId) || !/^\d+$/.test(accountId)) return {};
+  const destination = clean(destinationDigits).replace(/[^0-9]/g, "");
+  // Conservative: a link whose IQ name differs from PAY0's is not used, and the account fingerprint must
+  // match the digits this dispersion pays (a method can hold both a CLABE and a card).
+  if (!link || link.nameDiffers === true || !iqLinkMatchesMethod(link, method) || !/^\d+$/.test(beneficiaryId) || !/^\d+$/.test(accountId)) return {};
+  if (destination && iqAccountKey(destination) !== link.key) return {};
   return { storedLink: { beneficiaryId, accountId } };
+}
+
+// Stops that only mean "not yet": they are stored as PENDING_RETRY and picked up again by the scheduled
+// re-drive, instead of becoming a NOT_FOUND that nothing revisits. The delay is a floor, not a schedule.
+export const MAX_RETRY_ATTEMPTS = 20;
+const HOUR = 3_600_000;
+export const GATE_REASONS = new Set(["IQ_MASTER_OFF", "CREATE_DISABLED", "CREATE_CONTRACT_UNVERIFIED", "DAILY_LIMIT_REACHED", "ABSENCE_NOT_PROVEN"]);
+
+export function retryDelayMs(reason: string): number | null {
+  if (reason === "IQ_MASTER_OFF") return HOUR;
+  if (reason === "DAILY_LIMIT_REACHED" || reason === "CREATE_DISABLED" || reason === "CREATE_CONTRACT_UNVERIFIED" || reason === "ABSENCE_NOT_PROVEN") return 6 * HOUR;
+  if (reason === "LOOKUP_FAILED" || reason.startsWith("SAFETY_")) return HOUR / 2;
+  return null;
 }

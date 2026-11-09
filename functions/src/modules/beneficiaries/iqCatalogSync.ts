@@ -6,7 +6,8 @@ import { fetchIq } from "../iq/iqHttpClient";
 import { loginIqHttpDirect, type IqHttpAuthSession } from "../iq/iqHttpAuth";
 import { decryptSecret, IQ_CANCELLATION_CREDENTIALS_KEY } from "../iq/solicitudCancellationService";
 import { iqApiOrigin } from "../iq/solicitudHttpCancellation";
-import { iqAccountIdentity, iqCatalogForAlias, methodAccountRef, resolveIqLink, type IqCatalogRow } from "./iqCatalogDomain";
+import { iqAccountIdentity, iqCatalogForAlias, methodAccountRef, resolveIqLink, rowsOfPartner, type IqCatalogRow } from "./iqCatalogDomain";
+import { catalogsForClient } from "./iqLinkDomain";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -126,13 +127,23 @@ export async function linkMethodsToCatalog(input: { rootId: string; catalog: str
       const method = row.data();
       const account = methodAccountRef(method);
       if (!account || method.active === false) continue;
-      const [catalogRows, beneficiary] = await Promise.all([
+      const [catalogRows, beneficiary, client] = await Promise.all([
         db.collection("iqBeneficiaryCatalog").where("rootId", "==", input.rootId).where("catalog", "==", input.catalog).where("key", "==", account.key).get(),
         db.doc(`clientBeneficiaries/${text(method.beneficiaryId || method.beneficiarioId)}`).get(),
+        text(method.clientId || method.clienteId) ? db.doc(`clients/${text(method.clientId || method.clienteId)}`).get() : Promise.resolve(null),
       ]);
-      const { iqBeneficiaryName: _name, ...decision } = resolveIqLink(beneficiary.data()?.nombre ?? beneficiary.data()?.name, catalogRows.docs.map(doc => doc.data() as IqCatalogRow)) as Record<string, unknown>;
+      // Rows of another IQ associate are not this client's when its associate is known.
+      const partnerId = catalogsForClient(client?.data()).find(profile => profile.catalog === input.catalog)?.partnerId;
+      const rows = catalogRows.docs.map(doc => doc.data() as IqCatalogRow);
+      const resolved = resolveIqLink(beneficiary.data()?.nombre ?? beneficiary.data()?.name, partnerId ? rowsOfPartner(rows, partnerId) : rows);
+      const existing = method.iqLinksByCatalog?.[input.catalog];
+      // The catalog only knows what the nightly sync saw. A link found live or created, a stop with a reason
+      // or a pending retry for this same account must not be downgraded by a catalog that has not caught up.
+      const ownedByTrigger = existing?.key === account.key && (existing.source === "LIVE_LOOKUP" || existing.source === "CREATED_IN_IQ" || !!existing.createState || existing.status === "PENDING_RETRY");
+      if (ownedByTrigger && (resolved.status === "NOT_FOUND" || resolved.status === "NOT_CONCILIATED")) continue;
+      const { iqBeneficiaryName: _name, ...decision } = resolved as Record<string, unknown>;
       // Replaces the whole entry, so ids from an earlier state cannot survive.
-      await row.ref.set({ iqLinksByCatalog: { [input.catalog]: { ...decision, key: account.key, last4: account.last4, checkedAt: FieldValue.serverTimestamp() } } },
+      await row.ref.set({ iqLinksByCatalog: { [input.catalog]: { ...decision, key: account.key, last4: account.last4, source: "CATALOG", checkedAt: FieldValue.serverTimestamp() } } },
         { mergeFields: [new admin.firestore.FieldPath("iqLinksByCatalog", input.catalog)] });
     } catch (error) {
       lastLinkError = `${row.id}: ${errorText(error)}`;
