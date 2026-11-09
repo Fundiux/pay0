@@ -4,6 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { IQ_CREDENTIALS_KEY, loadIqAccess } from "../iq/dispersionCreationCallables";
 import { fetchIq } from "../iq/iqHttpClient";
 import { decideIqDispersionExecutionAccess } from "../iq/dispersionExecutionAccess";
+import { logActivityBatch } from "../../utils/logActivity";
 import { currentAuthority, finalizeDispersionDocumentUploadCore, initDispersionDocumentUploadCore } from "./service";
 import { fetchIqDispersionReceipt } from "./iqReceiptHttp";
 
@@ -23,24 +24,20 @@ function id(value: unknown): string {
   return result;
 }
 
-export const importIqDispersionReceipt = onCall(
-  {
-    cors: true,
-    preserveExternalChanges: true,
-    timeoutSeconds: 120,
-    memory: "512MiB",
-    maxInstances: 2,
-    concurrency: 1,
-    secrets: [IQ_CREDENTIALS_KEY],
-  },
-  async (request) => {
-    if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sesion requerida.");
-    const uid = id(request.auth.uid);
-    const dispersionId = id(request.data?.dispersionId);
-    const userSnap = await db.doc(`users/${uid}`).get();
-    if (!userSnap.exists) throw new HttpsError("permission-denied", "Usuario PAY0 no encontrado.");
-    const user = userSnap.data() || {};
-    const rootId = id(user.rootId || uid);
+export type IqReceiptImportOutcome = { ok: true; status: "IMPORTED" | "ALREADY_ATTACHED" | "NOT_AVAILABLE"; uploadId?: string };
+
+// Shared by the manual button and the scheduled job. The caller has already
+// authenticated `auth`; `authorizeLeg` adds caller-specific checks on the IQ leg.
+export async function importIqDispersionReceiptCore(input: {
+  auth: { uid: string; role: string; rootId: string; username: string };
+  dispersionId: string;
+  source: "MANUAL" | "AUTOMATIC";
+  authorizeLeg?: (leg: Record<string, any>) => Promise<void>;
+}): Promise<IqReceiptImportOutcome> {
+    const { uid, rootId } = input.auth;
+    const dispersionId = input.dispersionId;
+    const user = { role: input.auth.role, username: input.auth.username };
+    const request = { auth: { uid } };
     const { dispersion } = await currentAuthority(uid, rootId, dispersionId);
     const folio = clean(dispersion.iqDispersionFolio || dispersion.iqDispersionId);
     if (!/^[1-9][0-9]{0,15}$/.test(folio)) {
@@ -57,18 +54,7 @@ export const importIqDispersionReceipt = onCall(
     if (!["CREATED", "CREATED_PENDING_FOLIO"].includes(clean(leg.iqCreationStatus).toUpperCase())) {
       throw new HttpsError("failed-precondition", "El tramo IQ no esta vinculado como creado.");
     }
-    if (clean(user.role).toLowerCase() !== "superadmin") {
-      const [despachoSnap, iqAccessSnap] = await Promise.all([
-        db.doc(`despachos/${id(leg.despachoId)}`).get(),
-        db.doc(`iqUserAccess/${uid}`).get(),
-      ]);
-      const decision = decideIqDispersionExecutionAccess({
-        uid, role: clean(user.role), rootId,
-        despacho: despachoSnap.data() || {},
-        iqAccess: iqAccessSnap.exists ? iqAccessSnap.data() || {} : null,
-      });
-      if (!decision.allowed) throw new HttpsError("permission-denied", decision.message);
-    }
+    await input.authorizeLeg?.(leg);
 
     const currentUploads = await db.collection("uploads")
       .where("rootId", "==", rootId)
@@ -113,8 +99,7 @@ export const importIqDispersionReceipt = onCall(
     let uploadId = "";
     try {
       const access = await loadIqAccess({
-        uid, rootId, role: clean(user.role).toLowerCase(),
-        username: clean(user.username || user.displayName || user.email || uid),
+        uid, rootId, role: clean(user.role).toLowerCase(), username: clean(user.username) || uid,
       }, id(leg.despachoId), "IQ", dispersion);
       const receipt = await fetchIqDispersionReceipt({
         apiOrigin: access.erpUrl,
@@ -155,7 +140,7 @@ export const importIqDispersionReceipt = onCall(
         },
       });
       await db.doc(`uploads/${uploadId}`).set({
-        source: "IQ_IMPORT", sourceIqFolio: folio,
+        source: "IQ_IMPORT", sourceIqFolio: folio, importOrigin: input.source,
         sourceSha256: receipt.sha256,
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -177,6 +162,12 @@ export const importIqDispersionReceipt = onCall(
       if (manualLinkSnap.exists && manualLinkSnap.data()?.principalId === dispersionId) {
         batch.set(manualLinkRef, { receiptStatus: "IMPORTED", receiptUploadId: uploadId, receiptImportedAt: FieldValue.serverTimestamp() }, { merge: true });
       }
+      logActivityBatch(batch, db, {
+        event: "IQ_COMPROBANTE_DISPERSION_IMPORTADO", rootId,
+        actorUid: input.source === "AUTOMATIC" ? "SYSTEM" : uid, actorRole: input.source === "AUTOMATIC" ? "system" : input.auth.role,
+        referenceId: dispersionId, referenceFolio: clean(dispersion.folio || dispersion.sequenceDisplay) || null, referenceType: "dispersion",
+        description: `Comprobante de dispersion importado de IQ (${input.source === "AUTOMATIC" ? "automatico" : "manual"}). FOLIO IQ: ${folio}.`,
+      });
       await batch.commit();
       return { ok: true, status: "IMPORTED", uploadId };
     } catch (error) {
@@ -196,5 +187,42 @@ export const importIqDispersionReceipt = onCall(
       }
       throw new HttpsError("unavailable", "No se pudo importar el comprobante de IQ.");
     }
+}
+
+export const importIqDispersionReceipt = onCall(
+  {
+    cors: true,
+    preserveExternalChanges: true,
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    maxInstances: 2,
+    concurrency: 1,
+    secrets: [IQ_CREDENTIALS_KEY],
+  },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sesion requerida.");
+    const uid = id(request.auth.uid);
+    const dispersionId = id(request.data?.dispersionId);
+    const userSnap = await db.doc(`users/${uid}`).get();
+    if (!userSnap.exists) throw new HttpsError("permission-denied", "Usuario PAY0 no encontrado.");
+    const user = userSnap.data() || {};
+    const rootId = id(user.rootId || uid);
+    return importIqDispersionReceiptCore({
+      auth: { uid, rootId, role: clean(user.role), username: clean(user.username || user.displayName || user.email || uid) },
+      dispersionId, source: "MANUAL",
+      authorizeLeg: async (leg) => {
+        if (clean(user.role).toLowerCase() === "superadmin") return;
+        const [despachoSnap, iqAccessSnap] = await Promise.all([
+          db.doc(`despachos/${id(leg.despachoId)}`).get(),
+          db.doc(`iqUserAccess/${uid}`).get(),
+        ]);
+        const decision = decideIqDispersionExecutionAccess({
+          uid, role: clean(user.role), rootId,
+          despacho: despachoSnap.data() || {},
+          iqAccess: iqAccessSnap.exists ? iqAccessSnap.data() || {} : null,
+        });
+        if (!decision.allowed) throw new HttpsError("permission-denied", decision.message);
+      },
+    });
   },
 );
