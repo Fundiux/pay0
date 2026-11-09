@@ -1,6 +1,7 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { fetchIqExternal as fetch } from "./externalActionsPolicy";
 import { fetchIq } from "./iqHttpClient";
+import { selectStoredIqBeneficiary } from "./dispersionFailureReason";
 import { assertVerifiedIqCommissionInstrument, type VerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -20,6 +21,9 @@ export type IqDispersionCreateItemH4D82A4A1 = {
   reference: string;
   fundingHolderType?: "USER" | "CLIENT";
   verifiedInstrument?: VerifiedIqCommissionInstrument;
+  // The IQ ids PAY0 stored when it linked this account. They only choose among what IQ returns now:
+  // the wizard is still read live and the destination is still checked against the account.
+  storedLink?: { beneficiaryId: string; accountId: string };
 };
 
 export type IqDispersionCreateResultH4D82A4A1 = {
@@ -1084,8 +1088,11 @@ export async function runIqCreateDispersionHttpH4D85A50(
       }), token)).json as WizardPayload ?? {};
     let beneficiary: AnyRow;
     let resolvedDuplicate: Awaited<ReturnType<typeof resolveDuplicateBeneficiaryByDestination>> | null = null;
+    const stored = verified ? undefined : input.item.storedLink;
+    const storedHit = selectStoredIqBeneficiary(asRows(beneficiaryPayload.beneficiaries), stored?.beneficiaryId, rowId);
     try {
-      beneficiary = findUniqueByNormalizedNames(
+      // A single row with the stored id settles the beneficiary without comparing names.
+      beneficiary = storedHit ?? findUniqueByNormalizedNames(
         asRows(beneficiaryPayload.beneficiaries), input.item.beneficiaryCandidates, "IQ_BENEFICIARY",
       );
     } catch (error) {
@@ -1137,7 +1144,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
 
     const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(
       asRows(detailPayload.beneficiary_accounts), input.item.expectedDestinationLast4,
-      input.item.expectedDestinationDigits, verified?.accountId,
+      input.item.expectedDestinationDigits, verified?.accountId ?? (storedHit ? stored?.accountId : undefined),
     );
     if (verified && String(account.id) !== verified.accountId) throw new Error("IQ_COMMISSION_ACCOUNT_CHANGED");
 

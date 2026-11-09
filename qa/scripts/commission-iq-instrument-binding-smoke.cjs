@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const ts = require('typescript');
 const directory = path.resolve(__dirname, '../../functions/src/modules/iq');
-const allow = new Set(['dispersionHttpCreateCore', 'commissionInstrumentBinding', 'iqDateTime', 'iqHttpClient', 'externalActionsPolicy']);
+const allow = new Set(['dispersionHttpCreateCore', 'commissionInstrumentBinding', 'iqDateTime', 'iqHttpClient', 'externalActionsPolicy', 'dispersionFailureReason']);
 let scenario, calls, posts, posted, checks = 0;
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 async function fakeFetch(input, init = {}) {

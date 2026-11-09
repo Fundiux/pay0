@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 
-import { iqCatalogForAlias, type IqLinkDecision } from "./iqCatalogDomain";
+import { iqCatalogForAlias, iqLinkMatchesMethod, type IqLinkDecision } from "./iqCatalogDomain";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const asRecord = (value: unknown): Record<string, any> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
@@ -55,4 +55,14 @@ export type LinkEntryInput = { decision: IqLinkDecision; key: string; last4: str
 export function buildLinkEntry(input: LinkEntryInput, checkedAt: unknown) {
   const { iqBeneficiaryName: _name, ...decision } = input.decision as Record<string, unknown>;
   return { ...decision, key: input.key, last4: input.last4, source: input.source, ...(input.createState ? { createState: input.createState } : {}), checkedAt };
+}
+
+// The link a dispersion may use: same IQ data group as the profile that sends it, still LINKED and made
+// for the method's current CLABE or card. Anything else returns nothing and the dispersion resolves by name.
+export function storedIqLink(method: Record<string, unknown>, profileAlias: unknown): { storedLink?: { beneficiaryId: string; accountId: string } } {
+  const catalog = iqCatalogForAlias(profileAlias);
+  const link = catalog ? asRecord(asRecord(method.iqLinksByCatalog)[catalog]) : null;
+  const beneficiaryId = clean(link?.iqBeneficiaryId), accountId = clean(link?.iqAccountId);
+  if (!link || !iqLinkMatchesMethod(link, method) || !/^\d+$/.test(beneficiaryId) || !/^\d+$/.test(accountId)) return {};
+  return { storedLink: { beneficiaryId, accountId } };
 }
