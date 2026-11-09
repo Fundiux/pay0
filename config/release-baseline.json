@@ -284,6 +284,14 @@
     {
       "commit": "490de082",
       "capability": "Lectura de comprobantes Banregio, Santander, PC Directo y montos MN"
+    },
+    {
+      "commit": "fbf76b58",
+      "capability": "Hugo voz: resumen por cliente, saldo sin facturas canceladas ante el SAT y descarga de llamadas"
+    },
+    {
+      "commit": "095443b5",
+      "capability": "Pagos sin solicitud: clasificacion, lista, decision por rol y alertas al dueno del root"
     }
   ],
   "requiredText": [
