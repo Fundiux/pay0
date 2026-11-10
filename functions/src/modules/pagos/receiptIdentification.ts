@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { FieldValue, type Firestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
+import { isMergedClient, mergedIntoOf, resolveCanonicalClientId } from "../clients/mergeDomain";
 import { getReceiptActorCorrectionState } from "./receiptLearning";
 import { resolveReceiptOperationType } from "./receiptOperationType";
 import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptAliasAllowed, receiptCurrency, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
@@ -46,7 +47,9 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     db.collection("clients").where("rootId", "==", actor.rootId).limit(501).get(),
     db.collection("companies").where("rootId", "==", actor.rootId).limit(501).get(),
   ]);
-  const clientItems: ReceiptCatalogItem[] = clients.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+  const clientItems: ReceiptCatalogItem[] = clients.docs.filter(doc => !isMergedClient(doc.data())).map(doc => ({ ...doc.data(), id: doc.id }));
+  const mergedTargets = new Map(clients.docs.filter(doc => isMergedClient(doc.data())).map(doc => [doc.id, mergedIntoOf(doc.data())]));
+  const canonicalClientId = (value: unknown) => resolveCanonicalClientId(clean(value), { mergedInto: mergedTargets.get(clean(value)) });
   const companyItems: ReceiptCatalogItem[] = companies.docs.map(doc => ({ ...doc.data(), id: doc.id }));
   const clientSignals = { name: receipt.senderName, rfc: receipt.payerRfc, account: receipt.account };
   const companySignals = { name: receipt.beneficiaryName, rfc: receipt.beneficiaryRfc, account: receipt.destinationAccount };
@@ -66,10 +69,10 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
   const aliasFor = async (party: "CLIENT" | "COMPANY", name: unknown, items: ReceiptCatalogItem[], signals: { name?: string; rfc?: string; account?: string }, selected: string) => {
     if (selected || !normalizeReceiptName(name) || matchReceiptIdentity(items, signals, { party }).status === "EXACT") return { id: selected, learned: false };
     const alias = await db.doc(`receiptIdentityAliases/${receiptAliasId(actor.rootId, party, name)}`).get();
-    const target = alias.exists && alias.get("rootId") === actor.rootId && Number(alias.get("streak") || 0) >= RECEIPT_ALIAS_MIN_STREAK ? items.find(item => item.id === alias.get("targetId")) : undefined;
+    const target = alias.exists && alias.get("rootId") === actor.rootId && Number(alias.get("streak") || 0) >= RECEIPT_ALIAS_MIN_STREAK ? items.find(item => item.id === (party === "CLIENT" ? canonicalClientId(alias.get("targetId")) : alias.get("targetId"))) : undefined;
     return target && receiptAliasAllowed(items, target, signals, { party }) ? { id: target.id, learned: true } : { id: selected, learned: false };
   };
-  const selectedClient = await aliasFor("CLIENT", receipt.senderName, authorizedClients, clientSignals, clean(input.selectedClientId));
+  const selectedClient = await aliasFor("CLIENT", receipt.senderName, authorizedClients, clientSignals, canonicalClientId(input.selectedClientId));
   const selectedCompany = await aliasFor("COMPANY", receipt.beneficiaryName, authorizedCompanies, companySignals, clean(input.selectedCompanyId));
   const clientSelection = selectReceiptIdentity(authorizedClients, clientSignals, selectedClient.id, { party: "CLIENT", ...(selectedClient.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });
   const companySelection = selectReceiptIdentity(authorizedCompanies, companySignals, selectedCompany.id, { party: "COMPANY", ...(selectedCompany.learned ? { selectionEvidence: "LEARNED_ALIAS" } : {}) });

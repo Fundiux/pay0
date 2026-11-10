@@ -7,10 +7,6 @@ const clean = (value: unknown) => String(value ?? "").trim();
 export const mergedIntoOf = (client: unknown): string => clean((client as Record<string, unknown> | null | undefined)?.mergedInto);
 export const isMergedClient = (client: unknown): boolean => mergedIntoOf(client) !== "";
 
-// Permissions that start or change an operation. Viewing history stays allowed on a merged duplicate.
-export const NEW_OPERATION_PERMISSIONS = new Set(["operate", "operateSolicitudes", "operatePagos", "operateBeneficiarios", "operateDispersiones"]);
-export const mergedClientBlocksPermission = (client: unknown, permission: string) => isMergedClient(client) && NEW_OPERATION_PERMISSIONS.has(permission);
-
 export const mergedClientMessage = (client: unknown) => `Este cliente fue fusionado en ${mergedIntoOf(client)}. Las operaciones nuevas se hacen en el cliente vigente; su historial se conserva.`;
 
 export type MergeRefusal =

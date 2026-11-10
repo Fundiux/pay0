@@ -6,8 +6,9 @@ admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
 global.fetch = async () => { throw new Error("EXTERNAL_NETWORK_FORBIDDEN"); };
 const { mergeDuplicateClient } = require("../../functions/lib/modules/clients/mergeCallables.js");
-const { planClientMerge, resolveCanonicalClientId, mergedClientBlocksPermission } = require("../../functions/lib/modules/clients/mergeDomain.js");
+const { planClientMerge, resolveCanonicalClientId } = require("../../functions/lib/modules/clients/mergeDomain.js");
 const { requireClientOperationalAccess } = require("../../functions/lib/modules/clientDelegations/access.js");
+const { assertClientAcceptsNewOperations, assertClientIdAcceptsNewOperations } = require("../../functions/lib/modules/clients/mergeGuard.js");
 
 const run = `mrg${Date.now()}`;
 const rootId = `${run}-root`;
@@ -42,7 +43,6 @@ const merge = (canonical, duplicate, extra = {}) => mergeDuplicateClient({ rootI
   eq(planClientMerge({ ...base, duplicate: { ...base.duplicate, mergedInto: "z" } }).refusal, "DUPLICATE_ALREADY_MERGED", "ya fusionado");
   eq(resolveCanonicalClientId("b", { mergedInto: "a" }), "a", "una operación nueva se resuelve al vigente");
   eq(resolveCanonicalClientId("a", {}), "a", "sin fusión queda igual");
-  eq([mergedClientBlocksPermission({ mergedInto: "a" }, "operatePagos"), mergedClientBlocksPermission({ mergedInto: "a" }, "viewBasic"), mergedClientBlocksPermission({}, "operatePagos")], [true, false, false], "bloquea operar, no ver");
 
   // Merge keeps history exactly as it was -----------------------------------------------------------------
   await client("keep"); await client("dup");
@@ -72,18 +72,37 @@ const merge = (canonical, duplicate, extra = {}) => mergeDuplicateClient({ rootI
   await db.doc(`clients/${run}-foreign`).set({ rootId: `${rootId}-x`, name: "ajeno", rfc: "HEAP8801291C5", active: true });
   await rejects(() => merge("keep", "foreign"), "CLIENT_MERGE_OUT_OF_ROOT", "otro root no se fusiona");
 
-  // Operations: new ones are blocked on the duplicate, history stays readable -----------------------------
+  // Continue vs create: what already exists on the duplicate can be finished; nothing new is created on it ---
   const access = (clientId, permission, uid = superUid, role = "superadmin") => requireClientOperationalAccess({ uid, role, rootId, clientId, permission });
-  for (const permission of ["operatePagos", "operateSolicitudes", "operateBeneficiarios", "operateDispersiones", "operate"]) {
-    await rejects(() => access(id("dup"), permission), "CLIENT_MERGED", `${permission} en el duplicado se bloquea`);
+  for (const permission of ["operatePagos", "operateSolicitudes", "operateBeneficiarios", "operateDispersiones", "operate", "viewBasic", "view"]) {
+    ok((await access(id("dup"), permission)).allowed, `${permission} en el duplicado sigue permitido para terminar lo existente`);
   }
-  await rejects(() => access(id("dup"), "operatePagos", adminUid, "admin"), "CLIENT_MERGED", "también para el admin dueño del cliente");
-  ok((await access(id("dup"), "viewBasic")).allowed, "el historial del duplicado se puede ver");
-  ok((await access(id("dup"), "view")).allowed, "ver el cliente duplicado sigue permitido");
+  ok((await access(id("dup"), "operatePagos", adminUid, "admin")).allowed, "el admin dueño también puede terminar lo existente");
   ok((await access(id("keep"), "operatePagos")).allowed, "el vigente opera normal");
-  ok((await access(id("keep"), "operatePagos", adminUid, "admin")).allowed, "el admin opera en el vigente");
+  await rejects(() => assertClientIdAcceptsNewOperations(db, id("dup")), "CLIENT_MERGED", "una alta nueva en el duplicado se rechaza");
+  await assertClientIdAcceptsNewOperations(db, id("keep")); checks++;
+  await assertClientIdAcceptsNewOperations(db, id("no-existe")); checks++;
+  try { assertClientAcceptsNewOperations({ mergedInto: id("keep") }); assert.fail("debía fallar"); } catch (error) { eq([error.details.code, error.details.mergedInto], ["CLIENT_MERGED", id("keep")], "el error dice a qué cliente ir"); }
+  assertClientAcceptsNewOperations({}); checks++;
 
   // Wiring -------------------------------------------------------------------------------------------------
+  const src = file => fs.readFileSync(file, "utf8").split("\r\n").join("\n");
+  const squash = text => text.split(/\s+/).join(" ");
+  const idx = squash(src("functions/src/index.ts"));
+  ok(idx.includes("await assertClientIdAcceptsNewOperations(db, clienteId); const businessFolioContext ="), "crear solicitud rechaza al duplicado");
+  ok(idx.includes("await assertClientIdAcceptsNewOperations(db, String(clienteId)); const businessFolioContextPago ="), "crear pago rechaza al duplicado");
+  const fin = squash(src("functions/src/modules/financing/callables.ts"));
+  const finGuard = 'permission: "operateDispersiones", errorMessage: "No autorizado para crear dispersiones de este cliente.", }); assertClientAcceptsNewOperations(access.client);';
+  eq(fin.split(finGuard).length - 1, 2, "dispersión nueva (individual y masiva) rechaza al duplicado");
+  const ben = squash(src("functions/src/modules/beneficiaries/callables.ts"));
+  ok(ben.includes('errorMessage: "No autorizado para crear beneficiarios de este cliente.", }); assertClientAcceptsNewOperations(scope.client);'), "beneficiario nuevo rechaza al duplicado");
+  ok(ben.includes("await assertClientIdAcceptsNewOperations(db, clientId); const prepared = buildMethodPayload"), "método nuevo de beneficiario rechaza al duplicado");
+  const del = squash(src("functions/src/modules/clientDelegations/service.ts"));
+  ok(del.includes("if (current.get(clientId)?.data().active !== true) assertClientAcceptsNewOperations(client);"), "delegación nueva rechaza al duplicado; la existente se conserva");
+  const rec = squash(src("functions/src/modules/pagos/receiptIdentification.ts"));
+  ok(rec.includes("filter(doc => !isMergedClient(doc.data()))") && rec.includes("canonicalClientId(input.selectedClientId)") && rec.includes('canonicalClientId(alias.get("targetId"))'), "comprobantes: el duplicado sale del catálogo y la selección o el alias se resuelven al vigente");
+  const list = src("functions/src/modules/clients/callables.ts");
+  ok(list.includes("mergedIntoOf(data)&&request.data?.includeMerged!==true)continue;"), "los selectores no reciben duplicados; la lista de clientes los pide y los marca");
   const callable = fs.readFileSync("functions/src/modules/clients/mergeCallables.ts", "utf8");
   ok(/requireRole\(caller, \["superadmin"\]\)/.test(callable) && /allowedRoles: \["superadmin"\]/.test(callable), "el callable es solo superadmin");
   ok(/rootId = clean\(\(caller as any\)\?\.rootId\) \|\| callerUid/.test(callable), "el root sale del usuario, no del navegador");
