@@ -154,12 +154,14 @@ type DecisionResult = (status: AutomaticPaymentDecision["status"], reason: strin
 
 // Without an invoice reference the payment is applied in full only to the one
 // payable invoice of the same client, company and currency created in the
-// payment's month whose pending balance equals the available amount to the
-// cent. Any second candidate, even one excluded for its fiscal source, stops it.
+// payment's month or any earlier month (owner, 2026-11-09) whose pending balance
+// equals the available amount to the cent. An invoice created after the payment's
+// month is never a candidate. Any second candidate, even one excluded for its
+// fiscal source, stops it.
 function decideByExactAmount(pagoId: string, pago: Row, sameOwner: Row[], currency: string, noMatchReason: string, result: DecisionResult): AutomaticPaymentDecision {
   const month = paymentMonth(pago), available = cents(getPagoCoverageState(pago).available);
   if (!month) return result("REQUIRES_REVIEW", noMatchReason);
-  const matches = sameOwner.filter(row => mexicoMonth(row.createdAt) === month && invoiceCurrency(row) === currency &&
+  const matches = sameOwner.filter(row => !!mexicoMonth(row.createdAt) && mexicoMonth(row.createdAt) <= month && invoiceCurrency(row) === currency &&
     cents(getSolicitudCoverageState(row).pending) === available &&
     !["RECHAZADA", "CANCELADA", "ELIMINADA", "COMPLETADA"].includes(normalizeSolicitudBackendStatus(row.status)));
   if (!matches.length) return result("REQUIRES_REVIEW", noMatchReason);
@@ -170,5 +172,5 @@ function decideByExactAmount(pagoId: string, pago: Row, sameOwner: Row[], curren
     idempotencyKey: `automatic-${AUTOMATIC_APPLICATION_REVISION}-${automaticPaymentSourceDigest(pago)}`,
     applications: [{ solicitudId: matches[0].id, montoAplicado: available / 100 }],
   });
-  return result("READY", "EXACT_AMOUNT_SAME_MONTH", 1, batch);
+  return result("READY", mexicoMonth(matches[0].createdAt) === month ? "EXACT_AMOUNT_SAME_MONTH" : "EXACT_AMOUNT_EARLIER_MONTH", 1, batch);
 }

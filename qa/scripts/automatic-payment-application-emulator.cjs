@@ -52,9 +52,15 @@ const decide = (p = {}, rows = [invoice]) => domain.decideAutomaticPayment('paym
   check(byAmount().batch.totalAmount, 116, 'amount match applies the full payment');
   check(byAmount({referencia: ''}).reason, 'EXACT_AMOUNT_SAME_MONTH', 'amount match does not need a reference');
   check(byAmount({montoTotal: 116.01, montoDisponibleSolicitudes: 116.01}).reason, 'NO_EXACT_INVOICE_REFERENCE', 'one cent difference does not match');
-  check(byAmount({paymentDateTimeLocal: '2026-11-01T09:00:00'}).reason, 'NO_EXACT_INVOICE_REFERENCE', 'other month does not match');
+  check(byAmount({paymentDateTimeLocal: '2026-11-01T09:00:00'}).reason, 'EXACT_AMOUNT_EARLIER_MONTH', 'an invoice from an earlier month matches');
+  check(byAmount({paymentDateTimeLocal: '2027-02-10T09:00:00'}).reason, 'EXACT_AMOUNT_EARLIER_MONTH', 'an invoice several months old matches');
+  check(byAmount({paymentDateTimeLocal: '2026-09-30T09:00:00'}).reason, 'NO_EXACT_INVOICE_REFERENCE', 'an invoice created after the payment month does not match');
+  check(byAmount({paymentDateTimeLocal: '2026-11-01T09:00:00'}, [amountInvoice, {...amountInvoice, id: 'invoice-november', facturaUuid: '77777777-7777-4777-8777-777777777777', createdAt: new Date('2026-11-01T18:00:00Z')}]).reason, 'AMOUNT_MATCHES_MULTIPLE_INVOICES', 'equal balances in different months require review');
+  check(byAmount({paymentDateTimeLocal: '2026-11-01T09:00:00'}, [amountInvoice, {...amountInvoice, id: 'invoice-december', facturaUuid: '77777777-7777-4777-8777-777777777777', createdAt: new Date('2026-12-01T18:00:00Z')}]).reason, 'EXACT_AMOUNT_EARLIER_MONTH', 'a later invoice with the same balance does not interfere');
+  check(byAmount({paymentDateTimeLocal: '2026-11-01T09:00:00'}, [{...amountInvoice, createdAt: undefined}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'an invoice without creation date is not an amount candidate');
   check(byAmount({paymentDateTimeLocal: '2026-10-31T12:00:00'}, [{...amountInvoice, createdAt: new Date('2026-10-01T06:30:00Z')}]).reason, 'EXACT_AMOUNT_SAME_MONTH', 'October 1 00:30 in Mexico City is October');
-  check(byAmount({}, [{...amountInvoice, createdAt: new Date('2026-10-01T05:30:00Z')}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'September 30 23:30 in Mexico City is not October');
+  check(byAmount({}, [{...amountInvoice, createdAt: new Date('2026-10-01T05:30:00Z')}]).reason, 'EXACT_AMOUNT_EARLIER_MONTH', 'September 30 23:30 in Mexico City is an earlier month');
+  check(byAmount({paymentDateTimeLocal: '2026-10-31T12:00:00'}, [{...amountInvoice, createdAt: new Date('2026-11-01T06:30:00Z')}]).reason, 'NO_EXACT_INVOICE_REFERENCE', 'November 1 00:30 in Mexico City is after an October payment');
   check(byAmount({}, [{...amountInvoice, createdAt: new Date('2026-11-01T05:30:00Z')}]).reason, 'EXACT_AMOUNT_SAME_MONTH', 'October 31 23:30 in Mexico City is still October');
   check(byAmount({paymentDateTimeLocal: null, createdAt: new Date('2026-10-28T20:00:00Z')}).reason, 'EXACT_AMOUNT_SAME_MONTH', 'payment creation month when no payment date');
   check(byAmount({}, [amountInvoice, {...amountInvoice, id: 'invoice-c', facturaUuid: '33333333-3333-4333-8333-333333333333'}]).reason, 'AMOUNT_MATCHES_MULTIPLE_INVOICES', 'two equal balances require review');

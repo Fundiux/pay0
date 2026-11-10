@@ -499,8 +499,13 @@
     },
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
-      "text": "return result(\"READY\", \"EXACT_AMOUNT_SAME_MONTH\", 1, batch);",
-      "capability": "La aplicacion automatica relaciona pago y solicitud por monto exacto del mismo mes"
+      "text": "return result(\"READY\", mexicoMonth(matches[0].createdAt) === month ? \"EXACT_AMOUNT_SAME_MONTH\" : \"EXACT_AMOUNT_EARLIER_MONTH\", 1, batch);",
+      "capability": "La aplicacion automatica relaciona pago y solicitud por monto exacto del mismo mes o de meses anteriores"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
+      "text": "if (new Set(keys).size !== keys.length) return result(\"REQUIRES_REVIEW\", \"AMBIGUOUS_INVOICE_FOLIO\", byFolio.length);",
+      "capability": "La aplicacion automatica relaciona por folio sin serie solo cuando una factura del cliente lo tiene"
     },
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",

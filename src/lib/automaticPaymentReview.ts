@@ -9,7 +9,7 @@ const reasons: Record<string, string> = {
   DUPLICATE_INVOICE_IDENTITY: "Varias solicitudes contienen la misma identidad fiscal.",
   MULTIPLE_INVOICES_REQUIRE_ALLOCATION: "El importe requiere definir cómo repartirlo entre las facturas.",
   AMOUNT_EXCEEDS_INVOICE: "El importe supera el saldo de la factura identificada.",
-  AMOUNT_MATCHES_MULTIPLE_INVOICES: "Varias facturas del mes tienen exactamente el mismo saldo que el pago.",
+  AMOUNT_MATCHES_MULTIPLE_INVOICES: "Varias facturas pendientes tienen exactamente el mismo saldo que el pago.",
   NON_PRODUCTION_INVOICE: "La factura identificada proviene de un entorno de pruebas.",
   AMBIGUOUS_INVOICE_FISCAL_SOURCE: "El origen fiscal de la factura es ambiguo.",
   APPLICATION_PERMISSION_DENIED: "Los permisos del usuario de origen requieren revisión.",
