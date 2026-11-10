@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { overdue } from "../../functions/lib/modules/paymentApplications/complementPolicy.js";
 import { assertAuthorized } from "../../functions/lib/utils/authGuard.js";
 
-const index = readFileSync("functions/src/index.ts", "utf8");
+const index = readFileSync("functions/src/index.ts", "utf8") + readFileSync("functions/src/modules/legacyCore/callables.ts", "utf8");
 const constancias = readFileSync("functions/src/modules/constancias/service.ts", "utf8");
 const cotizaciones = readFileSync("functions/src/modules/cotizaciones/callables.ts", "utf8");
 const materialityTrigger = readFileSync("functions/src/modules/materiality/triggers.ts", "utf8");

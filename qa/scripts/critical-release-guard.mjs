@@ -86,7 +86,7 @@ requireText(
   "El parser CSF conserva espacios de la razon social de portada",
 );
 requireText(
-  "functions/src/index.ts",
+  "functions/src/modules/legacyCore/callables.ts",
   "PAGO_RECEIPT_RFC_MISMATCH",
   "Los RFC distintos del comprobante requieren aceptacion auditable",
 );

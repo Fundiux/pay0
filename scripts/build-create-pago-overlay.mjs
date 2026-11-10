@@ -15,7 +15,7 @@ const bytes=fs.readFileSync(archive),zip=await JSZip.loadAsync(bytes),base=await
 assert(!base.includes('const receiptLearning_1 ='),'UNEXPECTED_BASE_BINDING');
 const config=ts.readConfigFile(path.join(root,'functions/tsconfig.json'),ts.sys.readFile);
 const options=ts.convertCompilerOptionsFromJson(config.config.compilerOptions,path.join(root,'functions')).options;
-const emitted=ts.transpileModule(fs.readFileSync(path.join(root,'functions/src/index.ts'),'utf8'),{compilerOptions:options}).outputText;
+const emitted=ts.transpileModule(fs.readFileSync(path.join(root,'functions/src/modules/legacyCore/callables.ts'),'utf8'),{compilerOptions:options}).outputText;
 const printer=ts.createPrinter({removeComments:true,newLine:ts.NewLineKind.LineFeed});
 function handler(source){const ast=ts.createSourceFile('index.js',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);const matches=ast.statements.filter(n=>ts.isExpressionStatement(n)&&ts.isBinaryExpression(n.expression)&&n.expression.left.getText(ast)==='exports.createPago'&&ts.isCallExpression(n.expression.right));assert.equal(matches.length,1,'UNIQUE_CREATE_PAGO_REQUIRED');const node=matches[0].expression.right;return{node,start:node.getStart(ast),end:node.end,text:printer.printNode(ts.EmitHint.Expression,node,ast)};}
 const before=handler(base),after=handler(emitted);
