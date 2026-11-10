@@ -14,7 +14,6 @@ const db = admin.firestore();
 const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
 
 const minutes = (ms: number | null) => (ms === null || ms === undefined ? "sin datos" : `${(ms / 60000).toFixed(1)} min`);
-const percent = (value: number | null) => (value === null || value === undefined ? "sin datos" : `${value}%`);
 
 /** Texto del resumen diario para el dueño; función pura para poder probarla sin Firebase. */
 const INCIDENT_DETAIL_LIMIT = 5;
@@ -62,7 +61,7 @@ export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loa
   if (pending) lines.push(...pendingLines(pending));
   if (autonomy) {
     lines.push(
-      `Autonomía: ${percent(autonomy.agentResolutionRate)} resuelto por agentes (${autonomy.resolvedByAgent} agentes, ${autonomy.resolvedByPerson} personas)`,
+      `Autonomía: ${autonomy.agentResolutionRate === null || autonomy.agentResolutionRate === undefined ? "sin datos" : `${autonomy.agentResolutionRate}% resuelto por agentes`} (${autonomy.resolvedByAgent} resueltas por agentes, ${autonomy.resolvedByPerson} por personas)`,
       `Ejecuciones exitosas: ${autonomy.runsSucceeded} de ${autonomy.runsFinished} · Duración media: ${minutes(autonomy.avgRunMs)} · Intervenciones humanas hoy: ${autonomy.humanInterventionsToday}`
     );
   }
