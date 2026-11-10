@@ -320,6 +320,30 @@
     {
       "commit": "51552e0e",
       "capability": "La ventana de comprobantes se cierra sola cuando todos los pagos quedan creados y subidos"
+    },
+    {
+      "commit": "3388b268",
+      "capability": "Pagos en revision: reevaluacion automatica diaria a las 7:00 con las reglas vigentes"
+    },
+    {
+      "commit": "95cc080d",
+      "capability": "Fusion de clientes hacia adelante: duplicado sin altas nuevas, lo existente se termina, identificacion y P4 no usan al fusionado"
+    },
+    {
+      "commit": "8928d20f",
+      "capability": "Resumen diario: linea de autonomia legible sin datos"
+    },
+    {
+      "commit": "9fcd86a2",
+      "capability": "Hugo: herramienta de solo lectura de decisiones de pagos sin solicitud por cliente"
+    },
+    {
+      "commit": "99b731b6",
+      "capability": "Dashboard de indicadores de negocio para superadmin, sin CFDI cancelados"
+    },
+    {
+      "commit": "b57f852e",
+      "capability": "Release integrado 2026-11-10 con 405 endpoints esperados"
     }
   ],
   "requiredText": [
