@@ -12,7 +12,7 @@ import {
 const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
 
 export const initPagoDocumentUpload = onCall(
-  { region: "us-central1" },
+  { minInstances: 1, region: "us-central1" },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
     assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "uploadDocs" });
@@ -21,7 +21,7 @@ export const initPagoDocumentUpload = onCall(
 );
 
 export const finalizePagoDocumentUpload = onCall(
-  {
+  { minInstances: 1,
     region: "us-central1",
     secrets: [TELEGRAM_BOT_TOKEN],
   },

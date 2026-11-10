@@ -69,4 +69,4 @@ export async function readAuthorizedRelatedRecords(request: any) {
   return { items: current.docs.map(doc => ({ ...transport(doc.data()), id: doc.id })), nextCursor: current.nextCursor };
 }
 
-export const listAuthorizedRelatedRecords = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, readAuthorizedRelatedRecords);
+export const listAuthorizedRelatedRecords = onCall({ minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" }, readAuthorizedRelatedRecords);

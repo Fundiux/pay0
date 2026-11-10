@@ -14,7 +14,7 @@ import {
 } from "../telegram/clientNotifications";
 
 export const initSolicitudDocumentUpload = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const caller = await getMyUser(requireAuth(request));
     assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
@@ -23,7 +23,7 @@ export const initSolicitudDocumentUpload = onCall(
 );
 
 export const finalizeSolicitudDocumentUpload = onCall(
-  {
+  { minInstances: 1,
     cors: true,
     timeoutSeconds: 120,
     // La carga de una OC puede regenerar la cotizacion canonica HTML/CSS.

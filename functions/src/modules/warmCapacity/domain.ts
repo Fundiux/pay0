@@ -27,15 +27,10 @@ export const WARM_CAPACITY_CONFIG: WarmCapacityConfig = {
   windowEnd: "21:00",
   warmMinInstances: 1,
   coldMinInstances: 0,
+  // Functions managed by Cloud Functions reject service-level scaling (fixed revision name, 409), so the hot
+  // callables keep minInstances: 1 in code; only App Hosting follows this window.
   services: [
     { name: "pay0-next16", kind: "appHosting" },
-    ...[
-      "listAuthorizedRelatedRecords", "getHugoDashboard", "listAgent007Messages", "saveHugoVoiceHistory", "listPagos",
-      "listSolicitudes", "listClientsCanonical", "listCompaniesCanonical", "createPago", "createSolicitud",
-      "changeSolicitudStatus", "initPagoDocumentUpload", "finalizePagoDocumentUpload", "initSolicitudDocumentUpload",
-      "finalizeSolicitudDocumentUpload", "parsePagoReceiptPdf", "getAuthorizedDocumentDownloadUrl", "getMatUserHome",
-      "listUsers", "getClientWalletOverview", "listScopedClientDispersions", "getControlCenterOverview",
-    ].map((name): WarmService => ({ name, kind: "function" })),
   ],
 };
 

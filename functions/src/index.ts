@@ -116,7 +116,7 @@ export const upsertUser = onCall(
 );
 
 export const createSolicitud = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const __perfStartedAt = Date.now();
     const __perf: Record<string, number> = {};
@@ -1671,7 +1671,7 @@ async function resolveClientAssignedCostRate(params: {
 }
 
 export const createPago = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const __perfStartedAt = Date.now();
     const __perf: Record<string, number> = {};
@@ -2434,7 +2434,7 @@ export const createPago = onCall(
 );
 
 export const listPagos = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
     const meSnap = await db.doc(`users/${uid}`).get();
@@ -2505,7 +2505,7 @@ export const listPagos = onCall(
 );
 
 export const listSolicitudes = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  { minInstances: 1, cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const uid = requireAuth(request);
     const meSnap = await db.doc(`users/${uid}`).get();

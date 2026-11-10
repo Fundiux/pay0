@@ -8,8 +8,8 @@ const check = (actual, expected, label) => { assert.deepEqual(actual, expected, 
 const config = domain.WARM_CAPACITY_CONFIG;
 
 check(JSON.parse(fs.readFileSync(path.join(__dirname, '../../config/warm-capacity.json'), 'utf8')), JSON.parse(JSON.stringify(config)), 'config/warm-capacity.json mirrors the function constant');
-check(config.services.length, 23, 'the agreed 23 services');
-check(new Set(config.services.map(s => s.name)).size, 23, 'no duplicates');
+check(config.services.map(s => s.name), ['pay0-next16'], 'only App Hosting follows the window; hot callables keep minInstances in code');
+check(new Set(config.services.map(s => s.name)).size, config.services.length, 'no duplicates');
 
 // Mexico City is UTC-6 all year since 2022 (no DST).
 const at = (hh, mm, day = 10) => new Date(Date.UTC(2026, 10, day, hh + 6, mm));

@@ -8,28 +8,9 @@
   "warmMinInstances": 1,
   "coldMinInstances": 0,
   "services": [
-    { "name": "pay0-next16", "kind": "appHosting" },
-    { "name": "listAuthorizedRelatedRecords", "kind": "function" },
-    { "name": "getHugoDashboard", "kind": "function" },
-    { "name": "listAgent007Messages", "kind": "function" },
-    { "name": "saveHugoVoiceHistory", "kind": "function" },
-    { "name": "listPagos", "kind": "function" },
-    { "name": "listSolicitudes", "kind": "function" },
-    { "name": "listClientsCanonical", "kind": "function" },
-    { "name": "listCompaniesCanonical", "kind": "function" },
-    { "name": "createPago", "kind": "function" },
-    { "name": "createSolicitud", "kind": "function" },
-    { "name": "changeSolicitudStatus", "kind": "function" },
-    { "name": "initPagoDocumentUpload", "kind": "function" },
-    { "name": "finalizePagoDocumentUpload", "kind": "function" },
-    { "name": "initSolicitudDocumentUpload", "kind": "function" },
-    { "name": "finalizeSolicitudDocumentUpload", "kind": "function" },
-    { "name": "parsePagoReceiptPdf", "kind": "function" },
-    { "name": "getAuthorizedDocumentDownloadUrl", "kind": "function" },
-    { "name": "getMatUserHome", "kind": "function" },
-    { "name": "listUsers", "kind": "function" },
-    { "name": "getClientWalletOverview", "kind": "function" },
-    { "name": "listScopedClientDispersions", "kind": "function" },
-    { "name": "getControlCenterOverview", "kind": "function" }
+    {
+      "name": "pay0-next16",
+      "kind": "appHosting"
+    }
   ]
 }
