@@ -116,7 +116,7 @@ export const upsertUser = onCall(
 );
 
 export const createSolicitud = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB", minInstances: 1 },
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
     const __perfStartedAt = Date.now();
     const __perf: Record<string, number> = {};
@@ -3073,6 +3073,7 @@ export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";
 export { getBusinessIndicators } from "./modules/businessIndicators/callables";
+export { applyWarmCapacityWindow } from "./modules/warmCapacity/callables";
 export { getPendingOperationsSummary } from "./modules/agentOperations/pendingItems";
 export { detectMissingSolicitudQuotations } from "./modules/cotizaciones/missingQuoteDetector";
 export { listAssetOverview, createAssetPosition, updateAssetPositionDetails, recordAssetMovement, closeAssetPosition, accrueAssetLoanInterest, previewAssetPaymentAllocation, linkPay0PaymentToAsset, createAssetDocumentDraft, initAssetDocumentUpload, finalizeAssetDocumentUpload, seedUproAssetPortfolio } from "./modules/assets/callables";
