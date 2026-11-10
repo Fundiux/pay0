@@ -17,8 +17,8 @@ function Fixtures {
  };return $rows
 }
 function Jobs {
- $rows=@{};foreach($name in @('processIqCreateQueue','processIqDispersionCreate','syncTodayIqInvoicesNow','checkPaymentComplementsDaily')){
-  $schedule=switch($name){'processIqCreateQueue'{'every 1 minutes'};'processIqDispersionCreate'{'every 5 minutes'};'syncTodayIqInvoicesNow'{'every 24 hours'};default{'0 19 * * 1-5'}}
+ $rows=@{};foreach($name in @('processIqCreateQueue','processIqDispersionCreate','checkPaymentComplementsDaily')){
+  $schedule=switch($name){'processIqCreateQueue'{'every 1 minutes'};'processIqDispersionCreate'{'every 5 minutes'};default{'0 19 * * 1-5'}}
   $rows[$name]=Clone @{name=('projects/pay-0-system/locations/us-central1/jobs/firebase-schedule-'+$name+'-us-central1');state=$(if($name -cin @('processIqCreateQueue','processIqDispersionCreate')){'ENABLED'}else{'PAUSED'});schedule=$schedule;timeZone='America/Mexico_City';attemptDeadline='540s'}
  }
  $rows.processIqCreateOnDemandTask=Clone @{name='projects/pay-0-system/locations/us-central1/queues/processIqCreateOnDemandTask';state='RUNNING';rateLimits=@{maxConcurrentDispatches=1;maxDispatchesPerSecond=1;maxBurstSize=10};retryConfig=@{maxAttempts=1;minBackoff='60s';maxBackoff='300s';maxDoublings=16}}
@@ -71,7 +71,7 @@ foreach($name in @('IQ_CREDENTIALS_KEY','TELEGRAM_BOT_TOKEN')){
  Reject {Assert-RemainingSecret ([pscustomobject]@{state='ENABLED';name="projects/pay-0-system/secrets/$name/versions/99"}) $name} 'LATEST_SECRET_VERSION_CHANGED'
 }
 $jobs=Jobs;$fingerprint=Get-RemainingJobFingerprint $jobs;Check ([bool]$fingerprint) 'jobsFingerprint'
-$jobs.syncTodayIqInvoicesNow.state='ENABLED';Reject {Get-RemainingJobFingerprint $jobs} 'SCHEDULER_CHANGED'
+$jobs.checkPaymentComplementsDaily.state='ENABLED';Reject {Get-RemainingJobFingerprint $jobs} 'SCHEDULER_CHANGED'
 $jobs=Jobs;$jobs.processIqCreateQueue.schedule='every 5 minutes';Reject {Get-RemainingJobFingerprint $jobs} 'SCHEDULER_CHANGED'
 $jobs=Jobs;$jobs.processIqCreateOnDemandTask.rateLimits.maxConcurrentDispatches=2;Reject {Get-RemainingJobFingerprint $jobs} 'QUEUE_CHANGED'
 $jobs=Jobs;$jobs.processIqCreateOnDemandTask.retryConfig.maxAttempts=3;Reject {Get-RemainingJobFingerprint $jobs} 'QUEUE_CHANGED'
