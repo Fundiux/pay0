@@ -2853,7 +2853,7 @@ export {
   enqueuePaymentApplicationImmediately,
   diagnosePagoApplicationIqMethods,
 } from "./modules/paymentApplications/callables";
-export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnReceipt, applyPaymentsAutomaticallyOnInvoice } from "./modules/paymentApplications/automaticApplication";
+export { applyPaymentAutomaticallyOnReconciliation, applyPaymentAutomaticallyOnReceipt, applyPaymentsAutomaticallyOnInvoice, reevaluatePaymentsInReviewDaily } from "./modules/paymentApplications/automaticApplication";
 export { notifyUnmatchedPayment, listPagosSinSolicitud, decidePagoSinSolicitud } from "./modules/paymentApplications/unmatchedPaymentReview";
 
 export { addSolicitudNota, addPagoNota } from "./modules/notes/callables";

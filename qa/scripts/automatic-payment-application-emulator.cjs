@@ -193,5 +193,13 @@ const decide = (p = {}, rows = [invoice]) => domain.decideAutomaticPayment('paym
   await db.doc(`iqIntegrationConfigs/${rootId}`).set({enabled:true,automation:{aplicacionPagos:true}});
   check((await iq.continuePaymentApplicationImmediately(`${rootId}-iq`)).action!=='PAUSED',true,'operating window does not pause payment application');
   check((await db.collection('paymentComplementJobs').get()).size,0,'REP never invoked by local application');
+  const late = await fixture('late-invoice',{...full,referencia:'TRANSFERENCIA 99999'},[]);
+  check((await automatic.applyAutomaticPayment(late.pagoId)).status,'REQUIRES_REVIEW','pago before its invoice waits in review');
+  await db.doc(`solicitudes/${late.pagoId}-late`).set({...amountInvoice,clienteId:late.pago.clienteId,id:`${late.pagoId}-late`});
+  const reevaluated = await automatic.reevaluatePaymentsInReview();
+  check(reevaluated.applied >= 1 && reevaluated.failed === 0, true, 'daily re-evaluation applies pagos whose invoice arrived later');
+  check((await db.collection('pagoAplicaciones').where('pagoId','==',late.pagoId).get()).size,1,'late invoice applied once through the financial transaction');
+  check((await db.collection('pagoAplicaciones').where('pagoId','==',review.pagoId).get()).size,0,'an unmatched pago stays in review after re-evaluation');
+  check((await automatic.reevaluatePaymentsInReview()).applied,0,'a second run applies nothing new');
   console.log(JSON.stringify({ok:true,checks,concurrency:'PASS',financialTransaction:'PASS',scope:'PASS',ambiguousCases:'REVIEW',externalActions:0}));
 })().then(()=>process.exit(0)).catch(error=>{console.error(error);process.exit(1);});
