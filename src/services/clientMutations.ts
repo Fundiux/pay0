@@ -53,3 +53,13 @@ export async function mergeDuplicateClientMutation(input: { canonicalId: string;
   invalidateClientCatalog();
   return res?.data as { ok: true; canonicalId: string; duplicateId: string; alreadyMerged: boolean };
 }
+
+export type DuplicateClientCandidate = { id: string; name: string; numero: number | null; iqLinked: boolean; iqClientId: string; solicitudes: number; pagos: number };
+export type DuplicateClientGroup = { rfc: string; proposedCanonicalId: string; clients: DuplicateClientCandidate[] };
+
+// Superadmin only, read-only. The proposed canonical client is computed on the server.
+export async function listDuplicateClientGroupsQuery() {
+  const fn = httpsCallable(functions, "listDuplicateClientGroupsCallable");
+  const res: any = await fn({});
+  return (Array.isArray(res?.data?.groups) ? res.data.groups : []) as DuplicateClientGroup[];
+}

@@ -4,6 +4,7 @@ import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { logActivityTx } from "../../utils/logActivity";
 import { db, getActivityAdminId, getMyUser, requireAuth, requireRole } from "../sharedCallables/helpers";
 import { MERGE_REFUSAL_MESSAGES, planClientMerge } from "./mergeDomain";
+import { buildDuplicateGroups, type DuplicateGroup } from "./mergeProposal";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 
@@ -54,4 +55,32 @@ export const mergeDuplicateClientCallable = onCall({ cors: true, timeoutSeconds:
   const canonicalId = clean(request.data?.canonicalId), duplicateId = clean(request.data?.duplicateId);
   if (!canonicalId || !duplicateId) throw new HttpsError("invalid-argument", "canonicalId y duplicateId son requeridos.");
   return mergeDuplicateClient({ rootId, actorUid: callerUid, actor: caller, canonicalId, duplicateId, reason: request.data?.reason });
+});
+
+const countByClient = async (collection: "pagos" | "solicitudes", rootId: string, clientId: string) => {
+  const one = async (field: "clienteId" | "clientId") => (await db.collection(collection).where("rootId", "==", rootId).where(field, "==", clientId).count().get()).data().count;
+  return Math.max(await one("clienteId"), await one("clientId"));
+};
+
+// Read-only: the groups of active clients that share a unique RFC, with the canonical client the owner criterion proposes.
+export async function listDuplicateClientGroups(rootId: string): Promise<DuplicateGroup[]> {
+  const snap = await db.collection("clients").where("rootId", "==", rootId).get();
+  const clients = snap.docs.map((doc) => ({ id: doc.id, data: doc.data() as Record<string, any> }));
+  const grouped = buildDuplicateGroups(clients, new Map());
+  const counts = new Map<string, { solicitudes: number; pagos: number }>();
+  for (const group of grouped) {
+    for (const candidate of group.clients) {
+      counts.set(candidate.id, { solicitudes: await countByClient("solicitudes", rootId, candidate.id), pagos: await countByClient("pagos", rootId, candidate.id) });
+    }
+  }
+  return buildDuplicateGroups(clients, counts);
+}
+
+export const listDuplicateClientGroupsCallable = onCall({ cors: true, timeoutSeconds: 120, memory: "256MiB" }, async (request) => {
+  const callerUid = requireAuth(request);
+  const caller = await getMyUser(callerUid);
+  requireRole(caller, ["superadmin"]);
+  assertAuthorized(request.auth, caller, { allowedRoles: ["superadmin"], requiredModule: "clientes", requiredAction: "view" });
+  const rootId = clean((caller as any)?.rootId) || callerUid;
+  return { ok: true as const, groups: await listDuplicateClientGroups(rootId) };
 });

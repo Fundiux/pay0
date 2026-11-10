@@ -1482,7 +1482,7 @@ export { updateUserModules } from "./modules/users/modules";
 export { updateUserActive } from "./modules/users/active";
 export { listUsers } from "./modules/users/list";
 import { assertClientIdAcceptsNewOperations } from "./modules/clients/mergeGuard";
-export { mergeDuplicateClientCallable } from "./modules/clients/mergeCallables";
+export { mergeDuplicateClientCallable, listDuplicateClientGroupsCallable } from "./modules/clients/mergeCallables";
 export { saveClientCallable, toggleClientActiveCallable, repairClientNumbersByAdminCallable, listClientsCanonical, getClientCanonical } from "./modules/clients/callables";
 
 export { softDeleteUser, restoreUser, setUserCompanyAccess } from "./modules/users/access";

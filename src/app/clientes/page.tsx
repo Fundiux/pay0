@@ -10,6 +10,7 @@ import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "
 import { ChevronUp, ChevronDown, CircleDollarSign, Send, Pencil, Power, PowerOff, Eye, UploadCloud, FileText } from "lucide-react";
 import { saveClientMutation as saveClient, syncIqClientMutation as syncIqClient, toggleClientActiveMutation as toggleClientActive } from "@/services/clientMutations";
 import { listScopedClients } from "@/services/clients";
+import DuplicateRfcPanel from "@/components/clientes/DuplicateRfcPanel";
 import {
   finalizeClientCsfIntake,
   parseClientCsfFile,
@@ -769,6 +770,7 @@ export default function ClientesPage() {
         )}
       </div>
 
+      {isSuperAdmin(role) && <div className="mt-4"><DuplicateRfcPanel onMerged={(message) => { setPageMsg(message); setClientsRefreshKey((key) => key + 1); }} /></div>}
             {pageMsg && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}
