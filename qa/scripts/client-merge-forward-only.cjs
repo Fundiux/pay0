@@ -101,6 +101,8 @@ const merge = (canonical, duplicate, extra = {}) => mergeDuplicateClient({ rootI
   ok(del.includes("if (current.get(clientId)?.data().active !== true) assertClientAcceptsNewOperations(client);"), "delegación nueva rechaza al duplicado; la existente se conserva");
   const rec = squash(src("functions/src/modules/pagos/receiptIdentification.ts"));
   ok(rec.includes("filter(doc => !isMergedClient(doc.data()))") && rec.includes("canonicalClientId(input.selectedClientId)") && rec.includes('canonicalClientId(alias.get("targetId"))'), "comprobantes: el duplicado sale del catálogo y la selección o el alias se resuelven al vigente");
+  const p4 = squash(src("functions/src/modules/iqHistoricalImport/service.ts"));
+  ok(p4.includes('if (action.entityType !== "CLIENT" && ["CREATE_HISTORICAL", "DEPENDENCY_IMPORT"].includes(action.operation)) {') && p4.includes("isMergedClient(mergedSnap.data())) throw new P4EngineError(\"P4_HISTORICAL_MERGED_CLIENT_REVIEW_REQUIRED\""), "importación histórica de IQ: un alta nueva para un cliente fusionado va a revisión");
   const list = src("functions/src/modules/clients/callables.ts");
   ok(list.includes("mergedIntoOf(data)&&request.data?.includeMerged!==true)continue;"), "los selectores no reciben duplicados; la lista de clientes los pide y los marca");
   const callable = fs.readFileSync("functions/src/modules/clients/mergeCallables.ts", "utf8");
