@@ -368,6 +368,10 @@
     {
       "commit": "2ea5de79",
       "capability": "Ventana de capacidad caliente 08:45-21:00 y createSolicitud sin minInstances fijo"
+    },
+    {
+      "commit": "117e63ce",
+      "capability": "Diez callables de uso frecuente con minInstances 1 en codigo; la ventana caliente solo para App Hosting"
     }
   ],
   "requiredText": [
