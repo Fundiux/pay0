@@ -214,3 +214,33 @@ test('summarizeByClient ranks payments and computes what each client still owes'
   assert.throws(() => validateHugoReadInput('summarizeByClient', {}), /HUGO_TOOL_INVALID_INPUT/);
   assert.throws(() => validateHugoReadInput('summarizeByClient', { fuente: 'SALDO', rootId: 'x' }), /HUGO_TOOL_INVALID_INPUT/);
 });
+
+test('findPagoSinSolicitudDecisions groups the final decision per pago by client and never crosses roots', async () => {
+  const { findPagoSinSolicitudDecisions } = require('../../functions/lib/modules/agent007/hugoReadTools/decisions');
+  const { runHugoReadTool } = require('../../functions/lib/modules/agent007/hugoReadTools/loader');
+  const dec = (id, clienteId, nombre, pagoId, option, iso, extra = {}) => ({ id, rootId: root, clienteId, pagoId, option, note: '', decidedBy: 'secret-uid', createdAt: ts(iso), snapshot: { clienteNombre: nombre, monto: 100, moneda: 'MXN', folio: pagoId }, ...extra });
+  const rows = [
+    dec('d1', 'c-dmr', 'DESARROLLO Y CONSTRUCCIONES DMR SA DE CV', 'p1', 'ESPERAR_FACTURA', '2026-10-05T18:00:00Z'),
+    dec('d2', 'c-dmr', 'DESARROLLO Y CONSTRUCCIONES DMR SA DE CV', 'p1', 'FACTURAR_PUE', '2026-10-06T18:00:00Z', { note: 'se facturó' }),
+    dec('d3', 'c-dmr', 'DESARROLLO Y CONSTRUCCIONES DMR SA DE CV', 'p2', 'FACTURAR_PUE', '2026-10-07T18:00:00Z'),
+    dec('d4', 'c-bet', 'BETA SOLUCIONES SA DE CV', 'p3', 'DEVOLVER', '2026-10-08T18:00:00Z'),
+  ];
+  const all = findPagoSinSolicitudDecisions(rows, {});
+  assert.equal(all.total, 3); assert.equal(all.decisiones, 4); assert.equal(all.clientes, 2);
+  assert.deepEqual(all.porOpcion, { FACTURAR_PUE: 2, ESPERAR_FACTURA: 0, APLICAR_A_FACTURA_EXISTENTE: 0, DEVOLVER: 1 });
+  const dmr = all.items[0];
+  assert.deepEqual([dmr.pagos, dmr.decisiones, dmr.cambios, dmr.opcionMasFrecuente, dmr.ultimaOpcion, dmr.ultimaFecha], [2, 3, 1, 'FACTURAR_PUE', 'FACTURAR_PUE', '2026-10-07']);
+  assert.ok(!JSON.stringify(all).includes('secret-uid'), 'no user ids are returned');
+  const one = findPagoSinSolicitudDecisions(rows, { cliente: 'beta soluciones' });
+  assert.deepEqual([one.clientes, one.total, one.items[0].cliente], [1, 1, 'BETA SOLUCIONES SA DE CV']);
+  assert.equal(findPagoSinSolicitudDecisions(rows, { cliente: 'Cliente inexistente xyz' }).total, 0);
+  assert.equal(findPagoSinSolicitudDecisions(rows, { opcion: 'DEVOLVER' }).total, 1);
+  assert.equal(findPagoSinSolicitudDecisions(rows, { desde: '2026-10-07', hasta: '2026-10-08' }).total, 2);
+  assert.deepEqual(findPagoSinSolicitudDecisions(rows, { soloConteo: true }).items, []);
+  assert.match(findPagoSinSolicitudDecisions(rows, {}, true).advertencias[0], /incompleto/);
+  assert.equal(validateHugoReadInput('findPagoSinSolicitudDecisions', { cliente: ' DMR ', opcion: 'DEVOLVER', limite: 2, desde: null }).cliente, 'DMR');
+  for (const bad of [{ opcion: 'BORRAR' }, { rootId: 'x' }, { limite: 99 }, { desde: '2026-13-01' }]) assert.throws(() => validateHugoReadInput('findPagoSinSolicitudDecisions', bad), /HUGO_TOOL_INVALID_INPUT/, JSON.stringify(bad));
+  const fakeDb = rowsToServe => ({ collection: name => { assert.equal(name, 'pagoSinSolicitudDecisions'); return { where: (field, op, value) => { assert.deepEqual([field, op, value], ['rootId', '==', root]); return { limit: () => ({ get: async () => ({ docs: rowsToServe.map(r => ({ id: r.id, data: () => r })) }) }) }; } }; } });
+  assert.equal((await runHugoReadTool(fakeDb(rows), root, 'findPagoSinSolicitudDecisions', {})).total, 3);
+  await assert.rejects(runHugoReadTool(fakeDb([...rows, dec('dx', 'c-x', 'OTRA', 'p9', 'DEVOLVER', '2026-10-09T18:00:00Z', { rootId: 'other-root' })]), root, 'findPagoSinSolicitudDecisions', {}), /HUGO_READ_ROOT_MISMATCH/);
+});
