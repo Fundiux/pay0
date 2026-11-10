@@ -23,6 +23,8 @@ check(speed.recoveryDecision(stuck({ createdBy: '' }), NOW), 'SKIP_NO_REQUESTER'
 check(speed.recoveryDecision(stuck({ iqCreateRecoveryAttempts: 1, iqCreateRecoveryAt: ts(NOW - 60_000) }), NOW), 'SKIP_TOO_SOON', 'attempts are spaced out');
 check(speed.recoveryDecision(stuck({ iqCreateRecoveryAttempts: 2, iqCreateRecoveryAt: ts(NOW - 5 * 60_000) }), NOW), 'SKIP_TOO_SOON', 'spacing grows with attempts');
 check(speed.recoveryDecision(stuck({ iqCreateRecoveryAttempts: 2, iqCreateRecoveryAt: ts(NOW - 7 * 60_000) }), NOW), 'RETRY', 'a spaced attempt goes through');
+check(['SKIP_HAS_FOLIO','SKIP_EXHAUSTED','SKIP_DELETED','SKIP_NO_REQUESTER','SKIP_TOO_SOON','SKIP_STATUS','RETRY'].map(speed.recoveryStoppedStatus),
+  ['SKIPPED_ALREADY_HAS_FOLIO','RECOVERY_STOPPED','RECOVERY_STOPPED','RECOVERY_STOPPED',null,null,null], 'terminal decisions leave NOT_ENQUEUED, waiting ones do not');
 check(speed.recoveryRequester({ iqCreateQueuedBy: 'q', createdBy: 'c' }), 'q', 'the original requester is preferred');
 
 // 3) draining a profile.

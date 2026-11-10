@@ -34,6 +34,8 @@ import {
   lockBusyRetryPlan,
   recoveryDecision,
   recoveryRequester,
+  recoveryStoppedStatus,
+  RECOVERY_MAX_PER_RUN,
   selectDrainJobs,
 } from "./solicitudCreateSpeedup";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
@@ -1371,28 +1373,50 @@ async function loadDrainJobsForProfile(profileId: string, initialJobs: IqCreateJ
 /**
  * Re-enqueue solicitudes that stayed NOT_ENQUEUED once their requirements are met.
  * Each try is claimed in a transaction (attempt counter plus spacing), and the enqueue itself is idempotent
- * per solicitud, so a retry never creates a second job.
+ * per solicitud, so a retry never creates a second job. A solicitud that will not be retried again
+ * (exhausted, deleted, with folio, without requester) leaves NOT_ENQUEUED in the same transaction, so it
+ * cannot crowd out new ones; roots without automation are not queried at all.
  */
-async function recoverNotEnqueuedSolicitudes(enabledRoots: Set<string>): Promise<{ scanned: number; retried: number; queued: number }> {
-  const result = { scanned: 0, retried: 0, queued: 0 };
+export async function recoverNotEnqueuedSolicitudes(
+  enabledRoots: Set<string>,
+  enqueue: typeof enqueueIqCreationForSolicitud = enqueueIqCreationForSolicitud,
+): Promise<{ scanned: number; retried: number; queued: number; stopped: number }> {
+  const result = { scanned: 0, retried: 0, queued: 0, stopped: 0 };
+  const rootIds = [...enabledRoots].filter(Boolean).slice(0, 25);
+  if (rootIds.length === 0) return result;
   try {
-    const snap = await db.collection("solicitudes").where("iqCreateQueueStatus", "==", "NOT_ENQUEUED").limit(25).get();
+    const snap = await db.collection("solicitudes")
+      .where("iqCreateQueueStatus", "==", "NOT_ENQUEUED")
+      .where("rootId", "in", rootIds)
+      .limit(100)
+      .get();
     for (const doc of snap.docs) {
-      const row = asRecord(doc.data());
+      if (result.retried >= RECOVERY_MAX_PER_RUN) break;
       result.scanned += 1;
-      if (!enabledRoots.has(cleanText(row.rootId))) continue;
       const claimed = await db.runTransaction(async (tx) => {
         const live = asRecord((await tx.get(doc.ref)).data());
-        if (recoveryDecision(live, Date.now()) !== "RETRY") return "";
-        tx.set(doc.ref, {
-          iqCreateRecoveryAttempts: FieldValue.increment(1),
-          iqCreateRecoveryAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-        return recoveryRequester(live);
-      }).catch(() => "");
-      if (!claimed) continue;
+        const decision = recoveryDecision(live, Date.now());
+        if (decision === "RETRY") {
+          tx.set(doc.ref, {
+            iqCreateRecoveryAttempts: FieldValue.increment(1),
+            iqCreateRecoveryAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+          return { requester: recoveryRequester(live), stopped: false };
+        }
+        const stoppedStatus = recoveryStoppedStatus(decision);
+        if (stoppedStatus) {
+          tx.set(doc.ref, {
+            iqCreateQueueStatus: stoppedStatus,
+            iqCreateRecoveryStopReason: decision,
+            iqCreateRecoveryAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        return { requester: "", stopped: Boolean(stoppedStatus) };
+      }).catch(() => ({ requester: "", stopped: false }));
+      if (claimed.stopped) result.stopped += 1;
+      if (!claimed.requester) continue;
       result.retried += 1;
-      const outcome = await enqueueIqCreationForSolicitud({ solicitudId: doc.id, requestedBy: claimed, source: "AUTO_RECOVERY" });
+      const outcome = await enqueue({ solicitudId: doc.id, requestedBy: claimed.requester, source: "AUTO_RECOVERY" });
       if (outcome.queued) result.queued += 1;
     }
   } catch (error) {

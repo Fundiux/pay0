@@ -5,6 +5,7 @@
  */
 
 export const RECOVERY_MAX_ATTEMPTS = 4;
+export const RECOVERY_MAX_PER_RUN = 25;
 export const RECOVERY_SPACING_MS = 3 * 60 * 1000;
 export const LOCK_BUSY_MAX_RETRIES = 3;
 export const STATUS_MONITOR_FIRST_CHECK_MS = 3 * 60 * 1000;
@@ -32,6 +33,13 @@ export function recoveryDecision(solicitud: Record<string, any>, nowMs: number):
   const last = millis(solicitud.iqCreateRecoveryAt);
   if (last > 0 && nowMs - last < RECOVERY_SPACING_MS * Math.max(1, attempts)) return "SKIP_TOO_SOON";
   return "RETRY";
+}
+
+/** Terminal decisions take the solicitud out of NOT_ENQUEUED; TOO_SOON and non-NOT_ENQUEUED stay as they are. */
+export function recoveryStoppedStatus(decision: RecoveryDecision): string | null {
+  if (decision === "SKIP_HAS_FOLIO") return "SKIPPED_ALREADY_HAS_FOLIO";
+  if (["SKIP_EXHAUSTED", "SKIP_DELETED", "SKIP_NO_REQUESTER"].includes(decision)) return "RECOVERY_STOPPED";
+  return null;
 }
 
 export function recoveryRequester(solicitud: Record<string, any>): string {
