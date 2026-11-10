@@ -4,7 +4,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { getReceiptActorCorrectionState } from "./receiptLearning";
 import { resolveReceiptOperationType } from "./receiptOperationType";
-import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptAliasAllowed, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
+import { selectReceiptIdentity, matchReceiptIdentity, normalizeReceiptReference, normalizeReceiptName, receiptAliasAllowed, receiptCurrency, receiptRegistrationReasons, type ReceiptCatalogItem, type ReceiptSignals } from "./receiptIdentificationDomain";
 
 type Actor = { uid: string; rootId: string; role: "superadmin" | "admin" | "operador" };
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -95,7 +95,7 @@ export async function identifyParsedReceipt(input: { db: Firestore; actor: Actor
     clienteId: client!.id, companyId: company!.id, despachoId: clean(company!.despachoId),
     empresaNombre: clean(company!.razonSocial || company!.name || company!.nombre), operationTypeKey,
     montoTotal: Number(receipt.amount), fechaPago: clean(receipt.date), paymentTime: clean(receipt.time) || "12:00:00",
-    paymentForm: receipt.paymentForm, referencia: clean(receipt.reference), concepto: clean(receipt.concept).slice(0, 1000), moneda: "MXN", notaInicial: "",
+    paymentForm: clean(receipt.paymentForm) || "03", referencia: clean(receipt.reference), concepto: clean(receipt.concept).slice(0, 1000), moneda: receiptCurrency(receipt), notaInicial: "",
     detectedBankName: clean(receipt.bankName), detectedSenderName: clean(receipt.senderName), detectedBeneficiaryName: clean(receipt.beneficiaryName),
     detectedSourceAccount: clean(receipt.account), detectedDestinationAccount: clean(receipt.destinationAccount),
     detectedPayerRfc: clean(receipt.payerRfc), detectedBeneficiaryRfc: clean(receipt.beneficiaryRfc),

@@ -69,9 +69,14 @@ async function main() {
     [body.replace('$1,000.50', '$1,00.50'), 'INVALID_AMOUNT'],
     [body.replace('Fecha: 2026-09-27', 'Fecha de operacion: 2026-09-27') + '\nFecha de operacion: 2026-09-28', 'DATE_REQUIRES_REVIEW'],
     [body.replace('2026-09-27', '2026-02-31'), 'MISSING_DATE'],
-    [body.replace('SPEI MXN', 'SPEI USD MXN'), 'UNSUPPORTED_CURRENCY'],
     [body + '\nRFC ordenante: GHI030303EF3', 'CONFLICTING_RFC'],
   ]) check(receiptRegistrationReasons(parseReceiptText(text), operation).includes(reason), reason);
+  const usd = parseReceiptText(body.replace('SPEI MXN', 'SPEI USD MXN'));
+  check(usd.currency === 'USD' && receiptRegistrationReasons(usd, operation).length === 0, 'A USD receipt registers in USD');
+  const bare = parseReceiptText(body.replace('SPEI MXN', 'Pago'));
+  check(bare.currency === 'MXN' && bare.paymentForm === '03', 'A receipt without currency or SPEI wording defaults to MXN transfer');
+  check(parseReceiptText(body + '\nForma: CHEQUE').paymentForm === '02' && parseReceiptText(body + '\nDeposito en EFECTIVO').paymentForm === '01', 'Cheque and cash wording keep their payment form');
+  check(parseReceiptText(body + '\nEstado: RECHAZADA').paymentForm === '03', 'A bank result never blanks the payment form');
   for (const text of [body.replace('Estado: Aplicada', 'Estado: Pendiente de autorización'), body.replace('Estado: Aplicada', 'Estado: Programada'),
     body.replace('Estado: Aplicada', ''), body.replace('Estado: Aplicada', 'Estado: No aplicada'),
     ...['No efectuada', 'No completada', 'No liquidada', 'Desconocido'].map(state => body + '\nResultado: ' + state)]) {
