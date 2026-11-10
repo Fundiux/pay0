@@ -3,7 +3,7 @@
 // returns structured data (not prose) so the model can chain follow-up calls
 // with the returned ids and keep conversational context itself.
 
-export const HUGO_GENERAL_READ_TOOL_NAMES = ["findSolicitudes", "getSolicitudDetail", "findPagos", "findPeople", "summarizeByClient"] as const;
+export const HUGO_GENERAL_READ_TOOL_NAMES = ["findSolicitudes", "getSolicitudDetail", "findPagos", "findPeople", "summarizeByClient", "findPagoSinSolicitudDecisions"] as const;
 export type HugoGeneralReadToolName = typeof HUGO_GENERAL_READ_TOOL_NAMES[number];
 
 // Dates are calendar days (AAAA-MM-DD) in America/Mexico_City, inclusive.
@@ -81,6 +81,13 @@ export type ClientSummaryItem = { cliente: string; operaciones: number; monto: n
   emitidas?: number; porcentajeCancelado?: number | null }; // CANCELADAS/SUSTITUCIONES only: invoices issued in the period and the share cancelled
 export type SummarizeByClientResult = { fuente: SummarizeByClientInput["fuente"]; clientes: number; montoTotal: number; mostrados: number; items: ClientSummaryItem[];
   filtros: Record<string, unknown>; advertencias: string[] };
+
+// Manual decisions on pagos without a solicitud, grouped per client. The final decision of each pago counts toward the pattern.
+export type FindDecisionsInput = DateRange & { cliente?: string; opcion?: "FACTURAR_PUE" | "ESPERAR_FACTURA" | "APLICAR_A_FACTURA_EXISTENTE" | "DEVOLVER"; limite?: number; soloConteo?: boolean };
+export type DecisionClientItem = { cliente: string; pagos: number; decisiones: number; cambios: number; porOpcion: Record<string, number>;
+  opcionMasFrecuente: string | null; ultimaOpcion: string | null; ultimaFecha: string | null; ultimaNota: string | null };
+export type FindDecisionsResult = { total: number; decisiones: number; clientes: number; porOpcion: Record<string, number>; mostrados: number;
+  items: DecisionClientItem[]; filtros: Record<string, unknown>; interpretacion: MatchNote[]; advertencias: string[] };
 
 // Limits shared by backend validation and the gateway schemas.
 export const HUGO_READ_LIMITS = { maxItems: 20, defaultItems: 5, maxText: 120 } as const;

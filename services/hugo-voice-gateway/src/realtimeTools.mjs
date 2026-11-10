@@ -1,5 +1,6 @@
 // General read tools: the model picks filters; identity, rootId and read-only scope stay server-side.
 const ORDEN = ["RECIENTES", "ANTIGUAS", "MONTO_DESC", "MONTO_ASC"], PERSON_TYPES = ["USUARIO", "CLIENTE", "EMPRESA", "TODOS"], MAX_TEXT = 120;
+const DECISION_OPTIONS = ["FACTURAR_PUE", "ESPERAR_FACTURA", "APLICAR_A_FACTURA_EXISTENTE", "DEVOLVER"];
 const str = description => ({ type: "string", maxLength: MAX_TEXT, description });
 const num = description => ({ type: "number", minimum: 0, description });
 const rangeProps = {
@@ -35,6 +36,10 @@ const readTools = [
     description: "Ranking y totales POR CLIENTE. fuente PAGOS = cuánto ha pagado cada cliente (quién paga más); FACTURADO = cuánto se le ha facturado; SALDO = cuánto debe cada cliente en facturas sin pagar (quién solicita facturas y no las paga); CANCELADAS = facturas canceladas por cliente con su porcentaje sobre lo emitido (quién cancela más); SUSTITUCIONES = canceladas por sustitución, o sea refacturación (quién pide más sustituciones). Úsala para 'qué cliente pagó más en octubre', 'cuánto nos debe cada cliente' o 'quién debe más'. Sólo lectura. Para un solo cliente usa buscar_pagos o buscar_solicitudes con su nombre.",
     parameters: objectSchema({ fuente: { type: "string", enum: ["PAGOS", "FACTURADO", "SALDO", "CANCELADAS", "SUSTITUCIONES"], description: "PAGOS, FACTURADO, SALDO, CANCELADAS o SUSTITUCIONES." }, desde: rangeProps.desde, hasta: rangeProps.hasta,
       orden: { type: "string", enum: ["MAYOR", "MENOR"], description: "MAYOR por defecto." }, limite: listProps.limite }, ["fuente"]) },
+  { type: "function", name: "decisiones_pagos_sin_solicitud",
+    description: "Decisiones manuales que las personas tomaron sobre pagos que llegaron sin solicitud, agrupadas por cliente, para analizar el patrón de cada cliente (por ejemplo si casi siempre se espera la factura o se factura como PUE). Cuenta la decisión final de cada pago. Sólo lectura: no decide ni mueve dinero.",
+    parameters: objectSchema({ cliente: str("Cliente como lo dijo el usuario; vacío para ver todos."), opcion: { type: "string", enum: DECISION_OPTIONS, description: "Sólo decisiones con esta opción." },
+      desde: rangeProps.desde, hasta: rangeProps.hasta, limite: listProps.limite, soloConteo: listProps.soloConteo }) },
 ];
 const READ_TOOL_MAP = {
   buscar_solicitudes: ["findSolicitudes", "Buscar solicitudes con filtros.", ["folio", "cliente", "empresa", "creadoPor", "estado", "factura"]],
@@ -42,6 +47,7 @@ const READ_TOOL_MAP = {
   buscar_pagos: ["findPagos", "Buscar pagos con filtros.", ["folio", "cliente", "empresa", "pagador", "creadoPor", "estado"]],
   buscar_personas: ["findPeople", "Buscar usuarios, clientes o empresas por nombre.", ["texto"]],
   resumen_por_cliente: ["summarizeByClient", "Resumir pagos, facturas o saldo por cliente.", []],
+  decisiones_pagos_sin_solicitud: ["findPagoSinSolicitudDecisions", "Ver las decisiones sobre pagos sin solicitud por cliente.", ["cliente"]],
 };
 const cleanText = value => typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, MAX_TEXT) : "";
 const cleanDate = value => { const text = typeof value === "string" ? value.trim() : ""; return /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) && new Date(`${text}T00:00:00Z`).toISOString().startsWith(text) ? text : undefined; };
@@ -60,6 +66,13 @@ export function readToolInput(name, args = {}) {
     for (const key of ["desde", "hasta"]) { const value = cleanDate(source[key]); if (value) input[key] = value; }
     if (["MAYOR", "MENOR"].includes(source.orden)) input.orden = source.orden;
     if (limite !== undefined) input.limite = limite;
+    return input;
+  }
+  if (name === "decisiones_pagos_sin_solicitud") {
+    if (DECISION_OPTIONS.includes(source.opcion)) input.opcion = source.opcion;
+    for (const key of ["desde", "hasta"]) { const value = cleanDate(source[key]); if (value) input[key] = value; }
+    if (limite !== undefined) input.limite = limite;
+    if (typeof source.soloConteo === "boolean") input.soloConteo = source.soloConteo;
     return input;
   }
   if (name === "buscar_personas") {

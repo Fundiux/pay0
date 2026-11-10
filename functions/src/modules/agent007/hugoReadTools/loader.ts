@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { HugoGeneralReadToolName } from "./contract";
 import { findPagos, findPeople, findSolicitudes, getSolicitudDetail, resolveSolicitudForDetail, summarizeByClient } from "./search";
 import type { RawRow, ReadSnapshot } from "./search";
+import { DECISIONS_READ_LIMIT, findPagoSinSolicitudDecisions } from "./decisions";
 import { validateHugoReadInput } from "./validate";
 
 type BaseCollection = "solicitudes" | "pagos" | "users" | "clients" | "companies" | "facturamaInvoices";
@@ -42,6 +43,11 @@ export async function runHugoReadTool(db: Firestore, rootId: string, name: HugoG
   if (name === "findSolicitudes") return findSolicitudes(await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "users", "clients", "companies"] }), input);
   if (name === "findPagos") return findPagos(await loadReadSnapshot(db, rootId, { collections: ["pagos", "users", "clients", "companies"] }), input);
   if (name === "summarizeByClient") return summarizeByClient(await loadReadSnapshot(db, rootId, { collections: input.fuente === "PAGOS" ? ["pagos", "clients"] : ["solicitudes", "clients", "facturamaInvoices"] }), input);
+  if (name === "findPagoSinSolicitudDecisions") {
+    if (!safeId(rootId)) throw Error("HUGO_READ_ROOT_MISMATCH");
+    const rows = await rootRows(db.collection("pagoSinSolicitudDecisions").where("rootId", "==", rootId).limit(DECISIONS_READ_LIMIT + 1), rootId);
+    return findPagoSinSolicitudDecisions(rows.slice(0, DECISIONS_READ_LIMIT), input, rows.length > DECISIONS_READ_LIMIT);
+  }
   if (name === "findPeople") return findPeople(await loadReadSnapshot(db, rootId, { collections: PEOPLE_COLLECTIONS[input.tipo || "TODOS"] }), input);
   const base = await loadReadSnapshot(db, rootId, { collections: ["solicitudes", "pagos", "users", "clients", "companies"] });
   const target = resolveSolicitudForDetail(base, input).row;

@@ -119,6 +119,11 @@ export function summarizeHugoReadResult(tool: string, data: any) {
     if (!data?.clientes) return "No hay clientes con movimientos para ese periodo.";
     return `${plural(Number(data.clientes), "cliente", "clientes")}; ${label} ${money(data.montoTotal)}; se muestran ${Number(data.mostrados || 0)}. ${(data.advertencias || []).join(" ")}`.trim();
   }
+  if (tool === "findPagoSinSolicitudDecisions") {
+    if (!data?.total) return "No hay decisiones registradas para esos filtros.";
+    const top = (data.items || []).slice(0, 3).map((row: any) => `${row.cliente}: ${row.pagos} (${row.opcionMasFrecuente || "sin patrón"})`).join("; ");
+    return `${plural(Number(data.total), "pago con decisión", "pagos con decisión")} de ${plural(Number(data.clientes), "cliente", "clientes")}; se muestran ${Number(data.mostrados || 0)}.${top ? ` ${top}.` : ""} ${(data.advertencias || []).join(" ")}`.trim();
+  }
   if (tool === "getSolicitudDetail") return data?.encontrada ? `Solicitud ${data.solicitud?.folio || "sin folio"}: estado ${data.solicitud?.estado || "no registrado"}, ${data.solicitud?.monto == null ? "monto no registrado" : money(data.solicitud.monto, data.solicitud.moneda || "MXN")}.`
     : data?.candidatos?.length ? `No hay una solicitud única; ${plural(data.candidatos.length, "candidata", "candidatas")}.` : "No encontré esa solicitud dentro del alcance autorizado.";
   const rows = Array.isArray(data?.coincidencias) ? data.coincidencias : [];

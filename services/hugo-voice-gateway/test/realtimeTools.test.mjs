@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { delegationForRealtimeTool, readToolInput, realtimeToolNames, realtimeTools } from "../src/realtimeTools.mjs";
 
-const EXPECTED_TOOLS = ["buscar_solicitudes", "ver_solicitud", "buscar_pagos", "buscar_personas", "resumen_por_cliente", "get_earnings_by_client_report", "get_authorized_capabilities", "get_system_catalog",
+const EXPECTED_TOOLS = ["buscar_solicitudes", "ver_solicitud", "buscar_pagos", "buscar_personas", "resumen_por_cliente", "decisiones_pagos_sin_solicitud", "get_earnings_by_client_report", "get_authorized_capabilities", "get_system_catalog",
   "count_clients_for_user", "count_my_visible_clients", "get_payment_complement_status", "explain_last_operation", "delegate_to_hugo_core", "correct_current_voice_response",
   "request_voice_topic_memory", "confirm_voice_topic_memory", "select_voice_memory_topic", "clear_voice_memory_topic", "retire_current_voice_topic_memory"];
 const REMOVED_TOOLS = ["consult_hugo_team", "get_latest_solicitud", "get_latest_solicitud_for_user", "get_latest_payment_for_user", "query_received_payments", "get_payment_details", "get_recent_session_context"];
@@ -107,4 +107,11 @@ test("resumen_por_cliente whitelists its input and requires a known fuente", () 
   assert.deepEqual(readToolInput("resumen_por_cliente", { fuente: "PAGOS", orden: "ROOT", desde: "ayer" }), { fuente: "PAGOS" });
   assert.throws(() => delegationForRealtimeTool("resumen_por_cliente", { fuente: "TODO" }), /INVALID_TOOL_INPUT/);
   assert.equal(delegationForRealtimeTool("resumen_por_cliente", { fuente: "PAGOS" }).toolName, "summarizeByClient");
+});
+
+test("decisiones_pagos_sin_solicitud whitelists its input and maps to the read tool", () => {
+  assert.deepEqual(readToolInput("decisiones_pagos_sin_solicitud", { cliente: "DMR", opcion: "DEVOLVER", desde: "2026-10-01", hasta: "ayer", limite: "3", soloConteo: true, rootId: "r" }),
+    { cliente: "DMR", opcion: "DEVOLVER", desde: "2026-10-01", limite: 3, soloConteo: true });
+  assert.deepEqual(readToolInput("decisiones_pagos_sin_solicitud", { opcion: "BORRAR" }), {});
+  assert.equal(delegationForRealtimeTool("decisiones_pagos_sin_solicitud", {}).toolName, "findPagoSinSolicitudDecisions");
 });
