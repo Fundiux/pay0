@@ -88,7 +88,7 @@ const merge = (canonical, duplicate, extra = {}) => mergeDuplicateClient({ rootI
   // Wiring -------------------------------------------------------------------------------------------------
   const src = file => fs.readFileSync(file, "utf8").split("\r\n").join("\n");
   const squash = text => text.split(/\s+/).join(" ");
-  const idx = squash(src("functions/src/index.ts"));
+  const idx = squash(src("functions/src/index.ts") + " " + src("functions/src/modules/legacyCore/callables.ts"));
   ok(idx.includes("await assertClientIdAcceptsNewOperations(db, clienteId); const businessFolioContext ="), "crear solicitud rechaza al duplicado");
   ok(idx.includes("await assertClientIdAcceptsNewOperations(db, String(clienteId)); const businessFolioContextPago ="), "crear pago rechaza al duplicado");
   const fin = squash(src("functions/src/modules/financing/callables.ts"));
