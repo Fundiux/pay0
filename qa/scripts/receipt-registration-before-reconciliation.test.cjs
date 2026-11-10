@@ -32,12 +32,12 @@ test('transfer amount stays distinct from balance, commission and tax',()=>{
 test('invalid amount and remaining registration requirements are still enforced',()=>{
   const receipt=reader.parse(body('Monto: $100.00'));
   for(const amount of [0,-1,NaN,Infinity,undefined,null])assert(domain.receiptRegistrationReasons({...receipt,amount},'OP_DEMO').includes('INVALID_AMOUNT'));
-  for(const [patch,reason] of [[{dateVerified:false},'DATE_REQUIRES_REVIEW'],[{date:'2026-02-31'},'MISSING_DATE'],[{currency:'JPY'},'UNSUPPORTED_CURRENCY'],[{reference:''},'MISSING_REFERENCE'],[{identityConflict:true},'CONFLICTING_RFC']])assert(domain.receiptRegistrationReasons({...receipt,...patch},'OP_DEMO').includes(reason));
+  for(const [patch,reason] of [[{dateVerified:false},'DATE_REQUIRES_REVIEW'],[{date:'2026-02-31'},'MISSING_DATE'],[{currency:'JPY'},'UNSUPPORTED_CURRENCY'],[{identityConflict:true},'CONFLICTING_RFC']])assert(domain.receiptRegistrationReasons({...receipt,...patch},'OP_DEMO').includes(reason));
   assert(domain.receiptRegistrationReasons(receipt,'').includes('MISSING_OPERATION_TYPE'));
 });
 test('an unreadable receipt registers as MXN and its payment form waits for reconciliation',()=>{
   const receipt=reader.parse(body('Monto: $100.00'));
-  for(const patch of [{currency:'',paymentForm:''},{currency:undefined,paymentForm:undefined},{currency:'usd'},{currency:'EUR'},{paymentForm:'01'},{paymentForm:'02'}])
+  for(const patch of [{reference:''},{reference:'PAGO'},{concept:''},{currency:'',paymentForm:''},{currency:undefined,paymentForm:undefined},{currency:'usd'},{currency:'EUR'},{paymentForm:'01'},{paymentForm:'02'}])
     assert.deepEqual(domain.receiptRegistrationReasons({...receipt,...patch},'OP_DEMO'),[]);
   assert.equal(domain.receiptCurrency({currency:''}),'MXN');assert.equal(domain.receiptCurrency({currency:' usd '}),'USD');
 });

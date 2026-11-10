@@ -507,8 +507,8 @@
     },
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
-      "text": "return result(\"READY\", mexicoMonth(matches[0].createdAt) === month ? \"EXACT_AMOUNT_SAME_MONTH\" : \"EXACT_AMOUNT_EARLIER_MONTH\", 1, batch);",
-      "capability": "La aplicacion automatica relaciona pago y solicitud por monto exacto del mismo mes o de meses anteriores"
+      "text": "return result(\"READY\", \"EXACT_AMOUNT_SAME_MONTH\", 1, batch);",
+      "capability": "La aplicacion automatica relaciona pago sin folio y solicitud solo por monto del mismo mes (+-1 centavo)"
     },
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",

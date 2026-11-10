@@ -8,6 +8,8 @@ import { hasOpenCancellation } from "../../utils/solicitudCancellationState";
 type Row = Record<string, any>;
 export const AUTOMATIC_APPLICATION_REVISION = "ASTRA_V1";
 export const AUTOMATIC_CANDIDATE_LIMIT = 100;
+/** An unreferenced payment may differ from the invoice balance by this much. */
+export const AMOUNT_TOLERANCE_CENTS = 1;
 const clean = (value: unknown) => String(value ?? "").trim();
 const upper = (value: unknown) => clean(value).toUpperCase();
 const cents = (value: number) => Math.round(value * 100);
@@ -154,15 +156,15 @@ type DecisionResult = (status: AutomaticPaymentDecision["status"], reason: strin
 
 // Without an invoice reference the payment is applied in full only to the one
 // payable invoice of the same client, company and currency created in the
-// payment's month or any earlier month (owner, 2026-11-09) whose pending balance
-// equals the available amount to the cent. An invoice created after the payment's
-// month is never a candidate. Any second candidate, even one excluded for its
-// fiscal source, stops it.
+// payment's month whose pending balance differs from the available amount by at
+// most one cent (owner, 2026-11-09). A payment that says only "pago" must never
+// land on an old PPD invoice, so earlier months go to review. Any second
+// candidate, even one excluded for its fiscal source, stops it.
 function decideByExactAmount(pagoId: string, pago: Row, sameOwner: Row[], currency: string, noMatchReason: string, result: DecisionResult): AutomaticPaymentDecision {
   const month = paymentMonth(pago), available = cents(getPagoCoverageState(pago).available);
   if (!month) return result("REQUIRES_REVIEW", noMatchReason);
-  const matches = sameOwner.filter(row => !!mexicoMonth(row.createdAt) && mexicoMonth(row.createdAt) <= month && invoiceCurrency(row) === currency &&
-    cents(getSolicitudCoverageState(row).pending) === available &&
+  const matches = sameOwner.filter(row => mexicoMonth(row.createdAt) === month && invoiceCurrency(row) === currency &&
+    Math.abs(cents(getSolicitudCoverageState(row).pending) - available) <= AMOUNT_TOLERANCE_CENTS &&
     !["RECHAZADA", "CANCELADA", "ELIMINADA", "COMPLETADA"].includes(normalizeSolicitudBackendStatus(row.status)));
   if (!matches.length) return result("REQUIRES_REVIEW", noMatchReason);
   if (matches.length > 1) return result("REQUIRES_REVIEW", "AMOUNT_MATCHES_MULTIPLE_INVOICES", matches.length);
@@ -170,7 +172,7 @@ function decideByExactAmount(pagoId: string, pago: Row, sameOwner: Row[], curren
   if (fiscalBlock) return result("REQUIRES_REVIEW", fiscalBlock, 1);
   const batch = normalizePaymentApplicationBatchInput({ pagoId,
     idempotencyKey: `automatic-${AUTOMATIC_APPLICATION_REVISION}-${automaticPaymentSourceDigest(pago)}`,
-    applications: [{ solicitudId: matches[0].id, montoAplicado: available / 100 }],
+    applications: [{ solicitudId: matches[0].id, montoAplicado: Math.min(available, cents(getSolicitudCoverageState(matches[0]).pending)) / 100 }],
   });
-  return result("READY", mexicoMonth(matches[0].createdAt) === month ? "EXACT_AMOUNT_SAME_MONTH" : "EXACT_AMOUNT_EARLIER_MONTH", 1, batch);
+  return result("READY", "EXACT_AMOUNT_SAME_MONTH", 1, batch);
 }

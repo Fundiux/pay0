@@ -84,7 +84,7 @@ export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTyp
   if (!Number.isFinite(receipt.amount) || Number(receipt.amount) <= 0) reasons.push("INVALID_AMOUNT");
   const parsedDate = Date.parse(String(receipt.date || ""));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(receipt.date || "")) || !Number.isFinite(parsedDate) || new Date(parsedDate).toISOString().slice(0, 10) !== receipt.date) reasons.push("MISSING_DATE");
-  if (normalizeReceiptReference(receipt.reference).length < 4) reasons.push("MISSING_REFERENCE");
+  // Reference and concept are optional: a client may write only "pago" or nothing.
   if (!RECEIPT_CURRENCIES.includes(receiptCurrency(receipt))) reasons.push("UNSUPPORTED_CURRENCY");
   // The payment form and the bank result belong to reconciliation, not to registration.
   if (!operationTypeKey) reasons.push("MISSING_OPERATION_TYPE");
