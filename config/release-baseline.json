@@ -364,6 +364,10 @@
     {
       "commit": "6133cd1c",
       "capability": "Release integrado 2026-11-10 b"
+    },
+    {
+      "commit": "2ea5de79",
+      "capability": "Ventana de capacidad caliente 08:45-21:00 y createSolicitud sin minInstances fijo"
     }
   ],
   "requiredText": [
