@@ -62,4 +62,9 @@ test('full-message-stays-under-limit-with-everything', () => {
   const text = buildDailyAlertMessage(data, { a: 3, b: 4 }, { complementsHeld: 4, complementsLate: 1, cashUnsigned: 2, cancellationReview: 3 });
   assert(text.length <= 3900 && text.includes('Complementos de pago detenidos en IQ: 4'));
 });
+test('autonomy-without-data-reads-clearly', () => {
+  const data = base(); data.report.autonomy = { ...data.report.autonomy, agentResolutionRate: null, resolvedByAgent: 0, resolvedByPerson: 0 };
+  const text = buildDailyAlertMessage(data);
+  assert(text.includes('Autonomía: sin datos (0 resueltas por agentes, 0 por personas)') && !text.includes('sin datos resuelto'));
+});
 console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases }));
