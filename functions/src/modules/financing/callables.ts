@@ -21,6 +21,7 @@ import { buildCanonicalFolio,
   buildCounterPath,
   nextSequenceTx } from "../sequences/service";
 import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
+import { assertClientAcceptsNewOperations } from "../clients/mergeGuard";
 import { logActivity,
   logActivityTx } from "../../utils/logActivity";
 import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
@@ -443,6 +444,7 @@ export const createClientDispersion = onCall(
       permission: "operateDispersiones",
       errorMessage: "No autorizado para crear dispersiones de este cliente.",
     });
+    assertClientAcceptsNewOperations(access.client);
 
     const client = access.client || {};
     const clientAdminId = access.economicOwnerAdminId;
@@ -1008,6 +1010,7 @@ export const createClientDispersionsMassive = onCall(
       permission: "operateDispersiones",
       errorMessage: "No autorizado para crear dispersiones de este cliente.",
     });
+    assertClientAcceptsNewOperations(access.client);
 
     const client = access.client || {};
     const clientAdminId = access.economicOwnerAdminId;

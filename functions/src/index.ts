@@ -394,6 +394,7 @@ export const createSolicitud = onCall(
       "Usuario operativo"
     ).trim();
 
+    await assertClientIdAcceptsNewOperations(db, clienteId);
     const businessFolioContext =
       await resolveCanonicalBusinessFolioContext({
         db,
@@ -1480,6 +1481,8 @@ export { updateUserModules } from "./modules/users/modules";
 
 export { updateUserActive } from "./modules/users/active";
 export { listUsers } from "./modules/users/list";
+import { assertClientIdAcceptsNewOperations } from "./modules/clients/mergeGuard";
+export { mergeDuplicateClientCallable } from "./modules/clients/mergeCallables";
 export { saveClientCallable, toggleClientActiveCallable, repairClientNumbersByAdminCallable, listClientsCanonical, getClientCanonical } from "./modules/clients/callables";
 
 export { softDeleteUser, restoreUser, setUserCompanyAccess } from "./modules/users/access";
@@ -2085,6 +2088,7 @@ export const createPago = onCall(
     const actorRole = String(me?.role || "unknown");
     const actorId = String(me?.name || me?.displayName || me?.email || uid);
 
+    await assertClientIdAcceptsNewOperations(db, String(clienteId));
     const businessFolioContextPago =
       await resolveCanonicalBusinessFolioContext({
         db,

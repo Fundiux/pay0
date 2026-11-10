@@ -31,6 +31,7 @@ const warmupTimeoutMs = 60_000;
 const expectedEndpointCount = 403;
 const requiredEndpoints = [
   "saveClientCallable",
+  "mergeDuplicateClientCallable",
   "linkBeneficiaryMethodToIq",
   "redriveIqBeneficiaryLinks",
   "parseClientCsfCallable",

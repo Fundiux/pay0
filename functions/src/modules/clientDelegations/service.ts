@@ -5,6 +5,7 @@ import { getUserRole, normalizeRole } from "../../utils/authGuard";
 import type { ClientDelegationConfigItem } from "./types";
 import { normalizeClientAccessPermissions, resolveClientOperationalAccess } from "./access";
 import { canonicalDelegationTime } from "./policy";
+import { assertClientAcceptsNewOperations } from "../clients/mergeGuard";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -450,6 +451,8 @@ export async function setUserClientAccessService(request: any) {
       if (!client || client.active === false) {
         throw new HttpsError("failed-precondition", `Cliente no disponible: ${clientId}`);
       }
+      // A delegation that already exists on a merged duplicate stays; a new one is not granted.
+      if (current.get(clientId)?.data().active !== true) assertClientAcceptsNewOperations(client);
       const grantorAccess = await resolveClientOperationalAccess({ uid: ctx.callerUid, role: ctx.callerRole,
         rootId: ctx.callerRootId, clientId, client, transaction: tx, excludedAncestorUid: targetUid });
       if (!grantorAccess.allowed || !grantorAccess.permissions.operate) {
