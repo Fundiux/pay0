@@ -66,7 +66,7 @@ function Invoke-RemainingGet([ValidateSet('Function','Secret','Scheduler','Queue
  switch($Kind){
   'Function'{if($Name -cnotin $script:RemainingNames){throw 'FUNCTION_SCOPE_INVALID'};$url='https://cloudfunctions.googleapis.com/v2/projects/pay-0-system/locations/us-central1/functions/'+$Name;$fields='name,state,buildConfig(runtime,entryPoint,source(storageSource(bucket,object,generation))),serviceConfig(revision,serviceAccountEmail,timeoutSeconds,availableMemory,availableCpu,minInstanceCount,ingressSettings,vpcConnector,vpcConnectorEgressSettings,maxInstanceCount,maxInstanceRequestConcurrency,environmentVariables,secretEnvironmentVariables,secretVolumes)'}
   'Secret'{if($Name -cnotin @('IQ_CREDENTIALS_KEY','TELEGRAM_BOT_TOKEN')){throw 'SECRET_SCOPE_INVALID'};$url='https://secretmanager.googleapis.com/v1/projects/pay-0-system/secrets/'+$Name+'/versions/latest';$fields='name,state'}
-  'Scheduler'{if($Name -cnotin @('processIqCreateQueue','processIqDispersionCreate','syncTodayIqInvoicesNow','checkPaymentComplementsDaily')){throw 'JOB_SCOPE_INVALID'};$url='https://cloudscheduler.googleapis.com/v1/projects/pay-0-system/locations/us-central1/jobs/firebase-schedule-'+$Name+'-us-central1';$fields='name,state,schedule,timeZone,attemptDeadline,retryConfig'}
+  'Scheduler'{if($Name -cnotin @('processIqCreateQueue','processIqDispersionCreate','checkPaymentComplementsDaily')){throw 'JOB_SCOPE_INVALID'};$url='https://cloudscheduler.googleapis.com/v1/projects/pay-0-system/locations/us-central1/jobs/firebase-schedule-'+$Name+'-us-central1';$fields='name,state,schedule,timeZone,attemptDeadline,retryConfig'}
   'Queue'{if($Name -cne 'processIqCreateOnDemandTask'){throw 'QUEUE_SCOPE_INVALID'};$url='https://cloudtasks.googleapis.com/v2/projects/pay-0-system/locations/us-central1/queues/'+$Name;$fields='name,state,rateLimits,retryConfig'}
  }
  $token=(& gcloud.cmd auth print-access-token --project pay-0-system --quiet 2>$null|Out-String).Trim()
@@ -80,15 +80,15 @@ function Assert-RemainingSecret($Version,[string]$Name){
  if(!$Version -or $Version.state -cne 'ENABLED' -or $Version.name -cnotin $allowed){throw 'LATEST_SECRET_VERSION_CHANGED'}
 }
 function Get-RemainingJobs {
- $rows=@{};foreach($name in @('processIqCreateQueue','processIqDispersionCreate','syncTodayIqInvoicesNow','checkPaymentComplementsDaily')){$rows[$name]=Invoke-RemainingGet Scheduler $name}
+ $rows=@{};foreach($name in @('processIqCreateQueue','processIqDispersionCreate','checkPaymentComplementsDaily')){$rows[$name]=Invoke-RemainingGet Scheduler $name}
  $rows['processIqCreateOnDemandTask']=Invoke-RemainingGet Queue 'processIqCreateOnDemandTask';return $rows
 }
 function Get-RemainingJobFingerprint([hashtable]$Rows){
- if($Rows.Count -ne 5){throw 'JOB_SCOPE_INVALID'}
+ if($Rows.Count -ne 4){throw 'JOB_SCOPE_INVALID'}
  $out=[ordered]@{}
- foreach($name in @('processIqCreateQueue','processIqDispersionCreate','syncTodayIqInvoicesNow','checkPaymentComplementsDaily')){
+ foreach($name in @('processIqCreateQueue','processIqDispersionCreate','checkPaymentComplementsDaily')){
   $r=$Rows[$name];$state=if($name -cin @('processIqCreateQueue','processIqDispersionCreate')){'ENABLED'}else{'PAUSED'}
-  $schedule=switch($name){'processIqCreateQueue'{'every 1 minutes'};'processIqDispersionCreate'{'every 5 minutes'};'syncTodayIqInvoicesNow'{'every 24 hours'};default{'0 19 * * 1-5'}}
+  $schedule=switch($name){'processIqCreateQueue'{'every 1 minutes'};'processIqDispersionCreate'{'every 5 minutes'};default{'0 19 * * 1-5'}}
   if(!$r -or $r.name -cne ('projects/pay-0-system/locations/us-central1/jobs/firebase-schedule-'+$name+'-us-central1') -or $r.state -cne $state -or $r.schedule -cne $schedule -or $r.timeZone -cne 'America/Mexico_City' -or $r.attemptDeadline -cne '540s'){throw 'SCHEDULER_CHANGED'}
   $retry=[ordered]@{};foreach($key in @('retryCount','maxRetryDuration','minBackoffDuration','maxBackoffDuration','maxDoublings')){$retry[$key]=$r.retryConfig.$key}
   $out[$name]=[ordered]@{state=$r.state;schedule=$r.schedule;zone=$r.timeZone;deadline=$r.attemptDeadline;retry=$retry}

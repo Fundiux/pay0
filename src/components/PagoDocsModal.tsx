@@ -15,7 +15,6 @@ import { useGlobalLoading } from "@/components/GlobalLoading";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole } from "@/lib/roles";
 import { useModuleAccess } from "@/lib/useModuleAccess";
-import { requestPagoIqSync } from "@/services/iq";
 import { getAuthorizedOperationalRecord } from "@/services/operationalReads";
 
 type UploadRow = {
@@ -85,15 +84,11 @@ export default function PagoDocsModal(props: {
   const globalLoading = useGlobalLoading();
   const iqRole = normalizeRole((profile as any)?.role);
   const { modules: iqModules } = useModuleAccess(profile, "pagos", "view");
-  const isIqOperationalRole = ["superadmin", "admin", "operador"].includes(iqRole);
-  const canCreateIqPago = isIqOperationalRole && !!iqModules?.pagos?.create;
-  const canConciliateIqPago = isIqOperationalRole && !!iqModules?.pagos?.conciliate;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [docs, setDocs] = useState<UploadRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const [iqBusy, setIqBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [msg, setMsg] = useState("");
   const [documentType, setDocumentType] = useState<PagoDocumentType>("COMPROBANTE_PAGO");
@@ -126,16 +121,6 @@ export default function PagoDocsModal(props: {
       });
   }, [docs]);
 
-  const hasActiveReceipt = useMemo(() => {
-    return visibleDocs.some((row) => {
-      return (
-        String(row.documentType || "").toUpperCase() === "COMPROBANTE_PAGO" &&
-        row.active !== false &&
-        !!row.storagePath
-      );
-    });
-  }, [visibleDocs]);
-
   const terminalText = [
     currentPago?.status,
     currentPago?.iqDepositStatus,
@@ -166,70 +151,6 @@ export default function PagoDocsModal(props: {
     currentPago?.cancellationReason ||
     "",
   ).trim();
-  const iqPagoStatus = String(currentPago?.status || "").trim().toUpperCase();
-
-  const iqAutomationOmitted =
-    currentPago?.iqDepositOmitted === true ||
-    currentPago?.iqDepositAutomationOmitted === true ||
-    [
-      currentPago?.iqDepositStatus,
-      currentPago?.iqDepositSyncStatus,
-      currentPago?.iqDepositUploadStatus,
-      currentPago?.iqDepositFollowupStatus,
-      currentPago?.iqDepositReconciliationStatus,
-    ].some((value) => String(value || "").trim().toUpperCase() === "OMITTED");
-
-  const iqReferenceText = String(
-    currentPago?.iqDepositId ??
-    currentPago?.iqDepositFolio ??
-    currentPago?.iqPagoDepositId ??
-    currentPago?.iqPagoDepositFolio ??
-    "",
-  ).trim();
-
-  const normalizedIqReference = /^\d{5,9}$/.test(iqReferenceText)
-    ? iqReferenceText
-    : iqReferenceText.match(/\b([1-9]\d{4,8})\b/)?.[1] || "";
-
-  const iqCreationStatus = String(
-    currentPago?.iqDepositCreationStatus || "",
-  ).trim().toUpperCase();
-
-  const iqSyncEligible =
-    iqPagoStatus === "CONCILIACION_PENDIENTE" &&
-    !iqAutomationOmitted &&
-    !isTerminalLocked;
-
-  const iqShouldReconcile =
-    iqSyncEligible &&
-    (Boolean(normalizedIqReference) ||
-      iqCreationStatus === "CREATED" ||
-      iqCreationStatus === "CREATED_RECOVERED" ||
-      iqCreationStatus === "OUTCOME_UNKNOWN" ||
-      currentPago?.iqDepositCreationRetryBlocked === true);
-
-  const iqManualCreateProtectedStatuses = new Set([
-    "PROCESSING_HTTP",
-    "POST_ACKNOWLEDGED_PENDING_IQ_ID",
-    "OUTCOME_UNKNOWN",
-    "AMBIGUOUS",
-    "CLOCK_CONTRADICTION_REVIEW_REQUIRED",
-    "CREATED",
-    "CREATED_RECOVERED",
-    "TERMINAL_CANCELLED",
-    "TERMINAL_REJECTED",
-  ]);
-
-  const iqCanCreateManually =
-    iqSyncEligible &&
-    !normalizedIqReference &&
-    currentPago?.iqDepositCreationRetryBlocked !== true &&
-    !iqManualCreateProtectedStatuses.has(iqCreationStatus);
-
-  const canSyncIqPago = iqShouldReconcile
-    ? canConciliateIqPago
-    : iqCanCreateManually && canCreateIqPago;
-
   const canCorrectRejectedPayment = ["superadmin", "admin"].includes(iqRole) &&
     !!iqModules?.pagos?.edit &&
     isTerminalLocked &&
@@ -259,7 +180,7 @@ export default function PagoDocsModal(props: {
     const focused = () => { void refresh(); };
     window.addEventListener("focus", focused);
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", focused); };
-  }, [open, pagoId, profileUid, readScope, readRetry, busy, iqBusy, amountBusy, profile]);
+  }, [open, pagoId, profileUid, readScope, readRetry, busy, amountBusy, profile]);
 
   useEffect(() => {
     if (!open) return;
@@ -308,20 +229,19 @@ export default function PagoDocsModal(props: {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy && !iqBusy && !amountBusy) {
+      if (event.key === "Escape" && !busy && !amountBusy) {
         onClose();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, busy, iqBusy, amountBusy, onClose]);
+  }, [open, busy, amountBusy, onClose]);
 
   useEffect(() => {
     if (!open) {
       setDocs([]);
       setBusy(false);
-      setIqBusy(false);
       setPct(0);
       setMsg("");
       setDocumentType("COMPROBANTE_PAGO");
@@ -367,7 +287,7 @@ export default function PagoDocsModal(props: {
     setFile(nextFile);
   }
   async function onUpload() {
-    if (!pagoId || busy || iqBusy) return;
+    if (!pagoId || busy) return;
 
     setMsg("");
 
@@ -411,7 +331,7 @@ export default function PagoDocsModal(props: {
   }
 
   async function updateRejectedAmount() {
-    if (!canCorrectRejectedPayment || !pagoId || amountBusy || busy || iqBusy) return;
+    if (!canCorrectRejectedPayment || !pagoId || amountBusy || busy) return;
 
     const newAmount = Number(String(correctedAmount || "").replace(/[$,\s]/g, ""));
     const currentAmount = Number(currentPago?.montoTotal || 0);
@@ -486,7 +406,7 @@ export default function PagoDocsModal(props: {
   }
 
   async function deactivateDoc(row: UploadRow) {
-    if (!row.id || busy || iqBusy) return;
+    if (!row.id || busy) return;
 
     const ok = window.confirm("Desactivar este documento del pago?");
     if (!ok) return;
@@ -506,29 +426,6 @@ export default function PagoDocsModal(props: {
     }
   }
 
-  async function runIqPagoSync() {
-    if (!canSyncIqPago || !pagoId || iqBusy) return;
-
-    setIqBusy(true);
-    setMsg("");
-
-    try {
-      const requested = await requestPagoIqSync(pagoId);
-
-      setMsg(
-        requested.data.operation === "CREATE"
-          ? "Creacion de deposito IQ enviada. PAY0 continuara el proceso en segundo plano."
-          : "Sincronizacion IQ enviada. PAY0 continuara el proceso en segundo plano.",
-      );
-    } catch (e: any) {
-      setMsg(
-        e?.message ||
-          "No se pudo iniciar la sincronizacion IQ.",
-      );
-    } finally {
-      setIqBusy(false);
-    }
-  }
   if (!open || !pago) return null;
   if (!currentPago) return (
     <div className="fixed inset-0 z-[1320] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
@@ -553,7 +450,7 @@ export default function PagoDocsModal(props: {
     <div
       className="fixed inset-0 z-[1320] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy && !iqBusy && !amountBusy) {
+        if (event.target === event.currentTarget && !busy && !amountBusy) {
           onClose();
         }
       }}
@@ -562,7 +459,7 @@ export default function PagoDocsModal(props: {
         <button
           type="button"
           onClick={onClose}
-          disabled={busy || iqBusy || amountBusy}
+          disabled={busy || amountBusy}
           className="absolute -right-2 -top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-[#0b1220] text-slate-400 shadow-lg shadow-black/40 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Cerrar"
           title="Cerrar"
@@ -614,7 +511,7 @@ export default function PagoDocsModal(props: {
                     <input
                       value={correctedAmount}
                       onChange={(event) => setCorrectedAmount(event.target.value)}
-                      disabled={amountBusy || busy || iqBusy}
+                      disabled={amountBusy || busy}
                       inputMode="decimal"
                       placeholder="Monto corregido"
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
@@ -622,21 +519,21 @@ export default function PagoDocsModal(props: {
                     <input
                       value={correctedPayerName}
                       onChange={(event) => setCorrectedPayerName(event.target.value)}
-                      disabled={amountBusy || busy || iqBusy}
+                      disabled={amountBusy || busy}
                       placeholder="Quien pago / ordenante"
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
                     />
                     <input
                       value={correctedBeneficiaryName}
                       onChange={(event) => setCorrectedBeneficiaryName(event.target.value)}
-                      disabled={amountBusy || busy || iqBusy}
+                      disabled={amountBusy || busy}
                       placeholder="A quien pago / beneficiario"
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
                     />
                     <input
                       value={amountReason}
                       onChange={(event) => setAmountReason(event.target.value)}
-                      disabled={amountBusy || busy || iqBusy}
+                      disabled={amountBusy || busy}
                       placeholder="Motivo de la correccion"
                       className="rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-white outline-none disabled:opacity-60"
                     />
@@ -645,7 +542,7 @@ export default function PagoDocsModal(props: {
                     <button
                       type="button"
                       onClick={updateRejectedAmount}
-                      disabled={amountBusy || busy || iqBusy || !amountReason.trim()}
+                      disabled={amountBusy || busy || !amountReason.trim()}
                       className="rounded-xl border border-amber-300/30 bg-amber-500/20 px-3 py-2 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {amountBusy ? "Corrigiendo..." : "Guardar correccion"}
@@ -659,37 +556,6 @@ export default function PagoDocsModal(props: {
             </div>
           ) : null}
 
-          {canSyncIqPago ? (
-            <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4">
-              <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-                <div>
-                  <div className="text-sm font-semibold text-violet-100">
-                    Revision IQ Pagos
-                  </div>
-                  <div className="mt-1 text-xs text-violet-200/70">
-                    PAY0 determinara si debe crear, localizar o conciliar el deposito IQ sin duplicarlo.
-                  </div>
-
-                  {!hasActiveReceipt ? (
-                    <div className="mt-2 text-[11px] text-amber-200">
-                      Si aun no existe deposito IQ, sera necesario un comprobante activo para crearlo.
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={runIqPagoSync}
-                    disabled={iqBusy || !pagoId || isTerminalLocked}
-                    className="rounded-xl border border-cyan-400/40 bg-cyan-500/20 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {iqBusy ? "Enviando..." : "Sincronizar IQ"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
           <div className="space-y-2">
             <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
               Tipo documento
@@ -698,7 +564,7 @@ export default function PagoDocsModal(props: {
             <UiSelect
               value={documentType}
               onChange={(value) => {
-                if (!busy && !iqBusy) setDocumentType(value as PagoDocumentType);
+                if (!busy) setDocumentType(value as PagoDocumentType);
               }}
               options={[
                 { value: "COMPROBANTE_PAGO", label: "Comprobante de Pago" },
@@ -711,7 +577,7 @@ export default function PagoDocsModal(props: {
               <input
                 value={otherLabel}
                 onChange={(e) => setOtherLabel(e.target.value)}
-                disabled={busy || iqBusy}
+                disabled={busy}
                 placeholder="Nombre del documento"
                 className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-[12px] text-slate-100 outline-none disabled:opacity-60"
               />
@@ -727,12 +593,12 @@ export default function PagoDocsModal(props: {
             onDragEnter={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (!busy && !iqBusy) setDragActive(true);
+              if (!busy) setDragActive(true);
             }}
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (!busy && !iqBusy) setDragActive(true);
+              if (!busy) setDragActive(true);
             }}
             onDragLeave={(event) => {
               event.preventDefault();
@@ -744,7 +610,7 @@ export default function PagoDocsModal(props: {
               event.preventDefault();
               event.stopPropagation();
               setDragActive(false);
-              if (busy || iqBusy) return;
+              if (busy) return;
               selectPagoDocFile(event.dataTransfer.files?.[0] || null);
             }}
           >
@@ -769,7 +635,7 @@ export default function PagoDocsModal(props: {
                   ref={fileInputRef}
                   type="file"
                   accept={accept}
-                  disabled={busy || iqBusy}
+                  disabled={busy}
                   onChange={(e) => selectPagoDocFile(e.target.files?.[0] || null)}
                   className="hidden"
                 />
@@ -778,7 +644,7 @@ export default function PagoDocsModal(props: {
               <button
                 type="button"
                 onClick={onUpload}
-                disabled={busy || iqBusy || !file}
+                disabled={busy || !file}
                 className="inline-flex items-center justify-center rounded-xl border border-sky-400/40 bg-sky-500/20 px-4 py-2 text-[11px] font-normal uppercase text-sky-100 transition hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                 title={busy ? "Subiendo..." : "Subir documento"}
               >
@@ -877,7 +743,7 @@ export default function PagoDocsModal(props: {
                             <button
                               type="button"
                               onClick={() => deactivateDoc(row)}
-                              disabled={busy || iqBusy}
+                              disabled={busy}
                               className="rounded p-1 text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-100 disabled:opacity-50"
                               title="Desactivar"
                               aria-label="Desactivar"

@@ -3033,7 +3033,6 @@ export { processIqReconciliationQueue } from "./modules/iq/solicitudReconciliati
 export {
   discoverIqWorkCandidates,
   processIqInvoiceImportQueue,
-  syncTodayIqInvoicesNow,
 } from "./modules/iq/solicitudInvoiceImportCallables";
 export { processIqStatusMonitorQueue } from "./modules/iq/solicitudStatusMonitorCallables";
 export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationReceiptImport";

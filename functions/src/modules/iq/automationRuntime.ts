@@ -125,6 +125,16 @@ function processIntervalMinutes(
   return Math.max(minimum, Math.min(1440, Math.floor(configured)));
 }
 
+/**
+ * Scheduler runs land a few seconds before the stored claim plus the interval, so an exact
+ * comparison skips about a third of the runs. The slack keeps the claim transactional but accepts those.
+ */
+export const IQ_CLAIM_SLACK_MS = 15_000;
+
+export function claimSlackMs(intervalMs: number): number {
+  return Math.min(IQ_CLAIM_SLACK_MS, Math.floor(intervalMs / 4));
+}
+
 async function claimIqAutomationProcessIfDue(input: {
   rootId: string;
   process: IqAutomationProcessKey;
@@ -160,7 +170,7 @@ async function claimIqAutomationProcessIfDue(input: {
 
     if (
       lastClaimedMs > 0 &&
-      nowMs - lastClaimedMs < intervalMs
+      nowMs - lastClaimedMs < intervalMs - claimSlackMs(intervalMs)
     ) {
       return false;
     }

@@ -9,7 +9,6 @@ import {
   getMyTelegramLinkStatus,
   getMyTelegramNotificationPrefs,
   unlinkMyTelegramAccount,
-  sendMyTelegramTestNotification,
   updateMyTelegramNotificationPrefs,
   type TelegramLinkStatusResult,
   type TelegramNotificationPrefs,
@@ -40,7 +39,6 @@ export default function TelegramPage() {
   const [unlinking, setUnlinking] = useState(false);
   const [polling, setPolling] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
-  const [sendingTest, setSendingTest] = useState(false);
   const [msg, setMsg] = useState("");
   const [startUrl, setStartUrl] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -125,31 +123,6 @@ export default function TelegramPage() {
     }
   }
 
-  async function sendTestNotification() {
-    if (!status?.linked) {
-      setMsg("Primero vincula Telegram.");
-      return;
-    }
-
-    setSendingTest(true);
-    setMsg("");
-
-    try {
-      const res = await sendMyTelegramTestNotification();
-
-      if (res.sent) {
-        setMsg("Notificacion de prueba enviada.");
-      } else if (res.reason === "notifications_disabled") {
-        setMsg("Notificaciones Telegram pausadas. Activalas para enviar prueba.");
-      } else {
-        setMsg("No se envio la notificacion de prueba.");
-      }
-    } catch (e: any) {
-      setMsg(`Error enviando prueba Telegram: ${e?.code || ""} ${e?.message || e}`);
-    } finally {
-      setSendingTest(false);
-    }
-  }
   async function generateLink() {
     setLoading(true);
     setMsg("");
@@ -391,13 +364,6 @@ export default function TelegramPage() {
             </div>
           </div>
 
-                    <button
-            onClick={sendTestNotification}
-            disabled={sendingTest || !status?.linked}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-400/30 hover:bg-sky-500/15 text-sky-100 text-xs font-semibold disabled:opacity-50"
-          >
-            {sendingTest ? "Enviando..." : "Enviar prueba"}
-          </button>
 <span
             className={cx(
               "px-3 py-1 rounded-lg border text-xs font-semibold",
