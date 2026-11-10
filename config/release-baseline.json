@@ -308,6 +308,10 @@
     {
       "commit": "d492884d",
       "capability": "Pagos: folio sin serie (FAC, FACTURA, F o solo el numero) y monto exacto unico con facturas de meses anteriores"
+    },
+    {
+      "commit": "420cefac",
+      "capability": "Comprobantes: moneda MXN por defecto y editable; la forma de pago no bloquea el registro"
     }
   ],
   "requiredText": [
