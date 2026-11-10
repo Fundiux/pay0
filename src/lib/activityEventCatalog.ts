@@ -129,6 +129,7 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   CLIENT_CREATE: eventEntry("CLIENT_CREATE", "Cliente creado", "clientes", "business", "success"),
   CLIENT_UPDATE: eventEntry("CLIENT_UPDATE", "Cliente actualizado", "clientes", "business"),
   CLIENT_TOGGLE: eventEntry("CLIENT_TOGGLE", "Cliente activado o desactivado", "clientes", "business", "warning"),
+  CLIENT_MERGED: eventEntry("CLIENT_MERGED", "Cliente duplicado fusionado", "clientes", "business", "warning"),
   CLIENT_REPAIR_NUMBERS: eventEntry("CLIENT_REPAIR_NUMBERS", "Numeracion de clientes reparada", "clientes", "repair", "warning"),
 
   COMPANY_CREATE: eventEntry("COMPANY_CREATE", "Empresa creada", "empresas", "business", "success"),

@@ -192,6 +192,8 @@ function deniedAccess(params: {
   };
 }
 
+import { mergedClientBlocksPermission, mergedClientMessage, mergedIntoOf } from "../clients/mergeDomain";
+
 export async function resolveClientOperationalAccess(
   params: ResolveClientAccessParams
 ): Promise<ResolvedClientAccess> {
@@ -428,6 +430,11 @@ export async function requireClientOperationalAccess(
       "permission-denied",
       params.errorMessage || "No autorizado para operar este cliente."
     );
+  }
+
+  // A client merged into another keeps its history readable but takes no new operations.
+  if (mergedClientBlocksPermission(access.client, params.permission)) {
+    throw new HttpsError("failed-precondition", mergedClientMessage(access.client), { code: "CLIENT_MERGED", mergedInto: mergedIntoOf(access.client) });
   }
 
   return access;

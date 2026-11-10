@@ -45,3 +45,11 @@ export async function syncIqClientMutation(
   invalidateClientCatalog();
   return res?.data;
 }
+
+// Superadmin only. Marks the duplicate as merged into the canonical client for new operations; history is kept.
+export async function mergeDuplicateClientMutation(input: { canonicalId: string; duplicateId: string; reason?: string }) {
+  const fn = httpsCallable(functions, "mergeDuplicateClientCallable");
+  const res: any = await fn(input);
+  invalidateClientCatalog();
+  return res?.data as { ok: true; canonicalId: string; duplicateId: string; alreadyMerged: boolean };
+}

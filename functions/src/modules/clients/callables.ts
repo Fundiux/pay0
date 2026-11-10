@@ -29,7 +29,7 @@ async function assertClientRfcAvailable(
   if (!requiresUniqueClientRfc(rfc)) return;
   const query = db.collection("clients").where("rootId", "==", rootId).where("rfc", "==", rfc).limit(10);
   const snap = tx ? await tx.get(query) : await query.get();
-  const existing = snap.docs.find(doc => doc.id !== exceptClientId && doc.get("active") !== false);
+  const existing = snap.docs.find(doc => doc.id !== exceptClientId && doc.get("active") !== false && !doc.get("mergedInto"));
   if (!existing) return;
   const number = Number(existing.get("clientNumber") || existing.get("numeroCliente") || 0);
   throw new HttpsError(
