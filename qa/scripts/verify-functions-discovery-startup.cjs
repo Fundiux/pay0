@@ -28,7 +28,7 @@ const warmupTimeoutMs = 60_000;
 // documents callable, the Hugo team voice read and history callables, and the
 // five server-owned WhatsApp connector enrollment callables live since 2026-10-22.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 402;
+const expectedEndpointCount = 403;
 const requiredEndpoints = [
   "saveClientCallable",
   "linkBeneficiaryMethodToIq",

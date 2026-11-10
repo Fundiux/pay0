@@ -137,6 +137,12 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     actionKey: "view",
   },
   {
+    label: "Indicadores",
+    href: "/dashboard/indicadores",
+    iconKey: "reportes",
+    superadminOnly: true,
+  },
+  {
     label: "Reportes",
     href: "/reportes",
     iconKey: "reportes",
@@ -395,6 +401,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
     { href: "/activity-log", moduleKey: "actividad", actionKey: "view" },
     { href: "/materialidad", moduleKey: "materialidad", actionKey: "view" },
     { href: "/reportes", moduleKey: "reportes", actionKey: "view" },
+    { href: "/dashboard/indicadores", superadminOnly: true },
     { href: "/dashboard", moduleKey: "dashboard", actionKey: "view" },
   ];
 
