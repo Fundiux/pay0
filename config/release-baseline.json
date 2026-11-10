@@ -344,6 +344,26 @@
     {
       "commit": "b57f852e",
       "capability": "Release integrado 2026-11-10 con 405 endpoints esperados"
+    },
+    {
+      "commit": "c3442974",
+      "capability": "Panel de RFC duplicados en Clientes con propuesta de cliente vigente calculada en el servidor"
+    },
+    {
+      "commit": "f8bdac0a",
+      "capability": "IQ: claim con holgura, recuperacion automatica de NOT_ENQUEUED sin bloqueo, drenado por perfil y reintento con lock ocupado"
+    },
+    {
+      "commit": "b9edead6",
+      "capability": "Sin botones manuales de sincronizacion IQ ni prueba de Telegram"
+    },
+    {
+      "commit": "60e17f00",
+      "capability": "Complementos IQ: un solo interruptor sin limite diario visible y re-encolado de pausados por compuerta"
+    },
+    {
+      "commit": "6133cd1c",
+      "capability": "Release integrado 2026-11-10 b"
     }
   ],
   "requiredText": [
