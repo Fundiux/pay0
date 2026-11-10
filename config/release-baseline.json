@@ -312,6 +312,14 @@
     {
       "commit": "420cefac",
       "capability": "Comprobantes: moneda MXN por defecto y editable; la forma de pago no bloquea el registro"
+    },
+    {
+      "commit": "fb59c659",
+      "capability": "Pagos sin folio: solo monto del mismo mes (+-1 centavo); referencia y concepto opcionales en comprobantes"
+    },
+    {
+      "commit": "51552e0e",
+      "capability": "La ventana de comprobantes se cierra sola cuando todos los pagos quedan creados y subidos"
     }
   ],
   "requiredText": [
