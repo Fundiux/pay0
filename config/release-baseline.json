@@ -304,6 +304,10 @@
     {
       "commit": "34895ca5",
       "capability": "Beneficiarios: ligado automatico a IQ por cuenta, reintento cada 30 min y motivo claro cuando falta en IQ; alta en IQ bloqueada"
+    },
+    {
+      "commit": "d492884d",
+      "capability": "Pagos: folio sin serie (FAC, FACTURA, F o solo el numero) y monto exacto unico con facturas de meses anteriores"
     }
   ],
   "requiredText": [
