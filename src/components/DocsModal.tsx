@@ -50,15 +50,6 @@ import {
   SolicitudDocumentType,
   uploadSolicitudDoc,
 } from "@/lib/uploadSolicitudDoc";
-import {
-  createSolicitudIq,
-  reconcileSolicitudIq,
-  syncIqSolicitudStatus,
-  syncIqSolicitudInvoice,
-} from "@/services/iq";
-import { useGlobalLoading } from "@/components/GlobalLoading";
-import { useUserProfile } from "@/lib/useUserProfile";
-import { normalizeRole } from "@/lib/roles";
 import { createSolicitudSignatureLink, generateSolicitudQuotation, submitSolicitudSignature, generateSolicitudReceiptCertificate } from "@/services/signatureLinks";
 
 type UploadRow = {
@@ -98,10 +89,6 @@ export default function DocsModal(props: {
   solicitud: any | null;
 }) {
   const { open, onClose, solicitud } = props;
-  const { profile } = useUserProfile();
-  const globalLoading = useGlobalLoading();
-  const isIqPreparationSuperAdmin =
-    normalizeRole((profile as any)?.role) === "superadmin";
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [documentType, setDocumentType] = useState<SolicitudDocumentType>("FACTURA_PDF");
@@ -118,8 +105,6 @@ export default function DocsModal(props: {
     previousJobId: string;
     message: string;
   } | null>(null);
-  const [iqPreparing, setIqPreparing] = useState(false);
-  const [iqPreparationMessage, setIqPreparationMessage] = useState("");
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   const [signatureMessage, setSignatureMessage] = useState("");
@@ -308,8 +293,6 @@ useEffect(() => {
 
   useEffect(() => {
     if (!open) {
-      setIqPreparationMessage("");
-      setIqPreparing(false);
       setSignatureOpen(false);
       setSignatureSaving(false);
       setSignatureMessage("");
@@ -317,7 +300,6 @@ useEffect(() => {
       return;
     }
 
-    setIqPreparationMessage("");
     setSignatureMessage("");
     setSignatureLink("");
   }, [open, solicitudId]);
@@ -345,213 +327,6 @@ useEffect(() => {
     ctx.lineJoin = "round";
     signatureHasInkRef.current = false;
   }, [signatureOpen]);
-
-  // H4_D87_A58_A29_R1_UNIFIED_MANUAL_SOLICITUD_IQ
-  // Un solo boton manual; reutiliza las etapas backend existentes.
-  async function handleSyncIq() {
-    if (!isIqPreparationSuperAdmin || !solicitudId || iqPreparing) return;
-
-    const initialIqFolio = String(
-      solicitud?.iqFolio ??
-        solicitud?.iqId ??
-        solicitud?.solicitudIqFolio ??
-        solicitud?.folioIq ??
-        "",
-    ).trim();
-
-    if (!initialIqFolio) {
-      const confirmed = window.confirm(
-        "Esta solicitud aun no tiene Folio IQ. Sincronizar IQ intentara crearla y despues continuara automaticamente con el seguimiento. Deseas continuar?",
-      );
-
-      if (!confirmed) return;
-    }
-
-    setIqPreparing(true);
-    setIqPreparationMessage("");
-
-    try {
-      await globalLoading.run(
-        {
-          label: "SINCRONIZANDO IQ...",
-          helper:
-            "PAY0 determinara automaticamente si debe crear, recuperar folio, leer estado/rechazo o importar factura.",
-        },
-        async () => {
-          const messages: string[] = [];
-          let iqFolio = initialIqFolio;
-
-          if (!iqFolio) {
-            let creation:
-              | Awaited<ReturnType<typeof createSolicitudIq>>
-              | null = null;
-
-            try {
-              creation = await createSolicitudIq(solicitudId);
-            } catch (error) {
-              const message =
-                error instanceof Error
-                  ? error.message
-                  : "Error desconocido al crear en IQ.";
-
-              if (
-                /resultado iq incierto|debe conciliarse|concilia el intento/i.test(
-                  message,
-                )
-              ) {
-                const reconciliation = await reconcileSolicitudIq(
-                  solicitudId,
-                  true,
-                );
-
-                if (!reconciliation.data.linked) {
-                  setIqPreparationMessage(
-                    [
-                      "PAY0 intento recuperar el Folio IQ antes de crear otro.",
-                      `Resultado: ${reconciliation.data.status}.`,
-                      reconciliation.message,
-                      "No se genero un folio nuevo para evitar duplicados.",
-                    ]
-                      .filter(Boolean)
-                      .join(" "),
-                  );
-                  return;
-                }
-
-                iqFolio = String(reconciliation.data.iqId || "").trim();
-                messages.push(
-                  `Folio IQ recuperado: ${iqFolio || "NO IDENTIFICADO"}.`,
-                );
-              } else {
-                throw error;
-              }
-            }
-
-            if (creation) {
-              if (creation.data.created) {
-                iqFolio = String(creation.data.iqId || "").trim();
-                messages.push(
-                  creation.data.reused
-                    ? `Folio IQ existente reutilizado: ${iqFolio || "NO IDENTIFICADO"}.`
-                    : `Solicitud creada en IQ. Folio IQ: ${iqFolio || "NO IDENTIFICADO"}.`,
-                );
-              } else if (creation.data.status === "OUTCOME_UNKNOWN") {
-                const reconciliation = await reconcileSolicitudIq(
-                  solicitudId,
-                  true,
-                );
-
-                if (!reconciliation.data.linked) {
-                  setIqPreparationMessage(
-                    [
-                      "IQ recibio la operacion, pero PAY0 aun no pudo confirmar el Folio IQ.",
-                      `Resultado de recuperacion: ${reconciliation.data.status}.`,
-                      reconciliation.message,
-                      "No se volvera a crear para evitar duplicados.",
-                    ]
-                      .filter(Boolean)
-                      .join(" "),
-                  );
-                  return;
-                }
-
-                iqFolio = String(reconciliation.data.iqId || "").trim();
-                messages.push(
-                  `Folio IQ recuperado: ${iqFolio || "NO IDENTIFICADO"}.`,
-                );
-              } else {
-                setIqPreparationMessage(
-                  [
-                    "IQ no creo la solicitud.",
-                    creation.message ||
-                      creation.data.errors?.join(" ") ||
-                      "Operacion rechazada.",
-                    creation.data.retryBlocked
-                      ? "El reintento esta bloqueado."
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" "),
-                );
-                return;
-              }
-            }
-          } else {
-            messages.push(`Folio IQ: ${iqFolio}.`);
-          }
-
-          if (!iqFolio) {
-            setIqPreparationMessage(
-              [
-                ...messages,
-                "PAY0 no tiene un Folio IQ confirmado; no se ejecutara seguimiento ni factura para evitar una asociacion incorrecta.",
-              ].join(" "),
-            );
-            return;
-          }
-
-          // Esta etapa consulta IQ y aplica rechazo/comentario mediante
-          // el mismo core de processJobGroup usado por el monitor automatico.
-          const statusSync = await syncIqSolicitudStatus(solicitudId);
-          messages.push(`Estado IQ: ${statusSync.status}.`);
-
-          if (statusSync.status === "REJECTED_BEFORE_STAMPING") {
-            messages.push(
-              "PAY0 actualizo la solicitud como RECHAZADA y guardo el motivo/comentario informado por IQ.",
-            );
-            setIqPreparationMessage(messages.join(" "));
-            return;
-          }
-
-          // Si el monitor detecta factura, la misma accion manual intenta importarla.
-          if (statusSync.status === "INVOICE_AVAILABLE") {
-            const invoiceSync = await syncIqSolicitudInvoice(
-              solicitudId,
-              { force: true },
-            );
-
-            messages.push(`Factura IQ: ${invoiceSync.status}.`);
-
-            if (
-              invoiceSync.status === "IMPORTED" ||
-              invoiceSync.status === "IMPORTED_REUSED"
-            ) {
-              messages.push(
-                "Factura PDF/XML importada o ya existente en PAY0.",
-              );
-            } else {
-              messages.push(
-                "La factura aun no pudo importarse; el resultado quedo registrado para seguimiento.",
-              );
-            }
-          } else if (statusSync.status === "MONITORING") {
-            messages.push(
-              "La solicitud sigue en proceso en IQ; no hay factura disponible todavia.",
-            );
-          } else if (statusSync.status === "NOT_FOUND") {
-            messages.push(
-              "IQ aun no devolvio una coincidencia util para este folio; el seguimiento quedo registrado.",
-            );
-          } else if (statusSync.status === "WAITING_FOR_OPERATING_WINDOW") {
-            messages.push(
-              "La revision quedo pendiente para la ventana operativa IQ.",
-            );
-          }
-
-          setIqPreparationMessage(messages.join(" "));
-        },
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Error desconocido.";
-
-      setIqPreparationMessage(
-        `No se pudo completar la sincronizacion IQ: ${message}`,
-      );
-    } finally {
-      setIqPreparing(false);
-    }
-  }
 
   function getSignaturePoint(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = signatureCanvasRef.current;
@@ -947,8 +722,8 @@ const downloadDoc = async (doc: UploadRow) => {
 
           <button
             type="button"
-            onClick={() => !busy && !iqPreparing && !signatureSaving && onClose()}
-            disabled={busy || iqPreparing || signatureSaving}
+            onClick={() => !busy && !signatureSaving && onClose()}
+            disabled={busy || signatureSaving}
             className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             title="Cerrar"
           >
@@ -957,38 +732,6 @@ const downloadDoc = async (doc: UploadRow) => {
         </div>
 
         <div className="space-y-4 px-4 py-4">
-          {isIqPreparationSuperAdmin ? (
-            <div className="mb-4 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 pr-12">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-violet-100">Integracion IQ</div>
-                  <div className="mt-1 text-xs text-violet-200/70">
-                    Sincronizacion manual integral con IQ. PAY0 ejecuta automaticamente la etapa necesaria.
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-
-
-                  <button
-                    type="button"
-                    onClick={handleSyncIq}
-                    disabled={iqPreparing || !solicitudId}
-                    className="rounded-xl border border-sky-400/40 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {iqPreparing ? "Procesando..." : "Sincronizar IQ"}
-                  </button>
-                </div>
-              </div>
-
-              {iqPreparationMessage ? (
-                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-200">
-                  {iqPreparationMessage}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
           <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1027,7 +770,7 @@ const downloadDoc = async (doc: UploadRow) => {
               <button
                 type="button"
                 onClick={() => setSignatureOpen((value) => !value)}
-                disabled={busy || iqPreparing || signatureSaving || !solicitudId}
+                disabled={busy || signatureSaving || !solicitudId}
                 className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {signatureOpen ? "Ocultar firma" : "Capturar firma"}
@@ -1035,7 +778,7 @@ const downloadDoc = async (doc: UploadRow) => {
               <button
                 type="button"
                 onClick={createSignatureLink}
-                disabled={busy || iqPreparing || signatureSaving || signatureLinkCreating || !solicitudId}
+                disabled={busy || signatureSaving || signatureLinkCreating || !solicitudId}
                 className="rounded-xl border border-sky-400/30 bg-sky-500/15 px-3 py-2 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {signatureLinkCreating ? "Creando link..." : "Crear link"}
