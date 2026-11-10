@@ -1,7 +1,8 @@
 const reasons: Record<string, string> = {
   MISSING_INVOICE_REFERENCE: "Falta la referencia exacta de la factura.",
   NO_EXACT_INVOICE_REFERENCE: "La referencia no identifica una factura de este cliente y empresa.",
-  CANDIDATE_LIMIT: "Hay demasiadas facturas para decidir automáticamente.",
+  CANDIDATE_LIMIT: "El cliente tiene demasiadas facturas y la referencia no trae un folio que exista.",
+  AMBIGUOUS_INVOICE_FOLIO: "El folio de la referencia corresponde a más de una factura del cliente.",
   MISSING_CURRENCY: "Falta confirmar la moneda del pago.",
   CURRENCY_MISMATCH: "La moneda de la factura no coincide con el pago.",
   INVOICE_NOT_PAYABLE: "La factura está cerrada, cancelada o sin saldo pendiente.",

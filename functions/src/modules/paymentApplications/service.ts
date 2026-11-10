@@ -6,7 +6,7 @@ import { buildPagoCoverageApplyPatch, getPagoCoverageState } from "../deposits/f
 import { normalizePagoStatus } from "../pagos/domain";
 import { money2 } from "../shared/money";
 import { assertAuthorized } from "../../utils/authGuard";
-import { AUTOMATIC_CANDIDATE_LIMIT, decideAutomaticPayment } from "./automaticDomain";
+import { decideAutomaticPaymentFromStore } from "./automaticCandidates";
 import {
   applySolicitudCoverageAmount,
   getSolicitudCoverageState,
@@ -404,8 +404,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
       const receipts = await tx.get(db.collection("uploads").where("pagoId", "==", batch.pagoId).where("documentType", "==", "COMPROBANTE_PAGO").where("active", "==", true).limit(10));
       if (!receipts.docs.some(doc => doc.get("rootId") === actor.rootId && doc.get("status") === "READY" && doc.get("storagePath")))
         throw new HttpsError("failed-precondition", "El comprobante aún no está disponible.");
-      const candidates = await tx.get(db.collection("solicitudes").where("rootId", "==", actor.rootId).where("clienteId", "==", pago.clienteId).limit(AUTOMATIC_CANDIDATE_LIMIT + 1));
-      const liveDecision = decideAutomaticPayment(batch.pagoId, pago, candidates.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const liveDecision = await decideAutomaticPaymentFromStore(batch.pagoId, pago, actor.rootId, query => tx.get(query));
       if (liveDecision.sourceDigest !== params.automaticSourceDigest || liveDecision.batch?.requestHash !== batch.requestHash) {
         throw new HttpsError("failed-precondition", "La coincidencia automática cambió; requiere revisión.");
       }
