@@ -70,6 +70,7 @@
     "demo:cotizacion": "node scripts/render-cotizacion-demo.mjs",
     "test:assets": "npm --prefix functions run build && node scripts/assets-domain-smoke.cjs",
     "qa:audit-security": "node qa/scripts/audit-security-regression.mjs",
+    "qa:complement-switch": "npm --prefix functions run build && node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --project demo-pay0 --only firestore \"node qa/scripts/complement-single-switch.cjs\"",
     "qa:payment-complements": "powershell -ExecutionPolicy Bypass -File scripts/run-payment-complement-smoke.ps1",
     "qa:release-guard": "node qa/scripts/critical-release-guard.mjs",
     "qa:frontend-build-env": "node qa/scripts/verify-frontend-build-env.mjs",

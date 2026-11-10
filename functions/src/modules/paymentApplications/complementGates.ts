@@ -8,6 +8,9 @@ import { dayMexico, hash } from "./complementPolicy";
 export type IqComplementAction = "LOOKUP" | "REQUEST";
 export type GateDecision = { allowed: boolean; reason: string; limit: number };
 export const REP_REQUEST_HARD_DISABLED = "REP_REQUEST_HARD_DISABLED";
+// Server-side fuse for IQ complement requests per day. It is not a business rule: the owner activates requests
+// with one switch and this ceiling only shows up as REP_GATE_QUOTA_EXHAUSTED when it trips.
+export const IQ_REQUEST_DAILY_FUSE = 25;
 export const isIqRepRequestHardEnabled = (config: any): boolean => config?.iqRequestEnabled === true;
 const effectiveProfileId = (job: any) => String(job?.originIqProfileId || job?.profileId || "").trim();
 const isDurableReconciliation = (job: any, action: IqComplementAction) => action === "LOOKUP" &&
@@ -21,7 +24,7 @@ const clamp = (value: unknown, fallback: number, ceiling: number) => {
 };
 
 function decide(job: any, action: IqComplementAction, config: any, master: any, user: any, access: any, profile: any): GateDecision {
-  const limit = action === "LOOKUP" ? clamp(config?.iqLookupDailyLimit, 25, 100) : clamp(config?.iqRequestDailyLimit, 5, 25);
+  const limit = action === "LOOKUP" ? clamp(config?.iqLookupDailyLimit, 25, 100) : clamp(config?.iqRequestDailyLimit, IQ_REQUEST_DAILY_FUSE, IQ_REQUEST_DAILY_FUSE);
   const deny = (reason: string): GateDecision => ({ allowed: false, reason, limit });
   if (!job || job.provider !== "IQ" || !job.rootId || !effectiveProfileId(job) || !job.actorUid || !job.clientId) return deny("REP_GATE_JOB_INVALID");
   // REP C is fail-closed independently from every other IQ switch. Missing,
