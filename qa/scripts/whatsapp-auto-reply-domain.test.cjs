@@ -73,6 +73,19 @@ ok(() => assert.equal(d.isWithinWorkingHours(hours, Date.UTC(2026, 10, 9, 15, 0,
 ok(() => assert.equal(d.isWithinWorkingHours(hours, Date.UTC(2026, 10, 9, 14, 59, 0)), false));
 ok(() => assert.equal(d.isWithinWorkingHours(hours, Date.UTC(2026, 10, 10, 0, 0, 0)), false));
 
+// The owner's hours: Mon-Fri 07:30-19:30, Saturday 08:00-15:00, never Sunday.
+const owner = d.OWNER_WORKING_HOURS;
+const at = (day, h, m) => Date.UTC(2026, 10, day, h + 6, m, 0); // Mexico City is UTC-6
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(9, 7, 29)), false));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(9, 7, 30)), true));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(9, 19, 29)), true));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(9, 19, 30)), false));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(14, 7, 59)), false));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(14, 8, 0)), true));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(14, 14, 59)), true));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(14, 15, 0)), false));
+ok(() => assert.equal(d.isWithinWorkingHours(owner, at(15, 12, 0)), false));
+
 // Operator hashes match how the connector hashes authors, in both Mexican id forms.
 const hashOf = (rootId, authorId) => createHash('sha256').update(`${rootId}|${authorId}`).digest('hex').slice(0, 32);
 const hashes = d.operatorAuthorHashes('root-a', ['525512345678', 'invalid']);

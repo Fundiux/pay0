@@ -13,6 +13,11 @@ export const REPLY_TEXTS = {
 } as const;
 
 export type WorkingHours = { timezone: string; windows: { days: number[]; from: string; to: string }[] };
+// Working hours the owner set on 2026-11-11 (Mexico City). Not applied by default: an agent with no hours configured never answers.
+export const OWNER_WORKING_HOURS: WorkingHours = {
+  timezone: "America/Mexico_City",
+  windows: [{ days: [1, 2, 3, 4, 5], from: "07:30", to: "19:30" }, { days: [6], from: "08:00", to: "15:00" }],
+};
 export type AutoReplyConfig = { enabled?: boolean; humanWaitMs?: number; workingHours?: WorkingHours | null };
 export type ReplyKind = "GREETING" | "PROCESSING" | "VALIDATING";
 export type GroupMessage = { timestampMs: number; fromMe: boolean; authorIsOperator: boolean; type: string; body: string };
