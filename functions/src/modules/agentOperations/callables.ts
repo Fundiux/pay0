@@ -9,6 +9,7 @@ import { HugoModelRouter } from "../agent007/hugoModelRouter";
 import { draftAgentBlueprint, transitionProposal } from "./proposals";
 import { SYSTEMS } from "./systems";
 import { recordIntervention, resolveIncident } from "./incidentResolution";
+import { groupIncidents, loadIncidentSubjects } from "./incidentLabels";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -73,9 +74,11 @@ export async function loadAgentOperations(rootId: string) {
   const todayIncidents = (serialize(dailyIncidents) as Array<Record<string, any>>).filter(visible);
   const causes = Object.entries(todayIncidents.reduce((acc, row) => { const key = String(row.cause || "Sin causa registrada"); acc[key] = (acc[key] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cause, count]) => ({ cause, count }));
   const providerStatus = new HugoModelRouter().status();
+  const visibleIncidents = serialize(incidents).filter(visible) as Array<Record<string, any>>;
+  const incidentGroups = groupIncidents(visibleIncidents, await loadIncidentSubjects(rootId, visibleIncidents).catch(error => { console.error("INCIDENT_SUBJECTS_FAILED", String(error?.message || error).slice(0, 200)); return new Map(); }));
   return { ok: true, systems: SYSTEMS, agents: AGENTS, tools: TOOLS, killSwitch: control.get("killSwitch") === true,
     providers: providerStatus,
-    runs: runRows, incidents: serialize(incidents).filter(visible), proposals: serialize(proposals).filter(visible),
+    runs: runRows, incidents: visibleIncidents, incidentGroups, proposals: serialize(proposals).filter(visible),
     report: { day, reviewed: new Set(today.map(row => row.entityId)).size,
       detected: today.length, incidents: todayIncidents.length,
       generated: today.filter(row => row.toolId === "quotation-recovery" && row.status === "SUCCEEDED" && row.resolution === "GENERATED_NORMAL").length,

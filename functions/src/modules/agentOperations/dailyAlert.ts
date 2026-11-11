@@ -8,6 +8,7 @@ import { countOpenUnmatchedPayments } from "../paymentApplications/unmatchedPaym
 import { loadAgentOperations } from "./callables";
 import { COMPLEMENT_LATE_DAYS, loadPendingItems, type PendingItems } from "./pendingItems";
 import { mexicoDayKey } from "./time";
+import { groupIncidents, incidentSubjectLine, type ReadableIncident } from "./incidentLabels";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -19,19 +20,21 @@ const minutes = (ms: number | null) => (ms === null || ms === undefined ? "sin d
 const INCIDENT_DETAIL_LIMIT = 5;
 const shorten = (value: unknown, max: number) => { const text = String(value ?? "").replace(/\s+/g, " ").trim(); return text.length > max ? `${text.slice(0, max - 1)}…` : text; };
 
-/** Open incidents grouped by cause and entity type, so the summary says what is open and not only how many. */
-function incidentDetail(incidents: Array<Record<string, any>>): string[] {
-  const groups = new Map<string, number>();
-  for (const row of incidents) {
-    if (row.status !== "OPEN") continue;
-    const cause = shorten(row.cause || "Sin causa registrada", 90), type = shorten(row.entityType, 30);
-    const key = type ? `${cause} [${type}]` : cause;
-    groups.set(key, (groups.get(key) || 0) + 1);
+/** Open incidents: one line per entity as "Solicitud S-1 · Cliente · $monto · Proveedor — motivo"; those without a known entity are grouped by cause. */
+function incidentDetail(groups: ReadableIncident[]): string[] {
+  const lines: string[] = [];
+  const bare = new Map<string, number>();
+  for (const group of groups) {
+    if (group.status !== "OPEN") continue;
+    const line = incidentSubjectLine(group.subject);
+    if (line) { lines.push(`${line} — ${shorten(group.causes.join("; "), 90)}`); continue; }
+    const cause = shorten(group.causeLabel, 90);
+    bare.set(cause, (bare.get(cause) || 0) + 1);
   }
-  const sorted = [...groups].sort((a, b) => b[1] - a[1]);
-  const lines = sorted.slice(0, INCIDENT_DETAIL_LIMIT).map(([label, count]) => `  - ${label}${count > 1 ? ` (${count})` : ""}`);
-  if (sorted.length > INCIDENT_DETAIL_LIMIT) lines.push(`  - y ${sorted.length - INCIDENT_DETAIL_LIMIT} tipos más`);
-  return lines;
+  const all = [...lines, ...[...bare].sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}${count > 1 ? ` (${count})` : ""}`)];
+  const out = all.slice(0, INCIDENT_DETAIL_LIMIT).map(line => `  - ${line}`);
+  if (all.length > INCIDENT_DETAIL_LIMIT) out.push(`  - y ${all.length - INCIDENT_DETAIL_LIMIT} más`);
+  return out;
 }
 
 /** Pending items other than incidents; a figure that could not be read is left out, never shown as zero. */
@@ -48,14 +51,15 @@ function pendingLines(pending: PendingItems): string[] {
 export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loadAgentOperations>>, unmatched?: { a: number; b: number }, pending?: PendingItems): string {
   const { report, killSwitch } = operations;
   const autonomy = report.autonomy;
-  const openIncidents = operations.incidents.filter((row: Record<string, any>) => row.status === "OPEN").length;
+  const incidentGroups: ReadableIncident[] = (operations as any).incidentGroups ?? groupIncidents(operations.incidents, new Map());
+  const openIncidents = incidentGroups.filter(group => group.status === "OPEN").length;
   const tokens = (report.tokens ?? []).map(row => `${row.provider}: ${row.requests} llamadas`).join(", ") || "sin llamadas a IA";
   const lines = [
     `Resumen diario de agentes (${report.day}, corte 20:00 hora de México)`,
     killSwitch ? "ATENCIÓN: el interruptor de emergencia está ACTIVADO; los agentes están detenidos." : "Interruptor de emergencia: apagado (agentes operando).",
     `Revisadas: ${report.reviewed} · Detectadas: ${report.detected} · Corregidas: ${report.corrected} · Escaladas: ${report.escalated} · Por reintentar: ${report.retryable}`,
     `Incidentes abiertos: ${openIncidents}`,
-    ...(openIncidents ? incidentDetail(operations.incidents) : []),
+    ...(openIncidents ? incidentDetail(incidentGroups) : []),
   ];
   if (unmatched) lines.push(unmatched.a + unmatched.b === 0 ? "Pagos sin solicitud: ninguno." : `Pagos sin solicitud: ${unmatched.a} · Pagos que no coinciden con sus facturas pendientes: ${unmatched.b}`);
   if (pending) lines.push(...pendingLines(pending));

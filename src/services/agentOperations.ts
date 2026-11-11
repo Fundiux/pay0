@@ -14,6 +14,8 @@ export type AgentOperations = {
   killSwitch: boolean;
   runs: Array<{ id: string; status: string; agentId: string; entityId: string; reason?: string }>;
   incidents: Array<{ id: string; status: string; cause: string; entityType?: string; entityId: string }>;
+  incidentGroups?: Array<{ id: string; status: string; entityType?: string; entityId: string; causes: string[]; count: number;
+    subject: { kind: "SOLICITUD" | "PAGO" | "DISPERSION"; entityId: string; folio: string | null; clientName: string | null; amount: number | null; currency: string | null; providerName: string | null } | null }>;
   proposals: Array<{ id: string; status: string; problem: string; evidence?: string[]; impact?: string; risk?: string; scope?: string; rollback?: string }>;
   report: { day: string; reviewed: number; detected: number; incidents: number; generated: number; corrected: number; verified: number; escalated: number; retryable: number; causes: Array<{ cause: string; count: number }>; autonomy?: AgentAutonomyReport; tokens?: Array<{ provider: string; requests: number; input: number; output: number; reasoning: number }> };
   reportScope: string;

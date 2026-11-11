@@ -38,14 +38,14 @@ test('open-incidents-are-detailed-by-cause-and-type', () => {
     { status: 'OPEN', cause: 'Sin cotización', entityType: 'solicitud' }, { status: 'RESOLVED', cause: 'Resuelta antes', entityType: 'solicitud' },
   ];
   const text = buildDailyAlertMessage(data);
-  assert(text.includes('Incidentes abiertos: 3') && text.includes('REP_SIN_XML [paymentComplementJob] (2)') && text.includes('Sin cotización [solicitud]'));
+  assert(text.includes('Incidentes abiertos: 3') && text.includes('REP_SIN_XML (2)') && text.includes('Sin cotización'));
   assert(!text.includes('Resuelta antes'), 'resolved incidents are not detailed');
 });
 test('incident-detail-is-capped', () => {
   const data = base();
   data.incidents = Array.from({ length: 9 }, (_, i) => ({ status: 'OPEN', cause: `causa ${i}`, entityType: 'solicitud' }));
   const text = buildDailyAlertMessage(data);
-  assert(text.includes('y 4 tipos más') && !text.includes('causa 8'));
+  assert(text.includes('y 4 más') && !text.includes('causa 8'));
 });
 test('pending-items-are-reported-and-zero-or-unreadable-are-omitted', () => {
   const text = buildDailyAlertMessage(base(), { a: 1, b: 2 }, { complementsHeld: 4, complementsLate: 1, cashUnsigned: 0, cancellationReview: undefined });
@@ -66,5 +66,11 @@ test('autonomy-without-data-reads-clearly', () => {
   const data = base(); data.report.autonomy = { ...data.report.autonomy, agentResolutionRate: null, resolvedByAgent: 0, resolvedByPerson: 0 };
   const text = buildDailyAlertMessage(data);
   assert(text.includes('Autonomía: sin datos (0 resueltas por agentes, 0 por personas)') && !text.includes('sin datos resuelto'));
+});
+test('sentinel-codes-are-translated', () => {
+  const data = base();
+  data.incidents = [{ status: 'OPEN', cause: 'INTEGRITY_MISMATCH: BLOCKED', entityType: 'solicitud' }];
+  const text = buildDailyAlertMessage(data);
+  assert(text.includes('Datos que no cuadran; bloqueado para revisión') && !text.includes('INTEGRITY_MISMATCH'));
 });
 console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases }));

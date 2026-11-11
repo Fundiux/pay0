@@ -82,7 +82,16 @@ export default function AgentOperationsPage() {
           </section>
           <section className={card}>
             <h2 className="font-semibold">Incidencias y propuestas</h2>
-            {data.incidents.map(row => <p key={row.id} className="mt-2 text-sm">{row.entityType === "solicitud" ? <a className="text-violet-300" href={`/solicitudes?q=${encodeURIComponent(row.entityId)}`}>{row.entityId}</a> : row.entityId} · {row.status} · {row.cause}</p>)}
+            {(data.incidentGroups ?? []).map(row => {
+              const subject = row.subject;
+              const amount = subject?.amount != null ? `$${subject.amount.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${subject.currency && subject.currency !== "MXN" ? ` ${subject.currency}` : ""}` : null;
+              const folio = subject?.folio ? `${subject.kind === "SOLICITUD" ? "Solicitud" : subject.kind === "PAGO" ? "Pago" : "Dispersión"} ${subject.folio}` : null;
+              const target = subject?.kind === "SOLICITUD" ? `/solicitudes?q=${encodeURIComponent(subject.folio || row.entityId)}` : subject?.kind === "PAGO" ? `/pagos?q=${encodeURIComponent(subject.folio || row.entityId)}` : null;
+              return <div key={row.id} className="mt-2 text-sm">
+                <p>{folio ? (target ? <a className="text-violet-300" href={target}>{folio}</a> : folio) : <span className="text-slate-300">Registro sin datos disponibles</span>}{[subject?.clientName, amount, subject?.providerName].filter(Boolean).map(part => ` · ${part}`).join("")}</p>
+                <p className="text-xs text-slate-400">{row.status === "OPEN" ? "Abierta" : row.status === "RESOLVED" ? "Resuelta" : row.status} · {row.causes.join("; ")}{row.count > 1 ? ` (${row.count} avisos)` : ""}</p>
+              </div>;
+            })}
             {data.proposals.map(row => <div key={row.id} className="mt-3 rounded-lg border border-slate-700 p-3 text-sm">
               <p>Propuesta {row.status}: {row.problem}</p>
               <p className="mt-1 text-xs text-slate-400">Impacto: {row.impact} · Riesgo: {row.risk} · Alcance: {row.scope} · Reversión: {row.rollback}</p>
@@ -95,7 +104,7 @@ export default function AgentOperationsPage() {
                 </>}
               </div>
             </div>)}
-            {!data.incidents.length && !data.proposals.length && <p className="mt-2 text-sm text-slate-500">Sin registros.</p>}
+            {!(data.incidentGroups ?? []).length && !data.proposals.length && <p className="mt-2 text-sm text-slate-500">Sin registros.</p>}
             <p className="mt-3 text-xs text-amber-300">Aprobar una propuesta no ejecuta cambios ni despliegues.</p>
           </section>
         </div>
