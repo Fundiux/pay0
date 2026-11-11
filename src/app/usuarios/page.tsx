@@ -11,10 +11,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador } from "@/lib/roles";
 import { listUsers, createAdminUser, createOperadorUser, updateUserActive, softDeleteUserById, restoreUserById, repairUserNumbersByRoot } from "@/services/users";
-import { CircleDollarSign, RotateCcw, Settings2, Power, PowerOff, Trash2, UsersRound } from "lucide-react";
+import { CircleDollarSign, Phone, RotateCcw, Settings2, Power, PowerOff, Trash2, UsersRound } from "lucide-react";
 import Modal from "@/components/Modal";
 import UserPermissionsPanel from "@/components/UserPermissionsPanel";
 import UserClientAccessPanel from "@/components/UserClientAccessPanel";
+import UserOperatorNumbersPanel from "@/components/UserOperatorNumbersPanel";
 import UiSelect from "@/components/UiSelect";
 import { normalizeAccountUsername } from "@/lib/accountValidation";
 
@@ -112,6 +113,7 @@ export default function UsuariosPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [openPermsUid, setOpenPermsUid] = useState<string>("");
   const [openClientAccessUid, setOpenClientAccessUid] = useState<string>("");
+  const [openOperatorNumbersUid, setOpenOperatorNumbersUid] = useState<string>("");
 
   const [expandedAdminUid, setExpandedAdminUid] = useState<string>("");
 
@@ -620,6 +622,18 @@ export default function UsuariosPage() {
                               </button>
                             )}
 
+                            {!a.isDeleted && isSuper && (
+                              <button
+                                type="button"
+                                onClick={() => setOpenOperatorNumbersUid(a.uid)}
+                                className={actionIconClass("clientes")}
+                                title="Números de atención a clientes"
+                                aria-label="Números de atención a clientes"
+                              >
+                                <Phone size={16} />
+                              </button>
+                            )}
+
                             {!a.isDeleted && canPermissionsUsuarios && (
                               <button
                                 type="button"
@@ -878,6 +892,18 @@ export default function UsuariosPage() {
                                 aria-label="Clientes autorizados"
                               >
                                 <UsersRound size={16} />
+                              </button>
+                            )}
+
+                            {!a.isDeleted && isSuper && (
+                              <button
+                                type="button"
+                                onClick={() => setOpenOperatorNumbersUid(a.uid)}
+                                className={actionIconClass("clientes")}
+                                title="Números de atención a clientes"
+                                aria-label="Números de atención a clientes"
+                              >
+                                <Phone size={16} />
                               </button>
                             )}
 
@@ -1171,6 +1197,11 @@ export default function UsuariosPage() {
             targetUid={openClientAccessUid}
             onClose={() => setOpenClientAccessUid("")}
           />
+        ) : null}
+      </Modal>
+      <Modal open={!!openOperatorNumbersUid} title="Números de atención a clientes" onClose={() => setOpenOperatorNumbersUid("")} widthClassName="max-w-xl">
+        {openOperatorNumbersUid ? (
+          <UserOperatorNumbersPanel targetUid={openOperatorNumbersUid} onClose={() => setOpenOperatorNumbersUid("")} />
         ) : null}
       </Modal>
     </main>

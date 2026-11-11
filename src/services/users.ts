@@ -56,6 +56,18 @@ export async function restoreUserById(uid: string) {
   const res: any = await fn({ uid });
   return res?.data;
 }
+export async function getUserOperatorNumbers(targetUid: string) {
+  const fn = httpsCallable(functions, CALLABLES.getUserOperatorNumbers);
+  const res: any = await fn({ targetUid });
+  return res?.data as { ok: boolean; numbers: string[]; max: number };
+}
+
+export async function saveUserOperatorNumbers(targetUid: string, numbers: string[]) {
+  const fn = httpsCallable(functions, CALLABLES.saveUserOperatorNumbers);
+  const res: any = await fn({ targetUid, numbers });
+  return res?.data as { ok: boolean; numbers: string[]; duplicatesRemoved: number };
+}
+
 export async function getUserClientAccessConfig(targetUid: string) {
   const fn = httpsCallable(functions, CALLABLES.getUserClientAccessConfig);
   const res: any = await fn({ targetUid });
