@@ -4,6 +4,7 @@ import { functions } from "@/lib/firebaseClient";
 export type AgentAutonomyReport = {
   openIncidents: number; resolvedByAgent: number; resolvedByPerson: number; agentResolutionRate: number | null;
   runsSucceeded: number; runsFinished: number; avgRunMs: number | null; avgTimeToResolveMs: number | null; humanInterventionsToday: number;
+  resolvedBySystem?: number; resolvedByHugo?: number;
 };
 
 export type AgentOperations = {
@@ -19,8 +20,13 @@ export type AgentOperations = {
     subject: { kind: "SOLICITUD" | "PAGO" | "DISPERSION"; entityId: string; folio: string | null; clientName: string | null; amount: number | null; currency: string | null; providerName: string | null } | null }>;
   proposals: Array<{ id: string; status: string; problem: string; evidence?: string[]; impact?: string; risk?: string; scope?: string; rollback?: string }>;
   report: { day: string; reviewed: number; detected: number; incidents: number; generated: number; corrected: number; verified: number; escalated: number; retryable: number; causes: Array<{ cause: string; count: number }>; autonomy?: AgentAutonomyReport; tokens?: Array<{ provider: string; requests: number; input: number; output: number; reasoning: number }> };
+  automation?: {
+    killSwitch: boolean; undoneRate: number | null; verifiedActions: number; undoneActions: number;
+    rules: Array<{ id: string; causeLabel: string; toolLabel: string; status: "PROPUESTA" | "SIMULACION" | "ACTIVA" | "RECHAZADA" | "REVOCADA"; statusLabel: string; paused: boolean; dailyCap: number; evidenceCount: number; simulationEndsAtMs: number | null; simulatedToday: number; executedToday: number }>;
+  } | null;
   reportScope: string;
 };
+export type AutomationAction = "APPROVE" | "REJECT" | "REVOKE" | "PAUSE" | "RESUME" | "KILL_ON" | "KILL_OFF";
 
 export async function getAgentOperations() {
   return (await httpsCallable<Record<string, never>, AgentOperations>(functions, "getAgentOperations")({})).data;
@@ -33,4 +39,7 @@ export async function reviewAgentProposal(proposalId: string, status: "PENDING_A
 }
 export async function resolveAgentIncident(incidentId: string, reason: string) {
   return (await httpsCallable<{ incidentId: string; reason: string }, { ok: boolean }>(functions, "resolveAgentIncident")({ incidentId, reason })).data;
+}
+export async function reviewAgentAutomationRule(action: AutomationAction, ruleId?: string) {
+  return (await httpsCallable<{ action: AutomationAction; ruleId?: string }, { ok: boolean; status?: string; killSwitch?: boolean }>(functions, "reviewAgentAutomationRule")({ action, ruleId })).data;
 }

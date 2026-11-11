@@ -67,6 +67,7 @@ export function buildDailyAlertMessage(operations: Awaited<ReturnType<typeof loa
   if (autonomy) {
     lines.push(
       `Autonomía: ${autonomy.agentResolutionRate === null || autonomy.agentResolutionRate === undefined ? "sin datos" : `${autonomy.agentResolutionRate}% resuelto por agentes`} (${autonomy.resolvedByAgent} resueltas por agentes, ${autonomy.resolvedByPerson} por personas)`,
+      `Resueltas por: Sistema ${(autonomy as any).resolvedBySystem ?? 0} · Hugo ${(autonomy as any).resolvedByHugo ?? 0} · Persona ${autonomy.resolvedByPerson}${(operations as any).automation?.undoneRate != null ? ` · Acciones de reglas deshechas: ${(operations as any).automation.undoneRate}%` : ""}`,
       `Ejecuciones exitosas: ${autonomy.runsSucceeded} de ${autonomy.runsFinished} · Duración media: ${minutes(autonomy.avgRunMs)} · Intervenciones humanas hoy: ${autonomy.humanInterventionsToday}`
     );
   }

@@ -8,7 +8,8 @@ import { mexicoDayKey } from "./time";
 import { HugoModelRouter } from "../agent007/hugoModelRouter";
 import { draftAgentBlueprint, transitionProposal } from "./proposals";
 import { SYSTEMS } from "./systems";
-import { recordIntervention, resolveIncident } from "./incidentResolution";
+import { recordIntervention, resolveIncident, resolverTierOf } from "./incidentResolution";
+import { loadAutomationReport } from "../agentAutomation/service";
 import { groupIncidents, incidentsOfTheDay, loadIncidentSubjects } from "./incidentLabels";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -40,12 +41,14 @@ const average = (values: number[]) => values.length ? Math.round(values.reduce((
 export function autonomyReport(todayRuns: Array<Record<string, any>>, recentIncidents: Array<Record<string, any>>, interventionsToday: number) {
   const visible = recentIncidents.filter(row => row.reportingExcluded !== true);
   const resolved = visible.filter(row => row.status === "RESOLVED");
-  const byAgent = resolved.filter(row => row.resolvedBy === "AGENTE" || row.resolvedBy === "ORQUESTADOR").length;
-  const byPerson = resolved.filter(row => row.resolvedBy === "PERSONA").length;
+  const tierOf = (row: Record<string, any>) => resolverTierOf(row.resolverTier ?? row.resolvedBy);
+  const bySystem = resolved.filter(row => tierOf(row) === "SYSTEM").length, byHugo = resolved.filter(row => tierOf(row) === "HUGO").length;
+  const byAgent = bySystem + byHugo;
+  const byPerson = resolved.filter(row => resolverTierOf(row.resolverTier ?? row.resolvedBy) === "PERSON").length;
   const finishedRuns = todayRuns.filter(row => ["SUCCEEDED", "ESCALATED", "BLOCKED", "FAILED_RETRYABLE"].includes(row.status));
   return {
     openIncidents: visible.filter(row => row.status === "OPEN").length,
-    resolvedByAgent: byAgent, resolvedByPerson: byPerson,
+    resolvedByAgent: byAgent, resolvedByPerson: byPerson, resolvedBySystem: bySystem, resolvedByHugo: byHugo,
     agentResolutionRate: byAgent + byPerson ? Math.round((byAgent / (byAgent + byPerson)) * 100) : null,
     runsSucceeded: finishedRuns.filter(row => row.status === "SUCCEEDED").length, runsFinished: finishedRuns.length,
     avgRunMs: average(finishedRuns.map(row => Number(row.durationMs)).filter(value => Number.isFinite(value) && value >= 0)),
@@ -57,6 +60,7 @@ export function autonomyReport(todayRuns: Array<Record<string, any>>, recentInci
 export async function loadAgentOperations(rootId: string) {
   const day = mexicoDayKey();
   const dayStart = admin.firestore.Timestamp.fromDate(new Date(`${day}T00:00:00-06:00`));
+  const automationPromise = loadAutomationReport(rootId, day).catch(error => { console.error("AUTOMATION_REPORT_FAILED", String(error?.message || error).slice(0, 200)); return null; });
   const [control, runs, dailyRuns, incidents, dailyIncidents, proposals, dailyInterventions, dailyTraces] = await Promise.all([
     db.collection("agentControls").doc(rootId).get(),
     db.collection("agentRuns").where("rootId", "==", rootId).orderBy("updatedAt", "desc").limit(100).get(),
@@ -74,11 +78,12 @@ export async function loadAgentOperations(rootId: string) {
   const todayIncidents = (serialize(dailyIncidents) as Array<Record<string, any>>).filter(visible);
   const causes = Object.entries(todayIncidents.reduce((acc, row) => { const key = String(row.cause || "Sin causa registrada"); acc[key] = (acc[key] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cause, count]) => ({ cause, count }));
   const providerStatus = new HugoModelRouter().status();
+  const automation = await automationPromise;
   const visibleIncidents = serialize(incidents).filter(visible) as Array<Record<string, any>>;
   const incidentGroups = incidentsOfTheDay(groupIncidents(visibleIncidents, await loadIncidentSubjects(rootId, visibleIncidents).catch(error => { console.error("INCIDENT_SUBJECTS_FAILED", String(error?.message || error).slice(0, 200)); return new Map(); })), day);
   return { ok: true, systems: SYSTEMS, agents: AGENTS, tools: TOOLS, killSwitch: control.get("killSwitch") === true,
     providers: providerStatus,
-    runs: runRows, incidents: visibleIncidents, incidentGroups, proposals: serialize(proposals).filter(visible),
+    runs: runRows, incidents: visibleIncidents, incidentGroups, automation, proposals: serialize(proposals).filter(visible),
     report: { day, reviewed: new Set(today.map(row => row.entityId)).size,
       detected: today.length, incidents: todayIncidents.length,
       generated: today.filter(row => row.toolId === "quotation-recovery" && row.status === "SUCCEEDED" && row.resolution === "GENERATED_NORMAL").length,
