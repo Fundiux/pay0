@@ -65,6 +65,14 @@ test("general read delegations whitelist and coerce model input; identity keys n
   assert.throws(() => delegationForRealtimeTool("ver_solicitud", { rootId: "r" }), /INVALID_TOOL_INPUT/);
 });
 
+test("tool list stays fixed, fail closed and without the retired payment tool", () => {
+  assert.ok(realtimeToolNames.includes("buscar_pagos"));
+  assert.ok(realtimeToolNames.includes("explain_last_operation"));
+  assert.ok(!realtimeToolNames.includes("query_received_payments"));
+  assert.throws(() => delegationForRealtimeTool("query_received_payments", { operation: "LIST" }), /UNKNOWN_REALTIME_TOOL/);
+  assert.equal(realtimeToolNames.length, 20);
+});
+
 test("earnings report delegates explicit dates without allowing a model-provided identity", () => {
   const delegated = delegationForRealtimeTool("get_earnings_by_client_report", { dateFrom: "2026-10-01", dateTo: "2026-10-19", rootId: "foreign-root", uid: "foreign-user" });
   assert.deepEqual(delegated.toolInput, { dateFrom: "2026-10-01", dateTo: "2026-10-19", limit: 5000 });
