@@ -428,6 +428,14 @@
     {
       "commit": "e5a060a9",
       "capability": "WhatsApp: observar grupos y elegir su usuario desde la tarjeta del agente"
+    },
+    {
+      "commit": "e2653675",
+      "capability": "Guardar observadores resuelve el grupo desde los chats de agentes antes que el historico"
+    },
+    {
+      "commit": "56fafe10",
+      "capability": "Bloque Grupos que observa Hugo con switch, usuario y alta en linea"
     }
   ],
   "requiredText": [
