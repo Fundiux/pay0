@@ -424,6 +424,10 @@
     {
       "commit": "630843d3",
       "capability": "Cada grupo observado exige usuario duenio; sin duenio no se guarda nada"
+    },
+    {
+      "commit": "e5a060a9",
+      "capability": "WhatsApp: observar grupos y elegir su usuario desde la tarjeta del agente"
     }
   ],
   "requiredText": [
