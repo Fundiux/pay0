@@ -232,11 +232,12 @@ export async function omitWhatsAppJob(input: {
   return res.data;
 }
 export type WhatsAppAgentObserver = { agentId: string; phone: string };
-export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; observers: WhatsAppAgentObserver[] };
+export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] };
 export type WhatsAppAgentObserversState = {
   ok: boolean;
   agents: Array<{ id: string; name: string }>;
   groups: Array<{ chatId: string; name: string }>;
+  users: Array<{ uid: string; name: string }>;
   configs: WhatsAppAgentObserversConfig[];
 };
 
@@ -244,7 +245,7 @@ export async function getWhatsAppAgentObservers() {
   return (await httpsCallable<Record<string, never>, WhatsAppAgentObserversState>(functions, "getWhatsAppAgentObservers")({})).data;
 }
 
-export async function saveWhatsAppAgentObservers(input: { groupChatId: string; active: boolean; observers: WhatsAppAgentObserver[] }) {
+export async function saveWhatsAppAgentObservers(input: { groupChatId: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] }) {
   return (await httpsCallable<typeof input, { ok: boolean; observers: number }>(functions, "saveWhatsAppAgentObservers")(input)).data;
 }
 

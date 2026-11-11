@@ -14,6 +14,7 @@ export function AgentObserversPanel() {
   const [groupChatId, setGroupChatId] = useState("");
   const [observers, setObservers] = useState<WhatsAppAgentObserver[]>([]);
   const [active, setActive] = useState(true);
+  const [ownerUserUid, setOwnerUserUid] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -33,13 +34,14 @@ export function AgentObserversPanel() {
     const current = state?.configs.find(row => row.groupChatId === chatId);
     setObservers(current?.observers || []);
     setActive(current ? current.active : true);
+    setOwnerUserUid(current?.ownerUserUid || "");
   }
 
   async function save() {
     setSaving(true);
     setMessage("");
     try {
-      await saveWhatsAppAgentObservers({ groupChatId, active, observers });
+      await saveWhatsAppAgentObservers({ groupChatId, active, ownerUserUid, observers });
       setMessage("Configuración guardada.");
       await load();
     } catch (e: any) {
@@ -71,6 +73,18 @@ export function AgentObserversPanel() {
 
           {groupChatId && (
             <div className="space-y-3">
+              <label className="block max-w-xl text-xs text-slate-300">
+                Usuario al que pertenece este grupo
+                <select
+                  value={ownerUserUid}
+                  onChange={e => setOwnerUserUid(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                >
+                  <option value="">Elige un usuario</option>
+                  {state.users.map(user => <option key={user.uid} value={user.uid}>{user.name}</option>)}
+                </select>
+                <span className="mt-1 block text-slate-500">Sin usuario el agente no lee ni guarda nada de este grupo, y solo usará información de ese usuario.</span>
+              </label>
               {observers.map((row, index) => (
                 <div key={index} className="flex flex-wrap items-center gap-2">
                   <select
@@ -99,7 +113,7 @@ export function AgentObserversPanel() {
                 <label className="flex items-center gap-2 text-xs text-slate-300">
                   <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Activo
                 </label>
-                <button type="button" disabled={saving} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">
+                <button type="button" disabled={saving || (active && observers.length > 0 && !ownerUserUid)} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">
                   {saving && <Loader2 size={14} className="animate-spin" />} Guardar
                 </button>
               </div>

@@ -156,7 +156,7 @@ export class WhatsAppConnectorAuthority {
     const pending = data.poll ? await tx.get(this.db.collection("whatsappQrConnectorCommands").where("bindingId", "==", binding.id).where("status", "==", "PENDING").limit(1)) : null;
     // El conector solo recibe los grupos que su agente tiene autorizados; el resto nunca sale del teléfono.
     const observed = data.poll && agentId !== LEGACY_CONNECTOR_AGENT ? await tx.get(this.db.collection("whatsappAgentObservers").where("rootId", "==", binding.rootId).where("active", "==", true).limit(200)) : null;
-    const observedChats: string[] = observed ? observed.docs.map((doc: any) => doc.data() || {}).filter((config: any) => (config.observers || []).some((o: any) => o?.agentId === agentId)).map((config: any) => String(config.groupChatId)) : [];
+    const observedChats: string[] = observed ? observed.docs.map((doc: any) => doc.data() || {}).filter((config: any) => typeof config.ownerUserUid === "string" && config.ownerUserUid !== "" && (config.observers || []).some((o: any) => o?.agentId === agentId)).map((config: any) => String(config.groupChatId)) : [];
     let resetRef: any = null;
     if (data.resetCommandId !== undefined) {
       resetRef = this.db.doc(`whatsappQrConnectorCommands/${id(data.resetCommandId)}`);
@@ -263,17 +263,21 @@ export class WhatsAppConnectorAuthority {
     });
     const chatIds: string[] = [...new Set<string>(messages.map((m: any) => m.chatId))];
     const configs = await Promise.all(chatIds.map(chatId => tx.get(this.db.doc(`whatsappAgentObservers/${binding.rootId}__${encodeURIComponent(chatId)}`))));
-    const allowed = new Set(chatIds.filter((_chatId, index) => {
+    // A group is only read when it is assigned to a PAY0 user: nothing is stored without knowing whose group it is.
+    const ownerByChat = new Map<string, string>();
+    chatIds.forEach((chatId, index) => {
       const config = configs[index].data();
-      return config && config.rootId === binding.rootId && config.active === true && Array.isArray(config.observers) && config.observers.some((o: any) => o?.agentId === agentId);
-    }));
+      if (config && config.rootId === binding.rootId && config.active === true && Array.isArray(config.observers) && config.observers.some((o: any) => o?.agentId === agentId) &&
+          typeof config.ownerUserUid === "string" && config.ownerUserUid !== "") ownerByChat.set(chatId, config.ownerUserUid);
+    });
+    const allowed = new Set(ownerByChat.keys());
     const existing = await Promise.all(messages.map((m: any) => tx.get(this.db.collection("whatsappInboundMessages").doc(m.docId))));
     const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" });
     let stored = 0, discarded = 0, duplicates = 0;
     messages.forEach((m: any, index: number) => {
       if (!allowed.has(m.chatId)) { discarded++; return; }
       if (existing[index].exists) { duplicates++; return; }
-      tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, chatId: m.chatId, messageId: m.messageId, fromMe: m.fromMe,
+      tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, ownerUserUid: ownerByChat.get(m.chatId), chatId: m.chatId, messageId: m.messageId, fromMe: m.fromMe,
         authorHash: m.authorId ? createHash("sha256").update(`${binding.rootId}|${m.authorId}`).digest("hex").slice(0, 32) : null,
         timestampMs: m.timestampMs, type: m.type, body: m.body ?? "", reportDay: dayKey.format(new Date(m.timestampMs)),
         expiresAt: new Date(Date.now() + INBOUND_RETENTION_MS), createdAt: FieldValue.serverTimestamp() });

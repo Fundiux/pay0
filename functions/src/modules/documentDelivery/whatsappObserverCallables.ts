@@ -16,8 +16,9 @@ const configId = (rootId: string, chatId: string) => `${rootId}__${encodeURIComp
 
 export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
   const { rootId } = await requireWhatsAppSuperadmin(request);
-  const [configs, agentGroups] = await Promise.all([
+  const [configs, users, agentGroups] = await Promise.all([
     db.collection("whatsappAgentObservers").where("rootId", "==", rootId).limit(200).get(),
+    db.collection("users").where("rootId", "==", rootId).limit(500).get(),
     db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
   ]);
   // Solo se ofrecen los grupos que ven los conectores de los agentes; los de la conexión histórica ya no se mezclan.
@@ -27,7 +28,11 @@ export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60
     ok: true,
     agents: AGENTS.map(agent => ({ id: agent.id, name: agent.name })),
     groups: [...uniqueGroups.entries()].map(([chatId, name]) => ({ chatId, name })),
-    configs: configs.docs.map(doc => ({ groupChatId: doc.get("groupChatId"), groupName: doc.get("groupName") || "", active: doc.get("active") === true, observers: doc.get("observers") || [] })),
+    // Solo el nombre visible; el identificador viaja como valor del selector, nunca se muestra.
+    users: users.docs.filter(doc => doc.get("isDeleted") !== true && (doc.get("active") ?? doc.get("isActive") ?? true) !== false)
+      .map(doc => ({ uid: doc.id, name: clean(doc.get("displayName") || doc.get("nombreUsuario") || doc.get("usernameNormalized") || doc.get("username") || "Usuario", 120) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es")),
+    configs: configs.docs.map(doc => ({ groupChatId: doc.get("groupChatId"), groupName: doc.get("groupName") || "", active: doc.get("active") === true, ownerUserUid: doc.get("ownerUserUid") || "", observers: doc.get("observers") || [] })),
   };
 });
 
@@ -37,6 +42,14 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
   const active = request.data?.active !== false;
   const rawObservers: unknown[] = Array.isArray(request.data?.observers) ? request.data.observers : [];
   if (!groupChatId || rawObservers.length > MAX_OBSERVERS_PER_GROUP) throw new HttpsError("invalid-argument", "Grupo requerido y máximo 10 observadores por grupo.");
+
+  // Cada grupo pertenece a un usuario de PAY0: sin dueño no se lee ni se guarda nada del grupo.
+  const ownerUserUid = clean(request.data?.ownerUserUid, 128);
+  if (active && rawObservers.length > 0 && !ownerUserUid) throw new HttpsError("invalid-argument", "Elige el usuario al que pertenece el grupo.");
+  if (ownerUserUid) {
+    const owner = await db.doc(`users/${ownerUserUid}`).get();
+    if (!owner.exists || String(owner.get("rootId") || owner.id) !== rootId || owner.get("isDeleted") === true) throw new HttpsError("invalid-argument", "Usuario del grupo no válido.");
+  }
 
   const knownAgents = new Set(AGENTS.map(agent => agent.id));
   const seenAgents = new Set<string>();
@@ -58,7 +71,7 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
   if (!chat.exists || chat.get("rootId") !== rootId || chat.get("isGroup") !== true) throw new HttpsError("failed-precondition", "El grupo no existe en los chats sincronizados de este root.");
 
   await db.doc(`whatsappAgentObservers/${configId(rootId, groupChatId)}`).set({
-    rootId, groupChatId, groupName: clean(chat.get("name")), observers, active,
+    rootId, groupChatId, groupName: clean(chat.get("name")), observers, active, ownerUserUid,
     updatedBy: uid, updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, observers: observers.length };

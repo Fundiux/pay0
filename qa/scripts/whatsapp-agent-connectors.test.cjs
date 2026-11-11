@@ -65,8 +65,8 @@ const makeTransport = (privateKeyPem, binding) => createAuthorityTransport({ bas
     assert.equal(db.data('whatsappQrChats/' + enc(chat)).name, 'Legacy');
   });
   await test('heartbeat-returns-only-groups-authorized-for-the-agent', async () => {
-    db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: true, observers: [{ agentId: 'maria', phone: '' }] });
-    db.seed('whatsappAgentObservers/root-a__' + enc(otherChat), { rootId: 'root-a', groupChatId: otherChat, active: true, observers: [{ agentId: 'sentinel', phone: '' }] });
+    db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: true, ownerUserUid: 'user-betell', observers: [{ agentId: 'maria', phone: '' }] });
+    db.seed('whatsappAgentObservers/root-a__' + enc(otherChat), { rootId: 'root-a', groupChatId: otherChat, active: true, ownerUserUid: 'user-ebasor', observers: [{ agentId: 'sentinel', phone: '' }] });
     const agent = await agentTransport.operate('HEARTBEAT', { ready: true, poll: true });
     assert.deepEqual(agent.observedChats, [chat]);
     const legacy = await legacyTransport.operate('HEARTBEAT', { ready: true, poll: true });
@@ -77,7 +77,7 @@ const makeTransport = (privateKeyPem, binding) => createAuthorityTransport({ bas
     const r = await agentTransport.operate('INBOUND_GROUP', { messages: [message('m1'), message('m2', { chatId: otherChat })] });
     assert.equal(r.stored, 1); assert.equal(r.discarded, 1); assert.equal(r.duplicates, 0);
     const row = db.data('whatsappInboundMessages/' + agentBinding.id + '__m1');
-    assert.equal(row.rootId, 'root-a'); assert.equal(row.agentId, 'maria'); assert.equal(row.body, 'hola');
+    assert.equal(row.rootId, 'root-a'); assert.equal(row.agentId, 'maria'); assert.equal(row.body, 'hola'); assert.equal(row.ownerUserUid, 'user-betell');
     assert(row.authorHash && !JSON.stringify(row).includes('5215500000000'));
     assert(row.expiresAt);
     assert.equal(db.data('whatsappInboundMessages/' + agentBinding.id + '__m2'), undefined);
@@ -97,7 +97,16 @@ const makeTransport = (privateKeyPem, binding) => createAuthorityTransport({ bas
     db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: false, observers: [{ agentId: 'maria', phone: '' }] });
     const r = await agentTransport.operate('INBOUND_GROUP', { messages: [message('y1')] });
     assert.equal(r.stored, 0); assert.equal(r.discarded, 1);
+    db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: true, ownerUserUid: 'user-betell', observers: [{ agentId: 'maria', phone: '' }] });
+  });
+  await test('group-without-owner-user-is-not-observed-and-stores-nothing', async () => {
     db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: true, observers: [{ agentId: 'maria', phone: '' }] });
+    const hb = await agentTransport.operate('HEARTBEAT', { ready: true, poll: true });
+    assert.deepEqual(hb.observedChats, []);
+    const r = await agentTransport.operate('INBOUND_GROUP', { messages: [message('own1')] });
+    assert.equal(r.stored, 0); assert.equal(r.discarded, 1);
+    assert.equal(db.data('whatsappInboundMessages/' + agentBinding.id + '__own1'), undefined);
+    db.seed('whatsappAgentObservers/root-a__' + enc(chat), { rootId: 'root-a', groupChatId: chat, active: true, ownerUserUid: 'user-betell', observers: [{ agentId: 'maria', phone: '' }] });
   });
   await test('list-owned-shows-each-agent-connector', async () => {
     const r = await service.listOwned(req('owner-a'));
