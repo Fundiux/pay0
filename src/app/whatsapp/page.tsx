@@ -1,6 +1,5 @@
 "use client";
 
-import { AgentObserversPanel } from "@/components/whatsapp/AgentObserversPanel";
 import { AgentConnectorsPanel } from "@/components/whatsapp/AgentConnectorsPanel";
 
 import {
@@ -2287,7 +2286,6 @@ export default function WhatsAppPage() {
         </div>
       </details>
 
-      <AgentObserversPanel />
 
       <AgentConnectorsPanel />
 

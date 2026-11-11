@@ -6,6 +6,7 @@ import {
   createWhatsAppAgentEnrollment,
   getWhatsAppAgentActivity,
   getWhatsAppAgentObservers,
+  saveWhatsAppAgentObservers,
   listWhatsAppAgentChats,
   listWhatsAppAgentConnectors,
   revokeWhatsAppAgentConnector,
@@ -17,38 +18,96 @@ import {
 
 const minutes = (ms: number | null) => (ms === null ? "—" : `${(ms / 60000).toFixed(1)} min`);
 
-// Grupos que el conector de un agente ve. De los chats privados solo se cuenta cuántos hay.
-function AgentChatsList({ bindingId }: { bindingId: string }) {
+// Grupos que ve el conector de un agente. Aquí se elige cuáles observa y a qué usuario de PAY0 pertenece cada uno.
+// De los chats privados solo se cuenta cuántos hay.
+function AgentGroupsList({ bindingId, agentId, meta, onChanged }: { bindingId: string; agentId: string; meta: WhatsAppAgentObserversState; onChanged: () => Promise<void> }) {
   const [chats, setChats] = useState<WhatsAppAgentChats | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState("");
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try { setChats(await listWhatsAppAgentChats(bindingId)); }
-    catch (e: any) { setError(`No se pudieron cargar los grupos: ${e?.message || e}`); }
-    finally { setLoading(false); }
+  useEffect(() => {
+    let alive = true;
+    listWhatsAppAgentChats(bindingId)
+      .then(result => { if (alive) setChats(result); })
+      .catch((e: any) => { if (alive) setError(`No se pudieron cargar los grupos: ${e?.message || e}`); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [bindingId]);
+
+  const configFor = (chatId: string) => meta.configs.find(row => row.groupChatId === chatId);
+  const observed = (chatId: string) => { const config = configFor(chatId); return !!config && config.active && config.observers.some(o => o.agentId === agentId); };
+  const ownerOf = (chatId: string) => picked[chatId] ?? configFor(chatId)?.ownerUserUid ?? "";
+
+  // Un toque guarda: este agente se agrega o se quita de los observadores del grupo sin tocar a los demás.
+  async function apply(chatId: string, observe: boolean, owner: string) {
+    const config = configFor(chatId);
+    const others = (config?.observers || []).filter(o => o.agentId !== agentId);
+    const mine = config?.observers.find(o => o.agentId === agentId);
+    const observers = observe ? [...others, { agentId, phone: mine?.phone || "" }] : others;
+    setSaving(chatId);
+    setMessage("");
+    try {
+      await saveWhatsAppAgentObservers({ groupChatId: chatId, active: observers.length > 0, ownerUserUid: owner, observers });
+      await onChanged();
+      setMessage(observe ? "Guardado: el agente observa este grupo." : "Guardado: el agente ya no observa este grupo.");
+    } catch (e: any) {
+      setMessage(`No se pudo guardar: ${e?.message || e}`);
+    } finally {
+      setSaving("");
+    }
   }
 
   return (
-    <details className="rounded-lg border border-slate-800 bg-slate-950/50 p-2" onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open && !chats && !loading) void load(); }}>
+    <details open className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
       <summary className="cursor-pointer text-xs font-medium text-slate-300">
         Grupos de este agente{chats ? ` (${chats.groups.length})` : ""}
       </summary>
       {loading && <div className="mt-2 flex items-center gap-2 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> Cargando...</div>}
       {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
       {chats && (
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 space-y-2">
           {chats.groups.length === 0 && <p className="text-xs text-slate-500">Todavía no hay grupos sincronizados.</p>}
-          <ul className="max-h-48 space-y-1 overflow-y-auto pr-1">
-            {chats.groups.map(group => (
-              <li key={group.chatId} className="flex items-center justify-between gap-2 text-xs text-slate-300">
-                <span className="truncate">{group.name || "Grupo sin nombre"}</span>
-                {group.archived && <span className="shrink-0 text-slate-500">Archivado</span>}
-              </li>
-            ))}
+          <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {chats.groups.map(group => {
+              const on = observed(group.chatId), owner = ownerOf(group.chatId), busy = saving === group.chatId;
+              return (
+                <li key={group.chatId} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-xs text-slate-300">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-medium text-slate-200">{group.name || "Grupo sin nombre"}{group.archived ? " (archivado)" : ""}</span>
+                    <span className={on ? "shrink-0 text-emerald-300" : "shrink-0 text-slate-500"}>{on ? "Observando" : "No observado"}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select
+                      value={owner}
+                      disabled={busy}
+                      aria-label={`Usuario del grupo ${group.name}`}
+                      onChange={e => { setPicked({ ...picked, [group.chatId]: e.target.value }); if (on && e.target.value) void apply(group.chatId, true, e.target.value); }}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+                    >
+                      <option value="">Usuario del grupo</option>
+                      {meta.users.map(user => <option key={user.uid} value={user.uid}>{user.name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      disabled={busy || (!on && !owner)}
+                      title={!on && !owner ? "Elige primero el usuario del grupo" : on ? "Dejar de observar" : "Observar este grupo"}
+                      onClick={() => void apply(group.chatId, !on, owner)}
+                      className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50 ${on ? "border-emerald-500/50 bg-emerald-600/20 text-emerald-200" : "border-slate-700 text-slate-300"}`}
+                    >
+                      {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+                      {on ? "Observar: sí" : "Observar: no"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+          {message && <p className="text-xs text-slate-300">{message}</p>}
           <p className="text-xs text-slate-500">
             Chats privados: {chats.privateChats}. No se muestran ni sus nombres ni sus números.
             {chats.truncated ? " La lista está incompleta." : ""}
@@ -117,7 +176,7 @@ export function AgentConnectorsPanel() {
     <details className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
       <summary className="cursor-pointer text-lg font-semibold text-white">Conexión de WhatsApp por agente</summary>
       <p className="mt-2 max-w-3xl text-sm text-slate-400">
-        Cada agente se conecta con su propio QR y su propio conector local. Solo se leen los grupos que configures arriba para ese agente; los mensajes se borran a los 30 días.
+        Cada agente se conecta con su propio QR y su propio conector local. Solo se leen los grupos que actives aquí para ese agente, y cada uno debe tener su usuario; los mensajes se borran a los 30 días.
       </p>
 
       {!meta ? (
@@ -137,7 +196,7 @@ export function AgentConnectorsPanel() {
                     {connector.qrDataUrl && <img src={connector.qrDataUrl} alt={`QR de ${agent.name}`} className="h-40 w-40 rounded bg-white p-1" />}
                     {connector.error && <p className="text-xs text-rose-300">{connector.error}</p>}
                     <p className="text-xs text-slate-500">{connector.lastSeenAtMs ? `Última señal: ${new Date(connector.lastSeenAtMs).toLocaleString("es-MX")}` : "Sin señal todavía"}</p>
-                    <AgentChatsList bindingId={connector.bindingId} />
+                    <AgentGroupsList bindingId={connector.bindingId} agentId={agent.id} meta={meta} onChanged={load} />
                     <button type="button" disabled={busy === connector.bindingId} onClick={() => void revoke(connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-40">
                       <ShieldOff size={14} /> Revocar conexión
                     </button>
