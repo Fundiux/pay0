@@ -4,6 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { normalizeClientWhatsapp } from "../clients/domain";
 import { AGENTS } from "../agentOperations/contract";
 import { requireWhatsAppSuperadmin } from "./whatsappConnectorAuthority";
+import { resolveObservableGroup, type ObserverGroupDb } from "./whatsappObserverGroups";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -63,15 +64,11 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
     return { agentId, phone };
   });
 
-  let chat: FirebaseFirestore.DocumentSnapshot = await db.doc(`whatsappQrChats/${encodeURIComponent(groupChatId)}`).get();
-  if (!chat.exists) {
-    const viaAgent = await db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("chatId", "==", groupChatId).limit(1).get();
-    if (!viaAgent.empty) chat = viaAgent.docs[0];
-  }
-  if (!chat.exists || chat.get("rootId") !== rootId || chat.get("isGroup") !== true) throw new HttpsError("failed-precondition", "El grupo no existe en los chats sincronizados de este root.");
+  const group = await resolveObservableGroup(db as unknown as ObserverGroupDb, rootId, groupChatId);
+  if (!group) throw new HttpsError("failed-precondition", "El grupo no existe en los chats sincronizados de este root.");
 
   await db.doc(`whatsappAgentObservers/${configId(rootId, groupChatId)}`).set({
-    rootId, groupChatId, groupName: clean(chat.get("name")), observers, active, ownerUserUid,
+    rootId, groupChatId, groupName: group.name, observers, active, ownerUserUid,
     updatedBy: uid, updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, observers: observers.length };
