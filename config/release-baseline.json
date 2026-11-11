@@ -404,6 +404,26 @@
     {
       "commit": "d4e0255c",
       "capability": "Reglas de Hugo: propuesta con 3 lecciones, aprobacion del dueno, 7 dias de simulacion, verificacion y frenos"
+    },
+    {
+      "commit": "d489b87a",
+      "capability": "WhatsApp: grupos de cada agente y solo conteo de privados"
+    },
+    {
+      "commit": "583ee306",
+      "capability": "Directorio de numeros de atencion por usuario (solo superadmin)"
+    },
+    {
+      "commit": "a9de5b2e",
+      "capability": "Observadores de grupo solo desde conectores de agentes"
+    },
+    {
+      "commit": "c817f2b7",
+      "capability": "Reglas puras de respuesta automatica de grupos (apagadas)"
+    },
+    {
+      "commit": "630843d3",
+      "capability": "Cada grupo observado exige usuario duenio; sin duenio no se guarda nada"
     }
   ],
   "requiredText": [
