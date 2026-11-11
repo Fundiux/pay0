@@ -303,7 +303,7 @@ const DISPERSION_CREATE_SCHEDULER_MAX_PER_ROOT = 15;
 // H4_D87_A58_A51_PERSISTENT_SCAN_CURSOR
 const DISPERSION_CREATE_SCHEDULER_SCAN_PAGE_SIZE = 50;
 
-async function buildDispersionSchedulerAuth(
+export async function buildDispersionSchedulerAuth(
   principal: AnyDoc,
   expectedRootId: string,
 ): Promise<AuthContext> {

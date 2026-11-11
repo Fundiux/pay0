@@ -87,6 +87,7 @@
     "qa:simulated-dispersion-e2e": "npm --prefix functions run build && node qa/scripts/verify-simulated-dispersion-e2e.cjs",
     "qa:hugo-voice-runtime": "node qa/scripts/verify-hugo-voice-runtime-contract.cjs && npm --prefix services/hugo-voice-gateway test",
     "qa:client-csf-create": "npm --prefix functions run build && node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --project demo-pay0 --only firestore,storage \"node qa/scripts/client-csf-create-regression.cjs\"",
+    "qa:dispersion-iq-receipt-auto": "npm --prefix functions run build && node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --project demo-pay0 --only firestore,storage \"node qa/scripts/dispersion-iq-receipt-auto-emulator.cjs\"",
     "qa:dispersion-cash-signature": "npm --prefix functions run build && node qa/scripts/dispersion-cash-receipt.test.mjs && node scripts/run-firebase-clean-env.mjs emulators:exec --config firebase.emulator-tests.json --project demo-pay0 --only firestore,storage \"node qa/scripts/dispersion-cash-signature-emulator.cjs\"",
     "qa:document-ui": "node --experimental-strip-types qa/scripts/authorized-document-ui-integration.mjs",
     "qa:commissions": "npm --prefix functions run build && node qa/scripts/commission-distribution-domain.test.cjs",

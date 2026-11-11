@@ -104,6 +104,7 @@ function getDefaultConfig(): IqOperatingCalendarConfig {
       pagoCreate: 1,
       pagoReconciliation: 20,
       dispersionCreate: 5,
+      dispersionReceipt: 15,
       paymentApplicationExecution: 5,
     },
     automation: {

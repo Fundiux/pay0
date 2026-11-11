@@ -66,6 +66,7 @@ export { initPagoDocumentUpload, finalizePagoDocumentUpload, updateRejectedPagoA
 export { initDispersionDocumentUpload, finalizeDispersionDocumentUpload, deactivateDispersionDocument } from "./modules/dispersionDocuments/callables";
 export { createDispersionCashSignatureLink, getDispersionCashSignatureRequest, submitDispersionCashSignature } from "./modules/dispersionCashReceipt/callables";
 export { importIqDispersionReceipt } from "./modules/dispersionDocuments/iqReceiptImport";
+export { processIqDispersionReceipts } from "./modules/dispersionDocuments/iqReceiptAuto";
 
 export { telegramWebhook } from "./modules/telegram/webhook";
 
