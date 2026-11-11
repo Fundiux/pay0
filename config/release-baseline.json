@@ -440,6 +440,10 @@
     {
       "commit": "a4fce5a9",
       "capability": "WhatsApp sin la conexion vieja: solo agentes y el historial de envios de solo lectura"
+    },
+    {
+      "commit": "557d230e",
+      "capability": "WhatsApp compacto: agentes conectados arriba y sin conexion en lista cerrada"
     }
   ],
   "requiredText": [
