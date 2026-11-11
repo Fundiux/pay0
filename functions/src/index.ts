@@ -254,6 +254,7 @@ export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";
+export { reviewAgentAutomationRule, processAgentAutomationRules } from "./modules/agentAutomation/callables";
 export { getBusinessIndicators } from "./modules/businessIndicators/callables";
 export { applyWarmCapacityWindow } from "./modules/warmCapacity/callables";
 export { getPendingOperationsSummary } from "./modules/agentOperations/pendingItems";

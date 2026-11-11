@@ -15,7 +15,7 @@ export const resolverTierOf = (resolvedBy: unknown): ResolverTier | null =>
 export type InterventionKind = "INCIDENT_RESOLVED" | "PROPOSAL_REVIEWED" | "KILL_SWITCH";
 
 /** Cierra un incidente abierto de forma idempotente y guarda quién lo resolvió y cuánto tardó. */
-export async function resolveIncident(incidentId: string, input: { rootId: string; resolvedBy: IncidentResolver; actorUid?: string | null; note: string; resolution?: string; actionTaken?: string }): Promise<boolean> {
+export async function resolveIncident(incidentId: string, input: { rootId: string; resolvedBy: IncidentResolver; actorUid?: string | null; note: string; resolution?: string; actionTaken?: string; ruleId?: string }): Promise<boolean> {
   const ref = db.collection("agentIncidents").doc(incidentId);
   return db.runTransaction(async tx => {
     const snap = await tx.get(ref);
@@ -24,7 +24,7 @@ export async function resolveIncident(incidentId: string, input: { rootId: strin
     tx.update(ref, {
       status: "RESOLVED", resolvedBy: input.resolvedBy, resolvedByUid: clean(input.actorUid, 128) || null,
       resolutionNote: clean(input.note), resolverTier: resolverTierOf(input.resolvedBy),
-      resolution: clean(input.resolution, 80) || (input.resolvedBy === "PERSONA" ? "MANUAL" : "AUTOMATICA"), actionTaken: clean(input.actionTaken ?? input.note), resolvedAt: FieldValue.serverTimestamp(),
+      resolution: clean(input.resolution, 80) || (input.resolvedBy === "PERSONA" ? "MANUAL" : "AUTOMATICA"), actionTaken: clean(input.actionTaken ?? input.note), resolvedByRuleId: clean(input.ruleId, 64) || null, resolvedAt: FieldValue.serverTimestamp(),
       timeToResolveMs: createdMs ? Math.max(0, Date.now() - createdMs) : null,
     });
     // Lo que hizo la persona queda como candidato de aprendizaje para Hugo; no activa ninguna regla por sí solo.

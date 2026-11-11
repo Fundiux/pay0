@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAgentOperations, resolveAgentIncident, reviewAgentProposal, setAgentKillSwitch, type AgentOperations } from "@/services/agentOperations";
+import { getAgentOperations, resolveAgentIncident, reviewAgentAutomationRule, type AutomationAction, reviewAgentProposal, setAgentKillSwitch, type AgentOperations } from "@/services/agentOperations";
 
 const card = "rounded-2xl border border-slate-700 bg-slate-900 p-5";
 
@@ -25,6 +25,13 @@ export default function AgentOperationsPage() {
     if (busy || reason.length < 5) return;
     setBusy(true); setError("");
     try { for (const id of ids) await resolveAgentIncident(id, reason); await refresh(); }
+    catch (error: any) { setError(String(error?.message || error)); }
+    finally { setBusy(false); }
+  };
+  const automate = async (action: AutomationAction, ruleId?: string) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await reviewAgentAutomationRule(action, ruleId); await refresh(); }
     catch (error: any) { setError(String(error?.message || error)); }
     finally { setBusy(false); }
   };
@@ -78,11 +85,33 @@ export default function AgentOperationsPage() {
         <section className={card}>
           <h2 className="font-semibold">Reporte operacional · {data.report.day}</h2>
           <p className="mt-2 text-sm">Solicitudes revisadas: {data.report.reviewed} · Ejecuciones: {data.report.detected} · Incidencias: {data.report.incidents} · Cotizaciones normales: {data.report.generated} · Correcciones: {data.report.corrected} · Verificadas: {data.report.verified} · Bloqueadas o escaladas: {data.report.escalated} · Reintentables: {data.report.retryable}</p>
-          {data.report.autonomy && <p className="mt-2 text-sm text-slate-300">Autonomía: incidentes abiertos {data.report.autonomy.openIncidents} · resueltos por agentes {data.report.autonomy.resolvedByAgent} · resueltos por personas {data.report.autonomy.resolvedByPerson}{data.report.autonomy.agentResolutionRate !== null ? ` · autonomía ${data.report.autonomy.agentResolutionRate}%` : ""} · intervenciones humanas hoy {data.report.autonomy.humanInterventionsToday}{data.report.autonomy.avgRunMs !== null ? ` · tiempo medio por ejecución ${(data.report.autonomy.avgRunMs / 1000).toFixed(1)} s` : ""}</p>}
+          {data.report.autonomy && <p className="mt-2 text-sm text-slate-300">Autonomía: incidentes abiertos {data.report.autonomy.openIncidents} · resueltos por el sistema {data.report.autonomy.resolvedBySystem ?? 0} · por Hugo {data.report.autonomy.resolvedByHugo ?? 0} · resueltos por personas {data.report.autonomy.resolvedByPerson}{data.report.autonomy.agentResolutionRate !== null ? ` · autonomía ${data.report.autonomy.agentResolutionRate}%` : ""} · intervenciones humanas hoy {data.report.autonomy.humanInterventionsToday}{data.report.autonomy.avgRunMs !== null ? ` · tiempo medio por ejecución ${(data.report.autonomy.avgRunMs / 1000).toFixed(1)} s` : ""}</p>}
           <p className="mt-1 text-xs text-slate-400">Tokens hoy: {(data.report.tokens ?? []).length ? (data.report.tokens ?? []).map(row => `${row.provider}: ${row.requests} consultas, ${row.input.toLocaleString("es-MX")} entrada / ${(row.output + row.reasoning).toLocaleString("es-MX")} salida`).join(" · ") : "sin consultas registradas"}</p>
           <div className="mt-3 space-y-1 text-xs text-slate-300">{data.report.causes.map(row => <p key={row.cause}>{row.count} × {row.cause}</p>)}</div>
           <p className="mt-2 text-xs text-amber-300">{data.reportScope}</p>
         </section>
+
+        {data.automation && <section className={card}>
+          <div className="flex items-center justify-between gap-4">
+            <div><h2 className="font-semibold">Reglas de Hugo</h2><p className="text-sm text-slate-400">Hugo propone una regla cuando tres incidencias distintas se resolvieron de la misma forma. Nada se ejecuta sin tu aprobación; después corre 7 días en simulación.</p></div>
+            <button disabled={busy} onClick={() => void automate(data.automation!.killSwitch ? "KILL_OFF" : "KILL_ON")} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{data.automation.killSwitch ? "Reanudar reglas" : "Detener todas las reglas"}</button>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">Interruptor de reglas: {data.automation.killSwitch ? "DETENIDAS" : "operando"} · Acciones verificadas: {data.automation.verifiedActions} · Acciones deshechas: {data.automation.undoneRate !== null ? `${data.automation.undoneRate}%` : "sin datos"}</p>
+          {data.automation.rules.length ? data.automation.rules.map(rule => <div key={rule.id} className="mt-3 rounded-lg border border-slate-700 p-3 text-sm">
+            <p>{rule.toolLabel} cuando: {rule.causeLabel}</p>
+            <p className="mt-1 text-xs text-slate-400">{rule.statusLabel}{rule.paused ? " · pausada" : ""} · Basada en {rule.evidenceCount} incidencias · Tope diario {rule.dailyCap}{rule.simulationEndsAtMs && rule.status === "SIMULACION" ? ` · simula hasta ${new Date(rule.simulationEndsAtMs).toLocaleDateString("es-MX")}` : ""} · Hoy: {rule.simulatedToday} simuladas, {rule.executedToday} ejecutadas</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {rule.status === "PROPUESTA" && <>
+                <button disabled={busy} onClick={() => void automate("APPROVE", rule.id)} className="rounded border border-emerald-500 px-2 py-1">Aprobar e iniciar simulación</button>
+                <button disabled={busy} onClick={() => void automate("REJECT", rule.id)} className="rounded border border-rose-500 px-2 py-1">Rechazar</button>
+              </>}
+              {(rule.status === "SIMULACION" || rule.status === "ACTIVA") && <>
+                <button disabled={busy} onClick={() => void automate(rule.paused ? "RESUME" : "PAUSE", rule.id)} className="rounded border border-violet-500 px-2 py-1">{rule.paused ? "Reanudar" : "Pausar"}</button>
+                <button disabled={busy} onClick={() => void automate("REVOKE", rule.id)} className="rounded border border-rose-500 px-2 py-1">Revocar</button>
+              </>}
+            </div>
+          </div>) : <p className="mt-3 text-sm text-slate-500">Todavía no hay reglas propuestas.</p>}
+        </section>}
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section className={card}>
