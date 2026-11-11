@@ -5,7 +5,6 @@ import { requireWhatsAppSuperadmin, WhatsAppConnectorAuthority } from "./whatsap
 import {
   applyWhatsAppDestinationsToJob,
   buildWhatsAppRouteId,
-  getWhatsAppJobClientLabel,
   getWhatsAppJobSourceType,
   normalizeWhatsAppRouteKey,
   serializeWhatsAppDestination,
@@ -325,43 +324,6 @@ export const getWhatsAppQrDashboard = onCall(
 );
 
 
-// WA_REMOTE_CONTROL_A1
-type WhatsAppConnectorCommandType = "SYNC_CHATS" | "NEW_QR";
-
-async function enqueueWhatsAppConnectorCommand(
-  request: any,
-  type: WhatsAppConnectorCommandType
-) {
-  return connectorAuthority.enqueue(request, type);
-}
-
-export const requestWhatsAppChatsSync = onCall(
-  {
-    cors: true,
-    timeoutSeconds: 30,
-    memory: "256MiB",
-  },
-  async (request) =>
-    enqueueWhatsAppConnectorCommand(
-      request,
-      "SYNC_CHATS"
-    )
-);
-
-export const requestWhatsAppNewQr = onCall(
-  {
-    cors: true,
-    timeoutSeconds: 30,
-    memory: "256MiB",
-  },
-  async (request) =>
-    enqueueWhatsAppConnectorCommand(
-      request,
-      "NEW_QR"
-    )
-);
-// WA_REMOTE_CONTROL_A1_END
-
 export const saveWhatsAppDeliveryRoute = onCall(
   { cors: true, timeoutSeconds: 60, memory: "256MiB" },
   async (request) => {
@@ -497,137 +459,6 @@ export const saveWhatsAppDeliveryRoute = onCall(
       destinationsCount: destinationChats.length,
       appliedCount,
       message: `Ruta guardada con ${destinationChats.length} destino(s).`,
-    };
-  }
-);
-
-export const resolveWhatsAppJobDestinations = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
-  async (request) => {
-    const { uid, user, rootId } = await requireSuperadminUser(request);
-    const jobId = cleanText(request.data?.jobId);
-
-    if (!jobId) {
-      throw new HttpsError("invalid-argument", "Falta jobId.");
-    }
-
-    const jobRef = db.collection("documentDeliveryJobs").doc(jobId);
-    const jobSnap = await jobRef.get();
-
-    if (!jobSnap.exists) {
-      throw new HttpsError("not-found", "No existe el job WhatsApp.");
-    }
-
-    const job = jobSnap.data() || {};
-    if (cleanText(job.rootId) !== rootId) {
-      throw new HttpsError("permission-denied", "El job WhatsApp no pertenece a tu root.");
-    }
-    const result = await applyWhatsAppDestinationsToJob(db, jobRef, job, { uid, name: userName(user) });
-    const { ok: _routeOk, ...routeResult } = result;
-
-    return {
-      ok: true,
-      jobId,
-      ...routeResult,
-    };
-  }
-);
-
-// Override manual temporal. Se conserva como excepcion, no como flujo principal.
-export const assignWhatsAppJobDestination = onCall(
-  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
-  async (request) => {
-    const { uid, user, rootId } = await requireSuperadminUser(request);
-
-    const jobId = cleanText(request.data?.jobId);
-    const chatDocId = cleanText(request.data?.chatDocId);
-
-    if (!jobId) {
-      throw new HttpsError("invalid-argument", "Falta jobId.");
-    }
-
-    if (!chatDocId) {
-      throw new HttpsError("invalid-argument", "Falta chatDocId.");
-    }
-
-    const jobRef = db.collection("documentDeliveryJobs").doc(jobId);
-    const chatRef = db.collection("whatsappQrChats").doc(chatDocId);
-
-    const [jobSnap, chatSnap] = await Promise.all([jobRef.get(), chatRef.get()]);
-
-    if (!jobSnap.exists) {
-      throw new HttpsError("not-found", "No existe el job WhatsApp.");
-    }
-
-    if (!chatSnap.exists) {
-      throw new HttpsError("not-found", "No existe el chat WhatsApp seleccionado.");
-    }
-
-    const job = jobSnap.data() || {};
-    const chat = chatSnap.data() || {};
-
-    if (cleanText(job.rootId) !== rootId) {
-      throw new HttpsError("permission-denied", "El job WhatsApp no pertenece a tu root.");
-    }
-
-    if (cleanText(chat.rootId) !== rootId) {
-      throw new HttpsError("permission-denied", "El chat WhatsApp no pertenece a tu root.");
-    }
-
-    if (cleanText(job.channel || "WHATSAPP") !== "WHATSAPP") {
-      throw new HttpsError("failed-precondition", "El job no es de WhatsApp.");
-    }
-
-    const status = cleanText(job.status || "");
-    if (["SENDING", "SENT"].includes(status)) {
-      throw new HttpsError("failed-precondition", "No se puede cambiar destino de un job enviado o en envio.");
-    }
-
-    const destination = serializeWhatsAppDestination(chatSnap);
-
-    await jobRef.set(
-      {
-        deliveryMode: "MULTI_TARGET",
-        targetResolutionStatus: "MANUAL_OVERRIDE",
-        targetDestinations: [destination],
-        targetDestinationsCount: 1,
-        targetChatId: destination.chatId,
-        targetChatName: destination.chatName,
-        targetChatType: destination.chatType,
-        targetChatSafeDocId: destination.safeDocId,
-        targetConfiguredAt: admin.firestore.FieldValue.serverTimestamp(),
-        targetConfiguredByUid: uid,
-        targetConfiguredByName: userName(user),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    await jobRef.collection("deliveries").doc(encodeURIComponent(destination.safeDocId)).set(
-      {
-        channel: "WHATSAPP",
-        status: "PENDING_MANUAL_RELEASE",
-        connectorId: "default",
-        routeId: null,
-        routeMatchType: "MANUAL_OVERRIDE",
-        chatId: destination.chatId,
-        chatName: destination.chatName,
-        chatType: destination.chatType,
-        safeDocId: destination.safeDocId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    return {
-      ok: true,
-      jobId,
-      targetChatId: destination.chatId,
-      targetChatName: destination.chatName,
-      targetChatType: destination.chatType,
-      status,
-      message: "Destino WhatsApp configurado como excepcion. El job no se envio.",
     };
   }
 );

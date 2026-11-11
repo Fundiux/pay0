@@ -126,36 +126,6 @@ export async function getWhatsAppQrDashboard(): Promise<WhatsAppQrDashboard> {
   return res.data as WhatsAppQrDashboard;
 }
 
-// WA_REMOTE_CONTROL_A1
-export type WhatsAppConnectorCommandResponse = {
-  ok: boolean;
-  commandId: string;
-  type: "SYNC_CHATS" | "NEW_QR";
-  status: string;
-  message: string;
-};
-
-export async function requestWhatsAppChatsSync():
-  Promise<WhatsAppConnectorCommandResponse> {
-  const fn = httpsCallable(
-    functions,
-    "requestWhatsAppChatsSync"
-  );
-  const res: any = await fn({});
-  return res.data as WhatsAppConnectorCommandResponse;
-}
-
-export async function requestWhatsAppNewQr():
-  Promise<WhatsAppConnectorCommandResponse> {
-  const fn = httpsCallable(
-    functions,
-    "requestWhatsAppNewQr"
-  );
-  const res: any = await fn({});
-  return res.data as WhatsAppConnectorCommandResponse;
-}
-// WA_REMOTE_CONTROL_A1_END
-
 export async function saveWhatsAppDeliveryRoute(input: {
   clienteId: string;
   sourceType: string;
@@ -171,21 +141,6 @@ export async function saveWhatsAppDeliveryRoute(input: {
   message: string;
 }> {
   const fn = httpsCallable(functions, "saveWhatsAppDeliveryRoute");
-  const res: any = await fn(input);
-  return res.data;
-}
-
-export async function resolveWhatsAppJobDestinations(input: {
-  jobId: string;
-}): Promise<{
-  ok: boolean;
-  jobId: string;
-  status: string;
-  routeId?: string;
-  matchType?: string;
-  destinationsCount: number;
-}> {
-  const fn = httpsCallable(functions, "resolveWhatsAppJobDestinations");
   const res: any = await fn(input);
   return res.data;
 }
@@ -218,19 +173,7 @@ export async function retryWhatsAppJobErrors(input: {
   return res.data;
 }
 
-export async function omitWhatsAppJob(input: {
-  jobId: string;
-  reason?: string;
-}): Promise<{
-  ok: boolean;
-  jobId: string;
-  omittedDeliveries: number;
-  message: string;
-}> {
-  const fn = httpsCallable(functions, "omitWhatsAppJob");
-  const res: any = await fn(input);
-  return res.data;
-}
+
 export type WhatsAppAgentObserver = { agentId: string; phone: string };
 export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] };
 export type WhatsAppAgentObserversState = {
