@@ -436,6 +436,10 @@
     {
       "commit": "56fafe10",
       "capability": "Bloque Grupos que observa Hugo con switch, usuario y alta en linea"
+    },
+    {
+      "commit": "a4fce5a9",
+      "capability": "WhatsApp sin la conexion vieja: solo agentes y el historial de envios de solo lectura"
     }
   ],
   "requiredText": [
