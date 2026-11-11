@@ -9,7 +9,7 @@ import { HugoModelRouter } from "../agent007/hugoModelRouter";
 import { draftAgentBlueprint, transitionProposal } from "./proposals";
 import { SYSTEMS } from "./systems";
 import { recordIntervention, resolveIncident } from "./incidentResolution";
-import { groupIncidents, loadIncidentSubjects } from "./incidentLabels";
+import { groupIncidents, incidentsOfTheDay, loadIncidentSubjects } from "./incidentLabels";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -75,7 +75,7 @@ export async function loadAgentOperations(rootId: string) {
   const causes = Object.entries(todayIncidents.reduce((acc, row) => { const key = String(row.cause || "Sin causa registrada"); acc[key] = (acc[key] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cause, count]) => ({ cause, count }));
   const providerStatus = new HugoModelRouter().status();
   const visibleIncidents = serialize(incidents).filter(visible) as Array<Record<string, any>>;
-  const incidentGroups = groupIncidents(visibleIncidents, await loadIncidentSubjects(rootId, visibleIncidents).catch(error => { console.error("INCIDENT_SUBJECTS_FAILED", String(error?.message || error).slice(0, 200)); return new Map(); }));
+  const incidentGroups = incidentsOfTheDay(groupIncidents(visibleIncidents, await loadIncidentSubjects(rootId, visibleIncidents).catch(error => { console.error("INCIDENT_SUBJECTS_FAILED", String(error?.message || error).slice(0, 200)); return new Map(); })), day);
   return { ok: true, systems: SYSTEMS, agents: AGENTS, tools: TOOLS, killSwitch: control.get("killSwitch") === true,
     providers: providerStatus,
     runs: runRows, incidents: visibleIncidents, incidentGroups, proposals: serialize(proposals).filter(visible),
@@ -123,7 +123,7 @@ export const resolveAgentIncident = onCall({ cors: true, region: "us-central1" }
   const incidentId = String(request.data?.incidentId || "").trim();
   const reason = String(request.data?.reason || "").trim();
   if (!/^[A-Za-z0-9_-]{1,200}$/.test(incidentId) || reason.length < 5) throw new HttpsError("invalid-argument", "Incidente y motivo (mínimo 5 caracteres) requeridos.");
-  const resolved = await resolveIncident(incidentId, { rootId, resolvedBy: "PERSONA", actorUid: uid, note: reason });
+  const resolved = await resolveIncident(incidentId, { rootId, resolvedBy: "PERSONA", actorUid: uid, note: reason, resolution: "MANUAL", actionTaken: reason });
   if (!resolved) throw new HttpsError("failed-precondition", "El incidente no existe, no pertenece a este root o ya está cerrado.");
   await recordIntervention({ rootId, kind: "INCIDENT_RESOLVED", actorUid: uid, targetId: incidentId, reason }).catch(error => console.error("INTERVENTION_LOG_FAILED", error));
   return { ok: true };

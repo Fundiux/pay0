@@ -1,4 +1,6 @@
 import * as admin from "firebase-admin";
+import { resolverTierOf, type ResolverTier } from "./incidentResolution";
+import { mexicoDayKey } from "./time";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -110,15 +112,24 @@ export async function loadIncidentSubjects(rootId: string, incidents: Array<Reco
   return result;
 }
 
+export const RESOLVER_LABEL: Record<ResolverTier, string> = { SYSTEM: "Sistema", HUGO: "Hugo", PERSON: "Persona" };
+const millisOf = (value: any): number => value?.toMillis?.() ?? (typeof value?.seconds === "number" ? value.seconds * 1000 : typeof value?._seconds === "number" ? value._seconds * 1000 : Number(value) || 0);
+
 export type ReadableIncident = Record<string, any> & {
   causeLabel: string; subject: IncidentSubject | null; causes: string[]; count: number; ids: string[];
+  resolverTier: ResolverTier | null; resolvedAtMs: number | null; autoResolved: boolean | null; resolutionText: string | null;
 };
+
+/** Open incidents plus those resolved on the given Mexico day; this is what the daily list and the dashboard show. */
+export function incidentsOfTheDay<T extends ReadableIncident>(groups: T[], day: string): T[] {
+  return groups.filter(group => group.status === "OPEN" || (group.status === "RESOLVED" && group.resolvedAtMs !== null && mexicoDayKey(new Date(group.resolvedAtMs)) === day));
+}
 
 /** Same entity and state: one card. Each cause is listed once and the newest incident leads. */
 export function groupIncidents(incidents: Array<Record<string, any>>, subjects: Map<string, IncidentSubject>): ReadableIncident[] {
   const groups = new Map<string, ReadableIncident>();
   incidents.forEach((row, index) => {
-    const key = text(row.entityId) ? `${text(row.entityType)}/${text(row.entityId)}/${text(row.status)}` : `sin-entidad/${index}`;
+    const key = text(row.entityId) ? `${text(row.entityType)}/${text(row.entityId)}/${text(row.status)}/${row.status === "RESOLVED" ? text(row.resolverTier ?? row.resolvedBy) : ""}` : `sin-entidad/${index}`;
     const label = incidentCauseLabel(row.cause);
     const existing = groups.get(key);
     if (existing) {
@@ -126,7 +137,10 @@ export function groupIncidents(incidents: Array<Record<string, any>>, subjects: 
       if (!existing.causes.includes(label)) existing.causes.push(label);
       return;
     }
-    groups.set(key, { ...row, causeLabel: label, causes: [label], count: 1, ids: [String(row.id)], subject: subjects.get(`${text(row.entityType)}/${text(row.entityId)}`) || null });
+    const { resolvedByUid: _uid, ...safe } = row;
+    const tier = row.status === "RESOLVED" ? resolverTierOf(row.resolverTier ?? row.resolvedBy) : null;
+    groups.set(key, { ...safe, resolverTier: tier, resolvedAtMs: row.status === "RESOLVED" ? millisOf(row.resolvedAt) || null : null,
+      autoResolved: row.status === "RESOLVED" ? tier !== "PERSON" : null, resolutionText: text(row.actionTaken || row.resolutionNote) || null, causeLabel: label, causes: [label], count: 1, ids: [String(row.id)], subject: subjects.get(`${text(row.entityType)}/${text(row.entityId)}`) || null });
   });
   return [...groups.values()];
 }

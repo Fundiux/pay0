@@ -8,7 +8,8 @@ import { assertAuthorized } from "../../utils/authGuard";
 import { logActivity } from "../../utils/logActivity";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { enqueueIqOnDemandTaskH4D64 } from "../iq/iqOnDemandTaskQueue";
-import { ensureOcCommercialMetadata, generateCotizacionForSolicitudCore } from "./callables";
+import { ensureOcCommercialMetadata, generateCotizacionForSolicitudCore, requirePricedQuoteLines } from "./callables";
+import { readOcQuotationLines } from "../solicitudDocuments/service";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { finishRun, reserveRun } from "../agentOperations/engine";
 import { mexicoDayKey } from "../agentOperations/time";
@@ -98,6 +99,20 @@ export async function enqueueQuotationForConfirmedIq(input: QueueInput) {
   return { queued: !TERMINAL.has(reserved.status), jobId: reserved.id, reused: reserved.reused };
 }
 
+/** "Las partidas de la OC suman $0.00 y no cuadran con el subtotal ..." */
+export const isZeroLinesFailure = (message: string) => /Las partidas de la OC suman \$0\.00/.test(message);
+
+/** Re-reads the active OC with the commercial reader; true only when its lines now reconcile with the solicitud total. Never invents amounts. */
+async function ocRereadReconciles(solicitudId: string): Promise<boolean> {
+  const solicitud: any = (await db.collection("solicitudes").doc(solicitudId).get()).data() || {};
+  const total = Number(solicitud.total || solicitud.monto || solicitud.amount);
+  if (!(total > 0)) return false;
+  const activeOc = await db.collection("uploads").where("rootId", "==", clean(solicitud.rootId, 128)).where("solicitudId", "==", solicitudId).where("documentType", "==", "ORDEN_COMPRA").where("active", "==", true).limit(1).get();
+  if (activeOc.empty) return false;
+  const lines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
+  try { requirePricedQuoteLines(lines, total); return true; } catch { return false; }
+}
+
 async function processJob(jobId: string) {
   const ref = db.collection("solicitudQuotationJobs").doc(jobId);
   const claimed = await db.runTransaction(async (tx) => {
@@ -151,19 +166,21 @@ async function processJob(jobId: string) {
       tx.set(solicitudRef, { cotizacionAutoGenerateStatus: "READY", cotizacionAutoGenerateStage: "COMPLETED", cotizacionAutoGenerateJobId: jobId, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
     // La corrección quedó verificada: los incidentes abiertos de esta solicitud los cerró el agente.
-    await resolveIncidentsForEntity({ rootId: claimed.rootId, entityId: claimed.solicitudId, resolvedBy: "AGENTE", note: "Cotización generada o recuperada y verificada en Storage." }).catch(error => console.error("INCIDENT_RESOLUTION_FAILED", error));
+    await resolveIncidentsForEntity({ rootId: claimed.rootId, entityId: claimed.solicitudId, resolvedBy: "AGENTE", resolution: "COTIZACION_GENERADA", note: claimed.ocReadRetried ? "El sistema volvió a leer la OC y generó la cotización; quedó verificada en Storage." : "Cotización generada o recuperada y verificada en Storage." }).catch(error => console.error("INCIDENT_RESOLUTION_FAILED", error));
     await logActivity({ event: "COTIZACION_GENERADA", rootId: claimed.rootId, adminId: claimed.rootId, actorUid: claimed.requestedBy, actorRole: "system", referenceId: claimed.solicitudId, referenceType: "solicitud", entityId: claimed.solicitudId, entityType: "solicitudes", description: "Cotizacion generada por ejecucion automatica.", extra: { quotationJobId: jobId, iqFolio: claimed.iqFolio, uploadId: result.uploadId || null, automaticExecution: true } }).catch(() => undefined);
   } catch (error) {
     const message = clean((error as any)?.message || error, 1500);
     const code = String((error as any)?.code || "").toLowerCase();
     const blocked = code === "permission-denied";
     const uncertain = code === "failed-precondition" || message.startsWith("COTIZACION_") || message.startsWith("OC_");
-    let status: "BLOCKED" | "ESCALATED" | "FAILED_RETRYABLE" = blocked ? "BLOCKED" : runFinished || uncertain || claimed.source === "AUTHORIZED_QUOTE_ONLY" || claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
+    // Primer paso de la escalera: si las partidas de la OC sumaron $0.00, el sistema vuelve a leer la OC una vez y solo reintenta si ahora cuadra con la solicitud.
+    const rereadRetry = !runFinished && !claimed.ocReadRetried && claimed.source !== "AUTHORIZED_QUOTE_ONLY" && isZeroLinesFailure(message) && await ocRereadReconciles(claimed.solicitudId).catch(() => false);
+    let status: "BLOCKED" | "ESCALATED" | "FAILED_RETRYABLE" = rereadRetry ? "FAILED_RETRYABLE" : blocked ? "BLOCKED" : runFinished || uncertain || claimed.source === "AUTHORIZED_QUOTE_ONLY" || claimed.attemptCount >= MAX_ATTEMPTS ? "ESCALATED" : "FAILED_RETRYABLE";
     if (agentRunId && !runFinished) {
       try { await finishRun(agentRunId, status, { reason: message, evidence: [`solicitudes/${claimed.solicitudId}`, `solicitudQuotationJobs/${jobId}`] }); }
       catch (auditError) { status = "ESCALATED"; console.error("AGENT_RUN_AUDIT_FAILED", auditError); }
     }
-    await ref.set({ status, lastError: message, nextRunAt: status === "FAILED_RETRYABLE" ? Timestamp.fromMillis(Date.now() + RETRY_DELAY_MS) : null, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await ref.set({ status, lastError: message, nextRunAt: status === "FAILED_RETRYABLE" ? Timestamp.fromMillis(Date.now() + (rereadRetry ? 0 : RETRY_DELAY_MS)) : null, ...(rereadRetry ? { ocReadRetried: true } : {}), finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     if (!agentRunId && status !== "FAILED_RETRYABLE") await db.collection("agentIncidents").doc(`quotation-${jobId}`).set({ rootId: claimed.rootId, reportDay: mexicoDayKey(), runId: null, correlationId: jobId, entityType: "solicitud", entityId: claimed.solicitudId, status: "OPEN", cause: message, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${claimed.solicitudId}`], createdAt: FieldValue.serverTimestamp() }, { merge: true });
     await db.collection("solicitudes").doc(claimed.solicitudId).set({ cotizacionAutoGenerateStatus: status, cotizacionAutoGenerateLastError: message, cotizacionAutoGenerateUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     await observeSentinelEvent({ rootId: claimed.rootId, systemId: "pay0", eventId: `quotation-${jobId}-${claimed.attemptCount}`, kind: blocked ? "AUTH_DENIED" : uncertain ? "INTEGRITY_MISMATCH" : "REPEATED_FAILURE", actorUid: claimed.requestedBy, entityType: "solicitud", entityId: claimed.solicitudId, evidence: [`solicitudQuotationJobs/${jobId}`, `solicitudes/${claimed.solicitudId}`] }).catch(error => console.error("SENTINEL_OBSERVATION_FAILED", error));

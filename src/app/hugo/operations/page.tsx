@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAgentOperations, reviewAgentProposal, setAgentKillSwitch, type AgentOperations } from "@/services/agentOperations";
+import { getAgentOperations, resolveAgentIncident, reviewAgentProposal, setAgentKillSwitch, type AgentOperations } from "@/services/agentOperations";
 
 const card = "rounded-2xl border border-slate-700 bg-slate-900 p-5";
 
@@ -16,6 +16,15 @@ export default function AgentOperationsPage() {
     if (!data || busy) return;
     setBusy(true); setError("");
     try { await setAgentKillSwitch(!data.killSwitch); await refresh(); }
+    catch (error: any) { setError(String(error?.message || error)); }
+    finally { setBusy(false); }
+  };
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const close = async (ids: string[], key: string) => {
+    const reason = (notes[key] || "").trim();
+    if (busy || reason.length < 5) return;
+    setBusy(true); setError("");
+    try { for (const id of ids) await resolveAgentIncident(id, reason); await refresh(); }
     catch (error: any) { setError(String(error?.message || error)); }
     finally { setBusy(false); }
   };
@@ -90,6 +99,11 @@ export default function AgentOperationsPage() {
               return <div key={row.id} className="mt-2 text-sm">
                 <p>{folio ? (target ? <a className="text-violet-300" href={target}>{folio}</a> : folio) : <span className="text-slate-300">Registro sin datos disponibles</span>}{[subject?.clientName, amount, subject?.providerName].filter(Boolean).map(part => ` · ${part}`).join("")}</p>
                 <p className="text-xs text-slate-400">{row.status === "OPEN" ? "Abierta" : row.status === "RESOLVED" ? "Resuelta" : row.status} · {row.causes.join("; ")}{row.count > 1 ? ` (${row.count} avisos)` : ""}</p>
+                {row.status === "RESOLVED" && <p className="text-xs text-emerald-300">Resuelta automáticamente: {row.autoResolved ? "Sí" : "No"} · Resolvió: {row.resolverTier === "SYSTEM" ? "Sistema" : row.resolverTier === "HUGO" ? "Hugo" : row.resolverTier === "PERSON" ? "Persona" : "sin dato"}{row.resolutionText ? ` · ${row.resolutionText}` : ""}</p>}
+                {row.status === "OPEN" && <div className="mt-1 flex gap-2">
+                  <input value={notes[row.id] || ""} onChange={event => setNotes({ ...notes, [row.id]: event.target.value })} placeholder="Qué hiciste para resolverla (una línea)" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" />
+                  <button disabled={busy || (notes[row.id] || "").trim().length < 5} onClick={() => void close(row.ids, row.id)} className="rounded border border-emerald-500 px-2 py-1 text-xs disabled:opacity-40">Marcar resuelta</button>
+                </div>}
               </div>;
             })}
             {data.proposals.map(row => <div key={row.id} className="mt-3 rounded-lg border border-slate-700 p-3 text-sm">

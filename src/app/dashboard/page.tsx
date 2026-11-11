@@ -1,5 +1,6 @@
 "use client";
 
+import { IncidentsCard } from "@/components/dashboard/IncidentsCard";
 import NoAccess from "@/components/NoAccess";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 
@@ -338,6 +339,7 @@ export default function DashboardPage() {
         </div>
 
         <PendingItemsCards canSeeUnmatched={canSeeUnmatched} canSeeOperations={isSuperAdmin(role)} />
+        {isSuperAdmin(role) && <IncidentsCard />}
 
         {(isSuperAdmin(role) || isAdmin(role)) && (
           <div className="relative z-10 mt-6 min-w-0">

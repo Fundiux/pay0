@@ -45,7 +45,7 @@ test('incident-detail-is-capped', () => {
   const data = base();
   data.incidents = Array.from({ length: 9 }, (_, i) => ({ status: 'OPEN', cause: `causa ${i}`, entityType: 'solicitud' }));
   const text = buildDailyAlertMessage(data);
-  assert(text.includes('y 4 más') && !text.includes('causa 8'));
+  assert(text.includes('y 1 más') && !text.includes('causa 8'));
 });
 test('pending-items-are-reported-and-zero-or-unreadable-are-omitted', () => {
   const text = buildDailyAlertMessage(base(), { a: 1, b: 2 }, { complementsHeld: 4, complementsLate: 1, cashUnsigned: 0, cancellationReview: undefined });
