@@ -35,6 +35,11 @@ const makeTransport = (privateKeyPem, binding) => createAuthorityTransport({ bas
 (async () => {
   let agentBinding, legacyBinding, agentTransport, legacyTransport;
   await test('unknown-agent-enrollment-rejected', () => rejection(() => service.create(req('owner-a', { publicKeyPem: agentKey.publicKeyPem, agentId: 'nope' }))));
+  await test('internal-agent-enrollment-rejected', async () => {
+    for (const agentId of ['sentinel', 'iq', 'expediente', 'pagos', 'conciliacion', 'documentos', 'soporte', 'agent-creator']) {
+      await assert.rejects(() => service.create(req('owner-a', { publicKeyPem: agentKey.publicKeyPem, agentId })), error => error.code === 'failed-precondition' || /interno/.test(String(error.message)));
+    }
+  });
   await test('legacy-and-agent-bindings-coexist-with-separate-owner-records', async () => {
     const legacy = await service.create(req('owner-a', { publicKeyPem: legacyKey.publicKeyPem }));
     legacyTransport = makeTransport(legacyKey.privateKeyPem);

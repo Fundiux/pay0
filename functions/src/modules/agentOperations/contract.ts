@@ -16,6 +16,14 @@ export const AGENTS: AgentDefinition[] = [
   { id: "agent-creator", name: "Creador de agentes", specialty: "Prototipos en sandbox", kind: "SANDBOX", owner: "PAY0", systemId: "platform", enabled: false, provider: null, model: null, permissions: ["propose"], limits: { maxAttempts: 0, maxPerRun: 0 } },
 ];
 
+// Agents that talk to customers over WhatsApp. Every other agent is internal and never gets a WhatsApp connection.
+// Kept apart from the definitions above on purpose: adding an agent there does not put it on WhatsApp.
+export const CUSTOMER_FACING_AGENT_IDS: readonly string[] = ["hugo", "maria", "sofia"];
+
+export function isCustomerFacingAgent(agentId: unknown): boolean {
+  return typeof agentId === "string" && CUSTOMER_FACING_AGENT_IDS.includes(agentId);
+}
+
 export const TOOLS: ToolDefinition[] = [
   { id: "quotation-recovery", inputSchema: "{solicitudId:string,iqFolio:string,ocUploadId:string}", outputSchema: "{uploadId:string,active:boolean}", permission: "operateSolicitudes", risk: 1, idempotent: true, reversible: true, maxRetries: 1, evidence: ["solicitud", "IQ", "OC", "upload"], approvalRequired: false },
   { id: "agent-proposal", inputSchema: "AgentProposal", outputSchema: "{proposalId:string}", permission: "superadmin", risk: 3, idempotent: true, reversible: true, maxRetries: 0, evidence: ["incident"], approvalRequired: true },

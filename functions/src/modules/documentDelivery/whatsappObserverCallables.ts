@@ -2,7 +2,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { normalizeClientWhatsapp } from "../clients/domain";
-import { AGENTS } from "../agentOperations/contract";
+import { AGENTS, isCustomerFacingAgent } from "../agentOperations/contract";
 import { requireWhatsAppSuperadmin } from "./whatsappConnectorAuthority";
 import { resolveObservableGroup, type ObserverGroupDb } from "./whatsappObserverGroups";
 
@@ -27,7 +27,8 @@ export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60
   for (const doc of agentGroups.docs) uniqueGroups.set(clean(doc.get("chatId"), 200), clean(doc.get("name"), 160));
   return {
     ok: true,
-    agents: AGENTS.map(agent => ({ id: agent.id, name: agent.name })),
+    // Solo los agentes con atención a clientes aparecen en WhatsApp; los internos no se conectan.
+    agents: AGENTS.filter(agent => isCustomerFacingAgent(agent.id)).map(agent => ({ id: agent.id, name: agent.name })),
     groups: [...uniqueGroups.entries()].map(([chatId, name]) => ({ chatId, name })),
     // Solo el nombre visible; el identificador viaja como valor del selector, nunca se muestra.
     users: users.docs.filter(doc => doc.get("isDeleted") !== true && (doc.get("active") ?? doc.get("isActive") ?? true) !== false)
@@ -52,7 +53,7 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
     if (!owner.exists || String(owner.get("rootId") || owner.id) !== rootId || owner.get("isDeleted") === true) throw new HttpsError("invalid-argument", "Usuario del grupo no válido.");
   }
 
-  const knownAgents = new Set(AGENTS.map(agent => agent.id));
+  const knownAgents = new Set(AGENTS.filter(agent => isCustomerFacingAgent(agent.id)).map(agent => agent.id));
   const seenAgents = new Set<string>();
   const observers = rawObservers.map((row: any) => {
     // El número es solo informativo: cada agente se conectará con su propio QR (conector por agente).

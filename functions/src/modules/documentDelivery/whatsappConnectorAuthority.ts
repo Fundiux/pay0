@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldPath, FieldValue, Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
-import { AGENTS } from "../agentOperations/contract";
+import { AGENTS, isCustomerFacingAgent } from "../agentOperations/contract";
 import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
 import { assertEnrollmentProof, assertPublicKey, assertWorkerEnvelope, canonicalDataHash, Binding, Enrollment, EnrollmentProof, WorkerEnvelope } from "./whatsappConnectorPolicy";
 
@@ -35,6 +35,8 @@ export class WhatsAppConnectorAuthority {
   }
   async create(request: any) {
     const actor = await requireWhatsAppSuperadmin(request), publicKeyPem = request.data?.publicKeyPem, agentId = connectorAgentOf(request.data?.agentId);
+    // Only agents that talk to customers get a WhatsApp connection; the legacy owner connection is unaffected.
+    if (agentId !== LEGACY_CONNECTOR_AGENT && !isCustomerFacingAgent(agentId)) throw new HttpsError("failed-precondition", "Este agente es interno y no se conecta a WhatsApp.");
     assertPublicKey(publicKeyPem);
     const enrollmentId = randomUUID(), challenge = randomBytes(32).toString("hex");
     return this.db.runTransaction(async tx => {
