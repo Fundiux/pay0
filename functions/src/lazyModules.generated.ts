@@ -246,6 +246,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   processIqCreateOnDemandTask: { module: "./modules/iq/solicitudCreateQueueCallables", export: "processIqCreateOnDemandTask" },
   processIqCreateQueue: { module: "./modules/iq/solicitudCreateQueueCallables", export: "processIqCreateQueue" },
   processIqDispersionCreate: { module: "./modules/iq/dispersionCreationCallables", export: "processIqDispersionCreate" },
+  processIqDispersionReceipts: { module: "./modules/dispersionDocuments/iqReceiptAuto", export: "processIqDispersionReceipts" },
   processIqInvoiceImportQueue: { module: "./modules/iq/solicitudInvoiceImportCallables", export: "processIqInvoiceImportQueue" },
   processIqPagoDepositAutomaticTask: { module: "./modules/iq/pagoDepositCallables", export: "processIqPagoDepositAutomaticTask" },
   processIqPagoDepositCreateQueue: { module: "./modules/iq/pagoDepositCallables", export: "processIqPagoDepositCreateQueue" },
