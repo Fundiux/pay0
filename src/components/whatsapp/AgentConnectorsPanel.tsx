@@ -6,14 +6,58 @@ import {
   createWhatsAppAgentEnrollment,
   getWhatsAppAgentActivity,
   getWhatsAppAgentObservers,
+  listWhatsAppAgentChats,
   listWhatsAppAgentConnectors,
   revokeWhatsAppAgentConnector,
   type WhatsAppAgentActivityRow,
+  type WhatsAppAgentChats,
   type WhatsAppAgentConnector,
   type WhatsAppAgentObserversState,
 } from "@/services/whatsappQr";
 
 const minutes = (ms: number | null) => (ms === null ? "—" : `${(ms / 60000).toFixed(1)} min`);
+
+// Grupos que el conector de un agente ve. De los chats privados solo se cuenta cuántos hay.
+function AgentChatsList({ bindingId }: { bindingId: string }) {
+  const [chats, setChats] = useState<WhatsAppAgentChats | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try { setChats(await listWhatsAppAgentChats(bindingId)); }
+    catch (e: any) { setError(`No se pudieron cargar los grupos: ${e?.message || e}`); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <details className="rounded-lg border border-slate-800 bg-slate-950/50 p-2" onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open && !chats && !loading) void load(); }}>
+      <summary className="cursor-pointer text-xs font-medium text-slate-300">
+        Grupos de este agente{chats ? ` (${chats.groups.length})` : ""}
+      </summary>
+      {loading && <div className="mt-2 flex items-center gap-2 text-xs text-slate-400"><Loader2 size={13} className="animate-spin" /> Cargando...</div>}
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {chats && (
+        <div className="mt-2 space-y-1">
+          {chats.groups.length === 0 && <p className="text-xs text-slate-500">Todavía no hay grupos sincronizados.</p>}
+          <ul className="max-h-48 space-y-1 overflow-y-auto pr-1">
+            {chats.groups.map(group => (
+              <li key={group.chatId} className="flex items-center justify-between gap-2 text-xs text-slate-300">
+                <span className="truncate">{group.name || "Grupo sin nombre"}</span>
+                {group.archived && <span className="shrink-0 text-slate-500">Archivado</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-500">
+            Chats privados: {chats.privateChats}. No se muestran ni sus nombres ni sus números.
+            {chats.truncated ? " La lista está incompleta." : ""}
+          </p>
+        </div>
+      )}
+    </details>
+  );
+}
 
 export function AgentConnectorsPanel() {
   const [connectors, setConnectors] = useState<WhatsAppAgentConnector[]>([]);
@@ -93,6 +137,7 @@ export function AgentConnectorsPanel() {
                     {connector.qrDataUrl && <img src={connector.qrDataUrl} alt={`QR de ${agent.name}`} className="h-40 w-40 rounded bg-white p-1" />}
                     {connector.error && <p className="text-xs text-rose-300">{connector.error}</p>}
                     <p className="text-xs text-slate-500">{connector.lastSeenAtMs ? `Última señal: ${new Date(connector.lastSeenAtMs).toLocaleString("es-MX")}` : "Sin señal todavía"}</p>
+                    <AgentChatsList bindingId={connector.bindingId} />
                     <button type="button" disabled={busy === connector.bindingId} onClick={() => void revoke(connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-40">
                       <ShieldOff size={14} /> Revocar conexión
                     </button>

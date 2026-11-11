@@ -257,6 +257,15 @@ export type WhatsAppAgentActivityRow = {
   avgResponseMs: number | null; medianResponseMs: number | null;
 };
 
+export type WhatsAppAgentChats = {
+  groups: { chatId: string; name: string; archived: boolean; pinned: boolean; lastSyncedAtMs: number | null }[];
+  privateChats: number; truncated: boolean;
+};
+
+export async function listWhatsAppAgentChats(bindingId: string) {
+  return (await httpsCallable<{ bindingId: string }, { ok: boolean } & WhatsAppAgentChats>(functions, "listWhatsAppAgentChats")({ bindingId })).data;
+}
+
 export async function listWhatsAppAgentConnectors() {
   return (await httpsCallable<Record<string, never>, { ok: boolean; connectors: WhatsAppAgentConnector[] }>(functions, "listWhatsAppAgentConnectors")({})).data;
 }

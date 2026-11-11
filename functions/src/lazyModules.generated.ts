@@ -210,6 +210,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   listSolicitudes: { module: "./modules/legacyCore/callables", export: "listSolicitudes" },
   listUserIqAccess: { module: "./modules/iq/callables", export: "listUserIqAccess" },
   listUsers: { module: "./modules/users/list", export: "listUsers" },
+  listWhatsAppAgentChats: { module: "./modules/documentDelivery/whatsappAgentChats", export: "listWhatsAppAgentChats" },
   listWhatsAppAgentConnectors: { module: "./modules/documentDelivery/whatsappConnectorCallables", export: "listWhatsAppAgentConnectors" },
   logAuthEventCallable: { module: "./modules/activityLog/callables", export: "logAuthEventCallable" },
   logUnauthorizedRouteAttempt: { module: "./modules/activityLog/callables", export: "logUnauthorizedRouteAttempt" },
