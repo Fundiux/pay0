@@ -400,6 +400,10 @@
     {
       "commit": "ea4dfc3c",
       "capability": "Gateway de voz de Hugo reconciliado con main y certificacion R2"
+    },
+    {
+      "commit": "d4e0255c",
+      "capability": "Reglas de Hugo: propuesta con 3 lecciones, aprobacion del dueno, 7 dias de simulacion, verificacion y frenos"
     }
   ],
   "requiredText": [
