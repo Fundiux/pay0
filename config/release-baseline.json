@@ -444,6 +444,10 @@
     {
       "commit": "557d230e",
       "capability": "WhatsApp compacto: agentes conectados arriba y sin conexion en lista cerrada"
+    },
+    {
+      "commit": "9f434be6",
+      "capability": "WhatsApp solo para agentes de atencion a clientes (Hugo, Maria, Sofia); internos rechazados"
     }
   ],
   "requiredText": [
