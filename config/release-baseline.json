@@ -392,6 +392,14 @@
     {
       "commit": "e986b717",
       "capability": "Incidencias en lista con resuelta Si/No y quien resolvio; escalera sistema-Hugo-persona y relectura de OC con partidas en cero"
+    },
+    {
+      "commit": "1f6b502a",
+      "capability": "Comprobante de dispersion IQ descargado automaticamente (processIqDispersionReceipts) con sus indices"
+    },
+    {
+      "commit": "ea4dfc3c",
+      "capability": "Gateway de voz de Hugo reconciliado con main y certificacion R2"
     }
   ],
   "requiredText": [
