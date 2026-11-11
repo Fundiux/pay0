@@ -384,6 +384,14 @@
     {
       "commit": "c19b82c4",
       "capability": "Integracion de la carga perezosa con minInstances en legacyCore"
+    },
+    {
+      "commit": "41dc708e",
+      "capability": "Incidencias con folio, cliente, monto y proveedor, agrupadas y con motivo legible"
+    },
+    {
+      "commit": "e986b717",
+      "capability": "Incidencias en lista con resuelta Si/No y quien resolvio; escalera sistema-Hugo-persona y relectura de OC con partidas en cero"
     }
   ],
   "requiredText": [
