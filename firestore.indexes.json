@@ -1,11 +1,27 @@
 {
     "indexes": [
         {
+            "collectionGroup": "solicitudes", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "clienteId", "order": "ASCENDING" },
+                { "fieldPath": "facturaFolio", "order": "ASCENDING" }
+            ]
+        },
+        {
             "collectionGroup": "pagoSinSolicitudDecisions", "queryScope": "COLLECTION",
             "fields": [
                 { "fieldPath": "rootId", "order": "ASCENDING" },
                 { "fieldPath": "clienteId", "order": "ASCENDING" },
                 { "fieldPath": "createdAt", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "paymentComplementJobs", "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "rootId", "order": "ASCENDING" },
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "requestedAt", "order": "ASCENDING" }
             ]
         },
         {

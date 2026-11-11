@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const RECEIPT_LEARNING_VERSION = "PAY0_RECEIPT_LEARNING_V1";
-export const CORRECTABLE_RECEIPT_FIELDS = ["reference", "trackingKey", "folio", "transactionId", "transferAmount", "executionDate", "executionTime", "senderName", "beneficiaryName", "sourceBankName", "destinationBankName", "bankName", "sourceAccount", "destinationAccount", "concept"] as const;
+export const CORRECTABLE_RECEIPT_FIELDS = ["reference", "trackingKey", "folio", "transactionId", "transferAmount", "executionDate", "executionTime", "senderName", "beneficiaryName", "sourceBankName", "destinationBankName", "bankName", "sourceAccount", "destinationAccount", "concept", "currency"] as const;
 export type CorrectableReceiptField = typeof CORRECTABLE_RECEIPT_FIELDS[number];
 
 const clean = (value: unknown, max = 240) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -55,6 +55,10 @@ export function normalizeReceiptCorrection(from: CorrectableReceiptField, to: Co
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text) throw new Error("DATE_INVALID");
   }
   if (to === "executionTime" && !/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(text)) throw new Error("TIME_INVALID");
+  if (to === "currency") {
+    if (!["MXN", "USD", "EUR"].includes(text.toUpperCase())) throw new Error("CURRENCY_INVALID");
+    return text.toUpperCase();
+  }
   if ((to === "sourceAccount" || to === "destinationAccount") && !/^\d{4,18}$/.test(text)) throw new Error("ACCOUNT_INVALID");
   return text.replace(/\s+/g, " ");
 }
@@ -62,7 +66,7 @@ export function normalizeReceiptCorrection(from: CorrectableReceiptField, to: Co
 const receiptKeys: Record<CorrectableReceiptField, string> = {
   reference: "reference", trackingKey: "trackingKey", folio: "folio", transactionId: "transactionId",
   transferAmount: "amount", executionDate: "date", executionTime: "time", senderName: "senderName", beneficiaryName: "beneficiaryName",
-  sourceBankName: "sourceBankName", destinationBankName: "destinationBankName", bankName: "bankName", sourceAccount: "account", destinationAccount: "destinationAccount", concept: "concept",
+  sourceBankName: "sourceBankName", destinationBankName: "destinationBankName", bankName: "bankName", sourceAccount: "account", destinationAccount: "destinationAccount", concept: "concept", currency: "currency",
 };
 
 /** Apply only the durable human overlay. Original OCR evidence remains immutable. */

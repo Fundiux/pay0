@@ -1,10 +1,12 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { db, getActivityAdminId, getRootId } from "../sharedCallables/helpers";
 import { applyPaymentApplicationBatchAtomic, type PaymentApplicationActor } from "./service";
-import { AUTOMATIC_CANDIDATE_LIMIT, automaticPaymentSourceDigest, decideAutomaticPayment, isAutomaticPaymentReady } from "./automaticDomain";
+import { automaticPaymentSourceDigest, isAutomaticPaymentReady } from "./automaticDomain";
+import { decideAutomaticPaymentFromStore } from "./automaticCandidates";
 import { isIqHistoricalImport, shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 import { syncUnmatchedReview } from "./unmatchedPaymentReview";
 
@@ -37,8 +39,7 @@ export async function applyAutomaticPayment(pagoId: string, options: { retryRevi
     if (await getRootId(uid) !== pago.rootId) throw new HttpsError("permission-denied", "Usuario fuera del root del pago.");
     const actor: PaymentApplicationActor = { uid, rootId: pago.rootId, role,
       adminId: getActivityAdminId(user, uid, pago.rootId), displayName: clean(user.name || user.displayName), username: clean(user.username) };
-    const candidates = await db.collection("solicitudes").where("rootId", "==", pago.rootId).where("clienteId", "==", pago.clienteId).limit(AUTOMATIC_CANDIDATE_LIMIT + 1).get();
-    const decision = decideAutomaticPayment(pagoId, pago, candidates.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    const decision = await decideAutomaticPaymentFromStore(pagoId, pago, pago.rootId, query => query.get());
     if (!decision.batch) {
       await recordDecision(pagoId, sourceDigest, { status: decision.status, reason: decision.reason, matchedCount: decision.matchedCount });
       // The list and alert are informative; a failure there must never break the automatic application.
@@ -97,4 +98,33 @@ export const applyPaymentsAutomaticallyOnInvoice = onDocumentWritten(
     if (payments.size > 100) return;
     for (const payment of payments.docs) if (isAutomaticPaymentReady(payment.data())) await applyAutomaticPayment(payment.id, { retryReview: true });
   },
+);
+
+export const REVIEW_REEVALUATION_LIMIT = 300;
+
+/** Re-decides pagos left in review so rule changes and late invoices reach them without a manual button. */
+export async function reevaluatePaymentsInReview(limit = REVIEW_REEVALUATION_LIMIT) {
+  const pending = await db.collection("pagos").where("automaticApplicationEligible", "==", true)
+    .where("automaticApplication.status", "==", "REQUIRES_REVIEW").limit(limit).get();
+  const totals = { reviewed: 0, applied: 0, review: 0, skipped: 0, failed: 0, truncated: pending.size >= limit };
+  for (const doc of pending.docs) {
+    const pago = doc.data();
+    if (isIqHistoricalImport(pago) || !isAutomaticPaymentReady(pago)) { totals.skipped++; continue; }
+    totals.reviewed++;
+    try {
+      const result = await applyAutomaticPayment(doc.id, { retryReview: true });
+      if (result.status === "APPLIED") totals.applied++; else totals.review++;
+    } catch (error) {
+      // One pago must not stop the rest; the next run retries it.
+      totals.failed++;
+      console.error("REVIEW_REEVALUATION_FAILED", doc.id, String((error as Error)?.message || error).slice(0, 200));
+    }
+  }
+  console.log("REVIEW_REEVALUATION_DONE", JSON.stringify(totals));
+  return totals;
+}
+
+export const reevaluatePaymentsInReviewDaily = onSchedule(
+  { schedule: "0 7 * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", retryCount: 0, maxInstances: 1 },
+  () => reevaluatePaymentsInReview().then(() => undefined),
 );

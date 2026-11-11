@@ -27,6 +27,17 @@ import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
 
 import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
+import {
+  LOCK_BUSY_MAX_RETRIES,
+  ON_DEMAND_GATHER_DELAY_SECONDS,
+  STATUS_MONITOR_FIRST_CHECK_MS,
+  lockBusyRetryPlan,
+  recoveryDecision,
+  recoveryRequester,
+  recoveryStoppedStatus,
+  RECOVERY_MAX_PER_RUN,
+  selectDrainJobs,
+} from "./solicitudCreateSpeedup";
 import { enqueueIqOnDemandTaskH4D64 } from "./iqOnDemandTaskQueue";
 import { enqueueQuotationForConfirmedIq } from "../cotizaciones/queueCallables";
 if (!admin.apps.length) {
@@ -1207,6 +1218,7 @@ export async function enqueueIqCreationForSolicitud(input: {
           jobId: reservation.jobId,
           source: input.source || "AUTO",
         },
+        scheduleDelaySeconds: ON_DEMAND_GATHER_DELAY_SECONDS,
         dispatchDeadlineSeconds: 540,
       });
       taskId = task.taskId;
@@ -1304,9 +1316,114 @@ export const processIqCreateOnDemandTask = onTaskDispatched(
       attemptCount: Number(row.attemptCount ?? 0) || 0,
       batchId: cleanText(row.batchId),
     };
-    await processProfileJobs(job.profileId, [job]);
+    const result = await processProfileJobs(job.profileId, [job], { drain: true });
+    if (result.lockBusy) await requeueOnDemandTaskAfterLockBusy(jobId, source, Number(data.lockRetry ?? 0) || 0);
   },
 );
+
+/** The profile lock was busy, so nothing was opened or sent: wait a little and try the same job again. */
+async function requeueOnDemandTaskAfterLockBusy(jobId: string, source: string, previousRetries: number): Promise<void> {
+  const plan = lockBusyRetryPlan(previousRetries);
+  if (!plan.retry) {
+    console.info("IQ_CREATE_LOCK_BUSY_RETRIES_EXHAUSTED", { jobId, maxRetries: LOCK_BUSY_MAX_RETRIES });
+    return; // the scheduled queue still owns the job
+  }
+  await enqueueIqOnDemandTaskH4D64({
+    functionName: IQ_CREATE_ON_DEMAND_TASK,
+    taskId: `iq-solicitud-create-${jobId}-r${plan.nextRetry}`,
+    data: { jobId, source, lockRetry: plan.nextRetry },
+    scheduleDelaySeconds: plan.delaySeconds,
+    dispatchDeadlineSeconds: 540,
+  }).catch((error) => console.warn("IQ_CREATE_LOCK_BUSY_REQUEUE_FAILED", { jobId, error: safeErrorMessage(error) }));
+}
+
+/** Other due jobs of the same profile ride on the login that the first job already paid for. */
+async function loadDrainJobsForProfile(profileId: string, initialJobs: IqCreateJob[]): Promise<IqCreateJob[]> {
+  try {
+    const room = MAX_JOBS_PER_PROFILE - initialJobs.length;
+    if (room <= 0) return [];
+    const snap = await db.collection("iqCreateJobs")
+      .where("profileId", "==", profileId)
+      .where("status", "in", ["QUEUED", "FAILED_RETRYABLE"])
+      .limit(MAX_QUEUE_SCAN_PER_RUN)
+      .get();
+    const picked = selectDrainJobs(
+      snap.docs.map((doc) => ({ ...asRecord(doc.data()), id: doc.id, ref: doc.ref }) as any),
+      { nowMs: Date.now(), excludeIds: initialJobs.map((job) => job.id), max: room },
+    );
+    const jobs: IqCreateJob[] = picked.map((row: any) => ({
+      ...row,
+      attemptCount: Number(row.attemptCount ?? 0) || 0,
+      batchId: cleanText(row.batchId),
+    }));
+    const enabled = jobs.length ? await readEnabledIqAutomationRoots({ process: "solicitudCreate", purpose: "CREATION", respectWindow: false }) : new Map();
+    const scoped = jobs.filter((job) => ["MANUAL_QUEUE", "MASS_UPLOAD"].includes(cleanUpper((job as any).source)) || enabled.has(job.rootId));
+    const approved = await revalidateIqCreateJobsH4D82A4(scoped);
+    const authorized: IqCreateJob[] = [];
+    for (const job of approved) {
+      try { await authorizeSolicitudJob(job); authorized.push(job); } catch { /* it stays queued for the scheduler */ }
+    }
+    return authorized;
+  } catch (error) {
+    console.warn("IQ_CREATE_DRAIN_SKIPPED", { profileId, error: safeErrorMessage(error) });
+    return [];
+  }
+}
+
+/**
+ * Re-enqueue solicitudes that stayed NOT_ENQUEUED once their requirements are met.
+ * Each try is claimed in a transaction (attempt counter plus spacing), and the enqueue itself is idempotent
+ * per solicitud, so a retry never creates a second job. A solicitud that will not be retried again
+ * (exhausted, deleted, with folio, without requester) leaves NOT_ENQUEUED in the same transaction, so it
+ * cannot crowd out new ones; roots without automation are not queried at all.
+ */
+export async function recoverNotEnqueuedSolicitudes(
+  enabledRoots: Set<string>,
+  enqueue: typeof enqueueIqCreationForSolicitud = enqueueIqCreationForSolicitud,
+): Promise<{ scanned: number; retried: number; queued: number; stopped: number }> {
+  const result = { scanned: 0, retried: 0, queued: 0, stopped: 0 };
+  const rootIds = [...enabledRoots].filter(Boolean).slice(0, 25);
+  if (rootIds.length === 0) return result;
+  try {
+    const snap = await db.collection("solicitudes")
+      .where("iqCreateQueueStatus", "==", "NOT_ENQUEUED")
+      .where("rootId", "in", rootIds)
+      .limit(100)
+      .get();
+    for (const doc of snap.docs) {
+      if (result.retried >= RECOVERY_MAX_PER_RUN) break;
+      result.scanned += 1;
+      const claimed = await db.runTransaction(async (tx) => {
+        const live = asRecord((await tx.get(doc.ref)).data());
+        const decision = recoveryDecision(live, Date.now());
+        if (decision === "RETRY") {
+          tx.set(doc.ref, {
+            iqCreateRecoveryAttempts: FieldValue.increment(1),
+            iqCreateRecoveryAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+          return { requester: recoveryRequester(live), stopped: false };
+        }
+        const stoppedStatus = recoveryStoppedStatus(decision);
+        if (stoppedStatus) {
+          tx.set(doc.ref, {
+            iqCreateQueueStatus: stoppedStatus,
+            iqCreateRecoveryStopReason: decision,
+            iqCreateRecoveryAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        return { requester: "", stopped: Boolean(stoppedStatus) };
+      }).catch(() => ({ requester: "", stopped: false }));
+      if (claimed.stopped) result.stopped += 1;
+      if (!claimed.requester) continue;
+      result.retried += 1;
+      const outcome = await enqueue({ solicitudId: doc.id, requestedBy: claimed.requester, source: "AUTO_RECOVERY" });
+      if (outcome.queued) result.queued += 1;
+    }
+  } catch (error) {
+    console.warn("IQ_CREATE_RECOVERY_SKIPPED", { error: safeErrorMessage(error) });
+  }
+  return result;
+}
 
 export const enqueueSolicitudIqCreation = onCall(
   { cors: true, timeoutSeconds: 60, memory: "512MiB" },
@@ -1711,7 +1828,7 @@ async function finalizeJobFromResult(input: {
       targetDateIso: input.job.targetDateIso,
       requestedBy: input.job.requestedBy,
       reason: "QUEUE_CREATION_LINKED",
-      nextRunAt: new Date(Date.now() + 20 * 60 * 1000),
+      nextRunAt: new Date(Date.now() + STATUS_MONITOR_FIRST_CHECK_MS),
     }).catch(() => undefined);
   }
 
@@ -1818,16 +1935,20 @@ async function authorizeSolicitudJob(job: IqCreateJob) {
   if (!(await verifyDespachoAccess(job.requestedBy, cleanText(source.despachoId)))) throw new HttpsError("permission-denied", "AUTH_DISPATCH_CHANGED");
 }
 
-async function processProfileJobs(profileId: string, jobs: IqCreateJob[]): Promise<{
+async function processProfileJobs(profileId: string, initialJobs: IqCreateJob[], options: { drain?: boolean } = {}): Promise<{
   total: number;
   linked: number;
   uncertain: number;
   failed: number;
+  lockBusy?: boolean;
 }> {
   const leaseToken = await acquireProfileLock(profileId);
   if (!leaseToken) {
-    return { total: 0, linked: 0, uncertain: 0, failed: 0 };
+    return { total: 0, linked: 0, uncertain: 0, failed: 0, lockBusy: true };
   }
+
+  let jobs = initialJobs;
+  if (options.drain) jobs = [...initialJobs, ...(await loadDrainJobsForProfile(profileId, initialJobs))];
 
   const startedAtMs = Date.now();
   let batchId = cleanText(jobs[0]?.batchId) || `iqbatch-runtime-${crypto.randomUUID().slice(0, 8)}`;
@@ -2100,6 +2221,8 @@ export const processIqCreateQueue = onSchedule(
     if (enabledRoots.size === 0) {
       return;
     }
+
+    await recoverNotEnqueuedSolicitudes(new Set(enabledRoots.keys()));
 
     const queuedJobs = await loadQueuedJobs();
 

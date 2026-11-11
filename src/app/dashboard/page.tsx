@@ -1,10 +1,12 @@
 "use client";
 
+import { IncidentsCard } from "@/components/dashboard/IncidentsCard";
 import NoAccess from "@/components/NoAccess";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 
 import DashboardActivity from "../../components/DashboardActivity";
 import { InvoicePaymentControl } from "@/components/dashboard/InvoicePaymentControl";
+import { PendingItemsCards } from "@/components/dashboard/PendingItemsCards";
 import React, { useMemo, useState, useEffect } from "react";
 import { collection, query, where, Timestamp, getCountFromServer } from "firebase/firestore";
 import { db } from "../../lib/firebaseClient";
@@ -60,6 +62,8 @@ export default function DashboardPage() {
 
   const { modules, canAccess: canViewDashboard } = useModuleAccess(profile, "dashboard", "view");
   const canViewActividad = !!modules?.actividad?.view;
+  // The server repeats these checks; this only decides whether the cards are requested at all.
+  const canSeeUnmatched = (isSuperAdmin(role) || isAdmin(role) || role === "operador") && (isSuperAdmin(role) || !!modules?.pagos?.create);
 
   const range = useMemo(() => {
     if (mode === "custom" && customRange.start && customRange.end) {
@@ -333,6 +337,9 @@ export default function DashboardPage() {
           <Card title="Pendientes" value={counts.pendientes} color="#fbbf24" range={range} loading={loadingCounts} />
           <Card title="Pagadas" value={counts.pagadas} color="#34d399" range={range} loading={loadingCounts} />
         </div>
+
+        <PendingItemsCards canSeeUnmatched={canSeeUnmatched} canSeeOperations={isSuperAdmin(role)} />
+        {isSuperAdmin(role) && <IncidentsCard />}
 
         {(isSuperAdmin(role) || isAdmin(role)) && (
           <div className="relative z-10 mt-6 min-w-0">

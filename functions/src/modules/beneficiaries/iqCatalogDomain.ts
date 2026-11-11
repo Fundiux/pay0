@@ -31,7 +31,13 @@ export function iqLinkMatchesMethod(link: Record<string, unknown> | null | undef
   return !!account && link?.status === "LINKED" && link.key === account.key;
 }
 
-export type IqCatalogRow = { beneficiaryId: number; accountId: number; beneficiaryName: string; conciliationStatus: string };
+export type IqCatalogRow = { beneficiaryId: number; accountId: number; beneficiaryName: string; conciliationStatus: string; partnerId?: number };
+
+// The same CLABE under another IQ associate is another record: it is neither a link nor a reason to review.
+export function rowsOfPartner<T extends { partnerId?: unknown }>(rows: T[], partnerId: unknown): T[] {
+  const wanted = Number(partnerId);
+  return Number.isFinite(wanted) && wanted > 0 ? rows.filter(row => Number(row.partnerId) === wanted) : [];
+}
 export type IqLinkDecision =
   | { status: "LINKED"; iqBeneficiaryId: number; iqAccountId: number; iqBeneficiaryName: string; nameDiffers: boolean }
   | { status: "REVIEW_REQUIRED"; candidates: number[] }

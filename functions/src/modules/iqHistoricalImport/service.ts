@@ -4,6 +4,7 @@ import { FieldValue, FieldPath } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+import { isMergedClient, mergedIntoOf } from "../clients/mergeDomain";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import {
   P4EngineError, ZERO_SIDE_EFFECTS, assertManifestHash, canonicalJson,
@@ -464,6 +465,12 @@ async function executeAction(ctx: Context, runId: string, manifest: P4Manifest, 
       }
     }
     const canonicalFields = canonicalHistoricalFields(action);
+    // A new historical record for a client merged into another keeps its IQ ids, which belong to a different IQ client: it goes to review, never silently to the canonical client.
+    if (action.entityType !== "CLIENT" && ["CREATE_HISTORICAL", "DEPENDENCY_IMPORT"].includes(action.operation)) {
+      const mergedClientId = clean(action.after.clientId ?? action.after.clienteId, 128);
+      const mergedSnap = mergedClientId ? await tx.get(db.doc(`clients/${mergedClientId}`)) : null;
+      if (mergedSnap?.exists && isMergedClient(mergedSnap.data())) throw new P4EngineError("P4_HISTORICAL_MERGED_CLIENT_REVIEW_REQUIRED", `El cliente ${mergedClientId} está fusionado en ${mergedIntoOf(mergedSnap.data())}; ${action.entityType} ${action.iqEntityId} requiere revisión.`);
+    }
     const bridge=manifest.version>=6&&action.operation==="RECONCILE"&&action.reconciliationOf?assessV5V6Reconciliation(action,current):null;
     if(bridge&&!['SAFE_CANONICAL_RECONCILE','NO_CHANGE'].includes(bridge.classification))throw new P4EngineError("P4P_V5_V6_RECONCILIATION_CONFLICT",bridge.reason);
     if(bridge?.classification==="NO_CHANGE"){

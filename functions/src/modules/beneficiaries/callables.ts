@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { assertAuthorized } from "../../utils/authGuard";
 import { requireClientOperationalAccess, getCurrentClientDelegationAccess } from "../clientDelegations/access";
+import { assertClientAcceptsNewOperations, assertClientIdAcceptsNewOperations } from "../clients/mergeGuard";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -334,6 +335,7 @@ export const createClientBeneficiary = onCall(
       permission: "operateBeneficiarios",
       errorMessage: "No autorizado para crear beneficiarios de este cliente.",
     });
+    assertClientAcceptsNewOperations(scope.client);
     const adminId = scope.economicOwnerAdminId || adminScopeId;
     const operadorId = scope.economicOwnerOperadorId || null;
 
@@ -547,6 +549,7 @@ export const addClientBeneficiaryMethod = onCall(
       throw new HttpsError("permission-denied", "No autorizado.");
     }
 
+    await assertClientIdAcceptsNewOperations(db, clientId);
     const prepared = buildMethodPayload(request.data || {});
     const { ref } = await assertMethodDoesNotExistForClient(clientId, prepared.dedupeKey);
 

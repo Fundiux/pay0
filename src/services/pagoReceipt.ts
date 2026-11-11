@@ -14,7 +14,7 @@ export type ReceiptIdentification = {
   createPayload: (Parameters<typeof import("./pagos").createPago>[0] & { despachoId: string; empresaNombre: string; operationTypeKey: string; fechaPago: string; moneda: string; notaInicial: string }) | null;
 };
 export type ReceiptIdentityMatch = { id: string; name: string; despachoId?: string; evidence: string[] };
-export type ReceiptCorrectionField = "transferAmount" | "executionDate" | "executionTime" | "senderName" | "beneficiaryName" | "sourceBankName" | "destinationBankName" | "bankName" | "sourceAccount" | "destinationAccount" | "concept" | "reference" | "trackingKey" | "folio" | "transactionId";
+export type ReceiptCorrectionField = "transferAmount" | "executionDate" | "executionTime" | "senderName" | "beneficiaryName" | "sourceBankName" | "destinationBankName" | "bankName" | "sourceAccount" | "destinationAccount" | "concept" | "reference" | "trackingKey" | "folio" | "transactionId" | "currency";
 export type ReceiptParseOptions = { operationTypeKey?: string; selectedClientId?: string; selectedCompanyId?: string; assertContext?: () => void };
 
 /** Use only a server-resolved operation when the user has not chosen one. */

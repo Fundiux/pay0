@@ -13,8 +13,8 @@ export async function getHugoComplementInventoryPage(cursor?: string, pageSize =
 export async function listPaymentComplementFollowup() {
   return (await httpsCallable<Record<string, never>, { ok: boolean; rows: ComplementFollowup[]; truncated: boolean; automation: { iqEnabled: boolean; iqLookupEnabled: boolean; facturamaEnabled: boolean; iqRequestEnabled: boolean; iqRequestDailyLimit: number } }>(functions, "listPaymentComplementFollowup")({})).data;
 }
-export async function configurePaymentComplementAutomation(input: { iqEnabled: boolean; facturamaEnabled: boolean; confirmation?: string } | { provider: "IQ" | "FACTURAMA"; enabled: boolean; confirmation?: string } | { provider: "IQ_REQUEST"; enabled: boolean; dailyLimit: number; confirmation?: string }) {
-  return (await httpsCallable<typeof input, { ok: boolean }>(functions, "configurePaymentComplementAutomation")(input)).data;
+export async function configurePaymentComplementAutomation(input: { iqEnabled: boolean; facturamaEnabled: boolean; confirmation?: string } | { provider: "IQ" | "FACTURAMA"; enabled: boolean; confirmation?: string } | { provider: "IQ_REQUEST"; enabled: boolean; confirmation?: string }) {
+  return (await httpsCallable<typeof input, { ok: boolean; requeued?: number }>(functions, "configurePaymentComplementAutomation")(input)).data;
 }
 export async function setComplementPaymentForm(requestId: string, paymentForm: string) {
   return (await httpsCallable<{ requestId: string; paymentForm: string }, { ok: boolean }>(functions, "setComplementPaymentForm")({ requestId, paymentForm })).data;

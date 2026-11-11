@@ -1,9 +1,9 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 
-export type ClientItem = { id: string; name: string; rfc?: string; email?: string; phone?: string; whatsapp?: string; active?: boolean; adminId?: string; rootId?: string; ownerId?: string; managedByUserId?: string; createdBy?: string; createdAt?: any; numeroCliente?: number | null; clientNumber?: number | null; iqLink?: any; iqClientId?: string; iqClientName?: string };
+export type ClientItem = { id: string; name: string; rfc?: string; email?: string; phone?: string; whatsapp?: string; active?: boolean; adminId?: string; rootId?: string; ownerId?: string; managedByUserId?: string; createdBy?: string; createdAt?: any; numeroCliente?: number | null; clientNumber?: number | null; iqLink?: any; iqClientId?: string; iqClientName?: string; mergedInto?: string; mergedIntoNumber?: number | null };
 type ClientScopePermission = "view" | "operate" | "viewBasic" | "operateSolicitudes" | "operatePagos" | "operateBeneficiarios" | "operateDispersiones" | "viewBalanceInDispersion" | "requestDispersionIncidents" | "commentDispersionNotes";
-type ListScopedClientsParams = { uid: string; role: "superadmin" | "admin" | "operador" | string; rootId?: string; requiredPermission?: ClientScopePermission };
+type ListScopedClientsParams = { uid: string; role: "superadmin" | "admin" | "operador" | string; rootId?: string; requiredPermission?: ClientScopePermission; includeMerged?: boolean };
 const CACHE_MS = 30_000;
 const scopedCache = new Map<string, { expiresAt: number; value: ClientItem[]; pending?: Promise<ClientItem[]> }>();
 
@@ -25,7 +25,9 @@ export function listScopedClients(params: ListScopedClientsParams, cb: (items: C
   let cancelled = false;
   if (!params?.uid || !params?.rootId) { cb([]); return () => { cancelled = true; }; }
   const permission = params.requiredPermission || "view";
-  void readClients(keyFor(permission, `${params.uid}:${params.rootId}`), { requiredPermission: permission }).then((items) => { if (!cancelled) cb(items); }).catch((error) => { if (!cancelled) { cb([]); if (!denied(error)) onErr?.(error); } });
+  // Selectors never see a merged duplicate; only the clients list asks for it, to mark it.
+  const includeMerged = params.includeMerged === true;
+  void readClients(keyFor(permission, `${params.uid}:${params.rootId}${includeMerged ? ":merged" : ""}`), { requiredPermission: permission, ...(includeMerged ? { includeMerged: true } : {}) }).then((items) => { if (!cancelled) cb(items); }).catch((error) => { if (!cancelled) { cb([]); if (!denied(error)) onErr?.(error); } });
   return () => { cancelled = true; };
 }
 export async function getClientById(clientId: string, _rootId?: string): Promise<ClientItem | null> { if (!clientId) return null; const res: any = await httpsCallable(functions, "getClientCanonical")({ clientId, requiredPermission: "view" }); return res?.data?.client || null; }

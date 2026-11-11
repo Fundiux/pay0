@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "project": "pay-0-system",
+  "region": "us-central1",
+  "timeZone": "America/Mexico_City",
+  "windowStart": "08:45",
+  "windowEnd": "21:00",
+  "warmMinInstances": 1,
+  "coldMinInstances": 0,
+  "services": [
+    {
+      "name": "pay0-next16",
+      "kind": "appHosting"
+    }
+  ]
+}

@@ -8,9 +8,9 @@ const bbva = ['INSERVICE TELECOM S DE RL DE CV', 'Resultado del traspaso', 'Impo
 test('SPEI receipt with a peso amount and no other currency is MXN', () => {
   assert.equal(parseReceiptText(bbva).currency, 'MXN');
 });
-test('foreign currency or non-SPEI receipts are not defaulted to MXN', () => {
-  assert.equal(parseReceiptText(bbva + '\nUSD').currency, '');
-  assert.equal(parseReceiptText(bbva.replace('SPEI', 'CHEQUE')).currency, '');
+test('a foreign currency is detected and any other receipt defaults to editable MXN (owner, 2026-11-09)', () => {
+  assert.equal(parseReceiptText(bbva + '\nUSD').currency, 'USD');
+  assert.equal(parseReceiptText(bbva.replace('SPEI', 'CHEQUE')).currency, 'MXN');
 });
 for (const party of ['CLIENT', 'COMPANY']) {
   test(`${party}: a learned alias cannot override a contradicting RFC or another entity's exact RFC`, () => {

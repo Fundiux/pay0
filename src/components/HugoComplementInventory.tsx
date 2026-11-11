@@ -26,6 +26,7 @@ const reasons: Record<string, string> = {
   UNKNOWN: "Resultado externo incierto",
   BLOCKED: "Bloqueado para revisión",
   REVIEW_REQUIRED: "Requiere revisión",
+  REP_SOURCE_CANCELLATION_PENDING: "Espera: la solicitud tiene una cancelación en curso",
   REP_GATE_MASTER_OFF: "Master Switch de IQ apagado",
   REP_GATE_LOOKUP_OFF: "Consulta de complementos IQ pausada",
   REP_GATE_REQUEST_OFF: "Solicitud de complementos IQ pausada",

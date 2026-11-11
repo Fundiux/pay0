@@ -292,6 +292,98 @@
     {
       "commit": "095443b5",
       "capability": "Pagos sin solicitud: clasificacion, lista, decision por rol y alertas al dueno del root"
+    },
+    {
+      "commit": "114e535e",
+      "capability": "Complementos: espera por cancelacion en curso y frenos de seguridad diferidos en la busqueda diaria"
+    },
+    {
+      "commit": "96cca700",
+      "capability": "Pendientes en dashboard y resumen diario; pagos sin solicitud sin aviso inmediato"
+    },
+    {
+      "commit": "34895ca5",
+      "capability": "Beneficiarios: ligado automatico a IQ por cuenta, reintento cada 30 min y motivo claro cuando falta en IQ; alta en IQ bloqueada"
+    },
+    {
+      "commit": "d492884d",
+      "capability": "Pagos: folio sin serie (FAC, FACTURA, F o solo el numero) y monto exacto unico con facturas de meses anteriores"
+    },
+    {
+      "commit": "420cefac",
+      "capability": "Comprobantes: moneda MXN por defecto y editable; la forma de pago no bloquea el registro"
+    },
+    {
+      "commit": "fb59c659",
+      "capability": "Pagos sin folio: solo monto del mismo mes (+-1 centavo); referencia y concepto opcionales en comprobantes"
+    },
+    {
+      "commit": "51552e0e",
+      "capability": "La ventana de comprobantes se cierra sola cuando todos los pagos quedan creados y subidos"
+    },
+    {
+      "commit": "3388b268",
+      "capability": "Pagos en revision: reevaluacion automatica diaria a las 7:00 con las reglas vigentes"
+    },
+    {
+      "commit": "95cc080d",
+      "capability": "Fusion de clientes hacia adelante: duplicado sin altas nuevas, lo existente se termina, identificacion y P4 no usan al fusionado"
+    },
+    {
+      "commit": "8928d20f",
+      "capability": "Resumen diario: linea de autonomia legible sin datos"
+    },
+    {
+      "commit": "9fcd86a2",
+      "capability": "Hugo: herramienta de solo lectura de decisiones de pagos sin solicitud por cliente"
+    },
+    {
+      "commit": "99b731b6",
+      "capability": "Dashboard de indicadores de negocio para superadmin, sin CFDI cancelados"
+    },
+    {
+      "commit": "b57f852e",
+      "capability": "Release integrado 2026-11-10 con 405 endpoints esperados"
+    },
+    {
+      "commit": "c3442974",
+      "capability": "Panel de RFC duplicados en Clientes con propuesta de cliente vigente calculada en el servidor"
+    },
+    {
+      "commit": "f8bdac0a",
+      "capability": "IQ: claim con holgura, recuperacion automatica de NOT_ENQUEUED sin bloqueo, drenado por perfil y reintento con lock ocupado"
+    },
+    {
+      "commit": "b9edead6",
+      "capability": "Sin botones manuales de sincronizacion IQ ni prueba de Telegram"
+    },
+    {
+      "commit": "60e17f00",
+      "capability": "Complementos IQ: un solo interruptor sin limite diario visible y re-encolado de pausados por compuerta"
+    },
+    {
+      "commit": "6133cd1c",
+      "capability": "Release integrado 2026-11-10 b"
+    },
+    {
+      "commit": "2ea5de79",
+      "capability": "Ventana de capacidad caliente 08:45-21:00 y createSolicitud sin minInstances fijo"
+    },
+    {
+      "commit": "117e63ce",
+      "capability": "Diez callables de uso frecuente con minInstances 1 en codigo; la ventana caliente solo para App Hosting"
+    },
+    {
+      "commit": "3c332559",
+      "capability": "Carga perezosa: cada funcion carga solo su modulo desde el mapa generado (lazyEntry)"
+    },
+    {
+      "commit": "47a26975",
+      "capability": "functions main apunta a lib/lazyEntry.js"
+    },
+    {
+      "commit": "c19b82c4",
+      "capability": "Integracion de la carga perezosa con minInstances en legacyCore"
     }
   ],
   "requiredText": [
@@ -488,7 +580,12 @@
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
       "text": "return result(\"READY\", \"EXACT_AMOUNT_SAME_MONTH\", 1, batch);",
-      "capability": "La aplicacion automatica relaciona pago y solicitud por monto exacto del mismo mes"
+      "capability": "La aplicacion automatica relaciona pago sin folio y solicitud solo por monto del mismo mes (+-1 centavo)"
+    },
+    {
+      "file": "functions/src/modules/paymentApplications/automaticDomain.ts",
+      "text": "if (new Set(keys).size !== keys.length) return result(\"REQUIRES_REVIEW\", \"AMBIGUOUS_INVOICE_FOLIO\", byFolio.length);",
+      "capability": "La aplicacion automatica relaciona por folio sin serie solo cuando una factura del cliente lo tiene"
     },
     {
       "file": "functions/src/modules/paymentApplications/automaticDomain.ts",

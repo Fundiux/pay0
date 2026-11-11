@@ -139,7 +139,8 @@ export async function checkDueIqFollowup(requestId: string, now = new Date(), ad
   } catch (error) {
     reportProtectedFailure(error);
     const failure = code(error);
-    if (["REP_IQ_PERMISSION_REQUIRED", "REP_IQ_PROFILE_CHANGED"].includes(failure) || failure.startsWith("REP_GATE_")) {
+    // A safety stop only ends this run: the row stays eligible for tomorrow.
+    if (["REP_IQ_PERMISSION_REQUIRED", "REP_IQ_PROFILE_CHANGED"].includes(failure) || failure.startsWith("REP_GATE_") || failure.startsWith("SAFETY_")) {
       await finishBlocked(requestId, rootId, now, failure); return "BLOCKED";
     }
     await finishException(requestId, rootId, failure); return "EXCEPTION";

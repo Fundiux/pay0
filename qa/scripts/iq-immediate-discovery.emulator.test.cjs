@@ -901,7 +901,7 @@ test('integrated Solicitud creation, source retries, Materialidad, immediate Tas
     linkSolicitudToMaterialityOperationCore: materiality.linkSolicitudToMaterialityOperationCore,
     ensureAutomaticFacturamaDraftForSolicitud: async () => { facturamaCalls++; },
     belongsToPay0Dispatch: functionsRequire('./lib/modules/facturama/issuerGuard.js').belongsToPay0Dispatch,
-  }, 'functions/src/index.ts').createSolicitud;
+  }, 'functions/src/modules/legacyCore/callables.ts').createSolicitud;
   const strings = { cleanText: x => String(x || '').trim(), cleanUpper: x => String(x || '').toUpperCase(), asRecord: x => x || {} };
   const queueHandlers = extract(['reserveQueuedJob', 'enqueueIqCreationForSolicitud'], {
     db, FieldValue, ...https, ...strings, crypto: require('node:crypto'), IQ_QUEUE_VERSION: 'local', IQ_PREVALIDATION_VERSION: 'local',
@@ -1087,7 +1087,7 @@ test('listSolicitudes resolves historical names and retains production root, cre
  const helper=functionsRequire('./lib/modules/sharedCallables/recordCreators.js');
  const guard=functionsRequire('./lib/utils/authGuard.js');
  const https=functionsRequire('firebase-functions/v2/https');
- const {listSolicitudes} = extract(['listSolicitudes','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/index.ts');
+ const {listSolicitudes} = extract(['listSolicitudes','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/modules/legacyCore/callables.ts');
  await db.doc('users/list-admin').set({rootId:'list-root',role:'superadmin',active:true});
  await db.doc('users/list-creator').set({rootId:'list-root',displayName:'Listed Creator'});
  for(const [id,rootId,createdBy,at] of [['first','list-root','list-creator',3000],['second','list-root','list-creator',2000],['excluded','different-root','list-creator',4000],['other','list-root','someone-else',5000]]) await db.doc(`solicitudes/list-${id}`).set({rootId,createdBy,createdAt:Timestamp.fromMillis(at)});
@@ -1104,7 +1104,7 @@ test('listPagos resolves historical names and retains production root, creator f
  const helper=functionsRequire('./lib/modules/sharedCallables/recordCreators.js');
  const guard=functionsRequire('./lib/utils/authGuard.js');
  const https=functionsRequire('firebase-functions/v2/https');
- const {listPagos} = extract(['listPagos','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,canRunIqAutomationForDispatch:functionsRequire('./lib/modules/dispatches/domain.js').canRunIqAutomationForDispatch,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/index.ts');
+ const {listPagos} = extract(['listPagos','requireAuth'],{db,Timestamp,FieldPath:functionsRequire('firebase-admin/firestore').FieldPath,canRunIqAutomationForDispatch:functionsRequire('./lib/modules/dispatches/domain.js').canRunIqAutomationForDispatch,...guard,...helper,...https,onCall:(_,run)=>run},'functions/src/modules/legacyCore/callables.ts');
  await db.doc('users/list-pago-admin').set({rootId:'list-pago-root',role:'superadmin',active:true});
  await db.doc('users/list-pago-creator').set({rootId:'list-pago-root',displayName:'Listed Creator'});
  for(const [id,rootId,createdBy,at] of [['first','list-pago-root','list-pago-creator',3000],['second','list-pago-root','list-pago-creator',2000],['excluded','different-root','list-pago-creator',4000],['other','list-pago-root','someone-else',5000]]) await db.doc(`pagos/list-${id}`).set({rootId,createdBy,createdAt:Timestamp.fromMillis(at)});

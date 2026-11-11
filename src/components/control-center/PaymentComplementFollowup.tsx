@@ -3,25 +3,28 @@ import { useEffect, useState } from "react";
 import { listPaymentComplementFollowup, refreshPaymentComplementFollowup, configurePaymentComplementAutomation, setComplementPaymentForm, type ComplementFollowup } from "@/services/paymentComplements";
 
 const labels: Record<string, string> = { VOIDED: "Ya no aplica", NEEDS_FISCAL_DATA: "Faltan datos fiscales", WAITING_IQ_APPLICATION: "Esperando confirmación de aplicación IQ", PENDING_PROVIDER_CONTRACT: "Pendiente de solicitud al proveedor", REQUESTED: "Solicitado / esperando archivo", RECEIVED: "Recibido", QUEUED: "En cola", PAUSED: "Pausado por compuerta", PREPARING: "Validando", SENDING: "Enviando", BLOCKED: "Requiere datos o revisión", UNKNOWN: "Resultado incierto · no reenviar", ISSUED_PENDING_FILES: "Emitido · faltan archivos" };
+const gateReasonText: Record<string, string> = { REP_GATE_QUOTA_EXHAUSTED: "se alcanzó el límite de seguridad diario; continúa mañana", REP_REQUEST_HARD_DISABLED: "las solicitudes a IQ están pausadas", REP_GATE_REQUEST_OFF: "las solicitudes a IQ están pausadas" };
 export default function PaymentComplementFollowup() {
   const [rows, setRows] = useState<ComplementFollowup[]>([]), [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [truncated, setTruncated] = useState(false);
   const [automation, setAutomation] = useState({ iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false, iqRequestEnabled: false, iqRequestDailyLimit: 5 });
+  const iqRequestActive = automation.iqEnabled && automation.iqRequestEnabled;
   async function load() { const result = await listPaymentComplementFollowup(); setRows(result.rows); setTruncated(result.truncated); setAutomation(result.automation); }
-  async function configure(key: "iqEnabled" | "facturamaEnabled") {
-    const next = { ...automation, [key]: !automation[key] };
-    const prompt = key === "iqEnabled"
-      ? next[key] ? "¿Activar nuevas solicitudes de REP a IQ? La consulta de REP existentes tiene una compuerta independiente. No se enviará el histórico." : "¿Pausar nuevas solicitudes de REP a IQ? La consulta de REP existentes puede continuar si sus compuertas lo permiten."
-      : next[key] ? "¿Activar emisión Facturama para aplicaciones PPD nuevas? Puede emitir CFDI reales. No se enviará el histórico." : "¿Pausar nuevas emisiones Facturama?";
+  async function configure() {
+    const next = !automation.facturamaEnabled;
+    const prompt = next ? "¿Activar emisión Facturama para aplicaciones PPD nuevas? Puede emitir CFDI reales. No se enviará el histórico." : "¿Pausar nuevas emisiones Facturama?";
     if (!window.confirm(prompt)) return;
     setBusy(true);
-    try { await configurePaymentComplementAutomation({ provider: key === "iqEnabled" ? "IQ" : "FACTURAMA", enabled: next[key], confirmation: "AUTORIZO_REP_AUTOMATICO" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
+    try { await configurePaymentComplementAutomation({ provider: "FACTURAMA", enabled: next, confirmation: "AUTORIZO_REP_AUTOMATICO" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
   }
   async function configureIqRequest() {
-    const enabled = !automation.iqRequestEnabled;
-    const answer = enabled ? window.prompt("Esto enviará solicitudes reales de complemento a IQ después de aplicar pagos. ¿Cuántas por día? (1 a 25)", "1") : String(automation.iqRequestDailyLimit);
-    if (!answer || (!enabled && !window.confirm("¿Pausar las solicitudes de complementos a IQ? La búsqueda diaria continúa."))) return;
+    const enabled = !iqRequestActive;
+    if (!window.confirm(enabled ? "Esto enviará solicitudes reales de complemento a IQ después de aplicar pagos. Los complementos que estaban pausados por este interruptor volverán a la cola." : "¿Pausar las solicitudes de complementos a IQ? La búsqueda diaria continúa.")) return;
     setBusy(true);
-    try { await configurePaymentComplementAutomation({ provider: "IQ_REQUEST", enabled, dailyLimit: Number(answer), confirmation: "AUTORIZO_SOLICITUD_REP_IQ" }); await load(); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
+    try {
+      const result = await configurePaymentComplementAutomation({ provider: "IQ_REQUEST", enabled, confirmation: "AUTORIZO_SOLICITUD_REP_IQ" });
+      await load();
+      setMessage(enabled ? (result.requeued ? `Solicitudes activas. ${result.requeued} complementos pausados volvieron a la cola.` : "Solicitudes activas.") : "Solicitudes pausadas.");
+    } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
   }
   async function setForm(id: string, value: string) {
     if (!value || !window.confirm("Confirma que esta es la forma del pago recibido. Se revalidará el complemento para emitirlo.")) return;
@@ -37,12 +40,12 @@ export default function PaymentComplementFollowup() {
   }
   return <section className="rounded-2xl border border-white/10 bg-slate-900 p-4 text-slate-200">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">Complementos de pago · seguimiento actual</h2><button disabled={busy} onClick={() => void refresh()} className="rounded-lg border border-sky-400/40 px-3 py-2 text-sm text-sky-300 disabled:opacity-50">{busy ? "Revisando…" : "Revisar aplicaciones e histórico"}</button></div>
-    <p className="my-3 text-xs text-amber-200">IQ consulta REP existentes: {automation.iqLookupEnabled ? "habilitada por configuración" : "pausada"}; cada consulta también exige Master, perfil y permisos vigentes. La solicitud de REP tiene otra compuerta. Revisión diaria a las 19:00 (Ciudad de México), con aviso tras 7 días. El histórico no se envía automáticamente.</p>
-    <div className="mb-3 flex gap-3 text-xs">{(["iqEnabled", "facturamaEnabled"] as const).map(key => <button key={key} disabled={busy} onClick={() => void configure(key)} className="rounded border border-sky-400/40 px-3 py-2">{key === "iqEnabled" ? "IQ · nuevas solicitudes" : "Facturama"}: {automation[key] ? "activo · pausar" : "pausado · activar"}</button>)}<button disabled={busy} onClick={() => void configureIqRequest()} className="rounded border border-amber-400/40 px-3 py-2">IQ · solicitar complementos: {automation.iqRequestEnabled ? `activo (${automation.iqRequestDailyLimit} por día) · pausar` : "pausado · activar"}</button></div>
+    <p className="my-3 text-xs text-amber-200">IQ consulta REP existentes: {automation.iqLookupEnabled ? "habilitada por configuración" : "pausada"}; cada consulta también exige Master, perfil y permisos vigentes. La solicitud de REP tiene otra compuerta. Revisión diaria a las 19:00 (Ciudad de México), con aviso tras 5 días. El histórico no se envía automáticamente.</p>
+    <div className="mb-3 flex gap-3 text-xs"><button disabled={busy} onClick={() => void configureIqRequest()} className="rounded border border-amber-400/40 px-3 py-2">{iqRequestActive ? "Solicitudes de complementos a IQ: activas · pausar" : "Activar solicitudes de complementos"}</button><button disabled={busy} onClick={() => void configure()} className="rounded border border-sky-400/40 px-3 py-2">Facturama: {automation.facturamaEnabled ? "activo · pausar" : "pausado · activar"}</button></div>
     {message && <p role="status" className="mb-3 text-sm">{message}</p>}
     <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr>{["Solicitud", "Pago", "Aplicación", "Parcialidad", "Importe", "Proveedor", "Estado"].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
       {!rows.length && <tr><td colSpan={7} className="p-3 text-slate-400">Sin seguimientos registrados. Revisa el histórico para incluir aplicaciones anteriores.</td></tr>}
-      {rows.map(row => <tr key={row.id} className="border-t border-white/10"><td className="p-2">{row.solicitudFolio}</td><td className="p-2">{row.pagoFolio}</td><td className="p-2">{row.applicationFolio}</td><td className="p-2">{row.installment}</td><td className="p-2">{Number.isFinite(row.amountMinor) ? (row.amountMinor / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN" }) : "Sin importe"}</td><td className="p-2">{row.provider}</td><td className="p-2">{labels[row.automationStatus || row.status] || row.automationStatus || row.status}{row.automationGateReason && <div className="mt-1 text-sky-300">María observó el caso, pero no puede actuar: {row.automationGateReason}</div>}{row.automationError && <div className="mt-1 text-amber-300">{row.automationError === "REP_PAYMENT_FORM_REQUIRED" ? "Falta la forma SAT del pago recibido" : row.automationError}</div>}{row.automationError === "REP_PAYMENT_FORM_REQUIRED" && <select aria-label={`Forma de pago ${row.applicationFolio}`} value="" disabled={busy} onChange={e => void setForm(row.id, e.target.value)} className="mt-2 rounded bg-slate-800 p-2"><option value="">Seleccionar forma real…</option><option value="01">01 Efectivo</option><option value="02">02 Cheque nominativo</option><option value="03">03 Transferencia</option><option value="04">04 Tarjeta de crédito</option><option value="28">28 Tarjeta de débito</option><option value="29">29 Tarjeta de servicios</option></select>}</td></tr>)}
+      {rows.map(row => <tr key={row.id} className="border-t border-white/10"><td className="p-2">{row.solicitudFolio}</td><td className="p-2">{row.pagoFolio}</td><td className="p-2">{row.applicationFolio}</td><td className="p-2">{row.installment}</td><td className="p-2">{Number.isFinite(row.amountMinor) ? (row.amountMinor / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN" }) : "Sin importe"}</td><td className="p-2">{row.provider}</td><td className="p-2">{labels[row.automationStatus || row.status] || row.automationStatus || row.status}{row.automationGateReason && <div className="mt-1 text-sky-300">María observó el caso, pero no puede actuar: {gateReasonText[row.automationGateReason] || row.automationGateReason}</div>}{row.automationError && <div className="mt-1 text-amber-300">{row.automationError === "REP_PAYMENT_FORM_REQUIRED" ? "Falta la forma SAT del pago recibido" : row.automationError}</div>}{row.automationError === "REP_PAYMENT_FORM_REQUIRED" && <select aria-label={`Forma de pago ${row.applicationFolio}`} value="" disabled={busy} onChange={e => void setForm(row.id, e.target.value)} className="mt-2 rounded bg-slate-800 p-2"><option value="">Seleccionar forma real…</option><option value="01">01 Efectivo</option><option value="02">02 Cheque nominativo</option><option value="03">03 Transferencia</option><option value="04">04 Tarjeta de crédito</option><option value="28">28 Tarjeta de débito</option><option value="29">29 Tarjeta de servicios</option></select>}</td></tr>)}
     </tbody></table></div>{truncated && <p className="mt-2 text-xs text-amber-200">Se muestran los 100 seguimientos más recientes; no es el historial completo.</p>}
   </section>;
 }

@@ -690,11 +690,8 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     /^(?:concepto|concepto\s+de\s+pago|motivo|descripci[oÃƒÂ³]n)\s*[:\-]\s*(.+)$/i,
   ]);
 
-  const currency =
-    !/\b(?:usd|eur|dolares|euros)\b/i.test(normalizedText) &&
-    (/\b(?:mxn|m\.n\.|pesos\s+mexicanos)\b/i.test(text) || (/\bSPEI\b/i.test(text) && /\$\s*\d/.test(text)))
-      ? "MXN"
-      : "";
+  // MXN unless the document names another currency; the operator can correct it.
+  const currency = /\b(?:usd|dolares)\b/i.test(normalizedText) ? "USD" : /\b(?:eur|euros)\b/i.test(normalizedText) ? "EUR" : "MXN";
 
   const rfc = firstMatch(text, [
     /(?:rfc\s+(?:ordenante|emisor|remitente|beneficiario|receptor)?|rfc)\s*[:\-]\s*([A-Z&Ãƒâ€˜]{3,4}\d{6}[A-Z0-9]{3})/i,
@@ -738,7 +735,8 @@ export function parseReceiptText(textRaw: string): ReceiptData {
     reference,
     concept,
     currency,
-    paymentForm: /\b(?:SPEI|TRANSFERENCIA)\b/i.test(text) && !/\b(?:RECHAZAD[OA]|CANCELAD[OA]|FALLID[OA]|CHEQUE|EFECTIVO)\b/i.test(text) ? "03" : "",
+    // Transfer unless the document says cheque or cash; the bank result is checked at reconciliation.
+    paymentForm: /\bCHEQUE\b/i.test(text) ? "02" : /\bEFECTIVO\b/i.test(text) ? "01" : "03",
     rfc,
     payerRfc,
     beneficiaryRfc,

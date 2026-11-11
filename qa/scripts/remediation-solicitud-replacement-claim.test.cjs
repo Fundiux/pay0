@@ -4,7 +4,7 @@
 // synthetic Firestore and postcommit effects. No index initialization or providers.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
 global.fetch=async()=>{throw Error('NETWORK_FORBIDDEN');};
-const source=fs.readFileSync('functions/src/index.ts','utf8'),ast=ts.createSourceFile('index.ts',source,ts.ScriptTarget.Latest,true);let callback;
+const source=fs.readFileSync('functions/src/modules/legacyCore/callables.ts','utf8'),ast=ts.createSourceFile('index.ts',source,ts.ScriptTarget.Latest,true);let callback;
 for(const stmt of ast.statements)if(ts.isVariableStatement(stmt))for(const d of stmt.declarationList.declarations)if(d.name.getText(ast)==='createSolicitud'){assert.ok(ts.isCallExpression(d.initializer));assert.equal(d.initializer.expression.getText(ast),'onCall');callback=d.initializer.arguments[1].getText(ast);}
 assert.ok(callback);const callbackCode=ts.transpileModule('exports.handler='+callback,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,compiled=new Map();
 class HttpsError extends Error{constructor(code,message,details){super(message);this.code=code;this.details=details;}}

@@ -19,6 +19,8 @@ import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized } from "../../utils/authGuard";
 import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
 import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "./originIdentity";
+import { storedIqLink } from "../beneficiaries/iqLinkDomain";
+import { dispersionFailureReason } from "./dispersionFailureReason";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -1154,6 +1156,7 @@ async function persistLegResult(
     status === "CREATED" ||
     status ===
       "CREATED_PENDING_FOLIO";
+  const failureReason = dispersionFailureReason(result.errors);
 
   await db.runTransaction(
     async (tx) => {
@@ -1232,11 +1235,14 @@ async function persistLegResult(
           iqCreationLastError:
             created
               ? null
-              : result.responseMessage ||
+              : failureReason?.message ||
+                result.responseMessage ||
                 result.errors.join(
                   " | ",
                 ) ||
                 null,
+          iqCreationFailureReason:
+            created ? FieldValue.delete() : failureReason?.code ?? FieldValue.delete(),
           iqCreationFinishedAt:
             FieldValue.serverTimestamp(),
           iqCreationLockToken:
@@ -1927,6 +1933,11 @@ export async function runCreateClientDispersionIqCore(input: {
           access.associatedName,
         clientCandidates,
         beneficiaryCandidates,
+        ...storedIqLink(method, access.profileAlias, clean(
+          destination.kind === "CLABE"
+            ? (method.clabe ?? method.CLABE ?? method.bankClabe)
+            : (method.cardNumber ?? method.numeroTarjeta ?? method.tarjeta),
+        )),
         clientIqId:
           clean(
             record(client.iqLink).clientId ??

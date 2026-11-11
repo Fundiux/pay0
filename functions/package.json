@@ -18,7 +18,7 @@
   "engines": {
     "node": "22"
   },
-  "main": "lib/index.js",
+  "main": "lib/lazyEntry.js",
   "dependencies": {
     "fast-xml-parser": "5.11.1",
     "@google-cloud/vision": "^6.1.0",

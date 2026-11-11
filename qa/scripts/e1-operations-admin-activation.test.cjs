@@ -80,10 +80,10 @@ async function run() {
     }, {code: compiled, serviceCode});
     await expect(page.getByRole('button', { name: 'Facturama: pausado · activar' })).toBeVisible();
     await call('second', { provider: 'FACTURAMA', enabled: true, confirmation: 'AUTORIZO_REP_AUTOMATICO' });
-    await page.getByRole('button', { name: 'IQ · nuevas solicitudes: pausado · activar' }).click();
+    await page.getByRole('button', { name: 'Activar solicitudes de complementos' }).click();
     await expect(page.getByRole('button', { name: 'Facturama: activo · pausar' })).toBeVisible();
     assert.equal(payloads.length, 1);
-    assert.equal(payloads[0].provider, 'IQ');
+    assert.equal(payloads[0].provider, 'IQ_REQUEST'); assert.equal('dailyLimit' in payloads[0], false, 'the owner no longer chooses a daily number');
     assert.equal('facturamaEnabled' in payloads[0], false);
     assert.equal((await ref.get()).get('facturamaEnabled'), true);
     await page.screenshot({ path: path.join(process.env.TEMP, 'admin-provider-patch.png'), fullPage: true });

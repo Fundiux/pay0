@@ -11,6 +11,9 @@ export const normalizeReceiptName = (value: unknown) => String(value ?? "").norm
   .replace(/\bS\s+DE\s+R\s*L\s+DE\s+C\s*V$/, "S DE RL DE CV")
   .replace(/\bS\s*A\s+DE\s+C\s*V$/, "SA DE CV");
 export const normalizeReceiptReference = (value: unknown) => String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** Currencies the payment form offers; a receipt without one is MXN. */
+export const RECEIPT_CURRENCIES = ["MXN", "USD", "EUR"];
+export const receiptCurrency = (receipt: Pick<ReceiptSignals, "currency">) => String(receipt.currency ?? "").trim().toUpperCase() || "MXN";
 const rfc = (value: unknown) => String(value ?? "").toUpperCase().replace(/[\s.-]/g, "");
 const validRfc = (value: string) => /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(value) && !/^XAXX|^XEXX/.test(value);
 export function fullReceiptAccount(value: unknown) {
@@ -81,9 +84,9 @@ export function receiptRegistrationReasons(receipt: ReceiptSignals, operationTyp
   if (!Number.isFinite(receipt.amount) || Number(receipt.amount) <= 0) reasons.push("INVALID_AMOUNT");
   const parsedDate = Date.parse(String(receipt.date || ""));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(receipt.date || "")) || !Number.isFinite(parsedDate) || new Date(parsedDate).toISOString().slice(0, 10) !== receipt.date) reasons.push("MISSING_DATE");
-  if (normalizeReceiptReference(receipt.reference).length < 4) reasons.push("MISSING_REFERENCE");
-  if (String(receipt.currency || "").toUpperCase() !== "MXN") reasons.push("UNSUPPORTED_CURRENCY");
-  if (receipt.paymentForm !== "03") reasons.push("PAYMENT_FORM_REQUIRES_REVIEW");
+  // Reference and concept are optional: a client may write only "pago" or nothing.
+  if (!RECEIPT_CURRENCIES.includes(receiptCurrency(receipt))) reasons.push("UNSUPPORTED_CURRENCY");
+  // The payment form and the bank result belong to reconciliation, not to registration.
   if (!operationTypeKey) reasons.push("MISSING_OPERATION_TYPE");
   return reasons;
 }

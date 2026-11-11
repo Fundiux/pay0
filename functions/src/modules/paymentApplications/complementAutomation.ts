@@ -10,7 +10,7 @@ import { logActivityTx } from "../../utils/logActivity";
 import { complementRequestId, reconcilePaymentComplement } from "./complementFollowup";
 import { assertSource, dayMexico, hash, millis, overdue, text } from "./complementPolicy";
 import * as providers from "./complementProviders";
-import { claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } from "./complementGates";
+import { IQ_REQUEST_DAILY_FUSE, claimIqComplementGate, inspectIqComplementGate, recordBlockedIqGate } from "./complementGates";
 import { iqRepRequestId, matchingIqRepJobs } from "./complementRequestIdentity";
 import { verifiedDocuments } from "./complementCanary";
 import { scanDueIqFollowups } from "./complementDailyLookup";
@@ -583,6 +583,31 @@ export async function runProtectedRepDaily(now = new Date(), adapter = providers
 }
 export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * 1-5", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0, maxInstances: 1, concurrency: 1 }, () => runProtectedRepDaily().then(() => undefined));
 
+// Jobs PAUSED only because a switch or quota was closed wait for a scheduler that may not run. When the owner turns requests on,
+// the ones that stopped for those reasons go back to QUEUED so the execution trigger picks them up. BLOCKED and UNKNOWN stay as they are.
+// The cap keeps one activation under the safety circuit (20 admissions in 10 minutes); the rest wait for the daily run.
+const REQUEUE_GATE_REASONS = new Set(["REP_REQUEST_HARD_DISABLED", "REP_GATE_REQUEST_OFF", "REP_GATE_APPLICATION_FLOW_OFF", "REP_GATE_QUOTA_EXHAUSTED"]);
+export async function requeueGatePausedJobs(rootId: string, max = REP_DAILY_MAX_ADMITTED): Promise<number> {
+  const paused = await jobs().where("rootId", "==", rootId).where("status", "==", "PAUSED").limit(200).get();
+  const candidates = paused.docs.filter(doc => doc.data().provider === "IQ" && REQUEUE_GATE_REASONS.has(text(doc.data().gateReason)))
+    .sort((a, b) => millis(a.data().createdAt) - millis(b.data().createdAt)).slice(0, max);
+  let requeued = 0;
+  for (const doc of candidates) {
+    const done = await db.runTransaction(async tx => {
+      const snap = await tx.get(doc.ref), job = snap.data();
+      if (!job || job.rootId !== rootId || job.status !== "PAUSED" || !REQUEUE_GATE_REASONS.has(text(job.gateReason))) return false;
+      const requests = await tx.get(db.collection("paymentComplementRequests").where("automationJobId", "==", doc.id));
+      tx.update(doc.ref, { status: "QUEUED", gateReason: null, updatedAt: FieldValue.serverTimestamp() });
+      for (const source of requests.docs) if (source.data().rootId === rootId) tx.update(source.ref, { automationStatus: "QUEUED", automationError: null, updatedAt: FieldValue.serverTimestamp() });
+      logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: "SYSTEM", actorRole: "system", referenceId: doc.id, referenceType: "complementoPago",
+        description: `Al activar las solicitudes de complementos a IQ, el complemento pausado por ${text(job.gateReason)} volvió a la cola.` });
+      return true;
+    });
+    if (done) requeued++;
+  }
+  return requeued;
+}
+
 export const configurePaymentComplementAutomation = onCall({ region: "us-central1", cors: true }, async request => {
   const { rootId } = await context(request);
   if (request.data?.safetyOnly === true) {
@@ -596,18 +621,20 @@ export const configurePaymentComplementAutomation = onCall({ region: "us-central
   }
   const input = request.data || {};
   if (input.provider === "IQ_REQUEST") {
-    const limit = Number(input.dailyLimit ?? 1);
-    if (typeof input.enabled !== "boolean" || !Number.isInteger(limit) || limit < 1 || limit > 25)
-      throw new HttpsError("invalid-argument", "Indica el estado y un límite diario de 1 a 25 solicitudes.");
+    if (typeof input.enabled !== "boolean") throw new HttpsError("invalid-argument", "Indica si las solicitudes de complementos a IQ quedan activas o pausadas.");
     if (input.enabled && input.confirmation !== "AUTORIZO_SOLICITUD_REP_IQ") throw new HttpsError("failed-precondition", "Confirma las solicitudes reales de complementos a IQ.");
     const configRef = db.doc(`paymentComplementConfigs/${rootId}`);
+    // One switch for the owner: it sets iqEnabled and iqRequestEnabled together (the request gate needs both) and keeps the
+    // server fuse as the daily limit. The Facturama setting is never touched.
     await db.runTransaction(async tx => {
-      if (!(await tx.get(configRef)).exists) throw new HttpsError("failed-precondition", "Primero activa la automatización de complementos.");
-      tx.set(configRef, { iqRequestEnabled: input.enabled, iqRequestDailyLimit: limit, updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
+      const existing = await tx.get(configRef);
+      tx.set(configRef, { rootId, iqEnabled: input.enabled, iqRequestEnabled: input.enabled, iqRequestDailyLimit: IQ_REQUEST_DAILY_FUSE,
+        activatedAt: existing.data()?.activatedAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
       logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: request.auth!.uid, actorRole: "superadmin",
-        referenceId: rootId, referenceType: "configuracion", description: `Solicitud de complementos a IQ ${input.enabled ? `activa, hasta ${limit} por día` : "pausada"}.` });
+        referenceId: rootId, referenceType: "configuracion", description: `Solicitud de complementos a IQ ${input.enabled ? "activa" : "pausada"}.` });
     });
-    return { ok: true };
+    const requeued = input.enabled ? await requeueGatePausedJobs(rootId) : 0;
+    return { ok: true, requeued };
   }
   const patchProvider = Object.prototype.hasOwnProperty.call(input, "provider") || Object.prototype.hasOwnProperty.call(input, "enabled");
   if (patchProvider) {

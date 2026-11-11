@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ParsedPagoReceipt, ReceiptCorrectionField } from "@/services/pagoReceipt";
 
 const labels = [
-  ["transferAmount", "Importe"], ["executionDate", "Fecha"], ["executionTime", "Hora"],
+  ["transferAmount", "Importe"], ["currency", "Moneda"], ["executionDate", "Fecha"], ["executionTime", "Hora"],
   ["senderName", "Ordenante"], ["beneficiaryName", "Beneficiario"],
   ["sourceBankName", "Banco emisor"], ["destinationBankName", "Banco receptor"],
   ["bankName", "Institución identificada"],
@@ -26,9 +26,9 @@ type Props = {
   onCorrect?: (field: ReceiptCorrectionField, value: string, correctedField?: ReceiptCorrectionField) => Promise<void>;
   onEditingChange?: (editing: boolean) => void;
 };
-const primary = new Set(["transferAmount", "executionDate", "reference", "concept"]);
+const primary = new Set(["transferAmount", "currency", "executionDate", "reference", "concept"]);
 const identifiers = new Set(["reference", "trackingKey", "folio", "transactionId"]);
-const editable = new Set(["transferAmount", "executionDate", "executionTime", "senderName", "beneficiaryName", "sourceBankName", "destinationBankName", "bankName", "sourceAccount", "destinationAccount", "concept", "reference", "trackingKey", "folio", "transactionId"]);
+const editable = new Set(["transferAmount", "executionDate", "executionTime", "senderName", "beneficiaryName", "sourceBankName", "destinationBankName", "bankName", "sourceAccount", "destinationAccount", "concept", "reference", "trackingKey", "folio", "transactionId", "currency"]);
 
 export default function ReceiptEvidenceSummary({ receipt, disabled, onCorrect, onEditingChange }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -58,9 +58,11 @@ export default function ReceiptEvidenceSummary({ receipt, disabled, onCorrect, o
         {identifiers.has(key) && <select aria-label={`Clasificación de ${label}`} value={targetField} disabled={saving || disabled} onChange={event => setTargetField(event.target.value as ReceiptCorrectionField)} className="w-full rounded border border-white/10 bg-slate-950 px-2 py-2 text-xs">
           {labels.filter(([fieldKey]) => identifiers.has(fieldKey)).map(([fieldKey, fieldLabel]) => <option key={fieldKey} value={fieldKey}>{fieldLabel}</option>)}
         </select>}
-        <input aria-label={label} autoFocus type={key === "executionDate" ? "date" : "text"} inputMode={key === "transferAmount" ? "decimal" : undefined} value={draft} disabled={saving || disabled} onChange={event => setDraft(event.target.value)} className="w-full rounded border border-sky-400/40 bg-slate-950 px-2 py-2 text-sm text-white" />
+        {key === "currency" ? <select aria-label={label} autoFocus value={draft} disabled={saving || disabled} onChange={event => setDraft(event.target.value)} className="w-full rounded border border-sky-400/40 bg-slate-950 px-2 py-2 text-sm text-white">
+          {["MXN", "USD", "EUR"].map(option => <option key={option} value={option}>{option}</option>)}
+        </select> : <input aria-label={label} autoFocus type={key === "executionDate" ? "date" : "text"} inputMode={key === "transferAmount" ? "decimal" : undefined} value={draft} disabled={saving || disabled} onChange={event => setDraft(event.target.value)} className="w-full rounded border border-sky-400/40 bg-slate-950 px-2 py-2 text-sm text-white" />}
         <div className="flex flex-wrap gap-2"><button type="button" disabled={saving || disabled || !draft.trim()} onClick={() => void save(key as ReceiptCorrectionField)} className="rounded bg-sky-500/20 px-3 py-2 text-xs text-sky-200 disabled:opacity-40">{saving ? "Guardando..." : "Guardar"}</button><button type="button" disabled={saving} onClick={() => { setEditing(null); onEditingChange?.(false); }} className="rounded px-3 py-2 text-xs">Cancelar</button></div>
-      </dd> : <dd className="break-words text-sm text-slate-100">{field?.value == null ? "—" : key === "transferAmount" && typeof field.value === "number" ? field.value.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(field.value)}</dd>}
+      </dd> : <dd className="break-words text-sm text-slate-100">{field?.value == null ? (key === "currency" ? "MXN (predeterminada)" : "—") : key === "transferAmount" && typeof field.value === "number" ? field.value.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(field.value)}</dd>}
       <dd className={`mt-1 text-xs ${status[provenance].style}`}>{status[provenance].label}{provenance === "DETECTED" && field?.decision === "REVIEW" ? " · revisar" : ""}</dd>
       {field?.excerpt && !primary.has(key) && <dd className="mt-1 break-words text-xs text-slate-500">{field.excerpt}</dd>}
     </div>;

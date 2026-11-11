@@ -10,6 +10,7 @@ import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "
 import { ChevronUp, ChevronDown, CircleDollarSign, Send, Pencil, Power, PowerOff, Eye, UploadCloud, FileText } from "lucide-react";
 import { saveClientMutation as saveClient, syncIqClientMutation as syncIqClient, toggleClientActiveMutation as toggleClientActive } from "@/services/clientMutations";
 import { listScopedClients } from "@/services/clients";
+import DuplicateRfcPanel from "@/components/clientes/DuplicateRfcPanel";
 import {
   finalizeClientCsfIntake,
   parseClientCsfFile,
@@ -36,6 +37,8 @@ type ClientRow = {
   adminId?: string;
   ownerId?: string;
   managedByUserId?: string;
+  mergedInto?: string;
+  mergedIntoNumber?: number | null;
   
   createdByName?: string;
   createdByUsername?: string;
@@ -174,7 +177,7 @@ export default function ClientesPage() {
     }
 
     return listScopedClients(
-      { uid, role, rootId: effectiveRootId },
+      { uid, role, rootId: effectiveRootId, includeMerged: true },
       (rows) => setItems(rows as ClientRow[]),
       (e) => console.warn("[clients] scoped snapshot:", (e as any)?.code || (e as any)?.message || e)
     );
@@ -677,6 +680,7 @@ export default function ClientesPage() {
                 </div>
                 <div className="col-span-2 flex items-center font-normal text-slate-100">
                   {it.name} {!isActive && <span className="ml-2 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-tighter text-slate-500">Inactivo</span>}
+                  {it.mergedInto && <span className="ml-2 rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-tighter text-amber-300" title="Conserva su historial; las operaciones nuevas van al cliente vigente.">Fusionado en {it.mergedIntoNumber ? `C${String(it.mergedIntoNumber).padStart(2, "0")}` : "otro cliente"}</span>}
                 </div>
                 <div className="col-span-2 flex items-center truncate text-[13px] font-normal text-slate-400">{getClientUsuarioLabel(it)}</div>
                 <div className="col-span-1 flex items-center truncate text-[11px] font-normal">
@@ -766,6 +770,7 @@ export default function ClientesPage() {
         )}
       </div>
 
+      {isSuperAdmin(role) && <div className="mt-4"><DuplicateRfcPanel onMerged={(message) => { setPageMsg(message); setClientsRefreshKey((key) => key + 1); }} /></div>}
             {pageMsg && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
           {pageMsg}

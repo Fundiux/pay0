@@ -1,6 +1,7 @@
 import { parseIqDateTimeMs } from "./iqDateTime";
 import { fetchIqExternal as fetch } from "./externalActionsPolicy";
 import { fetchIq } from "./iqHttpClient";
+import { selectStoredIqBeneficiary } from "./dispersionFailureReason";
 import { assertVerifiedIqCommissionInstrument, type VerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
 const DEFAULT_IQ_API_ORIGIN =
   "https://iq-produccion-ccc570f75402.herokuapp.com";
@@ -20,6 +21,9 @@ export type IqDispersionCreateItemH4D82A4A1 = {
   reference: string;
   fundingHolderType?: "USER" | "CLIENT";
   verifiedInstrument?: VerifiedIqCommissionInstrument;
+  // The IQ ids PAY0 stored when it linked this account. They only choose among what IQ returns now:
+  // the wizard is still read live and the destination is still checked against the account.
+  storedLink?: { beneficiaryId: string; accountId: string };
 };
 
 export type IqDispersionCreateResultH4D82A4A1 = {
@@ -65,6 +69,8 @@ export type IqBeneficiaryInstrumentResolution = {
   partnerName: string;
   clientIqId: string;
   verifiedAt: string;
+  // True only when IQ exposed the full account number and it equals the expected one; otherwise the match was on the last four digits.
+  fullDigitsMatched: boolean;
 };
 
 type AnyRow = Record<string, unknown>;
@@ -1084,8 +1090,11 @@ export async function runIqCreateDispersionHttpH4D85A50(
       }), token)).json as WizardPayload ?? {};
     let beneficiary: AnyRow;
     let resolvedDuplicate: Awaited<ReturnType<typeof resolveDuplicateBeneficiaryByDestination>> | null = null;
+    const stored = verified ? undefined : input.item.storedLink;
+    const storedHit = selectStoredIqBeneficiary(asRows(beneficiaryPayload.beneficiaries), stored?.beneficiaryId, rowId);
     try {
-      beneficiary = findUniqueByNormalizedNames(
+      // A single row with the stored id settles the beneficiary without comparing names.
+      beneficiary = storedHit ?? findUniqueByNormalizedNames(
         asRows(beneficiaryPayload.beneficiaries), input.item.beneficiaryCandidates, "IQ_BENEFICIARY",
       );
     } catch (error) {
@@ -1137,7 +1146,7 @@ export async function runIqCreateDispersionHttpH4D85A50(
 
     const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(
       asRows(detailPayload.beneficiary_accounts), input.item.expectedDestinationLast4,
-      input.item.expectedDestinationDigits, verified?.accountId,
+      input.item.expectedDestinationDigits, verified?.accountId ?? (storedHit ? stored?.accountId : undefined),
     );
     if (verified && String(account.id) !== verified.accountId) throw new Error("IQ_COMMISSION_ACCOUNT_CHANGED");
 
@@ -1490,6 +1499,9 @@ export async function resolveIqBeneficiaryInstrument(input: {
   if (!beneficiaryId) throw new Error("IQ_BENEFICIARY_ID_INVALID");
   const detailPayload = resolvedDuplicate?.detail ?? await loadDetail(beneficiaryId);
   const account = resolvedDuplicate?.account ?? resolveBeneficiaryAccount(asRows(detailPayload.beneficiary_accounts), input.expectedDestinationLast4, input.expectedDestinationDigits);
+  const expectedFull = digits(input.expectedDestinationDigits);
+  const accountRow = asRows((resolvedDuplicate?.detail ?? detailPayload).beneficiary_accounts).find((row) => String(rowId(row)) === String(account.id));
+  const fullDigitsMatched = expectedFull.length >= 15 && !!accountRow && flattenStrings(accountRow).some((value) => digits(value) === expectedFull);
   return {
     status: "VERIFIED",
     iqBeneficiaryId: String(beneficiaryId),
@@ -1501,5 +1513,6 @@ export async function resolveIqBeneficiaryInstrument(input: {
     partnerName: partner.name,
     clientIqId: String(clientId),
     verifiedAt: new Date().toISOString(),
+    fullDigitsMatched,
   };
 }

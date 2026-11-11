@@ -1117,6 +1117,15 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
     };
   }, [receiptBatchItems]);
 
+  // The batch closes by itself once every receipt has its pago created and its
+  // file uploaded; any error or pending review keeps it open.
+  useEffect(() => {
+    if (!receiptBatchOpen || receiptBatchBusy || receiptBatchCreating || !receiptBatchItems.length) return;
+    if (!receiptBatchItems.every(row => row?.status === "CREATED")) return;
+    setReceiptBatchOpen(false);
+    setReceiptBatchItems([]);
+  }, [receiptBatchOpen, receiptBatchBusy, receiptBatchCreating, receiptBatchItems]);
+
   function getReceiptBatchStatusLabel(item: any): string {
     switch (String(item?.status || "")) {
       case "PENDING":
