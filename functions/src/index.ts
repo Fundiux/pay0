@@ -270,3 +270,4 @@ export { createWhatsAppConnectorEnrollment, consumeWhatsAppConnectorEnrollment, 
 export { listWhatsAppAgentConnectors } from "./modules/documentDelivery/whatsappConnectorCallables";
 export { getWhatsAppAgentActivity, purgeExpiredWhatsAppInboundMessages } from "./modules/documentDelivery/whatsappAgentActivity";
 export { listWhatsAppAgentChats } from "./modules/documentDelivery/whatsappAgentChats";
+export { getUserOperatorNumbers, saveUserOperatorNumbers } from "./modules/operatorNumbers/callables";

@@ -53,6 +53,8 @@ export const CALLABLES = {
   softDeleteUser: "softDeleteUser",
   restoreUser: "restoreUser",
   getUserClientAccessConfig: "getUserClientAccessConfig",
+  getUserOperatorNumbers: "getUserOperatorNumbers",
+  saveUserOperatorNumbers: "saveUserOperatorNumbers",
   setUserClientAccess: "setUserClientAccess",
   initEntityDocumentUpload: "initEntityDocumentUpload",
   finalizeEntityDocumentUpload: "finalizeEntityDocumentUpload",
