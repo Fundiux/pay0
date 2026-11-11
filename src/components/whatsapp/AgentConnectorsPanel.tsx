@@ -207,6 +207,7 @@ export function AgentConnectorsPanel() {
   const [meta, setMeta] = useState<WhatsAppAgentObserversState | null>(null);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [transfers, setTransfers] = useState<Record<string, string>>({});
+  const [connecting, setConnecting] = useState("");
   const [activity, setActivity] = useState<WhatsAppAgentActivityRow[] | null>(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -256,58 +257,82 @@ export function AgentConnectorsPanel() {
   const groupName = (id: string) => meta?.groups.find(g => g.chatId === id)?.name || id;
   const observedCount = (agentId: string) => meta?.configs.filter(c => c.active && c.observers.some(o => o.agentId === agentId)).length ?? 0;
   const activeByAgent = new Map(connectors.filter(c => c.state === "ACTIVE" && c.agentId !== "pay0").map(c => [c.agentId, c]));
+  const connectedAgents = (meta?.agents || []).filter(agent => activeByAgent.has(agent.id));
+  const disconnectedAgents = (meta?.agents || []).filter(agent => !activeByAgent.has(agent.id));
 
   return (
     <details open className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
       <summary className="cursor-pointer text-lg font-semibold text-white">Conexión de WhatsApp por agente</summary>
       <p className="mt-2 max-w-3xl text-sm text-slate-400">
-        Cada agente se conecta con su propio QR y su propio conector local. Solo se leen los grupos que actives aquí para ese agente, y cada uno debe tener su usuario; los mensajes se borran a los 30 días.
+        Solo se leen los grupos que actives aquí, cada uno con su usuario; los mensajes se borran a los 30 días.
       </p>
 
       {!meta ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando...</div>
       ) : (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {meta.agents.map(agent => {
-            const connector = activeByAgent.get(agent.id);
-            return (
-              <div key={agent.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-medium text-white">{agent.name}</h3>
-                  <span className="text-xs text-slate-400">{connector ? (connector.status || "Sin señal") : "Sin conexión"}</span>
-                </div>
-                {connector ? (
-                  <div className="mt-3 space-y-2">
-                    {connector.qrDataUrl && <img src={connector.qrDataUrl} alt={`QR de ${agent.name}`} className="h-40 w-40 rounded bg-white p-1" />}
-                    {connector.error && <p className="text-xs text-rose-300">{connector.error}</p>}
-                    <p className="text-xs text-slate-500">{connector.lastSeenAtMs ? `Última señal: ${new Date(connector.lastSeenAtMs).toLocaleString("es-MX")}` : "Sin señal todavía"}</p>
-                    <p className="text-xs text-slate-300">
-                      Observando {observedCount(agent.id)} {observedCount(agent.id) === 1 ? "grupo" : "grupos"}
-                      {" · "}
-                      <button type="button" onClick={() => document.getElementById(`grupos-${agent.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="text-sky-300 underline-offset-2 hover:underline">ver</button>
-                    </p>
-                    <button type="button" disabled={busy === connector.bindingId} onClick={() => void revoke(connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-40">
-                      <ShieldOff size={14} /> Revocar conexión
-                    </button>
+        <>
+          {connectedAgents.length > 0 && (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {connectedAgents.map(agent => {
+                const connector = activeByAgent.get(agent.id)!;
+                return (
+                  <div key={agent.id} className="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-medium text-white">{agent.name}</h3>
+                      <span className="text-xs text-slate-400">{connector.status || "Sin señal"}</span>
+                    </div>
+                    {connector.qrDataUrl && <img src={connector.qrDataUrl} alt={`QR de ${agent.name}`} className="mt-2 h-40 w-40 rounded bg-white p-1" />}
+                    {connector.error && <p className="mt-1 text-xs text-rose-300">{connector.error}</p>}
+                    <p className="mt-1 text-xs text-slate-500">{connector.lastSeenAtMs ? `Última señal: ${new Date(connector.lastSeenAtMs).toLocaleString("es-MX")}` : "Sin señal todavía"}</p>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-slate-300">
+                        Observando {observedCount(agent.id)} {observedCount(agent.id) === 1 ? "grupo" : "grupos"}
+                        {" · "}
+                        <button type="button" onClick={() => document.getElementById(`grupos-${agent.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="text-sky-300 underline-offset-2 hover:underline">ver</button>
+                      </p>
+                      <button type="button" disabled={busy === connector.bindingId} onClick={() => void revoke(connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-2.5 py-1 text-xs text-rose-200 disabled:opacity-40">
+                        <ShieldOff size={13} /> Revocar conexión
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    <textarea value={keys[agent.id] || ""} onChange={e => setKeys({ ...keys, [agent.id]: e.target.value })} rows={3} placeholder="Llave pública del conector local de este agente" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100" />
-                    <button type="button" disabled={busy === agent.id || !(keys[agent.id] || "").trim()} onClick={() => void enroll(agent.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">
-                      {busy === agent.id ? "Creando..." : "Crear enrolamiento"}
-                    </button>
-                    {transfers[agent.id] && <textarea readOnly value={transfers[agent.id]} rows={4} className="w-full rounded-lg border border-emerald-500/30 bg-slate-950 px-3 py-2 text-xs text-emerald-100" />}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+
+          {connectedAgents.map(agent => (
+            <AgentGroupsBlock key={agent.id} bindingId={activeByAgent.get(agent.id)!.bindingId} agentId={agent.id} agentName={agent.name} meta={meta} onChanged={load} />
+          ))}
+
+          {disconnectedAgents.length > 0 && (
+            <details className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-300">Agentes sin conexión ({disconnectedAgents.length})</summary>
+              <ul className="divide-y divide-slate-800 border-t border-slate-800">
+                {disconnectedAgents.map(agent => (
+                  <li key={agent.id} className="px-4 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{agent.name}</span>
+                      <span className="text-xs text-slate-500">Sin conexión</span>
+                      <button type="button" onClick={() => setConnecting(connecting === agent.id ? "" : agent.id)} className="rounded-lg border border-emerald-500/40 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10">
+                        {connecting === agent.id ? "Cerrar" : "Conectar"}
+                      </button>
+                    </div>
+                    {(connecting === agent.id || transfers[agent.id]) && (
+                      <div className="mt-2 space-y-2">
+                        <textarea value={keys[agent.id] || ""} onChange={e => setKeys({ ...keys, [agent.id]: e.target.value })} rows={3} placeholder="Llave pública del conector local de este agente" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100" />
+                        <button type="button" disabled={busy === agent.id || !(keys[agent.id] || "").trim()} onClick={() => void enroll(agent.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">
+                          {busy === agent.id ? "Creando..." : "Crear enrolamiento"}
+                        </button>
+                        {transfers[agent.id] && <textarea readOnly value={transfers[agent.id]} rows={4} className="w-full rounded-lg border border-emerald-500/30 bg-slate-950 px-3 py-2 text-xs text-emerald-100" />}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
       )}
-      {meta && meta.agents.map(agent => {
-        const connector = activeByAgent.get(agent.id);
-        return connector ? <AgentGroupsBlock key={agent.id} bindingId={connector.bindingId} agentId={agent.id} agentName={agent.name} meta={meta} onChanged={load} /> : null;
-      })}
 
       <div className="mt-5">
         <button type="button" disabled={busy === "activity"} onClick={() => void loadActivity()} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-medium text-emerald-200 disabled:opacity-40">
