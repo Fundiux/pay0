@@ -258,7 +258,7 @@ export function AgentConnectorsPanel() {
   const activeByAgent = new Map(connectors.filter(c => c.state === "ACTIVE" && c.agentId !== "pay0").map(c => [c.agentId, c]));
 
   return (
-    <details className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+    <details open className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
       <summary className="cursor-pointer text-lg font-semibold text-white">Conexión de WhatsApp por agente</summary>
       <p className="mt-2 max-w-3xl text-sm text-slate-400">
         Cada agente se conecta con su propio QR y su propio conector local. Solo se leen los grupos que actives aquí para ese agente, y cada uno debe tener su usuario; los mensajes se borran a los 30 días.
