@@ -16,14 +16,13 @@ const configId = (rootId: string, chatId: string) => `${rootId}__${encodeURIComp
 
 export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
   const { rootId } = await requireWhatsAppSuperadmin(request);
-  const [configs, groups, agentGroups] = await Promise.all([
+  const [configs, agentGroups] = await Promise.all([
     db.collection("whatsappAgentObservers").where("rootId", "==", rootId).limit(200).get(),
-    db.collection("whatsappQrChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
     db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
   ]);
-  // Los grupos pueden venir de la conexión histórica o de la de un agente; se muestran una sola vez.
+  // Solo se ofrecen los grupos que ven los conectores de los agentes; los de la conexión histórica ya no se mezclan.
   const uniqueGroups = new Map<string, string>();
-  for (const doc of [...groups.docs, ...agentGroups.docs]) uniqueGroups.set(clean(doc.get("chatId"), 200), clean(doc.get("name"), 160));
+  for (const doc of agentGroups.docs) uniqueGroups.set(clean(doc.get("chatId"), 200), clean(doc.get("name"), 160));
   return {
     ok: true,
     agents: AGENTS.map(agent => ({ id: agent.id, name: agent.name })),
