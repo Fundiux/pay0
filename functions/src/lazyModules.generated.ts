@@ -360,6 +360,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   sendAgentDailyStatusAlert: { module: "./modules/agentOperations/dailyAlert", export: "sendAgentDailyStatusAlert" },
   sendHugoTeamTurn: { module: "./modules/agent007/teamCallables", export: "sendHugoTeamTurn" },
   sendMyTelegramTestNotification: { module: "./modules/telegram/callables", export: "sendMyTelegramTestNotification" },
+  sendNewDispersionToIq: { module: "./modules/iq/dispersionCreateTrigger", export: "sendNewDispersionToIq" },
   setAgentKillSwitch: { module: "./modules/agentOperations/callables", export: "setAgentKillSwitch" },
   setClientOperationCost: { module: "./modules/rates/callables", export: "setClientOperationCost" },
   setCompanyQuotationLogo: { module: "./modules/companies/callables", export: "setCompanyQuotationLogo" },

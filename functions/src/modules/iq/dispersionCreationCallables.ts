@@ -391,7 +391,7 @@ export async function buildDispersionSchedulerAuth(
   };
 }
 
-function isDispersionCreateSchedulerCandidate(
+export function isDispersionCreateSchedulerCandidate(
   principal: AnyDoc,
   rootId: string,
 ): boolean {
