@@ -217,6 +217,7 @@ export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationRecei
 export { syncIqBeneficiaryCatalog } from "./modules/beneficiaries/iqCatalogSync";
 export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger";
 export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
+export { getClientWhatsAppGroups, assignWhatsAppGroupToClients } from "./modules/documentDelivery/clientWhatsappGroups";
 export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
 export {
   processIqPagoDepositCreateQueue,

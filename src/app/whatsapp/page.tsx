@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentConnectorsPanel } from "@/components/whatsapp/AgentConnectorsPanel";
+import { GroupClientAssignment } from "@/components/whatsapp/GroupClientAssignment";
 import { DeliveryHistory } from "@/components/whatsapp/DeliveryHistory";
 
 export default function WhatsAppPage() {
@@ -12,6 +13,8 @@ export default function WhatsAppPage() {
       </div>
 
       <AgentConnectorsPanel />
+
+      <GroupClientAssignment />
 
       <DeliveryHistory />
     </div>

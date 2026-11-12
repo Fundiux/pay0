@@ -81,6 +81,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   IQ_BENEFICIARIO_REVISION_REQUERIDA: eventEntry("IQ_BENEFICIARIO_REVISION_REQUERIDA", "Beneficiario de IQ requiere revisión", "iq", "system", "warning"),
   IQ_BENEFICIARIO_CREADO: eventEntry("IQ_BENEFICIARIO_CREADO", "Beneficiario creado en IQ", "iq", "business", "success"),
   IQ_BENEFICIARIO_CREACION_INCIERTA: eventEntry("IQ_BENEFICIARIO_CREACION_INCIERTA", "Creación de beneficiario en IQ incierta", "iq", "system", "warning"),
+  CLIENTE_GRUPO_WHATSAPP_ASIGNADO: eventEntry("CLIENTE_GRUPO_WHATSAPP_ASIGNADO", "Grupo de WhatsApp asignado al cliente", "clientes", "config", "success"),
+  CLIENTE_GRUPO_WHATSAPP_RETIRADO: eventEntry("CLIENTE_GRUPO_WHATSAPP_RETIRADO", "Grupo de WhatsApp retirado del cliente", "clientes", "config"),
   IQ_SOLICITUD_CONCILIADA: eventEntry("IQ_SOLICITUD_CONCILIADA", "Solicitud IQ conciliada", "iq", "business", "success"),
   IQ_CALENDARIO_ACTUALIZADO: eventEntry("IQ_CALENDARIO_ACTUALIZADO", "Calendario IQ actualizado", "iq", "config", "success"),
   IQ_SOLICITUD_ENCOLADA: eventEntry("IQ_SOLICITUD_ENCOLADA", "Solicitud encolada para envio automatico", "iq", "system"),
