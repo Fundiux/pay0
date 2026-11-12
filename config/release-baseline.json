@@ -448,6 +448,22 @@
     {
       "commit": "9f434be6",
       "capability": "WhatsApp solo para agentes de atencion a clientes (Hugo, Maria, Sofia); internos rechazados"
+    },
+    {
+      "commit": "21573ec6",
+      "capability": "WhatsApp: cinco callables heredados retirados del codigo y del frontend"
+    },
+    {
+      "commit": "5b7e3d6e",
+      "capability": "Comprobantes de dispersion IQ: descarga con el origen API de IQ y error real registrado"
+    },
+    {
+      "commit": "00c3757b",
+      "capability": "Dispersion enviada a IQ desde el servidor al crearse, con las reglas y el candado del programador"
+    },
+    {
+      "commit": "b6ab4467",
+      "capability": "Grupo de WhatsApp de los agentes asignado por cliente, con bitacora"
     }
   ],
   "requiredText": [
