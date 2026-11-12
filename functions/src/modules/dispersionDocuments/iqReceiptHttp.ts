@@ -86,10 +86,10 @@ export async function fetchIqDispersionReceipt(input: {
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ user: { username: input.username, password: input.password } }),
   });
-  if (login.status !== 201) throw new Error("IQ_RECEIPT_AUTH_FAILED");
+  if (login.status !== 201) throw new Error(`IQ_RECEIPT_AUTH_FAILED_HTTP_${login.status}`);
   const loginJson = await login.json() as { access_token?: unknown };
   const token = String(loginJson.access_token || "").trim();
-  if (!token) throw new Error("IQ_RECEIPT_AUTH_FAILED");
+  if (!token) throw new Error("IQ_RECEIPT_AUTH_FAILED_NO_TOKEN");
 
   const lookup = await input.fetcher(new URL(`/dispersions/voucher/${input.folio}`, origin), {
     method: "GET",
