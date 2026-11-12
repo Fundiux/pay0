@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { randomUUID } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
 import { IQ_CREDENTIALS_KEY, loadIqAccess } from "../iq/dispersionCreationCallables";
 import { fetchIq } from "../iq/iqHttpClient";
 import { decideIqDispersionExecutionAccess } from "../iq/dispersionExecutionAccess";
@@ -179,6 +180,8 @@ export async function importIqDispersionReceiptCore(input: {
       }).catch(() => undefined);
       if (error instanceof HttpsError) throw error;
       const code = error instanceof Error ? error.message : "";
+      // Only the error code or message is logged: never credentials or the receipt body.
+      logger.error("IQ receipt import failed", { dispersionId, folio, source: input.source, code: code.slice(0, 200) });
       if (code === "IQ_RECEIPT_HOST_UNVERIFIED") {
         throw new HttpsError("failed-precondition", "IQ devolvio una ubicacion de comprobante no autorizada.");
       }
