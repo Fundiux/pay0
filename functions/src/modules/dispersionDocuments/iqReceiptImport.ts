@@ -4,6 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { IQ_CREDENTIALS_KEY, loadIqAccess } from "../iq/dispersionCreationCallables";
 import { fetchIq } from "../iq/iqHttpClient";
+import { iqApiOrigin } from "../iq/solicitudHttpCancellation";
 import { decideIqDispersionExecutionAccess } from "../iq/dispersionExecutionAccess";
 import { logActivityBatch } from "../../utils/logActivity";
 import { currentAuthority, finalizeDispersionDocumentUploadCore, initDispersionDocumentUploadCore } from "./service";
@@ -103,7 +104,7 @@ export async function importIqDispersionReceiptCore(input: {
         uid, rootId, role: clean(user.role).toLowerCase(), username: clean(user.username) || uid,
       }, id(leg.despachoId), "IQ", dispersion);
       const receipt = await fetchIqDispersionReceipt({
-        apiOrigin: access.erpUrl,
+        apiOrigin: iqApiOrigin(),
         username: access.username,
         password: access.password,
         folio,
