@@ -464,6 +464,18 @@
     {
       "commit": "b6ab4467",
       "capability": "Grupo de WhatsApp de los agentes asignado por cliente, con bitacora"
+    },
+    {
+      "commit": "5283ce96",
+      "capability": "WhatsApp: envio automatico de factura, complemento, comprobante de dispersion, cotizacion, link y constancia firmada por Hugo"
+    },
+    {
+      "commit": "657ee914",
+      "capability": "Conector de Hugo reclama, envia y reporta documentos sin enviar dos veces; incierto bloquea reintento"
+    },
+    {
+      "commit": "7fd3d800",
+      "capability": "Grupo de WhatsApp del cliente desde su ficha y resolucion de envios sin confirmar"
     }
   ],
   "requiredText": [
