@@ -4,13 +4,15 @@ import { functions } from "@/lib/firebaseClient";
 export type ClientWhatsAppGroupOption = { chatId: string; name: string };
 export type ClientWhatsAppGroupAssignment = { clientId: string; groupChatId: string; groupName: string };
 
-export async function getClientWhatsAppGroups(): Promise<{
+/** agentId "hugo": only the groups Hugo sees, the ones he can send client documents to. */
+export async function getClientWhatsAppGroups(options: { agentId?: "hugo" } = {}): Promise<{
   ok: boolean;
+  senderConnected?: boolean;
   groups: ClientWhatsAppGroupOption[];
   assignments: ClientWhatsAppGroupAssignment[];
 }> {
   const fn = httpsCallable(functions, "getClientWhatsAppGroups");
-  const res: any = await fn({});
+  const res: any = await fn(options.agentId ? { agentId: options.agentId } : {});
   return res.data;
 }
 

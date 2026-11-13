@@ -7,6 +7,7 @@ export type WhatsAppAutomationState = {
   enabled: boolean;
   configured: boolean;
   effectiveReady: boolean;
+  withinSendingHours?: boolean;
 
   connector: {
     id: string;

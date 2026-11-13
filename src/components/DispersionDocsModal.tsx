@@ -167,6 +167,7 @@ export default function DispersionDocsModal(props: {
             contentType: doc.contentType || null,
             storagePath: doc.storagePath,
             documentType: "COMPROBANTE_DISPERSION",
+            uploadId: doc.id ? String(doc.id) : undefined,
           },
         ],
         notes: "Preparado desde comprobante de dispersion. No enviar automaticamente.",

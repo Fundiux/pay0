@@ -53,6 +53,7 @@ export type WhatsAppQrJob = {
     error: number;
     pending: number;
     omitted: number;
+    blocked?: number;
   };
   createdAt?: any;
   updatedAt?: any;
@@ -156,6 +157,16 @@ export async function releaseWhatsAppJobDeliveries(input: {
   message: string;
 }> {
   const fn = httpsCallable(functions, "releaseWhatsAppJobDeliveries");
+  const res: any = await fn(input);
+  return res.data;
+}
+
+/** Resolve a send whose WhatsApp result is unknown: confirm it arrived, or authorize one new send. */
+export async function resolveWhatsAppUncertainDelivery(input: {
+  jobId: string;
+  decision: "CONFIRM_SENT" | "ALLOW_RESEND";
+}): Promise<{ ok: boolean; jobId: string; status: string; resolvedCount: number; message: string }> {
+  const fn = httpsCallable(functions, "resolveWhatsAppUncertainDelivery");
   const res: any = await fn(input);
   return res.data;
 }

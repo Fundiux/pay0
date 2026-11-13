@@ -2,13 +2,14 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebaseClient";
 import { CALLABLES } from "@/lib/callableNames";
 
-export async function createSolicitudSignatureLink(solicitudId: string) {
+/** purpose REMOTE = a link to share with the client (sent by WhatsApp automatically); IN_PERSON = signed right here. */
+export async function createSolicitudSignatureLink(solicitudId: string, purpose: "REMOTE" | "IN_PERSON" = "IN_PERSON") {
   const fn = httpsCallable<
-    { solicitudId: string; origin?: string },
+    { solicitudId: string; origin?: string; purpose?: "REMOTE" | "IN_PERSON" },
     { ok: boolean; token: string; url: string; expiresAtMillis: number }
   >(functions, CALLABLES.createSolicitudSignatureLink);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return (await fn({ solicitudId, origin })).data;
+  return (await fn({ solicitudId, origin, purpose })).data;
 }
 
 export async function getSolicitudSignatureRequest(token: string) {

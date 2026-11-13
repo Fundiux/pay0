@@ -3,7 +3,8 @@ import app from "@/lib/firebase";
 
 const functions = getFunctions(app, "us-central1");
 
-export type DocumentDeliverySourceType = "FACTURA_PDF_XML" | "DISPERSION_COMPROBANTE";
+// Source types a person may prepare by hand. The full list lives in functions whatsappDeliveryDomain.ts.
+export type DocumentDeliverySourceType = "FACTURA_PDF_XML" | "DISPERSION_COMPROBANTE" | "COMPLEMENTO_PAGO_PDF_XML" | "COTIZACION_PDF" | "CONSTANCIA_FIRMADA_PDF";
 
 export type PrepareDocumentDeliveryInput = {
   sourceType: DocumentDeliverySourceType;
@@ -22,6 +23,7 @@ export type PrepareDocumentDeliveryInput = {
     downloadUrl?: string;
     url?: string;
     documentType?: string;
+    uploadId?: string;
   }>;
 };
 

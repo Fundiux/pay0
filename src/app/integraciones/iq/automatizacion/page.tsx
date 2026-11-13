@@ -711,8 +711,9 @@ export default function IqAutomationPage() {
                 </div>
 
                 <div className="text-xs text-slate-500">
-                  Auth client:{" "}
-                  {whatsappAutomation?.connector?.authClientId || "Sin registro"}
+                  Envia Hugo: lunes a viernes 7:30-19:30 y sabado 8:00-15:00 (hora de Mexico);
+                  fuera de ese horario los documentos quedan en cola
+                  {whatsappAutomation?.withinSendingHours === false ? " (ahora fuera de horario)" : ""}
                   {" · "}
                   Ultima señal:{" "}
                   {whatsappAutomation?.connector?.lastHeartbeatAt

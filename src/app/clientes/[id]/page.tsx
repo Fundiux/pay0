@@ -9,10 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { mergeModules, normalizeRole, isSuperAdmin } from "@/lib/roles";
 import { getClientById, type ClientItem } from "@/services/clients";
-import {
-  getWhatsAppQrDashboard,
-  saveWhatsAppDeliveryRoute,
-} from "@/services/whatsappQr";
+import ClientWhatsAppGroupPicker from "@/components/whatsapp/ClientWhatsAppGroupPicker";
 import ClientEntityDocumentsPanel from "@/components/ClientEntityDocumentsPanel";
 
 type DetailTab = "resumen" | "expediente" | "papeleria" | "kyc";
@@ -62,25 +59,6 @@ export default function ClienteDetallePage() {
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState("");
 
-  const [whatsappChats, setWhatsappChats] = useState<
-    Array<{
-      id: string;
-      name: string;
-      isGroup: boolean;
-    }>
-  >([]);
-
-  const [whatsappSelectedChatIds, setWhatsappSelectedChatIds] =
-    useState<string[]>([]);
-
-  const [whatsappRouteLoading, setWhatsappRouteLoading] =
-    useState(false);
-
-  const [whatsappRouteSaving, setWhatsappRouteSaving] =
-    useState(false);
-
-  const [whatsappRouteMessage, setWhatsappRouteMessage] =
-    useState("");
 
   useEffect(() => {
     let alive = true;
@@ -123,121 +101,6 @@ export default function ClienteDetallePage() {
     };
   }, [clientId, uid, effectiveRootId, canViewClientes]);
 
-  useEffect(() => {
-    let alive = true;
-
-    async function loadWhatsappRoute() {
-      if (!clientId || !canManageWhatsappRoute) {
-        setWhatsappChats([]);
-        setWhatsappSelectedChatIds([]);
-        return;
-      }
-
-      setWhatsappRouteLoading(true);
-      setWhatsappRouteMessage("");
-
-      try {
-        const dashboard = await getWhatsAppQrDashboard();
-
-        if (!alive) return;
-
-        const chats = (dashboard.chats || []).map((chat: any) => ({
-          id: String(chat.id || chat.safeDocId || ""),
-          name: String(chat.name || (chat.isGroup ? "Grupo sin nombre" : "Contacto sin nombre")),
-          isGroup: chat.isGroup === true,
-        }));
-
-        setWhatsappChats(
-          chats.filter((chat) => !!chat.id)
-        );
-
-        const route = (dashboard.routes || []).find(
-          (item: any) =>
-            item.active !== false &&
-            String(item.clienteId || "").trim() === clientId &&
-            String(item.sourceType || "DEFAULT")
-              .trim()
-              .toUpperCase() === "DEFAULT"
-        );
-
-        const selected = Array.isArray(route?.destinationChats)
-          ? route.destinationChats
-              .map((item: any) =>
-                String(
-                  item.safeDocId ||
-                  item.id ||
-                  ""
-                ).trim()
-              )
-              .filter(Boolean)
-          : [];
-
-        setWhatsappSelectedChatIds(
-          Array.from(new Set(selected))
-        );
-      } catch (e: any) {
-        if (!alive) return;
-
-        setWhatsappChats([]);
-        setWhatsappSelectedChatIds([]);
-
-        setWhatsappRouteMessage(
-          e?.message ||
-            "No se pudo cargar la configuracion WhatsApp."
-        );
-      } finally {
-        if (alive) {
-          setWhatsappRouteLoading(false);
-        }
-      }
-    }
-
-    loadWhatsappRoute();
-
-    return () => {
-      alive = false;
-    };
-  }, [clientId, canManageWhatsappRoute]);
-
-  function toggleWhatsappChat(chatId: string) {
-    setWhatsappSelectedChatIds((current) =>
-      current.includes(chatId)
-        ? current.filter((id) => id !== chatId)
-        : [...current, chatId]
-    );
-  }
-
-  async function saveWhatsappDefaultRoute() {
-    if (!clientId || whatsappSelectedChatIds.length === 0) {
-      setWhatsappRouteMessage(
-        "Selecciona al menos un destino WhatsApp."
-      );
-      return;
-    }
-
-    setWhatsappRouteSaving(true);
-    setWhatsappRouteMessage("");
-
-    try {
-      const result = await saveWhatsAppDeliveryRoute({
-        clienteId: clientId,
-        sourceType: "DEFAULT",
-        chatDocIds: whatsappSelectedChatIds,
-      });
-
-      setWhatsappRouteMessage(
-        result.message ||
-          "Destino WhatsApp guardado."
-      );
-    } catch (e: any) {
-      setWhatsappRouteMessage(
-        e?.message ||
-          "No se pudo guardar el destino WhatsApp."
-      );
-    } finally {
-      setWhatsappRouteSaving(false);
-    }
-  }
   if (loading || busy) {
     return (
       <div className="w-full max-w-none px-4 py-6 text-slate-300">
@@ -385,90 +248,7 @@ export default function ClienteDetallePage() {
             contratos, KYC, operaciones y documentos relacionados.
           </p>
 
-          {canManageWhatsappRoute && (
-            <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.05] p-4">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-semibold text-emerald-100">
-                  Destino WhatsApp
-                </h3>
-
-                <p className="text-xs text-slate-400">
-                  Destino general para las comunicaciones WhatsApp de este cliente.
-                </p>
-              </div>
-
-              {whatsappRouteLoading ? (
-                <div className="mt-4 text-sm text-slate-400">
-                  Cargando chats WhatsApp...
-                </div>
-              ) : whatsappChats.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-                  No hay chats WhatsApp sincronizados disponibles.
-                </div>
-              ) : (
-                <div className="mt-4 space-y-2">
-                  {whatsappChats.map((chat) => {
-                    const checked =
-                      whatsappSelectedChatIds.includes(chat.id);
-
-                    return (
-                      <label
-                        key={chat.id}
-                        className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 transition hover:bg-white/[0.05]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            toggleWhatsappChat(chat.id)
-                          }
-                          className="h-4 w-4"
-                        />
-
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm text-slate-100">
-                            {chat.name}
-                          </div>
-
-                          <div className="text-[11px] text-slate-500">
-                            {chat.isGroup
-                              ? "Grupo WhatsApp"
-                              : "Contacto WhatsApp"}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={saveWhatsappDefaultRoute}
-                      disabled={
-                        whatsappRouteSaving ||
-                        whatsappSelectedChatIds.length === 0
-                      }
-                      className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {whatsappRouteSaving
-                        ? "Guardando..."
-                        : "Guardar destino WhatsApp"}
-                    </button>
-
-                    <span className="text-xs text-slate-400">
-                      {whatsappSelectedChatIds.length} destino(s) seleccionado(s)
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {whatsappRouteMessage && (
-                <div className="mt-3 text-xs text-slate-300">
-                  {whatsappRouteMessage}
-                </div>
-              )}
-            </div>
-          )}
+          {canManageWhatsappRoute && clientId && <ClientWhatsAppGroupPicker clientId={clientId} />}
         </div>
       )}
 

@@ -427,7 +427,7 @@ useEffect(() => {
     setSignatureMessage("");
 
     try {
-      const result = await createSolicitudSignatureLink(String(solicitudId));
+      const result = await createSolicitudSignatureLink(String(solicitudId), "REMOTE");
       setSignatureLink(result.url);
       try {
         await navigator.clipboard?.writeText(result.url);
