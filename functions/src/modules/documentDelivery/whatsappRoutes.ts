@@ -1,14 +1,16 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeClientWhatsapp } from "../clients/domain";
+import { chooseDeliveryDestination, DOCUMENT_SENDER_AGENT_ID, PROTECTED_DELIVERY_STATUSES } from "./whatsappDeliveryDomain";
 
 export type WhatsAppDestinationRoute = {
   safeDocId: string;
   chatId: string;
   chatName: string;
   chatType: "GROUP" | "CONTACT";
-  destinationType?: "CLIENT_PRIMARY" | "ADDITIONAL";
+  destinationType?: "CLIENT_PRIMARY" | "ADDITIONAL" | "CLIENT_GROUP";
   phone?: string;
+  connectorId?: string;
 };
 
 function cleanText(value: unknown): string {
@@ -103,6 +105,21 @@ export async function getWhatsAppRouteForJob(
   return null;
 }
 
+/** Hugo's active binding for a root, if one exists. */
+export async function findDocumentSenderBinding(
+  db: admin.firestore.Firestore,
+  rootId: string
+): Promise<{ id: string; generation: number; ownerUid: string } | null> {
+  if (!rootId) return null;
+  const snap = await db.collection("whatsappQrConnectorBindings")
+    .where("rootId", "==", rootId)
+    .where("agentId", "==", DOCUMENT_SENDER_AGENT_ID)
+    .limit(10)
+    .get();
+  const active = snap.docs.find((doc) => doc.get("state") === "ACTIVE" && doc.get("rootId") === rootId);
+  return active ? { id: active.id, generation: Number(active.get("generation") || 0), ownerUid: cleanText(active.get("ownerUid")) } : null;
+}
+
 export async function applyWhatsAppDestinationsToJob(
   db: admin.firestore.Firestore,
   jobRef: admin.firestore.DocumentReference,
@@ -149,96 +166,85 @@ export async function applyWhatsAppDestinationsToJob(
     };
   }
 
-  // Una ruta activa tiene prioridad absoluta sobre el telefono del cliente.
-  const routeMatch = await getWhatsAppRouteForJob(db, jobData);
-
-  if (routeMatch) {
-    const destinations: WhatsAppDestinationRoute[] = (
-      Array.isArray(routeMatch.route.destinationChats)
-        ? routeMatch.route.destinationChats
-        : []
-    )
-      .map((item: any) => ({
-        safeDocId: cleanText(item.safeDocId),
-        chatId: cleanText(item.chatId),
-        chatName: cleanText(item.chatName),
-        chatType:
-          cleanText(item.chatType) === "GROUP"
-            ? "GROUP" as const
-            : "CONTACT" as const,
-        destinationType: "ADDITIONAL" as const,
-      }))
-      .filter((item: WhatsAppDestinationRoute) =>
-        Boolean(item.chatId && item.safeDocId)
-      );
-
-    if (destinations.length === 0) {
-      await writeResolutionFailure(
-        db,
-        jobRef,
-        "ROUTE_INVALID",
-        "La ruta WhatsApp configurada no tiene destinos validos.",
-        actor
-      );
-
-      return {
-        ok: true,
-        status: "ROUTE_INVALID",
-        routeId: routeMatch.routeId,
-        matchType: routeMatch.matchType,
-        destinationsCount: 0,
-      };
+  // 1) The client's WhatsApp group, only when Hugo's own connector sees it.
+  const assignmentSnap = await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
+  const assignment = assignmentSnap.exists && cleanText(assignmentSnap.get("rootId")) === rootId && cleanText(assignmentSnap.get("clientId")) === clienteId
+    ? (assignmentSnap.data() || {})
+    : null;
+  let hugoGroup: any = null;
+  const groupChatId = cleanText(assignment?.groupChatId);
+  if (groupChatId) {
+    const binding = await findDocumentSenderBinding(db, rootId);
+    if (binding) {
+      const chat = await db.doc(`whatsappAgentChats/${binding.id}__${encodeURIComponent(groupChatId)}`).get();
+      if (chat.exists && cleanText(chat.get("bindingId")) === binding.id) hugoGroup = { ...(chat.data() || {}), bindingId: binding.id };
     }
-
-    return writeDestinations(
-      db,
-      jobRef,
-      destinations,
-      routeMatch.routeId,
-      routeMatch.matchType,
-      actor
-    );
   }
 
-  // Solo cuando NO existe ruta configurada se usa el WhatsApp del cliente.
-  const phone = normalizeClientWhatsapp((client as any).whatsapp);
+  // 2) Legacy route, 3) the client's own WhatsApp number.
+  const routeMatch = await getWhatsAppRouteForJob(db, jobData);
+  const choice = chooseDeliveryDestination({
+    assignment,
+    hugoGroup,
+    rootId,
+    legacyRoute: routeMatch ? {
+      routeId: routeMatch.routeId,
+      matchType: routeMatch.matchType,
+      destinations: Array.isArray(routeMatch.route.destinationChats) ? routeMatch.route.destinationChats : [],
+    } : null,
+    clientPhone: normalizeClientWhatsapp((client as any).whatsapp) || null,
+    clientName: cleanText((client as any).name) || getWhatsAppJobClientLabel(jobData),
+  });
 
-  if (!phone) {
+  if (choice.source === "CLIENT_GROUP") {
+    return writeDestinations(db, jobRef, choice.destinations, null, null, actor, "CLIENT_GROUP");
+  }
+
+  if (choice.source === "LEGACY_ROUTE_INVALID") {
     await writeResolutionFailure(
       db,
       jobRef,
-      "CLIENT_WHATSAPP_MISSING",
-      "El cliente no tiene WhatsApp registrado y no existe una ruta configurada.",
+      "ROUTE_INVALID",
+      "La ruta WhatsApp configurada no tiene destinos validos.",
       actor
     );
 
     return {
       ok: true,
-      status: "ROUTE_NOT_CONFIGURED",
+      status: "ROUTE_INVALID",
+      routeId: choice.routeId,
+      matchType: choice.matchType,
       destinationsCount: 0,
     };
   }
 
-  const primary: WhatsAppDestinationRoute = {
-    safeDocId: "CLIENT_PRIMARY",
-    chatId: `${phone}@c.us`,
-    chatName:
-      cleanText((client as any).name) ||
-      getWhatsAppJobClientLabel(jobData),
-    chatType: "CONTACT",
-    destinationType: "CLIENT_PRIMARY",
-    phone,
-  };
+  if (choice.source === "LEGACY_ROUTE") {
+    return writeDestinations(db, jobRef, choice.destinations, choice.routeId, choice.matchType, actor, "LEGACY_ROUTE");
+  }
 
-  return writeDestinations(
+  if (choice.source === "CLIENT_PHONE") {
+    return writeDestinations(db, jobRef, choice.destinations, null, null, actor, "CLIENT_PHONE");
+  }
+
+  await writeResolutionFailure(
     db,
     jobRef,
-    [primary],
-    null,
-    null,
+    "CLIENT_WHATSAPP_MISSING",
+    groupChatId
+      ? "El grupo asignado al cliente no esta en los chats de Hugo y no hay otra ruta."
+      : "El cliente no tiene grupo, ruta ni WhatsApp registrado.",
     actor
   );
+
+  return {
+    ok: true,
+    status: "ROUTE_NOT_CONFIGURED",
+    destinationsCount: 0,
+  };
 }
+
+const isProtectedDeliveryStatus = (status: string) =>
+  (PROTECTED_DELIVERY_STATUSES as readonly string[]).includes(status);
 
 async function writeResolutionFailure(
   db: admin.firestore.Firestore,
@@ -247,50 +253,50 @@ async function writeResolutionFailure(
   resolutionError: string,
   actor?: { uid?: string; name?: string }
 ): Promise<void> {
-  const deliveriesSnap = await jobRef.collection("deliveries").get();
-  const batch = db.batch();
+  await db.runTransaction(async (tx) => {
+    const deliveriesSnap = await tx.get(jobRef.collection("deliveries"));
 
-  batch.set(
-    jobRef,
-    {
-      targetResolutionStatus: resolutionStatus,
-      targetResolutionError: resolutionError,
-      targetRouteId: null,
-      targetRouteMatchType: null,
-      targetDestinations: [],
-      targetDestinationsCount: 0,
-      targetChatId: null,
-      targetChatName: null,
-      targetChatType: null,
-      targetChatSafeDocId: null,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  deliveriesSnap.docs.forEach((doc) => {
-    const data = doc.data() || {};
-    const status = cleanText(data.status);
-
-    if (["SENT", "SENDING"].includes(status)) {
-      return;
-    }
-
-    batch.set(
-      doc.ref,
+    tx.set(
+      jobRef,
       {
-        status: "OMITTED",
-        omittedAt: FieldValue.serverTimestamp(),
-        omittedByUid: cleanText(actor?.uid),
-        omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
-        omitReason: "TARGET_RESOLUTION_REPLACED",
+        targetResolutionStatus: resolutionStatus,
+        targetResolutionError: resolutionError,
+        targetRouteId: null,
+        targetRouteMatchType: null,
+        targetDestinationSource: null,
+        targetDestinations: [],
+        targetDestinationsCount: 0,
+        targetChatId: null,
+        targetChatName: null,
+        targetChatType: null,
+        targetChatSafeDocId: null,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-  });
 
-  await batch.commit();
+    deliveriesSnap.docs.forEach((doc) => {
+      const status = cleanText((doc.data() || {}).status);
+
+      // Sent, in-flight and uncertain deliveries are history; never overwrite them.
+      if (isProtectedDeliveryStatus(status)) {
+        return;
+      }
+
+      tx.set(
+        doc.ref,
+        {
+          status: "OMITTED",
+          omittedAt: FieldValue.serverTimestamp(),
+          omittedByUid: cleanText(actor?.uid),
+          omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
+          omitReason: "TARGET_RESOLUTION_REPLACED",
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+  });
 }
 
 async function writeDestinations(
@@ -299,14 +305,10 @@ async function writeDestinations(
   destinations: WhatsAppDestinationRoute[],
   routeId: string | null,
   matchType: "EXACT" | "DEFAULT" | null,
-  actor?: { uid?: string; name?: string }
+  actor?: { uid?: string; name?: string },
+  destinationSource?: string
 ): Promise<any> {
   const first = destinations[0];
-  const deliveriesSnap = await jobRef.collection("deliveries").get();
-
-  const existingById = new Map(
-    deliveriesSnap.docs.map((doc) => [doc.id, doc])
-  );
 
   const desiredIds = new Set(
     destinations.map((destination) =>
@@ -316,106 +318,111 @@ async function writeDestinations(
     )
   );
 
-  const batch = db.batch();
+  // One transaction: a delivery claimed by the connector meanwhile is never reset.
+  await db.runTransaction(async (tx) => {
+    const [jobSnap, deliveriesSnap] = await Promise.all([
+      tx.get(jobRef),
+      tx.get(jobRef.collection("deliveries")),
+    ]);
+    const rootId = cleanText(jobSnap.get("rootId"));
+    const existingById = new Map(
+      deliveriesSnap.docs.map((doc) => [doc.id, doc])
+    );
 
-  batch.set(
-    jobRef,
-    {
-      deliveryMode: "MULTI_TARGET",
-      targetResolutionStatus: "ROUTE_RESOLVED",
-      targetResolutionError: null,
-      targetRouteId: routeId,
-      targetRouteMatchType: matchType,
-      targetDestinations: destinations,
-      targetDestinationsCount: destinations.length,
-
-      // Legacy/compatibilidad temporal para pantalla actual.
-      targetChatId: first.chatId,
-      targetChatName: first.chatName,
-      targetChatType: first.chatType,
-      targetChatSafeDocId: first.safeDocId,
-
-      targetConfiguredAt: FieldValue.serverTimestamp(),
-      targetConfiguredByUid: cleanText(actor?.uid),
-      targetConfiguredByName: cleanText(actor?.name || "AUTO_ROUTE"),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  // Todo destino anterior que ya no forma parte de la resolucion actual
-  // queda omitido. SENT/SENDING se preservan como historial o envio en curso.
-  deliveriesSnap.docs.forEach((doc) => {
-    if (desiredIds.has(doc.id)) {
-      return;
-    }
-
-    const data = doc.data() || {};
-    const status = cleanText(data.status);
-
-    if (["SENT", "SENDING"].includes(status)) {
-      return;
-    }
-
-    batch.set(
-      doc.ref,
+    tx.set(
+      jobRef,
       {
-        status: "OMITTED",
-        omittedAt: FieldValue.serverTimestamp(),
-        omittedByUid: cleanText(actor?.uid),
-        omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
-        omitReason: "DESTINATION_REPLACED",
+        deliveryMode: "MULTI_TARGET",
+        targetResolutionStatus: "ROUTE_RESOLVED",
+        targetResolutionError: null,
+        targetRouteId: routeId,
+        targetRouteMatchType: matchType,
+        targetDestinationSource: destinationSource || null,
+        targetDestinations: destinations,
+        targetDestinationsCount: destinations.length,
+
+        // Legacy/compatibilidad temporal para pantalla actual.
+        targetChatId: first.chatId,
+        targetChatName: first.chatName,
+        targetChatType: first.chatType,
+        targetChatSafeDocId: first.safeDocId,
+
+        targetConfiguredAt: FieldValue.serverTimestamp(),
+        targetConfiguredByUid: cleanText(actor?.uid),
+        targetConfiguredByName: cleanText(actor?.name || "AUTO_ROUTE"),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
+
+    // Todo destino anterior que ya no forma parte de la resolucion actual
+    // queda omitido. SENT/SENDING/SEND_UNCERTAIN se preservan.
+    deliveriesSnap.docs.forEach((doc) => {
+      if (desiredIds.has(doc.id)) {
+        return;
+      }
+
+      const status = cleanText((doc.data() || {}).status);
+
+      if (isProtectedDeliveryStatus(status)) {
+        return;
+      }
+
+      tx.set(
+        doc.ref,
+        {
+          status: "OMITTED",
+          omittedAt: FieldValue.serverTimestamp(),
+          omittedByUid: cleanText(actor?.uid),
+          omittedByName: cleanText(actor?.name || "AUTO_ROUTE"),
+          omitReason: "DESTINATION_REPLACED",
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+
+    destinations.forEach((destination: WhatsAppDestinationRoute) => {
+      const deliveryId = encodeURIComponent(
+        destination.safeDocId || destination.chatId
+      );
+
+      const deliveryRef = jobRef.collection("deliveries").doc(deliveryId);
+      const existing = existingById.get(deliveryId);
+      const existingStatus = cleanText((existing?.data() || {}).status);
+      const preserveExistingStatus = isProtectedDeliveryStatus(existingStatus);
+
+      const payload: Record<string, any> = {
+        channel: "WHATSAPP",
+        rootId,
+        status: preserveExistingStatus
+          ? existingStatus
+          : "PENDING_MANUAL_RELEASE",
+        connectorId: destination.connectorId || "default",
+        routeId,
+        routeMatchType: matchType,
+        chatId: destination.chatId,
+        chatName: destination.chatName,
+        chatType: destination.chatType,
+        safeDocId: destination.safeDocId,
+        destinationType:
+          destination.destinationType || "ADDITIONAL",
+        phone: destination.phone || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      if (!existing) {
+        payload.createdAt =
+          FieldValue.serverTimestamp();
+      }
+
+      tx.set(
+        deliveryRef,
+        payload,
+        { merge: true }
+      );
+    });
   });
-
-  destinations.forEach((destination: WhatsAppDestinationRoute) => {
-    const deliveryId = encodeURIComponent(
-      destination.safeDocId || destination.chatId
-    );
-
-    const deliveryRef = jobRef.collection("deliveries").doc(deliveryId);
-    const existing = existingById.get(deliveryId);
-    const existingData = existing?.data() || {};
-    const existingStatus = cleanText(existingData.status);
-
-    const preserveExistingStatus =
-      existingStatus === "SENT" ||
-      existingStatus === "SENDING";
-
-    const payload: Record<string, any> = {
-      channel: "WHATSAPP",
-      status: preserveExistingStatus
-        ? existingStatus
-        : "PENDING_MANUAL_RELEASE",
-      connectorId: "default",
-      routeId,
-      routeMatchType: matchType,
-      chatId: destination.chatId,
-      chatName: destination.chatName,
-      chatType: destination.chatType,
-      safeDocId: destination.safeDocId,
-      destinationType:
-        destination.destinationType || "ADDITIONAL",
-      phone: destination.phone || null,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    if (!existing) {
-      payload.createdAt =
-        FieldValue.serverTimestamp();
-    }
-
-    batch.set(
-      deliveryRef,
-      payload,
-      { merge: true }
-    );
-  });
-
-  await batch.commit();
 
   return {
     ok: true,

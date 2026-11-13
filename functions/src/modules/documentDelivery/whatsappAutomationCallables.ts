@@ -1,6 +1,8 @@
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
+import { findDocumentSenderBinding } from "./whatsappRoutes";
+import { isWithinHugoHours } from "./whatsappDeliveryDomain";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -121,26 +123,31 @@ function normalizeConnectorStatus(value: unknown): string {
   return cleanText(value).toUpperCase() || "UNKNOWN";
 }
 
+/** Readiness comes from Hugo's enrolled connector (the only sender), never the historic "default" connector. */
 export async function readWhatsAppAutomationState(rootId: string) {
-  const [configSnap, connectorSnap] = await Promise.all([
+  const [configSnap, binding] = await Promise.all([
     db.collection("whatsappAutomationConfigs").doc(rootId).get(),
-    db.collection("whatsappQrConnectors").doc("default").get(),
+    findDocumentSenderBinding(db, rootId),
   ]);
+  const connectorSnap = binding
+    ? await db.collection("whatsappQrConnectors").doc(binding.id).get()
+    : null;
 
   const config = configSnap.exists
     ? asRecord(configSnap.data())
     : {};
 
-  const connector = connectorSnap.exists
+  const connector = connectorSnap?.exists
     ? asRecord(connectorSnap.data())
     : {};
+  const senderBound = !!binding && cleanText(connector.rootId || rootId) === rootId;
 
   const enabled = config.enabled === true;
   const rawConnectorStatus = normalizeConnectorStatus(
     connector.status,
   );
 
-  const heartbeatValue = connector.lastHeartbeatAt as
+  const heartbeatValue = connector.lastSeenAt as
     | { toMillis?: () => number }
     | undefined;
 
@@ -175,10 +182,14 @@ export async function readWhatsAppAutomationState(rootId: string) {
     effectiveReady:
       enabled &&
       connectorConnected &&
-      connector.sendEnabled === true,
+      senderBound,
+
+    withinSendingHours: isWithinHugoHours(Date.now()),
 
     connector: {
-      id: "default",
+      id: "hugo",
+      agentName: "Hugo",
+      bound: senderBound,
       status: connectorStatus,
       rawStatus: rawConnectorStatus,
       connected: connectorConnected,
@@ -189,22 +200,17 @@ export async function readWhatsAppAutomationState(rootId: string) {
           : Math.floor(heartbeatAgeMs / 1000),
 
       lastHeartbeatAt:
-        timestampIso(connector.lastHeartbeatAt),
+        timestampIso(connector.lastSeenAt),
 
-      phoneLabel:
-        cleanText(
-          connector.phoneLabel ??
-            connector.sessionLabel,
-        ) || null,
+      phoneLabel: senderBound ? "Conexión de Hugo" : null,
 
-      authClientId:
-        cleanText(connector.authClientId) || null,
+      authClientId: null,
 
       chatsCount:
         Number(connector.chatsCount ?? 0) || 0,
 
       sendEnabled:
-        connector.sendEnabled === true,
+        senderBound,
 
       lastChatsSyncedAt:
         timestampIso(connector.lastChatsSyncedAt),

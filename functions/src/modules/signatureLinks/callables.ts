@@ -9,6 +9,11 @@ import { finalizeSolicitudDocumentVersionTx } from "../solicitudDocuments/lifecy
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { receiptAcceptance } from "./acceptance";
 import { MAX_SIGNATURE_PNG_PIXELS, MAX_SIGNATURE_PNG_SIDE, pngHasSignatureInk } from "./pngInk";
+import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
+import { buildDeliveryCaption } from "../documentDelivery/whatsappDeliveryDomain";
+
+// Public origins where the signature page is served. A browser-supplied origin outside this list is never sent to a client.
+const PUBLIC_SIGNATURE_ORIGINS = ["https://pay-0-system.web.app", "https://pay-0-system.firebaseapp.com", "https://pay0-next16--pay-0-system.us-central1.hosted.app"];
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -120,6 +125,25 @@ export const createSolicitudSignatureLink = onCall(
 
     const origin = clean(request.data?.origin, 240);
     const path = `/firma/${encodeURIComponent(token)}`;
+
+    // A link made to be shared (not the in-person signature) goes to the client by WhatsApp automatically.
+    if (clean(request.data?.purpose, 20).toUpperCase() === "REMOTE") {
+      const publicOrigin = PUBLIC_SIGNATURE_ORIGINS.includes(origin.replace(/\/$/, "")) ? origin.replace(/\/$/, "") : PUBLIC_SIGNATURE_ORIGINS[0];
+      const link = `${publicOrigin}${path}`;
+      await queueAutomaticClientDelivery({
+        rootId,
+        sourceType: "CONSTANCIA_FIRMA_LINK",
+        sourceId: solicitudId,
+        clienteId: clean(solicitud.clienteId || solicitud.clientId, 128),
+        clienteNombre: clean(solicitud.clienteNombre || solicitud.clientName, 200) || null,
+        caption: "Firma de constancia de recibido.",
+        textBody: buildDeliveryCaption({ sourceType: "CONSTANCIA_FIRMA_LINK", counterpartyName: solicitud.empresaNombre || solicitud.companyName,
+          amount: solicitud.total || solicitud.monto || solicitud.amount, link }),
+        linkToken: token,
+        notes: "Envio automatico del link de firma de constancia.",
+      }).catch((error: any) => console.warn("[WHATSAPP AUTO] LINK DE FIRMA NO ENCOLADO", error?.message || error));
+    }
+
     return {
       ok: true,
       token,

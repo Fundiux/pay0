@@ -325,6 +325,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   resolveAssignedIqCredentialForModule: { module: "./modules/iq/callables", export: "resolveAssignedIqCredentialForModule" },
   resolveClientDispersionIncident: { module: "./modules/financing/callables", export: "resolveClientDispersionIncident" },
   resolveCommissionInstrumentIq: { module: "./modules/iq/dispersionCreationCallables", export: "resolveCommissionInstrumentIq" },
+  resolveWhatsAppUncertainDelivery: { module: "./modules/documentDelivery/whatsappReleaseCallables", export: "resolveWhatsAppUncertainDelivery" },
   restoreCorporateResourceVersion: { module: "./modules/canonicalCenter/service", export: "restoreCorporateResourceVersion" },
   restoreUser: { module: "./modules/users/access", export: "restoreUser" },
   resumePagoApplicationIqPlan: { module: "./modules/paymentApplications/callables", export: "resumePagoApplicationIqPlan" },

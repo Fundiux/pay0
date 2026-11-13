@@ -3,6 +3,9 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logActivityBatch } from "../../utils/logActivity";
 import { requireWhatsAppSuperadmin } from "./whatsappConnectorAuthority";
 import { resolveObservableGroup, type ObserverGroupDb } from "./whatsappObserverGroups";
+import { applyWhatsAppDestinationsToJob, findDocumentSenderBinding } from "./whatsappRoutes";
+import { releaseWhatsAppJobDeliveriesCore } from "./whatsappReleaseCallables";
+import { DOCUMENT_SENDER_AGENT_ID } from "./whatsappDeliveryDomain";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -16,16 +19,24 @@ const clean = (value: unknown, max = 160) => String(value ?? "").trim().replace(
 // This stores only the link; sending stays with the delivery pipeline.
 const assignmentId = (rootId: string, clientId: string) => `${rootId}__${encodeURIComponent(clientId)}`;
 
+// agentId "hugo" limits the list to the groups Hugo's connector sees: the only ones he can send documents to.
 export const getClientWhatsAppGroups = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async (request) => {
   const { rootId } = await requireWhatsAppSuperadmin(request);
+  const onlySender = clean(request.data?.agentId) === DOCUMENT_SENDER_AGENT_ID;
+  const sender = onlySender ? await findDocumentSenderBinding(db, rootId) : null;
   const [chats, assignments] = await Promise.all([
-    db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
+    onlySender && !sender ? Promise.resolve({ docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] }) :
+      db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
     db.collection("clientWhatsappGroups").where("rootId", "==", rootId).limit(1000).get(),
   ]);
   const groups = new Map<string, string>();
-  for (const doc of chats.docs) groups.set(clean(doc.get("chatId"), 200), clean(doc.get("name")));
+  for (const doc of chats.docs) {
+    if (sender && doc.get("bindingId") !== sender.id) continue;
+    groups.set(clean(doc.get("chatId"), 200), clean(doc.get("name")));
+  }
   return {
     ok: true,
+    senderConnected: onlySender ? !!sender : undefined,
     groups: [...groups.entries()].map(([chatId, name]) => ({ chatId, name })).sort((a, b) => a.name.localeCompare(b.name, "es")),
     assignments: assignments.docs.map((doc) => ({
       clientId: clean(doc.get("clientId")),
@@ -89,6 +100,7 @@ export const assignWhatsAppGroupToClients = onCall({ cors: true, timeoutSeconds:
   });
 
   if (done.length > 0) await batch.commit();
+  const rerouted = action === "ASSIGN" ? await rerouteWaitingAutomaticJobs(rootId, done) : 0;
 
   return {
     ok: failed.length === 0,
@@ -96,8 +108,33 @@ export const assignWhatsAppGroupToClients = onCall({ cors: true, timeoutSeconds:
     groupChatId: action === "ASSIGN" ? groupChatId : null,
     groupName: action === "ASSIGN" ? groupName : null,
     doneCount: done.length,
+    reroutedJobs: rerouted,
     done,
     failed,
     message: failed.length === 0 ? `${done.length} cliente(s) actualizados.` : `${done.length} cliente(s) actualizados y ${failed.length} con error.`,
   };
 });
+
+/** Automatic jobs that were waiting for a destination are routed and released once the client has a group. */
+async function rerouteWaitingAutomaticJobs(rootId: string, clientIds: string[]): Promise<number> {
+  const config = await db.doc(`whatsappAutomationConfigs/${rootId}`).get();
+  if (config.get("enabled") !== true) return 0;
+  let released = 0;
+  for (const clientId of clientIds) {
+    const jobs = await db.collection("documentDeliveryJobs").where("clienteId", "==", clientId).limit(50).get();
+    for (const job of jobs.docs) {
+      const row = job.data() || {};
+      if (row.rootId !== rootId || row.origin !== "AUTOMATIC" || row.status !== "READY_FOR_MANUAL_SEND" || Number(row.targetDestinationsCount || 0) > 0) continue;
+      try {
+        const routed = await applyWhatsAppDestinationsToJob(db, job.ref, row, { uid: "system", name: "AUTO_ROUTE_AFTER_GROUP" });
+        if (routed.destinationsCount > 0) {
+          await releaseWhatsAppJobDeliveriesCore({ jobId: job.id, uid: "system", actorName: "Sistema" });
+          released++;
+        }
+      } catch (error: any) {
+        console.warn("[WHATSAPP AUTO] REENRUTAMIENTO FALLIDO", error?.message || error);
+      }
+    }
+  }
+  return released;
+}

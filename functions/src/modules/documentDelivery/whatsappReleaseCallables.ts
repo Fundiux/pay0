@@ -3,6 +3,9 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
 import { applyWhatsAppDestinationsToJob } from "./whatsappRoutes";
+import { requireWhatsAppSuperadmin } from "./whatsappConnectorAuthority";
+import { aggregateJobStatus } from "./whatsappDeliveryDomain";
+import { logActivityTx } from "../../utils/logActivity";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -290,5 +293,56 @@ export const retryWhatsAppJobErrors = onCall(
       retryCount,
       message: `Reintento liberado para ${retryCount} error(es).`,
     };
+  }
+);
+
+/**
+ * A human resolves deliveries whose WhatsApp result is unknown (SEND_UNCERTAIN): either confirms
+ * the client received it (CONFIRM_SENT) or authorizes one new send (ALLOW_RESEND). Never automatic.
+ */
+export const resolveWhatsAppUncertainDelivery = onCall(
+  { cors: true, timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    const { uid, rootId, user } = await requireWhatsAppSuperadmin(request);
+    const jobId = cleanText(request.data?.jobId);
+    const decision = cleanText(request.data?.decision).toUpperCase();
+    if (!jobId || /[\/\x00-\x1f]/.test(jobId)) throw new HttpsError("invalid-argument", "Falta el envio.");
+    if (!["CONFIRM_SENT", "ALLOW_RESEND"].includes(decision)) throw new HttpsError("invalid-argument", "Decision no valida.");
+
+    const jobRef = db.collection("documentDeliveryJobs").doc(jobId);
+    return db.runTransaction(async (tx) => {
+      const [jobSnap, deliveries] = await Promise.all([tx.get(jobRef), tx.get(jobRef.collection("deliveries"))]);
+      const job = jobSnap.data();
+      if (!job || cleanText(job.rootId) !== rootId) throw new HttpsError("not-found", "Envio no encontrado.");
+      const uncertain = deliveries.docs.filter((doc) => cleanText(doc.get("status")) === "SEND_UNCERTAIN");
+      if (!uncertain.length) throw new HttpsError("failed-precondition", "Este envio no tiene entregas sin confirmar.");
+      const next = decision === "CONFIRM_SENT" ? "SENT" : "PENDING_SEND";
+      for (const doc of uncertain) {
+        tx.update(doc.ref, decision === "CONFIRM_SENT"
+          ? { status: "SENT", sentAt: FieldValue.serverTimestamp(), confirmedByHuman: true, retryBlocked: false,
+              resolvedByUid: uid, resolvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }
+          : { status: "PENDING_SEND", lease: null, attemptStartedAtMs: null, retryBlocked: false, resendAuthorizedByUid: uid,
+              resendAuthorizedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      }
+      const ids = new Set(uncertain.map((doc) => doc.id));
+      const statuses = deliveries.docs.map((doc) => (ids.has(doc.id) ? next : cleanText(doc.get("status"))));
+      const status = aggregateJobStatus(statuses, cleanText(job.status));
+      tx.update(jobRef, { status, updatedAt: FieldValue.serverTimestamp() });
+      logActivityTx(tx, db, {
+        event: "WHATSAPP_DOCUMENTO_REVISION_RESUELTA",
+        rootId,
+        actorUid: uid,
+        actorName: userName(user),
+        actorRole: "superadmin",
+        referenceId: jobId,
+        referenceType: "documentDeliveryJob",
+        description: decision === "CONFIRM_SENT"
+          ? `Envio por WhatsApp de ${cleanText(job.clienteNombre) || "cliente"} confirmado como recibido.`
+          : `Reenvio por WhatsApp de ${cleanText(job.clienteNombre) || "cliente"} autorizado.`,
+        extra: { decision, deliveries: uncertain.length },
+      });
+      return { ok: true, jobId, status, resolvedCount: uncertain.length,
+        message: decision === "CONFIRM_SENT" ? "Envio confirmado como recibido." : "Reenvio autorizado; Hugo lo enviara en su horario." };
+    });
   }
 );

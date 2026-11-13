@@ -3,11 +3,11 @@ import { recordOperationalMetric } from "../operationalMetrics/service";
 import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import { DOCUMENT_DELIVERY_MESSAGES } from "./messages";
+import { deliverySource, normalizeDeliverySourceType, type DeliverySourceType } from "./whatsappDeliveryDomain";
 import { assertAuthorized } from "../../utils/authGuard";
 import { normalizeClientWhatsapp } from "../clients/domain";
 
-type DocumentDeliverySourceType = "FACTURA_PDF_XML" | "DISPERSION_COMPROBANTE";
+type DocumentDeliverySourceType = DeliverySourceType;
 type DocumentDeliveryChannel = "WHATSAPP";
 
 type DeliveryDocumentInput = {
@@ -18,6 +18,7 @@ type DeliveryDocumentInput = {
   downloadUrl?: unknown;
   url?: unknown;
   documentType?: unknown;
+  uploadId?: unknown;
 };
 
 function cleanText(value: unknown, maxLength = 500): string {
@@ -30,16 +31,13 @@ function cleanOptionalText(value: unknown, maxLength = 500): string | null {
 }
 
 function normalizeSourceType(value: unknown): DocumentDeliverySourceType {
-  const text = cleanText(value, 80).toUpperCase();
-  if (text === "FACTURA_PDF_XML") return "FACTURA_PDF_XML";
-  if (text === "DISPERSION_COMPROBANTE") return "DISPERSION_COMPROBANTE";
-  throw new HttpsError("invalid-argument", "Tipo de envio no soportado.");
+  const sourceType = normalizeDeliverySourceType(value);
+  if (!sourceType) throw new HttpsError("invalid-argument", "Tipo de envio no soportado.");
+  return sourceType;
 }
 
 function canonicalMessageForSource(sourceType: DocumentDeliverySourceType): string {
-  if (sourceType === "FACTURA_PDF_XML") return DOCUMENT_DELIVERY_MESSAGES.facturaPdfXml;
-  if (sourceType === "DISPERSION_COMPROBANTE") return DOCUMENT_DELIVERY_MESSAGES.dispersionComprobante;
-  throw new HttpsError("invalid-argument", "Tipo de envio no soportado.");
+  return deliverySource(sourceType).legacyMessage;
 }
 
 function normalizeDocuments(raw: unknown): Array<{
@@ -49,6 +47,7 @@ function normalizeDocuments(raw: unknown): Array<{
   storagePath: string | null;
   downloadUrl: string | null;
   documentType: string | null;
+  uploadId: string | null;
 }> {
   const list = Array.isArray(raw) ? raw : [];
   const docs = list
@@ -59,6 +58,7 @@ function normalizeDocuments(raw: unknown): Array<{
       const downloadUrl = cleanOptionalText(item?.downloadUrl ?? item?.url, 2000);
       const contentType = cleanOptionalText(item?.contentType, 200);
       const documentType = cleanOptionalText(item?.documentType, 120);
+      const uploadId = cleanOptionalText(item?.uploadId, 200);
 
       if (!name && !fileName && !storagePath && !downloadUrl) return null;
 
@@ -69,6 +69,7 @@ function normalizeDocuments(raw: unknown): Array<{
         storagePath,
         downloadUrl,
         documentType,
+        uploadId,
       };
     })
     .filter(Boolean) as Array<{
@@ -78,6 +79,7 @@ function normalizeDocuments(raw: unknown): Array<{
       storagePath: string | null;
       downloadUrl: string | null;
       documentType: string | null;
+      uploadId: string | null;
     }>;
 
   if (!docs.length) {
@@ -91,10 +93,12 @@ function buildDocumentFingerprint(
   documents: ReturnType<typeof normalizeDocuments>
 ): string {
   const canonical = documents
+    // The stored object identifies the document; the display name does not, so a
+    // manual and an automatic job for the same file share one fingerprint.
     .map((doc) => ({
       documentType: cleanText(doc.documentType, 120).toUpperCase(),
       storagePath: cleanText(doc.storagePath, 1200),
-      fileName: cleanText(doc.fileName || doc.name, 200),
+      fileName: cleanText(doc.storagePath, 1200) ? "" : cleanText(doc.fileName || doc.name, 200),
     }))
     .sort((a, b) =>
       `${a.documentType}|${a.storagePath}|${a.fileName}`.localeCompare(
@@ -154,11 +158,15 @@ async function resolveActor(uid: string): Promise<{
 }
 
 function assertCanPrepareDocumentDelivery(request: any, actor: { user: Record<string, unknown> }, sourceType: DocumentDeliverySourceType) {
-  if (sourceType === "DISPERSION_COMPROBANTE") {
-    assertAuthorized(request.auth, actor.user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
-    return;
-  }
-  assertAuthorized(request.auth, actor.user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
+  const source = deliverySource(sourceType);
+  // Text deliveries (links) are only created by the server.
+  if (source.kind !== "FILES") throw new HttpsError("permission-denied", "Este envio solo lo prepara el sistema.");
+  assertAuthorized(request.auth, actor.user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: source.manualPermission.module, requiredAction: source.manualPermission.action });
+}
+
+/** Automatic jobs get a deterministic id so concurrent triggers create exactly one job. */
+function automaticJobId(input: { rootId: string; sourceType: string; sourceId: string; clienteId: string; documentFingerprint: string }): string {
+  return "auto_" + createHash("sha256").update(JSON.stringify([input.rootId, input.sourceType, input.sourceId, input.clienteId, input.documentFingerprint])).digest("hex").slice(0, 40);
 }
 
 export type DocumentDeliveryInternalContext = {
@@ -214,15 +222,23 @@ export async function prepareDocumentDeliveryJobCore(
     );
   }
   const channel: DocumentDeliveryChannel = "WHATSAPP";
+  const source = deliverySource(sourceType);
   const message = canonicalMessageForSource(sourceType);
-  const documents = normalizeDocuments(data.documents);
-  const documentFingerprint = buildDocumentFingerprint(documents);
+  // TEXT deliveries carry no file; the fingerprint then covers the text itself.
+  const textBody = source.kind === "TEXT" ? cleanOptionalText(data.textBody, 1500) : null;
+  if (source.kind === "TEXT" && !textBody) throw new HttpsError("invalid-argument", "Falta el texto del envio.");
+  const documents = source.kind === "TEXT" ? [] : normalizeDocuments(data.documents);
+  const documentFingerprint = source.kind === "TEXT"
+    ? createHash("sha256").update(JSON.stringify([sourceType, textBody])).digest("hex")
+    : buildDocumentFingerprint(documents);
   const sourceId = cleanOptionalText(data.sourceId, 300);
+  // Client-facing caption: automatic jobs bring one built from client data; manual jobs use the neutral label.
+  const caption = automatic ? cleanOptionalText(data.caption, 1000) : `${source.label}.`;
 
-  if (sourceType === "FACTURA_PDF_XML" && !sourceId) {
+  if ((sourceType === "FACTURA_PDF_XML" || automatic) && !sourceId) {
     throw new HttpsError(
       "invalid-argument",
-      "Falta sourceId para proteger el envio de la factura."
+      "Falta sourceId para proteger el envio."
     );
   }
 
@@ -283,6 +299,7 @@ export async function prepareDocumentDeliveryJobCore(
       "READY_FOR_MANUAL_SEND",
       "READY_FOR_SEND",
       "SENDING",
+      "BLOCKED_UNCERTAIN",
     ].includes(cleanText(existing.status, 80).toUpperCase())
   );
 
@@ -364,6 +381,10 @@ export async function prepareDocumentDeliveryJobCore(
     targetLabel: cleanOptionalText(data.targetLabel, 500),
     targetGroupId: cleanOptionalText(data.targetGroupId, 500),
     message,
+    caption,
+    textBody,
+    linkToken: automatic ? cleanOptionalText(data.linkToken, 200) : null,
+    deliveryKind: source.kind,
     documents,
     status: "READY_FOR_MANUAL_SEND",
     sendMode: "DOCUMENT_ONLY",
@@ -384,7 +405,30 @@ export async function prepareDocumentDeliveryJobCore(
         : null,
   };
 
-  const ref = await db.collection("documentDeliveryJobs").add(payload);
+  let ref: FirebaseFirestore.DocumentReference;
+  if (automatic) {
+    ref = db.collection("documentDeliveryJobs").doc(automaticJobId({ rootId: actor.rootId, sourceType, sourceId: sourceId || "", clienteId, documentFingerprint }));
+    try {
+      await ref.create(payload);
+    } catch (error: any) {
+      // Another trigger created the same job first: report it instead of creating a second one.
+      if (Number(error?.code) !== 6 && !/already exists/i.test(String(error?.message || ""))) throw error;
+      const existing = await ref.get();
+      return {
+        ok: true,
+        action: "ALREADY_IN_PROGRESS" as const,
+        jobId: ref.id,
+        status: cleanText(existing.get("status"), 80),
+        channel,
+        sourceType,
+        message: "Este mismo envio ya existe.",
+        documentsCount: documents.length,
+        documentFingerprint,
+      };
+    }
+  } else {
+    ref = await db.collection("documentDeliveryJobs").add(payload);
+  }
 
   await recordOperationalMetric({
     rootId: actor.rootId,

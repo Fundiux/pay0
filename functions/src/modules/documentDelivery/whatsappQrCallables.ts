@@ -216,6 +216,12 @@ export const getWhatsAppQrDashboard = onCall(
               delivery.status === "OMITTED"
           ).length;
 
+        const blocked =
+          deliveries.filter(
+            (delivery) =>
+              delivery.status === "SEND_UNCERTAIN"
+          ).length;
+
         return {
           ...job,
           deliveries,
@@ -225,6 +231,7 @@ export const getWhatsAppQrDashboard = onCall(
             error,
             pending,
             omitted,
+            blocked,
           },
         };
       })

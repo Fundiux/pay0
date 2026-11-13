@@ -4,7 +4,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
 import { AGENTS, isCustomerFacingAgent } from "../agentOperations/contract";
 import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
-import { assertEnrollmentProof, assertPublicKey, assertWorkerEnvelope, canonicalDataHash, Binding, Enrollment, EnrollmentProof, WorkerEnvelope } from "./whatsappConnectorPolicy";
+import { assertEnrollmentProof, assertPublicKey, assertWorkerEnvelope, canonicalDataHash, Binding, Enrollment, EnrollmentProof, SENDING_WORKER_ACTIONS, WorkerEnvelope } from "./whatsappConnectorPolicy";
+import { WhatsAppDocumentSender, type DocumentSenderOptions } from "./whatsappDeliverySender";
+import { DOCUMENT_SENDER_AGENT_ID } from "./whatsappDeliveryDomain";
 
 const id = (s: unknown): string => {
   if (typeof s !== "string" || !s || s.length > 180 || /[\/\x00-\x1f]/.test(s)) throw new HttpsError("invalid-argument", "Identidad inválida.");
@@ -26,7 +28,10 @@ export async function requireWhatsAppSuperadmin(request: any) {
   return { uid, rootId, user };
 }
 export class WhatsAppConnectorAuthority {
-  constructor(private readonly db: Firestore) {}
+  private readonly sender: WhatsAppDocumentSender;
+  constructor(private readonly db: Firestore, senderOptions: DocumentSenderOptions = {}) {
+    this.sender = new WhatsAppDocumentSender(db, senderOptions);
+  }
   private owner(rootId: string, uid: string, agentId = LEGACY_CONNECTOR_AGENT) { return this.db.doc(`whatsappQrConnectorOwners/${Buffer.from(JSON.stringify(agentId === LEGACY_CONNECTOR_AGENT ? [rootId, uid] : [rootId, uid, agentId])).toString("base64url")}`); }
   private async actor(tx: any, ownerUid: string, rootId: string) {
     const snap = await tx.get(this.db.doc(`users/${id(ownerUid)}`)), user = snap.data();
@@ -143,12 +148,20 @@ export class WhatsAppConnectorAuthority {
       const nonceRef = bindingRef.collection("nonces").doc(`${binding.generation}_${envelope.nonce}`);
       if ((await tx.get(nonceRef)).exists) fail("already-exists");
       let result: any;
-      if (envelope.action === "HEARTBEAT") result = await this.heartbeat(tx, binding, data, connectorAgentOf(row.agentId));
+      // Sending to clients is reserved to the customer-facing agent Hugo's binding.
+      if (SENDING_WORKER_ACTIONS.includes(envelope.action) && connectorAgentOf(row.agentId) !== DOCUMENT_SENDER_AGENT_ID) fail();
+      if (envelope.action === "CLAIM_DELIVERY") result = { claim: await this.sender.claimTx(tx, binding, data) };
+      else if (envelope.action === "REPORT_DELIVERY") result = await this.sender.reportTx(tx, binding, data);
+      else if (envelope.action === "HEARTBEAT") result = await this.heartbeat(tx, binding, data, connectorAgentOf(row.agentId));
       else if (envelope.action === "INBOUND_GROUP") result = await this.inbound(tx, binding, row, data);
       else if (envelope.action === "SYNC_CHATS") result = await this.sync(tx, bindingRef, row, data);
       else result = await this.newQr(tx, binding, data);
       tx.create(nonceRef, { generation: binding.generation, action: envelope.action, createdAt: FieldValue.serverTimestamp() });
-      return { ok: true, bindingId, generation: binding.generation, rootId: binding.rootId, ...result };
+      return { ok: true, bindingId, generation: binding.generation, rootId: binding.rootId, binding, ...result };
+    }).then(async ({ binding, claim, ...result }: any) => {
+      // File URLs are signed after the lease commits; Storage calls never run inside the transaction.
+      if (envelope.action === "CLAIM_DELIVERY") return { ...result, ...(await this.sender.finishClaim(binding, claim)) };
+      return result;
     });
   }
   private async heartbeat(tx: any, binding: Binding, data: any, agentId = LEGACY_CONNECTOR_AGENT) {
