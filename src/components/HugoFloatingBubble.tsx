@@ -85,7 +85,7 @@ function HugoFloatingBubbleContent({ profile }: { profile: any }) {
       setMessages((current) => [...current.filter((message) => message.id !== optimisticId), { id: `${optimisticId}-user`, role: "user", text: value, source: "USER", read: true }, result.message]);
     } catch (cause: any) {
       setMessages((current) => current.filter((message) => message.id !== optimisticId));
-      setText(value); setError(cause?.message || "María no pudo responder. Intenta nuevamente.");
+      setText(value); setError(cause?.message || "Hugo no pudo responder. Intenta nuevamente.");
     } finally { setSending(false); }
   };
 
@@ -99,12 +99,12 @@ function HugoFloatingBubbleContent({ profile }: { profile: any }) {
         {menuOpen ? <X size={25} /> : <Menu size={25} />}{unread > 0 && <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-rose-500 px-1 text-xs">{Math.min(99, unread)}</span>}
       </button>
     </div>
-    {chatOpen && <aside aria-label="Conversación con María" className="fixed bottom-24 right-6 z-[100] flex h-[min(660px,calc(100vh-8rem))] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950 shadow-2xl">
+    {chatOpen && <aside aria-label="Conversación con Hugo" className="fixed bottom-24 right-6 z-[100] flex h-[min(660px,calc(100vh-8rem))] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950 shadow-2xl">
       <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-3"><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-full bg-violet-500/15 text-violet-300"><Bot size={19} /></span><div><h3 className="font-semibold text-white">María</h3><p className="text-[11px] text-emerald-300">Asistente interno · solo superadmin</p></div></div><button type="button" aria-label="Cerrar María" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={16} /></button></header>
       <div ref={listRef} onScroll={(event) => { const node = event.currentTarget; const close = node.scrollHeight - node.scrollTop - node.clientHeight < 80; setNearBottom(close); if (close) setNewBelow(false); }} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {!messages.length && <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-sm text-slate-300">Hola. Estoy listo para revisar contigo lo que ocurra en PAY0. Puedes preguntarme por una solicitud, pago, factura o decirme qué debo aprender.</div>}
         {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-800 bg-slate-900 text-slate-200"}`}><p className="whitespace-pre-wrap">{message.text}</p><HugoReportAttachment message={message} /><HugoResponseCorrection message={message} scope="PAY0" onTopicSelected={changeCorrectionTopic} onSaved={correction => setMessages(current => current.map(row => row.id === message.id ? { ...row, responseCorrection: correction } : row))} /><div className={`mt-1 flex gap-2 text-[10px] ${message.role === "user" ? "text-blue-100" : "text-slate-500"}`}><span>{message.role === "assistant" ? "María" : "Tú"}</span><span>{messageTime(message.createdAt)}</span></div></div></div>)}
-        {sending && <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 className="animate-spin" size={14} /> María está revisando el sistema…</div>}
+        {sending && <div className="flex items-center gap-2 text-xs text-slate-400"><Loader2 className="animate-spin" size={14} /> Hugo está revisando el sistema…</div>}
         {newBelow && <button type="button" onClick={() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); setNearBottom(true); setNewBelow(false); }} className="sticky bottom-2 mx-auto flex items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-xs text-white shadow-xl"><ArrowDown size={13}/> Ir al mensaje más reciente</button>}
       </div>
       {error && <p className="mx-4 mb-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}

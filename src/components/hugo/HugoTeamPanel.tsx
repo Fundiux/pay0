@@ -5,7 +5,7 @@ import { listHugoTeamTurns, sendHugoTeamTurn, type HugoTeamAgent, type HugoTeamT
 
 const agents: Array<{ id: HugoTeamAgent; name: string; role: string }> = [
   { id: "hugo", name: "Hugo", role: "Coordinador" },
-  { id: "maria", name: "María", role: "Operación" },
+  { id: "maria", name: "Operación", role: "Incidencias y pendientes" },
   { id: "sofia", name: "Sofía", role: "Documentos" },
   { id: "sentinel", name: "Sentinel", role: "Diagnóstico" },
 ];

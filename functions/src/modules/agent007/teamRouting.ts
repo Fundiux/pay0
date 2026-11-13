@@ -1,7 +1,7 @@
 export type HugoTeamAgent = "hugo" | "maria" | "sofia" | "sentinel";
 export const TEAM_AGENTS: ReadonlyArray<{ id: HugoTeamAgent; name: string; role: string }> = [
   { id: "hugo", name: "Hugo", role: "Coordinador" },
-  { id: "maria", name: "María", role: "Operación PAY0" },
+  { id: "maria", name: "Operación", role: "Operación PAY0" },
   { id: "sofia", name: "Sofía", role: "Documentos y cotizaciones" },
   { id: "sentinel", name: "Sentinel", role: "Diagnóstico de seguridad" },
 ];

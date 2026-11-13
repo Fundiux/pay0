@@ -9,10 +9,15 @@ export type SentinelDecision = "NORMAL" | "SUSPICIOUS" | "RESTRICTED" | "QUARANT
 
 export const AGENTS: AgentDefinition[] = [
   { id: "hugo", name: "Hugo", specialty: "Orquestación", kind: "ORCHESTRATOR", owner: "PAY0", systemId: "platform", enabled: true, provider: "GOOGLE_VERTEX", model: "gemini-2.5-flash", permissions: ["diagnose", "propose"], limits: { maxAttempts: 1, maxPerRun: 100 } },
-  { id: "maria", name: "María", specialty: "Conversación global", kind: "WORKER", owner: "PAY0", systemId: "platform", enabled: true, provider: "GOOGLE_VERTEX", model: "gemini-2.5-flash", permissions: ["diagnose"], limits: { maxAttempts: 1, maxPerRun: 100 } },
+  // María is client-facing only (owner decision 2026-11-13). Disabled until her per-client attention tools exist; the owner's internal chat is Hugo.
+  { id: "maria", name: "María", specialty: "Atención a clientes", kind: "WORKER", owner: "PAY0", systemId: "platform", enabled: false, provider: null, model: null, permissions: [], limits: { maxAttempts: 0, maxPerRun: 0 } },
   { id: "sofia", name: "Sofía", specialty: "Análisis", kind: "WORKER", owner: "PAY0", systemId: "platform", enabled: false, provider: null, model: null, permissions: [], limits: { maxAttempts: 0, maxPerRun: 0 } },
   { id: "sentinel", name: "Sentinel", specialty: "Defensa y evidencia", kind: "DEFENSE", owner: "PAY0", systemId: "platform", enabled: true, provider: null, model: null, permissions: ["observe"], limits: { maxAttempts: 0, maxPerRun: 100 } },
-  ...["iq", "expediente", "pagos", "conciliacion", "documentos", "soporte"].map(id => ({ id, name: id[0].toUpperCase() + id.slice(1), specialty: id, kind: "WORKER" as const, owner: "PAY0", systemId: "pay0", enabled: id === "expediente", provider: null, model: null, permissions: id === "expediente" ? ["diagnose", "recoverQuotation"] : [], limits: { maxAttempts: 2, maxPerRun: 100 } })),
+  // Internal agents (never on WhatsApp). IQ is a toolset, not an agent; Soporte is covered by María (clients) and Hugo/Sentinel (technical).
+  { id: "cobranza", name: "Cobranza", specialty: "Pagos y conciliación", kind: "WORKER", owner: "PAY0", systemId: "pay0", enabled: false, provider: null, model: null, permissions: [], limits: { maxAttempts: 2, maxPerRun: 100 } },
+  { id: "expediente", name: "Expediente", specialty: "Expediente y materialidad", kind: "WORKER", owner: "PAY0", systemId: "pay0", enabled: true, provider: null, model: null, permissions: ["diagnose", "recoverQuotation"], limits: { maxAttempts: 2, maxPerRun: 100 } },
+  // Proposes fixes and improvements with evidence; never changes code or production by itself (risk 3, owner approval).
+  { id: "programador", name: "Programador", specialty: "Correcciones y mejoras propuestas", kind: "WORKER", owner: "PAY0", systemId: "platform", enabled: false, provider: null, model: null, permissions: ["propose"], limits: { maxAttempts: 0, maxPerRun: 0 } },
   { id: "agent-creator", name: "Creador de agentes", specialty: "Prototipos en sandbox", kind: "SANDBOX", owner: "PAY0", systemId: "platform", enabled: false, provider: null, model: null, permissions: ["propose"], limits: { maxAttempts: 0, maxPerRun: 0 } },
 ];
 

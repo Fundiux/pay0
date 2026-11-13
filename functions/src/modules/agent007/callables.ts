@@ -209,7 +209,7 @@ export const sendAgent007Message = onCall(
   async (request) => {
     const { uid, user, rootId } = await actor(request);
     const text = clean(request.data?.text, 2000);
-    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para María.");
+    if (!text) throw new HttpsError("invalid-argument", "Escribe un mensaje para Hugo.");
     const startedAt = Date.now();
     const scope = normalizeHugoScope(request.data?.scope);
     const correctionTopic = request.data?.correctionTopic;

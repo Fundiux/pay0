@@ -109,7 +109,7 @@ async function readTeamFacts(rootId: string, uid: string, user: any, auth: any, 
       const folio = solicitud?.exists && solicitud.get("rootId") === rootId ? safe(solicitud.get("folio"), 120) : "Solicitud sin folio verificable";
       return { collection: "agentIncidents", folio, kind: "INCIDENTE" };
     }));
-    const specialist = consulted.includes("sentinel") ? "Sentinel" : "María";
+    const specialist = consulted.includes("sentinel") ? "Sentinel" : "Operación";
     return { text: `${specialist} revisó hasta 20 incidencias recientes del alcance autorizado: ${active.length} abiertas en esa muestra. No cambió estados ni ejecutó contención.`, evidence };
   }
   if (!/\b(última|ultima|reciente)\b/i.test(message)) return { text: "Indica el folio de la Solicitud para consultar su estado y expediente sin ambigüedad.", evidence };

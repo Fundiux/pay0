@@ -82,7 +82,7 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
 
   const canCorrect = !!receipt?.analysisId && Number.isSafeInteger(receipt?.correctionVersion);
   return <section aria-label="Aprender de un comprobante" className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-    <div><h2 className="font-semibold text-white">Revisar un comprobante con María</h2>
+    <div><h2 className="font-semibold text-white">Revisar un comprobante con Hugo</h2>
       <p className="mt-1 text-sm text-slate-400">Aquí, en el panel de comprobantes de /hugo, selecciona un PDF o imagen y pulsa Analizar comprobante. Después puedes editar los campos. El análisis conserva evidencia y no registra un pago.</p></div>
     {!allowed ? <p className="text-sm text-amber-200">Inicia una sesión autorizada para analizar y corregir comprobantes.</p> : <>
       <label className="block text-sm text-slate-300">Comprobante (PDF, JPG, PNG o WEBP; hasta 1 MB)
