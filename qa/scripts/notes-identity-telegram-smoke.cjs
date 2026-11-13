@@ -21,7 +21,7 @@ assert.equal(isSystemNote(cases[4][0]), true);
 assert.equal(recordCreatorLabel({ createdBy: 'uid-1', createdByDisplayName: 'uid-1' }), 'No disponible');
 assert.equal(recordCreatorLabel({ createdBy: 'uid-1', createdByUsername: 'ana.operaciones' }), 'ana.operaciones');
 const { legacyPrompt } = require('../../functions/lib/modules/agent007/hugoCore/legacyPrompt');
-assert.match(legacyPrompt('hola', 'Ana', {}, []).system, /Eres María/);
+assert.match(legacyPrompt('hola', 'Ana', {}, []).system, /Eres Hugo/);
 const { buildIqPagoTelegramPreviewH4D64A7: preview } = require('../../functions/lib/modules/iq/pagoTelegramNotifications');
 const base = { auth: { uid: 'internal-uid', rootId: 'test-root', role: 'superadmin' }, pagoId: 'internal-payment', pago: { folio: 'P123', monto: 1500, clienteNombre: 'Cliente prueba', empresaNombre: 'Empresa prueba' }, iqId: '12345', source: 'INTERNAL_TECHNICAL_SOURCE' };
 for (const event of ['IQ_PAGO_CREADO', 'IQ_PAGO_CONCILIADO', 'IQ_PAGO_RECHAZADO', 'IQ_PAGO_CANCELADO', 'IQ_PAGO_NUEVO_COMPROBANTE', 'IQ_PAGO_MONTO_CORREGIDO']) {
@@ -38,4 +38,4 @@ for (const file of ['solicitudCreationCallables', 'solicitudCreateQueueCallables
   const source = fs.readFileSync(path.join('functions/src/modules/iq', file + '.ts'), 'utf8');
   assert.doesNotMatch(source, /collection\("notas"\)/, file + ' must keep routine linkage in structured state');
 }
-console.log(JSON.stringify({ ok: true, checks: 46, externalActions: 0, suites: ['legacy note presentation', 'creator labels', 'María prompt', 'Telegram concise payloads', 'routine note producer guard'] }));
+console.log(JSON.stringify({ ok: true, checks: 46, externalActions: 0, suites: ['legacy note presentation', 'creator labels', 'Hugo prompt', 'Telegram concise payloads', 'routine note producer guard'] }));
