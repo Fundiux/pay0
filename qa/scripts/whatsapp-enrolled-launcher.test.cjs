@@ -24,4 +24,9 @@ test('rejects-missing-fields-and-bad-capture-type', () => {
   rejects({ baseUrl: undefined }, 'CONFIG_FIELD_REQUIRED:baseUrl');
   rejects({ captureGroups: 'yes' }, 'CONFIG_CAPTURE_GROUPS_BOOLEAN');
 });
+test('send-documents-off-by-default-and-boolean-only', () => {
+  assert.equal(loadConfig('c.json', read({})).sendDocuments, false);
+  assert.equal(loadConfig('c.json', read({ sendDocuments: true })).sendDocuments, true);
+  rejects({ sendDocuments: 'yes' }, 'CONFIG_SEND_DOCUMENTS_BOOLEAN');
+});
 console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases }));

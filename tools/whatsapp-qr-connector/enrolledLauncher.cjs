@@ -15,9 +15,10 @@ function loadConfig(file, readFile = fs.readFileSync) {
   if (!/^https:\/\//.test(raw.baseUrl)) throw Error("CONFIG_HTTPS_REQUIRED");
   if (raw.executablePath !== undefined && (typeof raw.executablePath !== "string" || !path.isAbsolute(raw.executablePath))) throw Error("CONFIG_ABSOLUTE_PATH_REQUIRED:executablePath");
   if (raw.captureGroups !== undefined && typeof raw.captureGroups !== "boolean") throw Error("CONFIG_CAPTURE_GROUPS_BOOLEAN");
+  if (raw.sendDocuments !== undefined && typeof raw.sendDocuments !== "boolean") throw Error("CONFIG_SEND_DOCUMENTS_BOOLEAN");
   const policyModule = raw.policyModule ? path.resolve(raw.policyModule) : path.resolve(__dirname, "../../functions/lib/modules/documentDelivery/whatsappConnectorPolicy.js");
   return { baseUrl: raw.baseUrl, pythonPath: raw.pythonPath, vaultPath: raw.vaultPath, sessionRoot: raw.sessionRoot,
-    executablePath: raw.executablePath, captureGroups: raw.captureGroups === true, policyModule };
+    executablePath: raw.executablePath, captureGroups: raw.captureGroups === true, sendDocuments: raw.sendDocuments === true, policyModule };
 }
 
 function argument(argv, name) {
@@ -53,8 +54,8 @@ async function main(argv) {
   const { startExplicitly } = require("./enrolledConnector.cjs");
   const runtime = await loadWorkerRuntime(options);
   fs.mkdirSync(config.sessionRoot, { recursive: true });
-  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, captureGroups: config.captureGroups });
-  console.log(JSON.stringify({ status: "RUNNING", bindingId: runtime.binding.id, captureGroups: config.captureGroups }));
+  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments });
+  console.log(JSON.stringify({ status: "RUNNING", bindingId: runtime.binding.id, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments }));
 }
 
 if (require.main === module) {
