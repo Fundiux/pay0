@@ -12,6 +12,7 @@ import { logActivityBatch } from "../../utils/logActivity";
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 import { facturamaCancellationBlock, PENDING_WINDOW_MS } from "./cancellationGuard";
 import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
+import { satPaymentForm } from "./paymentTerms";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -176,7 +177,7 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
       const tax = taxable ? money(subtotal * 0.16) : 0;
       return { ProductCode: item.productCode, Description: item.description, Unit: item.unit, UnitCode: item.unitCode, Quantity: item.quantity, UnitPrice: item.unitPrice, Subtotal: subtotal, TaxObject: item.taxObject, ...(taxable ? { Taxes: [{ Total: tax, Name: "IVA", Base: subtotal, Rate: 0.16, IsRetention: false }] } : {}), Total: money(subtotal + tax) };
     });
-    const payload = { NameId: 1, CfdiType: "I", ExpeditionPlace: issuer.expeditionPlace, Folio: folio, PaymentForm: invoice.paymentForm, PaymentMethod: invoice.paymentMethod, Currency: invoice.currency || "MXN", Issuer: { FiscalRegime: issuer.fiscalRegime, Rfc: issuer.rfc, Name: issuer.name }, Receiver: { Rfc: invoice.receiver.rfc, Name: clean(invoice.receiver.name, 254).toUpperCase(), CfdiUse: invoice.receiver.cfdiUse, FiscalRegime: invoice.receiver.fiscalRegime, TaxZipCode: invoice.receiver.postalCode }, Items: items, OrderNumber: clean(solicitud.ordenCompraFolio || solicitud.folio, 100), Observations: `${options.environment === "PRODUCTION" ? "Operación PAY0" : "Prueba sandbox PAY0"} ${folio}` };
+    const payload = { NameId: 1, CfdiType: "I", ExpeditionPlace: issuer.expeditionPlace, Folio: folio, PaymentForm: satPaymentForm(invoice.paymentMethod, invoice.paymentForm), PaymentMethod: invoice.paymentMethod, Currency: invoice.currency || "MXN", Issuer: { FiscalRegime: issuer.fiscalRegime, Rfc: issuer.rfc, Name: issuer.name }, Receiver: { Rfc: invoice.receiver.rfc, Name: clean(invoice.receiver.name, 254).toUpperCase(), CfdiUse: invoice.receiver.cfdiUse, FiscalRegime: invoice.receiver.fiscalRegime, TaxZipCode: invoice.receiver.postalCode }, Items: items, OrderNumber: clean(solicitud.ordenCompraFolio || solicitud.folio, 100), Observations: `${options.environment === "PRODUCTION" ? "Operación PAY0" : "Prueba sandbox PAY0"} ${folio}` };
     const replacementOfUuid = clean(solicitud.replacementOfUuid, 64).toUpperCase();
     if (solicitud.replacementOfSolicitudId && !/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/.test(replacementOfUuid)) {
       throw new HttpsError("failed-precondition", "La sustitucion no tiene UUID original valido para la relacion 04.");

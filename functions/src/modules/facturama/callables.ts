@@ -7,6 +7,7 @@ import { db, getActivityAdminId, getMyUser, requireAuth } from "../sharedCallabl
 import { assertPay0Issuer, PAY0_ROOT_ID } from "./issuerGuard";
 import { importCompanyInvoiceCatalogCore, resolveCompanyInvoiceConcept } from "./companyCatalog";
 import { finalizeGlobalSatCatalogImportCore, initGlobalSatCatalogUploadCore } from "./satGlobalCatalog";
+import { satPaymentForm } from "./paymentTerms";
 
 const FACTURAMA_SANDBOX_USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
 const FACTURAMA_SANDBOX_PASSWORD = defineSecret("FACTURAMA_SANDBOX_PASSWORD");
@@ -68,7 +69,7 @@ function normalizeDraft(data: any) {
   return {
     receiver,
     concepts,
-    paymentForm: text(data?.paymentForm || "03", 2),
+    paymentForm: satPaymentForm(data?.paymentMethod, text(data?.paymentForm || "03", 2)),
     paymentMethod: text(data?.paymentMethod || "PUE", 3).toUpperCase(),
     currency: text(data?.currency || "MXN", 3).toUpperCase(),
     subtotal,

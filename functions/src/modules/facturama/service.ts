@@ -2,6 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { resolveSolicitudFiscalClassification } from "./companyCatalog";
 import { belongsToPay0Dispatch, fiscalIssuerReason, loadPay0IssuerGuard, PAY0_DISPATCH_ID } from "./issuerGuard";
+import { satPaymentForm } from "./paymentTerms";
 
 const db = getFirestore();
 
@@ -223,8 +224,8 @@ export async function ensureAutomaticFacturamaDraftForSolicitud(input: {
       companyCatalogSha256: fiscal.companyCatalogSha256 || null,
       evaluatedAt: FieldValue.serverTimestamp(),
     },
-    paymentForm: text(solicitud.paymentForm || "03", 2),
     paymentMethod: text(solicitud.tipoFactura || solicitud.paymentMethod || "PUE", 3).toUpperCase() === "PPD" ? "PPD" : "PUE",
+    paymentForm: satPaymentForm(solicitud.tipoFactura || solicitud.paymentMethod, text(solicitud.paymentForm || "03", 2)),
     currency: "MXN",
     subtotal: amount,
     materialityOperationId: solicitud.materialityOperationId || null,
