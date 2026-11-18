@@ -4,7 +4,6 @@ import { formatDateTime24 } from "@/lib/dateTime";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
 import { httpsCallable } from "firebase/functions";
 import { Download, Trash2, UploadCloud, X } from "lucide-react";
 import { db, functions } from "@/lib/firebaseClient";
@@ -67,7 +66,6 @@ export default function DispersionDocsModal(props: {
   const [docs, setDocs] = useState<UploadRow[]>([]);
   const [docsError, setDocsError] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [deliveryBusyId, setDeliveryBusyId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [iqImportBusy, setIqImportBusy] = useState(false);
   const [iqImportMessage, setIqImportMessage] = useState("");
@@ -141,45 +139,6 @@ export default function DispersionDocsModal(props: {
     (SERVER_ONLY_DISPERSION_DOCUMENT_TYPES.has(String(doc.documentType || "")) && String(doc.status || "") === "REPLACED"),
   );
   const iqFolio = String(dispersion?.iqDispersionFolio || dispersion?.iqDispersionId || "").trim();
-
-
-  async function prepareDispersionWhatsapp(doc: any) {
-    if (!doc?.storagePath) {
-      alert("El comprobante no tiene archivo disponible para preparar envio.");
-      return;
-    }
-
-    const docId = String(doc.id || doc.storagePath || "active");
-    setDeliveryBusyId(docId);
-
-    try {
-      const dispersion = (props as any).dispersion || {};
-      const result = await prepareDocumentDeliveryJob({
-        sourceType: "DISPERSION_COMPROBANTE",
-        sourceId: String(dispersion.id || dispersion.dispersionId || ""),
-        clienteId: String(dispersion.clienteId || dispersion.clientId || ""),
-        clienteNombre: String(dispersion.clienteNombre || dispersion.clientName || ""),
-        targetLabel: dispersion.clienteNombre || dispersion.clientName ? String(dispersion.clienteNombre || dispersion.clientName) : "WhatsApp cliente",
-        documents: [
-          {
-            name: String(doc.originalName || doc.filename || doc.fileName || doc.storagePath.split("/").pop() || "comprobante-dispersion"),
-            fileName: String(doc.originalName || doc.filename || doc.fileName || doc.storagePath.split("/").pop() || "comprobante-dispersion"),
-            contentType: doc.contentType || null,
-            storagePath: doc.storagePath,
-            documentType: "COMPROBANTE_DISPERSION",
-            uploadId: doc.id ? String(doc.id) : undefined,
-          },
-        ],
-        notes: "Preparado desde comprobante de dispersion. No enviar automaticamente.",
-      });
-
-      alert("Envio WhatsApp preparado: " + result.message);
-    } catch (err: any) {
-      alert(err?.message || "No se pudo preparar el envio WhatsApp.");
-    } finally {
-      setDeliveryBusyId(null);
-    }
-  }
 
   const downloadDoc = async (doc: UploadRow) => {
     if (!doc.storagePath) {
@@ -379,15 +338,6 @@ export default function DispersionDocsModal(props: {
                               </span>
                             ) : (
                               <>
-                            <button
-                              type="button"
-                              onClick={() => prepareDispersionWhatsapp(doc)}
-                              disabled={deliveryBusyId === String(doc.id || doc.storagePath || "active") || !doc.storagePath}
-                              className="rounded-lg border border-emerald-500/40 px-3 py-1 text-[12px] text-emerald-200 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {deliveryBusyId === String(doc.id || doc.storagePath || "active") ? "Preparando..." : "Preparar WhatsApp"}
-                            </button>
-
                             <button
                               type="button"
                               onClick={() => deactivateDoc(doc)}
