@@ -19,6 +19,8 @@ const policy = require(lib + 'whatsappConnectorPolicy.js');
 const { queueAutomaticClientDelivery } = require(lib + 'whatsappAutomaticDelivery.js');
 const { processWhatsAppInvoiceAutomation } = require(lib + 'whatsappAutomationTrigger.js');
 const { releaseWhatsAppJobDeliveriesCore, resolveWhatsAppUncertainDelivery } = require(lib + 'whatsappReleaseCallables.js');
+const { setWhatsAppAutomationEnabled } = require(lib + 'whatsappAutomationCallables.js');
+const { mexicoDayStartMs } = require(lib + 'whatsappDeliveryDomain.js');
 const { createWorkerKey, createAuthorityTransport } = require('../../tools/whatsapp-qr-connector/connectorAuthority.cjs');
 const { runEnrolledConnector } = require('../../tools/whatsapp-qr-connector/enrolledConnector.cjs');
 
@@ -305,6 +307,71 @@ async function queueQuotation() {
     await fire(signedDoc.uploadId, signedDoc.row);
     const [row] = await jobsFor(signedDoc.solicitudId);
     assert.equal(row.sourceType, 'CONSTANCIA_FIRMADA_PDF');
+  });
+
+  // ---- Same-day catch-up: turning the switch OFF -> ON queues today's skipped documents only. ----
+  const setSwitch = enabled => setWhatsAppAutomationEnabled.run({ auth: { uid: ownerUid }, data: { enabled } });
+  const nowTs = () => admin.firestore.Timestamp.now();
+  const dayStart = mexicoDayStartMs(Date.now());
+  let sentToday, skippedQuote, skippedInvoice, yesterdayQuote;
+  await test('catch-up-off-to-on-queues-todays-skipped-documents', async () => {
+    // Sent today while ON: must never be queued again.
+    sentToday = await seedUpload('COTIZACION', { createdAt: nowTs() });
+    await fire(sentToday.uploadId, sentToday.row);
+    const [sentJob] = (await db.collection('documentDeliveryJobs').where('sourceId', '==', sentToday.solicitudId).get()).docs;
+    await sentJob.ref.update({ status: 'SENT' });
+
+    const off = await setSwitch(false);
+    assert.equal(off.data.enabled, false);
+    assert.equal(off.catchUp, null);
+
+    skippedQuote = await seedUpload('COTIZACION', { createdAt: nowTs() });
+    skippedInvoice = await seedUpload('FACTURA_PDF', { createdAt: nowTs() });
+    const xmlRow = await put(`${skippedInvoice.uploadId}-xml`, { ...skippedInvoice.row, documentType: 'FACTURA_XML', contentType: 'application/xml', storagePath: skippedInvoice.row.storagePath.replace('.pdf', '.xml') });
+    yesterdayQuote = await seedUpload('COTIZACION', { createdAt: admin.firestore.Timestamp.fromMillis(dayStart - 3600000) });
+    for (const [id, row] of [[skippedQuote.uploadId, skippedQuote.row], [skippedInvoice.uploadId, skippedInvoice.row], [`${skippedInvoice.uploadId}-xml`, xmlRow], [yesterdayQuote.uploadId, yesterdayQuote.row]]) await fire(id, row);
+    for (const doc of [skippedQuote, skippedInvoice, yesterdayQuote]) assert.equal((await jobsFor(doc.solicitudId)).length, 0, 'OFF queues nothing');
+
+    const on = await setSwitch(true);
+    assert.equal(on.data.enabled, true);
+    assert.deepEqual(on.catchUp, { queued: 2, already: 1, skipped: 0, truncated: false });
+    assert.match(on.message, /Se enviarán 2 documento\(s\) de hoy/);
+    const [quoteJob] = await jobsFor(skippedQuote.solicitudId);
+    assert.equal(quoteJob.sourceType, 'COTIZACION_PDF');
+    assert.equal(quoteJob.status, 'READY_FOR_SEND');
+    assert.equal(quoteJob.origin, 'AUTOMATIC');
+    const invoiceJobs = await jobsFor(skippedInvoice.solicitudId);
+    assert.equal(invoiceJobs.length, 1, 'PDF and XML make one invoice job');
+    assert.deepEqual(invoiceJobs[0].documents.map(doc => doc.documentType), ['FACTURA_PDF', 'FACTURA_XML']);
+    assert.equal(invoiceJobs[0].status, 'READY_FOR_SEND');
+  });
+
+  await test('catch-up-never-resends-todays-sent-document', async () => {
+    const jobs = await jobsFor(sentToday.solicitudId);
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].status, 'SENT');
+  });
+
+  await test('catch-up-never-queues-yesterdays-skipped-document', async () => {
+    assert.equal((await jobsFor(yesterdayQuote.solicitudId)).length, 0);
+  });
+
+  await test('catch-up-on-to-on-and-off-to-off-do-nothing', async () => {
+    const again = await setSwitch(true);
+    assert.equal(again.catchUp, null, 'ON -> ON runs no catch-up');
+    await setSwitch(false);
+    const offAgain = await setSwitch(false);
+    assert.equal(offAgain.catchUp, null, 'OFF -> OFF runs no catch-up');
+    for (const doc of [skippedQuote, skippedInvoice, sentToday]) assert.equal((await jobsFor(doc.solicitudId)).length, 1);
+  });
+
+  await test('catch-up-second-off-to-on-is-a-no-op', async () => {
+    const on = await setSwitch(true);
+    assert.deepEqual(on.catchUp, { queued: 0, already: 3, skipped: 0, truncated: false });
+    assert.equal(on.message, 'Automatizacion WhatsApp activada.');
+    for (const doc of [skippedQuote, skippedInvoice, sentToday]) assert.equal((await jobsFor(doc.solicitudId)).length, 1);
+    assert.equal((await jobsFor(yesterdayQuote.solicitudId)).length, 0);
+    assert.equal((await job((await db.collection('documentDeliveryJobs').where('sourceId', '==', skippedQuote.solicitudId).get()).docs[0].id)).status, 'READY_FOR_SEND');
   });
 
   console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases, emulator: true, realProviderRequests: 0 }));

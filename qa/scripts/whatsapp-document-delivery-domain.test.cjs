@@ -148,4 +148,22 @@ check('policy-accepts-signed-claim-and-report-only', () => {
   assert.equal(d.DOCUMENT_SENDER_AGENT_ID, 'hugo');
 });
 
+// ---- same-day catch-up: Mexico City calendar day only ----
+check('mexico-day-start-and-same-day-catch-up', () => {
+  // 2026-11-19 10:00 in Mexico City (UTC-6) opens at 2026-11-19 06:00 UTC.
+  const start = Date.UTC(2026, 10, 19, 6, 0, 0);
+  assert.equal(d.mexicoDayStartMs(Date.UTC(2026, 10, 19, 16, 0, 0)), start);
+  assert.equal(d.mexicoDayStartMs(start), start, 'midnight belongs to its own day');
+  assert.equal(d.mexicoDayStartMs(start - 1), start - 24 * 3600 * 1000, 'one ms before midnight is the previous day');
+  assert.equal(d.mexicoDayStartMs(Date.UTC(2026, 10, 20, 5, 59, 59)), start, '23:59 Mexico is still the same day');
+  const at = (ms) => ({ toMillis: () => ms });
+  const quote = (over) => ready({ entityType: 'solicitudes', documentType: 'COTIZACION', ...over });
+  assert.equal(d.sameDayCatchUpSourceType(quote({ createdAt: at(start + 3600000) }), start), 'COTIZACION_PDF');
+  assert.equal(d.sameDayCatchUpSourceType(quote({ createdAt: at(start - 3600000) }), start), null, 'yesterday is never caught up');
+  assert.equal(d.sameDayCatchUpSourceType(quote({ createdAt: at(start - 3600000), finalizedAt: at(start + 60000) }), start), 'COTIZACION_PDF', 'finalized today counts as today');
+  assert.equal(d.sameDayCatchUpSourceType(quote({ createdAt: at(start + 25 * 3600000) }), start), null, 'tomorrow is not today');
+  assert.equal(d.sameDayCatchUpSourceType(quote({}), start), null, 'no time, no catch-up');
+  assert.equal(d.sameDayCatchUpSourceType(ready({ entityType: 'pagos', documentType: 'COMPROBANTE_PAGO', createdAt: at(start + 1) }), start), null, 'pago receipts are not sent');
+});
+
 console.log(`whatsapp-document-delivery-domain: ${checks} checks passed`);

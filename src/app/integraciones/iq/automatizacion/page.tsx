@@ -607,6 +607,7 @@ export default function IqAutomationPage() {
                       Envio automatico de documentos por WhatsApp.
                       El control es independiente del Master IQ.
                       Si está apagada, los documentos no se envían.
+                      Al encenderlo se envían los documentos de hoy que quedaron pendientes.
                     </p>
                   </div>
 

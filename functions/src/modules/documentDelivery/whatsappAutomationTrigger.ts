@@ -10,6 +10,8 @@ import {
 import {
   buildDeliveryCaption,
   deliverySource,
+  mexicoDayStartMs,
+  sameDayCatchUpSourceType,
   sameUploadVersion,
   sourceTypeForUpload,
   type DeliverySourceType,
@@ -140,6 +142,75 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
     amount: firstAmount(solicitud.total, solicitud.monto, solicitud.amount), dateMs };
 }
 
+/** Queues a built package exactly as the live trigger does (same documents, caption and job identity). */
+async function queuePackage(sourceType: DeliverySourceType, rootId: string, pkg: DeliveryPackage, options: { onlyNewJob?: boolean } = {}): Promise<string> {
+  const documents = packageDocuments(sourceType, pkg.rows, pkg.dateMs);
+  return queueAutomaticClientDelivery({
+    rootId,
+    sourceType,
+    sourceId: pkg.sourceId,
+    clienteId: pkg.clienteId,
+    clienteNombre: pkg.clienteNombre,
+    documents,
+    caption: buildDeliveryCaption({ sourceType, counterpartyName: pkg.counterpartyName, amount: pkg.amount, dateMs: pkg.dateMs, fileName: documents[0]?.fileName }),
+    notes: `Envio automatico: ${deliverySource(sourceType).label}.`,
+    onlyNewJob: options.onlyNewJob === true,
+  });
+}
+
+const CATCHUP_SCAN_LIMIT = 500;
+const CATCHUP_QUEUED = ["RELEASED", "WAITING_DESTINATION", "NOT_RELEASED"];
+const CATCHUP_ALREADY = ["ALREADY_SENT", "ALREADY_IN_PROGRESS", "ALREADY_EXISTS"];
+
+export type WhatsAppCatchUpSummary = { queued: number; already: number; skipped: number; truncated: boolean };
+
+/**
+ * Switch turned OFF -> ON: queues the client documents that became READY today (America/Mexico_City)
+ * and have no delivery job yet. Earlier days are never queued. A document whose job already exists
+ * (sent, queued, failed or prepared by hand) is left alone, so repeating the catch-up is a no-op.
+ */
+export async function queueSameDayWhatsAppCatchUp(rootId: string, nowMs = Date.now()): Promise<WhatsAppCatchUpSummary> {
+  const summary: WhatsAppCatchUpSummary = { queued: 0, already: 0, skipped: 0, truncated: false };
+  if (!rootId) return summary;
+
+  const dayStartMs = mexicoDayStartMs(nowMs);
+  const since = admin.firestore.Timestamp.fromMillis(dayStartMs);
+  // Single-field range queries (automatic indexes); the root is filtered in memory.
+  const snaps = await Promise.all(["createdAt", "finalizedAt"].map((field) =>
+    db.collection("uploads").where(field, ">=", since).orderBy(field).limit(CATCHUP_SCAN_LIMIT).get()));
+  summary.truncated = snaps.some((snap) => snap.size >= CATCHUP_SCAN_LIMIT);
+
+  const rows = new Map<string, UploadRow>();
+  for (const snap of snaps) {
+    for (const doc of snap.docs) rows.set(doc.id, { id: doc.id, ...((doc.data() || {}) as Record<string, any>) });
+  }
+
+  const packagesSeen = new Set<string>();
+  for (const row of rows.values()) {
+    if (cleanText(row.rootId) !== rootId) continue;
+    const sourceType = sameDayCatchUpSourceType(row, dayStartMs);
+    if (!sourceType) continue;
+    try {
+      const pkg = await buildPackage(sourceType, row);
+      if (!pkg) { summary.skipped += 1; continue; }
+      // The PDF and the XML of one invoice build the same package: queue it once.
+      const packageKey = [sourceType, pkg.sourceId, ...pkg.rows.map((item) => item.id).sort()].join("|");
+      if (packagesSeen.has(packageKey)) continue;
+      packagesSeen.add(packageKey);
+      const outcome = await queuePackage(sourceType, rootId, pkg, { onlyNewJob: true });
+      if (CATCHUP_QUEUED.includes(outcome)) summary.queued += 1;
+      else if (CATCHUP_ALREADY.includes(outcome)) summary.already += 1;
+      else summary.skipped += 1;
+    } catch (error: any) {
+      summary.skipped += 1;
+      console.warn("[WHATSAPP AUTO] CATCHUP PAQUETE NO ENCOLADO", sourceType, error?.code || "ERROR");
+    }
+  }
+
+  console.log(`[WHATSAPP AUTO] CATCHUP queued=${summary.queued} already=${summary.already} skipped=${summary.skipped}${summary.truncated ? " truncated=true" : ""}`);
+  return summary;
+}
+
 // Every client document that lives in `uploads` (invoice, payment complement, dispersion receipt,
 // quotation, signed receipt certificate) is queued here as soon as its package is READY.
 export const processWhatsAppInvoiceAutomation =
@@ -177,16 +248,6 @@ export const processWhatsAppInvoiceAutomation =
         return;
       }
 
-      const documents = packageDocuments(sourceType, pkg.rows, pkg.dateMs);
-      await queueAutomaticClientDelivery({
-        rootId,
-        sourceType,
-        sourceId: pkg.sourceId,
-        clienteId: pkg.clienteId,
-        clienteNombre: pkg.clienteNombre,
-        documents,
-        caption: buildDeliveryCaption({ sourceType, counterpartyName: pkg.counterpartyName, amount: pkg.amount, dateMs: pkg.dateMs, fileName: documents[0]?.fileName }),
-        notes: `Envio automatico: ${deliverySource(sourceType).label}.`,
-      });
+      await queuePackage(sourceType, rootId, pkg);
     }
   );

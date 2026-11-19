@@ -257,7 +257,8 @@ export const getWhatsAppAutomationConfig = onCall(
 export const setWhatsAppAutomationEnabled = onCall(
   {
     cors: true,
-    timeoutSeconds: 30,
+    // Turning it on also queues today's skipped documents.
+    timeoutSeconds: 120,
     memory: "256MiB",
   },
   async (request) => {
@@ -277,16 +278,33 @@ export const setWhatsAppAutomationEnabled = onCall(
       .collection("whatsappAutomationConfigs")
       .doc(auth.rootId);
 
-    await configRef.set(
-      {
-        rootId: auth.rootId,
-        enabled,
-        updatedBy: auth.uid,
-        updatedByName: actorName(auth),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    // Read and write in one transaction so only a real OFF -> ON change triggers the catch-up.
+    const wasEnabled = await db.runTransaction(async (tx) => {
+      const previous = await tx.get(configRef);
+      tx.set(
+        configRef,
+        {
+          rootId: auth.rootId,
+          enabled,
+          updatedBy: auth.uid,
+          updatedByName: actorName(auth),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return previous.exists && previous.get("enabled") === true;
+    });
+
+    // OFF -> ON: queue the documents of today (Mexico City) that were skipped while it was off.
+    let catchUp: { queued: number; already: number; skipped: number; truncated: boolean } | null = null;
+    if (enabled && !wasEnabled) {
+      try {
+        const { queueSameDayWhatsAppCatchUp } = await import("./whatsappAutomationTrigger");
+        catchUp = await queueSameDayWhatsAppCatchUp(auth.rootId);
+      } catch (error: any) {
+        console.warn("[WHATSAPP AUTO] CATCHUP FALLO", error?.code || "ERROR");
+      }
+    }
 
     await logActivity({
       event: enabled
@@ -312,6 +330,7 @@ export const setWhatsAppAutomationEnabled = onCall(
 
       extra: {
         enabled,
+        ...(catchUp ? { catchUpQueued: catchUp.queued, catchUpAlready: catchUp.already, catchUpSkipped: catchUp.skipped } : {}),
       },
     }).catch(() => undefined);
 
@@ -321,8 +340,11 @@ export const setWhatsAppAutomationEnabled = onCall(
     return {
       ok: true,
       data,
+      catchUp,
       message: enabled
-        ? "Automatizacion WhatsApp activada."
+        ? catchUp && catchUp.queued > 0
+          ? `Automatizacion WhatsApp activada. Se enviarán ${catchUp.queued} documento(s) de hoy que quedaron pendientes.`
+          : "Automatizacion WhatsApp activada."
         : "Automatizacion WhatsApp desactivada.",
     };
   },

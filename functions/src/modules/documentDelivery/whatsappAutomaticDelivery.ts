@@ -20,6 +20,8 @@ export type AutomaticDeliveryInput = {
   textBody?: string | null;
   linkToken?: string | null;
   notes: string;
+  /** Same-day catch-up: only a brand-new job is created and released; an existing job (sent, queued, failed or manual) is left alone. */
+  onlyNewJob?: boolean;
 };
 
 /** Creates (once) and releases the automatic delivery job. Does nothing while the master switch is OFF. */
@@ -67,6 +69,8 @@ export async function queueAutomaticClientDelivery(input: AutomaticDeliveryInput
 
   // Misma version ya enviada. AUTOMATIC nunca hace forceResend.
   if (prepared.action === "REQUIRES_CONFIRMATION") return "ALREADY_SENT";
+
+  if (input.onlyNewJob && prepared.action !== "CREATED") return "ALREADY_EXISTS";
 
   // A job prepared by hand is released too; anything already queued or in flight is left alone.
   if (prepared.action === "ALREADY_IN_PROGRESS" && prepared.status !== "READY_FOR_MANUAL_SEND") return "ALREADY_IN_PROGRESS";

@@ -95,6 +95,48 @@ export function sameUploadVersion(before: Record<string, any> | null | undefined
 }
 
 // ---------------------------------------------------------------------------
+// Same-day catch-up: when the switch goes OFF -> ON, today's skipped documents are queued.
+// ---------------------------------------------------------------------------
+
+const MEXICO_TIME_ZONE = "America/Mexico_City";
+
+function mexicoOffsetMs(utcMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: MEXICO_TIME_ZONE, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(utcMs));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value || 0);
+  const wall = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour") % 24, part("minute"), part("second"));
+  return wall - Math.floor(utcMs / 1000) * 1000;
+}
+
+/** Midnight that opens the America/Mexico_City calendar day containing `nowMs`, as epoch ms. */
+export function mexicoDayStartMs(nowMs: number): number {
+  const [y, m, d] = new Intl.DateTimeFormat("en-CA", { timeZone: MEXICO_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(nowMs)).split("-").map(Number);
+  const wallMidnight = Date.UTC(y, m - 1, d);
+  let start = wallMidnight - mexicoOffsetMs(wallMidnight);
+  start = wallMidnight - mexicoOffsetMs(start);
+  return start;
+}
+
+function timeMs(value: any): number {
+  if (typeof value?.toMillis === "function") return Number(value.toMillis()) || 0;
+  if (value instanceof Date) return value.getTime();
+  return 0;
+}
+
+/** When the upload became a client document: finalized time, else creation time (0 when unknown). */
+export function uploadReadyAtMs(row: Record<string, any> | null | undefined): number {
+  return timeMs(row?.finalizedAt) || timeMs(row?.createdAt);
+}
+
+/** The source type of an upload that became READY on the Mexico City day opened by `dayStartMs`, else null. */
+export function sameDayCatchUpSourceType(row: Record<string, any> | null | undefined, dayStartMs: number): DeliverySourceType | null {
+  const readyAt = uploadReadyAtMs(row);
+  if (!readyAt || readyAt < dayStartMs || mexicoDayStartMs(readyAt) !== dayStartMs) return null;
+  return sourceTypeForUpload(row);
+}
+
+// ---------------------------------------------------------------------------
 // White-label texts. Built only from client-facing data, never PAY0, folios or despachos.
 // ---------------------------------------------------------------------------
 
