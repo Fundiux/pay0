@@ -18,7 +18,8 @@ import { assertPay0Issuer, belongsToPay0Dispatch, PAY0_DISPATCH_ID } from "../fa
 import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
 import { saveComplementDocuments } from "./complementDocuments";
 import { SafetyRuntime, CONSERVATIVE_POLICY, markProtectedEffectIntent, confirmProtectedEffect,
-  reportProtectedFailure, classifyFailure, type TechnicalOrigin, type Result } from "../automationSafety/runtime";
+  reportProtectedFailure, reportProtectedDeferral, classifyFailure, type TechnicalOrigin, type Result } from "../automationSafety/runtime";
+import { REP_DAILY_BATCH_ADMISSIONS, isRetryableComplementCode, nextDailyCheck, transientComplementFailure } from "./complementRetryPolicy";
 
 const jobs = () => db.collection("paymentComplementJobs");
 const errorCode = (e: any) => /^[A-Z0-9_]+$/.test(e?.message || "") ? e.message : "REP_OPERATION_FAILED";
@@ -272,14 +273,17 @@ export async function markIqSending(id: string) {
   });
 }
 
-export async function executeComplement(id: string, adapter = providers) {
-  const ref = jobs().doc(id);
+export type ExecuteOptions = { now?: Date; dailyDay?: string };
+export async function executeComplement(id: string, adapter = providers, options: ExecuteOptions = {}) {
+  const ref = jobs().doc(id), now = options.now || new Date();
   const job = await db.runTransaction(async tx => {
     const snap = await tx.get(ref), row = snap.data();
     if (!row || !["QUEUED", "PAUSED"].includes(row.status)) return null;
     const config = (await tx.get(db.doc(`paymentComplementConfigs/${row.rootId}`))).data();
     if (row.provider !== "IQ" && config?.facturamaEnabled !== true) return null;
-    tx.update(ref, { status: "PREPARING", startedAt: FieldValue.serverTimestamp() }); return { ...row, id } as any;
+    // The daily review executes a paused job at most once per Mexico day.
+    tx.update(ref, { status: "PREPARING", startedAt: FieldValue.serverTimestamp(),
+      ...(options.dailyDay ? { lastDailyExecutionDay: options.dailyDay } : {}) }); return { ...row, id } as any;
   });
   if (!job) return;
   let sending = false;
@@ -344,8 +348,17 @@ export async function executeComplement(id: string, adapter = providers) {
       await updateJob(id, { status: "PAUSED", gateReason: "REP_SOURCE_CANCELLATION_PENDING" }, "La solicitud tiene una cancelación en curso; el complemento espera su resultado.");
       return;
     }
-    reportProtectedFailure(error);
     const latest = (await ref.get()).data();
+    // Nothing reached the provider: a transient failure waits for the next daily
+    // review instead of stopping. After a send starts this never applies.
+    const transient = sending || latest?.cfdiId ? null : transientComplementFailure(error);
+    if (transient) {
+      reportProtectedDeferral(error);
+      await updateJob(id, { status: "PAUSED", gateReason: transient, error: null, nextCheckAt: nextDailyCheck(now) },
+        `Complemento en espera por ${transient} antes de enviar; Hugo lo reintentará en la siguiente revisión diaria.`);
+      return;
+    }
+    reportProtectedFailure(error);
     const retryableBeforeSend = ["RETRY_WAIT", "DEFERRED"].includes(classifyFailure(error).result);
     const rejection = (error as any)?.observation?.operationalError || null;
     await updateJob(id, { status: latest?.cfdiId ? "ISSUED_PENDING_FILES" : sending ? "UNKNOWN" : retryableBeforeSend ? "PAUSED" : "BLOCKED", error: errorCode(error), gateReason: null, ...(rejection ? { iqRejection: rejection } : {}) },
@@ -388,11 +401,14 @@ async function markReceived(id: string, rows: any[]) {
   });
 }
 
+// A lookup stopped by a transient failure before this fix is looked up again;
+// a genuine exception (mismatch, permission, configuration) stays stopped.
+export const lookupStopped = (row: any) => row?.bReadState === "EXCEPTION" && !isRetryableComplementCode(row?.error);
 export async function checkComplementDaily(id: string, now = new Date(), adapter = providers): Promise<Result> {
   const ref = jobs().doc(id), day = dayMexico(now);
   const current = (await ref.get()).data();
   const currentEligibilityLookup = current?.status === "BLOCKED" && current?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
-  if (current?.bReadState === "EXCEPTION") return "QUARANTINED";
+  if (lookupStopped(current)) return "QUARANTINED";
   if (current?.nextCheckAt && millis(current.nextCheckAt) > now.getTime()) return "DEFERRED";
   if (current?.provider === "IQ" && (currentEligibilityLookup || ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(current.status))) {
     const gate = await inspectIqComplementGate(current, "LOOKUP");
@@ -401,7 +417,7 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
   const job = await db.runTransaction(async tx => {
     const row = (await tx.get(ref)).data();
     const eligibilityLookup = row?.status === "BLOCKED" && row?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
-    if (!row || row.bReadState === "EXCEPTION" || (!eligibilityLookup && !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status)) || row.lastCheckDay === day ||
+    if (!row || lookupStopped(row) || (!eligibilityLookup && !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(row.status)) || row.lastCheckDay === day ||
         row.nextCheckAt && millis(row.nextCheckAt) > now.getTime()) return null;
     tx.update(ref, { lastCheckDay: day, lastCheckedAt: Timestamp.fromDate(now) }); return { ...row, id } as any;
   });
@@ -430,7 +446,9 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
       // Daily scheduler is at 19:00; a strict +24h from its actual start
       // could miss the next run by seconds and defer B for 48 hours.
       const nextCheckAt = Timestamp.fromMillis(now.getTime() + 12 * 60 * 60 * 1000);
-      await updateJob(id, { nextCheckAt, repAttachmentStatus: "REP_ATTACHMENT_NOT_AVAILABLE", bReadState: "WAITING_B" },
+      await updateJob(id, { nextCheckAt, repAttachmentStatus: "REP_ATTACHMENT_NOT_AVAILABLE", bReadState: "WAITING_B", lookupRetryReason: null,
+        // A row revived from a transient stop no longer carries that stop.
+        ...(job.bReadState === "EXCEPTION" && isRetryableComplementCode(job.error) ? { error: null } : {}) },
         "IQ todavía no ofrece un REP adjunto; Hugo volverá a consultar después de la siguiente revisión programada.");
       result = "SUCCEEDED"; // The daily read completed; the financial REP remains pending.
       if (job.status === "REQUESTED") {
@@ -446,8 +464,19 @@ export async function checkComplementDaily(id: string, now = new Date(), adapter
     }
   } catch (error) {
     if (errorCode(error) === "REP_SOURCE_CANCELLATION_PENDING") return "DEFERRED";
-    result = "QUARANTINED"; reportProtectedFailure(error); await updateJob(id, { error: errorCode(error), bReadState: "EXCEPTION", nextCheckAt: null },
-    `Revisión B detenida por ${errorCode(error)}; resultado de solicitud C conservado, sin reenvío.`); }
+    // A lookup never sends anything, so a transient failure is simply looked up
+    // again at the next daily review. The C request outcome is untouched.
+    const transient = transientComplementFailure(error);
+    if (transient) {
+      reportProtectedDeferral(error);
+      await updateJob(id, { nextCheckAt: nextDailyCheck(now), bReadState: "RETRY_PENDING", lookupRetryReason: transient },
+        `La consulta diaria a IQ no se completó (${transient}); Hugo volverá a consultar en la siguiente revisión diaria, sin reenvío.`);
+      result = "DEFERRED";
+    } else {
+      result = "QUARANTINED"; reportProtectedFailure(error); await updateJob(id, { error: errorCode(error), bReadState: "EXCEPTION", nextCheckAt: null },
+      `Revisión B detenida por ${errorCode(error)}; resultado de solicitud C conservado, sin reenvío.`);
+    }
+  }
   if (!job.overdueAlertedAt && overdue(job.requestedAt, now)) await updateJob(id, { overdueAlertedAt: Timestamp.fromDate(now) }, `El complemento ${job.provider === "IQ" ? `del depósito IQ ${job.depositId}` : `de la aplicación ${job.applicationId}`} lleva 5 días sin recibirse. ${job.provider === "IQ" ? "Pregunta por él en el grupo de WhatsApp de IQ" : "Solicítalo por WhatsApp al proveedor"}; PAY0 continuará la revisión diaria. No se envió WhatsApp automáticamente.`);
   return result;
 }
@@ -470,7 +499,7 @@ export async function protectedEnqueueComplement(applicationId: string, technica
     value => ({ evidence: value.evidence, reason: value.reason }));
 }
 
-export async function protectedExecuteComplement(id: string, technicalOrigin: TechnicalOrigin = "TRIGGER", adapter = providers) {
+export async function protectedExecuteComplement(id: string, technicalOrigin: TechnicalOrigin = "TRIGGER", adapter = providers, options: ExecuteOptions = {}) {
   const job = (await jobs().doc(id).get()).data();
   if (!job || !["QUEUED", "PAUSED"].includes(job.status)) return;
   // Gate-only wakeups do not consume execution attempts or provider capacity.
@@ -479,8 +508,10 @@ export async function protectedExecuteComplement(id: string, technicalOrigin: Te
   return safety.run({ rootId: job.rootId, process: "REP", partition: job.provider,
     operationType: "REP_EXECUTE", operationId: id, idempotencyKey: job.requestIdentity || id,
     origin: "AUTOMATIC", technicalOrigin, externalTarget: job.provider,
+    // The daily review spends from a batch budget below the volume breaker.
+    ...(technicalOrigin === "SCHEDULER" ? { admissionCeiling: REP_DAILY_BATCH_ADMISSIONS } : {}),
   }, async () => {
-    await executeComplement(id, adapter);
+    await executeComplement(id, adapter, options);
     const latest = (await jobs().doc(id).get()).data();
     return latest?.status === "UNKNOWN" ? "OUTCOME_UNKNOWN" : latest?.status === "PAUSED" ? "DEFERRED"
       : latest?.status === "BLOCKED" ? "QUARANTINED"
@@ -491,11 +522,11 @@ export async function protectedExecuteComplement(id: string, technicalOrigin: Te
 
 export async function protectedCheckComplementDaily(id: string, now = new Date(), adapter = providers) {
   const job = (await jobs().doc(id).get()).data();
-  if (!job || job.bReadState === "EXCEPTION" || job.lastCheckDay === dayMexico(now) ||
+  if (!job || lookupStopped(job) || job.lastCheckDay === dayMexico(now) ||
       !["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES", "BLOCKED"].includes(job.status)) return;
   return safety.run({ rootId: job.rootId, process: "REP", partition: job.provider,
     operationType: "REP_RECONCILE", operationId: id, idempotencyKey: `${id}:${dayMexico(now)}`,
-    origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: job.provider,
+    origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: job.provider, admissionCeiling: REP_DAILY_BATCH_ADMISSIONS,
   }, () => checkComplementDaily(id, now, adapter), value => value);
 }
 
@@ -520,68 +551,177 @@ export const enqueueAutomaticPaymentComplement = onDocumentWritten({ document: "
 export const executeAutomaticPaymentComplement = onDocumentWritten({ document: "paymentComplementJobs/{jobId}", region: "us-central1", retry: true, maxInstances: 1, concurrency: 1, timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS }, async event => {
   if (event.data?.after.data()?.status === "QUEUED") await protectedExecuteComplement(event.params.jobId);
 });
-// Stays under the safety circuit, which opens at 20 admissions in 10 minutes.
+// Each root's REP safety scope opens its breaker at 20 admissions in 10 minutes
+// and then needs a manual reset. A daily batch admits at most
+// REP_DAILY_BATCH_ADMISSIONS per scope, enforced inside the safety claim, so the
+// breaker is never reached and the execution trigger keeps some room. Three
+// batches 15 minutes apart (19:00, 19:15, 19:30) give every scope a fresh window.
+// One owner activation requeues at most this many paused jobs.
 const REP_DAILY_MAX_ADMITTED = 15;
 const REP_DAILY_SPACING_MS = 1100;
 const REP_OPEN_STATUSES = ["QUEUED", "PAUSED", "PREPARING", "SENDING", "REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES", "BLOCKED"];
+const REP_LOOKUP_STATUSES = ["REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"];
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const isEligibilityLookup = (job: any) => job?.status === "BLOCKED" && job?.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
+// BLOCKED before this fix by a transient failure, with no trace of any send.
+const isResumableBlocked = (job: any) => job?.status === "BLOCKED" && isRetryableComplementCode(job.error) &&
+  !job.attemptedAt && !job.requestedAt && !job.cfdiId;
+export const repScopeKey = (rootId: string, provider: string) => `${rootId}:${provider}`;
+
+export type RepDailyAction = "STALE" | "EXECUTE" | "RESUME" | "LOOKUP";
+/** What the daily review does with one open job now, or null when it is not due. */
+export function repDailyAction(job: any, now: Date, day = dayMexico(now), clock = Date.now()): RepDailyAction | null {
+  if (["PREPARING", "SENDING"].includes(job?.status)) return clock - millis(job.startedAt) > 15 * 60000 ? "STALE" : null;
+  const due = !job?.nextCheckAt || millis(job.nextCheckAt) <= now.getTime();
+  if (job?.status === "QUEUED") return "EXECUTE";
+  if (job?.status === "PAUSED") return due && job.lastDailyExecutionDay !== day ? "EXECUTE" : null;
+  if (isResumableBlocked(job)) return due ? "RESUME" : null;
+  if ((REP_LOOKUP_STATUSES.includes(job?.status) || isEligibilityLookup(job)) && !lookupStopped(job) && job.lastCheckDay !== day)
+    return due ? "LOOKUP" : null;
+  return null;
+}
+/** Oldest next check first; a job never checked has no next check and goes first. */
+export function orderDueJobs<T extends { id: string; job: any }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => millis(a.job.nextCheckAt) - millis(b.job.nextCheckAt) ||
+    millis(a.job.lastCheckedAt) - millis(b.job.lastCheckedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+async function resumeTransientBlockedJob(id: string) {
+  const ref = jobs().doc(id);
+  return db.runTransaction(async tx => {
+    const job = (await tx.get(ref)).data();
+    if (!job || !isResumableBlocked(job)) return false;
+    const linked = await tx.get(db.collection("paymentComplementRequests").where("automationJobId", "==", id));
+    if (linked.docs.some(row => row.data().rootId !== job.rootId || row.data().externalRequestSent === true || row.data().requestedAt ||
+        ["REQUESTED", "RECEIVED", "REQUEST_STATE_UNKNOWN", "SENDING"].includes(row.data().status))) return false;
+    // Refuses (throws) when the safety record shows an attempted provider effect.
+    await safety.releaseUnsentRepair(tx, { rootId: job.rootId, process: "REP", partition: job.provider,
+      operationType: "REP_EXECUTE", operationId: id, idempotencyKey: job.requestIdentity || id,
+      origin: "AUTOMATIC", technicalOrigin: "SCHEDULER" }, "SYSTEM", "TRANSIENT_STOP_RETRY");
+    tx.update(ref, { status: "PAUSED", gateReason: job.error, error: null, nextCheckAt: null, updatedAt: FieldValue.serverTimestamp() });
+    for (const row of linked.docs) tx.update(row.ref, { automationStatus: "PAUSED", automationError: null, automationGateReason: job.error,
+      updatedAt: FieldValue.serverTimestamp() });
+    logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId: job.rootId, actorUid: "SYSTEM", actorRole: "system",
+      referenceId: id, referenceType: "complementoPago",
+      description: `El complemento detenido por ${job.error} antes de enviar vuelve a la revisión diaria; no hubo envío previo.` });
+    return true;
+  });
+}
+
+const safeCode = (value: unknown) => { const code = String(value ?? ""); return /^[A-Z0-9_]{1,80}$/.test(code) ? code : code ? "OTHER" : "NONE"; };
+const bump = (map: Record<string, number>, key: unknown, by = 1) => { const code = safeCode(key); map[code] = (map[code] || 0) + by; };
+const cleanCounts = (map: Record<string, number>) => { const out: Record<string, number> = {}; for (const [key, value] of Object.entries(map)) bump(out, key, Number(value) || 0); return out; };
+export type RepDailyRun = { processed: number; deferredForBudget: number; deferredForTime: number; notAdmitted: Record<string, number>;
+  errors: number; followups: Record<string, number> };
+/** One log line per daily run: counts by status and reason only, never IDs, folios, names or amounts. */
+export function buildRepDailySummary(rows: any[], run: RepDailyRun, day: string, batch: string) {
+  const paused: Record<string, number> = {}, blocked: Record<string, number> = {};
+  const counts = { queued: 0, inFlight: 0, requestedWaiting: 0, lookupRetry: 0, unknown: 0, review: 0, exception: 0 };
+  for (const job of rows) {
+    if (job?.bReadState === "RETRY_PENDING") counts.lookupRetry++;
+    if (lookupStopped(job)) counts.exception++;
+    else if (job?.status === "UNKNOWN") counts.unknown++;
+    else if (["REQUESTED", "ISSUED_PENDING_FILES"].includes(job?.status)) counts.requestedWaiting++;
+    else if (job?.status === "PAUSED") bump(paused, job.gateReason || job.error);
+    else if (job?.status === "BLOCKED") bump(blocked, job.error);
+    else if (job?.status === "REVIEW_REQUIRED") counts.review++;
+    else if (job?.status === "QUEUED") counts.queued++;
+    else if (["PREPARING", "SENDING"].includes(job?.status)) counts.inFlight++;
+  }
+  return { event: "REP_DAILY_SUMMARY", day: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "NONE", batch: /^\d{2}:\d{2}$/.test(batch) ? batch : "NONE",
+    open: rows.length, ...counts, paused, blocked,
+    processed: run.processed, deferredForBudget: run.deferredForBudget, deferredForTime: run.deferredForTime,
+    notAdmitted: cleanCounts(run.notAdmitted), errors: run.errors, followups: cleanCounts(run.followups) };
+}
+// Mexico wall-clock slot of this batch (19:00, 19:15, 19:30): one run per slot.
+export const batchMexico = (date: Date) => {
+  const [hour, minute] = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(date).split(":").map(Number);
+  return `${String(hour).padStart(2, "0")}:${String(Math.floor(minute / 15) * 15).padStart(2, "0")}`;
+};
+
+async function openJobs() {
+  const rows: { id: string; job: any }[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    let query = jobs().where("status", "in", [...REP_OPEN_STATUSES, "REVIEW_REQUIRED"]).orderBy(FieldPath.documentId()).limit(200);
+    if (cursor) query = query.startAfter(cursor);
+    const snap = await query.get();
+    for (const doc of snap.docs) rows.push({ id: doc.id, job: doc.data() });
+    if (snap.size < 200) break;
+    cursor = snap.docs[snap.size - 1].id;
+  }
+  return rows;
+}
 
 export async function runProtectedRepDaily(now = new Date(), adapter = providers) {
-  return safety.run({ rootId: "SYSTEM", process: "REP", partition: "SCAN", operationType: "REP_DAILY",
-    operationId: dayMexico(now), idempotencyKey: dayMexico(now), origin: "AUTOMATIC", technicalOrigin: "SCHEDULER",
+  const day = dayMexico(now), batch = batchMexico(now), key = `${day}:${batch}`;
+  const run: RepDailyRun = { processed: 0, deferredForBudget: 0, deferredForTime: 0, notAdmitted: {}, errors: 0, followups: {} };
+  const outcome = await safety.run({ rootId: "SYSTEM", process: "REP", partition: "SCAN", operationType: "REP_DAILY",
+    operationId: key, idempotencyKey: key, origin: "AUTOMATIC", technicalOrigin: "SCHEDULER",
     policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 100 },
   }, async () => {
   const checkpointRef = db.doc("automationSafetyCheckpoints/rep-daily");
   const checkpoint = (await checkpointRef.get()).data() || {};
   const deadline = Date.now() + 480_000;
+  const exhausted = new Set<string>();
   // Revisit persisted local intents too: a process kill may have prevented the
   // original event from creating a job. Activation still prohibits backfill POSTs.
   let importedQuery = db.collection("pagoAplicaciones").orderBy(FieldPath.documentId()).limit(50);
   if (checkpoint.importedCursor) importedQuery = importedQuery.startAfter(checkpoint.importedCursor);
   const imported = await importedQuery.get();
   for (const row of imported.docs) {
-    if (Date.now() >= deadline) return;
+    if (Date.now() >= deadline) break;
     try { if (row.data().status === "APLICADA" && row.data().invoiceType === "PPD") await protectedEnqueueComplement(row.id, "SCHEDULER"); }
     catch (error) { console.error("REP_IMPORTED_RECONCILIATION_EXCEPTION", row.id, errorCode(error)); }
     await checkpointRef.set({ importedCursor: row.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   }
   if (imported.size < 50) await checkpointRef.set({ importedCursor: null }, { merge: true });
+  const followups = async () => {
+    if (Date.now() >= deadline) return;
+    const scan = await scanDueIqFollowups(now, adapter, 10, exhausted);
+    for (const [reason, count] of Object.entries(scan.outcomes)) run.followups[reason] = (run.followups[reason] || 0) + count;
+    run.deferredForBudget += scan.deferredForBudget;
+  };
+  // Alternate which pass goes first so neither one always gets the budget.
   const jobsFirst = checkpoint.nextPhase !== "FOLLOWUPS";
-  if (!jobsFirst) await scanDueIqFollowups(now, adapter);
-  let cursor: string | undefined = checkpoint.jobCursor;
-  // Each open complement is looked up once a day, so a run covers every open job
-  // up to the budget. Closed jobs stay out of the page; the cursor resumes the rest.
-  {
-    let admitted = 0;
-    let query = jobs().where("status", "in", REP_OPEN_STATUSES).orderBy(FieldPath.documentId()).limit(50); if (cursor) query = query.startAfter(cursor);
-    const page = await query.get();
-    for (const row of page.docs) {
-      if (Date.now() >= deadline) return;
-      try {
-        const job = row.data();
-        if (["PREPARING", "SENDING"].includes(job.status) && Date.now() - millis(job.startedAt) > 15 * 60000) await updateJob(row.id,
-          { status: job.status === "SENDING" ? "UNKNOWN" : "BLOCKED", error: "REP_INTERRUPTED" }, "El procesamiento del complemento se interrumpió. Se requiere revisión; no se repetirá el envío automáticamente.");
-        const execution = ["QUEUED", "PAUSED"].includes(job.status) ? await protectedExecuteComplement(row.id, "SCHEDULER", adapter) : undefined;
-        const observation = execution?.admitted ? undefined : await protectedCheckComplementDaily(row.id, now, adapter);
-        if (execution?.admitted || observation?.admitted) {
-          // Resume after the admitted case, not after capacity-skipped cases.
-          // This prevents the first slow/poison record from starving the rest.
-          await checkpointRef.set({ jobCursor: row.id, nextPhase: "FOLLOWUPS", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-          if (++admitted >= REP_DAILY_MAX_ADMITTED) return;
-          await new Promise(resolve => setTimeout(resolve, REP_DAILY_SPACING_MS));
-        }
-      } catch (error) {
-        // A failed expediente must not prevent the other due B observations.
-        console.error("REP_DAILY_JOB_EXCEPTION", row.id, errorCode(error));
-      }
-      await checkpointRef.set({ jobCursor: row.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  if (!jobsFirst) await followups();
+  // Every due open job, oldest next check first. A job not yet due is skipped;
+  // a job beyond the batch budget waits for the next batch and is counted.
+  const due = orderDueJobs((await openJobs()).map(row => ({ ...row, action: repDailyAction(row.job, now, day) }))
+    .filter(row => row.action !== null));
+  for (const { id, job, action } of due) {
+    if (Date.now() >= deadline) { run.deferredForTime++; continue; }
+    const scope = repScopeKey(job.rootId, job.provider);
+    if (exhausted.has(scope)) { run.deferredForBudget++; continue; }
+    try {
+      if (action === "STALE") await updateJob(id, { status: job.status === "SENDING" ? "UNKNOWN" : "BLOCKED", error: "REP_INTERRUPTED" },
+        "El procesamiento del complemento se interrumpió. Se requiere revisión; no se repetirá el envío automáticamente.");
+      if (action === "RESUME" && !(await resumeTransientBlockedJob(id))) continue;
+      const result = action === "LOOKUP" || action === "STALE" ? await protectedCheckComplementDaily(id, now, adapter)
+        : await protectedExecuteComplement(id, "SCHEDULER", adapter, { now, dailyDay: day });
+      if (result?.admitted) { run.processed++; await sleep(REP_DAILY_SPACING_MS); }
+      else if (result?.reason === "WINDOW_BUDGET") { exhausted.add(scope); run.deferredForBudget++; }
+      else if (result) bump(run.notAdmitted, result.reason);
+    } catch (error) {
+      // A failed expediente must not prevent the other due observations.
+      run.errors++;
+      console.error("REP_DAILY_JOB_EXCEPTION", id, errorCode(error));
     }
-    if (page.size < 50) await checkpointRef.set({ jobCursor: null }, { merge: true });
   }
-  if (jobsFirst) await scanDueIqFollowups(now, adapter);
-  await checkpointRef.set({ nextPhase: "JOBS" }, { merge: true });
+  if (jobsFirst) await followups();
+  await checkpointRef.set({ nextPhase: jobsFirst ? "FOLLOWUPS" : "JOBS", jobCursor: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   });
+  let summary: Record<string, unknown> = { event: "REP_DAILY_SUMMARY", day, batch, skipped: safeCode(outcome.reason) };
+  if (outcome.admitted) {
+    try { summary = buildRepDailySummary((await openJobs()).map(row => row.job), run, day, batch); }
+    catch (error) { summary = { event: "REP_DAILY_SUMMARY", day, batch, ...run, notAdmitted: cleanCounts(run.notAdmitted),
+      followups: cleanCounts(run.followups), summaryError: safeCode(errorCode(error)) }; }
+  }
+  console.log(JSON.stringify(summary));
+  return outcome;
 }
-export const checkPaymentComplementsDaily = onSchedule({ schedule: "0 19 * * 1-5", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0, maxInstances: 1, concurrency: 1 }, () => runProtectedRepDaily().then(() => undefined));
+export const checkPaymentComplementsDaily = onSchedule({ schedule: "0,15,30 19 * * 1-5", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: providers.COMPLEMENT_SECRETS, retryCount: 0, maxInstances: 1, concurrency: 1 }, () => runProtectedRepDaily().then(() => undefined));
 
 // Jobs PAUSED only because a switch or quota was closed wait for a scheduler that may not run. When the owner turns requests on,
 // the ones that stopped for those reasons go back to QUEUED so the execution trigger picks them up. BLOCKED and UNKNOWN stay as they are.

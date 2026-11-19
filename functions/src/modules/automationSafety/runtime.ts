@@ -31,6 +31,9 @@ export interface ExecutionInput {
   partition?: string;
   /** Opt-in only for local, deterministic enqueue; never replay a provider effect. */
   localCompletion?: "DETERMINISTIC_ENQUEUE";
+  /** Opt-in batch ceiling below the volume breaker: at this many admissions in the
+   * current window the claim is refused as WINDOW_BUDGET and the circuit stays closed. */
+  admissionCeiling?: number;
 }
 export interface Completion { evidence?: { kind: "JOB" | "ADOPTED"; id: string }; reason?: string }
 export const safetyHash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -125,6 +128,9 @@ export class SafetyRuntime {
       if (now < Number(o.nextRetryAt || 0)) return { reason: "BACKOFF" };
       if (now < Number(s.leaseUntil || 0) || now < Number(s.nextAdmissionAt || 0)) return { reason: "CAPACITY" };
       const admissions = now - Number(s.windowAt || 0) < policy.duplicateWindowMs ? Number(s.windowAdmissions || 0) : 0;
+      // Checked in the same transaction as the breaker, so a batch never trips it.
+      if (input.admissionCeiling !== undefined && admissions >= Math.min(input.admissionCeiling, policy.duplicateThreshold))
+        return { reason: "WINDOW_BUDGET" };
       if (admissions >= policy.duplicateThreshold) {
         const sequence = Number(s.sequence || 0) + 1;
         tx.set(refs.scope, { circuitState: "OPEN", manualRecovery: true, openUntil: now + policy.openMs,
@@ -341,4 +347,11 @@ export async function observeProtectedResponse(status: number) {
 export function reportProtectedFailure(error: unknown) {
   const context = current.getStore();
   if (context) context.failure = classifyFailure(error);
+}
+/** A failure before any provider effect that the domain retries on its next
+ * scheduled check. Provider failures still count toward the circuit, but the
+ * operation is deferred instead of using up attempts or being quarantined. */
+export function reportProtectedDeferral(error: unknown) {
+  const context = current.getStore();
+  if (context) context.failure = { ...classifyFailure(error), result: "DEFERRED" };
 }

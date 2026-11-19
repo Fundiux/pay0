@@ -7,6 +7,7 @@ import { assertSource, dayMexico, millis, text } from "./complementPolicy";
 import { verifiedDocuments } from "./complementCanary";
 import * as providers from "./complementProviders";
 import { SafetyRuntime, reportProtectedFailure } from "../automationSafety/runtime";
+import { REP_DAILY_BATCH_ADMISSIONS, transientComplementFailure } from "./complementRetryPolicy";
 
 const pending = new Set(["PENDING", "PENDING_B", "PENDING_PROVIDER_CONTRACT"]);
 const code = (error: any) => /^[A-Z0-9_]+$/.test(error?.message || "") ? error.message : "REP_B_DAILY_FAILED";
@@ -138,21 +139,24 @@ export async function checkDueIqFollowup(requestId: string, now = new Date(), ad
     return "RECEIVED";
   } catch (error) {
     reportProtectedFailure(error);
-    const failure = code(error);
-    // A safety stop only ends this run: the row stays eligible for tomorrow.
-    if (["REP_IQ_PERMISSION_REQUIRED", "REP_IQ_PROFILE_CHANGED"].includes(failure) || failure.startsWith("REP_GATE_") || failure.startsWith("SAFETY_")) {
-      await finishBlocked(requestId, rootId, now, failure); return "BLOCKED";
+    const failure = code(error), transient = transientComplementFailure(error);
+    // A safety stop, timeout, network or provider 5xx only ends this run: the
+    // row stays eligible for tomorrow.
+    if (["REP_IQ_PERMISSION_REQUIRED", "REP_IQ_PROFILE_CHANGED"].includes(failure) || failure.startsWith("REP_GATE_") || failure.startsWith("SAFETY_") || transient) {
+      await finishBlocked(requestId, rootId, now, transient || failure); return "BLOCKED";
     }
     await finishException(requestId, rootId, failure); return "EXCEPTION";
   }
 }
 
-// Called by the existing 19:00 scheduler before its job pass. A bounded scan
-// advances over unrelated/job-linked requests without starving due B cases.
-export async function scanDueIqFollowups(now = new Date(), adapter = providers, maxCases = 10) {
+// Called by the 19:00 scheduler batches beside their job pass. A bounded scan
+// advances over unrelated/job-linked requests without starving due B cases,
+// oldest next check first. It shares each root's batch budget with the job
+// pass (`exhaustedScopes`, keyed root:IQ): a case beyond it waits for the next batch.
+export async function scanDueIqFollowups(now = new Date(), adapter = providers, maxCases = 10, exhaustedScopes = new Set<string>()) {
   const due = Timestamp.fromDate(now);
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
-  let pages = 0, selected = 0;
+  let pages = 0, selected = 0, deferredForBudget = 0;
   const outcomes: Record<string, number> = {};
   while (selected < maxCases && pages < 20) {
     let query = db.collection("paymentComplementRequests").where("nextCheckAt", "<=", due).orderBy("nextCheckAt").limit(50);
@@ -160,20 +164,23 @@ export async function scanDueIqFollowups(now = new Date(), adapter = providers, 
     const page = await query.get(); pages++;
     for (const row of page.docs) {
       if (!eligible(row.data(), now)) continue;
-      selected++;
+      const scope = `${row.data().rootId}:IQ`;
+      if (exhaustedScopes.has(scope)) { deferredForBudget++; continue; }
       let result: string;
       try {
         const guarded = await new SafetyRuntime(db).run({ rootId: row.data().rootId, process: "REP", partition: "IQ",
           operationType: "REP_FOLLOWUP", operationId: row.id, idempotencyKey: `${row.id}:${dayMexico(now)}`,
-          origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ",
+          origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ", admissionCeiling: REP_DAILY_BATCH_ADMISSIONS,
         }, () => checkDueIqFollowup(row.id, now, adapter), value => ["BLOCKED", "SKIPPED"].includes(value) ? "DEFERRED"
           : ["WAITING_B", "RECEIVED"].includes(value) ? "SUCCEEDED" : "QUARANTINED");
+        if (!guarded.admitted && guarded.reason === "WINDOW_BUDGET") { exhaustedScopes.add(scope); deferredForBudget++; continue; }
         result = guarded.admitted ? guarded.value || guarded.reason : guarded.reason;
       }
       catch (error) {
         try { await finishException(row.id, row.data().rootId, code(error)); } catch { /* Keep the next daily attempt if Firestore is unavailable. */ }
         result = "EXCEPTION";
       }
+      selected++;
       outcomes[result] = (outcomes[result] || 0) + 1;
       if (selected >= maxCases) break;
       // The safety runtime spaces admissions by 1 s: without this wait the next
@@ -183,5 +190,5 @@ export async function scanDueIqFollowups(now = new Date(), adapter = providers, 
     if (page.size < 50 || selected >= maxCases) break;
     cursor = page.docs.at(-1);
   }
-  return { selected, pages, outcomes };
+  return { selected, pages, outcomes, deferredForBudget };
 }
