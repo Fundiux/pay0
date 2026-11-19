@@ -480,6 +480,14 @@
     {
       "commit": "9ea30529",
       "capability": "Facturama: factura PPD emitida con FormaPago 99 como exige el SAT"
+    },
+    {
+      "commit": "33b98e33",
+      "capability": "Botones manuales de envio por WhatsApp retirados; envio solo automatico"
+    },
+    {
+      "commit": "95e12cb1",
+      "capability": "CFDI sin texto PAY0 ni folio interno en observaciones u orden de compra"
     }
   ],
   "requiredText": [
