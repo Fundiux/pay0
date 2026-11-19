@@ -42,6 +42,8 @@ try {
   Rotate $out; Rotate $err
   $worker=Start-Process -FilePath $NodePath -ArgumentList @($entry,'run','--config',$ConfigFile) -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
   $worker.WaitForExit()
+  # Los hijos del worker (Chrome) conservan su ParentProcessId aunque el worker ya salio.
+  foreach($child in @(Get-CimInstance Win32_Process -Filter ("ParentProcessId="+$worker.Id))){ try { & taskkill.exe /PID $child.ProcessId /T /F 2>&1 | Out-Null } catch {} }
   Stop-OrphanBrowser
   if(Test-Path -LiteralPath $stop){break}
   Start-Sleep -Seconds 30
