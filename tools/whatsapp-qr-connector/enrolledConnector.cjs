@@ -6,21 +6,30 @@ const readChats = require("./readChats.cjs");
 // Cada lote cabe holgadamente en el límite canónico de 64 KB del servidor.
 const MAX_BATCH_MESSAGES = 25, MAX_BATCH_BYTES = 40000, MAX_BUFFERED_MESSAGES = 1000;
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
+const NOT_READY_LIMIT_MS = 5 * 60 * 1000, DESTROY_TIMEOUT_MS = 15000;
 async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval, captureGroups = false,
-  sendDocuments = false, fetchFile, createMedia }) {
+  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS }) {
   if (!transport?.getBinding() || !client || typeof resetLocalSession !== "function") throw Error("ENROLLED_DEPENDENCIES_REQUIRED");
   if (sendDocuments && (typeof fetchFile !== "function" || typeof createMedia !== "function")) throw Error("SEND_DEPENDENCIES_REQUIRED");
   let ready = false, busy = false, stopped = false, pendingResetId = null, delivering = false;
+  // Self-recovery: a connector that cannot keep working closes and reports why, so the
+  // supervisor relaunches it. A pending QR waits for a person, so it never counts as stuck.
+  let awaitingQr = false, notReadySince = null;
   // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
   let observedChats = new Set();
   const buffer = [];
   const timers = [];
-  async function close() {
+  async function close(reason = "CONNECTOR_FAILED") {
+    if (stopped) return;
     stopped = true;
     for (const timer of timers) clearTimer(timer);
-    await client.destroy().catch(() => undefined);
+    // A hung browser (for example a detached frame) can block destroy forever.
+    let timeout;
+    await Promise.race([client.destroy().catch(() => undefined), new Promise(resolve => { timeout = setTimeout(resolve, destroyTimeoutMs); })]);
+    clearTimeout(timeout);
+    if (typeof onStopped === "function") onStopped(typeof reason === "string" && /^[A-Z0-9_]{1,60}$/.test(reason) ? reason : "CONNECTOR_FAILED");
   }
-  const event = handler => (...args) => Promise.resolve().then(() => handler(...args)).catch(close);
+  const event = handler => (...args) => Promise.resolve().then(() => handler(...args)).catch(() => close("EVENT_FAILED"));
   const status = async data => transport.operate("HEARTBEAT", { ready, poll: false, ...data });
   async function synchronize(commandId) {
     if (!ready || stopped) throw Error("CLIENT_NOT_READY");
@@ -41,6 +50,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
         // No marker or automatic retry: a lost authorization/reset result stays
         // reconcilable on the server. A fresh startup never repeats this effect.
         ready = false;
+        notReadySince = now();
         await client.destroy();
         await resetLocalSession(transport.getBinding().id);
         pendingResetId = command.id;
@@ -49,16 +59,17 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     } catch (error) {
       // Any rejected/unknown transport outcome closes local activity. Do not
       // continue with a cached heartbeat, root, binding or stale command.
-      await close();
+      await close("HEARTBEAT_FAILED");
       throw error;
     } finally { busy = false; }
   }
-  client.on("qr", event(async qr => { await status({ status: "QR_REQUIRED", qrText: qr, qrDataUrl: await encodeQr(qr), error: null,
+  client.on("qr", event(async qr => { awaitingQr = true; await status({ status: "QR_REQUIRED", qrText: qr, qrDataUrl: await encodeQr(qr), error: null,
     ...(pendingResetId ? { resetCommandId: pendingResetId } : {}) }); pendingResetId = null; }));
-  client.on("authenticated", event(async () => status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null })));
-  client.on("ready", event(async () => { ready = true; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
-  client.on("auth_failure", event(async () => { ready = false; await status({ status: "ERROR", error: "AUTHENTICATION_FAILED" }); }));
-  client.on("disconnected", event(async () => { ready = false; await status({ status: "DISCONNECTED" }); }));
+  client.on("authenticated", event(async () => { awaitingQr = false; notReadySince = now(); return status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null }); }));
+  client.on("ready", event(async () => { ready = true; notReadySince = null; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
+  client.on("auth_failure", event(async () => { ready = false; await status({ status: "ERROR", error: "AUTHENTICATION_FAILED" }); await close("AUTHENTICATION_FAILED"); }));
+  // whatsapp-web.js does not reconnect by itself: close so the supervisor starts a fresh client.
+  client.on("disconnected", event(async () => { ready = false; await status({ status: "DISCONNECTED" }).catch(() => undefined); await close("DISCONNECTED"); }));
   // Preserve the recovered client's no inbound-response policy. Sending and
   // document/complement polling remain outside this enrolled control entry.
   client.on("message", async () => undefined);
@@ -75,6 +86,18 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
         body: type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "" });
     } catch { /* un mensaje ilegible nunca detiene el conector */ }
   });
+  // Every minute: a ready client must still read its chats (a detached frame fails here),
+  // and a client that never becomes ready without waiting for a QR is restarted.
+  async function watchdog() {
+    if (stopped) return;
+    if (!ready) {
+      if (!awaitingQr && notReadySince !== null && now() - notReadySince >= notReadyLimitMs) await close("NOT_READY_TIMEOUT");
+      return;
+    }
+    if (busy) return;
+    busy = true;
+    try { await synchronize(); } catch { busy = false; await close("SYNC_FAILED"); } finally { busy = false; }
+  }
   async function flush() {
     if (!captureGroups || busy || stopped || !ready || buffer.length === 0) return;
     busy = true;
@@ -148,16 +171,13 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   }
   // Verify live server ownership/revocation BEFORE initializing WhatsApp.
   await status({ status: "DISCONNECTED" });
+  notReadySince = now();
   await client.initialize();
   timers.push(setTimer(() => poll().catch(() => undefined), 10000));
   if (captureGroups) timers.push(setTimer(() => flush().catch(() => undefined), 15000));
   if (sendDocuments) timers.push(setTimer(() => deliver().catch(() => undefined), 10000));
-  timers.push(setTimer(async () => {
-    if (busy || !ready || stopped) return;
-    busy = true;
-    try { await synchronize(); } catch { await close(); } finally { busy = false; }
-  }, 60000));
-  return { poll, synchronize, flush, deliver, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
+  timers.push(setTimer(() => watchdog().catch(() => undefined), 60000));
+  return { poll, synchronize, flush, deliver, watchdog, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
 }
 
 async function startExplicitly(config) {
@@ -178,6 +198,7 @@ async function startExplicitly(config) {
     return Buffer.from(await response.arrayBuffer());
   };
   return runEnrolledConnector({ transport, client, captureGroups: config.captureGroups === true, sendDocuments: config.sendDocuments === true,
+    onStopped: typeof config.onStopped === "function" ? config.onStopped : undefined,
     fetchFile, createMedia: (mimetype, data, filename) => new MessageMedia(mimetype, data, filename), encodeQr: qr => qrcode.toDataURL(qr, { margin: 1, width: 320 }),
     resetLocalSession: async id => { if (id !== binding.id) throw Error("SESSION_ID_MISMATCH"); await fs.rm(sessionDir, { recursive: true, force: true }); } });
 }

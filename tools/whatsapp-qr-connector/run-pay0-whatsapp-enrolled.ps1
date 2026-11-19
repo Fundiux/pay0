@@ -27,12 +27,22 @@ try {
  # Una parada pendiente de una corrida anterior se limpia solo al arrancar a proposito.
  if(Test-Path -LiteralPath $stop){Remove-Item -LiteralPath $stop -Force}
  $out=Join-Path $logs ($Agent+'.stdout.log'); $err=Join-Path $logs ($Agent+'.stderr.log')
+ # sessionRoot no es secreto. Un Chrome huerfano de una corrida colgada conserva el lockfile de la sesion
+ # y el siguiente arranque falla con "The browser is already running": se cierra solo ese arbol.
+ $sessionRoot=[string](Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json).sessionRoot
+ function Stop-OrphanBrowser(){
+  if(!$sessionRoot){return}
+  $orphans=@(Get-CimInstance Win32_Process | Where-Object {$_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.Contains($sessionRoot)})
+  foreach($p in $orphans){ try { & taskkill.exe /PID $p.ProcessId /T /F 2>&1 | Out-Null } catch {} }
+ }
  while(!(Test-Path -LiteralPath $stop)){
   $already=@(Get-CimInstance Win32_Process | Where-Object {$_.Name -eq 'node.exe' -and $_.CommandLine -and $_.CommandLine -like '*enrolledLauncher.cjs*' -and $_.CommandLine -like ('*'+$ConfigFile+'*')})
   if($already.Count){Start-Sleep -Seconds 15;continue}
+  Stop-OrphanBrowser
   Rotate $out; Rotate $err
   $worker=Start-Process -FilePath $NodePath -ArgumentList @($entry,'run','--config',$ConfigFile) -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
   $worker.WaitForExit()
+  Stop-OrphanBrowser
   if(Test-Path -LiteralPath $stop){break}
   Start-Sleep -Seconds 30
  }
