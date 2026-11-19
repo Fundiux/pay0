@@ -15,3 +15,7 @@ const src = fs.readFileSync(path.resolve(__dirname, "../../functions/src/modules
 assert.ok(src.includes("PaymentForm: satPaymentForm(invoice.paymentMethod, invoice.paymentForm)"), "issue payload must apply satPaymentForm");
 assert.ok(!/PaymentForm: invoice\.paymentForm[,}]/.test(src), "issue payload must not send the raw form");
 console.log("facturama-ppd-payment-form: 9 checks passed");
+// White-label: the CFDI must not carry PAY0 text or fall back to the internal folio as order number.
+assert.ok(!/Operaci[oó]n PAY0|Prueba sandbox PAY0/.test(src), "CFDI must not mention PAY0");
+assert.ok(!src.includes("ordenCompraFolio || solicitud.folio"), "OrderNumber must not fall back to the internal folio");
+console.log("facturama-white-label: 2 checks passed");
