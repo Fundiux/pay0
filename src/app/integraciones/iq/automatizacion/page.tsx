@@ -606,7 +606,7 @@ export default function IqAutomationPage() {
                     <p className="mt-1 text-sm text-slate-400">
                       Envio automatico de documentos por WhatsApp.
                       El control es independiente del Master IQ.
-                      El envio manual desde la solicitud permanece disponible aunque esta automatizacion este apagada.
+                      Si está apagada, los documentos no se envían.
                     </p>
                   </div>
 
