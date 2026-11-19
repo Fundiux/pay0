@@ -476,6 +476,10 @@
     {
       "commit": "7fd3d800",
       "capability": "Grupo de WhatsApp del cliente desde su ficha y resolucion de envios sin confirmar"
+    },
+    {
+      "commit": "9ea30529",
+      "capability": "Facturama: factura PPD emitida con FormaPago 99 como exige el SAT"
     }
   ],
   "requiredText": [
