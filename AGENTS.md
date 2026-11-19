@@ -23,7 +23,7 @@ Functions through `src/lib/firebaseClient.ts`.
 ## Startup and verification
 
 Use Node 22 for the Functions package; the frontend currently builds with the
-repository lockfile and Next.js 15.5.27.
+repository lockfile and Next.js 16.4.6.
 
 ```powershell
 npm ci
