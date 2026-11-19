@@ -488,6 +488,14 @@
     {
       "commit": "95e12cb1",
       "capability": "CFDI sin texto PAY0 ni folio interno en observaciones u orden de compra"
+    },
+    {
+      "commit": "ce62083d",
+      "capability": "Complementos: fallas pasajeras se reintentan y revision diaria en tandas sin disparar el freno"
+    },
+    {
+      "commit": "67332e87",
+      "capability": "Automatizacion: con WhatsApp apagado los documentos no se envian (sin envio manual)"
     }
   ],
   "requiredText": [
