@@ -7,11 +7,6 @@ import { listAuthorizedRelatedRecords } from "@/services/operationalReads";
 import { collection, onSnapshot, query, where,
   getDocs} from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { prepareDocumentDeliveryJob } from "@/services/documentDelivery";
-import {
-  releaseWhatsAppJobDeliveries,
-  retryWhatsAppJobErrors,
-} from "@/services/whatsappQr";
 import { ChevronDown, Download, UploadCloud, X } from "lucide-react";
 import { db, functions } from "@/lib/firebaseClient";
 import { getAuthorizedDocumentDownloadUrl } from "@/services/authorizedDocuments";
@@ -100,11 +95,6 @@ export default function DocsModal(props: {
   const [relatedReadError, setRelatedReadError] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [deliveryPreparing, setDeliveryPreparing] = useState(false);
-  const [whatsappResendWarning, setWhatsappResendWarning] = useState<{
-    previousJobId: string;
-    message: string;
-  } | null>(null);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   const [signatureMessage, setSignatureMessage] = useState("");
@@ -431,9 +421,9 @@ useEffect(() => {
       setSignatureLink(result.url);
       try {
         await navigator.clipboard?.writeText(result.url);
-        setSignatureMessage("Link de firma creado y copiado. Puedes enviarlo por WhatsApp al repartidor o cliente.");
+        setSignatureMessage("Link de firma creado y copiado. Se envia automaticamente al grupo de WhatsApp del cliente.");
       } catch {
-        setSignatureMessage("Link de firma creado. Copialo y envialo al repartidor o cliente.");
+        setSignatureMessage("Link de firma creado. Se envia automaticamente al grupo de WhatsApp del cliente.");
       }
     } catch (error: any) {
       setSignatureMessage(error?.message || "No se pudo crear el link de firma.");
@@ -465,193 +455,6 @@ useEffect(() => {
     });
   }
 
-  async function sendFacturaWhatsapp(forceResend = false) {
-    if (!forceResend) {
-      setWhatsappResendWarning(null);
-    }
-    const facturaDocsForWhatsapp = docs.filter((doc: any) => {
-      const documentType = String(doc.documentType || "").toUpperCase();
-
-      return (
-        ["FACTURA_PDF", "FACTURA_XML"].includes(documentType) &&
-        doc.active === true &&
-        !!doc.storagePath
-      );
-    });
-
-    const hasPdf = facturaDocsForWhatsapp.some(
-      (doc: any) =>
-        String(doc.documentType || "").toUpperCase() === "FACTURA_PDF"
-    );
-
-    const hasXml = facturaDocsForWhatsapp.some(
-      (doc: any) =>
-        String(doc.documentType || "").toUpperCase() === "FACTURA_XML"
-    );
-
-    if (!hasPdf || !hasXml) {
-      alert(
-        "Se requiere Factura PDF y Factura XML activas para enviar por WhatsApp."
-      );
-      return;
-    }
-
-    setDeliveryPreparing(true);
-
-    try {
-      const solicitud = (props as any).solicitud || {};
-
-      const deliveryDocs = facturaDocsForWhatsapp.map((doc: any) => ({
-        name: String(
-          doc.originalName ||
-            doc.filename ||
-            doc.fileName ||
-            doc.storagePath?.split("/").pop() ||
-            doc.documentType ||
-            "factura"
-        ),
-        fileName: String(
-          doc.originalName ||
-            doc.filename ||
-            doc.fileName ||
-            doc.storagePath?.split("/").pop() ||
-            doc.documentType ||
-            "factura"
-        ),
-        contentType: doc.contentType || null,
-        storagePath: doc.storagePath,
-        documentType: String(doc.documentType || "").toUpperCase(),
-      }));
-
-      const prepared = await prepareDocumentDeliveryJob({
-        sourceType: "FACTURA_PDF_XML",
-        sourceId: String(
-          solicitud.id ||
-            solicitud.solicitudId ||
-            ""
-        ),
-        clienteId: String(
-          solicitud.clienteId ||
-            solicitud.clientId ||
-            ""
-        ),
-        clienteNombre: String(
-          solicitud.clienteNombre ||
-            solicitud.clientName ||
-            ""
-        ),
-        targetLabel:
-          solicitud.clienteNombre || solicitud.clientName
-            ? String(
-                solicitud.clienteNombre ||
-                  solicitud.clientName
-              )
-            : "WhatsApp cliente",
-        documents: deliveryDocs,
-        notes: "Envio manual de factura PDF/XML desde Solicitudes.",
-        forceResend,
-      });
-
-      if (prepared.action === "REQUIRES_CONFIRMATION") {
-        setWhatsappResendWarning({
-          previousJobId:
-            prepared.previousJobId ||
-            prepared.jobId,
-          message:
-            prepared.message ||
-            "Esta misma factura PDF/XML ya fue enviada por WhatsApp.",
-        });
-        return;
-      }
-
-      if (prepared.action === "ALREADY_IN_PROGRESS") {
-        setWhatsappResendWarning(null);
-
-        const currentStatus = String(
-          prepared.status || ""
-        )
-          .trim()
-          .toUpperCase();
-
-        if (currentStatus === "READY_FOR_MANUAL_SEND") {
-          const released =
-            await releaseWhatsAppJobDeliveries({
-              jobId: prepared.jobId,
-            });
-
-          alert(
-            released.message ||
-              "Factura liberada a WhatsApp."
-          );
-          return;
-        }
-
-        if (currentStatus === "READY_FOR_SEND") {
-          alert(
-            "Esta factura ya esta liberada y esperando al conector WhatsApp."
-          );
-          return;
-        }
-
-        if (currentStatus === "SENDING") {
-          alert(
-            "Esta factura ya se esta enviando por WhatsApp."
-          );
-          return;
-        }
-
-        alert(
-          prepared.message ||
-            "Esta misma factura ya tiene un envio pendiente o en proceso."
-        );
-        return;
-      }
-
-      if (prepared.action === "RETRY_EXISTING") {
-        setWhatsappResendWarning(null);
-
-        const retried = await retryWhatsAppJobErrors({
-          jobId: prepared.jobId,
-        });
-
-        alert(
-          retried.message ||
-            "El intento fallido fue liberado nuevamente."
-        );
-        return;
-      }
-
-      if (prepared.action !== "CREATED") {
-        throw new Error(
-          "PAY0 recibio un estado de envio WhatsApp no reconocido."
-        );
-      }
-
-      setWhatsappResendWarning(null);
-
-      const released = await releaseWhatsAppJobDeliveries({
-        jobId: prepared.jobId,
-      });
-
-      alert(
-        released.message ||
-          (
-            forceResend
-              ? "Reenvio de factura liberado a WhatsApp."
-              : "Factura enviada a la cola de WhatsApp."
-          )
-      );
-    } catch (err: any) {
-      console.error("[PAY0][WhatsApp][Factura]", err);
-
-      alert(
-        err?.message ||
-          "No se pudo enviar la factura por WhatsApp."
-      );
-    } finally {
-      setDeliveryPreparing(false);
-    }
-  }
 const downloadDoc = async (doc: UploadRow) => {
     if (!doc.storagePath) {
       alert("Documento sin ruta de Storage.");
@@ -984,93 +787,6 @@ const downloadDoc = async (doc: UploadRow) => {
               </div>
             )}
           </div>
-
-          {docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_PDF" && !!doc.storagePath) &&
-          docs.some((doc: any) => String(doc.documentType || "").toUpperCase() === "FACTURA_XML" && !!doc.storagePath) ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-                <div>
-                  <div className="text-[12px] font-semibold text-emerald-100">Factura lista para WhatsApp</div>
-                  <div className="text-[11px] text-emerald-200/80">Mensaje: compartimos folio solicitado</div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => sendFacturaWhatsapp(false)}
-                  disabled={deliveryPreparing}
-                  className="rounded-lg border border-emerald-500/40 px-3 py-1 text-[12px] text-emerald-100 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {deliveryPreparing ? "Enviando..." : "Enviar por WhatsApp"}
-                </button>
-              </div>
-
-              {whatsappResendWarning && (
-                <div
-                  className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-[2px]"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="whatsapp-resend-title"
-                  onMouseDown={(event) => {
-                    if (
-                      event.target === event.currentTarget &&
-                      !deliveryPreparing
-                    ) {
-                      setWhatsappResendWarning(null);
-                    }
-                  }}
-                >
-                  <div className="relative w-full max-w-md rounded-2xl border border-amber-400/25 bg-[#161d2b] p-6 shadow-2xl">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setWhatsappResendWarning(null)
-                      }
-                      disabled={deliveryPreparing}
-                      className="absolute -top-3 -right-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0f172a] text-slate-300 shadow-lg transition hover:bg-[#162033] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Cerrar"
-                    >
-                      <X size={18} />
-                    </button>
-
-                    <div className="pr-8">
-                      <div
-                        id="whatsapp-resend-title"
-                        className="text-2xl font-semibold text-slate-50"
-                      >
-                        Factura Enviada Anteriormente!
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setWhatsappResendWarning(null)
-                        }
-                        disabled={deliveryPreparing}
-                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Cancelar
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          sendFacturaWhatsapp(true)
-                        }
-                        disabled={deliveryPreparing}
-                        className="rounded-xl border border-amber-400/30 bg-amber-500/20 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {deliveryPreparing
-                          ? "Enviando..."
-                          : "Enviar de todos modos"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.02]">
             <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
