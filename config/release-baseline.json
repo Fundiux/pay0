@@ -496,6 +496,18 @@
     {
       "commit": "67332e87",
       "capability": "Automatizacion: con WhatsApp apagado los documentos no se envian (sin envio manual)"
+    },
+    {
+      "commit": "226285fc",
+      "capability": "WhatsApp: al encender el envio se encolan los documentos del mismo dia que quedaron pendientes"
+    },
+    {
+      "commit": "38650a26",
+      "capability": "Next.js 16.4.6 con las correcciones de seguridad de cache"
+    },
+    {
+      "commit": "0615c8af",
+      "capability": "Conector de Hugo se cierra al dejar de funcionar y el supervisor lo relanza"
     }
   ],
   "requiredText": [
