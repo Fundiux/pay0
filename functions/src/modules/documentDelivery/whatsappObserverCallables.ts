@@ -45,6 +45,9 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
   const rawObservers: unknown[] = Array.isArray(request.data?.observers) ? request.data.observers : [];
   if (!groupChatId || rawObservers.length > MAX_OBSERVERS_PER_GROUP) throw new HttpsError("invalid-argument", "Grupo requerido y máximo 10 observadores por grupo.");
 
+  // El grupo interno del equipo no se asigna a un usuario: ahí Hugo no contesta ni aprende de clientes.
+  const internalGroup = await db.doc(`whatsappInternalGroups/${rootId}`).get();
+  if (active && internalGroup.exists && internalGroup.get("groupChatId") === groupChatId) throw new HttpsError("failed-precondition", "Este grupo es el grupo interno del equipo; no se asigna a un usuario.");
   // Cada grupo pertenece a un usuario de PAY0: sin dueño no se lee ni se guarda nada del grupo.
   const ownerUserUid = clean(request.data?.ownerUserUid, 128);
   if (active && rawObservers.length > 0 && !ownerUserUid) throw new HttpsError("invalid-argument", "Elige el usuario al que pertenece el grupo.");
