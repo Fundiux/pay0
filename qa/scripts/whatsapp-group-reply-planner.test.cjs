@@ -1,8 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { planGroupReplies } = require('../../functions/lib/modules/whatsappAutoReply/planner.js');
-const { OWNER_WORKING_HOURS, REPLY_TEXTS } = require('../../functions/lib/modules/whatsappAutoReply/domain.js');
-const REQUEST_DATA_TEXT = REPLY_TEXTS.requestData;
+const { OWNER_WORKING_HOURS, REPLY_TEXT_VARIANTS: V } = require('../../functions/lib/modules/whatsappAutoReply/domain.js');
 
 let checks = 0;
 const ok = fn => { fn(); checks++; };
@@ -28,8 +27,12 @@ const kinds = plan => plan.map(item => item.kind);
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: false, mode: 'STANDARD', workingHours: OWNER_WORKING_HOURS } })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { mode: 'STANDARD', workingHours: OWNER_WORKING_HOURS } })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ ownerByChat: {} })), []));
-ok(() => assert.deepEqual(planGroupReplies(input({ firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } })), []));
-ok(() => assert.deepEqual(planGroupReplies(input({ firstObservedByChat: {} })), []));
+// A group in its first days: the greeting is answered from day one, anything else only after the learning period.
+const asks = [msg('lq', { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN })];
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: asks, firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } })), []));
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: asks, firstObservedByChat: {} })), []));
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } }))), ['GREETING']));
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ firstObservedByChat: {} }))), ['GREETING']));
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode: 'STANDARD' } })), []));
 
 // A greeting is answered with the owner's name.
@@ -45,7 +48,7 @@ ok(() => assert.deepEqual(planGroupReplies(input({ repliedIds: new Set(['m1']) }
 const status = [msg('q1', { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN })];
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode: 'GREETINGS_ONLY', workingHours: OWNER_WORKING_HOURS }, messages: status })), []));
 ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: status }))), ['VALIDATING']));
-ok(() => assert.equal(planGroupReplies(input({ messages: status }))[0].text, REPLY_TEXTS.validating));
+ok(() => assert.ok(V.VALIDATING.includes(planGroupReplies(input({ messages: status }))[0].text)));
 ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: status, hasOpenSolicitud: uid => uid === 'user-betell' }))), ['PROCESSING']));
 ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: status, hasOpenSolicitud: () => false }))), ['VALIDATING']));
 // A missing mode behaves as the safer greetings-only mode.
@@ -58,7 +61,7 @@ const invoiceAsk = [msg('f1', { body: 'saben como va la factura que solicite', t
 const lookupWith = result => (owner, subject, row) => { seen.push([owner, subject, row.id]); return result; };
 const seen = [];
 ok(() => { const plan = planGroupReplies(input({ messages: transferAsk, lookupRequest: lookupWith('FOUND') })); assert.deepEqual(kinds(plan), ['PROCESSING']); assert.equal(plan[0].subject, 'TRANSFER'); assert.equal(plan[0].notifyInternal, false); });
-ok(() => { const plan = planGroupReplies(input({ messages: invoiceAsk, lookupRequest: lookupWith('NOT_FOUND') })); assert.deepEqual(kinds(plan), ['REQUEST_DATA']); assert.equal(plan[0].subject, 'INVOICE'); assert.equal(plan[0].notifyInternal, true); assert.equal(plan[0].text, REQUEST_DATA_TEXT); });
+ok(() => { const plan = planGroupReplies(input({ messages: invoiceAsk, lookupRequest: lookupWith('NOT_FOUND') })); assert.deepEqual(kinds(plan), ['REQUEST_DATA']); assert.equal(plan[0].subject, 'INVOICE'); assert.equal(plan[0].notifyInternal, true); assert.ok(V.REQUEST_DATA.INVOICE.includes(plan[0].text)); assert.doesNotMatch(plan[0].text, /transferencia/); });
 ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: transferAsk, lookupRequest: lookupWith('UNKNOWN') }))), ['VALIDATING']));
 ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: transferAsk }))), ['VALIDATING']));
 // The lookup receives the group's owner user and what the client asked about, and is only consulted for status questions.

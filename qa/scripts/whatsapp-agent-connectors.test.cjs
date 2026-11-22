@@ -36,7 +36,10 @@ const makeTransport = (privateKeyPem, binding) => createAuthorityTransport({ bas
   let agentBinding, legacyBinding, agentTransport, legacyTransport;
   await test('unknown-agent-enrollment-rejected', () => rejection(() => service.create(req('owner-a', { publicKeyPem: agentKey.publicKeyPem, agentId: 'nope' }))));
   await test('internal-agent-enrollment-rejected', async () => {
-    for (const agentId of ['sentinel', 'iq', 'expediente', 'pagos', 'conciliacion', 'documentos', 'soporte', 'agent-creator']) {
+    const { AGENTS, isCustomerFacingAgent } = require('../../functions/lib/modules/agentOperations/contract.js');
+    const internal = AGENTS.map(agent => agent.id).filter(id => !isCustomerFacingAgent(id));
+    assert.ok(internal.length > 0);
+    for (const agentId of internal) {
       await assert.rejects(() => service.create(req('owner-a', { publicKeyPem: agentKey.publicKeyPem, agentId })), error => error.code === 'failed-precondition' || /interno/.test(String(error.message)));
     }
   });
