@@ -157,6 +157,17 @@ export async function resolveWhatsAppUncertainDelivery(input: {
 }
 
 
+export type WhatsAppReplyMode = "GREETINGS_ONLY" | "STANDARD";
+export type WhatsAppAgentReplyConfig = { ok: boolean; agentId: string; enabled: boolean; mode: WhatsAppReplyMode };
+
+export async function getWhatsAppAgentReplyConfig() {
+  return (await httpsCallable<Record<string, never>, WhatsAppAgentReplyConfig>(functions, "getWhatsAppAgentReplyConfig")({})).data;
+}
+
+export async function setWhatsAppAgentReplyConfig(input: { enabled: boolean; mode: WhatsAppReplyMode }) {
+  return (await httpsCallable<typeof input, { ok: boolean; enabled: boolean; mode: WhatsAppReplyMode }>(functions, "setWhatsAppAgentReplyConfig")(input)).data;
+}
+
 export type WhatsAppAgentObserver = { agentId: string; phone: string };
 export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] };
 export type WhatsAppAgentObserversState = {
