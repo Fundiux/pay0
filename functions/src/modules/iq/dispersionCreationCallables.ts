@@ -21,6 +21,7 @@ import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
 import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "./originIdentity";
 import { storedIqLink } from "../beneficiaries/iqLinkDomain";
 import { dispersionFailureReason } from "./dispersionFailureReason";
+import { syncDispersionIqIncident } from "./dispersionIqIncident";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
 import {
   runIqCreateDispersionHttpH4D85A50,
@@ -1383,6 +1384,20 @@ async function aggregatePrincipal(
     { merge: true },
   );
 
+  // A dispersion the automatic send could not finish becomes a visible incident; a later success closes it.
+  try {
+    const principalRootId = clean((await principalRef.get()).get("rootId"));
+    await syncDispersionIqIncident({
+      db,
+      rootId: principalRootId,
+      dispersionId: principalId,
+      aggregateStatus,
+      evidence: { legCount: legs.length, createdCount, reviewCount, failedCount },
+    });
+  } catch (incidentError) {
+    console.error("DISPERSION_INCIDENT_SYNC_FAILED", principalId, String((incidentError as Error)?.message || incidentError).slice(0, 160));
+  }
+
   return {
     aggregateStatus,
     legCount: legs.length,
@@ -2256,6 +2271,8 @@ export const processIqDispersionCreate =
         await loadEnabledIqAutomationRoots({
           process: "dispersionCreate",
           purpose: "CREATION",
+          // Creating never depends on IQ staff hours (as with solicitudes and pagos); only the receipt waits.
+          respectWindow: false,
         });
 
       if (enabledRoots.size === 0) {

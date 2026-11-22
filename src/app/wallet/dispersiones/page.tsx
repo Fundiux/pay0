@@ -21,7 +21,6 @@ import { collection,
   where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
-  previewClientDispersionIq,
   generateClientDispersionIq,
   createClientDispersion,
   previewClientDispersionPricing,
@@ -33,6 +32,7 @@ import {
   type DispersionIncidentType,
   type ResolveClientDispersionIncidentDecision,
   } from "@/services/financing";
+import { dispersionProgress } from "@/lib/dispersionClientStatus";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { listScopedClients } from "@/services/clients";
@@ -379,7 +379,6 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
   const createMassiveDispersionLockRef = useRef(false);
   const [incidentBusyId, setIncidentBusyId] = useState("");
   const [signatureBusyId, setSignatureBusyId] = useState("");
-  const [iqBusyId, setIqBusyId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -1182,8 +1181,14 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
 
   // Cash dispersions are only finished once the receipt is signed, so the
   // receipt state travels with the status everywhere it is shown or exported.
+  // Everyone but a superadmin sees the progress words only; the technical status stays for the superadmin.
+  function shownBaseStatus(row: DispersionRow): string {
+    const progress = isSuperadmin ? null : dispersionProgress(row);
+    return progress || String(row.status || "").trim();
+  }
+
   function dispersionStatusText(row: DispersionRow): string {
-    const base = String(row.status || "").trim();
+    const base = shownBaseStatus(row);
     const receipt = cashReceiptStatusOfRow(row);
     if (!receipt) return base;
     const mark = cashReceiverMismatch(row) ? ` ${CASH_RECEIPT_MISMATCH_MARK}` : "";
@@ -1976,157 +1981,6 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
     )
       .trim()
       .toUpperCase();
-  }
-
-  function canGenerateIqForRow(
-    row: any,
-  ) {
-    if (row.fundingSource?.holderType === "USER") return false;
-    const iqStatus =
-      getIqGenerationStatus(row);
-
-    return (
-      String(
-        row?.forwardOnlyVersion || "",
-      ).trim() ===
-        "H4_D82_A3_A2_FORWARD_ONLY_V1" &&
-      String(
-        row?.reservationStatus || "",
-      )
-        .trim()
-        .toUpperCase() ===
-        "SALDO_RESERVADO" &&
-      row?.reservationReleased !== true &&
-      ![
-        "IQ_GENERADA",
-        "IQ_REQUIERE_REVISION",
-      ].includes(iqStatus)
-    );
-  }
-
-
-  async function handleGenerateIq(
-    dispersionId: string,
-    folio?: string | null,
-  ) {
-    setIqBusyId(dispersionId);
-    setError("");
-    setSuccess("");
-
-    try {
-      const preview =
-        await previewClientDispersionIq(
-          dispersionId,
-        );
-      const readyLegs =
-        preview.legs.filter(
-          (leg) =>
-            leg.status === "READY",
-        );
-      const skippedLegs =
-        preview.legs.filter(
-          (leg) =>
-            leg.status !== "READY",
-        );
-      if (readyLegs.length === 0) {
-        const diagnostics =
-          skippedLegs
-            .map((leg) => {
-              const d =
-                leg.diagnostic;
-              const config =
-                d
-                  ? [
-                      `Despacho: ${d.despachoNombre || leg.despachoName || "SIN NOMBRE"}`,
-                      `Activo: ${d.active === null || d.active === undefined ? "N/D" : d.active ? "SI" : "NO"}`,
-                      `IQ efectivo: ${d.iqEnabled ? "SI" : "NO"}`,
-                      `iqEnabled: ${d.iqEnabledFlag ? "SI" : "NO"}`,
-                      `usesIq: ${d.usesIq ? "SI" : "NO"}`,
-                      `iqDispersionEnabled: ${d.iqDispersionEnabled ? "SI" : "NO"}`,
-                      `Marcador integracion: ${d.integrationMarker || "VACIO"}`,
-                      `Perfil IQ configurado: ${d.credentialProfileConfigured ? "SI" : "NO"}`,
-                    ].join(" | ")
-                  : "";
-
-              return `Tramo ${leg.legIndex + 1}: ${leg.reason || leg.status}${config ? `\n${config}` : ""}`;
-            })
-            .join("\n\n");
-
-        setError(
-          `PREVALIDACION IQ BLOQUEADA\n\n${diagnostics || "No hay tramos READY."}\n\nNo se envio informacion a IQ.`,
-        );
-        return;
-      }
-
-      const amountTotal =
-        readyLegs.reduce(
-          (total, leg) =>
-            total +
-            Number(leg.amount || 0),
-          0,
-        );
-      const legSummary =
-        readyLegs
-          .map(
-            (leg) =>
-              `Tramo ${leg.legIndex + 1}: ${leg.despachoName || "Despacho sin nombre"} | ${leg.currency || "MXN"} ${Number(leg.amount || 0).toLocaleString("es-MX", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })} | ${leg.operationTypeKey} ${leg.percentageLabel || "0"}% | ${leg.destinationKind} ****${leg.destinationLast4} | Asociado: ${leg.associatedName} | Perfil: ${leg.iqCredentialProfileAlias || "Perfil sin alias"}`,
-          )
-          .join("\n");
-      const skippedSummary =
-        skippedLegs.length > 0
-          ? `\n\nNo enviados:\n${skippedLegs
-              .map(
-                (leg) =>
-                  `Tramo ${leg.legIndex + 1}: ${leg.reason || leg.status}`,
-              )
-              .join("\n")}`
-          : "";
-      const confirmed =
-        window.confirm(
-          `PREVALIDACION IQ\n\nDispersion: ${folio || "Sin folio"}\nTipo: ${preview.operationTypeKey}\nDestino: ${preview.destination.kind} ****${preview.destination.last4}\nTramos IQ: ${readyLegs.length}\nTotal principal: MXN ${amountTotal.toLocaleString("es-MX", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}\n\n${legSummary}${skippedSummary}\n\nEsta accion pulsara Crear en IQ para cada tramo READY. Un resultado incierto bloqueara el reintento para evitar duplicados.\n\n¿Continuar?`,
-        );
-
-      if (!confirmed) {
-        setSuccess(
-          "Prevalidacion IQ terminada sin enviar datos.",
-        );
-        return;
-      }
-
-      const result =
-        await generateClientDispersionIq({
-          dispersionId,
-          confirm: true,
-        });
-
-      const resultLines =
-        result.results
-          .map(
-            (leg) =>
-              `${leg.legId}: ${leg.status}${leg.iqId ? ` | IQ ${leg.iqId}` : ""}`,
-          )
-          .join(" · ");
-
-      setSuccess(
-        result.aggregateStatus ===
-          "IQ_GENERADA"
-          ? `Dispersion IQ generada: ${result.createdCount}/${result.legCount} tramos. ${resultLines}`
-          : `IQ termino en ${result.aggregateStatus}: ${result.createdCount} creados, ${result.reviewCount} en revision y ${result.failedCount} fallidos. ${resultLines}`,
-      );
-    } catch (e: any) {
-      setError(
-        e?.message ||
-          "No se pudo prevalidar o generar la dispersion en IQ.",
-      );
-    } finally {
-      setIqBusyId("");
-    }
   }
 
   async function handleRequestIncident(dispersionId: string, incidentType: DispersionIncidentType) {
@@ -3071,7 +2925,7 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                     </td>
                     <td className="pay0-td-money text-white" title={formatMoney(row.amount)}>{formatMoney(row.amount)}</td>
                     <td className="pay0-td pay0-dis-cell-estatus" title={dispersionStatusText(row)}>
-                      <div>{row.status || "-"}</div>
+                      <div>{shownBaseStatus(row) || "-"}</div>
                       {cashReceiptStatusOfRow(row) ? (
                         <span
                           className={`pay0-dis-estatus-badge rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
@@ -3197,36 +3051,13 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
                           </>
                         ) : null}
 
-                        
-                          {canGenerateIqForRow(row) ? (
-                            <button
-                              type="button"
-                              disabled={
-                                incidentBusyId === row.id ||
-                                iqBusyId === row.id
-                              }
-                              onClick={() =>
-                                handleGenerateIq(
-                                  row.id,
-                                  row.folio,
-                                )
-                              }
-                              className="pay0-dis-iq rounded-lg border border-emerald-600 text-emerald-300 disabled:opacity-50"
-                            >
-                              {iqBusyId === row.id
-                                ? "Generando IQ..."
-                                : "Generar en IQ"}
-                            </button>
-                          ) : getIqGenerationStatus(row) ? (
-                            <span className="text-xs text-slate-400">
-                              {getIqGenerationStatus(row).replaceAll(
-                                "_",
-                                " ",
-                              )}
-                            </span>
-                          ) : null}
+                        {isSuperadmin && getIqGenerationStatus(row) ? (
+                          <span className="text-xs text-slate-400">
+                            {getIqGenerationStatus(row).replaceAll("_", " ")}
+                          </span>
+                        ) : null}
 
-{!canRequest && !canResolve && !canGenerateIqForRow(row) && !canCreateCashSignatureLink(row) ? (
+{!canRequest && !canResolve && !(isSuperadmin && getIqGenerationStatus(row)) && !canCreateCashSignatureLink(row) ? (
                           <span className="text-xs text-slate-500">-</span>
                         ) : null}
                       </div>
