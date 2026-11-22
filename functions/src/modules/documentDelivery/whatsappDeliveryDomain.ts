@@ -45,6 +45,11 @@ export const WHATSAPP_DELIVERY_SOURCES = {
     kind: "TEXT", label: "Firma de constancia de recibido", uploadTypes: [],
     legacyMessage: "compartimos link de firma", manualPermission: { module: "solicitudes", action: "uploadDocs" },
   },
+  // A short reply Hugo posts in a client group. Created only by the group reply runner; manual preparation refuses TEXT sources.
+  GRUPO_RESPUESTA: {
+    kind: "TEXT", label: "Respuesta en grupo", uploadTypes: [],
+    legacyMessage: "respuesta en grupo", manualPermission: { module: "solicitudes", action: "uploadDocs" },
+  },
   CONSTANCIA_FIRMADA_PDF: {
     kind: "FILES", label: "Constancia de recibido firmada", uploadTypes: ["CONSTANCIA_RECEPCION_SATISFACCION"], entityType: "solicitudes",
     legacyMessage: "compartimos constancia firmada", manualPermission: { module: "solicitudes", action: "uploadDocs" },
