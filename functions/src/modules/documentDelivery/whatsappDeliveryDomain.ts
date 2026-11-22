@@ -241,6 +241,37 @@ export function chooseDeliveryDestination(input: DestinationInputs): Destination
 }
 
 // ---------------------------------------------------------------------------
+// Client group completeness: the three customer-facing agents must be in every client group.
+// ---------------------------------------------------------------------------
+
+export const REQUIRED_GROUP_AGENTS = ["hugo", "maria", "sofia"] as const;
+
+export type GroupAgentCheck =
+  | { status: "OK" }
+  | { status: "NO_GROUP_ASSIGNED" }
+  /** missing: connected agents whose connector does not see the group. notConnected: agents without an active connector. */
+  | { status: "AGENTS_MISSING"; missing: string[]; notConnected: string[] };
+
+export function checkClientGroupAgents(input: {
+  rootId: string;
+  groupChatId: unknown;
+  bindings: Array<{ id: unknown; agentId?: unknown; state?: unknown; rootId?: unknown }>;
+  chats: Array<{ bindingId?: unknown; chatId?: unknown; isGroup?: unknown; active?: unknown; rootId?: unknown }>;
+}): GroupAgentCheck {
+  const groupChatId = clean(input.groupChatId, 200);
+  if (!groupChatId) return { status: "NO_GROUP_ASSIGNED" };
+  const missing: string[] = [], notConnected: string[] = [];
+  for (const agentId of REQUIRED_GROUP_AGENTS) {
+    const binding = input.bindings.find((row) => clean(row.agentId, 64).toLowerCase() === agentId && upper(row.state) === "ACTIVE" && clean(row.rootId, 200) === input.rootId);
+    if (!binding) { notConnected.push(agentId); continue; }
+    const sees = input.chats.some((row) => clean(row.bindingId, 200) === clean(binding.id, 200) && clean(row.chatId, 200) === groupChatId &&
+      row.isGroup === true && row.active === true && clean(row.rootId, 200) === input.rootId);
+    if (!sees) missing.push(agentId);
+  }
+  return missing.length || notConnected.length ? { status: "AGENTS_MISSING", missing, notConnected } : { status: "OK" };
+}
+
+// ---------------------------------------------------------------------------
 // Delivery lease state machine. A delivery is never sent twice.
 // ---------------------------------------------------------------------------
 

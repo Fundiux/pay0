@@ -102,6 +102,22 @@ check('destination-group-only', () => {
   assert.equal(d.chooseDeliveryDestination({ ...base, assignment: { groupChatId: '5215550000000@c.us' }, hugoGroup: { ...hugoGroup, chatId: '5215550000000@c.us' } }).source, 'NONE');
 });
 
+// ---- every client group has the three agents ----
+check('group-agents', () => {
+  const g = '120363000000000001@g.us';
+  const bindings = ['hugo', 'maria', 'sofia'].map((agentId) => ({ id: 'b-' + agentId, agentId, state: 'ACTIVE', rootId: 'r1' }));
+  const chat = (agentId, over = {}) => ({ bindingId: 'b-' + agentId, chatId: g, isGroup: true, active: true, rootId: 'r1', ...over });
+  const all = ['hugo', 'maria', 'sofia'].map((a) => chat(a));
+  const run = (over) => d.checkClientGroupAgents({ rootId: 'r1', groupChatId: g, bindings, chats: all, ...over });
+  assert.deepEqual(run({}), { status: 'OK' });
+  assert.deepEqual(run({ groupChatId: '' }), { status: 'NO_GROUP_ASSIGNED' });
+  assert.deepEqual(run({ chats: all.filter((c) => c.bindingId !== 'b-maria') }), { status: 'AGENTS_MISSING', missing: ['maria'], notConnected: [] });
+  assert.deepEqual(run({ chats: all.map((c) => (c.bindingId === 'b-sofia' ? { ...c, active: false } : c)) }).missing, ['sofia']);
+  assert.deepEqual(run({ chats: all.map((c) => (c.bindingId === 'b-hugo' ? { ...c, rootId: 'other' } : c)) }).missing, ['hugo']);
+  assert.deepEqual(run({ bindings: bindings.filter((b) => b.agentId !== 'sofia') }), { status: 'AGENTS_MISSING', missing: [], notConnected: ['sofia'] });
+  assert.deepEqual(run({ bindings: bindings.map((b) => (b.agentId === 'maria' ? { ...b, state: 'REVOKED' } : b)) }).notConnected, ['maria']);
+});
+
 // ---- lease state machine ----
 const now = 1_000_000;
 const lease = { leaseId: '11111111-1111-4111-8111-111111111111', bindingId: 'b', generation: 1, expiresAtMs: now + 1000 };
