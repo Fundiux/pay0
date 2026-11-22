@@ -132,7 +132,7 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
       amount: firstAmount(dispersion.amount, dispersion.monto), dateMs: millis(dispersion.createdAt) || dateMs };
   }
 
-  // COTIZACION_PDF and CONSTANCIA_FIRMADA_PDF: one PDF of a solicitud.
+  // COTIZACION_PDF, CONSTANCIA_FIRMADA_PDF and ACUSE_CANCELACION: one document of a solicitud.
   const solicitudId = cleanText(upload.solicitudId ?? upload.entityId);
   const solicitud = await readSolicitud(rootId, solicitudId);
   if (!solicitud) return null;

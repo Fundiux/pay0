@@ -54,6 +54,11 @@ export const WHATSAPP_DELIVERY_SOURCES = {
     kind: "FILES", label: "Constancia de recibido firmada", uploadTypes: ["CONSTANCIA_RECEPCION_SATISFACCION"], entityType: "solicitudes",
     legacyMessage: "compartimos constancia firmada", manualPermission: { module: "solicitudes", action: "uploadDocs" },
   },
+  // The SAT cancellation receipt that IQ returns once an invoice is cancelled (PDF or XML as IQ delivers it).
+  ACUSE_CANCELACION: {
+    kind: "FILES", label: "Acuse de cancelación", uploadTypes: ["ACUSE_CANCELACION_CFDI"], entityType: "solicitudes",
+    legacyMessage: "compartimos acuse de cancelacion", manualPermission: { module: "solicitudes", action: "uploadDocs" },
+  },
 } as const satisfies Record<string, DeliverySourceDefinition>;
 
 export type DeliverySourceType = keyof typeof WHATSAPP_DELIVERY_SOURCES;
@@ -86,6 +91,7 @@ export function sourceTypeForUpload(row: Record<string, any> | null | undefined)
       upper(row!.integritySealStatus) === "SEALED") return "COMPLEMENTO_PAGO_PDF_XML";
   if (type === "COMPROBANTE_DISPERSION" && entity === "clientDispersions") return "DISPERSION_COMPROBANTE";
   if (type === "COTIZACION" && entity === "solicitudes") return "COTIZACION_PDF";
+  if (type === "ACUSE_CANCELACION_CFDI" && entity === "solicitudes") return "ACUSE_CANCELACION";
   // The receipt certificate is only sent once the client's signature is part of it.
   if (type === "CONSTANCIA_RECEPCION_SATISFACCION" && entity === "solicitudes" && clean(row!.constanciaSnapshot?.signatureUploadId, 200))
     return "CONSTANCIA_FIRMADA_PDF";
@@ -206,7 +212,7 @@ export function isWithinHugoHours(nowMs: number): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Destination order: client group seen by Hugo, then legacy route, then client phone.
+// Destination: only the client's group, when Hugo's connector sees it.
 // ---------------------------------------------------------------------------
 
 export type DestinationCandidate = { safeDocId: string; chatId: string; chatName: string; chatType: "GROUP" | "CONTACT"; destinationType: "CLIENT_GROUP" | "ADDITIONAL" | "CLIENT_PRIMARY"; phone?: string; connectorId: string };

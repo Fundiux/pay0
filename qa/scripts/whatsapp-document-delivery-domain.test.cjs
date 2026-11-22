@@ -28,6 +28,9 @@ check('upload-to-source-type', () => {
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'pagos', documentType: 'COMPLEMENTO_PAGO_PDF' })), null, 'manual complement upload without canonical key');
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'clientDispersions', documentType: 'COMPROBANTE_DISPERSION' })), 'DISPERSION_COMPROBANTE');
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'solicitudes', documentType: 'COTIZACION' })), 'COTIZACION_PDF');
+  assert.equal(d.sourceTypeForUpload(ready({ entityType: 'solicitudes', documentType: 'ACUSE_CANCELACION_CFDI' })), 'ACUSE_CANCELACION');
+  assert.equal(d.sourceTypeForUpload(ready({ entityType: 'pagos', documentType: 'ACUSE_CANCELACION_CFDI' })), null, 'acuse only for solicitudes');
+  assert.equal(d.sourceTypeForUpload(ready({ entityType: 'solicitudes', documentType: 'ACUSE_CANCELACION_CFDI', status: 'PENDING' })), null, 'acuse not ready');
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'solicitudes', documentType: 'CONSTANCIA_RECEPCION_SATISFACCION' })), null, 'constancia without signature');
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'solicitudes', documentType: 'CONSTANCIA_RECEPCION_SATISFACCION', constanciaSnapshot: { signatureUploadId: 's1' } })), 'CONSTANCIA_FIRMADA_PDF');
   assert.equal(d.sourceTypeForUpload(ready({ entityType: 'pagos', documentType: 'COMPROBANTE_PAGO' })), null, 'pago receipts are not sent');
