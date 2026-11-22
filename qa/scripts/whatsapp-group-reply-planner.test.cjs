@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const { planGroupReplies } = require('../../functions/lib/modules/whatsappAutoReply/planner.js');
 const { OWNER_WORKING_HOURS, REPLY_TEXTS } = require('../../functions/lib/modules/whatsappAutoReply/domain.js');
+const REQUEST_DATA_TEXT = REPLY_TEXTS.requestData;
 
 let checks = 0;
 const ok = fn => { fn(); checks++; };
@@ -32,7 +33,7 @@ ok(() => assert.deepEqual(planGroupReplies(input({ firstObservedByChat: {} })), 
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode: 'STANDARD' } })), []));
 
 // A greeting is answered with the owner's name.
-ok(() => assert.deepEqual(planGroupReplies(input()), [{ messageId: 'm1', chatId: 'g1@g.us', ownerUserUid: 'user-betell', kind: 'GREETING', text: 'Buen día, Betell.' }]));
+ok(() => assert.deepEqual(planGroupReplies(input()), [{ messageId: 'm1', chatId: 'g1@g.us', ownerUserUid: 'user-betell', kind: 'GREETING', text: 'Buen día, Betell.', subject: null, notifyInternal: false }]));
 // Team members and the agent itself are never answered; a team answer after the message stops it.
 ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('m1', { authorHash: 'operator-hash' })] })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('m1', { fromMe: true })] })), []));
@@ -50,6 +51,23 @@ ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: status, hasOp
 // A missing mode behaves as the safer greetings-only mode.
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, workingHours: OWNER_WORKING_HOURS }, messages: status })), []));
 ok(() => assert.equal(planGroupReplies(input({ config: { enabled: true, workingHours: OWNER_WORKING_HOURS } })).length, 1));
+
+// The system lookup: found = already processing, not found = ask who it is for and tell the internal team, unknown = neutral.
+const transferAsk = [msg('t1', { body: 'nos urge la transferencia nos podrian apoyar.', timestampMs: NOW - 5 * MIN })];
+const invoiceAsk = [msg('f1', { body: 'saben como va la factura que solicite', timestampMs: NOW - 5 * MIN })];
+const lookupWith = result => (owner, subject, row) => { seen.push([owner, subject, row.id]); return result; };
+const seen = [];
+ok(() => { const plan = planGroupReplies(input({ messages: transferAsk, lookupRequest: lookupWith('FOUND') })); assert.deepEqual(kinds(plan), ['PROCESSING']); assert.equal(plan[0].subject, 'TRANSFER'); assert.equal(plan[0].notifyInternal, false); });
+ok(() => { const plan = planGroupReplies(input({ messages: invoiceAsk, lookupRequest: lookupWith('NOT_FOUND') })); assert.deepEqual(kinds(plan), ['REQUEST_DATA']); assert.equal(plan[0].subject, 'INVOICE'); assert.equal(plan[0].notifyInternal, true); assert.equal(plan[0].text, REQUEST_DATA_TEXT); });
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: transferAsk, lookupRequest: lookupWith('UNKNOWN') }))), ['VALIDATING']));
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ messages: transferAsk }))), ['VALIDATING']));
+// The lookup receives the group's owner user and what the client asked about, and is only consulted for status questions.
+ok(() => { seen.length = 0; planGroupReplies(input({ messages: transferAsk, lookupRequest: lookupWith('FOUND') })); assert.deepEqual(seen, [['user-betell', 'TRANSFER', 't1']]); });
+ok(() => { seen.length = 0; planGroupReplies(input({ messages: [msg('g1')], lookupRequest: lookupWith('FOUND') })); assert.deepEqual(seen, []); });
+// Greetings-only mode never sends the data request, whatever the lookup says.
+ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode: 'GREETINGS_ONLY', workingHours: OWNER_WORKING_HOURS }, messages: transferAsk, lookupRequest: lookupWith('NOT_FOUND') })), []));
+// A thank-you about the request is not answered.
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('th', { body: 'gracias, ya quedó la factura', timestampMs: NOW - 5 * MIN })], lookupRequest: lookupWith('NOT_FOUND') })), []));
 
 // The 3 minute wait applies to questions, not to greetings.
 const fresh = [msg('q2', { body: '¿Ya salió mi factura?', timestampMs: NOW - 2 * MIN })];

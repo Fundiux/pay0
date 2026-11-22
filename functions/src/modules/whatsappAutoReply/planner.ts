@@ -1,4 +1,4 @@
-import { decideGroupReply, type AutoReplyConfig, type ReplyKind } from "./domain";
+import { classifyMessage, decideGroupReply, statusSubject, type AutoReplyConfig, type ReplyKind, type RequestLookup, type StatusSubject } from "./domain";
 
 // Pure planner for the group reply runner: from the recent messages of the groups an agent observes,
 // it decides which replies to queue. No Firestore here; the runner supplies what it read.
@@ -23,6 +23,10 @@ export type PlannedReply = {
   ownerUserUid: string;
   kind: ReplyKind;
   text: string;
+  /** What the client asked about, when it was a status question. */
+  subject: StatusSubject | null;
+  /** The request was not found in the system: the internal team should be told. */
+  notifyInternal: boolean;
 };
 
 export type PlanInput = {
@@ -40,6 +44,8 @@ export type PlanInput = {
   repliedIds: ReadonlySet<string>;
   /** Whether the owner user has a request in progress (decides "already processing" vs "let us validate"). */
   hasOpenSolicitud: (ownerUserUid: string) => boolean;
+  /** Looks the client's request up in the system. Absent means it is not checked (the neutral reply is used). */
+  lookupRequest?: (ownerUserUid: string, subject: StatusSubject, row: InboundRow) => RequestLookup;
   clientNameByOwner: Record<string, string>;
   /** Hard cap per run so a burst can never flood a group. */
   maxReplies?: number;
@@ -63,6 +69,7 @@ export function planGroupReplies(input: PlanInput): PlannedReply[] {
     for (const row of [...rows].sort((a, b) => a.timestampMs - b.timestampMs)) {
       if (planned.length >= cap) return planned;
       const isOperator = !!row.authorHash && input.operatorHashes.has(row.authorHash);
+      const isStatus = classifyMessage(row.body) === "STATUS_INQUIRY", subject = isStatus ? statusSubject(row.body) : "OTHER" as StatusSubject;
       const decision = decideGroupReply({
         config,
         nowMs,
@@ -72,12 +79,13 @@ export function planGroupReplies(input: PlanInput): PlannedReply[] {
           .filter(other => other.timestampMs > row.timestampMs)
           .map(other => ({ timestampMs: other.timestampMs, fromMe: other.fromMe, authorIsOperator: !!other.authorHash && input.operatorHashes.has(other.authorHash) })),
         hasOpenSolicitud: input.hasOpenSolicitud(ownerUserUid),
+        requestLookup: isStatus ? input.lookupRequest?.(ownerUserUid, subject, row) : undefined,
         alreadyReplied: input.repliedIds.has(row.id),
         clientName: input.clientNameByOwner[ownerUserUid] || null,
       });
       if (decision.action !== "REPLY") continue;
       if (config.mode !== "STANDARD" && decision.kind !== "GREETING") continue;
-      planned.push({ messageId: row.id, chatId, ownerUserUid, kind: decision.kind, text: decision.text });
+      planned.push({ messageId: row.id, chatId, ownerUserUid, kind: decision.kind, text: decision.text, subject: isStatus ? subject : null, notifyInternal: decision.kind === "REQUEST_DATA" });
       break;
     }
   }
