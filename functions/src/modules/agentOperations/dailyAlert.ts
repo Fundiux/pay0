@@ -46,6 +46,7 @@ function pendingLines(pending: PendingItems): string[] {
   add(pending.complementsLate, count => `Complementos solicitados con más de ${COMPLEMENT_LATE_DAYS} días sin llegar: ${count}`);
   add(pending.cashUnsigned, count => `Dispersiones en efectivo sin recibo firmado: ${count}`);
   add(pending.cancellationReview, count => `Solicitudes con cancelación en revisión: ${count}`);
+  add(pending.iqBalanceDifferences, count => `Clientes con saldo distinto entre IQ y PAY0 (última revisión nocturna): ${count}`);
   return lines;
 }
 

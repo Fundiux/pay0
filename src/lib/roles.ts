@@ -390,6 +390,7 @@ export function getRouteAccessRule(pathname: string): RouteCandidate | null {
     { href: "/wallet/clientes", moduleKey: "wallet", actionKey: "estadoCuentaCliente" },
     { href: "/wallet/estado-cuenta-cliente", moduleKey: "wallet", actionKey: "estadoCuentaCliente" },
     { href: "/wallet/estado-cuenta-usuario", moduleKey: "wallet", actionKey: "estadoCuentaUsuario" },
+    { href: "/wallet/saldos-iq", moduleKey: "wallet", actionKey: "saldos" },
     { href: "/wallet", moduleKey: "wallet", actionKey: "saldos" },
     { href: "/pagos/reproceso", moduleKey: "pagos", actionKey: "conciliate", superadminOnly: true },
     { href: "/pagos", moduleKey: "pagos", actionKey: "view" },

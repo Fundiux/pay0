@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Clock,
   Landmark,
+  Scale,
   Send,
   TrendingUp,
   Users,
@@ -146,6 +147,7 @@ export default function WalletPage() {
           {canViewUserStatement && <WalletShortcut href="/wallet/estado-cuenta-usuario" icon={<Landmark size={17} />} title="Saldos de usuarios" description="Utilidades y estado de cuenta." />}
           {canManageDispersions && <WalletShortcut href="/wallet/dispersiones" icon={<Send size={17} />} title="Dispersiones" description="Crear y consultar salidas." />}
           {canManageBeneficiaries && <WalletShortcut href="/wallet/beneficiarios" icon={<Users size={17} />} title="Beneficiarios" description="Cuentas destino de clientes." />}
+          {(role === "superadmin" || role === "admin") && <WalletShortcut href="/wallet/saldos-iq" icon={<Scale size={17} />} title="Saldos IQ vs PAY0" description="Revisión nocturna de diferencias." />}
         </div>
       </section>
 
