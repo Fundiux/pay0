@@ -508,6 +508,58 @@
     {
       "commit": "0615c8af",
       "capability": "Conector de Hugo se cierra al dejar de funcionar y el supervisor lo relanza"
+    },
+    {
+      "commit": "02cd776d",
+      "capability": "Catalogo de agentes consolidado: Maria solo clientes, Cobranza y Programador"
+    },
+    {
+      "commit": "84347536",
+      "capability": "Conversacion interna presentada como Hugo en UI, auditoria y prompt legacy-v2"
+    },
+    {
+      "commit": "13d5281c",
+      "capability": "Dispersiones sin boton manual IQ: envio automatico sin horario e incidentes"
+    },
+    {
+      "commit": "b46d07b3",
+      "capability": "Monto de nueva solicitud con formato en-US (MAT/Telegram)"
+    },
+    {
+      "commit": "83e3482b",
+      "capability": "Aplicar pago: montos con coma decimal y aviso visible en el modal"
+    },
+    {
+      "commit": "df2239b2",
+      "capability": "Conciliacion nocturna de saldos IQ vs PAY0 con visibilidad por socio"
+    },
+    {
+      "commit": "e03e6278",
+      "capability": "Alta automatica de beneficiarios en IQ con prueba de ausencia por catalogo (apagada)"
+    },
+    {
+      "commit": "2ae83184",
+      "capability": "Import historico IQ acepta meses posteriores a 2026"
+    },
+    {
+      "commit": "72f6bd05",
+      "capability": "Sincronizacion inversa diaria IQ a PAY0 automatica e idempotente"
+    },
+    {
+      "commit": "77634cfd",
+      "capability": "Reconocimiento tolerante de ordenes de compra (Excel, CSV, PDF) con revision"
+    },
+    {
+      "commit": "29e1c03d",
+      "capability": "Respuestas de Hugo en grupos (servidor, apagadas por defecto)"
+    },
+    {
+      "commit": "47f66137",
+      "capability": "Respuestas de Hugo en grupos (pantalla)"
+    },
+    {
+      "commit": "80f2a322",
+      "capability": "Respuestas de Hugo: clasificacion de preguntas de transferencia o factura"
     }
   ],
   "requiredText": [
