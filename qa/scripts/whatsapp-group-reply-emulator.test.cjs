@@ -23,7 +23,7 @@ const { createWorkerKey, createAuthorityTransport } = require('../../tools/whats
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -143,27 +143,34 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
   });
 
   const asOwner = data => ({ auth: { uid: ownerUid }, data });
-  await test('the-internal-group-of-the-team-is-never-answered', async () => {
-    await db.doc(`whatsappAgentChats/${bindingId}__${encodeURIComponent(groupE)}`).set({ rootId, bindingId, chatId: groupE, name: 'RR - Equipo', isGroup: true, active: true });
+  const internalDoc = (ownerAdminId, data) => db.doc(`whatsappInternalGroups/${rootId}__${encodeURIComponent(ownerAdminId)}`).set({ rootId, ownerAdminId, ...data });
+  const adminUid = `${run}-admin`;
+  await test('no-internal-group-of-the-root-is-ever-answered', async () => {
+    for (const [chatId, name] of [[groupE, 'RR - Equipo'], [groupF, 'Equipo admin']]) await db.doc(`whatsappAgentChats/${bindingId}__${encodeURIComponent(chatId)}`).set({ rootId, bindingId, chatId, name, isGroup: true, active: true });
     await setReply(true, 'STANDARD');
-    // An observer row written before the group became internal must not make Hugo answer there.
+    // Observer rows written before the groups became internal must not make Hugo answer there.
     await observe(groupE, 'RR - Equipo', betell);
+    await observe(groupF, 'Equipo admin', betell);
     await inbound(groupE, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
-    const hello = await inbound(groupE);
-    await db.doc(`whatsappInternalGroups/${rootId}`).set({ rootId, groupChatId: groupE, groupName: 'RR - Equipo' });
+    await inbound(groupF, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const helloE = await inbound(groupE), helloF = await inbound(groupF);
+    await internalDoc(ownerUid, { groupChatId: groupE, groupName: 'RR - Equipo' });
+    await internalDoc(adminUid, { groupChatId: groupF, groupName: 'Equipo admin' });
     await runGroupReplies(rootId, NOW);
-    assert.equal((await jobsFor(hello)).length, 0);
+    assert.equal((await jobsFor(helloE)).length, 0);
+    assert.equal((await jobsFor(helloF)).length, 0);
   });
 
-  await test('the-internal-group-cannot-be-assigned-to-a-user', async () => {
-    await assert.rejects(() => saveWhatsAppAgentObservers.run(asOwner({ groupChatId: groupE, active: true, ownerUserUid: betell, observers: [{ agentId: 'hugo', phone: '' }] })), error => /grupo interno/.test(String(error.message)));
+  await test('no-internal-group-can-be-assigned-to-a-user', async () => {
+    for (const chatId of [groupE, groupF]) await assert.rejects(() => saveWhatsAppAgentObservers.run(asOwner({ groupChatId: chatId, active: true, ownerUserUid: betell, observers: [{ agentId: 'hugo', phone: '' }] })), error => /grupo interno/.test(String(error.message)));
   });
 
-  await test('an-empty-internal-group-document-means-there-is-none', async () => {
-    await db.doc(`whatsappInternalGroups/${rootId}`).set({ rootId, groupChatId: '', groupName: '' });
-    await db.doc(`whatsappAgentChats/${bindingId}__${encodeURIComponent(groupE)}`).set({ rootId, bindingId, chatId: groupE, name: 'RR - Equipo', isGroup: true, active: true });
+  await test('an-empty-or-foreign-internal-group-document-blocks-nothing', async () => {
+    await internalDoc(ownerUid, { groupChatId: '', groupName: '' });
+    await internalDoc(adminUid, { groupChatId: '', groupName: '' });
+    await db.doc(`whatsappInternalGroups/other-root__${encodeURIComponent(adminUid)}`).set({ rootId: 'other-root', ownerAdminId: adminUid, groupChatId: groupE, groupName: 'Otro' });
     await saveWhatsAppAgentObservers.run(asOwner({ groupChatId: groupE, active: true, ownerUserUid: betell, observers: [{ agentId: 'hugo', phone: '' }] }));
-    await db.doc(`whatsappInternalGroups/${rootId}`).delete();
+    await db.doc(`whatsappInternalGroups/other-root__${encodeURIComponent(adminUid)}`).delete();
   });
 
   await test('switching-replies-off-stops-new-replies', async () => {

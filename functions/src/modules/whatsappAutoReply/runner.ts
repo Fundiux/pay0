@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logActivity } from "../../utils/logActivity";
 import { operatorAuthorHashes, MAX_REPLY_AGE_MS, OWNER_WORKING_HOURS } from "./domain";
+import { readInternalGroupChatIds } from "./internalGroups";
 import { planGroupReplies, type InboundRow, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -44,13 +45,6 @@ export function buildReplyDelivery(rootId: string, groupName: string, ownerName:
 
 type ReplyConfigDoc = { enabled: boolean; mode: ReplyMode };
 
-// The team's single internal group (owned by the delivery notices) is never answered. No document or an empty id means there is none.
-export const INTERNAL_GROUPS = "whatsappInternalGroups";
-export async function readInternalGroupChatId(rootId: string): Promise<string | null> {
-  const snap = await db.doc(`${INTERNAL_GROUPS}/${rootId}`).get();
-  return clean(snap.get("groupChatId"), 200) || null;
-}
-
 export async function readReplyConfig(rootId: string): Promise<ReplyConfigDoc> {
   const snap = await db.doc(`${REPLY_CONFIGS}/${replyConfigId(rootId)}`).get();
   return { enabled: snap.get("enabled") === true, mode: snap.get("mode") === "STANDARD" ? "STANDARD" : "GREETINGS_ONLY" };
@@ -69,7 +63,7 @@ async function firstObservedAt(rootId: string, chatId: string): Promise<number |
 
 export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
   const stored = await readReplyConfig(rootId);
-  const internalChatId = await readInternalGroupChatId(rootId);
+  const internalChatIds = await readInternalGroupChatIds(db, rootId);
   if (!stored.enabled) return { skipped: "OFF" as const, queued: 0 };
   const config: ReplyRuntimeConfig = { enabled: true, mode: stored.mode, workingHours: OWNER_WORKING_HOURS };
 
@@ -79,7 +73,7 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
   for (const doc of observers.docs) {
     const owner = clean(doc.get("ownerUserUid"), 128), chatId = clean(doc.get("groupChatId"), 200);
     const observed = ((doc.get("observers") as any[]) || []).some(row => row?.agentId === REPLY_AGENT_ID);
-    if (owner && chatId && observed && chatId !== internalChatId) { ownerByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
+    if (owner && chatId && observed && !internalChatIds.has(chatId)) { ownerByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
   }
   if (!Object.keys(ownerByChat).length) return { skipped: "NO_GROUPS" as const, queued: 0 };
 
