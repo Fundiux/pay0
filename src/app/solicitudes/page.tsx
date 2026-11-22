@@ -16,7 +16,7 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import { normalizeRole, isSuperAdmin, isAdmin, isOperador, mergeModules } from "@/lib/roles";
 import { applyPagoToSolicitud, createPagoApplicationIdempotencyKey } from "@/services/pagos";
 import { addSolicitudNota, cancelSolicitud, changeSolicitudStatus, listSolicitudes, type SolicitudPageCursor } from "@/services/solicitudes";
-import { cancelFacturamaProductionInvoice, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
+import { cancelFacturamaProductionInvoice, confirmRepCancellation, getRepCancellationImpact, refreshFacturamaProductionCancellationStatus } from "@/services/facturama";
 import { buildSustitucionSnapshot, buildSustitucionChain, buildSustitucionIndex } from "@/lib/solicitudSustitucion";
 import { normalizeSolicitudStatus } from "@/lib/solicitudStatus";
 import { canAutomaticallyRefreshCancellation } from "@/lib/solicitudCancellationFollowup";
@@ -1249,6 +1249,18 @@ export default function SolicitudesPage() {
     try {
       setCancelSatSaving(true);
 
+      // Cancelling an invoice with live payment complements cancels them too, complements first. The owner confirms it here;
+      // the server checks the confirmation before it cancels anything.
+      if (String(cancelSatFor?.facturamaEnvironment || "").toUpperCase() === "PRODUCTION" && cancelSatFor?.facturamaInvoiceId) {
+        const impact = await getRepCancellationImpact(cancelSatFor.id);
+        if (impact.reps.length) {
+          const lines = impact.reps.map((rep) => `• Parcialidad ${rep.installment}${rep.amountMinor != null ? ` · $${toCurrency(rep.amountMinor / 100)}` : ""}`).join("\n");
+          const accepted = window.confirm(`Esta factura tiene ${impact.reps.length} complemento(s) de pago vigente(s):\n${lines}\n\nCancelar la factura cancela también esos complementos: primero los complementos y después la factura. ¿Confirmas la cancelación de todos?`);
+          if (!accepted) return;
+          await confirmRepCancellation(cancelSatFor.id);
+        }
+      }
+
       if (cancelSatMotivo === "01") {
         await statusFn({
           solicitudId: cancelSatFor.id,
@@ -1334,6 +1346,7 @@ export default function SolicitudesPage() {
         }
       }
 
+      if (cancelResult?.status === "WAITING_REP_CANCELLATION") setPageMsg(String(cancelResult?.message || "Los complementos de pago aún no están cancelados; la factura se cancela cuando el SAT los confirme."));
       const cancelResponse = (cancelResult as any)?.data || {};
 
       const savedPatch: any =

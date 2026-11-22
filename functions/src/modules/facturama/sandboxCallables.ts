@@ -12,6 +12,7 @@ import { logActivityBatch } from "../../utils/logActivity";
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 import { facturamaCancellationBlock, PENDING_WINDOW_MS } from "./cancellationGuard";
 import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
+import { cancelRepsBeforeInvoice, listFacturamaReps, publicRep, REP_CANCELLATION_CONFIRM_REQUIRED, repsToCancel } from "./repCancellation";
 import { satPaymentForm } from "./paymentTerms";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
@@ -271,6 +272,13 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
           if (!originalSnap.exists || clean(original.rootId, 128) !== rootId || !originalInvoice.facturamaCfdiId || !originalInvoiceSnap) throw new Error("No se encontro el CFDI original.");
           await assertPay0Issuer({ db, rootId, companyId: clean(original.companyId || original.empresaId, 128) });
           if (original.despachoId !== PAY0_DISPATCH_ID || originalInvoice.companyId !== (original.companyId || original.empresaId)) throw new Error("FACTURAMA_REPLACEMENT_ISSUER_SCOPE");
+          let repWait: string | null = null;
+          if (repsToCancel(await listFacturamaReps(db, rootId, originalRef.id)).length) {
+            if (!original.repCancellationConfirmedAt) repWait = REP_CANCELLATION_CONFIRM_REQUIRED;
+            else if (!(await cancelRepsBeforeInvoice({ db, rootId, solicitudId: originalRef.id, solicitudFolio: original.folio || null, actorUid: uid, actorRole: "superadmin",
+              cancelCfdi: (cfdiId, motive) => requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(cfdiId)}?${new URLSearchParams({ motive }).toString()}`, { method: "DELETE" }) })).allConfirmed) repWait = "WAITING_REP_CANCELLATION";
+          }
+          if (repWait) throw Object.assign(new Error(repWait), { repWait });
           const cancelResult = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(originalInvoice.facturamaCfdiId)}?${new URLSearchParams({ motive: "01", uuidReplacement: uuid }).toString()}`, { method: "DELETE" });
           const cancellationStatus = clean(cancelResult?.Status || cancelResult?.status, 32).toUpperCase() || "REQUESTED";
           const cancellationTerminal = isConfirmedFacturamaCancellation(cancellationStatus);
@@ -292,7 +300,8 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
             originalInvoiceSnap.ref.set({ cancellationStatus, cancellationMotive: "01", cancellationUuidReplacement: uuid, updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
           ]);
         } catch (cancellationError: any) {
-          await solicitudSnap.ref.set({ replacementCancellationStatus: "ERROR", replacementCancellationError: clean(cancellationError?.message || cancellationError, 1000), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          if (cancellationError?.repWait) await solicitudSnap.ref.set({ replacementCancellationStatus: cancellationError.repWait, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          else await solicitudSnap.ref.set({ replacementCancellationStatus: "ERROR", replacementCancellationError: clean(cancellationError?.message || cancellationError, 1000), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         }
       }
       return { ok: true, reused: false, invoiceId, status: issuedStatus, facturamaCfdiId: cfdiId, uuid: uuid || null, xmlUploadId: xmlDoc.uploadId, pdfUploadId: pdfDoc.uploadId };
@@ -365,6 +374,14 @@ export const cancelFacturamaProductionInvoice = onCall(
     const invRef = db.doc(`facturamaInvoices/${invoiceId}`); const invSnap = await invRef.get(); const inv: any = invSnap.data() || {};
     if (!invSnap.exists || clean(inv.rootId, 128) !== rootId || inv.environment !== "PRODUCTION" || !inv.facturamaCfdiId) throw new HttpsError("failed-precondition", "CFDI productivo Facturama no disponible.");
     if (inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
+    // A live complemento de pago makes the invoice "no cancelable" for the SAT: the complements are cancelled first, with the owner's confirmation.
+    if (repsToCancel(await listFacturamaReps(db, rootId, solicitudId)).length) {
+      if (request.data?.confirmRepCancellation !== true && !sol.repCancellationConfirmedAt)
+        throw new HttpsError("failed-precondition", "Esta factura tiene complementos de pago vigentes. Cancelarla cancela también esos complementos; confirma para continuar.", { code: REP_CANCELLATION_CONFIRM_REQUIRED, reps: (await listFacturamaReps(db, rootId, solicitudId)).map(publicRep) });
+      const repOutcome = await cancelRepsBeforeInvoice({ db, rootId, solicitudId, solicitudFolio: sol.folio || null, actorUid: uid, actorRole: "superadmin",
+        cancelCfdi: (cfdiId, motive) => requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(cfdiId)}?${new URLSearchParams({ motive }).toString()}`, { method: "DELETE" }) });
+      if (!repOutcome.allConfirmed) return { ok: true, status: "WAITING_REP_CANCELLATION", terminal: false, uuid: inv.uuid || sol.facturaUuid || null, message: "Los complementos de pago aún no están cancelados; la factura se cancela cuando el SAT los confirme. Vuelve a intentarlo después." };
+    }
     let previousMotive: unknown = null;
     // Two clicks or two users must reach Facturama only once.
     await db.runTransaction(async tx => {

@@ -101,3 +101,11 @@ export type InvoicePaymentControlResult = {
 export async function getInvoicePaymentControl() {
   return (await httpsCallable<Record<string, never>, InvoicePaymentControlResult>(functions, "getInvoicePaymentControl", { timeout: 120000 })({})).data;
 }
+
+// A live complemento de pago makes the invoice "no cancelable" for the SAT: the complements are cancelled first.
+export async function getRepCancellationImpact(solicitudId: string) {
+  return (await httpsCallable<{ solicitudId: string }, { ok: boolean; reps: Array<{ installment: number; amountMinor: number | null; cancelled: boolean }> }>(functions, "getRepCancellationImpact")({ solicitudId })).data;
+}
+export async function confirmRepCancellation(solicitudId: string) {
+  return (await httpsCallable<{ solicitudId: string }, { ok: boolean; reps: number }>(functions, "confirmRepCancellation")({ solicitudId })).data;
+}
