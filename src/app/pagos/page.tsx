@@ -63,13 +63,18 @@ import CompactBalanceCells from "@/components/CompactBalanceCells";
 import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
-  const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  let raw = value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    // Teclados con coma decimal (p. ej. "1500,50") se leen como decimal; "1,500" sigue siendo miles.
+    raw = /^\d+,\d{1,2}$/.test(trimmed) ? trimmed.replace(",", ".") : trimmed.replace(/,/g, "");
+  }
   const num = Number(raw || 0);
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
 
 function toCurrency(value: any) {
-  return money2(value).toLocaleString(undefined, {
+  return money2(value).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -2840,6 +2845,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                               title="Aplicar a folios"
                               onClick={() => {
                                 applyRequestKeyRef.current = createPagoApplicationIdempotencyKey();
+                                setPageMsg("");
                                 setApplyFor(p);
                                 setApplyAmounts({});
                               }}
@@ -3328,6 +3334,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                             )}<td className="p-3 text-center font-mono">${toCurrency(s?.monto)}</td><td className="p-3 text-center font-mono text-emerald-400">${toCurrency(s?.totalAbonado)}</td><td className="p-3 text-center font-mono text-amber-400">${toCurrency(pendiente)}</td><td className="p-3">
                               <input
                                 value={applyAmounts[s.id] || ""}
+                                inputMode="decimal"
                                 onChange={(e) =>
                                   setApplyAmounts((prev) => ({
                                     ...prev,
@@ -3356,6 +3363,11 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
                   </table>
                 </div>
 
+                {pageMsg && (
+                  <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    {pageMsg}
+                  </div>
+                )}
                 <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
                   <div className="text-sm text-slate-300">
                     Seleccionado: <span className="font-normal text-white">${toCurrency(totalAplicarSeleccionado)}</span>
