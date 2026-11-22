@@ -59,6 +59,11 @@ export const WHATSAPP_DELIVERY_SOURCES = {
     kind: "FILES", label: "Acuse de cancelación", uploadTypes: ["ACUSE_CANCELACION_CFDI"], entityType: "solicitudes",
     legacyMessage: "compartimos acuse de cancelacion", manualPermission: { module: "solicitudes", action: "uploadDocs" },
   },
+  // Internal notice to the owner's internal group (never to a client): a client has no group or an agent is missing from it.
+  AVISO_GRUPO_INTERNO: {
+    kind: "TEXT", label: "Aviso interno de grupo", uploadTypes: [],
+    legacyMessage: "aviso interno de grupo", manualPermission: { module: "solicitudes", action: "uploadDocs" },
+  },
 } as const satisfies Record<string, DeliverySourceDefinition>;
 
 export type DeliverySourceType = keyof typeof WHATSAPP_DELIVERY_SOURCES;
@@ -269,6 +274,21 @@ export function checkClientGroupAgents(input: {
     if (!sees) missing.push(agentId);
   }
   return missing.length || notConnected.length ? { status: "AGENTS_MISSING", missing, notConnected } : { status: "OK" };
+}
+
+const AGENT_LABEL: Record<string, string> = { hugo: "Hugo", maria: "María", sofia: "Sofía" };
+const agentNames = (ids: string[]) => ids.map((id) => AGENT_LABEL[id] || id).join(", ");
+
+/** Text of the internal notice, or null when the client's group is complete. */
+export function buildGroupAlertText(input: { clientName: unknown; check: GroupAgentCheck }): string | null {
+  const name = clean(input.clientName, 120) || "Un cliente";
+  const check = input.check;
+  if (check.status === "OK") return null;
+  if (check.status === "NO_GROUP_ASSIGNED") return `Aviso: el cliente ${name} tiene una solicitud nueva y no tiene grupo de WhatsApp asignado. Asigna un grupo para poder enviarle sus documentos.`;
+  const parts: string[] = [];
+  if (check.missing.length) parts.push(`en el grupo del cliente ${name} falta${check.missing.length > 1 ? "n" : ""}: ${agentNames(check.missing)}. Agrégal${check.missing.length > 1 ? "os" : "o"} al grupo`);
+  if (check.notConnected.length) parts.push(`${agentNames(check.notConnected)} no tiene${check.notConnected.length > 1 ? "n" : ""} una conexión activa de WhatsApp`);
+  return `Aviso: ${parts.join(". ")}.`;
 }
 
 // ---------------------------------------------------------------------------

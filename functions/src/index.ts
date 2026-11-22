@@ -219,7 +219,8 @@ export { reconcileIqBalances } from "./modules/iqBalanceReconciliation/service";
 export { getIqBalanceComparison } from "./modules/iqBalanceReconciliation/callables";
 export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger";
 export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
-export { getClientWhatsAppGroups, assignWhatsAppGroupToClients } from "./modules/documentDelivery/clientWhatsappGroups";
+export { getClientWhatsAppGroups, assignWhatsAppGroupToClients, setWhatsAppInternalGroup } from "./modules/documentDelivery/clientWhatsappGroups";
+export { alertClientGroupOnSolicitud } from "./modules/documentDelivery/clientGroupAlerts";
 export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
 export { setIqBeneficiaryCreateConfig } from "./modules/beneficiaries/iqCreateConfigCallables";
 export {

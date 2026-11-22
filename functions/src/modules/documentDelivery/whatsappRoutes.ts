@@ -166,9 +166,14 @@ export async function applyWhatsAppDestinationsToJob(
     };
   }
 
-  // 1) The client's WhatsApp group, only when Hugo's own connector sees it.
-  const assignmentSnap = await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
-  const assignment = assignmentSnap.exists && cleanText(assignmentSnap.get("rootId")) === rootId && cleanText(assignmentSnap.get("clientId")) === clienteId
+  // An internal notice goes to the owner's internal group; every client document goes to the client's group.
+  const isInternalNotice = cleanText(jobData?.sourceType).toUpperCase() === "AVISO_GRUPO_INTERNO";
+
+  // 1) The group, only when Hugo's own connector sees it.
+  const assignmentSnap = isInternalNotice
+    ? await db.doc(`whatsappInternalGroups/${rootId}`).get()
+    : await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
+  const assignment = assignmentSnap.exists && cleanText(assignmentSnap.get("rootId")) === rootId && (isInternalNotice || cleanText(assignmentSnap.get("clientId")) === clienteId)
     ? (assignmentSnap.data() || {})
     : null;
   let hugoGroup: any = null;
@@ -193,10 +198,12 @@ export async function applyWhatsAppDestinationsToJob(
   await writeResolutionFailure(
     db,
     jobRef,
-    notVisible ? "CLIENT_GROUP_NOT_VISIBLE" : "CLIENT_GROUP_MISSING",
-    notVisible
-      ? "Hugo no esta en el grupo asignado al cliente."
-      : "El cliente no tiene grupo de WhatsApp asignado.",
+    isInternalNotice
+      ? (notVisible ? "INTERNAL_GROUP_NOT_VISIBLE" : "INTERNAL_GROUP_MISSING")
+      : (notVisible ? "CLIENT_GROUP_NOT_VISIBLE" : "CLIENT_GROUP_MISSING"),
+    isInternalNotice
+      ? (notVisible ? "Hugo no esta en el grupo interno de avisos." : "No hay grupo interno de avisos configurado.")
+      : (notVisible ? "Hugo no esta en el grupo asignado al cliente." : "El cliente no tiene grupo de WhatsApp asignado."),
     actor
   );
 

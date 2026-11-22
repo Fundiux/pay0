@@ -8,6 +8,7 @@ import { listScopedClients, invalidateClientCatalog, type ClientItem } from "@/s
 import {
   assignWhatsAppGroupToClients,
   getClientWhatsAppGroups,
+  setWhatsAppInternalGroup,
   type ClientWhatsAppGroupAssignment,
   type ClientWhatsAppGroupOption,
 } from "@/services/clientWhatsappGroups";
@@ -27,6 +28,8 @@ export function GroupClientAssignment() {
 
   const [groups, setGroups] = useState<ClientWhatsAppGroupOption[]>([]);
   const [assignments, setAssignments] = useState<ClientWhatsAppGroupAssignment[]>([]);
+  const [internalChatId, setInternalChatId] = useState("");
+  const [internalSaving, setInternalSaving] = useState(false);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupChatId, setGroupChatId] = useState("");
@@ -46,6 +49,7 @@ export function GroupClientAssignment() {
         if (!alive) return;
         setGroups(result.groups || []);
         setAssignments(result.assignments || []);
+        setInternalChatId(result.internalGroup?.chatId || "");
       })
       .catch((e: any) => alive && setError(e?.message || "No se pudieron cargar los grupos de WhatsApp."))
       .finally(() => alive && setLoading(false));
@@ -84,6 +88,21 @@ export function GroupClientAssignment() {
 
   const toAssign = selected.filter((id) => !rows.find((row) => row.client.id === id)?.inThisGroup);
   const toRemove = selected.filter((id) => rows.find((row) => row.client.id === id)?.inThisGroup);
+
+  async function saveInternalGroup(chatId: string) {
+    setInternalSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await setWhatsAppInternalGroup(chatId);
+      setInternalChatId(result.groupChatId || "");
+      setMessage(result.message);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo guardar el grupo interno.");
+    } finally {
+      setInternalSaving(false);
+    }
+  }
 
   async function run(action: "ASSIGN" | "UNASSIGN") {
     const ids = action === "ASSIGN" ? toAssign : toRemove;
@@ -131,6 +150,31 @@ export function GroupClientAssignment() {
       </div>
 
       <div className="space-y-3 p-4">
+        {!loading && groups.length > 0 && (
+          <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <label className="text-xs font-semibold text-slate-300" htmlFor="internal-whatsapp-group">
+              Grupo interno de avisos
+            </label>
+            <p className="text-xs text-slate-400">
+              Hugo avisa aquí cuando entra una solicitud de un cliente sin grupo o cuando falta Hugo, María o Sofía en su grupo.
+            </p>
+            <select
+              id="internal-whatsapp-group"
+              value={internalChatId}
+              disabled={internalSaving}
+              onChange={(e) => saveInternalGroup(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400/40 disabled:opacity-50"
+            >
+              <option value="">Sin grupo interno</option>
+              {groups.map((item) => (
+                <option key={item.chatId} value={item.chatId} className="bg-[#161d2b]">
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Cargando...

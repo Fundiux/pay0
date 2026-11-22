@@ -24,10 +24,11 @@ export const getClientWhatsAppGroups = onCall({ cors: true, timeoutSeconds: 60, 
   const { rootId } = await requireWhatsAppSuperadmin(request);
   const onlySender = clean(request.data?.agentId) === DOCUMENT_SENDER_AGENT_ID;
   const sender = onlySender ? await findDocumentSenderBinding(db, rootId) : null;
-  const [chats, assignments] = await Promise.all([
+  const [chats, assignments, internal] = await Promise.all([
     onlySender && !sender ? Promise.resolve({ docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] }) :
       db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
     db.collection("clientWhatsappGroups").where("rootId", "==", rootId).limit(1000).get(),
+    db.doc(`whatsappInternalGroups/${rootId}`).get(),
   ]);
   const groups = new Map<string, string>();
   for (const doc of chats.docs) {
@@ -37,6 +38,8 @@ export const getClientWhatsAppGroups = onCall({ cors: true, timeoutSeconds: 60, 
   return {
     ok: true,
     senderConnected: onlySender ? !!sender : undefined,
+    internalGroup: internal.exists && clean(internal.get("rootId")) === rootId && clean(internal.get("groupChatId"), 200)
+      ? { chatId: clean(internal.get("groupChatId"), 200), name: clean(internal.get("groupName")) } : null,
     groups: [...groups.entries()].map(([chatId, name]) => ({ chatId, name })).sort((a, b) => a.name.localeCompare(b.name, "es")),
     assignments: assignments.docs.map((doc) => ({
       clientId: clean(doc.get("clientId")),
@@ -138,3 +141,21 @@ async function rerouteWaitingAutomaticJobs(rootId: string, clientIds: string[]):
   }
   return released;
 }
+
+// The owner's internal group: where Hugo reports clients without a group or groups missing an agent.
+// One per root. An empty groupChatId clears it.
+export const setWhatsAppInternalGroup = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async (request) => {
+  const { uid, rootId } = await requireWhatsAppSuperadmin(request);
+  const groupChatId = clean(request.data?.groupChatId, 200);
+  const ref = db.doc(`whatsappInternalGroups/${rootId}`);
+
+  if (!groupChatId) {
+    await ref.delete();
+    return { ok: true, groupChatId: null, groupName: null, message: "Grupo interno retirado." };
+  }
+
+  const group = await resolveObservableGroup(db as unknown as ObserverGroupDb, rootId, groupChatId);
+  if (!group || group.source !== "AGENT") throw new HttpsError("failed-precondition", "El grupo no existe en los chats de los agentes de este root.");
+  await ref.set({ rootId, groupChatId, groupName: group.name, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { ok: true, groupChatId, groupName: group.name, message: "Grupo interno guardado." };
+});

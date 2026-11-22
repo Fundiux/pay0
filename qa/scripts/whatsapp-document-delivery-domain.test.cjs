@@ -118,6 +118,18 @@ check('group-agents', () => {
   assert.deepEqual(run({ bindings: bindings.map((b) => (b.agentId === 'maria' ? { ...b, state: 'REVOKED' } : b)) }).notConnected, ['maria']);
 });
 
+// ---- internal notice text ----
+check('group-alert-text', () => {
+  assert.equal(d.buildGroupAlertText({ clientName: 'Norte', check: { status: 'OK' } }), null);
+  assert.match(d.buildGroupAlertText({ clientName: 'Norte', check: { status: 'NO_GROUP_ASSIGNED' } }), /Norte.*no tiene grupo/);
+  const one = d.buildGroupAlertText({ clientName: 'Norte', check: { status: 'AGENTS_MISSING', missing: ['maria'], notConnected: [] } });
+  assert.match(one, /falta: María. Agrégalo/);
+  const two = d.buildGroupAlertText({ clientName: 'Norte', check: { status: 'AGENTS_MISSING', missing: ['maria', 'sofia'], notConnected: [] } });
+  assert.match(two, /faltan: María, Sofía. Agrégalos/);
+  assert.match(d.buildGroupAlertText({ clientName: 'Norte', check: { status: 'AGENTS_MISSING', missing: [], notConnected: ['hugo'] } }), /Hugo no tiene una conexión activa/);
+  assert.equal(d.deliverySource('AVISO_GRUPO_INTERNO').kind, 'TEXT');
+});
+
 // ---- lease state machine ----
 const now = 1_000_000;
 const lease = { leaseId: '11111111-1111-4111-8111-111111111111', bindingId: 'b', generation: 1, expiresAtMs: now + 1000 };

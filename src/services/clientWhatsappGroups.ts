@@ -8,6 +8,7 @@ export type ClientWhatsAppGroupAssignment = { clientId: string; groupChatId: str
 export async function getClientWhatsAppGroups(options: { agentId?: "hugo" } = {}): Promise<{
   ok: boolean;
   senderConnected?: boolean;
+  internalGroup?: ClientWhatsAppGroupOption | null;
   groups: ClientWhatsAppGroupOption[];
   assignments: ClientWhatsAppGroupAssignment[];
 }> {
@@ -30,5 +31,12 @@ export async function assignWhatsAppGroupToClients(input: {
 }> {
   const fn = httpsCallable(functions, "assignWhatsAppGroupToClients");
   const res: any = await fn(input);
+  return res.data;
+}
+
+/** The owner's internal group, where Hugo reports clients without a group or groups missing an agent. Empty clears it. */
+export async function setWhatsAppInternalGroup(groupChatId: string): Promise<{ ok: boolean; groupChatId: string | null; groupName: string | null; message: string }> {
+  const fn = httpsCallable(functions, "setWhatsAppInternalGroup");
+  const res: any = await fn({ groupChatId });
   return res.data;
 }
