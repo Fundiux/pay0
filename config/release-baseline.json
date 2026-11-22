@@ -560,6 +560,34 @@
     {
       "commit": "80f2a322",
       "capability": "Respuestas de Hugo: clasificacion de preguntas de transferencia o factura"
+    },
+    {
+      "commit": "7ba5c3d5",
+      "capability": "WhatsApp solo al grupo: Key the internal WhatsApp group by owner: superadmin or admin, operators use their admin's"
+    },
+    {
+      "commit": "b842d6fb",
+      "capability": "WhatsApp solo al grupo: Fix the source type list in the delivery domain test after rebasing on main"
+    },
+    {
+      "commit": "9c69ecb0",
+      "capability": "WhatsApp solo al grupo: Test the internal group notice and keep the group visible in the sending emulator"
+    },
+    {
+      "commit": "2959f400",
+      "capability": "WhatsApp solo al grupo: Have Hugo report clients without a WhatsApp group in the internal group"
+    },
+    {
+      "commit": "3ba130dd",
+      "capability": "WhatsApp solo al grupo: Add the rule that checks the three agents are in a client's WhatsApp group"
+    },
+    {
+      "commit": "237794e0",
+      "capability": "WhatsApp solo al grupo: Send the IQ cancellation receipt (acuse) to the client's WhatsApp group"
+    },
+    {
+      "commit": "ae71f195",
+      "capability": "WhatsApp solo al grupo: Send client documents only to the client's WhatsApp group"
     }
   ],
   "requiredText": [
