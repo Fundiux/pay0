@@ -181,58 +181,22 @@ export async function applyWhatsAppDestinationsToJob(
     }
   }
 
-  // 2) Legacy route, 3) the client's own WhatsApp number.
-  const routeMatch = await getWhatsAppRouteForJob(db, jobData);
-  const choice = chooseDeliveryDestination({
-    assignment,
-    hugoGroup,
-    rootId,
-    legacyRoute: routeMatch ? {
-      routeId: routeMatch.routeId,
-      matchType: routeMatch.matchType,
-      destinations: Array.isArray(routeMatch.route.destinationChats) ? routeMatch.route.destinationChats : [],
-    } : null,
-    clientPhone: normalizeClientWhatsapp((client as any).whatsapp) || null,
-    clientName: cleanText((client as any).name) || getWhatsAppJobClientLabel(jobData),
-  });
+  const choice = chooseDeliveryDestination({ assignment, hugoGroup, rootId });
 
   if (choice.source === "CLIENT_GROUP") {
     return writeDestinations(db, jobRef, choice.destinations, null, null, actor, "CLIENT_GROUP");
   }
 
-  if (choice.source === "LEGACY_ROUTE_INVALID") {
-    await writeResolutionFailure(
-      db,
-      jobRef,
-      "ROUTE_INVALID",
-      "La ruta WhatsApp configurada no tiene destinos validos.",
-      actor
-    );
-
-    return {
-      ok: true,
-      status: "ROUTE_INVALID",
-      routeId: choice.routeId,
-      matchType: choice.matchType,
-      destinationsCount: 0,
-    };
-  }
-
-  if (choice.source === "LEGACY_ROUTE") {
-    return writeDestinations(db, jobRef, choice.destinations, choice.routeId, choice.matchType, actor, "LEGACY_ROUTE");
-  }
-
-  if (choice.source === "CLIENT_PHONE") {
-    return writeDestinations(db, jobRef, choice.destinations, null, null, actor, "CLIENT_PHONE");
-  }
-
+  // Everything goes to the client's group. There is no private fallback: without a usable group the job waits
+  // and the reason is recorded so Hugo can report it.
+  const notVisible = choice.reason === "GROUP_NOT_VISIBLE";
   await writeResolutionFailure(
     db,
     jobRef,
-    "CLIENT_WHATSAPP_MISSING",
-    groupChatId
-      ? "El grupo asignado al cliente no esta en los chats de Hugo y no hay otra ruta."
-      : "El cliente no tiene grupo, ruta ni WhatsApp registrado.",
+    notVisible ? "CLIENT_GROUP_NOT_VISIBLE" : "CLIENT_GROUP_MISSING",
+    notVisible
+      ? "Hugo no esta en el grupo asignado al cliente."
+      : "El cliente no tiene grupo de WhatsApp asignado.",
     actor
   );
 

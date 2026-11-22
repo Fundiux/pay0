@@ -73,25 +73,30 @@ check('hugo-hours', () => {
   assert.equal(d.isWithinHugoHours(mx(2026, 11, 15, 12, 0)), false); // Sun
 });
 
-// ---- destination order ----
+// ---- destination: client group only ----
 const group = '120363000000000001@g.us';
 const hugoGroup = { bindingId: 'hugo-binding', chatId: group, name: 'Cliente Norte', isGroup: true, active: true, rootId: 'r1' };
-const legacyRoute = { routeId: 'route', matchType: 'DEFAULT', destinations: [{ safeDocId: 'legacy', chatId: '120363000000000009@g.us', chatName: 'Legacy', chatType: 'GROUP' }] };
-const base = { assignment: { groupChatId: group, groupName: 'Cliente Norte' }, hugoGroup, rootId: 'r1', legacyRoute, clientPhone: '5215550000000', clientName: 'Norte' };
-check('destination-order', () => {
+const base = { assignment: { groupChatId: group, groupName: 'Cliente Norte' }, hugoGroup, rootId: 'r1' };
+check('destination-group-only', () => {
   const first = d.chooseDeliveryDestination(base);
   assert.equal(first.source, 'CLIENT_GROUP');
   assert.equal(first.destinations[0].chatId, group);
   assert.equal(first.destinations[0].connectorId, 'hugo-binding');
-  assert.equal(d.chooseDeliveryDestination({ ...base, hugoGroup: null }).source, 'LEGACY_ROUTE', 'Hugo does not see the group');
-  assert.equal(d.chooseDeliveryDestination({ ...base, hugoGroup: { ...hugoGroup, active: false } }).source, 'LEGACY_ROUTE');
-  assert.equal(d.chooseDeliveryDestination({ ...base, hugoGroup: { ...hugoGroup, rootId: 'other' } }).source, 'LEGACY_ROUTE', 'foreign root');
-  assert.equal(d.chooseDeliveryDestination({ ...base, hugoGroup: { ...hugoGroup, chatId: '120363000000000002@g.us' } }).source, 'LEGACY_ROUTE', 'different group');
-  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: null }).source, 'LEGACY_ROUTE');
-  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: null, legacyRoute: null }).source, 'CLIENT_PHONE');
-  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: null, legacyRoute: null }).destinations[0].chatId, '5215550000000@c.us');
-  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: null, legacyRoute: { ...legacyRoute, destinations: [{}] } }).source, 'LEGACY_ROUTE_INVALID');
-  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: null, legacyRoute: null, clientPhone: null }).source, 'NONE');
+  // A group Hugo does not see, is inactive, belongs to another root or differs from the assigned one never falls back to a private chat.
+  for (const bad of [null, { ...hugoGroup, active: false }, { ...hugoGroup, rootId: 'other' }, { ...hugoGroup, chatId: '120363000000000002@g.us' }, { ...hugoGroup, isGroup: false }]) {
+    const choice = d.chooseDeliveryDestination({ ...base, hugoGroup: bad });
+    assert.equal(choice.source, 'NONE');
+    assert.equal(choice.reason, 'GROUP_NOT_VISIBLE');
+    assert.equal(choice.destinations.length, 0);
+  }
+  const none = d.chooseDeliveryDestination({ ...base, assignment: null, hugoGroup: null });
+  assert.equal(none.source, 'NONE');
+  assert.equal(none.reason, 'NO_GROUP_ASSIGNED');
+  // Extra private inputs are ignored: no legacy route or phone can become a destination.
+  const withPrivate = d.chooseDeliveryDestination({ ...base, assignment: null, hugoGroup: null, legacyRoute: { routeId: 'r', matchType: 'DEFAULT', destinations: [{ safeDocId: 'x', chatId: 'y', chatName: 'z', chatType: 'GROUP' }] }, clientPhone: '5215550000000' });
+  assert.equal(withPrivate.source, 'NONE');
+  // A chat id that is not a group id is never accepted as a group.
+  assert.equal(d.chooseDeliveryDestination({ ...base, assignment: { groupChatId: '5215550000000@c.us' }, hugoGroup: { ...hugoGroup, chatId: '5215550000000@c.us' } }).source, 'NONE');
 });
 
 // ---- lease state machine ----

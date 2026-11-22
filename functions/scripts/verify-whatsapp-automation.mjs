@@ -48,29 +48,24 @@ async function waitForJob(solicitudId, predicate) {
 await createInvoicePair(missingSolicitudId, missingClientId);
 const missingJob = await waitForJob(
   missingSolicitudId,
-  (job) => job.targetResolutionStatus === "CLIENT_WHATSAPP_MISSING"
+  (job) => job.targetResolutionStatus === "CLIENT_GROUP_MISSING"
 );
 
 assert.ok(missingJob, "La automatizacion no creo el job sin destino esperado.");
 assert.equal(missingJob.origin, "AUTOMATIC");
-assert.equal(missingJob.targetResolutionStatus, "CLIENT_WHATSAPP_MISSING");
+assert.equal(missingJob.targetResolutionStatus, "CLIENT_GROUP_MISSING");
 assert.equal(missingJob.targetDestinationsCount, 0);
 assert.notEqual(missingJob.status, "READY_FOR_SEND");
 
+// A client with only a private WhatsApp number is not a destination either: documents go only to a group.
 await createInvoicePair(routedSolicitudId, routedClientId);
-const routedJob = await waitForJob(
+const phoneOnlyJob = await waitForJob(
   routedSolicitudId,
-  (job) => job.status === "READY_FOR_SEND"
+  (job) => job.targetResolutionStatus === "CLIENT_GROUP_MISSING"
 );
 
-assert.ok(routedJob, "La automatizacion no libero el job con destino valido.");
-assert.equal(routedJob.origin, "AUTOMATIC");
-assert.equal(routedJob.targetResolutionStatus, "ROUTE_RESOLVED");
-assert.equal(routedJob.targetDestinationsCount, 1);
-assert.equal(routedJob.targetChatId, "5215512345678@c.us");
+assert.ok(phoneOnlyJob, "El cliente con solo telefono privado debio quedar esperando grupo.");
+assert.equal(phoneOnlyJob.targetDestinationsCount, 0);
+assert.notEqual(phoneOnlyJob.status, "READY_FOR_SEND");
 
-const deliveries = await db.collection("documentDeliveryJobs").doc(routedJob.id).collection("deliveries").get();
-assert.equal(deliveries.size, 1);
-assert.equal(deliveries.docs[0].data().status, "PENDING_SEND");
-
-console.log("PASS WhatsApp automatico: sin destino espera configuracion y con destino valido libera una sola entrega sin duplicados.");
+console.log("PASS WhatsApp automatico: sin grupo asignado el envio espera y nunca usa el telefono privado.");

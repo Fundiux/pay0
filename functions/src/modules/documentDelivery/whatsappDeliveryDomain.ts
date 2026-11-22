@@ -216,17 +216,13 @@ export type DestinationInputs = {
   /** Hugo's synced row for the assigned group, if his binding sees it. */
   hugoGroup: { bindingId: string; chatId?: unknown; name?: unknown; isGroup?: unknown; active?: unknown; rootId?: unknown } | null;
   rootId: string;
-  legacyRoute: { routeId: string; matchType: "EXACT" | "DEFAULT"; destinations: Array<{ safeDocId?: unknown; chatId?: unknown; chatName?: unknown; chatType?: unknown }> } | null;
-  clientPhone: string | null;
-  clientName: string;
 };
 
+// Client documents go only to the client's WhatsApp group. There is no private or legacy fallback:
+// without a usable group nothing is sent and the reason is reported.
 export type DestinationChoice =
   | { source: "CLIENT_GROUP"; destinations: DestinationCandidate[] }
-  | { source: "LEGACY_ROUTE"; routeId: string; matchType: "EXACT" | "DEFAULT"; destinations: DestinationCandidate[] }
-  | { source: "LEGACY_ROUTE_INVALID"; routeId: string; matchType: "EXACT" | "DEFAULT"; destinations: [] }
-  | { source: "CLIENT_PHONE"; destinations: DestinationCandidate[] }
-  | { source: "NONE"; destinations: [] };
+  | { source: "NONE"; reason: "NO_GROUP_ASSIGNED" | "GROUP_NOT_VISIBLE"; destinations: [] };
 
 export function chooseDeliveryDestination(input: DestinationInputs): DestinationChoice {
   const groupChatId = clean(input.assignment?.groupChatId, 200);
@@ -235,19 +231,7 @@ export function chooseDeliveryDestination(input: DestinationInputs): Destination
     return { source: "CLIENT_GROUP", destinations: [{ safeDocId: encodeURIComponent(groupChatId), chatId: groupChatId,
       chatName: clean(group.name, 160) || clean(input.assignment?.groupName, 160) || "Grupo WhatsApp", chatType: "GROUP", destinationType: "CLIENT_GROUP", connectorId: group.bindingId }] };
   }
-  if (input.legacyRoute) {
-    const destinations: DestinationCandidate[] = input.legacyRoute.destinations
-      .map(item => ({ safeDocId: clean(item.safeDocId, 1000), chatId: clean(item.chatId, 200), chatName: clean(item.chatName, 160),
-        chatType: clean(item.chatType) === "GROUP" ? "GROUP" as const : "CONTACT" as const, destinationType: "ADDITIONAL" as const, connectorId: "default" }))
-      .filter(item => Boolean(item.chatId && item.safeDocId));
-    if (!destinations.length) return { source: "LEGACY_ROUTE_INVALID", routeId: input.legacyRoute.routeId, matchType: input.legacyRoute.matchType, destinations: [] };
-    return { source: "LEGACY_ROUTE", routeId: input.legacyRoute.routeId, matchType: input.legacyRoute.matchType, destinations };
-  }
-  if (input.clientPhone) {
-    return { source: "CLIENT_PHONE", destinations: [{ safeDocId: "CLIENT_PRIMARY", chatId: `${input.clientPhone}@c.us`, chatName: clean(input.clientName, 160) || "Cliente",
-      chatType: "CONTACT", destinationType: "CLIENT_PRIMARY", phone: input.clientPhone, connectorId: "default" }] };
-  }
-  return { source: "NONE", destinations: [] };
+  return { source: "NONE", reason: groupChatId ? "GROUP_NOT_VISIBLE" : "NO_GROUP_ASSIGNED", destinations: [] };
 }
 
 // ---------------------------------------------------------------------------
