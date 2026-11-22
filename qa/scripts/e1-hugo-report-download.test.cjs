@@ -45,7 +45,7 @@ async function build(kind) {
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.route('http://localhost/report-test',r=>r.fulfill({contentType:'text/html',body:'<html><body><div id="root"></div></body></html>'}));
       await page.goto('http://localhost/report-test');await page.addScriptTag({path:file});
-      const mount=async(uid,rootId,messages)=>{await page.evaluate(f=>window.renderFixture(f),{uid,rootId,messages});if(kind==='bubble'){await page.getByRole('button',{name:/Abrir menú/}).click();await page.getByRole('menuitem',{name:'María',exact:true}).click();}};
+      const mount=async(uid,rootId,messages)=>{await page.evaluate(f=>window.renderFixture(f),{uid,rootId,messages});if(kind==='bubble'){await page.getByRole('button',{name:/Abrir menú/}).click();await page.getByRole('menuitem',{name:'Hugo',exact:true}).click();}};
       await mount('a','root-a',[{id:'promise',role:'assistant',text:'Prepararé el reporte.'}]);
       await expect(page.getByRole('button',{name:downloadLabel})).toHaveCount(0);
       await mount('b','root-b',[{id:'report',role:'assistant',text:'Reporte obtenido.',reportExport:report}]);
