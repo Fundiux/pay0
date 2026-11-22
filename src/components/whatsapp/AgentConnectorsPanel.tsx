@@ -68,7 +68,7 @@ function ReplySwitchBlock({ agentName }: { agentName: string }) {
       const result = await setWhatsAppAgentReplyConfig({ enabled: nextEnabled, mode: nextMode });
       setEnabled(result.enabled);
       setMode(result.mode);
-      setNote({ ok: true, text: result.enabled ? "Respuestas encendidas." : "Respuestas apagadas." });
+      setNote({ ok: true, text: result.enabled ? "Modo Actuando: las respuestas están encendidas." : "Modo Observador: las respuestas están apagadas." });
     } catch (e: any) {
       setNote({ ok: false, text: `No se pudo guardar: ${e?.message || e}` });
     } finally {
@@ -82,7 +82,7 @@ function ReplySwitchBlock({ agentName }: { agentName: string }) {
         <div>
           <h4 className="text-sm font-semibold text-slate-100">Respuestas de {agentName} en los grupos</h4>
           <p className="mt-0.5 text-xs text-slate-400">
-            {loading ? "Cargando..." : enabled ? `Encendido: ${mode === "STANDARD" ? "saludos y \"permítanos validarlo\"" : "solo saludos"}.` : `Apagado: ${agentName} solo observa y no contesta nada.`}
+            {loading ? "Cargando..." : enabled ? `Actuando: ${mode === "STANDARD" ? "saludos y \"permítanos validarlo\"" : "solo saludos"}.` : `Observador: ${agentName} solo observa y no contesta nada.`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -100,7 +100,7 @@ function ReplySwitchBlock({ agentName }: { agentName: string }) {
         </div>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Solo contesta en grupos con usuario, después de 3 días observándolos, en horario de trabajo, y si nadie del equipo contestó en 3 minutos (los saludos, enseguida).
+        Solo contesta en grupos con usuario y en horario de trabajo. Los saludos, desde el primer día y enseguida; lo demás, después de 3 días observando el grupo y si nadie del equipo contestó en 3 minutos.
       </p>
       {note && <p className={`mt-1 text-xs ${note.ok ? "text-emerald-300" : "text-rose-300"}`}>{note.text}</p>}
     </div>

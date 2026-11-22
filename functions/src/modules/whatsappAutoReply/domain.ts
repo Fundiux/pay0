@@ -146,14 +146,15 @@ export function decideGroupReply(input: ReplyInput): ReplyDecision {
   if (message.fromMe || message.authorIsOperator) return none("NOT_A_CLIENT_MESSAGE");
   if (message.type !== "chat" || !message.body.trim()) return none("NOT_TEXT");
   if (input.alreadyReplied) return none("ALREADY_REPLIED");
-  // The first days in a group are only for learning: never answer before the observation period ends.
-  if (input.firstObservedAtMs === null || nowMs - input.firstObservedAtMs < OBSERVATION_MS) return none("LEARNING_PERIOD");
+  // Owner decision 2026-11-22: the agent greets from the first day. Every other reply still waits for the learning period.
+  const kind = classifyMessage(message.body);
+  const learning = input.firstObservedAtMs === null || nowMs - input.firstObservedAtMs < OBSERVATION_MS;
+  if (learning && kind !== "GREETING") return none("LEARNING_PERIOD");
   if (!isWithinWorkingHours(config.workingHours, nowMs)) return none("OFF_HOURS");
   if (input.laterMessages.some(later => later.timestampMs > message.timestampMs && (later.fromMe || later.authorIsOperator))) return none("HUMAN_ANSWERED");
   const age = nowMs - message.timestampMs;
   if (age > MAX_REPLY_AGE_MS) return none("TOO_OLD");
 
-  const kind = classifyMessage(message.body);
   if (kind === "OTHER") return none("NOT_A_QUESTION");
   if (kind === "GREETING") {
     const name = (input.clientName || "").trim();

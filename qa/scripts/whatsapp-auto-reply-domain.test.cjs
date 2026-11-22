@@ -89,9 +89,19 @@ ok(() => none(base({ message: { ...base().message, fromMe: true } }), 'NOT_A_CLI
 ok(() => none(base({ message: { ...base().message, authorIsOperator: true } }), 'NOT_A_CLIENT_MESSAGE'));
 ok(() => none(base({ message: { ...base().message, type: 'image', body: '' } }), 'NOT_TEXT'));
 ok(() => none(base({ alreadyReplied: true }), 'ALREADY_REPLIED'));
-// The first 3 days are only for learning.
-ok(() => none(base({ firstObservedAtMs: NOW - 71 * HOUR }), 'LEARNING_PERIOD'));
-ok(() => none(base({ firstObservedAtMs: null }), 'LEARNING_PERIOD'));
+// The agent greets from the first day; every other reply waits for the 3 day learning period.
+const question = (over = {}) => withBody('¿Ya salió mi transferencia?', { message: { ...base().message, body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN }, ...over });
+ok(() => none(question({ firstObservedAtMs: NOW - 71 * HOUR }), 'LEARNING_PERIOD'));
+ok(() => none(question({ firstObservedAtMs: null }), 'LEARNING_PERIOD'));
+ok(() => assert.equal(d.decideGroupReply(question({ firstObservedAtMs: NOW - 72 * HOUR })).action, 'REPLY'));
+ok(() => assert.equal(d.decideGroupReply(base({ firstObservedAtMs: NOW - 71 * HOUR })).kind, 'GREETING'));
+ok(() => assert.equal(d.decideGroupReply(base({ firstObservedAtMs: NOW - HOUR })).kind, 'GREETING'));
+ok(() => assert.equal(d.decideGroupReply(base({ firstObservedAtMs: null })).kind, 'GREETING'));
+// The other gates still apply to a first-day greeting: switch, team message, hours, an answer from the team.
+ok(() => none(base({ firstObservedAtMs: null, config: { enabled: false, workingHours: hours } }), 'DISABLED'));
+ok(() => none(base({ firstObservedAtMs: null, message: { ...base().message, authorIsOperator: true } }), 'NOT_A_CLIENT_MESSAGE'));
+ok(() => none(base({ firstObservedAtMs: null, config: { enabled: true } }), 'OFF_HOURS'));
+ok(() => none(base({ firstObservedAtMs: null, laterMessages: [{ timestampMs: NOW - 4 * MIN, fromMe: false, authorIsOperator: true }] }), 'HUMAN_ANSWERED'));
 ok(() => assert.equal(d.decideGroupReply(base({ firstObservedAtMs: NOW - 72 * HOUR })).action, 'REPLY'));
 // Off hours: nothing, and no hours configured means never.
 ok(() => none(base({ firstObservedAtMs: 0, nowMs: Date.UTC(2026, 10, 9, 2, 0, 0), message: { ...base().message, timestampMs: Date.UTC(2026, 10, 9, 1, 55, 0) } }), 'OFF_HOURS'));

@@ -130,12 +130,15 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal((await jobsFor(hello)).length, 0);
   });
 
-  await test('a-group-still-in-its-first-days-is-only-learning', async () => {
+  await test('a-group-in-its-first-days-gets-the-greeting-but-no-other-reply', async () => {
     await observe(groupD, 'Nuevo grupo', betell);
     await inbound(groupD, { timestampMs: NOW - 10 * HOUR, body: 'hola' });
-    const hello = await inbound(groupD);
+    const question = await inbound(groupD, { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN });
     assert.equal((await runGroupReplies(rootId, NOW)).queued, 0);
-    assert.equal((await jobsFor(hello)).length, 0);
+    assert.equal((await jobsFor(question)).length, 0);
+    const hello = await inbound(groupD, { timestampMs: NOW - 2 * MIN });
+    assert.equal((await runGroupReplies(rootId, NOW)).queued, 1);
+    assert.equal((await jobsFor(hello))[0].data().textBody, 'Buen día, Betell.');
   });
 
   await test('switching-replies-off-stops-new-replies', async () => {

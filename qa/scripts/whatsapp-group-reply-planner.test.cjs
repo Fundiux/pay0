@@ -27,8 +27,12 @@ const kinds = plan => plan.map(item => item.kind);
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: false, mode: 'STANDARD', workingHours: OWNER_WORKING_HOURS } })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { mode: 'STANDARD', workingHours: OWNER_WORKING_HOURS } })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ ownerByChat: {} })), []));
-ok(() => assert.deepEqual(planGroupReplies(input({ firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } })), []));
-ok(() => assert.deepEqual(planGroupReplies(input({ firstObservedByChat: {} })), []));
+// A group in its first days: the greeting is answered from day one, anything else only after the learning period.
+const asks = [msg('lq', { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN })];
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: asks, firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } })), []));
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: asks, firstObservedByChat: {} })), []));
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ firstObservedByChat: { 'g1@g.us': NOW - 71 * HOUR } }))), ['GREETING']));
+ok(() => assert.deepEqual(kinds(planGroupReplies(input({ firstObservedByChat: {} }))), ['GREETING']));
 ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode: 'STANDARD' } })), []));
 
 // A greeting is answered with the owner's name.
