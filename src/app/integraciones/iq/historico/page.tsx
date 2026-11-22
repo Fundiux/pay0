@@ -66,6 +66,11 @@ const PHASE_COPY: Record<P4SyncProgress["phase"], string> = {
 /** Capas de dependencia por sesión: clientes, luego sus facturas y pagos, luego aplicaciones. */
 const MAX_FOLLOW_UPS = 4;
 
+/** Mes actual en hora de México (YYYY-MM): límite superior del selector, sin año fijo. */
+function currentMonth(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit" }).format(new Date()).slice(0, 7);
+}
+
 export default function IqHistoricalImportPage() {
   const [month, setMonth] = useState("2026-09");
   const [block, setBlock] = useState<P4Block>("01_10");
@@ -144,7 +149,7 @@ export default function IqHistoricalImportPage() {
       <h2 className="font-semibold">Periodo</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm">Mes
-          <input type="month" value={month} min="2026-01" max="2026-12" disabled={!!busy} onChange={event => { setMonth(event.target.value); reset(); }} className="mt-1 w-full rounded border border-slate-600 bg-slate-950 p-2" />
+          <input type="month" value={month} min="2026-01" max={currentMonth()} disabled={!!busy} onChange={event => { setMonth(event.target.value); reset(); }} className="mt-1 w-full rounded border border-slate-600 bg-slate-950 p-2" />
         </label>
         <label className="text-sm">Días
           <select value={block} disabled={!!busy} onChange={event => { setBlock(event.target.value as P4Block); reset(); }} className="mt-1 w-full rounded border border-slate-600 bg-slate-950 p-2">
@@ -154,7 +159,7 @@ export default function IqHistoricalImportPage() {
           </select>
         </label>
       </div>
-      <button type="button" disabled={!!busy || !/^2026-\d{2}$/.test(month)} onClick={() => prepare(0)} className="mt-4 rounded bg-sky-700 px-4 py-2 text-sm disabled:opacity-50">
+      <button type="button" disabled={!!busy || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)} onClick={() => prepare(0)} className="mt-4 rounded bg-sky-700 px-4 py-2 text-sm disabled:opacity-50">
         {busy === "preparar" ? "Leyendo IQ…" : "Sincronizar"}
       </button>
       {busy === "preparar" && <p className="mt-2 text-xs text-slate-400">Esto lee IQ completo para el periodo y puede tardar varios minutos. Aún no se escribe nada.</p>}

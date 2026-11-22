@@ -33,7 +33,7 @@ export function validateScopeRequest(input:unknown):P4ScopeRequest{
   }
   if(type==="MONTH_BLOCK"){
     const month=text(row.month),block=text(row.block) as P4ScopeRequest["block"];
-    if(!/^2026-(0[1-9]|1[0-2])$/.test(month)||!["01_10","11_20","21_END"].includes(block||""))throw Object.assign(new Error("Month block invalid"),{code:"P4_SCOPE_RANGE_INVALID"});
+    if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)||!["01_10","11_20","21_END"].includes(block||""))throw Object.assign(new Error("Month block invalid"),{code:"P4_SCOPE_RANGE_INVALID"});
     return{type,month,block};
   }
   return{type};

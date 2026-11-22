@@ -252,6 +252,7 @@ export { authorizeHugoVoiceGatewaySession, delegateHugoVoiceTurn } from "./modul
 export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from "./modules/agent007/voiceHistory";
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
+export { runIqDailyReverseSync } from "./modules/iqDailySync/service";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";

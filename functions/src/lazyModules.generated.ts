@@ -348,6 +348,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   runHugoIqRepReadCanary: { module: "./modules/paymentApplications/complementCanary", export: "runHugoIqRepReadCanary" },
   runHugoIqRepReadCohort: { module: "./modules/paymentApplications/repReadCohort", export: "runHugoIqRepReadCohort" },
   runHugoIqRepRequestCanary: { module: "./modules/paymentApplications/repRequestCanary", export: "runHugoIqRepRequestCanary" },
+  runIqDailyReverseSync: { module: "./modules/iqDailySync/service", export: "runIqDailyReverseSync" },
   saveAgent007HumanReview: { module: "./modules/agent007/callables", export: "saveAgent007HumanReview" },
   saveClientCallable: { module: "./modules/clients/callables", export: "saveClientCallable" },
   saveClientCommissionRule: { module: "./modules/commissionDistributions/callables", export: "saveClientCommissionRule" },

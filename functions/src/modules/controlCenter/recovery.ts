@@ -1,4 +1,4 @@
-import { isIqHistoricalImport } from "../iq/historicalImportGuard";
+import { isLegacyIqHistoricalImport } from "../iq/historicalImportGuard";
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -51,7 +51,7 @@ export const queueOperationRecovery = onDocumentWritten({
 }, async event => {
   if (!event.data?.after.exists) return;
   const row = (await db.doc(`solicitudes/${event.params.documentId}`).get()).data();
-  if (!row || isIqHistoricalImport(row) || row.isDeleted || row.deletedAt || row.status === "ELIMINADA") return;
+  if (!row || isLegacyIqHistoricalImport(row) || row.isDeleted || row.deletedAt || row.status === "ELIMINADA") return;
   await reconcileRecoverySource(event.params.documentId, row);
   for (const kind of Object.keys(RECOVERY_FIELDS) as RecoveryKind[]) {
     if (row[RECOVERY_FIELDS[kind]] === "ERROR") await enqueueRecovery(event.params.documentId, row, kind);
