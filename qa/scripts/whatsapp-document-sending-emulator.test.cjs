@@ -242,6 +242,9 @@ async function queueQuotation() {
   });
 
   await test('connector-send-failure-is-reported-uncertain', async () => {
+    // The previous test syncs an empty chat list, which marks the group inactive. A group Hugo does not see is never a destination
+    // (there is no private fallback), so the group is made visible again before queueing.
+    await db.doc(`whatsappAgentChats/${hugo.binding.id}__${encodeURIComponent(group)}`).set({ rootId, bindingId: hugo.binding.id, chatId: group, name: 'Cliente Norte - Documentos', isGroup: true, active: true });
     const id = await queueQuotation();
     const callbacks = {};
     const client = { on: (name, cb) => { callbacks[name] = cb; }, initialize: async () => {}, destroy: async () => {}, getChats: async () => [],
@@ -315,6 +318,8 @@ async function queueQuotation() {
   const dayStart = mexicoDayStartMs(Date.now());
   let sentToday, skippedQuote, skippedInvoice, yesterdayQuote;
   await test('catch-up-off-to-on-queues-todays-skipped-documents', async () => {
+    // Earlier connector tests sync an empty chat list and mark the group inactive: make it visible again (no private fallback exists).
+    await db.doc(`whatsappAgentChats/${hugo.binding.id}__${encodeURIComponent(group)}`).set({ rootId, bindingId: hugo.binding.id, chatId: group, name: 'Cliente Norte - Documentos', isGroup: true, active: true });
     // Sent today while ON: must never be queued again.
     sentToday = await seedUpload('COTIZACION', { createdAt: nowTs() });
     await fire(sentToday.uploadId, sentToday.row);
@@ -372,6 +377,50 @@ async function queueQuotation() {
     for (const doc of [skippedQuote, skippedInvoice, sentToday]) assert.equal((await jobsFor(doc.solicitudId)).length, 1);
     assert.equal((await jobsFor(yesterdayQuote.solicitudId)).length, 0);
     assert.equal((await job((await db.collection('documentDeliveryJobs').where('sourceId', '==', skippedQuote.solicitudId).get()).docs[0].id)).status, 'READY_FOR_SEND');
+  });
+
+  await test('group-alert-goes-only-to-the-internal-group', async () => {
+    const { alertIfClientGroupIncomplete } = require('../../functions/lib/modules/documentDelivery/clientGroupAlerts.js');
+    const internal = '120363000000000077@g.us';
+    const day = mexicoDayStartMs(Date.now());
+    const sourceOf = id => id + ':' + day;
+    await setSwitch(true);
+
+    // A client without a group, and no internal group yet: the notice waits and never reaches the client's private number.
+    await db.doc('clients/client-sin-grupo').set({ rootId, name: 'Cliente Sur', whatsapp: '5215550000009' });
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-sin-grupo' }), 'NO_GROUP_ASSIGNED:WAITING_DESTINATION');
+    const [waiting] = await jobsFor(sourceOf('client-sin-grupo'));
+    assert.equal(waiting.sourceType, 'AVISO_GRUPO_INTERNO');
+    assert.equal(waiting.targetResolutionStatus, 'INTERNAL_GROUP_MISSING');
+    assert.equal(waiting.targetDestinationsCount, 0);
+
+    // With the internal group marked and visible to Hugo, the notice goes to it and only to it.
+    await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(internal)).set({ rootId, bindingId: hugo.binding.id, chatId: internal, name: 'Equipo interno', isGroup: true, active: true });
+    await db.doc('whatsappInternalGroups/' + rootId).set({ rootId, groupChatId: internal, groupName: 'Equipo interno' });
+    await db.doc('clients/client-sin-grupo-2').set({ rootId, name: 'Cliente Este', whatsapp: '5215550000010' });
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-sin-grupo-2' }), 'NO_GROUP_ASSIGNED:RELEASED');
+    const [notice] = await jobsFor(sourceOf('client-sin-grupo-2'));
+    assert.equal(notice.targetDestinations.length, 1);
+    assert.equal(notice.targetDestinations[0].chatId, internal);
+    assert.equal(notice.targetDestinations[0].chatType, 'GROUP');
+    assert.match(notice.textBody, /Cliente Este.*no tiene grupo de WhatsApp asignado/);
+    assert.ok(!JSON.stringify(notice.targetDestinations).includes('@c.us'), 'never a private chat');
+
+    // The client's group exists but only Hugo sees it: María is missing and Sofía has no connector.
+    await db.doc('clients/client-grupo-incompleto').set({ rootId, name: 'Cliente Oeste', whatsapp: '5215550000011' });
+    await db.doc('clientWhatsappGroups/' + rootId + '__client-grupo-incompleto').set({ rootId, clientId: 'client-grupo-incompleto', groupChatId: group, groupName: 'Cliente Norte - Documentos' });
+    await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(group)).set({ rootId, bindingId: hugo.binding.id, chatId: group, name: 'Cliente Norte - Documentos', isGroup: true, active: true });
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-grupo-incompleto' }), 'AGENTS_MISSING:RELEASED');
+    const [incomplete] = await jobsFor(sourceOf('client-grupo-incompleto'));
+    assert.match(incomplete.textBody, /Cliente Oeste/);
+    assert.match(incomplete.textBody, /María/);
+    assert.match(incomplete.textBody, /Sofía/);
+    assert.equal(incomplete.targetDestinations[0].chatId, internal);
+
+    // Same client, same problem, same day: no second notice.
+    const again = await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-grupo-incompleto' });
+    assert.notEqual(again, 'AGENTS_MISSING:RELEASED');
+    assert.equal((await jobsFor(sourceOf('client-grupo-incompleto'))).length, 1);
   });
 
   console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases, emulator: true, realProviderRequests: 0 }));
