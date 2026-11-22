@@ -76,6 +76,9 @@ export async function syncIqCatalog(input: { rootId: string; catalog: string; se
   const save = (lastError: string | null = null) => ref.set({ rootId: input.rootId, catalog: input.catalog, partnerId: partners[partnerIndex]?.id ?? null, offset, lastError,
     ...(skipped.length ? { skippedBeneficiaryIds: FieldValue.arrayUnion(...skipped.slice(0, MAX_SKIPPED_IDS)) } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
+  // An associate read from its first page to its last in this run, with no row skipped, is proof material:
+  // its partnerSyncedAt says when its slice of the catalog was last complete.
+  let wholeFromStart = offset === 0, partnerSkipped = 0;
   while (partnerIndex < partners.length) {
     const partner = partners[partnerIndex];
     let beneficiaries: Array<Record<string, any>>;
@@ -97,19 +100,27 @@ export async function syncIqCatalog(input: { rootId: string; catalog: string; se
       } catch (error) {
         if (!SKIPPABLE_STATUS.has(httpStatus(error))) { offset += done; await save(errorText(error)); throw error; }
         skipped.push(Number(beneficiary.id));
+        partnerSkipped += 1;
       }
       done += 1;
       await sleep(input.spacingMs ?? READ_SPACING_MS);
       if (Date.now() >= input.deadlineMs) { offset += done; await save(); return false; }
     }
     if (beneficiaries.length === PAGE) offset += PAGE;
-    else { partnerIndex += 1; offset = 0; }
+    else {
+      if (wholeFromStart && partnerSkipped === 0) await ref.update(new admin.firestore.FieldPath("partnerSyncedAt", String(partner.id)), FieldValue.serverTimestamp()).catch(() => ref.set({ partnerSyncedAt: { [String(partner.id)]: FieldValue.serverTimestamp() } }, { merge: true }));
+      partnerIndex += 1; offset = 0; wholeFromStart = true; partnerSkipped = 0;
+    }
     await save();
   }
   const nextRunAfter = admin.firestore.Timestamp.fromMillis(Date.now() + (input.refreshDays ?? DEFAULT_REFRESH_DAYS) * 86_400_000);
   await ref.set({ partnerId: null, offset: 0, lastError: null, completedAt: FieldValue.serverTimestamp(), nextRunAfter, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return true;
 }
+
+const DECISION_FIELDS = ["status", "iqBeneficiaryId", "iqAccountId", "nameDiffers", "candidates"];
+const sameDecision = (existing: Record<string, unknown>, decision: Record<string, unknown>) =>
+  DECISION_FIELDS.every(field => JSON.stringify(existing[field] ?? null) === JSON.stringify(decision[field] ?? null)) && !existing.createState;
 
 // Writes only iqLinksByCatalog. iqLinkStatus keeps belonging to commissions, and
 // nothing here changes how a dispersion is sent. IQ names stay in the catalog,
@@ -142,6 +153,8 @@ export async function linkMethodsToCatalog(input: { rootId: string; catalog: str
       const ownedByTrigger = existing?.key === account.key && (existing.source === "LIVE_LOOKUP" || existing.source === "CREATED_IN_IQ" || !!existing.createState || existing.status === "PENDING_RETRY");
       if (ownedByTrigger && (resolved.status === "NOT_FOUND" || resolved.status === "NOT_CONCILIATED")) continue;
       const { iqBeneficiaryName: _name, ...decision } = resolved as Record<string, unknown>;
+      // Same answer as last night: no write, so the nightly pass does not fire the link trigger for every method.
+      if (existing?.key === account.key && existing.source === "CATALOG" && sameDecision(existing, decision)) continue;
       // Replaces the whole entry, so ids from an earlier state cannot survive.
       await row.ref.set({ iqLinksByCatalog: { [input.catalog]: { ...decision, key: account.key, last4: account.last4, source: "CATALOG", checkedAt: FieldValue.serverTimestamp() } } },
         { mergeFields: [new admin.firestore.FieldPath("iqLinksByCatalog", input.catalog)] });

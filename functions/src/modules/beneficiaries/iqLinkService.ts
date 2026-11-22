@@ -4,7 +4,10 @@ import { logActivityBatch } from "../../utils/logActivity";
 import { CONSERVATIVE_POLICY, SafetyRuntime } from "../automationSafety/runtime";
 import { db } from "../sharedCallables/helpers";
 import { methodAccountRef, resolveIqLink, rowsOfPartner, type IqCatalogRow, type IqLinkDecision } from "./iqCatalogDomain";
-import { buildLinkEntry, catalogsForClient, createReservationId, evaluateCreateGate, GATE_REASONS, linkActivityId, MAX_RETRY_ATTEMPTS, mexicoDay, retryDelayMs, type ClientCatalogProfile } from "./iqLinkDomain";
+import {
+  buildLinkEntry, catalogAbsenceProof, catalogMaxAgeMs, catalogsForClient, createReservationId, evaluateCreateGate, linkActivityId, MAX_RETRY_ATTEMPTS,
+  MAX_UNKNOWN_OUTCOME_READS, mexicoDay, retryDelayMs, UNKNOWN_OUTCOME_REASON, WAITING_REASONS, type ClientCatalogProfile,
+} from "./iqLinkDomain";
 
 const text = (value: unknown) => String(value ?? "").trim();
 
@@ -12,21 +15,28 @@ export type IqLinkContext = {
   rootId: string; methodId: string; catalog: string; profile: ClientCatalogProfile;
   beneficiaryName: string; method: Record<string, any>; account: { key: string; last4: string };
 };
-// absenceProof says how "not found" was established. NAME means IQ was searched by beneficiary name only,
-// which does not prove the account is missing under another name; only ACCOUNT allows a create.
+// The name search is an extra chance to link; it never proves absence (only the catalog does).
 export type LiveLookupResult =
-  | { found: false; absenceProof: "NAME" | "ACCOUNT" }
+  | { found: false; absenceProof?: "NAME" | "ACCOUNT" }
   | { found: true; iqBeneficiaryId: number; iqAccountId: number; iqBeneficiaryName: string }
   | { found: "AMBIGUOUS"; candidates: number[] };
+type CreatedIds = { iqBeneficiaryId: number; iqAccountId: number; iqBeneficiaryName: string; conciliated?: boolean };
 export type CreateResult =
-  | { outcome: "CREATED"; iqBeneficiaryId: number; iqAccountId: number; iqBeneficiaryName: string }
+  | ({ outcome: "CREATED" } & CreatedIds)
   | { outcome: "EXISTS" }
-  | { outcome: "OUTCOME_UNKNOWN" };
+  | { outcome: "OUTCOME_UNKNOWN" }
+  // Stopped before the account POST left (login, a read, the kill switch): safe to try again later.
+  | { outcome: "NOT_SENT"; reason: string }
+  // effect NONE: nothing was created in IQ; PARTIAL: at most an empty beneficiary.
+  | { outcome: "REJECTED"; reason: string; effect: "NONE" | "PARTIAL" };
+export type FindResult = ({ found: true } & CreatedIds) | { found: false } | { found: "AMBIGUOUS"; candidates: number[] };
 
-// The two things that touch IQ. Production wires them in iqLinkPorts.ts; tests pass fakes.
+// The three things that touch IQ. Production wires them in iqLinkPorts.ts; tests pass fakes.
 export interface IqLinkPorts {
   liveLookup(input: IqLinkContext): Promise<LiveLookupResult>;
   create(input: IqLinkContext & { reservationId: string }): Promise<CreateResult>;
+  // Account-level read under the client's associate; used after "ya existe" or a lost answer, never to create.
+  findExisting(input: IqLinkContext): Promise<FindResult>;
 }
 
 export type LinkOutcome = { methodId: string; catalog: string; status: string; createState?: string | null; skipped?: string };
@@ -34,6 +44,13 @@ export type LinkOutcome = { methodId: string; catalog: string; status: string; c
 const AUDIT_EVENT: Record<string, string> = {
   LINKED: "IQ_BENEFICIARIO_VINCULADO", REVIEW_REQUIRED: "IQ_BENEFICIARIO_REVISION_REQUERIDA", CREATED: "IQ_BENEFICIARIO_CREADO", OUTCOME_UNKNOWN: "IQ_BENEFICIARIO_CREACION_INCIERTA",
 };
+const REVIEW_LABEL: Record<string, string> = {
+  PARTNER_UNKNOWN: "falta el asociado IQ del cliente", ACCOUNT_IN_CATALOG: "la cuenta aparece cancelada o rechazada en IQ", OUTCOME_UNKNOWN: "no se sabe si IQ la creó",
+  EXISTS_UNRESOLVED: "IQ indica que ya existe pero no se encontró", IQ_BANK_UNRESOLVED: "no se identificó el banco en IQ", IQ_BENEFICIARY_NAME_AMBIGUOUS: "hay varios beneficiarios con ese nombre en IQ",
+};
+const reviewText = (last4: string, createState: string | null) => createState
+  ? `La cuenta ****${last4} requiere revisión antes de darla de alta en IQ: ${REVIEW_LABEL[createState] ?? "IQ rechazó el alta"}.`
+  : `Varios beneficiarios de IQ coinciden con la cuenta ****${last4}; requiere revisión.`;
 
 async function writeEntry(ctx: IqLinkContext, entry: Record<string, unknown>, audit?: { event: string; description: string; status: string; source: string; outcomeKey: string }) {
   const batch = db.batch();
@@ -55,8 +72,20 @@ async function settle(ctx: IqLinkContext, decision: IqLinkDecision, source: "CAT
   const event = source === "CREATED_IN_IQ" && decision.status === "LINKED" ? AUDIT_EVENT.CREATED : AUDIT_EVENT[decision.status];
   const entry = buildLinkEntry({ decision, key: ctx.account.key, last4: ctx.account.last4, source, createState }, FieldValue.serverTimestamp());
   await writeEntry(ctx, entry, audited && event ? { event, status: decision.status, source, outcomeKey: `${decision.status}:${source}:${createState ?? ""}`,
-    description: decision.status === "LINKED" ? `Beneficiario vinculado con IQ (${source === "CATALOG" ? "catálogo" : source === "LIVE_LOOKUP" ? "consulta en vivo" : "creado en IQ"}), cuenta ****${ctx.account.last4}.` : `Varios beneficiarios de IQ coinciden con la cuenta ****${ctx.account.last4}; requiere revisión.` } : undefined);
+    description: decision.status === "LINKED" ? `Beneficiario vinculado con IQ (${source === "CATALOG" ? "catálogo" : source === "LIVE_LOOKUP" ? "consulta en vivo" : "creado en IQ"}), cuenta ****${ctx.account.last4}.` : reviewText(ctx.account.last4, createState) } : undefined);
   return { methodId: ctx.methodId, catalog: ctx.catalog, status: decision.status, createState };
+}
+
+const review = (ctx: IqLinkContext, createState: string, candidates: number[] = []) => settle(ctx, { status: "REVIEW_REQUIRED", candidates }, "CREATED_IN_IQ", createState);
+
+// A new IQ account usually waits for IQ's conciliation. Until then the ids are kept, but the entry is not LINKED,
+// so no dispersion uses it; the nightly catalog turns it LINKED once IQ shows it conciliated.
+async function settleCreated(ctx: IqLinkContext, ids: CreatedIds): Promise<LinkOutcome> {
+  if (ids.conciliated === true) return settle(ctx, linked(ids), "CREATED_IN_IQ");
+  await writeEntry(ctx, { status: "NOT_CONCILIATED", iqBeneficiaryId: ids.iqBeneficiaryId, iqAccountId: ids.iqAccountId, key: ctx.account.key, last4: ctx.account.last4, source: "CREATED_IN_IQ", createState: "PENDING_CONCILIATION", checkedAt: FieldValue.serverTimestamp() },
+    { event: AUDIT_EVENT.CREATED, status: "NOT_CONCILIATED", source: "CREATED_IN_IQ", outcomeKey: "NOT_CONCILIATED:CREATED_IN_IQ:PENDING_CONCILIATION",
+      description: `Beneficiario dado de alta en IQ, cuenta ****${ctx.account.last4}; IQ debe conciliar la cuenta antes de usarla.` });
+  return { methodId: ctx.methodId, catalog: ctx.catalog, status: "NOT_CONCILIATED", createState: "PENDING_CONCILIATION" };
 }
 
 // Admission refusals that only mean "not now": nothing is written, so the trigger can retry the same work.
@@ -65,47 +94,54 @@ const deferred = (ctx: IqLinkContext): LinkOutcome => ({ methodId: ctx.methodId,
 
 // A stop is either temporary (stored as PENDING_RETRY and re-driven on a schedule, up to a cap) or final
 // for this account (NOT_FOUND with the reason). Final stops are not retried until the CLABE or card changes.
-async function stop(ctx: IqLinkContext, reason: string, attempts = 1, nowMs = Date.now()): Promise<LinkOutcome> {
+// pendingSince survives retries, so a method waiting for more than a day shows up in the daily summary.
+async function stop(ctx: IqLinkContext, reason: string, attempts = 1, nowMs = Date.now(), pendingSince?: unknown): Promise<LinkOutcome> {
   const delay = retryDelayMs(reason);
-  // Waiting for a switch to be turned on is not a failure: it never counts toward the cap.
-  if (GATE_REASONS.has(reason)) attempts = 1;
+  // Waiting for a switch or for the catalog is not a failure: it never counts toward the cap.
+  if (WAITING_REASONS.has(reason)) attempts = 1;
   if (delay !== null && attempts <= MAX_RETRY_ATTEMPTS) {
-    await writeEntry(ctx, { status: "PENDING_RETRY", reason, attempts, key: ctx.account.key, last4: ctx.account.last4, source: "CATALOG", retryAfter: Timestamp.fromMillis(nowMs + delay), checkedAt: FieldValue.serverTimestamp() });
+    await writeEntry(ctx, { status: "PENDING_RETRY", reason, attempts, key: ctx.account.key, last4: ctx.account.last4, source: "CATALOG", retryAfter: Timestamp.fromMillis(nowMs + delay),
+      pendingSince: pendingSince instanceof Timestamp ? pendingSince : Timestamp.fromMillis(nowMs), checkedAt: FieldValue.serverTimestamp() });
     return { methodId: ctx.methodId, catalog: ctx.catalog, status: "PENDING_RETRY", createState: reason };
   }
   return settle(ctx, { status: "NOT_FOUND" }, "CATALOG", delay !== null ? "RETRY_EXHAUSTED" : reason);
 }
 
-type Reservation = { state: "NEW" | "CREATED" | "BLOCKED"; reason?: string; ids?: { iqBeneficiaryId: number; iqAccountId: number; iqBeneficiaryName: string } };
+type Reservation = { state: "NEW" | "BLOCKED"; reason?: string; take?: number };
 
 const counterRef = (rootId: string, nowMs: number) => db.doc(`iqBeneficiaryCreateCounters/${rootId}_${mexicoDay(nowMs)}`);
+const reservationRefOf = (reservationId: string) => db.doc(`iqBeneficiaryCreateReservations/${reservationId}`);
+// A RESERVED create older than this lost its worker (timeout, crash): its outcome is unknown, never retaken.
+const IN_FLIGHT_MS = 15 * 60_000;
 
 // One transaction decides whether this account may be created now: an existing reservation wins
 // (never twice), and today's counter is only spent together with the reservation.
 async function reserveCreate(ctx: IqLinkContext, nowMs: number): Promise<Reservation & { reservationId: string }> {
   const reservationId = createReservationId(ctx.rootId, ctx.catalog, ctx.account.key);
-  const reservationRef = db.doc(`iqBeneficiaryCreateReservations/${reservationId}`);
+  const reservationRef = reservationRefOf(reservationId);
   const counter = counterRef(ctx.rootId, nowMs);
   const result = await db.runTransaction(async tx => {
     const [reservation, today, config, master] = await Promise.all([tx.get(reservationRef), tx.get(counter), tx.get(db.doc(`iqBeneficiaryCreateConfig/${ctx.rootId}`)), tx.get(db.doc(`iqIntegrationConfigs/${ctx.rootId}`))]);
     const status = text(reservation.data()?.status);
-    if (status === "CREATED") return { state: "CREATED" as const, ids: { iqBeneficiaryId: Number(reservation.get("iqBeneficiaryId")), iqAccountId: Number(reservation.get("iqAccountId")), iqBeneficiaryName: text(reservation.get("iqBeneficiaryName")) } };
     if (reservation.exists && status !== "FAILED_SAFE") return { state: "BLOCKED" as const, reason: status || "RESERVED" };
     const gate = evaluateCreateGate({ masterEnabled: master.data()?.enabled === true, config: config.data(), createdToday: Number(today.data()?.count || 0) });
     if (!gate.allowed) return { state: "BLOCKED" as const, reason: gate.reason };
-    tx.set(reservationRef, { rootId: ctx.rootId, catalog: ctx.catalog, key: ctx.account.key, last4: ctx.account.last4, methodId: ctx.methodId, status: "RESERVED", profileId: ctx.profile.profileId, reservedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // Each take is its own safety operation, so a take released before anything was sent can be taken again.
+    const take = Number(reservation.data()?.takes || 0) + 1;
+    tx.set(reservationRef, { rootId: ctx.rootId, catalog: ctx.catalog, key: ctx.account.key, last4: ctx.account.last4, methodId: ctx.methodId, status: "RESERVED", takes: take, profileId: ctx.profile.profileId, reservedAt: Timestamp.fromMillis(nowMs), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     tx.set(counter, { rootId: ctx.rootId, day: mexicoDay(nowMs), count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { state: "NEW" as const };
+    return { state: "NEW" as const, take };
   });
   return { ...result, reservationId };
 }
 
-const closeReservation = (reservationId: string, patch: Record<string, unknown>) => db.doc(`iqBeneficiaryCreateReservations/${reservationId}`).set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+const closeReservation = (reservationId: string, patch: Record<string, unknown>) => reservationRefOf(reservationId).set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+const createdIdsOf = (data: Record<string, any>): CreatedIds => ({ iqBeneficiaryId: Number(data.iqBeneficiaryId), iqAccountId: Number(data.iqAccountId), iqBeneficiaryName: text(data.iqBeneficiaryName), conciliated: data.conciliated === true });
 
 // Gives back the day's slot of a create that never reached IQ, together with the reservation, atomically
 // and never below zero.
 async function releaseReservation(ctx: IqLinkContext, reservationId: string, nowMs: number, reason: string) {
-  const reservationRef = db.doc(`iqBeneficiaryCreateReservations/${reservationId}`), counter = counterRef(ctx.rootId, nowMs);
+  const reservationRef = reservationRefOf(reservationId), counter = counterRef(ctx.rootId, nowMs);
   await db.runTransaction(async tx => {
     const today = await tx.get(counter);
     tx.set(reservationRef, { status: "FAILED_SAFE", reason, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -113,8 +149,38 @@ async function releaseReservation(ctx: IqLinkContext, reservationId: string, now
   });
 }
 
+type Run = { ctx: IqLinkContext; ports: IqLinkPorts; safety: SafetyRuntime; nowMs: number; attempts: number; pendingSince?: unknown };
+
+const readPolicy = { ...CONSERVATIVE_POLICY, maxExternalRequests: 20 };
+const bucketOf = (nowMs: number) => Math.floor(nowMs / 600_000);
+
+// After "ya existe" or a lost answer the create is never sent again: IQ is read at account level and the
+// result linked; what cannot be settled by reading goes to a person.
+async function reconcile(run: Run, reservationId: string, cause: "OUTCOME_UNKNOWN" | "EXISTS"): Promise<LinkOutcome> {
+  const { ctx } = run;
+  const read = await run.safety.run({ rootId: ctx.rootId, process: "IQ_BENEFICIARY_LINK", partition: ctx.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:reconcile:${ctx.methodId}:${bucketOf(run.nowMs)}`,
+    idempotencyKey: `${reservationId}:${ctx.methodId}:reconcile:${bucketOf(run.nowMs)}`, origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => run.ports.findExisting(ctx));
+  const found = (read as { value?: FindResult }).value;
+  if (found?.found === true) {
+    await closeReservation(reservationId, { status: "CREATED", reconciledFrom: cause, iqBeneficiaryId: found.iqBeneficiaryId, iqAccountId: found.iqAccountId, iqBeneficiaryName: found.iqBeneficiaryName, conciliated: found.conciliated === true });
+    return settleCreated(ctx, found);
+  }
+  if (found?.found === "AMBIGUOUS") { await closeReservation(reservationId, { status: "OUTCOME_UNKNOWN", reason: "RECONCILE_AMBIGUOUS" }); return review(ctx, cause === "EXISTS" ? "EXISTS_UNRESOLVED" : "OUTCOME_UNKNOWN", found.candidates); }
+  if (cause === "EXISTS" && found?.found === false) { await closeReservation(reservationId, { status: "OUTCOME_UNKNOWN", reason: "EXISTS_UNRESOLVED" }); return review(ctx, "EXISTS_UNRESOLVED"); }
+  await closeReservation(reservationId, { status: "OUTCOME_UNKNOWN", reason: cause === "EXISTS" ? "EXISTS_UNRESOLVED" : "NOT_FOUND_AFTER_UNKNOWN" });
+  // Not found yet (IQ may still be writing it) or the read was refused: read again later, a bounded number of times.
+  if (run.attempts < MAX_UNKNOWN_OUTCOME_READS) {
+    await writeEntry(ctx, { status: "PENDING_RETRY", reason: UNKNOWN_OUTCOME_REASON, attempts: run.attempts, key: ctx.account.key, last4: ctx.account.last4, source: "CREATED_IN_IQ", createState: "OUTCOME_UNKNOWN",
+      retryAfter: Timestamp.fromMillis(run.nowMs + (retryDelayMs(UNKNOWN_OUTCOME_REASON) ?? 21_600_000)), pendingSince: run.pendingSince instanceof Timestamp ? run.pendingSince : Timestamp.fromMillis(run.nowMs), checkedAt: FieldValue.serverTimestamp() },
+      { event: AUDIT_EVENT.OUTCOME_UNKNOWN, status: "PENDING_RETRY", source: "CREATED_IN_IQ", outcomeKey: "PENDING_RETRY:CREATED_IN_IQ:OUTCOME_UNKNOWN",
+        description: `No se sabe si IQ creó la cuenta ****${ctx.account.last4}; PAY0 solo la vuelve a buscar, no la envía otra vez.` });
+    return { methodId: ctx.methodId, catalog: ctx.catalog, status: "PENDING_RETRY", createState: UNKNOWN_OUTCOME_REASON };
+  }
+  return review(ctx, "OUTCOME_UNKNOWN");
+}
+
 // Link first, create only when IQ really lacks the account. Nothing here writes to IQ unless the create
-// gate (master switch, create switch, verified contract, proven absence, daily limit, kill switch) allows it.
+// gate (master switch, create switch, verified contract, catalog absence proof, daily limit, kill switch) allows it.
 export async function linkOrCreateMethod(input: { methodId: string; ports: IqLinkPorts; nowMs?: number; safety?: SafetyRuntime }): Promise<LinkOutcome[]> {
   const nowMs = input.nowMs ?? Date.now();
   const safety = input.safety ?? new SafetyRuntime(db);
@@ -140,64 +206,83 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
     const ctx: IqLinkContext = { rootId, methodId: input.methodId, catalog: profile.catalog, profile, beneficiaryName, method, account };
     const retrying = existing?.key === account.key && text(existing.status) === "PENDING_RETRY";
     const attempts = retrying ? Number(existing.attempts || 0) + 1 : 1;
+    const pendingSince = retrying ? existing.pendingSince : undefined;
+    const run: Run = { ctx, ports: input.ports, safety, nowMs, attempts, pendingSince };
     // The write below triggers this function again; the same account in the same state is a no-op,
     // except a temporary stop, which is exactly what a retry has to pick up.
     if (existing?.key === account.key && text(existing.status) && !retrying) { outcomes.push({ methodId: input.methodId, catalog: profile.catalog, status: text(existing.status), skipped: "UNCHANGED" }); continue; }
 
     const catalogRows = await db.collection("iqBeneficiaryCatalog").where("rootId", "==", rootId).where("catalog", "==", profile.catalog).where("key", "==", account.key).get();
-    // Only the client's own IQ associate counts; without its id the catalog cannot be trusted, so IQ is asked.
-    const decision = resolveIqLink(beneficiaryName, rowsOfPartner(catalogRows.docs.map(doc => doc.data() as IqCatalogRow), profile.partnerId));
+    // Only the client's own IQ associate counts; without its id the catalog cannot prove anything.
+    const partnerRows = rowsOfPartner(catalogRows.docs.map(doc => doc.data() as IqCatalogRow), profile.partnerId);
+    const decision = resolveIqLink(beneficiaryName, partnerRows);
     if (decision.status !== "NOT_FOUND") { outcomes.push(await settle(ctx, decision, "CATALOG")); continue; }
 
-    // The catalog may be stale: ask IQ for this account before deciding it does not exist.
     const master = (await db.doc(`iqIntegrationConfigs/${rootId}`).get()).data()?.enabled === true;
-    if (!master) { outcomes.push(await stop(ctx, "IQ_MASTER_OFF", attempts, nowMs)); continue; }
+    if (!master) { outcomes.push(await stop(ctx, "IQ_MASTER_OFF", attempts, nowMs, pendingSince)); continue; }
+
+    // A create already made, lost or in flight for this account in this catalog decides before anything else.
     const reservationId = createReservationId(rootId, profile.catalog, account.key);
-    // Per method and 10-minute window: another method with the same account is its own lookup, and a retry later is not a duplicate.
-    const bucket = Math.floor(nowMs / 600_000);
-    const lookup = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:${bucket}`, idempotencyKey: `${reservationId}:${input.methodId}:lookup:${bucket}`,
-      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 20 } }, () => input.ports.liveLookup(ctx));
-    if (!lookup.admitted) { outcomes.push(DEFERRABLE.has(String(lookup.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${lookup.reason}`, attempts, nowMs)); continue; }
+    const prior = (await reservationRefOf(reservationId).get()).data();
+    const priorStatus = text(prior?.status);
+    if (priorStatus === "CREATED") { outcomes.push(await settleCreated(ctx, createdIdsOf(prior!))); continue; }
+    if (priorStatus === "RESERVED" && nowMs - (prior?.reservedAt?.toMillis?.() ?? 0) < IN_FLIGHT_MS) { outcomes.push({ methodId: input.methodId, catalog: profile.catalog, status: "IN_PROGRESS" }); continue; }
+    if (priorStatus === "RESERVED" || priorStatus === "OUTCOME_UNKNOWN") { outcomes.push(await reconcile(run, reservationId, "OUTCOME_UNKNOWN")); continue; }
+    if (priorStatus === "REJECTED") { outcomes.push(await review(ctx, text(prior?.reason) || "REJECTED")); continue; }
+
+    // The catalog may lag behind IQ: a name search can still find the account and link it.
+    const lookup = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:${bucketOf(nowMs)}`, idempotencyKey: `${reservationId}:${input.methodId}:lookup:${bucketOf(nowMs)}`,
+      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.liveLookup(ctx));
+    if (!lookup.admitted) { outcomes.push(DEFERRABLE.has(String(lookup.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${lookup.reason}`, attempts, nowMs, pendingSince)); continue; }
     const live = (lookup as { value?: LiveLookupResult }).value;
-    if (!live) { outcomes.push(await stop(ctx, "LOOKUP_FAILED", attempts, nowMs)); continue; }
+    if (!live) { outcomes.push(await stop(ctx, "LOOKUP_FAILED", attempts, nowMs, pendingSince)); continue; }
     if (live.found === "AMBIGUOUS") { outcomes.push(await settle(ctx, { status: "REVIEW_REQUIRED", candidates: live.candidates }, "LIVE_LOOKUP")); continue; }
     if (live.found) { outcomes.push(await settle(ctx, linked(live), "LIVE_LOOKUP")); continue; }
-    // A name-only search does not prove the account is absent: it may exist under another name, and creating
-    // would duplicate it. Only an account-level lookup allows going on to create.
-    if (live.absenceProof !== "ACCOUNT") { outcomes.push(await stop(ctx, "ABSENCE_NOT_PROVEN", attempts, nowMs)); continue; }
+
+    // Proof of absence is the catalog: the associate read whole recently and no row for this account.
+    const [catalogState, createConfig] = await Promise.all([db.doc(`iqBeneficiaryCatalogState/${rootId}_${profile.catalog}`).get(), db.doc(`iqBeneficiaryCreateConfig/${rootId}`).get()]);
+    const proof = catalogAbsenceProof({ partnerId: profile.partnerId, partnerRows, state: catalogState.data(), nowMs, maxAgeMs: catalogMaxAgeMs(createConfig.data()) });
+    if (!proof.proven) { outcomes.push(proof.reason === "CATALOG_STALE" ? await stop(ctx, "CATALOG_STALE", attempts, nowMs, pendingSince) : await review(ctx, proof.reason)); continue; }
 
     const reservation = await reserveCreate(ctx, nowMs);
-    if (reservation.state === "CREATED" && reservation.ids) { outcomes.push(await settle(ctx, linked(reservation.ids), "CREATED_IN_IQ")); continue; }
-    if (reservation.state === "BLOCKED") { outcomes.push(await stop(ctx, reservation.reason || "BLOCKED", attempts, nowMs)); continue; }
+    if (reservation.state === "BLOCKED") {
+      // Another worker took it between the read above and the transaction: it settles the method.
+      if (reservation.reason === "RESERVED" || reservation.reason === "CREATED" || reservation.reason === "OUTCOME_UNKNOWN") { outcomes.push({ methodId: input.methodId, catalog: profile.catalog, status: "IN_PROGRESS" }); continue; }
+      outcomes.push(await stop(ctx, reservation.reason || "BLOCKED", attempts, nowMs, pendingSince));
+      continue;
+    }
 
-    const created = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_CREATE", operationId: reservation.reservationId, idempotencyKey: `${reservation.reservationId}:create`,
-      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 10 } },
+    const created = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_CREATE", operationId: `${reservation.reservationId}:${reservation.take}`, idempotencyKey: `${reservation.reservationId}:create:${reservation.take}`,
+      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 30 } },
       () => input.ports.create({ ...ctx, reservationId: reservation.reservationId }), value => value.outcome === "OUTCOME_UNKNOWN" ? "OUTCOME_UNKNOWN" : "SUCCEEDED");
     const result = (created as { value?: CreateResult }).value;
     if (!created.admitted) {
       // Nothing reached IQ: give the day's slot back and let the reservation be taken again.
       await releaseReservation(ctx, reservation.reservationId, nowMs, `SAFETY_${created.reason}`);
-      outcomes.push(DEFERRABLE.has(String(created.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${created.reason}`, attempts, nowMs));
+      outcomes.push(DEFERRABLE.has(String(created.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${created.reason}`, attempts, nowMs, pendingSince));
       continue;
     }
-    if (!result) { await closeReservation(reservation.reservationId, { status: "OUTCOME_UNKNOWN", reason: String(created.reason) }); outcomes.push(await stop(ctx, "OUTCOME_UNKNOWN")); continue; }
-    if (result.outcome === "OUTCOME_UNKNOWN") {
-      await closeReservation(reservation.reservationId, { status: "OUTCOME_UNKNOWN" });
-      await writeEntry(ctx, buildLinkEntry({ decision: { status: "NOT_FOUND" }, key: account.key, last4: account.last4, source: "CREATED_IN_IQ", createState: "OUTCOME_UNKNOWN" }, FieldValue.serverTimestamp()),
-        { event: AUDIT_EVENT.OUTCOME_UNKNOWN, status: "NOT_FOUND", source: "CREATED_IN_IQ", outcomeKey: "NOT_FOUND:CREATED_IN_IQ:OUTCOME_UNKNOWN", description: `No se sabe si IQ creó el beneficiario de la cuenta ****${account.last4}; no se reintenta solo.` });
-      outcomes.push({ methodId: input.methodId, catalog: profile.catalog, status: "NOT_FOUND", createState: "OUTCOME_UNKNOWN" });
+    // A throw inside the create may have happened after the POST left: treated as a lost answer.
+    if (!result || result.outcome === "OUTCOME_UNKNOWN") {
+      await closeReservation(reservation.reservationId, { status: "OUTCOME_UNKNOWN", reason: result ? "IQ_NO_ANSWER" : String(created.reason) });
+      outcomes.push(await reconcile({ ...run, attempts: 1 }, reservation.reservationId, "OUTCOME_UNKNOWN"));
       continue;
     }
-    if (result.outcome === "EXISTS") {
-      // "Ya existe" is a link, never an error loop: read the ids it now exposes.
-      const again = await input.ports.liveLookup(ctx);
-      if (again.found === true) { await closeReservation(reservation.reservationId, { status: "CREATED", existed: true, iqBeneficiaryId: again.iqBeneficiaryId, iqAccountId: again.iqAccountId, iqBeneficiaryName: again.iqBeneficiaryName }); outcomes.push(await settle(ctx, linked(again), "LIVE_LOOKUP")); continue; }
-      await closeReservation(reservation.reservationId, { status: "OUTCOME_UNKNOWN", reason: "EXISTS_UNRESOLVED" });
-      outcomes.push(await stop(ctx, "EXISTS_UNRESOLVED"));
+    if (result.outcome === "EXISTS") { outcomes.push(await reconcile(run, reservation.reservationId, "EXISTS")); continue; }
+    if (result.outcome === "NOT_SENT") {
+      await releaseReservation(ctx, reservation.reservationId, nowMs, result.reason);
+      outcomes.push(await stop(ctx, "CREATE_NOT_SENT", attempts, nowMs, pendingSince));
       continue;
     }
-    await closeReservation(reservation.reservationId, { status: "CREATED", iqBeneficiaryId: result.iqBeneficiaryId, iqAccountId: result.iqAccountId, iqBeneficiaryName: result.iqBeneficiaryName });
-    outcomes.push(await settle(ctx, linked(result), "CREATED_IN_IQ"));
+    if (result.outcome === "REJECTED") {
+      // Nothing created: the slot comes back. An empty beneficiary may remain: the reservation stays closed.
+      if (result.effect === "NONE") await releaseReservation(ctx, reservation.reservationId, nowMs, result.reason);
+      else await closeReservation(reservation.reservationId, { status: "REJECTED", reason: result.reason });
+      outcomes.push(await review(ctx, result.reason));
+      continue;
+    }
+    await closeReservation(reservation.reservationId, { status: "CREATED", iqBeneficiaryId: result.iqBeneficiaryId, iqAccountId: result.iqAccountId, iqBeneficiaryName: result.iqBeneficiaryName, conciliated: result.conciliated === true });
+    outcomes.push(await settleCreated(ctx, result));
   }
   return outcomes;
 }

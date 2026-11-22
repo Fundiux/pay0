@@ -1099,3 +1099,21 @@ export async function probeIqDispersionModule(): Promise<{
   };
 }
 
+
+export type IqBeneficiaryCreateConfig = {
+  enabled: boolean;
+  contractVerified: boolean;
+  dailyLimit: number;
+  catalogMaxAgeHours: number;
+};
+
+/** Super Admin only: automatic beneficiary creation in IQ for the caller's root. Only the fields sent change. */
+export async function setIqBeneficiaryCreateConfig(
+  input: Partial<IqBeneficiaryCreateConfig>,
+): Promise<IqBeneficiaryCreateConfig> {
+  return callIq<Partial<IqBeneficiaryCreateConfig>, IqBeneficiaryCreateConfig>(
+    "setIqBeneficiaryCreateConfig",
+    input,
+    30_000,
+  );
+}

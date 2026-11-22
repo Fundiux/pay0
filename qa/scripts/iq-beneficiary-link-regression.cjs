@@ -18,13 +18,16 @@ const eq = (a, b, label) => { assert.deepEqual(a, b, label); checks++; };
 const ok = (v, label) => { assert.ok(v, label); checks++; };
 const newClabe = () => `0121800${String(++seq).padStart(3, "0")}${String(Date.now()).slice(-8)}`;
 
-const calls = { lookup: 0, create: 0 };
-let lookupResults = [], createResult = null;
+const calls = { lookup: 0, create: 0, find: 0 };
+let lookupResults = [], createResult = null, findResult = { found: false };
 const ports = {
-  liveLookup: async () => { calls.lookup++; return lookupResults.length > 1 ? lookupResults.shift() : lookupResults[0] ?? { found: false, absenceProof: "ACCOUNT" }; },
+  liveLookup: async () => { calls.lookup++; return lookupResults.length > 1 ? lookupResults.shift() : lookupResults[0] ?? { found: false }; },
   create: async () => { calls.create++; if (createResult instanceof Error) throw createResult; return createResult; },
+  findExisting: async () => { calls.find++; return findResult; },
 };
-const reset = () => { calls.lookup = 0; calls.create = 0; lookupResults = [{ found: false, absenceProof: "ACCOUNT" }]; createResult = { outcome: "OUTCOME_UNKNOWN" }; };
+const reset = () => { calls.lookup = 0; calls.create = 0; calls.find = 0; lookupResults = [{ found: false }]; createResult = { outcome: "OUTCOME_UNKNOWN" }; findResult = { found: false }; };
+// The catalog proves absence only when the client's associate (partnerId 1) was read whole recently.
+const setCatalogFresh = hoursAgo => db.doc(`iqBeneficiaryCatalogState/${rootId}_${catalog}`).set({ partnerSyncedAt: { "1": admin.firestore.Timestamp.fromMillis(Date.now() - hoursAgo * 3_600_000) } }, { merge: true });
 
 async function setup(name, { clabe = newClabe(), beneficiaryRoot = rootId, linked = true, benName = "Juan Perez" } = {}) {
   const clientId = `${run}-${name}-c`, benId = `${run}-${name}-b`, methodId = `${run}-${name}-m`;
@@ -50,10 +53,12 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   eq(evaluateCreateGate({ masterEnabled: false, config: { enabled: true, contractVerified: true }, createdToday: 0 }).reason, "IQ_MASTER_OFF", "sin interruptor maestro");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: false, contractVerified: true }, createdToday: 0 }).reason, "CREATE_DISABLED", "creación apagada");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true }, createdToday: 0 }).reason, "CREATE_CONTRACT_UNVERIFIED", "contrato sin verificar");
-  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 3 }).reason, "DAILY_LIMIT_REACHED", "límite por defecto bajo (3)");
+  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 99 }).allowed, true, "límite por defecto 100: el 100.º cabe");
+  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 100 }).reason, "DAILY_LIMIT_REACHED", "límite por defecto 100: el 101.º no");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true, dailyLimit: 10 }, createdToday: 3 }).allowed, true, "el límite se lee de la configuración");
   eq(createReservationId("r", "c", "k"), createReservationId("r", "c", "k"), "la reserva es determinista");
 
+  await setCatalogFresh(1);
   // 1. in the catalog: linked with no IQ contact at all
   reset();
   const a = await setup("a");
@@ -101,7 +106,7 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
 
   // 7. create allowed: once, then the second method with the same account reuses the reservation
   await setCreate({ enabled: true, contractVerified: true, dailyLimit: 2 }); reset();
-  createResult = { outcome: "CREATED", iqBeneficiaryId: 4000, iqAccountId: 9000, iqBeneficiaryName: "Juan Perez" };
+  createResult = { outcome: "CREATED", iqBeneficiaryId: 4000, iqAccountId: 9000, iqBeneficiaryName: "Juan Perez", conciliated: true };
   const f = await setup("f");
   const outF = await link(f.methodId);
   eq([outF.status, calls.create], ["LINKED", 1], "se crea y se vincula");
@@ -116,37 +121,37 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   eq((await db.doc(`iqBeneficiaryCreateCounters/${rootId}_${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date())}`).get()).get("count"), 1, "el contador diario solo cuenta la creación real");
 
   // 8. daily limit
-  reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 4001, iqAccountId: 9001, iqBeneficiaryName: "Ana" };
+  reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 4001, iqAccountId: 9001, iqBeneficiaryName: "Ana", conciliated: true };
   const g = await setup("g");
   eq((await link(g.methodId)).status, "LINKED", "segunda creación del día cabe en el límite de 2");
-  reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 4002, iqAccountId: 9002, iqBeneficiaryName: "Luis" };
+  reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 4002, iqAccountId: 9002, iqBeneficiaryName: "Luis", conciliated: true };
   const h = await setup("h");
   const outH = await link(h.methodId);
   eq([outH.status, outH.createState, calls.create], ["PENDING_RETRY", "DAILY_LIMIT_REACHED", 0], "el límite diario detiene la creación sin tocar IQ");
   await setCreate({ enabled: true, contractVerified: true, dailyLimit: 50 });
 
   // 9. "ya existe" is a link
-  reset(); lookupResults = [{ found: false, absenceProof: "ACCOUNT" }, { found: true, iqBeneficiaryId: 4100, iqAccountId: 9100, iqBeneficiaryName: "Rosa" }]; createResult = { outcome: "EXISTS" };
+  reset(); findResult = { found: true, iqBeneficiaryId: 4100, iqAccountId: 9100, iqBeneficiaryName: "Rosa", conciliated: true }; createResult = { outcome: "EXISTS" };
   const i = await setup("i");
   const outI = await link(i.methodId);
-  eq([outI.status, (await entry(i.methodId)).iqAccountId, calls.create], ["LINKED", 9100, 1], "'ya existe' termina vinculando, sin bucle de error");
+  eq([outI.status, (await entry(i.methodId)).iqAccountId, calls.create, calls.find], ["LINKED", 9100, 1, 1], "'ya existe' termina vinculando con una lectura por cuenta, sin bucle de error");
   eq((await db.doc(`iqBeneficiaryCreateReservations/${createReservationId(rootId, catalog, iqAccountKey(i.clabe))}`).get()).get("status"), "CREATED", "la reserva queda cerrada");
 
   // 10. unknown outcome is never retried
   reset(); createResult = { outcome: "OUTCOME_UNKNOWN" };
   const j = await setup("j");
   const outJ = await link(j.methodId);
-  eq([outJ.createState, calls.create], ["OUTCOME_UNKNOWN", 1], "resultado incierto se registra");
+  eq([outJ.status, outJ.createState, calls.create], ["PENDING_RETRY", "CREATE_OUTCOME_UNKNOWN", 1], "resultado incierto: solo se vuelve a leer, más tarde");
   ok((await activities(j.methodId)).includes("IQ_BENEFICIARIO_CREACION_INCIERTA"), "auditoría de resultado incierto");
   await db.doc(`clientBeneficiaryMethods/${j.methodId}`).update({ iqLinksByCatalog: admin.firestore.FieldValue.delete() });
   const outJ2 = await link(j.methodId, Date.now() + 20 * 60_000);
-  eq([outJ2.createState, calls.create], ["OUTCOME_UNKNOWN", 1], "una reserva incierta bloquea un segundo POST");
+  eq([outJ2.createState, calls.create], ["CREATE_OUTCOME_UNKNOWN", 1], "una reserva incierta bloquea un segundo POST");
 
   // 11. an error thrown while creating is treated as unknown: it is not retried on its own
   reset(); createResult = new Error("IQ_BENEFICIARY_CREATE_CONTRACT_UNVERIFIED");
   const k = await setup("k");
   const outK = await link(k.methodId);
-  eq([outK.status, outK.createState, calls.create], ["NOT_FOUND", "OUTCOME_UNKNOWN", 1], "un error de creación no deja la cuenta vinculada ni se reintenta");
+  eq([outK.status, outK.createState, calls.create], ["PENDING_RETRY", "CREATE_OUTCOME_UNKNOWN", 1], "un error de creación no deja la cuenta vinculada ni se reenvía");
   eq((await db.doc(`iqBeneficiaryCreateReservations/${createReservationId(rootId, catalog, iqAccountKey(k.clabe))}`).get()).get("status"), "OUTCOME_UNKNOWN", "reserva incierta");
 
   // 11b. "not now" from the safety runtime writes nothing and gives the slot back
@@ -228,12 +233,16 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   eq([waiting.status, (await rawEntry(r3b.methodId)).attempts], ["PENDING_RETRY", 1], "esperar un interruptor no consume intentos");
   await setMaster(true); reset();
 
-  // R4. a name-only search never proves the account is missing
-  lookupResults = [{ found: false, absenceProof: "NAME" }]; createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x" };
+  // R4. a stale catalog never proves the account is missing: it waits without spending attempts
+  await setCatalogFresh(40);
+  createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x", conciliated: true };
   const r4 = await setup("r4");
   const outR4 = await link(r4.methodId);
-  eq([outR4.createState, calls.create], ["ABSENCE_NOT_PROVEN", 0], "búsqueda solo por nombre: no se crea");
+  eq([outR4.createState, calls.create], ["CATALOG_STALE", 0], "catálogo viejo: no se crea");
   eq((await db.collection("iqBeneficiaryCreateReservations").where("methodId", "==", r4.methodId).get()).size, 0, "sin reserva");
+  await entryField(r4.methodId, "attempts", 30);
+  eq([(await link(r4.methodId, Date.now() + 7 * 3_600_000)).createState, (await rawEntry(r4.methodId)).attempts], ["CATALOG_STALE", 1], "esperar al catálogo no consume intentos");
+  await setCatalogFresh(1);
 
   // R5. the same CLABE under another IQ associate is neither a link nor a review
   await setMaster(false); reset();

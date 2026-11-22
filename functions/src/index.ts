@@ -221,6 +221,7 @@ export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger
 export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
 export { getClientWhatsAppGroups, assignWhatsAppGroupToClients } from "./modules/documentDelivery/clientWhatsappGroups";
 export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
+export { setIqBeneficiaryCreateConfig } from "./modules/beneficiaries/iqCreateConfigCallables";
 export {
   processIqPagoDepositCreateQueue,
   dispatchQueuedPagoIqCreation,

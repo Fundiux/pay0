@@ -6,6 +6,7 @@ import { db } from "../sharedCallables/helpers";
 import { evaluateCreateGate, GATE_REASONS, mexicoDay, retryDelayMs } from "./iqLinkDomain";
 import { productionIqLinkPorts } from "./iqLinkPorts";
 import { linkOrCreateMethod, type IqLinkPorts } from "./iqLinkService";
+import { summarizeIqBeneficiaryLinks } from "./iqLinkSummary";
 import type { SafetyRuntime } from "../automationSafety/runtime";
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -60,4 +61,6 @@ export const redriveIqBeneficiaryLinks = onSchedule({ schedule: "*/30 * * * *", 
     try { await redriveCatalog({ catalog, ports: productionIqLinkPorts }); }
     catch (error) { console.error("IQ_BENEFICIARY_REDRIVE_CATALOG_FAILED", catalog, text(error instanceof Error ? error.message : error).slice(0, 200)); }
   }
+  try { await summarizeIqBeneficiaryLinks({ catalogs: REDRIVEN_CATALOGS }); }
+  catch (error) { console.error("IQ_BENEFICIARY_LINK_SUMMARY_FAILED", text(error instanceof Error ? error.message : error).slice(0, 200)); }
 });
