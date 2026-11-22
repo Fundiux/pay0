@@ -31,10 +31,35 @@ export const linkActivityId = (methodId: string, catalog: string, accountKey: st
 
 export const mexicoDay = (nowMs: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(nowMs));
 
-export const DEFAULT_DAILY_CREATE_LIMIT = 3;
+// Owner-approved 2026-11-22. Creation itself stays off until enabled and contractVerified are set.
+export const DEFAULT_DAILY_CREATE_LIMIT = 100;
 export const MAX_DAILY_CREATE_LIMIT = 200;
 
-export type CreateConfig = { enabled?: unknown; contractVerified?: unknown; dailyLimit?: unknown };
+export type CreateConfig = { enabled?: unknown; contractVerified?: unknown; dailyLimit?: unknown; catalogMaxAgeHours?: unknown };
+
+// How old the nightly catalog may be and still prove that an account is missing.
+export const DEFAULT_CATALOG_MAX_AGE_HOURS = 36;
+export function catalogMaxAgeMs(config: CreateConfig | undefined): number {
+  const configured = Number(config?.catalogMaxAgeHours);
+  const hours = Number.isFinite(configured) && configured > 0 ? Math.min(configured, 72) : DEFAULT_CATALOG_MAX_AGE_HOURS;
+  return hours * 3_600_000;
+}
+
+export type CatalogStateForProof = { partnerSyncedAt?: Record<string, { toMillis?: () => number } | null> | null };
+export type AbsenceProof = { proven: true } | { proven: false; reason: "PARTNER_UNKNOWN" | "CATALOG_STALE" | "ACCOUNT_IN_CATALOG" };
+
+// The account is missing in IQ when the associate's slice of the catalog was read whole, in one run, recently
+// and has no row at all for it, whatever its status. A full pass spans several nights, so its completion date
+// says nothing about one associate. Rows of other associates do not count: the same CLABE under another
+// associate is another IQ record.
+export function catalogAbsenceProof(input: { partnerId: unknown; partnerRows: unknown[]; state: CatalogStateForProof | undefined; nowMs: number; maxAgeMs: number }): AbsenceProof {
+  const partnerId = Number(input.partnerId);
+  if (!Number.isInteger(partnerId) || partnerId <= 0) return { proven: false, reason: "PARTNER_UNKNOWN" };
+  if (input.partnerRows.length) return { proven: false, reason: "ACCOUNT_IN_CATALOG" };
+  const syncedMs = input.state?.partnerSyncedAt?.[String(partnerId)]?.toMillis?.() ?? 0;
+  if (!syncedMs || input.nowMs - syncedMs > input.maxAgeMs) return { proven: false, reason: "CATALOG_STALE" };
+  return { proven: true };
+}
 export type CreateGate = { allowed: true; limit: number } | { allowed: false; reason: "IQ_MASTER_OFF" | "CREATE_DISABLED" | "CREATE_CONTRACT_UNVERIFIED" | "DAILY_LIMIT_REACHED"; limit: number };
 
 // Creating in IQ needs the master switch, the per-root create switch, a verified write contract and
@@ -76,10 +101,34 @@ export function storedIqLink(method: Record<string, unknown>, profileAlias: unkn
 export const MAX_RETRY_ATTEMPTS = 20;
 const HOUR = 3_600_000;
 export const GATE_REASONS = new Set(["IQ_MASTER_OFF", "CREATE_DISABLED", "CREATE_CONTRACT_UNVERIFIED", "DAILY_LIMIT_REACHED", "ABSENCE_NOT_PROVEN"]);
+// Waiting for the nightly catalog to read the associate again is not a failure either: it never spends attempts.
+export const WAITING_REASONS = new Set([...GATE_REASONS, "CATALOG_STALE"]);
+// A create whose answer was lost is only re-read, never re-sent: a few reads over a day, then a person.
+export const UNKNOWN_OUTCOME_REASON = "CREATE_OUTCOME_UNKNOWN";
+export const MAX_UNKNOWN_OUTCOME_READS = 4;
 
 export function retryDelayMs(reason: string): number | null {
   if (reason === "IQ_MASTER_OFF") return HOUR;
-  if (reason === "DAILY_LIMIT_REACHED" || reason === "CREATE_DISABLED" || reason === "CREATE_CONTRACT_UNVERIFIED" || reason === "ABSENCE_NOT_PROVEN") return 6 * HOUR;
-  if (reason === "LOOKUP_FAILED" || reason.startsWith("SAFETY_")) return HOUR / 2;
+  if (reason === "DAILY_LIMIT_REACHED" || reason === "CREATE_DISABLED" || reason === "CREATE_CONTRACT_UNVERIFIED" || reason === "ABSENCE_NOT_PROVEN" || reason === "CATALOG_STALE" || reason === UNKNOWN_OUTCOME_REASON) return 6 * HOUR;
+  if (reason === "LOOKUP_FAILED" || reason === "CREATE_NOT_SENT" || reason.startsWith("SAFETY_")) return HOUR / 2;
   return null;
+}
+
+// What the daily summary counts. No identifiers: only how many methods are in each state per catalog.
+export type LinkSummaryCounts = { linked: number; created: number; awaitingConciliation: number; pending: number; stuck: number; review: number; notFound: number };
+const DAY = 24 * HOUR;
+export function summarizeEntries(entries: Array<Record<string, any>>, nowMs: number): LinkSummaryCounts {
+  const counts: LinkSummaryCounts = { linked: 0, created: 0, awaitingConciliation: 0, pending: 0, stuck: 0, review: 0, notFound: 0 };
+  for (const entry of entries) {
+    const status = clean(entry?.status);
+    if (status === "LINKED") { counts.linked++; if (entry.source === "CREATED_IN_IQ") counts.created++; }
+    else if (status === "NOT_CONCILIATED" && entry.source === "CREATED_IN_IQ") counts.awaitingConciliation++;
+    else if (status === "PENDING_RETRY") {
+      counts.pending++;
+      const since = entry.pendingSince?.toMillis?.() ?? entry.checkedAt?.toMillis?.() ?? nowMs;
+      if (nowMs - since > DAY) counts.stuck++;
+    } else if (status === "REVIEW_REQUIRED") counts.review++;
+    else if (status === "NOT_FOUND") counts.notFound++;
+  }
+  return counts;
 }

@@ -12,6 +12,11 @@ export function iqCatalogForAlias(alias: unknown): string | null {
   return CATALOG_BY_ALIAS[clean(alias).toUpperCase()] ?? null;
 }
 
+// The login that writes new beneficiaries in each catalog (owner decision 2026-11-22): ELIUT's list with the
+// PAY0 profile, the RR/BETELL 1 list with the RR profile. Reads may use any login of the catalog.
+const CREATE_ALIAS_BY_CATALOG: Record<string, string> = { "iq-group-pay0": "PAY0", "iq-group-rr": "RR" };
+export const iqCreateAliasForCatalog = (catalog: unknown): string | null => CREATE_ALIAS_BY_CATALOG[clean(catalog)] ?? null;
+
 export const iqAccountKey = (accountDigits: string) => createHash("sha256").update(accountDigits).digest("hex").slice(0, 32);
 
 export function iqAccountIdentity(account: Record<string, unknown>): { key: string; last4: string } | null {

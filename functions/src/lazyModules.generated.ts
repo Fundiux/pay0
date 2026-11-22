@@ -371,6 +371,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   setDespachoOperationCost: { module: "./modules/rates/callables", export: "setDespachoOperationCost" },
   setDispatchCompanies: { module: "./modules/companies/callables", export: "setDispatchCompanies" },
   setIqAutomationMasterEnabled: { module: "./modules/iq/operatingCalendarCallables", export: "setIqAutomationMasterEnabled" },
+  setIqBeneficiaryCreateConfig: { module: "./modules/beneficiaries/iqCreateConfigCallables", export: "setIqBeneficiaryCreateConfig" },
   setMaintenanceMode: { module: "./modules/system/maintenance", export: "setMaintenanceMode" },
   setMyUsername: { module: "./modules/users/loginIdentity", export: "setMyUsername" },
   setUserClientAccess: { module: "./modules/clientDelegations/callables", export: "setUserClientAccess" },
