@@ -11,7 +11,11 @@ const check = (name, fn) => { fn(); checks++; };
 
 // ---- source types: one extensible list ----
 check('source-list', () => {
-  assert.deepEqual(d.DELIVERY_SOURCE_TYPES.sort(), ['COMPLEMENTO_PAGO_PDF_XML', 'CONSTANCIA_FIRMADA_PDF', 'CONSTANCIA_FIRMA_LINK', 'COTIZACION_PDF', 'DISPERSION_COMPROBANTE', 'FACTURA_PDF_XML']);
+  assert.deepEqual(d.DELIVERY_SOURCE_TYPES.sort(), ['COMPLEMENTO_PAGO_PDF_XML', 'CONSTANCIA_FIRMADA_PDF', 'CONSTANCIA_FIRMA_LINK', 'COTIZACION_PDF', 'DISPERSION_COMPROBANTE', 'FACTURA_PDF_XML', 'GRUPO_RESPUESTA']);
+  // A group reply is a server-made TEXT delivery: never a document, never prepared by hand, never triggered by an upload.
+  assert.equal(d.deliverySource('GRUPO_RESPUESTA').kind, 'TEXT');
+  assert.equal(d.normalizeDeliverySourceType('grupo_respuesta'), 'GRUPO_RESPUESTA');
+  assert.equal(d.sourceTypeForUpload({ active: true, status: 'READY', storagePath: 'roots/r/x.pdf', rootId: 'r', documentType: 'GRUPO_RESPUESTA', entityType: 'solicitudes' }), null);
   assert.equal(d.normalizeDeliverySourceType('factura_pdf_xml'), 'FACTURA_PDF_XML');
   assert.equal(d.normalizeDeliverySourceType('PAGO_COMPROBANTE'), null);
   assert.equal(d.deliverySource('CONSTANCIA_FIRMA_LINK').kind, 'TEXT');

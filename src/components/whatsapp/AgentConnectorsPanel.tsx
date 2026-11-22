@@ -6,6 +6,8 @@ import {
   createWhatsAppAgentEnrollment,
   getWhatsAppAgentActivity,
   getWhatsAppAgentObservers,
+  getWhatsAppAgentReplyConfig,
+  setWhatsAppAgentReplyConfig,
   saveWhatsAppAgentObservers,
   listWhatsAppAgentChats,
   listWhatsAppAgentConnectors,
@@ -14,6 +16,7 @@ import {
   type WhatsAppAgentChats,
   type WhatsAppAgentConnector,
   type WhatsAppAgentObserversState,
+  type WhatsAppReplyMode,
 } from "@/services/whatsappQr";
 
 const minutes = (ms: number | null) => (ms === null ? "—" : `${(ms / 60000).toFixed(1)} min`);
@@ -37,6 +40,70 @@ function Switch({ on, busy, label, onClick }: { on: boolean; busy: boolean; labe
     >
       <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${on ? "left-6" : "left-1"}`} />
     </button>
+  );
+}
+
+// Interruptor de las respuestas del agente en los grupos. Apagado por defecto; el servidor aplica además
+// los 3 días de aprendizaje, el horario y la espera a que conteste una persona del equipo.
+function ReplySwitchBlock({ agentName }: { agentName: string }) {
+  const [enabled, setEnabled] = useState(false);
+  const [mode, setMode] = useState<WhatsAppReplyMode>("GREETINGS_ONLY");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getWhatsAppAgentReplyConfig()
+      .then(result => { if (alive) { setEnabled(result.enabled); setMode(result.mode); } })
+      .catch((e: any) => { if (alive) setNote({ ok: false, text: `No se pudo cargar: ${e?.message || e}` }); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  async function save(nextEnabled: boolean, nextMode: WhatsAppReplyMode) {
+    setSaving(true);
+    setNote(null);
+    try {
+      const result = await setWhatsAppAgentReplyConfig({ enabled: nextEnabled, mode: nextMode });
+      setEnabled(result.enabled);
+      setMode(result.mode);
+      setNote({ ok: true, text: result.enabled ? "Respuestas encendidas." : "Respuestas apagadas." });
+    } catch (e: any) {
+      setNote({ ok: false, text: `No se pudo guardar: ${e?.message || e}` });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-100">Respuestas de {agentName} en los grupos</h4>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {loading ? "Cargando..." : enabled ? `Encendido: ${mode === "STANDARD" ? "saludos y \"permítanos validarlo\"" : "solo saludos"}.` : `Apagado: ${agentName} solo observa y no contesta nada.`}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={mode}
+            disabled={loading || saving}
+            aria-label="Qué contesta"
+            onChange={e => { const next = e.target.value as WhatsAppReplyMode; setMode(next); if (enabled) void save(true, next); }}
+            className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+          >
+            <option value="GREETINGS_ONLY">Solo saludos</option>
+            <option value="STANDARD">Saludos y validación</option>
+          </select>
+          <Switch on={enabled} busy={loading || saving} label={enabled ? "Apagar las respuestas" : "Encender las respuestas"} onClick={() => void save(!enabled, mode)} />
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        Solo contesta en grupos con usuario, después de 3 días observándolos, en horario de trabajo, y si nadie del equipo contestó en 3 minutos (los saludos, enseguida).
+      </p>
+      {note && <p className={`mt-1 text-xs ${note.ok ? "text-emerald-300" : "text-rose-300"}`}>{note.text}</p>}
+    </div>
   );
 }
 
@@ -103,6 +170,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
         {chats && <span className="text-sm text-slate-300">Observando {observedTotal} de {groups.length} grupos</span>}
       </div>
       <p className="mt-1 text-xs text-slate-500">Cada grupo observado debe tener su usuario: el agente solo usa información de ese usuario.</p>
+      {agentId === "hugo" && <ReplySwitchBlock agentName={agentName} />}
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
 

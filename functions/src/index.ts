@@ -273,3 +273,5 @@ export { listWhatsAppAgentConnectors } from "./modules/documentDelivery/whatsapp
 export { getWhatsAppAgentActivity, purgeExpiredWhatsAppInboundMessages } from "./modules/documentDelivery/whatsappAgentActivity";
 export { listWhatsAppAgentChats } from "./modules/documentDelivery/whatsappAgentChats";
 export { getUserOperatorNumbers, saveUserOperatorNumbers } from "./modules/operatorNumbers/callables";
+export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modules/whatsappAutoReply/callables";
+export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
