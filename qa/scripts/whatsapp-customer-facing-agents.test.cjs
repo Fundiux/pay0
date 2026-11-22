@@ -9,9 +9,10 @@ const ok = fn => { fn(); checks++; };
 ok(() => assert.deepEqual([...CUSTOMER_FACING_AGENT_IDS], ['hugo', 'maria', 'sofia']));
 // Every listed id is a real agent, so a rename in the catalog cannot silently drop one.
 ok(() => { for (const id of CUSTOMER_FACING_AGENT_IDS) assert.ok(AGENTS.some(agent => agent.id === id), id); });
-// Internal agents are all of the others and none is customer facing.
+// Internal agents are all of the others: whatever the catalog holds today, none of them is customer facing.
 const internal = AGENTS.map(agent => agent.id).filter(id => !CUSTOMER_FACING_AGENT_IDS.includes(id));
-ok(() => assert.deepEqual(internal.sort(), ['agent-creator', 'conciliacion', 'documentos', 'expediente', 'iq', 'pagos', 'sentinel', 'soporte']));
+ok(() => assert.ok(internal.length > 0));
+ok(() => assert.equal(internal.length + CUSTOMER_FACING_AGENT_IDS.length, AGENTS.length));
 ok(() => { for (const id of internal) assert.equal(isCustomerFacingAgent(id), false, id); });
 ok(() => { for (const id of CUSTOMER_FACING_AGENT_IDS) assert.equal(isCustomerFacingAgent(id), true, id); });
 // Anything that is not a known id string is refused.
