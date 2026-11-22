@@ -81,6 +81,7 @@ export function planGroupReplies(input: PlanInput): PlannedReply[] {
         hasOpenSolicitud: input.hasOpenSolicitud(ownerUserUid),
         requestLookup: isStatus ? input.lookupRequest?.(ownerUserUid, subject, row) : undefined,
         alreadyReplied: input.repliedIds.has(row.id),
+        seed: row.id,
         clientName: input.clientNameByOwner[ownerUserUid] || null,
       });
       if (decision.action !== "REPLY") continue;

@@ -7,11 +7,50 @@ export const OBSERVATION_MS = 72 * 60 * 60 * 1000;
 export const DEFAULT_HUMAN_WAIT_MS = 3 * 60 * 1000;
 export const MAX_REPLY_AGE_MS = 30 * 60 * 1000;
 
-export const REPLY_TEXTS = {
-  requestData: "Para ubicar su solicitud en el sistema, ¿nos confirma el nombre del cliente, o de la empresa o persona que realizó el pago? Permítanos validarlo, un momento por favor.",
-  processing: "Su solicitud ya se está procesando. No contamos con un tiempo estimado, ya que las solicitudes se atienden en el orden en que fueron llegando.",
-  validating: "Permítanos validarlo, un momento por favor.",
+// Fixed, warm wordings. Each situation has a few variants so the agent does not sound like a robot; the variant is chosen
+// from the message id, so the same message always gets the same wording. A status reply names what the client asked about
+// (transfer or invoice), one or the other, never both, and never promises a time.
+export const REPLY_TEXT_VARIANTS = {
+  VALIDATING: [
+    "Con gusto lo revisamos. Permítanos validarlo, un momento por favor.",
+    "Gracias por avisarnos. Permítanos validarlo y en un momento le confirmamos.",
+    "Enseguida lo revisamos. Permítanos validarlo, un momento por favor.",
+  ],
+  PROCESSING: {
+    TRANSFER: [
+      "Gracias por su paciencia. Su transferencia ya se encuentra en proceso y, en cuanto contemos con el comprobante, se lo compartiremos de inmediato. Entendemos la urgencia y estamos trabajando en ello.",
+      "Con gusto le informamos que su transferencia ya está en proceso. Tan pronto tengamos el comprobante se lo compartimos de manera inmediata. Agradecemos mucho su confianza y su paciencia.",
+      "Entendemos que es importante para usted. Su transferencia se encuentra en proceso y, en cuanto contemos con el comprobante, se lo compartiremos de inmediato.",
+    ],
+    INVOICE: [
+      "Gracias por su paciencia. Su solicitud de factura ya se encuentra en proceso y, en cuanto contemos con la factura, se la compartiremos de inmediato. Entendemos la urgencia y estamos trabajando en ello.",
+      "Con gusto le informamos que su solicitud de factura ya está en proceso. Tan pronto tengamos la factura se la compartimos de manera inmediata. Agradecemos mucho su confianza y su paciencia.",
+      "Entendemos que es importante para usted. Su factura se encuentra en proceso y, en cuanto la tengamos lista, se la compartiremos de inmediato.",
+    ],
+  },
+  REQUEST_DATA: {
+    TRANSFER: [
+      "Con gusto lo revisamos. Para ubicar su transferencia, ¿nos podría confirmar el nombre del cliente, o de la empresa o persona que realizó el pago? Permítanos validarlo, un momento por favor.",
+      "Gracias por escribirnos. Para ayudarle más rápido con su transferencia, ¿nos confirma por favor el nombre del cliente, o de la empresa o persona que realizó el pago? Lo validamos enseguida.",
+    ],
+    INVOICE: [
+      "Con gusto lo revisamos. Para ubicar su solicitud de factura, ¿nos podría confirmar el nombre del cliente, o de la empresa o persona que realizó el pago? Permítanos validarlo, un momento por favor.",
+      "Gracias por escribirnos. Para ayudarle más rápido con su factura, ¿nos confirma por favor el nombre del cliente, o de la empresa o persona que realizó el pago? Lo validamos enseguida.",
+    ],
+  },
 } as const;
+
+function pickVariant<T>(variants: readonly T[], seed: string): T {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return variants[hash % variants.length];
+}
+
+/** The text for a status reply. A subject that is neither a transfer nor an invoice can only get the neutral wording. */
+export function replyText(kind: "VALIDATING" | "PROCESSING" | "REQUEST_DATA", subject: "TRANSFER" | "INVOICE" | "OTHER", seed: string): string {
+  if (kind === "VALIDATING" || subject === "OTHER") return pickVariant(REPLY_TEXT_VARIANTS.VALIDATING, seed);
+  return pickVariant(REPLY_TEXT_VARIANTS[kind][subject], seed);
+}
 
 export type WorkingHours = { timezone: string; windows: { days: number[]; from: string; to: string }[] };
 // Working hours the owner set on 2026-11-11 (Mexico City). Not applied by default: an agent with no hours configured never answers.
@@ -35,6 +74,8 @@ export type ReplyInput = {
   hasOpenSolicitud: boolean;
   /** When present it decides the status reply; UNKNOWN or absent falls back to hasOpenSolicitud. */
   requestLookup?: RequestLookup;
+  /** Stable per message (its id): picks the wording variant. */
+  seed?: string;
   alreadyReplied: boolean;
   clientName?: string | null;
 };
@@ -121,13 +162,18 @@ export function decideGroupReply(input: ReplyInput): ReplyDecision {
   const waitMs = Number.isFinite(config.humanWaitMs) && (config.humanWaitMs as number) >= 0 ? (config.humanWaitMs as number) : DEFAULT_HUMAN_WAIT_MS;
   if (age < waitMs) return none("WAITING_FOR_HUMAN");
   // "Already processing" is only said when a real open request exists; otherwise the team validates first.
+  const seed = input.seed || String(message.timestampMs);
   if (kind === "STATUS_INQUIRY") {
-    // The system was checked: say it is being processed only when it really is there; when it is not, ask the client who it is for.
-    if (input.requestLookup === "FOUND") return { action: "REPLY", kind: "PROCESSING", text: REPLY_TEXTS.processing };
-    if (input.requestLookup === "NOT_FOUND") return { action: "REPLY", kind: "REQUEST_DATA", text: REPLY_TEXTS.requestData };
-    if (input.hasOpenSolicitud) return { action: "REPLY", kind: "PROCESSING", text: REPLY_TEXTS.processing };
+    // Without knowing whether it is a transfer or an invoice, the reply cannot name it: only the neutral wording fits.
+    const subject = statusSubject(message.body);
+    if (subject !== "OTHER") {
+      // The system was checked: say it is in process only when it really is there; when it is not, ask the client who it is for.
+      if (input.requestLookup === "FOUND") return { action: "REPLY", kind: "PROCESSING", text: replyText("PROCESSING", subject, seed) };
+      if (input.requestLookup === "NOT_FOUND") return { action: "REPLY", kind: "REQUEST_DATA", text: replyText("REQUEST_DATA", subject, seed) };
+      if (input.hasOpenSolicitud) return { action: "REPLY", kind: "PROCESSING", text: replyText("PROCESSING", subject, seed) };
+    }
   }
-  return { action: "REPLY", kind: "VALIDATING", text: REPLY_TEXTS.validating };
+  return { action: "REPLY", kind: "VALIDATING", text: replyText("VALIDATING", "OTHER", seed) };
 }
 
 // The inbound store keeps only a hash of each author; this builds the hashes of a user's operator numbers

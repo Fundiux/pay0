@@ -51,17 +51,36 @@ ok(() => assert.equal(d.statusSubject('cómo va la factura y la transferencia'),
 
 // What the system lookup decides: found = processing, not found = ask who it is for, unknown = neutral.
 const statusMsg = (over = {}) => ({ ...base(), message: { ...base().message, body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN }, hasOpenSolicitud: false, ...over });
-ok(() => assert.deepEqual(d.decideGroupReply(statusMsg({ requestLookup: 'FOUND' })), { action: 'REPLY', kind: 'PROCESSING', text: d.REPLY_TEXTS.processing }));
-ok(() => assert.deepEqual(d.decideGroupReply(statusMsg({ requestLookup: 'NOT_FOUND' })), { action: 'REPLY', kind: 'REQUEST_DATA', text: d.REPLY_TEXTS.requestData }));
-ok(() => assert.deepEqual(d.decideGroupReply(statusMsg({ requestLookup: 'UNKNOWN' })), { action: 'REPLY', kind: 'VALIDATING', text: d.REPLY_TEXTS.validating }));
-ok(() => assert.deepEqual(d.decideGroupReply(statusMsg({ requestLookup: 'UNKNOWN', hasOpenSolicitud: true })), { action: 'REPLY', kind: 'PROCESSING', text: d.REPLY_TEXTS.processing }));
+const V = d.REPLY_TEXT_VARIANTS;
+const isReply = (result, kind, list) => { assert.equal(result.action, 'REPLY'); assert.equal(result.kind, kind); assert.ok(list.includes(result.text), result.text); };
+ok(() => isReply(d.decideGroupReply(statusMsg({ requestLookup: 'FOUND' })), 'PROCESSING', V.PROCESSING.TRANSFER));
+ok(() => isReply(d.decideGroupReply(statusMsg({ requestLookup: 'NOT_FOUND' })), 'REQUEST_DATA', V.REQUEST_DATA.TRANSFER));
+ok(() => isReply(d.decideGroupReply(statusMsg({ requestLookup: 'UNKNOWN' })), 'VALIDATING', V.VALIDATING));
+ok(() => isReply(d.decideGroupReply(statusMsg({ requestLookup: 'UNKNOWN', hasOpenSolicitud: true })), 'PROCESSING', V.PROCESSING.TRANSFER));
 // The lookup never overrides the waiting time or a team answer.
 ok(() => assert.deepEqual(d.decideGroupReply(statusMsg({ requestLookup: 'FOUND', message: { ...base().message, body: '¿Ya salió mi transferencia?', timestampMs: NOW - 2 * MIN } })), { action: 'NONE', reason: 'WAITING_FOR_HUMAN' }));
 ok(() => assert.equal(d.decideGroupReply(statusMsg({ requestLookup: 'NOT_FOUND', laterMessages: [{ timestampMs: NOW - 4 * MIN, fromMe: false, authorIsOperator: true }] })).action, 'NONE'));
-// The request-data text asks for the identifying data and promises no time.
-ok(() => assert.match(d.REPLY_TEXTS.requestData, /nombre del cliente.*empresa o persona que realizó el pago/));
-ok(() => assert.match(d.REPLY_TEXTS.requestData, /Permítanos validarlo/));
-ok(() => assert.doesNotMatch(d.REPLY_TEXTS.requestData + d.REPLY_TEXTS.processing, /pay\s*-?\s*0|despacho/i));
+// A status reply names what the client asked about: a transfer or an invoice, one or the other, never both.
+const invoiceMsg = (over = {}) => ({ ...base(), message: { ...base().message, body: 'saben como va la factura que solicite', timestampMs: NOW - 5 * MIN }, hasOpenSolicitud: false, ...over });
+ok(() => isReply(d.decideGroupReply(invoiceMsg({ requestLookup: 'FOUND' })), 'PROCESSING', V.PROCESSING.INVOICE));
+ok(() => isReply(d.decideGroupReply(invoiceMsg({ requestLookup: 'NOT_FOUND' })), 'REQUEST_DATA', V.REQUEST_DATA.INVOICE));
+// When the subject is unclear (both or neither), only the neutral wording fits, whatever the lookup says.
+const unclear = (body, lookup) => d.decideGroupReply({ ...base(), message: { ...base().message, body, timestampMs: NOW - 5 * MIN }, hasOpenSolicitud: true, requestLookup: lookup });
+ok(() => { for (const lookup of ['FOUND', 'NOT_FOUND', 'UNKNOWN']) isReply(unclear('cómo va la factura y la transferencia?', lookup), 'VALIDATING', V.VALIDATING); });
+ok(() => isReply(unclear('¿ya llegó mi pago?', 'FOUND'), 'VALIDATING', V.VALIDATING));
+// Every wording: warm, no brand, no time promised, and it names only its own subject.
+const all = [...V.VALIDATING, ...V.PROCESSING.TRANSFER, ...V.PROCESSING.INVOICE, ...V.REQUEST_DATA.TRANSFER, ...V.REQUEST_DATA.INVOICE];
+ok(() => { for (const text of all) { assert.doesNotMatch(text, /pay\s*-?\s*0|despacho/i, text); assert.doesNotMatch(text, /\b(minutos?|horas?|hoy|mañana|días)\b/i, text); assert.doesNotMatch(text, /dispersi[oó]n|sin tiempo estimado|ya se está procesando/i, text); } });
+ok(() => { for (const text of [...V.PROCESSING.TRANSFER, ...V.REQUEST_DATA.TRANSFER]) { assert.match(text, /transferencia/, text); assert.doesNotMatch(text, /factura/i, text); } });
+ok(() => { for (const text of [...V.PROCESSING.INVOICE, ...V.REQUEST_DATA.INVOICE]) { assert.match(text, /factura/i, text); assert.doesNotMatch(text, /transferencia|comprobante/i, text); } });
+ok(() => { for (const text of [...V.REQUEST_DATA.TRANSFER, ...V.REQUEST_DATA.INVOICE]) assert.match(text, /nombre del cliente, o de la empresa o persona que realizó el pago/, text); });
+ok(() => { for (const text of V.PROCESSING.TRANSFER) assert.match(text, /comprobante/, text); });
+ok(() => assert.ok(V.VALIDATING.length >= 2 && V.PROCESSING.TRANSFER.length >= 2 && V.PROCESSING.INVOICE.length >= 2 && V.REQUEST_DATA.TRANSFER.length >= 2 && V.REQUEST_DATA.INVOICE.length >= 2));
+// The wording is chosen from the message id: stable for one message, varied across messages.
+ok(() => assert.equal(d.replyText('PROCESSING', 'TRANSFER', 'msg-1'), d.replyText('PROCESSING', 'TRANSFER', 'msg-1')));
+ok(() => assert.ok(new Set(Array.from({ length: 40 }, (_, i) => d.replyText('PROCESSING', 'INVOICE', `msg-${i}`))).size >= 2));
+ok(() => assert.ok(new Set(Array.from({ length: 40 }, (_, i) => d.replyText('VALIDATING', 'OTHER', `msg-${i}`))).size >= 2));
+ok(() => assert.ok(V.PROCESSING.TRANSFER.includes(d.replyText('PROCESSING', 'TRANSFER', ''))));
 
 // Gates, in order.
 ok(() => none(base({ config: { workingHours: hours } }), 'DISABLED'));
@@ -92,16 +111,14 @@ ok(() => assert.deepEqual(d.decideGroupReply(base({ message: { ...base().message
 ok(() => assert.deepEqual(d.decideGroupReply(base({ clientName: '' })), { action: 'REPLY', kind: 'GREETING', text: 'Buen día.' }));
 // Status: only "processing" when a real open request exists, and only after the 3 minute wait.
 const status = (extra) => withBody('¿Ya salió mi transferencia?', extra);
-ok(() => assert.deepEqual(d.decideGroupReply(status({})), { action: 'REPLY', kind: 'PROCESSING', text: d.REPLY_TEXTS.processing }));
-ok(() => assert.deepEqual(d.decideGroupReply(status({ hasOpenSolicitud: false })), { action: 'REPLY', kind: 'VALIDATING', text: d.REPLY_TEXTS.validating }));
+ok(() => isReply(d.decideGroupReply(status({})), 'PROCESSING', V.PROCESSING.TRANSFER));
+ok(() => isReply(d.decideGroupReply(status({ hasOpenSolicitud: false })), 'VALIDATING', V.VALIDATING));
 ok(() => none(status({ message: { ...base().message, body: '¿Ya salió mi transferencia?', timestampMs: NOW - 2 * MIN } }), 'WAITING_FOR_HUMAN'));
 ok(() => assert.equal(d.decideGroupReply(status({ message: { ...base().message, body: '¿Ya salió mi transferencia?', timestampMs: NOW - 3 * MIN } })).action, 'REPLY'));
 ok(() => none(status({ config: { enabled: true, workingHours: hours, humanWaitMs: 10 * MIN } }), 'WAITING_FOR_HUMAN'));
 // Anything deeper than a status question is only validated, never answered with content.
-ok(() => assert.deepEqual(d.decideGroupReply(withBody('¿Me pueden ayudar con otra cosa?')), { action: 'REPLY', kind: 'VALIDATING', text: d.REPLY_TEXTS.validating }));
+ok(() => isReply(d.decideGroupReply(withBody('¿Me pueden ayudar con otra cosa?')), 'VALIDATING', V.VALIDATING));
 // The "processing" text promises no time.
-ok(() => assert.match(d.REPLY_TEXTS.processing, /No contamos con un tiempo estimado/));
-ok(() => assert.match(d.REPLY_TEXTS.processing, /orden en que fueron llegando/));
 
 // Working hours boundaries (Monday 09:00 in, 18:00 out).
 ok(() => assert.equal(d.isWithinWorkingHours(hours, Date.UTC(2026, 10, 9, 15, 0, 0)), true));
