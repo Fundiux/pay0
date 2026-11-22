@@ -229,7 +229,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
 
     setFormData({
       ...formData,
-      monto: num.toLocaleString(undefined, {
+      monto: num.toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
@@ -364,7 +364,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
         }
 
         if (parsed.montoSolicitud > 0) {
-          next.monto = parsed.montoSolicitud.toLocaleString(undefined, {
+          next.monto = parsed.montoSolicitud.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           });
@@ -462,7 +462,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
         }
 
         if (parsed.montoSolicitud > 0) {
-          next.monto = parsed.montoSolicitud.toLocaleString(undefined, {
+          next.monto = parsed.montoSolicitud.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           });
@@ -842,13 +842,13 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
 
             {ordenCompraParsed?.total ? (
               <div className="mt-1 text-[11px] text-emerald-300">
-                Monto solicitud = Total OC: ${ordenCompraParsed.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Monto solicitud = Total OC: ${ordenCompraParsed.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             ) : null}
 
             {facturaXmlParsed?.total ? (
               <div className="mt-1 text-[11px] text-emerald-300">
-                Monto solicitud = Total XML: ${facturaXmlParsed.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Monto solicitud = Total XML: ${facturaXmlParsed.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             ) : null}
 
