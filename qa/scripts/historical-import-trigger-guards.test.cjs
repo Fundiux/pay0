@@ -1,5 +1,7 @@
 // Contract test: every Firestore trigger that reacts to pagos, solicitudes or
 // pagoAplicaciones must ignore IQ historical imports before producing effects.
+// Rows recovered by the automatic daily sync (importMode DAILY_SYNC) pass the legacy-only guard used by
+// local idempotent projections, and stay behind the full guard on IQ application/complement flows.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -15,11 +17,11 @@ const CONTRACTS = [
   ["paymentApplications/automaticApplication.ts", "export const applyPaymentAutomaticallyOnReceipt", "isIqHistoricalImport(pago)", "applyAutomaticPayment("],
   ["paymentApplications/automaticApplication.ts", "export const applyPaymentsAutomaticallyOnInvoice", "shouldSuppressIqHistoricalImport(before, after)", "applyAutomaticPayment"],
   ["paymentApplications/callables.ts", "export const enqueuePaymentApplicationImmediately", "shouldSuppressIqHistoricalImport(before, after)", "continuePaymentApplicationImmediately("],
-  ["materiality/triggers.ts", "export const refreshMaterialityFromPaymentApplication", "shouldSuppressIqHistoricalImport(before, after)", "refreshOrSkipInvalidSource("],
-  ["commissionDistributions/triggers.ts", "export const onPaymentReadyForCommissionDistribution", "shouldSuppressIqHistoricalImport(before, after)", "materializeCommissionDistribution("],
-  ["agent007/reconciliationMaintenance.ts", "export async function reconcileForPay0Change", "shouldSuppressIqHistoricalImport(before, after)", "reconcileAgent007Recommendations("],
-  ["controlCenter/automation.ts", "export async function markControlCenterDirty", "shouldSuppressIqHistoricalImport(before, after)", "rootId"],
-  ["controlCenter/recovery.ts", "isIqHistoricalImport(row)", "isIqHistoricalImport(row)", "return"],
+  ["materiality/triggers.ts", "export const refreshMaterialityFromPaymentApplication", "shouldSuppressLegacyIqHistoricalImport(before, after)", "refreshOrSkipInvalidSource("],
+  ["commissionDistributions/triggers.ts", "export const onPaymentReadyForCommissionDistribution", "shouldSuppressLegacyIqHistoricalImport(before, after)", "materializeCommissionDistribution("],
+  ["agent007/reconciliationMaintenance.ts", "export async function reconcileForPay0Change", "shouldSuppressLegacyIqHistoricalImport(before, after)", "reconcileAgent007Recommendations("],
+  ["controlCenter/automation.ts", "export async function markControlCenterDirty", "shouldSuppressLegacyIqHistoricalImport(before, after)", "rootId"],
+  ["controlCenter/recovery.ts", "isLegacyIqHistoricalImport(row)", "isLegacyIqHistoricalImport(row)", "return"],
   ["paymentApplications/complementAutomation.ts", "shouldSuppressIqHistoricalImport(event.data?.before.data(), app)", "shouldSuppressIqHistoricalImport(event.data?.before.data(), app)", "return"],
   ["paymentApplications/complementFollowup.ts", "shouldSuppressIqHistoricalImport(before, after)", "shouldSuppressIqHistoricalImport(before, after)", "return"],
 ];
@@ -53,4 +55,16 @@ test("compiled guard recognises complete historical provenance only", { skip: !f
   assert.equal(guard.shouldSuppressIqHistoricalImport({ ...HISTORICAL }, undefined), true, "deleted historical row suppresses");
   assert.equal(guard.shouldSuppressIqHistoricalImport({ ...HISTORICAL }, { status: "CONCILIADO" }), false, "ordinary after is never suppressed");
   assert.equal(guard.shouldSuppressIqHistoricalImport({}, { status: "CONCILIADO" }), false);
+});
+
+test("daily-sync rows run local projections but never the IQ application/complement flows", { skip: !fs.existsSync(guardPath) && "functions/lib not built" }, () => {
+  const guard = require(guardPath), dailySync = { ...HISTORICAL, importMode: "DAILY_SYNC" };
+  assert.equal(guard.isIqDailySyncImport(dailySync), true);
+  assert.equal(guard.isIqDailySyncImport(HISTORICAL), false);
+  assert.equal(guard.isIqDailySyncImport({ importMode: "DAILY_SYNC" }), false, "the marker alone is not provenance");
+  assert.equal(guard.shouldSuppressIqHistoricalImport({}, dailySync), true, "full guard still suppresses daily-sync rows");
+  assert.equal(guard.shouldSuppressLegacyIqHistoricalImport({}, dailySync), false, "projections run for daily-sync rows");
+  assert.equal(guard.shouldSuppressLegacyIqHistoricalImport({}, HISTORICAL), true, "legacy imports stay suppressed");
+  assert.equal(guard.shouldSuppressLegacyIqHistoricalImport({ ...HISTORICAL }, undefined), true);
+  assert.equal(guard.shouldSuppressLegacyIqHistoricalImport({}, { status: "CONCILIADO" }), false);
 });

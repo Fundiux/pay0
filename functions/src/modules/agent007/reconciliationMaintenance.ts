@@ -1,7 +1,7 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { db } from "../sharedCallables/helpers";
 import { reconcileAgent007Recommendations } from "./reconciliation";
-import { shouldSuppressIqHistoricalImport } from "../iq/historicalImportGuard";
+import { shouldSuppressLegacyIqHistoricalImport } from "../iq/historicalImportGuard";
 
 function relevant(kind: "solicitud" | "pago", before: any, after: any) {
   if (!before?.rootId || !after?.rootId || before.rootId !== after.rootId) return false;
@@ -10,7 +10,7 @@ function relevant(kind: "solicitud" | "pago", before: any, after: any) {
 }
 
 export async function reconcileForPay0Change(kind: "solicitud" | "pago", before: any, after: any) {
-  if (shouldSuppressIqHistoricalImport(before, after)) return 0;
+  if (shouldSuppressLegacyIqHistoricalImport(before, after)) return 0;
   if (!relevant(kind, before, after)) return 0;
   return reconcileAgent007Recommendations(db, after.rootId);
 }

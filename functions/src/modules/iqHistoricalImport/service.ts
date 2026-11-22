@@ -52,7 +52,7 @@ const now = () => FieldValue.serverTimestamp();
 const clean = (value: unknown, max = 180) => String(value ?? "").trim().slice(0, max);
 function materializeTemporalFields(payload:Record<string,unknown>):Record<string,unknown>{const out={...payload};for(const field of P4_TEMPORAL_TIMESTAMP_FIELDS){const value=out[field];if(typeof value==="string"){const date=new Date(value);if(!Number.isFinite(date.getTime()))throw new P4EngineError("P4_HISTORICAL_DATE_REVIEW_REQUIRED",`Fecha histórica inválida en ${field}.`);out[field]=admin.firestore.Timestamp.fromDate(date);}}return out;}
 
-type Context = { uid: string; rootId: string };
+export type Context = { uid: string; rootId: string };
 type Mode = "LIST_MANIFESTS" | "PLAN" | "APPROVE" | "PREVIEW_PHASE" | "PREVIEW_SCOPE" | "APPROVE_SCOPE" | "EXECUTE_SCOPE" | "RESUME_SCOPE" | "STATUS_SCOPE" | "VERIFY_SCOPE" | "ROLLBACK_SCOPE" | "PREVIEW_FINANCIAL_COMPONENT_ISOLATION" | "ISOLATE_FINANCIAL_COMPONENT" | "VERIFY_FINANCIAL_COMPONENT_ISOLATION" | "PREVIEW_RECONCILE_PROVENANCE_REPAIR" | "REPAIR_RECONCILE_PROVENANCE" | "VERIFY_RECONCILE_PROVENANCE_REPAIR" | "PREVIEW_CANONICAL_RECONCILIATION" | "PREVIEW_CANONICAL_RECONCILIATION_R1" | "PREVIEW_CANONICAL_RECONCILIATION_SCOPE" | "RECONCILE_CANONICAL" | "RECONCILE_CANONICAL_SCOPE" | "VERIFY_CANONICAL_RECONCILIATION" | "VERIFY_CANONICAL_RECONCILIATION_SCOPE" | "ROLLBACK_CANONICAL_RECONCILIATION" | "ROLLBACK_CANONICAL_RECONCILIATION_SCOPE" | "PREVIEW_R3_OPERATIONAL_POLICY" | "ACTIVATE_R3_OPERATIONAL_POLICY" | "VERIFY_R3_OPERATIONAL_POLICY" | "ROLLBACK_R3_OPERATIONAL_POLICY" | "EXECUTE" | "RESUME" | "STATUS" | "VERIFY" | "ROLLBACK";
 const DEFAULT_BUDGET: P4ExecutionBudget = { maxEntities: 25, maxWrites: 100, maxDurationMs: 45_000, maxErrors: 1, maxBatches: 5 };
 
@@ -129,6 +129,32 @@ async function plan(ctx: Context, data: any) {
   const counts = manifest.actions.reduce<Record<string, number>>((out, action) => { out[`${action.canonicalGroupId}:${action.entityType}:${action.operation}`] = (out[`${action.canonicalGroupId}:${action.entityType}:${action.operation}`] || 0) + 1; return out; }, {});
   return { ok: true, mode: "PLAN", planRunId, manifestId: manifest.manifestId, manifestHash: manifest.manifestHash, status: "PLANNED", counts, summary, metrics:discovered.metrics,
     expectedPay0Writes: manifest.expectedPay0Writes, expectedIqWrites: 0, expectedExternalEffects: 0 };
+}
+
+/**
+ * Daily sync (iqDailySync) persistence of a server-built manifest. Same chunked storage and audit as PLAN,
+ * but the owner-approved automatic policy (2026-11-22) records the system actor as approver: there is no
+ * human approval step. Idempotent by manifest hash.
+ */
+export async function persistDailySyncManifest(input: { ctx: Context; manifest: P4Manifest; summary: Record<string, unknown>; metrics: Record<string, unknown>; dailyRunId: string }) {
+  const { ctx, manifest } = input;
+  if (manifest.actions.some(action => action.rootId !== ctx.rootId)) throw new P4EngineError("P4_ROOT_REVIEW_REQUIRED", "El manifest contiene otro root.");
+  const ref = manifests.doc(manifest.manifestId), manifestChunks = encodeManifestChunks(manifest);
+  await db.runTransaction(async tx => {
+    const existing = await tx.get(ref);
+    if (existing.exists) {
+      if (existing.get("manifestHash") !== manifest.manifestHash) throw new P4EngineError("P4_MANIFEST_HASH_MISMATCH", "El ID ya existe con otro contenido.");
+      return;
+    }
+    const { actions: _actions, financialGraph: _financialGraph, ...manifestHeader } = manifest;
+    tx.create(ref, { ...manifestHeader, status: "APPROVED", importMode: "DAILY_SYNC", dailyRunId: input.dailyRunId, manifestStorage: P4_MANIFEST_STORAGE_VERSION, chunkCount: manifestChunks.length, planRunId: input.dailyRunId, planningSummary: input.summary, planningMetrics: input.metrics, serverGenerated: true, rootId: ctx.rootId, createdBy: ctx.uid, createdAt: now(), updatedAt: now(), approvedBy: ctx.uid, approvedAt: now(), approvalPolicy: "IQ_DAILY_SYNC_AUTOMATIC_2026_11_22" });
+    manifestChunks.forEach((payload, index) => tx.create(ref.collection("chunks").doc(manifestChunkId(index)), { index, payload }));
+    tx.create(audit.doc(), { mode: "DAILY_SYNC_PLAN", planRunId: input.dailyRunId, manifestId: manifest.manifestId, rootId: ctx.rootId, actorUid: ctx.uid, actorType: "SYSTEM", result: "AUTO_APPROVED", metrics: input.metrics, createdAt: now() });
+  });
+}
+
+export async function markDailySyncManifest(manifestId: string, status: "COMPLETED" | "APPROVED") {
+  await manifests.doc(manifestId).set({ status, updatedAt: now() }, { merge: true });
 }
 
 async function loadManifest(ctx: Context, manifestId: string): Promise<{ ref: FirebaseFirestore.DocumentReference; manifest: P4Manifest }> {
@@ -427,7 +453,28 @@ function beforeFields(row: Record<string, unknown>, fields: string[]) {
 }
 
 type ExecutionActionResult = { outcome: "COMPLETED" | "SKIPPED" | "NOOP" | "REVIEW"; progressStatus: "COMPLETED" | "SKIP_PURGED" | Exclude<P4TerminalDecision, "ALLOW_EXECUTE">; guard?: P4TerminalGuardResult };
-async function executeAction(ctx: Context, runId: string, manifest: P4Manifest, action: P4Action, phasedBalances = false, stateReader?: P4CurrentStateReader, verifiedTargets?: Set<string>): Promise<ExecutionActionResult> {
+export type P4ExecuteActionOptions = { importMode?: "DAILY_SYNC" };
+const sameCents=(left:unknown,right:unknown)=>Number.isFinite(Number(left))&&Number.isFinite(Number(right))&&Math.round(Number(left)*100)===Math.round(Number(right)*100);
+/**
+ * Daily sync only: a new IQ application whose invoice/deposit was imported from IQ on an earlier day. The parent
+ * balance is moved forward exactly once, and only when the parent's current balance plus this application equals,
+ * to the cent, the balance the planner derived from IQ's full application graph. Anything else (PAY0-native parent,
+ * several new applications on the parent, any other assessment failure) stays blocked and goes to review.
+ * Idempotent: once applied, the parent equals the planned balance and the application target exists.
+ */
+function dailyExistingParentPatch(parent:P4Action,application:P4Action,current:Record<string,unknown>,reasons:string[]):Record<string,unknown>|null{
+  const balanceReason=parent.entityType==="SOLICITUD"?"SOLICITUD_BALANCE":"PAYMENT_BALANCE";
+  if(!reasons.length||reasons.some(reason=>reason!==balanceReason))return null;
+  if(current.source!=="IQ_IMPORT"||clean(current.originalIqEntityId)!==parent.iqEntityId||clean(current.canonicalIqGroupId)!==parent.canonicalGroupId)return null;
+  if(!["NO_OP","EXISTING"].includes(parent.operation)||!["ACTIVE","APLICADA"].includes(clean(application.after.status)))return null;
+  const amount=Number(application.after.montoAplicado);if(!Number.isFinite(amount)||amount<=0)return null;
+  const [appliedField,openField]=parent.entityType==="SOLICITUD"?["totalAbonado","saldoPendiente"]:["totalAplicado","saldoDisponible"];
+  const plannedApplied=parent.after[appliedField],plannedOpen=parent.after[openField];
+  if(!sameCents(Number(current[appliedField]||0)+amount,plannedApplied)||!sameCents(Number(current[openField])-amount,plannedOpen)||Number(plannedOpen)<0)return null;
+  return{[appliedField]:Number(plannedApplied),[openField]:Number(plannedOpen),...(clean(parent.after.status)?{status:parent.after.status}:{})};
+}
+export async function executeAction(ctx: Context, runId: string, manifest: P4Manifest, action: P4Action, phasedBalances = false, stateReader?: P4CurrentStateReader, verifiedTargets?: Set<string>, options: P4ExecuteActionOptions = {}): Promise<ExecutionActionResult> {
+  if (options.importMode === "DAILY_SYNC" && !["CREATE_HISTORICAL", "DEPENDENCY_IMPORT", "NO_OP", "EXISTING"].includes(action.operation)) throw new P4EngineError("P4_DAILY_SYNC_OPERATION_FORBIDDEN", `La sincronización diaria sólo crea registros faltantes: ${action.operation}.`);
   if (["NO_OP", "EXISTING", "SKIP_PURGED", "REVIEW_REQUIRED", "CLIENT_REVIEW_REQUIRED", "FINANCIAL_RECONCILIATION_REVIEW", "HISTORICAL_DATE_REVIEW_REQUIRED"].includes(action.operation)) return { outcome: "SKIPPED", progressStatus: "SKIP_PURGED" };
   let iqEvidence: P4CurrentStateEvidence | null = null;
   if (stateReader) {
@@ -478,7 +525,7 @@ async function executeAction(ctx: Context, runId: string, manifest: P4Manifest, 
       tx.create(audit.doc(),{mode:"EXECUTE",runId,manifestId:manifest.manifestId,actionId:action.actionId,entityType:action.entityType,iqEntityId:action.iqEntityId,targetPath:action.targetPath,group:action.canonicalGroupId,operation:action.operation,result:"NO_CHANGE",rootId:ctx.rootId,actorUid:ctx.uid,createdAt:now()});
       return{outcome:"NOOP",progressStatus:"COMPLETED"};
     }
-    let payload = bridge?materializeTemporalFields({ ...action.after, ...canonicalFields, canonicalReconciliation:{manifestId:manifest.manifestId,actionId:action.actionId,contractVersion:manifest.version,reconciledAt:now()},rootId:action.rootId }):materializeTemporalFields({ ...historicalPayload(action, runId, manifest.manifestId, now(), manifest.version), ...canonicalFields });
+    let payload = bridge?materializeTemporalFields({ ...action.after, ...canonicalFields, canonicalReconciliation:{manifestId:manifest.manifestId,actionId:action.actionId,contractVersion:manifest.version,reconciledAt:now()},rootId:action.rootId }):materializeTemporalFields({ ...historicalPayload(action, runId, manifest.manifestId, now(), manifest.version), ...canonicalFields, ...(options.importMode ? { importMode: options.importMode } : {}) });
     if (phasedBalances && action.entityType === "SOLICITUD") payload = { ...payload, totalAbonado: 0, saldoPendiente: Number(action.after.monto || 0) };
     if (phasedBalances && action.entityType === "PAYMENT") payload = { ...payload, totalAplicado: 0, saldoDisponible: Number(action.after.monto || 0) };
     if(bridge)payload={...payload,[P4_EXECUTION_PROVENANCE_FIELD]:executionProvenance(action,manifest.manifestId,runId,payload)};
@@ -491,7 +538,13 @@ async function executeAction(ctx: Context, runId: string, manifest: P4Manifest, 
         const ref = db.doc(parent.targetPath), parentSnap = await tx.get(ref);
         if(!parentSnap.exists)throw new P4EngineError("P4_APPLICATION_ATOMICITY_BLOCKED",`Parent ausente para ${action.actionId}.`);
         const assessment=assessApplicationParent({parentAction:parent,applicationAction:action,current:(parentSnap.data()||{}) as Record<string,unknown>,manifest});
-        if(!assessment.valid)throw new P4EngineError("P4_APPLICATION_ATOMICITY_BLOCKED",`Parent ${parent.iqEntityId} no verificable: ${assessment.reasons.join(",")}.`);
+        if(!assessment.valid){
+          const dailyPatch=options.importMode==="DAILY_SYNC"?dailyExistingParentPatch(parent,action,(parentSnap.data()||{}) as Record<string,unknown>,assessment.reasons):null;
+          if(!dailyPatch)throw new P4EngineError("P4_APPLICATION_ATOMICITY_BLOCKED",`Parent ${parent.iqEntityId} no verificable: ${assessment.reasons.join(",")}.`);
+          validatedParents.push(parent);
+          parentMutations.push({ action: parent, ref, snap: parentSnap, fields: Object.keys(dailyPatch), patch: dailyPatch });
+          continue;
+        }
         validatedParents.push(parent);
         if(!assessment.parentBalanceMutation)continue;
         const fields = parent.entityType === "SOLICITUD" ? ["totalAbonado", "saldoPendiente"] : ["totalAplicado", "saldoDisponible"];
