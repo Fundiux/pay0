@@ -48,7 +48,7 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
         if (!verified) setError("La nueva lectura no confirmó la corrección anterior. Revisa el campo antes de continuar.");
       }
       const restored = Object.values(result.semanticReceipt.fields).some(field => field?.provenance === "HUMAN_CORRECTION");
-      setNotice(restored ? "Comprobante analizado. Se recuperaron tus correcciones guardadas para este documento." : "Comprobante analizado. Revisa lo que María entendió y corrige los campos que lo necesiten.");
+      setNotice(restored ? "Comprobante analizado. Se recuperaron tus correcciones guardadas para este documento." : "Comprobante analizado. Revisa lo que Hugo entendió y corrige los campos que lo necesiten.");
     } catch (cause) {
       if (current(version)) setError(cause instanceof Error ? cause.message : "No se pudo analizar el comprobante.");
     } finally { if (current(version)) setBusy(false); }
@@ -82,11 +82,11 @@ function ReceiptLearningContent({ allowed }: { allowed: boolean }) {
 
   const canCorrect = !!receipt?.analysisId && Number.isSafeInteger(receipt?.correctionVersion);
   return <section aria-label="Aprender de un comprobante" className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-    <div><h2 className="font-semibold text-white">Revisar un comprobante con María</h2>
+    <div><h2 className="font-semibold text-white">Revisar un comprobante con Hugo</h2>
       <p className="mt-1 text-sm text-slate-400">Aquí, en el panel de comprobantes de /hugo, selecciona un PDF o imagen y pulsa Analizar comprobante. Después puedes editar los campos. El análisis conserva evidencia y no registra un pago.</p></div>
     {!allowed ? <p className="text-sm text-amber-200">Inicia una sesión autorizada para analizar y corregir comprobantes.</p> : <>
       <label className="block text-sm text-slate-300">Comprobante (PDF, JPG, PNG o WEBP; hasta 1 MB)
-        <input aria-label="Seleccionar comprobante para María" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" disabled={busy || editing}
+        <input aria-label="Seleccionar comprobante para Hugo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" disabled={busy || editing}
           onChange={event => { const next = event.target.files?.[0] || null; event.target.value = ""; selectFile(next); }}
           className="mt-2 block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-100 disabled:opacity-50" />
       </label>

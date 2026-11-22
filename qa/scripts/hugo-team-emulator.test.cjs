@@ -38,7 +38,7 @@ const turnId = number => `00000000-0000-4000-8000-${String(number).padStart(12, 
   const first = await sendHugoTeamTurn.run({ auth: auth(uid), data: input });
   assert.equal(first.result, "READ_COMPLETE");
   assert.deepEqual(first.consultedAgents, ["sofia", "maria"]);
-  assert.match(first.reply, /Hugo consultó a Sofía y María/);
+  assert.match(first.reply, /Hugo consultó a Sofía y Operación/);
   assert.match(first.reply, /ACIER CAPITAL/);
   assert.equal(first.evidence.some(row => row.kind === "ORDEN_COMPRA"), true);
   assert.deepEqual(first.toolsUsed, ["resolveHumanSolicitud", "getSolicitud", "listSolicitudUploads", "getQuotationJob"]);

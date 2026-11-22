@@ -14,7 +14,7 @@ export default function SystemsPage() {
   const cards = [
     { name: "PAY0", description: "Operación, pagos, solicitudes, facturación y control.", icon: WalletCards, action: () => router.push(getFirstAllowedRoute(profile)), enabled: true, style: "border-sky-500/30 bg-sky-500/5 text-sky-200" },
     { name: "ASSETS", description: "Patrimonio, inversiones, préstamos y movimientos.", icon: Landmark, action: () => router.push("/assets"), enabled: assetsAllowed, style: "border-orange-500/35 bg-[#202224] text-orange-300" },
-    { name: "María", description: "Atención, tareas, consumo y conversación transversal.", icon: Bot, action: () => router.push("/hugo"), enabled: hugoAllowed, style: "border-violet-500/35 bg-violet-500/5 text-violet-200" },
+    { name: "Hugo", description: "Atención, tareas, consumo y conversación transversal.", icon: Bot, action: () => router.push("/hugo"), enabled: hugoAllowed, style: "border-violet-500/35 bg-violet-500/5 text-violet-200" },
   ];
   return <main className="min-h-screen bg-[#070d18] px-5 py-16 text-white">
     <section className="mx-auto max-w-5xl">

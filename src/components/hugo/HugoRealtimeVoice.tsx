@@ -25,7 +25,7 @@ type VoiceHistoryDraft = { sessionId: string; gatewayCallId: string; model: stri
 
 const FINALIZATION_TIMEOUT_MS = 8000;
 const STARTUP_TIMEOUT_MS = 45000;
-const teamAgents = { hugo: "Hugo", maria: "María", sofia: "Sofía", sentinel: "Sentinel" } as const;
+const teamAgents = { hugo: "Hugo", maria: "Operación", sofia: "Sofía", sentinel: "Sentinel" } as const;
 type TeamAgent = keyof typeof teamAgents;
 const isTeamAgent = (value: unknown): value is TeamAgent => typeof value === "string" && Object.prototype.hasOwnProperty.call(teamAgents, value);
 
@@ -223,7 +223,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error("Tu sesion expiro. Inicia sesion nuevamente.");
       const gatewayUrl = selectHugoVoiceGateway(currentUser.uid, process.env.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL);
-      if (!gatewayUrl) throw new Error("El gateway server-side de María no esta configurado en esta version.");
+      if (!gatewayUrl) throw new Error("El gateway server-side de Hugo no esta configurado en esta version.");
       const idToken = await withVoiceStartupAbort(() => currentUser.getIdToken(), startup.signal);
       if (generationRef.current !== generation) return;
       const stream = await withVoiceStartupAbort(() => navigator.mediaDevices.getUserMedia({
@@ -393,7 +393,7 @@ export default function HugoRealtimeVoice({ onHistorySaved }: { onHistorySaved?:
           try { event = JSON.parse(String(incoming.data)); } catch { return; }
           if (event.type === "authenticated") gateway.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
           if (event.type === "answer") { window.clearTimeout(timeout); resolve({ sdp: String(event.sdp), sessionId: String(event.sessionId), model: String(event.model), voice: String(event.voice), runtime: event.runtime }); }
-          if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`María no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
+          if (event.type === "gateway.error") { window.clearTimeout(timeout); reject(new Error(`Hugo no pudo establecer la llamada (${String(event.code || "GATEWAY_ERROR")}).`)); }
           if (event.type === "gateway.team_result") {
             if (isTeamAgent(event.agent)) { activeAgentRef.current = event.agent; setActiveAgent(event.agent); }
             setTeamResults(current => [...current.slice(-7), { agent: isTeamAgent(event.agent) ? teamAgents[event.agent] : "Hugo", activity: String(event.activity || "Consulta PAY0"), evidence: Array.isArray(event.evidence) ? event.evidence : [], toolsUsed: Array.isArray(event.toolsUsed) ? event.toolsUsed : [] }]);

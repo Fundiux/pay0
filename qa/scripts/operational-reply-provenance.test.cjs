@@ -28,7 +28,7 @@ test('payment clients are never replaced by banks, payers or OCR names', () => {
 test('receipt discovery points to the actual review surface without interpreting a document', () => {
   for (const message of ['puedes leer un comprobante de pago y donde?','¿Dónde puedo subir un comprobante?','cómo analizar un recibo']) {
     const reply = receiptReadingLocationReply(message);
-    assert.match(reply,/\/hugo/);assert.match(reply,/Revisar un comprobante con María/);assert.match(reply,/no registra un pago/);
+    assert.match(reply,/\/hugo/);assert.match(reply,/Revisar un comprobante con Hugo/);assert.match(reply,/no registra un pago/);
   }
   for(const message of ['último cliente en hacer una solicitud','último pago registrado','el comprobante tiene un monto incorrecto']) assert.equal(receiptReadingLocationReply(message),null);
 });

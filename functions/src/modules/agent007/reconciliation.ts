@@ -87,7 +87,7 @@ function presentation(row: Record<string, any>) {
     explanation: clean(
       row.explanation ||
         row.proposal ||
-        "María detectó una condición que conviene revisar.",
+        "Hugo detectó una condición que conviene revisar.",
       600,
     ),
     actionPrompt:

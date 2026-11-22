@@ -1800,7 +1800,7 @@ export default function PagosPage({ matCreateOnly = false, onMatClose }: { matCr
         [
           "El comprobante contiene RFC distintos a los registrados.",
           ...mismatchLines,
-          "Si es un pago realizado por un tercero, puedes enviarlo de todos modos. La aceptacion quedara registrada para auditoria y aprendizaje de María.",
+          "Si es un pago realizado por un tercero, puedes enviarlo de todos modos. La aceptacion quedara registrada para auditoria y aprendizaje de Hugo.",
           "¿Enviar de todos modos?",
         ].join("\n\n"),
       );

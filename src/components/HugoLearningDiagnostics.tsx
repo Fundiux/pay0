@@ -24,7 +24,7 @@ function LearningDiagnosticsContent({ canReview }: { canReview: boolean }) {
     catch (error: any) { if (version === lineageGeneration.current) setMessage(error?.message || "No se pudo consultar la procedencia."); } }
   const count = (check: (row: HugoLearningDiagnostic) => boolean) => rows.filter(check).length;
   return <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
-    <div className="flex items-center justify-between"><div><h2 className="font-semibold text-white">Aprendizaje de María</h2><p className="text-xs text-slate-500">Experiencias recientes, procedencia y elegibilidad. Vista limitada a 100 registros.</p></div><button onClick={() => void load()} disabled={loading} className="rounded bg-violet-600 px-3 py-2 text-white">Consultar</button></div>
+    <div className="flex items-center justify-between"><div><h2 className="font-semibold text-white">Aprendizaje de Hugo</h2><p className="text-xs text-slate-500">Experiencias recientes, procedencia y elegibilidad. Vista limitada a 100 registros.</p></div><button onClick={() => void load()} disabled={loading} className="rounded bg-violet-600 px-3 py-2 text-white">Consultar</button></div>
     {message && <p className="mt-2 text-rose-300">{message}</p>}
     {queriedAt && <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400"><p>Consulta completada · {rows.length} registros · Voz excluida.</p><p>Fuente: experiencias verificables de aprendizaje · Rango: últimos 100 registros · Última actualización: {new Date(queriedAt).toLocaleString("es-MX")}</p>{rows.length === 0 && <p>0 registros. No hay experiencias con resultado medido en el alcance consultado.</p>}</div>}
     <p className="mt-3 text-xs">{rows.length} almacenadas · {count(x => x.state === "VERIFIED")} verificadas · {count(x => x.state === "WAITING_FOR_OUTCOME")} esperando resultado · {count(x => x.state === "REJECTED")} rechazadas · {count(x => x.trainingEligible)} aptas por calidad (uso sujeto a revisión)</p>
@@ -95,7 +95,7 @@ function SupervisedReviewPanel() {
     {message && <p role="status" className="mt-2 text-amber-200">{message}</p>}
     {busy && <p role="status">Consultando evidencia y reglas…</p>}
     {data && <>
-      <p className="mt-3 text-xs text-slate-400">Consulta: {data.queriedAt}. Disponibilidad de aprobación: por confirmar con el servidor. Aplicación de reglas en María: no verificada. Si la revisión está pausada, el servidor lo indicará al confirmar.</p>
+      <p className="mt-3 text-xs text-slate-400">Consulta: {data.queriedAt}. Disponibilidad de aprobación: por confirmar con el servidor. Aplicación de reglas en Hugo: no verificada. Si la revisión está pausada, el servidor lo indicará al confirmar.</p>
       <h4 className="mt-4 font-medium text-white">Experiencias para revisión · página limitada a {data.limit}</h4>
       {!data.candidates.length && <p>No hay experiencias en esta página del ámbito consultado.</p>}
       <ul className="mt-2 space-y-2">{data.candidates.map(row => <li key={row.id} className="rounded border border-slate-700 p-3">

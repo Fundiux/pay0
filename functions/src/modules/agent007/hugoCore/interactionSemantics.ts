@@ -23,7 +23,7 @@ export function receiptReadingLocationReply(message: string): string | null {
   const value = plain(message);
   if (!/\b(comprobante|recibo)s?\b/.test(value)) return null;
   if (!/\b(donde|como|puedes|puedo)\b/.test(value) || !/\b(leer|lees|lectura|analizar|analizas|subir|adjuntar|cargar)\b/.test(value)) return null;
-  return "En PAY0 abre /hugo y busca «Revisar un comprobante con María». Selecciona un PDF o imagen de hasta 1 MB y pulsa «Analizar comprobante». Ahí puedes revisar la lectura, editar un campo y volver a analizar para comprobar tu corrección. El acceso depende de tu sesión autorizada; el análisis no registra un pago.";
+  return "En PAY0 abre /hugo y busca «Revisar un comprobante con Hugo». Selecciona un PDF o imagen de hasta 1 MB y pulsa «Analizar comprobante». Ahí puedes revisar la lectura, editar un campo y volver a analizar para comprobar tu corrección. El acceso depende de tu sesión autorizada; el análisis no registra un pago.";
 }
 
 export function formatLatestSolicitud(data: any) {

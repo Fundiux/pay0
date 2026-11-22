@@ -5,6 +5,10 @@ const { SYSTEMS, canAgentAccessSystem } = require("../../functions/lib/modules/a
 assert.equal(new Set(AGENTS.map(row => row.id)).size, AGENTS.length);
 assert.equal(AGENTS.find(row => row.id === "sentinel").kind, "DEFENSE");
 assert.equal(AGENTS.find(row => row.id === "agent-creator").enabled, false);
+for (const removed of ["iq", "pagos", "conciliacion", "documentos", "soporte"]) assert.equal(AGENTS.some(row => row.id === removed), false);
+assert.equal(AGENTS.find(row => row.id === "maria").enabled, false);
+assert.deepEqual(AGENTS.find(row => row.id === "programador").permissions, ["propose"]);
+assert.equal(AGENTS.find(row => row.id === "programador").enabled, false);
 const quotation = TOOLS.find(row => row.id === "quotation-recovery");
 assert.equal(quotation.idempotent, true);
 assert.equal(canExecuteTool(quotation, false, 1, false), true);

@@ -32,7 +32,7 @@ export default function HugoTraceInspector() {
     catch (e: any) { setError(e?.message || "No se pudo abrir la traza."); }
   }
   return <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
-    <h2 className="font-semibold text-white">Actividad de María</h2>
+    <h2 className="font-semibold text-white">Actividad de Hugo</h2>
     <p className="mt-1 text-xs text-slate-500">Procedencia y ejecución de los últimos 30 días. Cada página examina hasta 20 trazas.</p>
     <div className="mt-3 flex flex-wrap gap-2">
       <input aria-label="Conversación" placeholder="Conversación" value={filter.conversationId || ""} onChange={e => setFilter({ ...filter, conversationId: e.target.value })} className="rounded bg-slate-950 p-2" />
