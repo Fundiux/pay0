@@ -588,6 +588,34 @@
     {
       "commit": "ae71f195",
       "capability": "WhatsApp solo al grupo: Send client documents only to the client's WhatsApp group"
+    },
+    {
+      "commit": "b18aad51",
+      "capability": "Run the cancellation of an invoice with payment complements as a self-advancing process, with 72-hour retries and an editable lookup limit"
+    },
+    {
+      "commit": "c41cdbf5",
+      "capability": "Cancel a Facturama invoice's payment complements first, with the owner's confirmation"
+    },
+    {
+      "commit": "51698878",
+      "capability": "Never answer in, or assign to a client, any internal group of the root (one per superadmin or admin owner)"
+    },
+    {
+      "commit": "8f228bea",
+      "capability": "Read the team's single internal group from whatsappInternalGroups: Hugo never answers there and it cannot be assigned to a user"
+    },
+    {
+      "commit": "a3372be9",
+      "capability": "Read the internal agents from the catalog in the WhatsApp agent tests"
+    },
+    {
+      "commit": "9f164525",
+      "capability": "Greet from the first day and label the reply switch Observador or Actuando"
+    },
+    {
+      "commit": "0a11cd02",
+      "capability": "Give Hugo's group replies warm, subject-specific wordings with several variants"
     }
   ],
   "requiredText": [
