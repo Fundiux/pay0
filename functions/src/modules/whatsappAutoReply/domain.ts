@@ -8,6 +8,7 @@ export const DEFAULT_HUMAN_WAIT_MS = 3 * 60 * 1000;
 export const MAX_REPLY_AGE_MS = 30 * 60 * 1000;
 
 export const REPLY_TEXTS = {
+  requestData: "Para ubicar su solicitud en el sistema, ¿nos confirma el nombre del cliente, o de la empresa o persona que realizó el pago? Permítanos validarlo, un momento por favor.",
   processing: "Su solicitud ya se está procesando. No contamos con un tiempo estimado, ya que las solicitudes se atienden en el orden en que fueron llegando.",
   validating: "Permítanos validarlo, un momento por favor.",
 } as const;
@@ -19,7 +20,9 @@ export const OWNER_WORKING_HOURS: WorkingHours = {
   windows: [{ days: [1, 2, 3, 4, 5], from: "07:30", to: "19:30" }, { days: [6], from: "08:00", to: "15:00" }],
 };
 export type AutoReplyConfig = { enabled?: boolean; humanWaitMs?: number; workingHours?: WorkingHours | null };
-export type ReplyKind = "GREETING" | "PROCESSING" | "VALIDATING";
+export type ReplyKind = "GREETING" | "PROCESSING" | "VALIDATING" | "REQUEST_DATA";
+/** What the system lookup found for the client's request: FOUND, NOT_FOUND, or UNKNOWN when it could not be checked. */
+export type RequestLookup = "FOUND" | "NOT_FOUND" | "UNKNOWN";
 export type GroupMessage = { timestampMs: number; fromMe: boolean; authorIsOperator: boolean; type: string; body: string };
 export type ReplyDecision = { action: "NONE"; reason: string } | { action: "REPLY"; kind: ReplyKind; text: string };
 
@@ -30,20 +33,52 @@ export type ReplyInput = {
   message: GroupMessage;
   laterMessages: Pick<GroupMessage, "timestampMs" | "fromMe" | "authorIsOperator">[];
   hasOpenSolicitud: boolean;
+  /** When present it decides the status reply; UNKNOWN or absent falls back to hasOpenSolicitud. */
+  requestLookup?: RequestLookup;
   alreadyReplied: boolean;
   clientName?: string | null;
 };
 
 const normalize = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9? ]+/g, " ").replace(/\s+/g, " ").trim();
-const BUSINESS = /\b(factura|facturas|transferencia|transferencias|comprobante|comprobantes|pago|pagos|dispersion|dispersiones|solicitud|solicitudes|oc|orden de compra|deposito|cfdi)\b/;
-const QUESTION = /\?|\b(cuando|como|cual|cuales|donde|que paso|en que va|ya (esta|llego|salio|quedo|se)|me (puede|pueden|ayuda|ayudan)|podrian?|puedes?|hay (noticias|avance))\b/;
+const TRANSFER_WORDS = "transferencia|transferencias|tranferencia|tranferencias|trasferencia|trasferencias|transferncia|transferecia|transferensia|transfer|transferir|spei|dispersion|dispersiones|dispercion|pago a proveedor|pago al proveedor|envio de dinero|deposito";
+const INVOICE_WORDS = "factura|facturas|cfdi|solicitud|solicitudes|oc|orden de compra|comprobante|comprobantes|cotizacion";
+const BUSINESS = new RegExp(`\\b(${TRANSFER_WORDS}|${INVOICE_WORDS}|pago|pagos)\\b`);
+const TRANSFER_SUBJECT = new RegExp(`\\b(${TRANSFER_WORDS})\\b`);
+const INVOICE_SUBJECT = new RegExp(`\\b(${INVOICE_WORDS})\\b`);
+// Ways a client asks how something is going, including polite requests for help and urgency.
+const QUESTION = new RegExp([
+  "\\?",
+  "\\b(cuando|como|cual|cuales|donde|que paso|que pasa|que onda|en que va|en que quedo|como va|como vamos|como sigue|como quedo)\\b",
+  "\\bya (esta|estan|llego|llegaron|salio|salieron|quedo|quedaron|se|lo|la|los|las|hay|tienen|vieron|hicieron|reflejo|aparece|aparecio)\\b",
+  "\\b(me|nos) (puede|pueden|podria|podrian|podrias|ayuda|ayudan|apoya|apoyan|confirma|confirman|avisa|avisan|informa|informan|comparte|comparten)\\b",
+  "\\b(apoyo|apoyarnos|apoyarme|ayuda|ayudarnos|ayudarme|favor de|por favor)\\b.*\\b(con|de|para)\\b",
+  "\\b(nos|me) urge\\b|\\burge\\b|\\burgente\\b",
+  "\\bpodrian?\\b|\\bpuedes?\\b|\\bpueden\\b",
+  "\\bsaben\\b|\\bsabe\\b|\\bme confirman\\b|\\bconfirmen\\b",
+  "\\bhay (noticias|avance|novedad|novedades|respuesta)\\b|\\balguna (noticia|novedad|respuesta)\\b|\\b(avance|estatus|status)\\b",
+  "\\b(cuanto|cuanta) (falta|tarda|demora)\\b|\\bfalta (mucho|algo)\\b|\\bpara cuando\\b",
+  "\\b(sigue|siguen) (pendiente|pendientes)\\b|\\b(aun|todavia) no\\b|\\bno (ha|han|me ha|nos ha|se ha) (llegado|salido|reflejado|quedado)\\b|\\bno se (refleja|ve|ha reflejado)\\b",
+].join("|"));
 const GREETING = /^(hola|buenas|buen dias?|buenos dias|buenas tardes|buenas noches)( [a-z ]{0,25})?$/;
+
+export type StatusSubject = "TRANSFER" | "INVOICE" | "OTHER";
+
+/** What a status question is about: a transfer (dispersion) or an invoice request (solicitud). */
+export function statusSubject(body: string): StatusSubject {
+  const text = normalize(body);
+  const transfer = TRANSFER_SUBJECT.test(text), invoice = INVOICE_SUBJECT.test(text);
+  if (transfer && !invoice) return "TRANSFER";
+  if (invoice && !transfer) return "INVOICE";
+  return "OTHER";
+}
 
 export type MessageKind = "GREETING" | "STATUS_INQUIRY" | "QUESTION" | "OTHER";
 
 export function classifyMessage(body: string): MessageKind {
   const text = normalize(body);
   if (!text) return "OTHER";
+  // A thank-you that mentions the request ("gracias, ya quedo la factura") is not a question.
+  if (/\bgracias\b/.test(text) && !text.includes("?") && !/\b(me|nos) (puede|pueden|podria|podrian|podrias|ayuda|ayudan|apoya|apoyan|confirma|confirman)\b|\burge\b/.test(text)) return "OTHER";
   const question = QUESTION.test(text);
   if (BUSINESS.test(text) && question) return "STATUS_INQUIRY";
   if (text.length <= 40 && !BUSINESS.test(text) && !question && GREETING.test(text)) return "GREETING";
@@ -86,7 +121,12 @@ export function decideGroupReply(input: ReplyInput): ReplyDecision {
   const waitMs = Number.isFinite(config.humanWaitMs) && (config.humanWaitMs as number) >= 0 ? (config.humanWaitMs as number) : DEFAULT_HUMAN_WAIT_MS;
   if (age < waitMs) return none("WAITING_FOR_HUMAN");
   // "Already processing" is only said when a real open request exists; otherwise the team validates first.
-  if (kind === "STATUS_INQUIRY" && input.hasOpenSolicitud) return { action: "REPLY", kind: "PROCESSING", text: REPLY_TEXTS.processing };
+  if (kind === "STATUS_INQUIRY") {
+    // The system was checked: say it is being processed only when it really is there; when it is not, ask the client who it is for.
+    if (input.requestLookup === "FOUND") return { action: "REPLY", kind: "PROCESSING", text: REPLY_TEXTS.processing };
+    if (input.requestLookup === "NOT_FOUND") return { action: "REPLY", kind: "REQUEST_DATA", text: REPLY_TEXTS.requestData };
+    if (input.hasOpenSolicitud) return { action: "REPLY", kind: "PROCESSING", text: REPLY_TEXTS.processing };
+  }
   return { action: "REPLY", kind: "VALIDATING", text: REPLY_TEXTS.validating };
 }
 
