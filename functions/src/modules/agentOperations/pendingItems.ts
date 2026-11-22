@@ -20,6 +20,8 @@ export type PendingItems = {
   cashUnsigned?: number;
   /** Solicitudes whose IQ cancellation was confirmed and awaits review. */
   cancellationReview?: number;
+  /** Clients whose IQ balance differed from the PAY0 Wallet in the last nightly comparison. */
+  iqBalanceDifferences?: number;
 };
 
 /** Cash dispersions read per root; the receipt rules (users paid in cash are exempt) cannot be expressed in a count query. */
@@ -44,6 +46,7 @@ export async function loadPendingItems(rootId: string, now = Date.now()): Promis
     ["complementsLate", () => countOf(db.collection("paymentComplementJobs").where("rootId", "==", rootId).where("status", "==", "REQUESTED").where("requestedAt", "<", late))],
     ["cashUnsigned", () => countUnsignedCash(rootId)],
     ["cancellationReview", () => countOf(db.collection("solicitudes").where("rootId", "==", rootId).where("iqCancellationStatus", "==", "CONFIRMED_REVIEW_REQUIRED"))],
+    ["iqBalanceDifferences", async () => Number((await db.doc(`iqBalanceReconciliationState/${rootId}`).get()).data()?.counts?.different) || 0],
   ];
   const result: PendingItems = {};
   await Promise.all(readers.map(async ([key, read]) => {
