@@ -167,8 +167,8 @@ export async function ensureOcCommercialMetadata(solicitudId: string, actorUid: 
     .where("documentType", "==", "ORDEN_COMPRA").where("active", "==", true).limit(1).get();
   if (activeOc.empty) throw new HttpsError("failed-precondition", "Se requiere una Orden de Compra activa para generar la cotizacion.");
   const ocUploadId = activeOc.docs[0].id;
-  const oc = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
   const total = money(solicitud.total || solicitud.monto || solicitud.amount);
+  const oc = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000), { solicitudTotal: total });
   if (total <= 0) throw new HttpsError("failed-precondition", "La solicitud no tiene un importe total valido para la cotizacion.");
   const statedTotal = roundCents(oc?.total);
   if (Number.isFinite(statedTotal) && Math.abs(statedTotal - total) > 0.01)
@@ -179,7 +179,7 @@ export async function ensureOcCommercialMetadata(solicitudId: string, actorUid: 
     if (clean(current.ocCommercialMetadataUploadId || current.ocFiscalMetadataUploadId, 128)) return;
     tx.set(solicitudRef, {
       ocCommercialMetadataUploadId: ocUploadId,
-      ocCommercialMetadataSource: "ORDEN_COMPRA_XLSX_SIN_CLAVE_SAT",
+      ocCommercialMetadataSource: oc?.recognition ? `ORDEN_COMPRA_${oc.recognition.layer}_${oc.recognition.format}` : "ORDEN_COMPRA_XLSX_SIN_CLAVE_SAT",
       ocCommercialItems: priced.items,
       ocCommercialSubtotal: priced.subtotal,
       ocCommercialIva: priced.iva,
@@ -377,7 +377,7 @@ export async function generateCotizacionForSolicitudCore(request: {
     const total = quotationSource.total;
     // Stored OC metadata predates line pricing, so the priced lines, date and
     // number are read from the active OC file itself.
-    const ocLines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
+    const ocLines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000), { solicitudTotal: total });
     const { items: quoteItems, subtotal, iva } = requirePricedQuoteLines(ocLines, total);
     const description = clean(quoteItems[0]?.description, 240);
     // The quote shows the OC date; the real generation time stays in

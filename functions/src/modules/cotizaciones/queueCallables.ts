@@ -109,7 +109,7 @@ async function ocRereadReconciles(solicitudId: string): Promise<boolean> {
   if (!(total > 0)) return false;
   const activeOc = await db.collection("uploads").where("rootId", "==", clean(solicitud.rootId, 128)).where("solicitudId", "==", solicitudId).where("documentType", "==", "ORDEN_COMPRA").where("active", "==", true).limit(1).get();
   if (activeOc.empty) return false;
-  const lines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000));
+  const lines = await readOcQuotationLines(clean(activeOc.docs[0].get("storagePath"), 1000), { solicitudTotal: total });
   try { requirePricedQuoteLines(lines, total); return true; } catch { return false; }
 }
 

@@ -14,6 +14,8 @@ import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { isOcTemplateHelp } from "../../utils/ocTemplateText";
+import { candidateToCommercialMetadata, decodeTextDocument, parseDelimitedText, recognitionLogEntry, recognitionSummary, recognizeOcFromRows, recognizeOcFromText, type OcRecognitionResult, type OcSourceFormat, type OcValidationContext } from "./ocRecognition";
+import { extractOcSemantically } from "./ocSemanticExtraction";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -129,6 +131,8 @@ type OcFiscalMetadata = {
   date: string;
   /** OC number when the OC states one, or "". */
   number: string;
+  /** Present only when the tolerant layer (not the deterministic reader) produced the data. */
+  recognition?: ReturnType<typeof recognitionLogEntry>;
 };
 
 export type OcLineItem = { quantity: number; unit: string; productCode: string; description: string; unitPrice: number | null; amount: number | null };
@@ -160,10 +164,6 @@ async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<O
   // Fetch one extra byte so an oversized object is rejected before full allocation.
   const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
   return parseOcFiscalMetadataBuffer(buffer);
-}
-async function readOcCommercialMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
-  const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
-  return parseOcCommercialMetadataBuffer(buffer);
 }
 
 /** Pure parser used by the upload flow and by emulator/fixture verification. */
@@ -349,9 +349,123 @@ export async function parseOcCommercialMetadataBuffer(buffer: Buffer, diagnostic
  * quotation only mirrors the commercial terms; validation happens in the
  * quotation module.
  */
-export async function readOcQuotationLines(storagePath: string): Promise<OcFiscalMetadata | null> {
+export async function readOcQuotationLines(storagePath: string, context: OcValidationContext = {}): Promise<OcFiscalMetadata | null> {
   const [buffer] = await admin.storage().bucket().file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
-  return parseOcFiscalMetadataBuffer(buffer, true, undefined, true);
+  return parseOcQuotationLinesBuffer(buffer, context);
+}
+
+/**
+ * Deterministic quotation lines first; their output is returned untouched
+ * whenever every line is priced. Only an OC the deterministic reader cannot
+ * price (or cannot read: CSV, PDF, other layouts) goes to the tolerant layer,
+ * and only an ACCEPTED tolerant result replaces it. The semantic layer never
+ * feeds a quotation directly.
+ */
+export async function parseOcQuotationLinesBuffer(buffer: Buffer, context: OcValidationContext = {}): Promise<OcFiscalMetadata | null> {
+  const strict = isZipBuffer(buffer) ? await parseOcFiscalMetadataBuffer(buffer, true, undefined, true) : null;
+  if (strict && strict.items.every(item => item.amount !== null)) return strict;
+  const recognition = await recognizeOcBuffer(buffer, context, { semantic: false }).catch(error => {
+    if (!strict && error instanceof HttpsError) throw error;
+    console.warn("OC_RECOGNITION_FAILED", error instanceof Error ? error.name : "UnknownError");
+    return null;
+  });
+  if (recognition?.status === "ACCEPTED" && recognition.candidate)
+    return { ...candidateToCommercialMetadata(recognition.candidate), recognition: recognitionLogEntry(recognition) };
+  return strict;
+}
+
+const isZipBuffer = (buffer: Buffer) => Buffer.isBuffer(buffer) && buffer.length >= 4 && buffer.readUInt32LE(0) === 0x04034b50;
+const isPdfBuffer = (buffer: Buffer) => Buffer.isBuffer(buffer) && buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+let pdfTextParser: ((buffer: Buffer) => Promise<{ text?: string }>) | null = null;
+
+type OcRecognitionSource = { format: OcSourceFormat; rows?: string[][]; text: string };
+
+/** Every sheet of a workbook as text rows, through the same bounded ZIP reader. */
+async function readWorkbookRowsForRecognition(buffer: Buffer): Promise<string[][]> {
+  const zip = openBoundedWorkbook(buffer), budget = createWorkbookStructureBudget();
+  const sharedXml = await zip.readText("xl/sharedStrings.xml");
+  const shared: string[] = [];
+  for (const match of sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)) { budget.sharedString(); shared.push(xmlValue(match[1])); }
+  const rows: string[][] = [];
+  for (const sheetName of zip.sheetNames) {
+    const sheet = await zip.readText(sheetName);
+    for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      budget.row();
+      const values: string[] = [];
+      for (const cell of row[1].matchAll(/<c\b([^>]*[^/])>([\s\S]*?)<\/c>/g)) {
+        const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "";
+        budget.cell(reference, true);
+        const raw = cell[2].match(/<v[^>]*>([\s\S]*?)<\/v>/)?.[1] || cell[2].match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "";
+        const column = excelColumn(reference) - 1;
+        if (column >= 0) values[column] = cell[1].includes('t="s"') ? shared[Number(raw)] || "" : xmlValue(raw);
+      }
+      // Template help cells are blanked, not removed, so columns stay aligned.
+      if (values.some(Boolean)) rows.push(Array.from(values, value => value && !isOcTemplateHelp(value) ? value : ""));
+    }
+    rows.push([]);
+  }
+  return rows;
+}
+
+async function ocRecognitionSource(buffer: Buffer): Promise<OcRecognitionSource | null> {
+  if (isZipBuffer(buffer)) {
+    try {
+      const rows = await readWorkbookRowsForRecognition(buffer);
+      return { format: "XLSX", rows, text: rows.map(row => row.filter(Boolean).join(" | ")).filter(Boolean).join("\n") };
+    } catch (error) {
+      if (error instanceof WorkbookLimitError) throw new HttpsError("invalid-argument", "El Excel es invalido o excede los limites de procesamiento.");
+      throw error;
+    }
+  }
+  if (isPdfBuffer(buffer)) {
+    try {
+      if (!pdfTextParser) pdfTextParser = require("pdf-parse");
+      const parsed = await pdfTextParser!(buffer);
+      const text = String(parsed?.text || "");
+      return text.replace(/\s/g, "").length >= 20 ? { format: "PDF", text } : null;
+    } catch { return null; }
+  }
+  const text = decodeTextDocument(buffer);
+  if (!text) return null;
+  const rows = parseDelimitedText(text);
+  const multiColumn = rows.filter(row => row.filter(cell => cell.trim()).length > 1).length;
+  return multiColumn >= Math.max(2, rows.filter(row => row.some(cell => cell.trim())).length * 0.3)
+    ? { format: "CSV", rows, text: rows.map(row => row.filter(Boolean).join(" | ")).join("\n") }
+    : { format: "TEXT", text };
+}
+
+/**
+ * Tolerant (and, when enabled, semantic) recognition of an OC the
+ * deterministic reader did not accept. Logs reason codes only.
+ */
+export async function recognizeOcBuffer(buffer: Buffer, context: OcValidationContext, options: { semantic?: boolean } = {}): Promise<OcRecognitionResult | null> {
+  const source = await ocRecognitionSource(buffer);
+  if (!source) return null;
+  let result = source.rows ? recognizeOcFromRows(source.rows, source.format, context) : recognizeOcFromText(source.text, source.format, context);
+  if (result.status !== "ACCEPTED" && options.semantic !== false) {
+    const semantic = await extractOcSemantically(source.text, source.format, context).catch(() => null);
+    if (semantic && (semantic.status === "ACCEPTED" || result.status === "UNREADABLE")) result = semantic;
+  }
+  console.info("OC_RECOGNITION", recognitionLogEntry(result));
+  return result;
+}
+
+/** Figures the tolerant layer must reconcile with: solicitud total, client RFC, issuer RFC. */
+async function ocValidationContext(solicitud: any, rootId: string): Promise<OcValidationContext> {
+  const total = Number(solicitud?.total || solicitud?.monto || solicitud?.amount);
+  const clientId = String(solicitud?.clienteId || solicitud?.clientId || "").trim();
+  const companyId = String(solicitud?.companyId || solicitud?.empresaId || "").trim();
+  const [clientSnap, companySnap] = await Promise.all([
+    clientId ? db.collection("clients").doc(clientId).get().catch(() => null) : Promise.resolve(null),
+    companyId ? db.collection("companies").doc(companyId).get().catch(() => null) : Promise.resolve(null),
+  ]);
+  const client: any = clientSnap?.exists && clientSnap.get("rootId") === rootId ? clientSnap.data() || {} : {};
+  const company: any = companySnap?.exists && companySnap.get("rootId") === rootId ? companySnap.data() || {} : {};
+  return {
+    solicitudTotal: Number.isFinite(total) && total > 0 ? total : null,
+    registeredClientRfc: String(client.rfc || client.fiscalProfile?.rfc || "") || null,
+    companyRfc: String(company.rfc || solicitud?.companyRfc || solicitud?.empresaRfc || "") || null,
+  };
 }
 
 function cleanCfdiText(value: any): string {
@@ -663,6 +777,7 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
   let facturaXmlMetadata: FacturaXmlMetadata | null = null;
   let ocFiscalMetadata: OcFiscalMetadata | null = null;
   let ocCommercialMetadata: OcFiscalMetadata | null = null;
+  let ocRecognition: OcRecognitionResult | null = null;
 
   try {
     const bucket = admin.storage().bucket();
@@ -676,10 +791,26 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
       documentType === "FACTURA_XML"
         ? await readFacturaXmlMetadataFromStorage(bucket, String(upload.storagePath || ""))
         : null;
-    ocCommercialMetadata = documentType === "ORDEN_COMPRA"
-      ? await readOcCommercialMetadata(bucket, String(upload.storagePath || "")) : null;
-    ocFiscalMetadata = documentType === "ORDEN_COMPRA"
-      ? await readOcFiscalMetadata(bucket, String(upload.storagePath || "")) : null;
+    if (documentType === "ORDEN_COMPRA") {
+      const [ocBuffer] = await bucket.file(String(upload.storagePath || "")).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
+      const isWorkbook = isZipBuffer(ocBuffer);
+      // Layer 1: the deterministic Excel readers, unchanged.
+      ocCommercialMetadata = isWorkbook ? await parseOcCommercialMetadataBuffer(ocBuffer) : null;
+      ocFiscalMetadata = isWorkbook ? await parseOcFiscalMetadataBuffer(ocBuffer) : null;
+      if (!ocCommercialMetadata) {
+        // Layers 2-3: other layouts and formats; accepted only when they
+        // reconcile with the solicitud, otherwise recorded for review.
+        // A fault in these layers never blocks an upload the deterministic
+        // flow would have finalized; only bounded-ZIP rejections propagate.
+        ocRecognition = await recognizeOcBuffer(ocBuffer, await ocValidationContext(solicitud, rootId)).catch(error => {
+          if (error instanceof HttpsError) throw error;
+          console.warn("OC_RECOGNITION_FAILED", error instanceof Error ? error.name : "UnknownError");
+          return null;
+        });
+        if (!ocRecognition && !isWorkbook) throw new HttpsError("invalid-argument", "La Orden de Compra debe ser un Excel, CSV o PDF legible.");
+        if (ocRecognition?.status === "ACCEPTED" && ocRecognition.candidate) ocCommercialMetadata = candidateToCommercialMetadata(ocRecognition.candidate);
+      }
+    }
   } catch (e: any) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError("internal", "No se pudo verificar el archivo en Storage.");
@@ -769,6 +900,17 @@ if (storagePathIn && storagePathIn !== String(upload.storagePath || "")) {
           currency: ocCommercialMetadata.currency,
           ocCommercialMetadataUpdatedAt: FieldValue.serverTimestamp(),
           replacementOcStatus: "UPLOADED", replacementRequiresOc: false,
+          ...(ocRecognition ? { ocCommercialMetadataSource: `ORDEN_COMPRA_${ocRecognition.layer}_${ocRecognition.format}` }
+            // A deterministic re-upload must not keep a previous tolerant label.
+            : /^ORDEN_COMPRA_(TOLERANT|SEMANTIC)_/.test(String(solicitudH4D58H.ocCommercialMetadataSource || "")) ? { ocCommercialMetadataSource: FieldValue.delete() } : {}),
+        }, { merge: true });
+      }
+      if (documentType === "ORDEN_COMPRA") {
+        // Why the active OC was or was not read; reason codes and figures only.
+        tx.set(solicitudRef, {
+          ocRecognition: ocRecognition
+            ? { ...recognitionSummary(ocRecognition), uploadId, updatedAt: FieldValue.serverTimestamp() }
+            : FieldValue.delete(),
         }, { merge: true });
       }
       if (ocFiscalMetadata) {
