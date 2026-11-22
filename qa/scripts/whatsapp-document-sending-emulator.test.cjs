@@ -379,48 +379,85 @@ async function queueQuotation() {
     assert.equal((await job((await db.collection('documentDeliveryJobs').where('sourceId', '==', skippedQuote.solicitudId).get()).docs[0].id)).status, 'READY_FOR_SEND');
   });
 
-  await test('group-alert-goes-only-to-the-internal-group', async () => {
+  // Internal groups belong to an owner: the superadmin or an admin. Operators use the group of their admin.
+  await test('internal-group-is-per-owner-and-operators-use-their-admins', async () => {
     const { alertIfClientGroupIncomplete } = require('../../functions/lib/modules/documentDelivery/clientGroupAlerts.js');
-    const internal = '120363000000000077@g.us';
+    const { setWhatsAppInternalGroup } = require('../../functions/lib/modules/documentDelivery/clientWhatsappGroups.js');
     const day = mexicoDayStartMs(Date.now());
     const sourceOf = id => id + ':' + day;
+    const groupA = '120363555000000101@g.us', groupB = '120363555000000102@g.us', groupS = '120363555000000103@g.us';
+    const adminA = run + '-admin-a', adminB = run + '-admin-b', adminC = run + '-admin-c', operatorA = run + '-operator-a';
     await setSwitch(true);
+    for (const [uid, role, extra] of [[adminA, 'admin', {}], [adminB, 'admin', {}], [adminC, 'admin', {}], [operatorA, 'operador', { adminId: adminA, parentRole: 'admin', parentUserId: adminA }]]) {
+      await db.doc('users/' + uid).set({ role, rootId, active: true, ...extra });
+    }
+    for (const [chatId, name] of [[groupA, 'Equipo A'], [groupB, 'Equipo B'], [groupS, 'Equipo superadmin']]) {
+      await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(chatId)).set({ rootId, bindingId: hugo.binding.id, chatId, name, isGroup: true, active: true });
+    }
+    const client = async (id, adminId, name) => { await db.doc('clients/' + id).set({ rootId, name, adminId, whatsapp: '5215550000099' }); return id; };
+    const as = uid => ({ auth: { uid } });
+    const internalDoc = async (owner) => (await db.doc('whatsappInternalGroups/' + rootId + '__' + encodeURIComponent(owner)).get());
 
-    // A client without a group, and no internal group yet: the notice waits and never reaches the client's private number.
-    await db.doc('clients/client-sin-grupo').set({ rootId, name: 'Cliente Sur', whatsapp: '5215550000009' });
-    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-sin-grupo' }), 'NO_GROUP_ASSIGNED:WAITING_DESTINATION');
-    const [waiting] = await jobsFor(sourceOf('client-sin-grupo'));
-    assert.equal(waiting.sourceType, 'AVISO_GRUPO_INTERNO');
-    assert.equal(waiting.targetResolutionStatus, 'INTERNAL_GROUP_MISSING');
-    assert.equal(waiting.targetDestinationsCount, 0);
+    // Nobody has marked a group yet: no notice and no waiting job, and never a private chat.
+    const nobody = await client(run + '-c-none', adminA, 'Cliente Sin Dueno Con Grupo');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: nobody }), 'NO_INTERNAL_GROUP');
+    assert.equal((await jobsFor(sourceOf(nobody))).length, 0);
 
-    // With the internal group marked and visible to Hugo, the notice goes to it and only to it.
-    await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(internal)).set({ rootId, bindingId: hugo.binding.id, chatId: internal, name: 'Equipo interno', isGroup: true, active: true });
-    await db.doc('whatsappInternalGroups/' + rootId).set({ rootId, groupChatId: internal, groupName: 'Equipo interno' });
-    await db.doc('clients/client-sin-grupo-2').set({ rootId, name: 'Cliente Este', whatsapp: '5215550000010' });
-    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-sin-grupo-2' }), 'NO_GROUP_ASSIGNED:RELEASED');
-    const [notice] = await jobsFor(sourceOf('client-sin-grupo-2'));
-    assert.equal(notice.targetDestinations.length, 1);
-    assert.equal(notice.targetDestinations[0].chatId, internal);
-    assert.equal(notice.targetDestinations[0].chatType, 'GROUP');
-    assert.match(notice.textBody, /Cliente Este.*no tiene grupo de WhatsApp asignado/);
-    assert.ok(!JSON.stringify(notice.targetDestinations).includes('@c.us'), 'never a private chat');
+    // An admin sets only its own group; the superadmin sets any owner; an operator cannot set one.
+    assert.equal((await setWhatsAppInternalGroup.run({ ...as(adminA), data: { groupChatId: groupA } })).ownerAdminId, adminA);
+    await assert.rejects(() => setWhatsAppInternalGroup.run({ ...as(adminA), data: { groupChatId: groupA, ownerAdminId: adminB } }), error => error.code === 'permission-denied');
+    await assert.rejects(() => setWhatsAppInternalGroup.run({ ...as(operatorA), data: { groupChatId: groupA } }), error => error.code === 'permission-denied');
+    assert.equal((await setWhatsAppInternalGroup.run({ ...as(ownerUid), data: { groupChatId: groupB, ownerAdminId: adminB } })).ownerAdminId, adminB);
+    assert.equal((await setWhatsAppInternalGroup.run({ ...as(ownerUid), data: { groupChatId: groupS } })).ownerAdminId, ownerUid);
+    await assert.rejects(() => setWhatsAppInternalGroup.run({ ...as(ownerUid), data: { groupChatId: groupA, ownerAdminId: 'no-such-owner' } }), error => error.code === 'failed-precondition');
+    await assert.rejects(() => setWhatsAppInternalGroup.run({ ...as(adminA), data: { groupChatId: '120363555000009999@g.us' } }), error => error.code === 'failed-precondition');
+    assert.equal((await internalDoc(adminA)).get('groupChatId'), groupA);
+    assert.equal((await internalDoc(adminB)).get('groupChatId'), groupB);
 
-    // The client's group exists but only Hugo sees it: María is missing and Sofía has no connector.
-    await db.doc('clients/client-grupo-incompleto').set({ rootId, name: 'Cliente Oeste', whatsapp: '5215550000011' });
-    await db.doc('clientWhatsappGroups/' + rootId + '__client-grupo-incompleto').set({ rootId, clientId: 'client-grupo-incompleto', groupChatId: group, groupName: 'Cliente Norte - Documentos' });
+    // Each client's notice goes to the group of its own owner.
+    const cA = await client(run + '-c-a', adminA, 'Cliente De A');
+    const cB = await client(run + '-c-b', adminB, 'Cliente De B');
+    const cS = await client(run + '-c-s', ownerUid, 'Cliente Del Superadmin');
+    const cOp = await client(run + '-c-op', operatorA, 'Cliente Del Operador');
+    const destinationOf = async id => (await jobsFor(sourceOf(id)))[0].targetDestinations.map(d => d.chatId);
+    for (const id of [cA, cB, cS, cOp]) assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: id }), 'NO_GROUP_ASSIGNED:RELEASED');
+    assert.deepEqual(await destinationOf(cA), [groupA], 'admin A sees its client');
+    assert.deepEqual(await destinationOf(cB), [groupB], 'admin B has a different group');
+    assert.deepEqual(await destinationOf(cS), [groupS], 'the superadmin sees its own clients');
+    assert.deepEqual(await destinationOf(cOp), [groupA], 'an operator resolves to the group of its admin');
+    for (const id of [cA, cB, cS, cOp]) assert.ok(!JSON.stringify((await jobsFor(sourceOf(id)))[0].targetDestinations).includes('@c.us'), 'never a private chat');
+
+    // An admin without an internal group receives nothing.
+    const cC = await client(run + '-c-c', adminC, 'Cliente De C');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cC }), 'NO_INTERNAL_GROUP');
+    assert.equal((await jobsFor(sourceOf(cC))).length, 0);
+
+    // Clearing a group stops that owner's notices.
+    await setWhatsAppInternalGroup.run({ ...as(adminB), data: { groupChatId: '' } });
+    assert.equal((await internalDoc(adminB)).exists, false);
+    const cB2 = await client(run + '-c-b2', adminB, 'Otro Cliente De B');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cB2 }), 'NO_INTERNAL_GROUP');
+  });
+
+  await test('group-alert-lists-missing-agents-once-per-day', async () => {
+    const { alertIfClientGroupIncomplete } = require('../../functions/lib/modules/documentDelivery/clientGroupAlerts.js');
+    const day = mexicoDayStartMs(Date.now());
+    const sourceOf = id => id + ':' + day;
+    // The client's group exists but only Hugo sees it: Maria is missing and Sofia has no connector.
+    const adminA = run + '-admin-a';
+    const id = run + '-c-incompleto';
+    await db.doc('clients/' + id).set({ rootId, name: 'Cliente Oeste', adminId: adminA, whatsapp: '5215550000011' });
+    await db.doc('clientWhatsappGroups/' + rootId + '__' + id).set({ rootId, clientId: id, groupChatId: group, groupName: 'Cliente Norte - Documentos' });
     await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(group)).set({ rootId, bindingId: hugo.binding.id, chatId: group, name: 'Cliente Norte - Documentos', isGroup: true, active: true });
-    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-grupo-incompleto' }), 'AGENTS_MISSING:RELEASED');
-    const [incomplete] = await jobsFor(sourceOf('client-grupo-incompleto'));
-    assert.match(incomplete.textBody, /Cliente Oeste/);
-    assert.match(incomplete.textBody, /María/);
-    assert.match(incomplete.textBody, /Sofía/);
-    assert.equal(incomplete.targetDestinations[0].chatId, internal);
-
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: id }), 'AGENTS_MISSING:RELEASED');
+    const [notice] = await jobsFor(sourceOf(id));
+    assert.match(notice.textBody, /Cliente Oeste/);
+    assert.match(notice.textBody, /María/);
+    assert.match(notice.textBody, /Sofía/);
+    assert.equal(notice.targetDestinations[0].chatId, '120363555000000101@g.us');
     // Same client, same problem, same day: no second notice.
-    const again = await alertIfClientGroupIncomplete({ rootId, clienteId: 'client-grupo-incompleto' });
-    assert.notEqual(again, 'AGENTS_MISSING:RELEASED');
-    assert.equal((await jobsFor(sourceOf('client-grupo-incompleto'))).length, 1);
+    assert.notEqual(await alertIfClientGroupIncomplete({ rootId, clienteId: id }), 'AGENTS_MISSING:RELEASED');
+    assert.equal((await jobsFor(sourceOf(id))).length, 1);
   });
 
   console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases, emulator: true, realProviderRequests: 0 }));

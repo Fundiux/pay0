@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { normalizeClientWhatsapp } from "../clients/domain";
 import { chooseDeliveryDestination, DOCUMENT_SENDER_AGENT_ID, PROTECTED_DELIVERY_STATUSES } from "./whatsappDeliveryDomain";
+import { readInternalGroup, resolveInternalOwnerAdminId } from "./internalGroupOwner";
 
 export type WhatsAppDestinationRoute = {
   safeDocId: string;
@@ -170,12 +171,18 @@ export async function applyWhatsAppDestinationsToJob(
   const isInternalNotice = cleanText(jobData?.sourceType).toUpperCase() === "AVISO_GRUPO_INTERNO";
 
   // 1) The group, only when Hugo's own connector sees it.
-  const assignmentSnap = isInternalNotice
-    ? await db.doc(`whatsappInternalGroups/${rootId}`).get()
-    : await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
-  const assignment = assignmentSnap.exists && cleanText(assignmentSnap.get("rootId")) === rootId && (isInternalNotice || cleanText(assignmentSnap.get("clientId")) === clienteId)
-    ? (assignmentSnap.data() || {})
-    : null;
+  let assignment: Record<string, unknown> | null = null;
+  if (isInternalNotice) {
+    // The internal group of the owner of this client (its admin, or the admin an operator depends on).
+    const ownerAdminId = await resolveInternalOwnerAdminId(db, rootId, (client as any).adminId);
+    const internal = ownerAdminId ? await readInternalGroup(db, rootId, ownerAdminId) : null;
+    assignment = internal ? { groupChatId: internal.groupChatId, groupName: internal.groupName } : null;
+  } else {
+    const assignmentSnap = await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
+    assignment = assignmentSnap.exists && cleanText(assignmentSnap.get("rootId")) === rootId && cleanText(assignmentSnap.get("clientId")) === clienteId
+      ? (assignmentSnap.data() || {})
+      : null;
+  }
   let hugoGroup: any = null;
   const groupChatId = cleanText(assignment?.groupChatId);
   if (groupChatId) {

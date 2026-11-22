@@ -2,6 +2,9 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logActivityBatch } from "../../utils/logActivity";
 import { requireWhatsAppSuperadmin } from "./whatsappConnectorAuthority";
+import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
+import { getUserRole } from "../../utils/authGuard";
+import { INTERNAL_GROUPS, internalGroupDocId } from "./internalGroupOwner";
 import { resolveObservableGroup, type ObserverGroupDb } from "./whatsappObserverGroups";
 import { applyWhatsAppDestinationsToJob, findDocumentSenderBinding } from "./whatsappRoutes";
 import { releaseWhatsAppJobDeliveriesCore } from "./whatsappReleaseCallables";
@@ -24,12 +27,19 @@ export const getClientWhatsAppGroups = onCall({ cors: true, timeoutSeconds: 60, 
   const { rootId } = await requireWhatsAppSuperadmin(request);
   const onlySender = clean(request.data?.agentId) === DOCUMENT_SENDER_AGENT_ID;
   const sender = onlySender ? await findDocumentSenderBinding(db, rootId) : null;
-  const [chats, assignments, internal] = await Promise.all([
+  const [chats, assignments, internalDocs, ownerUsers] = await Promise.all([
     onlySender && !sender ? Promise.resolve({ docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] }) :
       db.collection("whatsappAgentChats").where("rootId", "==", rootId).where("isGroup", "==", true).where("active", "==", true).limit(500).get(),
     db.collection("clientWhatsappGroups").where("rootId", "==", rootId).limit(1000).get(),
-    db.doc(`whatsappInternalGroups/${rootId}`).get(),
+    db.collection(INTERNAL_GROUPS).where("rootId", "==", rootId).limit(200).get(),
+    db.collection("users").where("rootId", "==", rootId).limit(500).get(),
   ]);
+  // The people who can own an internal group: the superadmin and each admin of this root.
+  const owners = ownerUsers.docs
+    .filter((doc) => ["admin", "superadmin"].includes(clean(doc.get("role")).toLowerCase()) && doc.get("isDeleted") !== true && (doc.get("active") ?? doc.get("isActive") ?? true) !== false)
+    .map((doc) => ({ adminId: doc.id, name: clean(doc.get("displayName") || doc.get("nombreUsuario") || doc.get("usernameNormalized") || doc.get("username") || "Usuario", 120) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const internalByOwner = new Map(internalDocs.docs.map((doc) => [clean(doc.get("ownerAdminId")), { chatId: clean(doc.get("groupChatId"), 200), name: clean(doc.get("groupName"), 160) }]));
   const groups = new Map<string, string>();
   for (const doc of chats.docs) {
     if (sender && doc.get("bindingId") !== sender.id) continue;
@@ -38,8 +48,8 @@ export const getClientWhatsAppGroups = onCall({ cors: true, timeoutSeconds: 60, 
   return {
     ok: true,
     senderConnected: onlySender ? !!sender : undefined,
-    internalGroup: internal.exists && clean(internal.get("rootId")) === rootId && clean(internal.get("groupChatId"), 200)
-      ? { chatId: clean(internal.get("groupChatId"), 200), name: clean(internal.get("groupName")) } : null,
+    // One internal group per owner (superadmin or admin); operators use the group of their admin.
+    owners: owners.map((owner) => ({ ...owner, internalGroup: internalByOwner.get(owner.adminId)?.chatId ? internalByOwner.get(owner.adminId)! : null })),
     groups: [...groups.entries()].map(([chatId, name]) => ({ chatId, name })).sort((a, b) => a.name.localeCompare(b.name, "es")),
     assignments: assignments.docs.map((doc) => ({
       clientId: clean(doc.get("clientId")),
@@ -142,20 +152,38 @@ async function rerouteWaitingAutomaticJobs(rootId: string, clientIds: string[]):
   return released;
 }
 
-// The owner's internal group: where Hugo reports clients without a group or groups missing an agent.
-// One per root. An empty groupChatId clears it.
+// An owner's internal group: where Hugo reports that owner's clients without a group or groups missing an agent.
+// One per owner (a superadmin or an admin); an empty groupChatId clears it. An admin sets only its own; the superadmin
+// sets any owner of the root with ownerAdminId, or its own when it is omitted.
 export const setWhatsAppInternalGroup = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async (request) => {
-  const { uid, rootId } = await requireWhatsAppSuperadmin(request);
+  const uid = requireAuth(request);
+  const user = await getMyUser(uid);
+  const role = getUserRole(user);
+  if (role !== "superadmin" && role !== "admin") throw new HttpsError("permission-denied", "Solo un administrador puede configurar su grupo interno.");
+  const rootId = await getRootId(uid);
+
+  const requestedOwner = clean(request.data?.ownerAdminId, 128);
+  if (role === "admin" && requestedOwner && requestedOwner !== uid) throw new HttpsError("permission-denied", "Solo puedes configurar tu propio grupo interno.");
+  const ownerAdminId = role === "admin" ? uid : requestedOwner || uid;
+  if (/[\\/\x00-\x1f]/.test(ownerAdminId)) throw new HttpsError("invalid-argument", "Dueno no valido.");
+  if (ownerAdminId !== uid) {
+    const owner = await db.doc(`users/${ownerAdminId}`).get();
+    const ownerRole = clean(owner.get("role")).toLowerCase();
+    if (!owner.exists || clean(owner.get("rootId") || owner.id) !== rootId || owner.get("isDeleted") === true || !["admin", "superadmin"].includes(ownerRole)) {
+      throw new HttpsError("failed-precondition", "El dueno no existe en este root.");
+    }
+  }
+
   const groupChatId = clean(request.data?.groupChatId, 200);
-  const ref = db.doc(`whatsappInternalGroups/${rootId}`);
+  const ref = db.doc(`${INTERNAL_GROUPS}/${internalGroupDocId(rootId, ownerAdminId)}`);
 
   if (!groupChatId) {
     await ref.delete();
-    return { ok: true, groupChatId: null, groupName: null, message: "Grupo interno retirado." };
+    return { ok: true, ownerAdminId, groupChatId: null, groupName: null, message: "Grupo interno retirado." };
   }
 
   const group = await resolveObservableGroup(db as unknown as ObserverGroupDb, rootId, groupChatId);
   if (!group || group.source !== "AGENT") throw new HttpsError("failed-precondition", "El grupo no existe en los chats de los agentes de este root.");
-  await ref.set({ rootId, groupChatId, groupName: group.name, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  return { ok: true, groupChatId, groupName: group.name, message: "Grupo interno guardado." };
+  await ref.set({ rootId, ownerAdminId, groupChatId, groupName: group.name, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { ok: true, ownerAdminId, groupChatId, groupName: group.name, message: "Grupo interno guardado." };
 });

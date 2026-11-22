@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { queueAutomaticClientDelivery } from "./whatsappAutomaticDelivery";
 import { buildGroupAlertText, checkClientGroupAgents, mexicoDayStartMs } from "./whatsappDeliveryDomain";
+import { readInternalGroup, resolveInternalOwnerAdminId } from "./internalGroupOwner";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -20,6 +21,11 @@ export async function alertIfClientGroupIncomplete(input: { rootId: string; clie
 
   const clientSnap = await db.doc(`clients/${clienteId}`).get();
   if (!clientSnap.exists || clean(clientSnap.get("rootId")) !== rootId) return "CLIENT_OUT_OF_SCOPE";
+
+  // The notice goes to the internal group of this client's owner (its admin; an operator uses its admin's group).
+  // An owner without an internal group gets no notice.
+  const ownerAdminId = await resolveInternalOwnerAdminId(db, rootId, clientSnap.get("adminId"));
+  if (!ownerAdminId || !(await readInternalGroup(db, rootId, ownerAdminId))) return "NO_INTERNAL_GROUP";
 
   const assignmentSnap = await db.doc(`clientWhatsappGroups/${rootId}__${encodeURIComponent(clienteId)}`).get();
   const groupChatId = assignmentSnap.exists && clean(assignmentSnap.get("rootId")) === rootId ? clean(assignmentSnap.get("groupChatId")) : "";

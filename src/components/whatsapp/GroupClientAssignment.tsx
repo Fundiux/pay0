@@ -10,6 +10,7 @@ import {
   getClientWhatsAppGroups,
   setWhatsAppInternalGroup,
   type ClientWhatsAppGroupAssignment,
+  type ClientWhatsAppGroupOwner,
   type ClientWhatsAppGroupOption,
 } from "@/services/clientWhatsappGroups";
 
@@ -28,8 +29,8 @@ export function GroupClientAssignment() {
 
   const [groups, setGroups] = useState<ClientWhatsAppGroupOption[]>([]);
   const [assignments, setAssignments] = useState<ClientWhatsAppGroupAssignment[]>([]);
-  const [internalChatId, setInternalChatId] = useState("");
-  const [internalSaving, setInternalSaving] = useState(false);
+  const [owners, setOwners] = useState<ClientWhatsAppGroupOwner[]>([]);
+  const [internalSavingFor, setInternalSavingFor] = useState("");
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupChatId, setGroupChatId] = useState("");
@@ -49,7 +50,7 @@ export function GroupClientAssignment() {
         if (!alive) return;
         setGroups(result.groups || []);
         setAssignments(result.assignments || []);
-        setInternalChatId(result.internalGroup?.chatId || "");
+        setOwners(result.owners || []);
       })
       .catch((e: any) => alive && setError(e?.message || "No se pudieron cargar los grupos de WhatsApp."))
       .finally(() => alive && setLoading(false));
@@ -89,18 +90,24 @@ export function GroupClientAssignment() {
   const toAssign = selected.filter((id) => !rows.find((row) => row.client.id === id)?.inThisGroup);
   const toRemove = selected.filter((id) => rows.find((row) => row.client.id === id)?.inThisGroup);
 
-  async function saveInternalGroup(chatId: string) {
-    setInternalSaving(true);
+  async function saveInternalGroup(ownerAdminId: string, chatId: string) {
+    setInternalSavingFor(ownerAdminId);
     setError("");
     setMessage("");
     try {
-      const result = await setWhatsAppInternalGroup(chatId);
-      setInternalChatId(result.groupChatId || "");
+      const result = await setWhatsAppInternalGroup(chatId, ownerAdminId);
+      setOwners((current) =>
+        current.map((owner) =>
+          owner.adminId === ownerAdminId
+            ? { ...owner, internalGroup: result.groupChatId ? { chatId: result.groupChatId, name: result.groupName || "" } : null }
+            : owner
+        )
+      );
       setMessage(result.message);
     } catch (e: any) {
       setError(e?.message || "No se pudo guardar el grupo interno.");
     } finally {
-      setInternalSaving(false);
+      setInternalSavingFor("");
     }
   }
 
@@ -150,28 +157,32 @@ export function GroupClientAssignment() {
       </div>
 
       <div className="space-y-3 p-4">
-        {!loading && groups.length > 0 && (
-          <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <label className="text-xs font-semibold text-slate-300" htmlFor="internal-whatsapp-group">
-              Grupo interno de avisos
-            </label>
+        {!loading && groups.length > 0 && owners.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-xs font-semibold text-slate-300">Grupo interno de avisos</p>
             <p className="text-xs text-slate-400">
-              Hugo avisa aquí cuando entra una solicitud de un cliente sin grupo o cuando falta Hugo, María o Sofía en su grupo.
+              Cada administrador tiene su grupo interno, donde Hugo avisa de sus clientes: cuando entra una solicitud de un cliente sin grupo o cuando falta
+              Hugo, María o Sofía en su grupo. Un operador usa el grupo de su administrador. Si un administrador no tiene grupo, no recibe avisos.
             </p>
-            <select
-              id="internal-whatsapp-group"
-              value={internalChatId}
-              disabled={internalSaving}
-              onChange={(e) => saveInternalGroup(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400/40 disabled:opacity-50"
-            >
-              <option value="">Sin grupo interno</option>
-              {groups.map((item) => (
-                <option key={item.chatId} value={item.chatId} className="bg-[#161d2b]">
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            {owners.map((owner) => (
+              <div key={owner.adminId} className="flex flex-wrap items-center gap-3">
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{owner.name}</span>
+                <select
+                  aria-label={`Grupo interno de ${owner.name}`}
+                  value={owner.internalGroup?.chatId || ""}
+                  disabled={internalSavingFor === owner.adminId}
+                  onChange={(e) => saveInternalGroup(owner.adminId, e.target.value)}
+                  className="w-full max-w-xs rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400/40 disabled:opacity-50"
+                >
+                  <option value="">Sin grupo interno</option>
+                  {groups.map((item) => (
+                    <option key={item.chatId} value={item.chatId} className="bg-[#161d2b]">
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
           </div>
         )}
 
