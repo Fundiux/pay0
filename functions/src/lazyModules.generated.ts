@@ -7,6 +7,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   addClientDispersionNota: { module: "./modules/financing/callables", export: "addClientDispersionNota" },
   addPagoNota: { module: "./modules/notes/callables", export: "addPagoNota" },
   addSolicitudNota: { module: "./modules/notes/callables", export: "addSolicitudNota" },
+  advanceFacturamaCancellations: { module: "./modules/facturama/sandboxCallables", export: "advanceFacturamaCancellations" },
   alertClientGroupOnSolicitud: { module: "./modules/documentDelivery/clientGroupAlerts", export: "alertClientGroupOnSolicitud" },
   applyAbono: { module: "./modules/legacyCore/callables", export: "applyAbono" },
   applyPagoToSolicitud: { module: "./modules/paymentApplications/callables", export: "applyPagoToSolicitud" },

@@ -6,7 +6,7 @@ const labels: Record<string, string> = { VOIDED: "Ya no aplica", NEEDS_FISCAL_DA
 const gateReasonText: Record<string, string> = { REP_GATE_QUOTA_EXHAUSTED: "se alcanzó el límite de seguridad diario; continúa mañana", REP_REQUEST_HARD_DISABLED: "las solicitudes a IQ están pausadas", REP_GATE_REQUEST_OFF: "las solicitudes a IQ están pausadas" };
 export default function PaymentComplementFollowup() {
   const [rows, setRows] = useState<ComplementFollowup[]>([]), [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [truncated, setTruncated] = useState(false);
-  const [automation, setAutomation] = useState({ iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false, iqRequestEnabled: false, iqRequestDailyLimit: 5 });
+  const [automation, setAutomation] = useState({ iqEnabled: false, iqLookupEnabled: false, facturamaEnabled: false, iqRequestEnabled: false, iqRequestDailyLimit: 5, iqLookupDailyLimit: 25 });
   const iqRequestActive = automation.iqEnabled && automation.iqRequestEnabled;
   async function load() { const result = await listPaymentComplementFollowup(); setRows(result.rows); setTruncated(result.truncated); setAutomation(result.automation); }
   async function configure() {
@@ -26,6 +26,14 @@ export default function PaymentComplementFollowup() {
       setMessage(enabled ? (result.requeued ? `Solicitudes activas. ${result.requeued} complementos pausados volvieron a la cola.` : "Solicitudes activas.") : "Solicitudes pausadas.");
     } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
   }
+  async function editLookupLimit() {
+    const answer = window.prompt("Límite diario de consultas a IQ (1 a 100). Es el tope de veces al día que el sistema pregunta a IQ si un complemento ya llegó; si se agota, el resto se revisa al día siguiente.", String(automation.iqLookupDailyLimit ?? 25));
+    if (answer === null) return;
+    const dailyLimit = Number(answer);
+    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 100) { setMessage("Indica un número entero de 1 a 100."); return; }
+    setBusy(true);
+    try { await configurePaymentComplementAutomation({ provider: "IQ_LOOKUP_LIMIT", dailyLimit }); await load(); setMessage(`Límite diario de consultas a IQ: ${dailyLimit}.`); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
+  }
   async function setForm(id: string, value: string) {
     if (!value || !window.confirm("Confirma que esta es la forma del pago recibido. Se revalidará el complemento para emitirlo.")) return;
     setBusy(true); try { await setComplementPaymentForm(id, value); await load(); setMessage("Forma guardada. El complemento se revalidará automáticamente."); } catch (e: any) { setMessage(e.message); } finally { setBusy(false); }
@@ -41,7 +49,7 @@ export default function PaymentComplementFollowup() {
   return <section className="rounded-2xl border border-white/10 bg-slate-900 p-4 text-slate-200">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">Complementos de pago · seguimiento actual</h2><button disabled={busy} onClick={() => void refresh()} className="rounded-lg border border-sky-400/40 px-3 py-2 text-sm text-sky-300 disabled:opacity-50">{busy ? "Revisando…" : "Revisar aplicaciones e histórico"}</button></div>
     <p className="my-3 text-xs text-amber-200">IQ consulta REP existentes: {automation.iqLookupEnabled ? "habilitada por configuración" : "pausada"}; cada consulta también exige Master, perfil y permisos vigentes. La solicitud de REP tiene otra compuerta. Revisión diaria a las 19:00 (Ciudad de México), con aviso tras 5 días. El histórico no se envía automáticamente.</p>
-    <div className="mb-3 flex gap-3 text-xs"><button disabled={busy} onClick={() => void configureIqRequest()} className="rounded border border-amber-400/40 px-3 py-2">{iqRequestActive ? "Solicitudes de complementos a IQ: activas · pausar" : "Activar solicitudes de complementos"}</button><button disabled={busy} onClick={() => void configure()} className="rounded border border-sky-400/40 px-3 py-2">Facturama: {automation.facturamaEnabled ? "activo · pausar" : "pausado · activar"}</button></div>
+    <div className="mb-3 flex gap-3 text-xs"><button disabled={busy} onClick={() => void configureIqRequest()} className="rounded border border-amber-400/40 px-3 py-2">{iqRequestActive ? "Solicitudes de complementos a IQ: activas · pausar" : "Activar solicitudes de complementos"}</button><button disabled={busy} onClick={() => void configure()} className="rounded border border-sky-400/40 px-3 py-2">Facturama: {automation.facturamaEnabled ? "activo · pausar" : "pausado · activar"}</button><button disabled={busy} onClick={() => void editLookupLimit()} className="rounded border border-slate-400/40 px-3 py-2">Consultas a IQ por día: {automation.iqLookupDailyLimit ?? 25} · editar</button></div>
     {message && <p role="status" className="mb-3 text-sm">{message}</p>}
     <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr>{["Solicitud", "Pago", "Aplicación", "Parcialidad", "Importe", "Proveedor", "Estado"].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
       {!rows.length && <tr><td colSpan={7} className="p-3 text-slate-400">Sin seguimientos registrados. Revisa el histórico para incluir aplicaciones anteriores.</td></tr>}

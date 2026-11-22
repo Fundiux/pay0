@@ -1255,7 +1255,7 @@ export default function SolicitudesPage() {
         const impact = await getRepCancellationImpact(cancelSatFor.id);
         if (impact.reps.length) {
           const lines = impact.reps.map((rep) => `• Parcialidad ${rep.installment}${rep.amountMinor != null ? ` · $${toCurrency(rep.amountMinor / 100)}` : ""}`).join("\n");
-          const accepted = window.confirm(`Esta factura tiene ${impact.reps.length} complemento(s) de pago vigente(s):\n${lines}\n\nCancelar la factura cancela también esos complementos: primero los complementos y después la factura. ¿Confirmas la cancelación de todos?`);
+          const accepted = window.confirm(`Esta factura tiene ${impact.reps.length} complemento(s) de pago vigente(s):\n${lines}\n\nCancelar la factura cancela también esos complementos: primero los complementos y, cuando el SAT los confirme, la factura. El proceso sigue solo, los acuses se envían al cliente conforme llegan y, si algo no se confirma en 72 horas, se vuelve a solicitar y se avisa al grupo interno. ¿Confirmas la cancelación de todos?`);
           if (!accepted) return;
           await confirmRepCancellation(cancelSatFor.id);
         }

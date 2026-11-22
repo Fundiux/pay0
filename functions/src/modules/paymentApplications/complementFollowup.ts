@@ -93,7 +93,7 @@ export const listPaymentComplementFollowup = onCall({ region: "us-central1", cor
   return { ok: true, rows: rows.docs.slice(0, 100).map(doc => ({ id: doc.id, ...doc.data() })), truncated: rows.size > 100,
     automation: { iqEnabled: config?.iqEnabled === true, iqLookupEnabled: !!config && config.iqLookupEnabled !== false,
       facturamaEnabled: config?.facturamaEnabled === true, iqRequestEnabled: config?.iqRequestEnabled === true,
-      iqRequestDailyLimit: Number(config?.iqRequestDailyLimit ?? 5) }, externalContractReady: true };
+      iqRequestDailyLimit: Number(config?.iqRequestDailyLimit ?? 5), iqLookupDailyLimit: Number(config?.iqLookupDailyLimit ?? 25) }, externalContractReady: true };
 });
 
 // Explicit, read/reconcile-only refresh also covers earlier applications and

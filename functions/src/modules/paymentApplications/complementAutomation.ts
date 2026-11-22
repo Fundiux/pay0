@@ -760,6 +760,18 @@ export const configurePaymentComplementAutomation = onCall({ region: "us-central
     return { ok: true };
   }
   const input = request.data || {};
+  // The daily number of lookups to IQ is a setting the owner can change by hand (default 25, ceiling 100).
+  if (input.provider === "IQ_LOOKUP_LIMIT") {
+    const limit = Number(input.dailyLimit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HttpsError("invalid-argument", "Indica un límite diario de consultas a IQ de 1 a 100.");
+    const configRef = db.doc(`paymentComplementConfigs/${rootId}`);
+    await db.runTransaction(async tx => {
+      tx.set(configRef, { rootId, iqLookupDailyLimit: limit, updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid }, { merge: true });
+      logActivityTx(tx, db, { event: "COMPLEMENTO_PAGO_SEGUIMIENTO", rootId, actorUid: request.auth!.uid, actorRole: "superadmin",
+        referenceId: rootId, referenceType: "configuracion", description: `Límite diario de consultas a IQ: ${limit}.` });
+    });
+    return { ok: true };
+  }
   if (input.provider === "IQ_REQUEST") {
     if (typeof input.enabled !== "boolean") throw new HttpsError("invalid-argument", "Indica si las solicitudes de complementos a IQ quedan activas o pausadas.");
     if (input.enabled && input.confirmation !== "AUTORIZO_SOLICITUD_REP_IQ") throw new HttpsError("failed-precondition", "Confirma las solicitudes reales de complementos a IQ.");

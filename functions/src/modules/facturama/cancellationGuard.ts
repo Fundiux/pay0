@@ -1,6 +1,7 @@
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 
-export const PENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// The SAT closes a cancellation in at most 72 hours, receiver acceptance included. After that it is asked for again.
+export const PENDING_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 const upper = (value: unknown) => String(value ?? "").trim().toUpperCase();
 const millis = (value: any) => value?.toMillis?.() ?? 0;

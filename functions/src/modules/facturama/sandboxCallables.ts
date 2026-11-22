@@ -12,7 +12,9 @@ import { logActivityBatch } from "../../utils/logActivity";
 import { isConfirmedFacturamaCancellation } from "./cancellationStatus";
 import { facturamaCancellationBlock, PENDING_WINDOW_MS } from "./cancellationGuard";
 import { cancellationNeedsPaymentReview } from "../../utils/solicitudCancellationState";
-import { cancelRepsBeforeInvoice, listFacturamaReps, publicRep, REP_CANCELLATION_CONFIRM_REQUIRED, repsToCancel } from "./repCancellation";
+import { listFacturamaReps, markRepCancelled, publicRep, REP_CANCELLATION_CONFIRM_REQUIRED, repsToCancel, requestOneRepCancellation, type FacturamaRep } from "./repCancellation";
+import { advanceCancellation, alertText, type ProcessPorts } from "./repCancellationProcess";
+import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
 import { satPaymentForm } from "./paymentTerms";
 
 const USERNAME = defineSecret("FACTURAMA_SANDBOX_USERNAME");
@@ -87,9 +89,11 @@ function issuerConfig(company: any, config: any) {
 async function saveIssuedDocument(input: {
   rootId: string; solicitud: any; solicitudId: string; uid: string; invoiceId: string;
   environment: FacturamaEnvironment; type: "FACTURA_XML" | "FACTURA_PDF" | "ACUSE_CANCELACION_CFDI"; contentType: string; extension: string; buffer: Buffer;
+  // Several acuses of one solicitud (one per complement plus the invoice) coexist: each has its own key, so none replaces another.
+  variant?: { key: string; label?: string };
 }) {
   const sha256 = createHash("sha256").update(input.buffer).digest("hex");
-  const uploadId = createHash("sha256").update(`${input.rootId}:${input.invoiceId}:${input.environment}:${input.type}`).digest("hex");
+  const uploadId = createHash("sha256").update(`${input.rootId}:${input.invoiceId}:${input.environment}:${input.type}${input.variant ? `:${input.variant.key}` : ""}`).digest("hex");
   const previous = await db.collection("uploads").doc(uploadId).get();
   if (previous.exists && ["REPLACED", "INACTIVE"].includes(String(previous.data()?.status))) throw new HttpsError("failed-precondition", "El documento fiscal fue reemplazado; revisa el expediente antes de reintentar.");
   if (previous.exists && previous.data()?.status === "READY") {
@@ -97,7 +101,7 @@ async function saveIssuedDocument(input: {
     return { uploadId, storagePath: String(previous.data()?.storagePath || ""), sha256: String(previous.data()?.sha256 || ""), version: Number(previous.data()?.version || 1) };
   }
   const folio = clean(input.solicitud.folio || input.solicitudId, 80);
-  const filename = input.type === "ACUSE_CANCELACION_CFDI" ? `ACUSE-CANCELACION-${folio}.${input.extension}` : `CFDI-${folio}.${input.extension}`;
+  const filename = input.type === "ACUSE_CANCELACION_CFDI" ? `ACUSE-CANCELACION-${input.variant?.label ? `${input.variant.label}-` : ""}${folio}.${input.extension}` : `CFDI-${folio}.${input.extension}`;
   const storagePath = `roots/${input.rootId}/solicitudes/${input.solicitudId}/docs/${input.type}/${uploadId}-${filename}`;
   await admin.storage().bucket().file(storagePath).save(input.buffer, {
     resumable: false, contentType: input.contentType,
@@ -116,13 +120,14 @@ async function saveIssuedDocument(input: {
     storagePath, sha256, integrityHashAlgorithm: "SHA-256", integritySealStatus: "HASH_SERVER_GENERATED",
     generatedBySystem: true, generatedByModule: "facturama", facturamaInvoiceId: input.invoiceId,
     facturamaEnvironment: input.environment, status: "PENDING", active: false, version: null,
+    ...(input.variant ? { complementKey: input.variant.key } : {}),
     createdBy: input.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
   let version = 1;
   await db.runTransaction(async tx => {
     version = await finalizeSolicitudDocumentVersionTx({
       tx, db, rootId: input.rootId, solicitudId: input.solicitudId, documentType: input.type,
-      uploadId, uploadRef: ref, mode: "update",
+      uploadId, uploadRef: ref, mode: "update", ...(input.variant ? { complementKey: input.variant.key } : {}),
       readyPatch: { finalizedBy: input.uid, finalizedAt: FieldValue.serverTimestamp(), integritySealStatus: "SEALED", integritySealedAt: FieldValue.serverTimestamp(), integritySealedBy: input.uid },
     });
   });
@@ -275,8 +280,11 @@ async function issueFacturamaInvoice(request: any, options: { environment: Factu
           let repWait: string | null = null;
           if (repsToCancel(await listFacturamaReps(db, rootId, originalRef.id)).length) {
             if (!original.repCancellationConfirmedAt) repWait = REP_CANCELLATION_CONFIRM_REQUIRED;
-            else if (!(await cancelRepsBeforeInvoice({ db, rootId, solicitudId: originalRef.id, solicitudFolio: original.folio || null, actorUid: uid, actorRole: "superadmin",
-              cancelCfdi: (cfdiId, motive) => requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(cfdiId)}?${new URLSearchParams({ motive }).toString()}`, { method: "DELETE" }) })).allConfirmed) repWait = "WAITING_REP_CANCELLATION";
+            else {
+              await originalRef.set({ cancellationProcess: { active: true, motive: "01", uuidReplacement: uuid, replacementSolicitudId: solicitudId, startedBy: uid, startedAt: FieldValue.serverTimestamp() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+              const summary = await advanceCancellation(cancellationPorts({ uid, actorRole: "superadmin", rootId, solicitudId: originalRef.id, sol: original, motive: "01", replacement: uuid, onOriginal: () => undefined }), { repsOnly: true });
+              if (summary.phase === "REPS") repWait = "WAITING_REP_CANCELLATION";
+            }
           }
           if (repWait) throw Object.assign(new Error(repWait), { repWait });
           const cancelResult = await requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(originalInvoice.facturamaCfdiId)}?${new URLSearchParams({ motive: "01", uuidReplacement: uuid }).toString()}`, { method: "DELETE" });
@@ -366,6 +374,13 @@ export const cancelFacturamaProductionInvoice = onCall(
     const motive = clean(request.data?.motive, 2); const replacement = clean(request.data?.uuidReplacement, 64).toUpperCase();
     if (!solicitudId || !["01", "02", "03", "04"].includes(motive)) throw new HttpsError("invalid-argument", "Solicitud y motivo SAT válidos son requeridos.");
     if (motive === "01" && !/^[0-9A-F]{8}-[0-9A-F-]{27}$/.test(replacement)) throw new HttpsError("invalid-argument", "Motivo 01 requiere UUID sustituto.");
+    return cancelInvoiceCore({ uid, actorRole: "superadmin", rootId, solicitudId, motive, replacement, confirmRep: request.data?.confirmRepCancellation === true });
+  },
+);
+
+// The cancellation of one invoice. The callable above and the cancellation process (scheduler) both run it.
+export async function cancelInvoiceCore(input: { uid: string; actorRole: string; rootId: string; solicitudId: string; motive: string; replacement: string; confirmRep: boolean }): Promise<any> {
+    const { uid, rootId, solicitudId, motive, replacement } = input;
     const solSnap = await db.doc(`solicitudes/${solicitudId}`).get(); if (!solSnap.exists) throw new HttpsError("not-found", "Solicitud no encontrada.");
     const sol: any = solSnap.data() || {}; if (clean(sol.rootId, 128) !== rootId) throw new HttpsError("permission-denied", "Solicitud fuera de alcance.");
     await assertPay0Issuer({ db, rootId, companyId: clean(sol.companyId || sol.empresaId, 128) });
@@ -376,11 +391,14 @@ export const cancelFacturamaProductionInvoice = onCall(
     if (inv.companyId !== (sol.companyId || sol.empresaId) || inv.sourceSolicitudId !== solicitudId) throw new HttpsError("failed-precondition", "CFDI fuera del emisor de la Solicitud.");
     // A live complemento de pago makes the invoice "no cancelable" for the SAT: the complements are cancelled first, with the owner's confirmation.
     if (repsToCancel(await listFacturamaReps(db, rootId, solicitudId)).length) {
-      if (request.data?.confirmRepCancellation !== true && !sol.repCancellationConfirmedAt)
+      if (!input.confirmRep && !sol.repCancellationConfirmedAt)
         throw new HttpsError("failed-precondition", "Esta factura tiene complementos de pago vigentes. Cancelarla cancela también esos complementos; confirma para continuar.", { code: REP_CANCELLATION_CONFIRM_REQUIRED, reps: (await listFacturamaReps(db, rootId, solicitudId)).map(publicRep) });
-      const repOutcome = await cancelRepsBeforeInvoice({ db, rootId, solicitudId, solicitudFolio: sol.folio || null, actorUid: uid, actorRole: "superadmin",
-        cancelCfdi: (cfdiId, motive) => requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(cfdiId)}?${new URLSearchParams({ motive }).toString()}`, { method: "DELETE" }) });
-      if (!repOutcome.allConfirmed) return { ok: true, status: "WAITING_REP_CANCELLATION", terminal: false, uuid: inv.uuid || sol.facturaUuid || null, message: "Los complementos de pago aún no están cancelados; la factura se cancela cuando el SAT los confirme. Vuelve a intentarlo después." };
+      await solSnap.ref.set({ cancellationProcess: { active: true, motive, uuidReplacement: replacement || null, startedBy: uid, startedAt: FieldValue.serverTimestamp() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      let originalResult: any = null;
+      const summary = await advanceCancellation(cancellationPorts({ uid, actorRole: input.actorRole, rootId, solicitudId, sol, motive, replacement, onOriginal: result => { originalResult = result; } }));
+      if (originalResult) return originalResult;
+      return { ok: true, status: summary.phase === "DONE" ? "CANCELED" : "WAITING_REP_CANCELLATION", terminal: summary.phase === "DONE", uuid: inv.uuid || sol.facturaUuid || null,
+        message: "Los complementos de pago se están cancelando; la factura se cancela cuando el SAT los confirme y se te avisa si algo no se confirma en 72 horas." };
     }
     let previousMotive: unknown = null;
     // Two clicks or two users must reach Facturama only once.
@@ -420,8 +438,7 @@ export const cancelFacturamaProductionInvoice = onCall(
     logActivityBatch(outcome, db, { event: terminal ? "FACTURAMA_CANCELACION_CONFIRMADA" : "FACTURAMA_CANCELACION_SOLICITADA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: solicitudId, referenceFolio: sol.folio || null, referenceType: "solicitud", description: `Cancelación de ${clean(sol.folio || solicitudId, 80)} en Facturama: ${externalStatus || "REQUESTED"}. Motivo SAT ${motive}.` });
     await outcome.commit();
     return { ok: true, status: externalStatus || "REQUESTED", terminal, uuid: inv.uuid || sol.facturaUuid || null, message: clean(result?.Message || result?.message, 500) || null };
-  },
-);
+}
 
 // This is an explicit, auditable status refresh. It does not request a second
 // cancellation and uses the SAT-status endpoint with the CFDI's own UUID/RFCs.
@@ -477,7 +494,9 @@ async function refreshFacturamaCancellationCore(rootId: string, solicitudId: str
         const receipt = await requestFacturama(PRODUCTION_BASE_URL, `/api/Acuse/pdf/issuedLite/${encodeURIComponent(clean(inv.facturamaCfdiId, 256))}`);
         const receiptBuffer = Buffer.from(clean(receipt?.Content, 20_000_000), "base64");
         if (!receiptBuffer.length) throw new Error("Facturama no devolvio el acuse PDF.");
-        const saved = await saveIssuedDocument({ rootId, solicitud: { ...sol, facturaDisplay: metadata.display || sol.facturaDisplay }, solicitudId, uid, invoiceId, environment: "PRODUCTION", type: "ACUSE_CANCELACION_CFDI", contentType: "application/pdf", extension: "pdf", buffer: receiptBuffer });
+        const saved = await saveIssuedDocument({ rootId, solicitud: { ...sol, facturaDisplay: metadata.display || sol.facturaDisplay }, solicitudId, uid, invoiceId, environment: "PRODUCTION", type: "ACUSE_CANCELACION_CFDI", contentType: "application/pdf", extension: "pdf", buffer: receiptBuffer,
+          // With payment complements the solicitud holds several acuses; the invoice's must not replace theirs.
+          ...((await listFacturamaReps(db, rootId, solicitudId)).length ? { variant: { key: "FACTURA_ORIGINAL", label: "FACTURA" } } : {}) });
         receiptUploadId = saved.uploadId;
       } catch (error: any) {
         receiptError = clean(error?.message || error, 500) || "No se pudo descargar el acuse de cancelacion.";
@@ -595,5 +614,110 @@ export const registerFacturamaProductionCsd = onCall(
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     return { ok: true, companyId: issuer.companyId, rfc: issuer.rfc, registered: true };
+  },
+);
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cancellation of an invoice that has payment complements. The process runs on its own: the complements first, the invoice
+// only when every complement is effectively cancelled, the receipts go to the client as they are obtained, and whatever the
+// SAT has not confirmed after 72 hours is requested again and reported to the internal group.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const SAT_STATUS_URL = "https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc";
+
+// The public SAT status service (the one behind the QR code). Read-only.
+async function satIsCancelled(input: { uuid: string; issuerRfc: string; receiverRfc: string; total: number }): Promise<boolean> {
+  if (!input.uuid || !input.issuerRfc || !input.receiverRfc) return false;
+  const expression = `?re=${input.issuerRfc}&rr=${input.receiverRfc}&tt=${input.total.toFixed(6)}&id=${input.uuid}`;
+  const body = `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/"><soapenv:Body><tem:Consulta><tem:expresionImpresa><![CDATA[${expression}]]></tem:expresionImpresa></tem:Consulta></soapenv:Body></soapenv:Envelope>`;
+  const response = await fetch(SAT_STATUS_URL, { method: "POST", headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "http://tempuri.org/IConsultaCFDIService/Consulta" }, body });
+  if (!response.ok) return false;
+  const xml = await response.text();
+  return /<a:Estado>Cancelado<\/a:Estado>/i.test(xml);
+}
+
+type PortsInput = {
+  uid: string; actorRole: string; rootId: string; solicitudId: string; sol: any; motive: string; replacement: string;
+  onOriginal: (result: any) => void;
+};
+
+function cancellationPorts(input: PortsInput): ProcessPorts {
+  const { rootId, solicitudId, sol } = input;
+  const cancelCfdi = (cfdiId: string, motive: string) => requestFacturama(PRODUCTION_BASE_URL, `/api-lite/cfdis/${encodeURIComponent(cfdiId)}?${new URLSearchParams({ motive }).toString()}`, { method: "DELETE" });
+  const invoiceRef = () => db.doc(`facturamaInvoices/${clean(sol.facturamaInvoiceId, 128)}`);
+  let issuerRfc = "", receiverRfc = "";
+  const rfcs = async () => {
+    if (!issuerRfc) {
+      const [company, client] = await Promise.all([
+        sol.companyId || sol.empresaId ? db.doc(`companies/${clean(sol.companyId || sol.empresaId, 128)}`).get() : null,
+        sol.clienteId || sol.clientId ? db.doc(`clients/${clean(sol.clienteId || sol.clientId, 128)}`).get() : null,
+      ]);
+      issuerRfc = clean(company?.data()?.rfc, 13).toUpperCase();
+      receiverRfc = clean(client?.data()?.rfc || sol.clienteRfc || sol.clientRfc, 13).toUpperCase();
+    }
+    return { issuerRfc, receiverRfc };
+  };
+  return {
+    nowMs: () => Date.now(),
+    reps: () => listFacturamaReps(db, rootId, solicitudId),
+    repSatCancelled: async (rep: FacturamaRep) => satIsCancelled({ uuid: rep.uuid, ...(await rfcs()), total: 0 }).catch(() => false),
+    requestRepCancel: rep => requestOneRepCancellation({ db, rootId, solicitudId, solicitudFolio: sol.folio || null, actorUid: input.uid, actorRole: input.actorRole, rep, cancelCfdi }),
+    markRepCancelled: rep => markRepCancelled(db, rep),
+    saveRepAcuse: async (rep: FacturamaRep) => {
+      try {
+        const receipt = await requestFacturama(PRODUCTION_BASE_URL, `/api/Acuse/pdf/issuedLite/${encodeURIComponent(rep.cfdiId)}`);
+        const buffer = Buffer.from(clean(receipt?.Content, 20_000_000), "base64");
+        if (!buffer.length) throw new Error("Facturama no devolvio el acuse PDF.");
+        // The upload goes to the client by itself (ACUSE_CANCELACION delivery); one file per complement, so it is never sent twice.
+        const saved = await saveIssuedDocument({ rootId, solicitud: sol, solicitudId, uid: input.uid, invoiceId: rep.jobId, environment: "PRODUCTION", type: "ACUSE_CANCELACION_CFDI",
+          contentType: "application/pdf", extension: "pdf", buffer, variant: { key: `REP:${rep.requestId}`, label: `COMPLEMENTO-${rep.installment}` } });
+        await db.doc(`paymentComplementJobs/${rep.jobId}`).set({ repCancellationReceiptUploadId: saved.uploadId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      } catch (error: any) {
+        console.error("REP_CANCELLATION_ACUSE_PENDING", rep.jobId, clean(error?.message || error, 200));
+      }
+    },
+    original: async () => {
+      const inv: any = (await invoiceRef().get()).data() || {};
+      if (isConfirmedFacturamaCancellation(inv.cancellationStatus)) return { state: "CANCELED" as const, requestedAtMs: 0 };
+      const requestedAtMs = inv.cancellationRequestedAt?.toMillis?.() ?? 0;
+      return requestedAtMs ? { state: "REQUESTED" as const, requestedAtMs } : { state: "NOT_REQUESTED" as const, requestedAtMs: 0 };
+    },
+    requestOriginal: async () => {
+      const result = await cancelInvoiceCore({ uid: input.uid, actorRole: input.actorRole, rootId, solicitudId, motive: input.motive, replacement: input.replacement, confirmRep: true });
+      input.onOriginal(result);
+      if (input.motive === "01" && input.replacement) {
+        const replacementId = clean((await db.doc(`solicitudes/${solicitudId}`).get()).data()?.cancellationProcess?.replacementSolicitudId, 128);
+        if (replacementId) await db.doc(`solicitudes/${replacementId}`).set({ replacementCancellationStatus: result.status, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
+    },
+    alert: async ({ kind, installment, attempt }) => {
+      const clientId = clean(sol.clienteId || sol.clientId, 128);
+      if (!clientId) return;
+      const clientName = clean(sol.clienteNombre || sol.clientName, 120);
+      await queueAutomaticClientDelivery({
+        rootId, sourceType: "AVISO_GRUPO_INTERNO", sourceId: `${solicitudId}:cancel:${kind}:${installment ?? 0}:${attempt}`, clienteId: clientId, clienteNombre: clientName || null,
+        caption: "", textBody: alertText({ kind, clientName, folio: clean(sol.facturaDisplay || sol.folio, 80), installment }), notes: "Aviso interno: cancelación sin confirmar en 72 horas.",
+      }).catch(error => console.error("REP_CANCELLATION_ALERT_FAILED", solicitudId, clean(error?.message || error, 200)));
+    },
+  };
+}
+
+// Every 30 minutes: keeps each open cancellation process moving. A pass that finds nothing new changes nothing.
+export const advanceFacturamaCancellations = onSchedule(
+  { schedule: "*/30 * * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 300, memory: "256MiB", secrets: [USERNAME, PASSWORD], retryCount: 0, maxInstances: 1, concurrency: 1 },
+  async () => {
+    const open = await db.collection("solicitudes").where("cancellationProcess.active", "==", true).limit(50).get();
+    for (const row of open.docs) {
+      const sol: any = row.data();
+      const process = sol.cancellationProcess || {};
+      try {
+        const rootId = clean(sol.rootId, 128);
+        const summary = await advanceCancellation(cancellationPorts({ uid: clean(process.startedBy, 128) || "system", actorRole: "system", rootId, solicitudId: row.id, sol, motive: clean(process.motive, 2), replacement: clean(process.uuidReplacement, 64), onOriginal: () => undefined }));
+        if (summary.phase === "DONE") await row.ref.set({ cancellationProcess: { active: false, completedAt: FieldValue.serverTimestamp() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      } catch (error: any) {
+        console.error("FACTURAMA_CANCELLATION_PROCESS_FAILED", row.id, clean(error?.message || error, 200));
+      }
+    }
   },
 );
