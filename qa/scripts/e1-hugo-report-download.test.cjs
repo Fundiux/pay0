@@ -16,7 +16,7 @@ const mocks = {
   '@/lib/useUserProfile': `export const useUserProfile=()=>({profileUid:window.fixture.uid,profile:{rootId:window.fixture.rootId,role:'superadmin',active:true}});`,
   '@/lib/useModuleAccess': `export const useModuleAccess=()=>({canAccess:false});`,
   'next/navigation': `export const usePathname=()=>'/dashboard';`,
-  '@/services/agent007': `export const listAgent007Messages=async()=>({messages:window.fixture.messages,voiceSessions:[],nextMessageCursor:null,nextVoiceCursor:null});export const listAgent007Recommendations=async()=>({recommendations:[]});export const markAgent007MessagesRead=async()=>({});export const getHugoDashboard=async()=>({attention:[],activity:[],consumption:{},providers:{},systems:[],capabilities:[]});export const getHugoVoiceSession=async()=>({turns:[],nextTurnCursor:null,nextEventCursor:null});export const resolveAgent007Recommendation=async()=>({});export const sendAgent007Message=()=>new Promise(resolve=>window.resolveFixtureSend=resolve);`,
+  '@/services/agent007': `export const listAgent007Messages=async()=>({messages:window.fixture.messages,voiceSessions:[],nextMessageCursor:null,nextVoiceCursor:null});export const listAgent007Recommendations=async()=>({recommendations:[]});export const markAgent007MessagesRead=async()=>({});export const getHugoDashboard=async()=>({attention:[],activity:[],consumption:{},providers:{},systems:[],capabilities:[]});export const getHugoVoiceSession=async()=>({turns:[],nextTurnCursor:null,nextEventCursor:null});export const resolveAgent007Recommendation=async()=>({});export const correctAgent007Response=async()=>({});export const reviewAgent007MemoryCandidate=async()=>({ok:true,changed:false});export const sendAgent007Message=()=>new Promise(resolve=>window.resolveFixtureSend=resolve);`,
 };
 async function build(kind) {
   const file = path.join(output, `${kind}.js`);
@@ -24,7 +24,7 @@ async function build(kind) {
   await esbuild.build({ stdin: { contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';import Component from '${entry}';const root=createRoot(document.getElementById('root'));window.renderFixture=fixture=>{window.fixture=fixture;flushSync(()=>root.render(React.createElement(Component)));};`, loader:'tsx',resolveDir:root }, bundle:true,platform:'browser',format:'iife',outfile:file,jsx:'automatic',tsconfigRaw:{},define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'fixture',setup(b){
     b.onResolve({filter:/.*/},args=>{
       if(mocks[args.path])return {path:args.path,namespace:'fixture'};
-      if(/^@\/components\/(HugoComplementInventory|HugoTraceInspector|HugoMemoryDiagnostics|HugoLearningDiagnostics|HugoPhase7Review|hugo\/HugoRealtimeVoice)$/.test(args.path))return {path:args.path,namespace:'empty'};
+      if(/^@\/components\/(HugoComplementInventory|HugoTraceInspector|HugoMemoryDiagnostics|HugoLearningDiagnostics|HugoPhase7Review|hugo\/HugoRealtimeVoice|hugo\/HugoReceiptLearning)$/.test(args.path))return {path:args.path,namespace:'empty'};
       if(args.path.startsWith('@/')) {const base=path.join(root,'src',args.path.slice(2));return {path:fs.existsSync(base+'.tsx')?base+'.tsx':base+'.ts'};}
       if(args.path==='exceljs')return {path:require.resolve('exceljs/dist/exceljs.min.js')};
       if(args.path==='jspdf')return {path:require.resolve('jspdf/dist/jspdf.es.min.js')};
