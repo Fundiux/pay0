@@ -7,6 +7,7 @@ import { readInternalGroupChatIds } from "./internalGroups";
 import { mexicoMonthKey, summarizeReplyMetrics, type ModeEventRow, type ReplyMetricRow } from "./metrics";
 import { applyModeChange, readAgentModes, type AgentMode } from "./modes";
 import { correctionLessonId, isCorrectionCategory, LESSONS } from "./lessons";
+import { refreshPlaybookProposals } from "./playbook";
 import { REPLY_METRICS } from "./runner";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -94,6 +95,7 @@ export const markWhatsAppReplyCorrection = onCall({ cors: true, timeoutSeconds: 
       kind: clean(snap.get("kind"), 40), subject: snap.get("subject") || null, category, reason, jobId, monthKey: clean(snap.get("monthKey"), 7),
       markedBy: uid, createdAt: FieldValue.serverTimestamp(),
     });
+    await refreshPlaybookProposals(db, rootId, clean(snap.get("chatId"))).catch(() => undefined);
   } else await lessonRef.delete();
   await logActivity({
     event: "WHATSAPP_RESPUESTA_CORREGIDA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: jobId, referenceType: "documentDeliveryJob", entityId: jobId, entityType: "document_delivery",

@@ -17,6 +17,7 @@ const lib = '../../functions/lib/modules/';
 const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappConnectorAuthority.js');
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
 const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
+const { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } = require(lib + 'whatsappAutoReply/playbookCallables.js');
 const { runUnansweredAlerts } = require(lib + 'whatsappAutoReply/unansweredRunner.js');
 const { operatorAuthorHashes, REPLY_TEXT_VARIANTS } = require(lib + 'whatsappAutoReply/domain.js');
 const { saveWhatsAppAgentObservers, getWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
@@ -313,6 +314,33 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal(mine.length, 3);
     const [alert] = (await db.collection('whatsappAgentUnansweredAlerts').where('rootId', '==', rootId).where('chatId', '==', groupL).get()).docs;
     assert.equal(alert.get('status'), 'ANSWERED');
+  });
+
+  await test('three-corrections-in-a-group-become-a-proposal-only-the-owner-decides', async () => {
+    const ids = [];
+    for (let i = 0; i < 3; i++) {
+      const id = `reply_playbook_${i}`; ids.push(id);
+      await db.doc(`whatsappAgentReplyMetrics/${id}`).set({ rootId, agentId: 'hugo', chatId: groupL, groupName: 'Contabilidad Oil', kind: 'PROCESSING', subject: 'TRANSFER', monthKey: '2026-11', humanCorrection: false });
+    }
+    const call = (fn, uid, data) => fn.run({ auth: { uid }, data });
+    for (const id of ids.slice(0, 2)) await call(markWhatsAppReplyCorrection, ownerUid, { jobId: id, reason: 'Dijo que estaba en proceso y no era cierto', category: 'WRONG_FACT' });
+    assert.equal((await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.filter(e => e.chatId === groupL && e.type === 'CORRECTION').length, 0, 'two cases are not enough');
+    await call(markWhatsAppReplyCorrection, ownerUid, { jobId: ids[2], reason: 'Otra vez dijo que estaba en proceso', category: 'WRONG_FACT' });
+    const entries = (await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.filter(e => e.chatId === groupL && e.type === 'CORRECTION');
+    assert.equal(entries.length, 1); const [entry] = entries;
+    assert.equal(entry.status, 'PROPOSED'); assert.equal(entry.evidenceCount, 3); assert.equal(entry.category, 'WRONG_FACT'); assert.ok(entry.suggestedGuidance);
+    // Only the owner: a user without the role cannot read or decide.
+    await assert.rejects(() => call(getWhatsAppAgentPlaybook, betell, {}));
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, betell, { id: entry.id, decision: 'APPROVE', guidance: entry.suggestedGuidance }));
+    // The guidance is validated: no numbers, nothing internal.
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: 'Decir que son $540,000 de retorno' }), error => /cifras/.test(String(error.message)));
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: 'Avisar que lo validamos con IQ primero' }), error => /IQ/.test(String(error.message)));
+    const approved = await call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: entry.suggestedGuidance });
+    assert.equal(approved.status, 'APPROVED'); assert.ok(approved.simulationEndsAtMs > Date.now() + 2.9 * 24 * HOUR);
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'REJECT' }), error => /ya fue decidida/.test(String(error.message)));
+    // A fourth case refreshes nothing once decided, and a decided entry keeps its guidance.
+    const after = (await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.find(e => e.id === entry.id);
+    assert.equal(after.status, 'APPROVED'); assert.equal(after.guidance, entry.suggestedGuidance);
   });
 
   await test('an-agents-own-number-is-never-answered', async () => {

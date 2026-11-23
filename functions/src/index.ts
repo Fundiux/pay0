@@ -278,3 +278,4 @@ export { getUserOperatorNumbers, saveUserOperatorNumbers } from "./modules/opera
 export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modules/whatsappAutoReply/callables";
 export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";
+export { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } from "./modules/whatsappAutoReply/playbookCallables";
