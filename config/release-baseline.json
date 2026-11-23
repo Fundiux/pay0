@@ -720,6 +720,10 @@
     {
       "commit": "4bc79357",
       "capability": "El QR pendiente de Hugo se mantiene visible en la pagina WhatsApp hasta escanearlo"
+    },
+    {
+      "commit": "8567a955",
+      "capability": "Con version fijada de WhatsApp Web, Hugo limpia la cache Service Worker antes de arrancar"
     }
   ],
   "requiredText": [
