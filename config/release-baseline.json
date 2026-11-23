@@ -620,6 +620,22 @@
     {
       "commit": "9c3383ce",
       "capability": "Montos con formato en-US en todas las pantallas y coma decimal en solicitudes"
+    },
+    {
+      "commit": "796410c6",
+      "capability": "Show the Observador/Actuando switch per group and the monthly measurement on the WhatsApp page; count the three new callables in the discove"
+    },
+    {
+      "commit": "ac5054b7",
+      "capability": "Hugo group replies: Observador/Actuando per agent and per group, real request lookup, monthly measurement, turn memory and team notice"
+    },
+    {
+      "commit": "b5fdb3ac",
+      "capability": "Resolve an operator to its parent for the internal group, whether the parent is an admin or the superadmin"
+    },
+    {
+      "commit": "51dd0a03",
+      "capability": "Cancel the original invoice only when every complement is cancelled and verified with its receipt"
     }
   ],
   "requiredText": [
