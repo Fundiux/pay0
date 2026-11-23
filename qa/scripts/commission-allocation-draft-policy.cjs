@@ -17,4 +17,8 @@ assert.equal(validateClientAllocationDraft(draft, [account], owner).canExecute, 
 assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE" }, [account], owner));
 assert.equal(validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 20 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner).canExecute, true);
 assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 20 }] }, [account], owner));
+
+assert.equal(commissionAccountOptions([account], owner)[0].instrumentNumber, "••5678");
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", earningsPercentBps: 10001 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner));
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 10 }, { accountId: "one", pointsBps: 20 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner));
 console.log("Account and draft policy tests passed.");
