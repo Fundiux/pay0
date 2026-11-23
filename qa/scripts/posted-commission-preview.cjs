@@ -7,7 +7,23 @@ const source = fs.readFileSync(path.join(__dirname, "../../functions/src/modules
 const moduleExports = {};
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 vm.runInNewContext(compiled, { exports: moduleExports, Number, String, Error });
-const { postedClientOperationBaseMinor: basis, hasExactPersonalCommissionIqLink: exactLink } = moduleExports;
+const { postedClientOperationBaseMinor: basis, hasExactPersonalCommissionIqLink: exactLink,
+  postedClientIqOrigin: iqOrigin } = moduleExports;
+const payment = { rootId: "r", clientId: "c", financialSnapshotId: "s", moneda: "MXN", despachoId: "d" };
+const snapshot = { rootId: "r", clienteId: "c", pagoId: "p", currency: "MXN", despachoId: "d" };
+const origin = { rootId: "r", clientId: "c", paymentId: "p", payment, snapshot };
+assert.equal(iqOrigin(origin), "d", "posted immutable origin is authoritative");
+assert.equal(iqOrigin({ ...origin, payment: { ...payment, despachoId: "" } }), "d");
+assert.equal(iqOrigin({ ...origin, payment: { ...payment, despachoId: "another" } }), null,
+  "mutable payment origin may not contradict financial posting");
+assert.equal(iqOrigin({ ...origin, snapshot: { ...snapshot, despachoId: "" } }), null);
+assert.equal(iqOrigin({ ...origin, snapshot: { ...snapshot, rootId: "other" } }), null);
+assert.equal(iqOrigin({ ...origin, snapshot: { ...snapshot, clienteId: "other" } }), null);
+assert.equal(iqOrigin({ ...origin, snapshot: { ...snapshot, pagoId: "other" } }), null);
+assert.equal(iqOrigin({ ...origin, snapshot: { ...snapshot, currency: "USD" } }), null);
+assert.equal(iqOrigin({ ...origin, payment: { ...payment, rootId: "other" } }), null);
+assert.equal(iqOrigin({ ...origin, payment: { ...payment, clientId: "other" } }), null);
+assert.equal(iqOrigin({ ...origin, snapshot: null }), null);
 assert.equal(basis({ grossAmount: 116.00 }, "TOTAL"), 11600);
 assert.equal(basis({ grossAmount: 116.00, baseAmount: 100.00, assignmentSnapshot: { despachoCost: { calculationBaseType: "SUBTOTAL" } } }, "SUBTOTAL"), 10000);
 assert.equal(basis({ grossAmount: 116.00, baseAmount: 100.00, assignmentSnapshot: { despachoCost: { calculationBaseType: "TOTAL" } } }, "SUBTOTAL"), null);
