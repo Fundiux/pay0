@@ -39,6 +39,10 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
       await setDoc(doc(database, "personalCommissionIqLinks", "qa-iq-link"), {
         rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", accountId: "qa-account", iqLinkStatus: "VERIFIED",
       });
+      await setDoc(doc(database, "clientCommissionAllocationCalculations", "qa-calculation"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", paymentId: "qa-payment",
+        status: "CALCULATED_NOT_EXECUTABLE", executionEnabled: false, version: 1,
+      });
     });
     const protectedDocuments = [
       ["personalCommissionAccounts", "qa-account"],
@@ -47,6 +51,7 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
       ["clientCommissionAllocationRules", "qa-rule"],
       ["clientCommissionAllocationHistory", "qa-published-history"],
       ["personalCommissionIqLinks", "qa-iq-link"],
+      ["clientCommissionAllocationCalculations", "qa-calculation"],
     ];
     let denials = 0;
     for (const uid of ["qa-owner", "qa-super", "qa-other"]) {
@@ -61,8 +66,8 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
         denials += 5;
       }
     }
-    assert.equal(denials, 90);
-    console.log("PASS: 90 Firestore rule denials across accounts, IQ links, drafts and prospective rules.");
+    assert.equal(denials, 105);
+    console.log("PASS: 105 Firestore rule denials across accounts, IQ links, drafts, published rules and calculations.");
   } finally {
     await environment.cleanup();
   }
