@@ -17,6 +17,7 @@ const lib = '../../functions/lib/modules/';
 const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappConnectorAuthority.js');
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
 const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
+const { runUnansweredAlerts } = require(lib + 'whatsappAutoReply/unansweredRunner.js');
 const { operatorAuthorHashes, REPLY_TEXT_VARIANTS } = require(lib + 'whatsappAutoReply/domain.js');
 const { saveWhatsAppAgentObservers, getWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
 const { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } = require(lib + 'whatsappAutoReply/modeCallables.js');
@@ -24,7 +25,7 @@ const { createWorkerKey, createAuthorityTransport } = require('../../tools/whats
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us', groupL = '120363555000000012@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -288,6 +289,30 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal(lesson.chatId, metric.get('chatId')); assert.equal(lesson.reason, 'Dijo que estaba en proceso y no era cierto');
     await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, corrected: false } });
     assert.equal((await db.doc(`whatsappAgentLessons/corr__${metric.id}`).get()).exists, false);
+  });
+
+  await test('an-unanswered-question-is-told-to-the-team-after-3-min-and-every-5-min-until-answered', async () => {
+    await chatDoc(groupL, 'Contabilidad Oil');
+    await db.doc(`clientWhatsappGroups/${rootId}__cli-alerta`).set({ rootId, clienteId: 'cli-alerta', groupChatId: groupL, groupName: 'Contabilidad Oil' });
+    await observe(groupL, 'Contabilidad Oil', betell, { agentModes: {} }); // observer mode still alerts the team
+    await inbound(groupL, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const mine = [];
+    const deliver = async input => { if (input.clienteId === 'cli-alerta') mine.push(input); return 'OK'; };
+    const step = async at => { const before = mine.length; await runUnansweredAlerts(rootId, at, deliver); return mine.length - before; };
+    await inbound(groupL, { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 2 * MIN });
+    assert.equal(await step(NOW), 0, 'not yet 3 minutes');
+    assert.equal(await step(NOW + 2 * MIN), 1);
+    assert.match(mine[0].textBody, /«Contabilidad Oil»/); assert.match(mine[0].textBody, /más de 3 minutos/); assert.match(mine[0].textBody, /¿Ya salió mi transferencia\?/);
+    assert.equal(await step(NOW + 3 * MIN), 0, 'no repeat before 5 minutes');
+    assert.equal(await step(NOW + 7 * MIN), 1);
+    assert.match(mine[1].textBody, /Recordatorio/); assert.notEqual(mine[0].sourceId, mine[1].sourceId);
+    assert.equal(await step(NOW + 12 * MIN), 1);
+    await inbound(groupL, { fromMe: true, authorHash: null, body: 'Ya lo estamos revisando', timestampMs: NOW + 13 * MIN });
+    assert.equal(await step(NOW + 13 * MIN + 30000), 0);
+    assert.equal(await step(NOW + 20 * MIN), 0);
+    assert.equal(mine.length, 3);
+    const [alert] = (await db.collection('whatsappAgentUnansweredAlerts').where('rootId', '==', rootId).where('chatId', '==', groupL).get()).docs;
+    assert.equal(alert.get('status'), 'ANSWERED');
   });
 
   await test('an-agents-own-number-is-never-answered', async () => {
