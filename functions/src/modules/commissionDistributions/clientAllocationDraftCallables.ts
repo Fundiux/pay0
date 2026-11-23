@@ -52,6 +52,19 @@ export const saveClientCommissionAllocationDraft = onCall({ cors: true }, async 
         throw new HttpsError("permission-denied", "Cuenta seleccionada fuera del usuario u organización.");
       }
     }
+    // A draft may be incomplete, but complete rows must not contradict each other.
+    const seen = new Set<string>();
+    for (const row of instructions) {
+      if (!row.accountId) continue;
+      const hasPoints = row.pointsBps != null;
+      const hasPercent = row.earningsPercentBps != null;
+      if (hasPoints && hasPercent) throw new HttpsError("invalid-argument", "Una fila no puede combinar puntos y porcentaje.");
+      if (!hasPoints && !hasPercent) continue;
+      const mode = hasPoints ? "points" : "earnings";
+      const key = JSON.stringify([row.accountId, mode]);
+      if (seen.has(key)) throw new HttpsError("invalid-argument", "Cuenta y modalidad duplicadas.");
+      seen.add(key);
+    }
     const oldVersion = Number(previous.data()?.version || 0);
     if (request.data?.expectedVersion !== oldVersion) throw new HttpsError("aborted", "El borrador cambió. Recarga antes de guardar.");
     const nextVersion = oldVersion + 1;
