@@ -4,6 +4,7 @@ import { commissionAccountActor, commissionMillis, commissionSettingsId } from "
 import { calculateClientCommissionInstructions } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
 import type { ClientCommissionInstruction } from "./clientAllocation";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -160,7 +161,7 @@ export const previewPostedClientCommissionAllocation = onCall({ cors: true }, as
     if (!data || data.rootId !== actor.rootId || data.ownerUid !== ownerUid || data.active !== true) {
       throw new HttpsError("failed-precondition", "Una cuenta fue eliminada, desactivada o está fuera de alcance.");
     }
-    return { id: accountSnap.id, ...data };
+    return { ...data, id: accountSnap.id };
   });
   let earning: ReturnType<typeof canonicalUserCommission>;
   try { earning = canonicalUserCommission(financialSnapshot, ownerUid); }
@@ -180,17 +181,24 @@ export const previewPostedClientCommissionAllocation = onCall({ cors: true }, as
   }
   const now = Date.now();
   const clientIqId = String(client.iqLink?.clientId || client.iqClientId || "");
-  const blockedIqAccountIds = accounts.filter(account => {
+  // IQ destinations are scoped to the client, not globally verified on an account.
+  const iqLinks = await Promise.all(accounts.map(account =>
+    db.doc(`personalCommissionIqLinks/${personalCommissionIqLinkId(actor.rootId, clientId, ownerUid, account.id)}`).get()));
+  const blockedIqAccountIds = accounts.filter((account, index) => {
+    const iq = iqLinks[index].data();
     const link = evaluateIqLink({
-      status: account.iqLinkStatus,
-      verifiedAtMs: commissionMillis(account.iqVerifiedAt),
+      status: iq?.iqLinkStatus,
+      verifiedAtMs: commissionMillis(iq?.verifiedAt),
       nowMs: now,
       maxAgeMs: 86400000,
-      storedLast4: account.iqInstrumentLast4,
+      storedLast4: iq?.last4,
       currentLast4: account.last4,
     });
-    return !link.ready || account.iqFullDigitsMatched !== true || !account.iqBeneficiaryId ||
-      !account.iqAccountId || !clientIqId || String(account.iqClientId || "") !== clientIqId;
+    return !link.ready || !iq || iq.rootId !== actor.rootId || iq.clientId !== clientId ||
+      iq.ownerUid !== ownerUid || iq.accountId !== account.id ||
+      iq.accountFingerprint !== account.instrumentFingerprint ||
+      !clientIqId || String(iq.iqClientId || "") !== clientIqId ||
+      !iq.iqPartnerId || !iq.iqBeneficiaryId || !iq.iqAccountId;
   }).map(account => account.id);
   return {
     ok: true,
