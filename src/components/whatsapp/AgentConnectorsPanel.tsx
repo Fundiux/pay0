@@ -20,7 +20,10 @@ import {
   type WhatsAppReplyMetricsBucket,
   type WhatsAppAgentObserversState,
   type WhatsAppReplyMode,
+  decideWhatsAppPlaybookEntry,
+  getWhatsAppAgentPlaybook,
   getWhatsAppAgentReplyMetrics,
+  type WhatsAppPlaybookEntry,
   setWhatsAppGroupAgentMode,
 } from "@/services/whatsappQr";
 
@@ -175,6 +178,69 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
   );
 }
 
+const PLAYBOOK_TITLES: Record<string, string> = {
+  "MISSED_QUESTION|STATUS_INQUIRY": "Preguntas de estatus sin respuesta",
+  "MISSED_QUESTION|QUESTION": "Preguntas sin respuesta",
+  "CORRECTION|WRONG_FACT": "Respuestas con datos incorrectos",
+  "CORRECTION|TONE": "Respuestas con tono que no gustó",
+  "CORRECTION|NOT_NEEDED": "Respuestas que no hacían falta",
+  "CORRECTION|TOO_LATE": "Respuestas tardías",
+  "CORRECTION|OTHER": "Respuestas corregidas por una persona",
+};
+const playbookTitle = (entry: WhatsAppPlaybookEntry) => PLAYBOOK_TITLES[`${entry.type}|${entry.type === "CORRECTION" ? entry.category : entry.kind}`] || "Aprendizaje del grupo";
+
+// What Hugo learned per group. Three cases of the same kind propose a rule; only the owner approves, and an approved one runs 3 days in simulation.
+function PlaybookEntryRow({ entry, onDecided }: { entry: WhatsAppPlaybookEntry; onDecided: () => Promise<void> }) {
+  const [guidance, setGuidance] = useState(entry.suggestedGuidance);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function decide(decision: "APPROVE" | "REJECT") {
+    setBusy(true); setError("");
+    try { await decideWhatsAppPlaybookEntry({ id: entry.id, decision, guidance }); await onDecided(); }
+    catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <li className="rounded-lg border border-slate-800 p-2 text-xs text-slate-300">
+      <p className="font-semibold text-slate-100">{entry.groupName || "Grupo"} · {playbookTitle(entry)} <span className="font-normal text-slate-500">({entry.evidenceCount} casos)</span></p>
+      {entry.examples.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-400">{entry.examples.map(text => <li key={text}>{text}</li>)}</ul>}
+      {entry.status === "PROPOSED" ? (
+        <div className="mt-2 space-y-1">
+          <textarea value={guidance} onChange={e => setGuidance(e.target.value)} maxLength={400} rows={3} aria-label="Indicación para Hugo en este grupo" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100" />
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={busy} onClick={() => void decide("APPROVE")} className="rounded-lg bg-emerald-600 px-2 py-1 text-white disabled:opacity-50">Aprobar (3 días en simulación)</button>
+            <button type="button" disabled={busy} onClick={() => void decide("REJECT")} className="rounded-lg bg-slate-700 px-2 py-1 text-white disabled:opacity-50">Rechazar</button>
+            {busy && <Loader2 size={14} className="animate-spin text-slate-400" />}
+          </div>
+          {error && <p className="text-rose-300">{error}</p>}
+        </div>
+      ) : (
+        <p className="mt-1 text-slate-400">{entry.status === "APPROVED" ? `Aprobado: ${entry.guidance}${entry.simulationEndsAtMs ? ` · simulación hasta ${new Date(entry.simulationEndsAtMs).toLocaleDateString("es-MX")}` : ""}` : "Rechazado"}</p>
+      )}
+    </li>
+  );
+}
+
+function PlaybookBlock() {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState<WhatsAppPlaybookEntry[] | null>(null);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { setEntries((await getWhatsAppAgentPlaybook()).entries); setError(""); }
+    catch (e: any) { setError(`No se pudo cargar: ${e?.message || e}`); }
+  };
+  useEffect(() => { if (open) void load(); }, [open]);
+  const pending = entries?.filter(entry => entry.status === "PROPOSED").length ?? 0;
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Lo que Hugo aprende por grupo{pending > 0 ? ` (${pending} por revisar)` : ""}</summary>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {entries && entries.length === 0 && <p className="mt-2 text-xs text-slate-500">Todavía no hay propuestas: se crean cuando un grupo acumula 3 casos del mismo tipo.</p>}
+      {entries && entries.length > 0 && <ul className="mt-2 space-y-2">{entries.map(entry => <PlaybookEntryRow key={`${entry.id}:${entry.status}`} entry={entry} onDecided={load} />)}</ul>}
+    </details>
+  );
+}
+
 // Observador / Actuando for one agent in one group. Going back to Observador asks for the reason.
 function GroupModeControl({ agentId, agentName, config, onChanged }: { agentId: string; agentName: string; config: WhatsAppAgentObserversConfig; onChanged: () => Promise<void> }) {
   const acting = config.agentModes?.[agentId] === "ACTING";
@@ -281,6 +347,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
       <p className="mt-1 text-xs text-slate-500">Cada grupo observado debe tener su usuario: el agente solo usa información de ese usuario.</p>
       {agentId === "hugo" && <ReplySwitchBlock agentName={agentName} />}
       <ReplyMetricsBlock agentId={agentId} agentName={agentName} />
+      {agentId === "hugo" && <PlaybookBlock />}
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
 

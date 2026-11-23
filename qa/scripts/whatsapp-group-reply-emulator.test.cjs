@@ -17,6 +17,8 @@ const lib = '../../functions/lib/modules/';
 const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappConnectorAuthority.js');
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
 const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
+const { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } = require(lib + 'whatsappAutoReply/playbookCallables.js');
+const { runUnansweredAlerts } = require(lib + 'whatsappAutoReply/unansweredRunner.js');
 const { operatorAuthorHashes, REPLY_TEXT_VARIANTS } = require(lib + 'whatsappAutoReply/domain.js');
 const { saveWhatsAppAgentObservers, getWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
 const { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } = require(lib + 'whatsappAutoReply/modeCallables.js');
@@ -24,7 +26,7 @@ const { createWorkerKey, createAuthorityTransport } = require('../../tools/whats
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us', groupL = '120363555000000012@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -262,6 +264,83 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     const repeat = await inbound(groupH, { body: '¿Hay avance de mi factura?', timestampMs: NOW - 4 * MIN });
     await runGroupReplies(rootId, NOW + 2 * MIN);
     assert.equal((await jobsFor(repeat)).length, 0);
+  });
+
+  await test('an-unanswered-question-becomes-a-masked-lesson-once', async () => {
+    await chatDoc(groupK, 'Grupo lecciones');
+    await observe(groupK, 'Grupo lecciones', betell);
+    await inbound(groupK, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const missed = await inbound(groupK, { body: '¿Ya salió mi transferencia de $45,000 a Juan Pérez?', timestampMs: NOW - 32 * MIN });
+    await runGroupReplies(rootId, NOW);
+    await runGroupReplies(rootId, NOW + MIN);
+    const lessons = (await db.collection('whatsappAgentLessons').where('rootId', '==', rootId).where('type', '==', 'MISSED_QUESTION').get()).docs.filter(doc => doc.get('chatId') === groupK);
+    assert.equal(lessons.length, 1);
+    assert.equal(lessons[0].get('kind'), 'STATUS_INQUIRY');
+    assert.equal(lessons[0].get('subject'), 'TRANSFER');
+    assert.equal(lessons[0].get('groupName'), 'Grupo lecciones');
+    assert.ok(!/\d|juan/i.test(lessons[0].get('phrase')), 'the stored phrase is masked');
+    assert.equal(missed.length > 0, true);
+  });
+
+  await test('a-correction-keeps-the-reason-per-group-and-unmarking-removes-it', async () => {
+    const [metric] = (await db.collection('whatsappAgentReplyMetrics').where('rootId', '==', rootId).limit(1).get()).docs;
+    await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, reason: 'Dijo que estaba en proceso y no era cierto', category: 'WRONG_FACT' } });
+    const lesson = (await db.doc(`whatsappAgentLessons/corr__${metric.id}`).get()).data();
+    assert.equal(lesson.type, 'CORRECTION'); assert.equal(lesson.category, 'WRONG_FACT');
+    assert.equal(lesson.chatId, metric.get('chatId')); assert.equal(lesson.reason, 'Dijo que estaba en proceso y no era cierto');
+    await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, corrected: false } });
+    assert.equal((await db.doc(`whatsappAgentLessons/corr__${metric.id}`).get()).exists, false);
+  });
+
+  await test('an-unanswered-question-is-told-to-the-team-after-3-min-and-every-5-min-until-answered', async () => {
+    await chatDoc(groupL, 'Contabilidad Oil');
+    await db.doc(`clientWhatsappGroups/${rootId}__cli-alerta`).set({ rootId, clienteId: 'cli-alerta', groupChatId: groupL, groupName: 'Contabilidad Oil' });
+    await observe(groupL, 'Contabilidad Oil', betell, { agentModes: {} }); // observer mode still alerts the team
+    await inbound(groupL, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const mine = [];
+    const deliver = async input => { if (input.clienteId === 'cli-alerta') mine.push(input); return 'OK'; };
+    const step = async at => { const before = mine.length; await runUnansweredAlerts(rootId, at, deliver); return mine.length - before; };
+    await inbound(groupL, { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 2 * MIN });
+    assert.equal(await step(NOW), 0, 'not yet 3 minutes');
+    assert.equal(await step(NOW + 2 * MIN), 1);
+    assert.match(mine[0].textBody, /«Contabilidad Oil»/); assert.match(mine[0].textBody, /más de 3 minutos/); assert.match(mine[0].textBody, /¿Ya salió mi transferencia\?/);
+    assert.equal(await step(NOW + 3 * MIN), 0, 'no repeat before 5 minutes');
+    assert.equal(await step(NOW + 7 * MIN), 1);
+    assert.match(mine[1].textBody, /Recordatorio/); assert.notEqual(mine[0].sourceId, mine[1].sourceId);
+    assert.equal(await step(NOW + 12 * MIN), 1);
+    await inbound(groupL, { fromMe: true, authorHash: null, body: 'Ya lo estamos revisando', timestampMs: NOW + 13 * MIN });
+    assert.equal(await step(NOW + 13 * MIN + 30000), 0);
+    assert.equal(await step(NOW + 20 * MIN), 0);
+    assert.equal(mine.length, 3);
+    const [alert] = (await db.collection('whatsappAgentUnansweredAlerts').where('rootId', '==', rootId).where('chatId', '==', groupL).get()).docs;
+    assert.equal(alert.get('status'), 'ANSWERED');
+  });
+
+  await test('three-corrections-in-a-group-become-a-proposal-only-the-owner-decides', async () => {
+    const ids = [];
+    for (let i = 0; i < 3; i++) {
+      const id = `reply_playbook_${i}`; ids.push(id);
+      await db.doc(`whatsappAgentReplyMetrics/${id}`).set({ rootId, agentId: 'hugo', chatId: groupL, groupName: 'Contabilidad Oil', kind: 'PROCESSING', subject: 'TRANSFER', monthKey: '2026-11', humanCorrection: false });
+    }
+    const call = (fn, uid, data) => fn.run({ auth: { uid }, data });
+    for (const id of ids.slice(0, 2)) await call(markWhatsAppReplyCorrection, ownerUid, { jobId: id, reason: 'Dijo que estaba en proceso y no era cierto', category: 'WRONG_FACT' });
+    assert.equal((await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.filter(e => e.chatId === groupL && e.type === 'CORRECTION').length, 0, 'two cases are not enough');
+    await call(markWhatsAppReplyCorrection, ownerUid, { jobId: ids[2], reason: 'Otra vez dijo que estaba en proceso', category: 'WRONG_FACT' });
+    const entries = (await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.filter(e => e.chatId === groupL && e.type === 'CORRECTION');
+    assert.equal(entries.length, 1); const [entry] = entries;
+    assert.equal(entry.status, 'PROPOSED'); assert.equal(entry.evidenceCount, 3); assert.equal(entry.category, 'WRONG_FACT'); assert.ok(entry.suggestedGuidance);
+    // Only the owner: a user without the role cannot read or decide.
+    await assert.rejects(() => call(getWhatsAppAgentPlaybook, betell, {}));
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, betell, { id: entry.id, decision: 'APPROVE', guidance: entry.suggestedGuidance }));
+    // The guidance is validated: no numbers, nothing internal.
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: 'Decir que son $540,000 de retorno' }), error => /cifras/.test(String(error.message)));
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: 'Avisar que lo validamos con IQ primero' }), error => /IQ/.test(String(error.message)));
+    const approved = await call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'APPROVE', guidance: entry.suggestedGuidance });
+    assert.equal(approved.status, 'APPROVED'); assert.ok(approved.simulationEndsAtMs > Date.now() + 2.9 * 24 * HOUR);
+    await assert.rejects(() => call(decideWhatsAppPlaybookEntry, ownerUid, { id: entry.id, decision: 'REJECT' }), error => /ya fue decidida/.test(String(error.message)));
+    // A fourth case refreshes nothing once decided, and a decided entry keeps its guidance.
+    const after = (await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.find(e => e.id === entry.id);
+    assert.equal(after.status, 'APPROVED'); assert.equal(after.guidance, entry.suggestedGuidance);
   });
 
   await test('an-agents-own-number-is-never-answered', async () => {

@@ -9,6 +9,9 @@ import { AGENTS } from "../agentOperations/contract";
 import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
 import { agentCanAct, readAgentModes } from "./modes";
 import { mexicoMonthKey } from "./metrics";
+import { runUnansweredAlerts } from "./unansweredRunner";
+import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
+import { refreshPlaybookProposals } from "./playbook";
 import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
 import { planGroupReplies, type InboundRow, type LastReply, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
@@ -16,14 +19,13 @@ if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
-export const REPLY_AGENT_ID = "hugo";
+import { REPLY_AGENT_ID, LOOKBACK_MS, MAX_MESSAGES_PER_RUN } from "./constants";
+export { REPLY_AGENT_ID };
 export const REPLY_CONFIGS = "whatsappAgentReplyConfigs";
 const REPLY_STATE = "whatsappAgentReplyState";
 export const REPLY_METRICS = "whatsappAgentReplyMetrics";
 export const CONVERSATION_STATE = "whatsappAgentConversationState";
 const conversationStateId = (rootId: string, chatId: string) => `${rootId}__${REPLY_AGENT_ID}__${encodeURIComponent(chatId)}`;
-const LOOKBACK_MS = MAX_REPLY_AGE_MS + 5 * 60 * 1000;
-const MAX_MESSAGES_PER_RUN = 400;
 const BRAND_OR_INTERNAL = /pay\s*-?\s*0|despacho/i;
 
 const clean = (value: unknown, max = 200) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -149,6 +151,15 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     hasOpenSolicitud: ownerUserUid => Object.entries(ownerByChat).some(([chatId, owner]) => owner === ownerUserUid && lookupByChat[chatId]?.INVOICE === "FOUND"),
   });
 
+  // Learning (capture only): client questions in acting groups that nobody answered. Created once per message, never overwritten.
+  for (const missed of findMissedQuestions({ messages, ownerByChat, operatorHashes, repliedIds, nowMs, workingHours: config.workingHours ?? null })) {
+    const wrote = await db.doc(`${LESSONS}/${missedLessonId(rootId, missed.messageId)}`).create({
+      rootId, agentId: REPLY_AGENT_ID, chatId: missed.chatId, groupName: groupNameByChat[missed.chatId] || "", type: "MISSED_QUESTION",
+      kind: missed.kind, subject: missed.subject, phrase: missed.phrase, withinHours: missed.withinHours, monthKey: mexicoMonthKey(nowMs), createdAt: FieldValue.serverTimestamp(),
+    }).then(() => true).catch(() => false);
+    if (wrote) await refreshPlaybookProposals(db, rootId, missed.chatId).catch(() => undefined);
+  }
+
   let queued = 0;
   for (const item of plan) {
     const built = buildReplyDelivery(rootId, groupNameByChat[item.chatId], clientNameByOwner[item.ownerUserUid] || "", item, nowMs);
@@ -194,6 +205,8 @@ export const processWhatsAppGroupReplies = onSchedule(
       if (!rootId || doc.id !== replyConfigId(rootId)) continue;
       try { await runGroupReplies(rootId); }
       catch (error) { console.error("WHATSAPP_GROUP_REPLY_RUN_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
+      try { await runUnansweredAlerts(rootId); }
+      catch (error) { console.error("WHATSAPP_UNANSWERED_RUN_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
     }
   },
 );
