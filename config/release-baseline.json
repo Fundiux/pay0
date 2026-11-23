@@ -616,6 +616,10 @@
     {
       "commit": "0a11cd02",
       "capability": "Give Hugo's group replies warm, subject-specific wordings with several variants"
+    },
+    {
+      "commit": "9c3383ce",
+      "capability": "Montos con formato en-US en todas las pantallas y coma decimal en solicitudes"
     }
   ],
   "requiredText": [
