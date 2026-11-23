@@ -4,7 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
 import { normalizePersonalCommissionAccount } from "./personalAccounts";
-import { encryptCommissionInstrument, fingerprintCommissionInstrument } from "./instrumentEncryption";
+import { decryptCommissionInstrument, encryptCommissionInstrument, fingerprintCommissionInstrument } from "./instrumentEncryption";
 import { defineSecret } from "firebase-functions/params";
 const ACCOUNT_KEY = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
 
@@ -127,4 +127,51 @@ export const deactivatePersonalCommissionAccount = onCall({ cors: true }, async 
     tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_DEACTIVATED", accountId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     return { ok: true, idempotent: false };
   });
+});
+
+/** Reveal on explicit authenticated request only; never include plaintext in list responses. */
+export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secrets: [ACCOUNT_KEY] }, async request => {
+  const actor = await commissionAccountActor(request);
+  const accountId = cleanId(request.data?.accountId);
+  const snapshot = await db.doc(`personalCommissionAccounts/${accountId}`).get();
+  const account = snapshot.data();
+  if (!account || account.rootId !== actor.rootId || !account.ownerUid) {
+    throw new HttpsError("permission-denied", "Cuenta fuera de alcance.");
+  }
+  const ownerSnap = await db.doc(`users/${account.ownerUid}`).get();
+  const owner = ownerSnap.data() || {};
+  try {
+    authorizeCommissionAccountRead(
+      { uid: actor.uid, rootId: actor.rootId, role: actor.role as "superadmin" | "admin" | "operador", active: true },
+      { uid: account.ownerUid, rootId: String(owner.rootId || account.ownerUid),
+        active: ownerSnap.exists && owner.active !== false && owner.isActive !== false &&
+          owner.isDeleted !== true && owner.deleted !== true && !owner.deletedAt && owner.disabled !== true },
+      actor.uid === account.ownerUid ? "SELF_PROFILE" : "CLIENT_COSTS",
+    );
+  } catch {
+    throw new HttpsError("permission-denied", "No puedes ver los datos de esta cuenta.");
+  }
+  const keyBase64 = ACCOUNT_KEY.value();
+  if (!keyBase64) throw new HttpsError("failed-precondition", "Cifrado de cuentas no configurado.");
+  let number: string;
+  try {
+    number = decryptCommissionInstrument({
+      encrypted: account.encryptedInstrument,
+      rootId: actor.rootId,
+      ownerUid: account.ownerUid,
+      accountId: snapshot.id,
+      keyBase64,
+    });
+    const valid = account.instrumentType === "CLABE" ? /^\d{18}$/.test(number) :
+      account.instrumentType === "CARD" && /^\d{16,19}$/.test(number);
+    if (!valid || number.slice(-4) !== account.last4) throw new Error("Mismatch");
+  } catch {
+    throw new HttpsError("failed-precondition", "No se pudo validar el instrumento cifrado.");
+  }
+  await db.collection("commissionAuditEvents").add({
+    rootId: actor.rootId, ownerUid: account.ownerUid, actorUid: actor.uid,
+    accountId, event: "PERSONAL_COMMISSION_ACCOUNT_REVEALED",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, accountId, instrumentType: account.instrumentType, instrumentNumber: number };
 });
