@@ -6,6 +6,33 @@ import { listUsers } from "@/services/users";
 import { useUserProfile } from "@/lib/useUserProfile";
 import ClientCommissionAllocationEditor, { type ClientAllocationRow, type CommissionAccountOption } from "./ClientCommissionAllocationEditor";
 
+type ListedAccount = { id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string };
+async function clientAccountOptions(ownerUid: string, clientId: string, data: { accounts: ListedAccount[] }) {
+  const active = data.accounts.filter(account => account.active);
+  if (!active.length) return { options: [] as CommissionAccountOption[], error: "" };
+  let numbers = new Map<string, string>();
+  let error = "";
+  try {
+    const response = await httpsCallable<
+      { accountIds: string[]; ownerUid: string; clientId: string; purpose: "CLIENT_COSTS" },
+      { accounts: Array<{ accountId: string; instrumentNumber: string }> }
+    >(functions, "revealPersonalCommissionAccountNumber")({
+      accountIds: active.map(account => account.id), ownerUid, clientId, purpose: "CLIENT_COSTS",
+    });
+    numbers = new Map(response.data.accounts.map(account => [account.accountId, account.instrumentNumber]));
+  } catch {
+    error = "No fue posible mostrar las CLABE o tarjetas completas. Revisa la clave de cifrado del servidor.";
+  }
+  return {
+    options: active.map(account => ({
+      id: account.id, bankName: account.bankName, beneficiaryName: account.beneficiaryName,
+      instrumentNumber: numbers.get(account.id) || account.instrumentNumber,
+      selectable: account.iqLinkStatus === "VERIFIED",
+      reason: account.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
+    })),
+    error,
+  };
+}
 type Draft = { version: number; instructions: ClientAllocationRow[] };
 type PostedPreview = {
   simulationOnly: true; canSubmitToIq: false; currency: string; draftVersion: number;
@@ -55,13 +82,11 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
       httpsCallable<{ ownerUid: string; purpose: string; clientId: string; paymentId: string }, { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({ ownerUid, purpose: "CLIENT_COSTS", clientId, paymentId: referencePaymentId.trim() }),
       httpsCallable<{ clientId: string; ownerUid: string }, { draft: Draft | null }>(functions, "getClientCommissionAllocationDraft")({ clientId, ownerUid }),
       httpsCallable<{ clientId: string; ownerUid: string }, { rule: { version: number; status: string; executionEnabled: false } | null }>(functions, "getPublishedClientCommissionAllocation")({ clientId, ownerUid }),
-    ]).then(([accountResponse, draftResponse, ruleResponse]) => {
+    ]).then(async ([accountResponse, draftResponse, ruleResponse]) => {
+      const details = await clientAccountOptions(ownerUid, clientId, accountResponse.data);
       if (!live) return;
-      setAccounts(accountResponse.data.accounts.filter(a => a.active).map(a => ({
-        id: a.id, bankName: a.bankName, beneficiaryName: a.beneficiaryName,
-        instrumentNumber: a.instrumentNumber, selectable: a.iqLinkStatus === "VERIFIED",
-        reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
-      })));
+      setAccounts(details.options);
+      if (details.error) setMessage(details.error);
       setAccountsReferencePaymentId(referencePaymentId.trim());
       setDraft(draftResponse.data.draft || { version: 0, instructions: [] });
       setPublishedVersion(ruleResponse.data.rule?.version || 0);
@@ -85,11 +110,9 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
           { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({
           ownerUid, purpose: "CLIENT_COSTS", clientId, paymentId: referencePaymentId.trim(),
         });
-        setAccounts(refreshed.data.accounts.filter(a => a.active).map(a => ({
-          id: a.id, bankName: a.bankName, beneficiaryName: a.beneficiaryName,
-          instrumentNumber: a.instrumentNumber, selectable: a.iqLinkStatus === "VERIFIED",
-          reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
-        })));
+        const details = await clientAccountOptions(ownerUid, clientId, refreshed.data);
+        setAccounts(details.options);
+        if (details.error) setMessage(details.error);
         setAccountsReferencePaymentId(referencePaymentId.trim());
         setMessage("Cuenta verificada en IQ para este cliente y origen de pago. No se ha enviado ninguna dispersión.");
       }
