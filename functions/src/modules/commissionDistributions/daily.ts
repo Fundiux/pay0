@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { randomUUID } from "crypto";
+import { mayAutomaticallyProcessCommission } from "./payoutPreference";
 import { commissionAccountActor, commissionMillis } from "./userDestinations";
 import { stableCommissionId } from "./service";
 import { evaluateCommissionLegSubmission } from "./domain";
@@ -94,6 +95,9 @@ export async function runDailyUserCommissionPreflightCore(rootId: string, actorU
       for (; ownerIndex < owners.length; ownerIndex++) {
         const ownerUid = owners[ownerIndex];
         try {
+          const preference = (await db.doc(`commissionPayoutPreferences/${ownerUid}`).get()).data();
+          const permission = mayAutomaticallyProcessCommission({ ownerPreference: preference?.mode, organizationEnabled: policy.enabled, organizationExecutionEnabled: policy.executionEnabled });
+          if (!permission.prepare) { results.push({ paymentId: payment.id, ownerUid, status: "MANUAL_PREFERENCE" }); continue; }
           const created: any = await requestUserCommissionDispersionCore({ paymentId: payment.id, ownerUid, actorUid, rootId, source: "DAILY", now, reserve: policy.executionEnabled });
           if (!created.distributionId) { results.push({ paymentId: payment.id, ownerUid, status: created.reason || "SKIPPED" }); continue; }
           let status = created.status;
