@@ -4,7 +4,7 @@ import { commissionAccountActor, commissionMillis, commissionSettingsId } from "
 import { calculateClientCommissionInstructions } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { postedClientOperationBaseMinor, hasExactPersonalCommissionIqLink } from "./postedClientAllocationPreview";
-import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
 import type { ClientCommissionInstruction } from "./clientAllocation";
 
 if (!admin.apps.length) admin.initializeApp();

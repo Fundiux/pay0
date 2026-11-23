@@ -6,7 +6,7 @@ import { assertCommissionWithdrawalOwner, assertOwnedCommissionInstrument, commi
 import { calculateUserCommissionDestinations, canonicalUserCommission } from "./domain";
 import { calculateClientCommissionInstructions } from "./clientAllocation";
 import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
-import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { evaluateIqLink } from "./domain";
 import { commissionMillis } from "./userDestinations";
 import { applyCanonicalDispersionFinancialsTx, prepareCanonicalDispersionFinancialsTx, projectCanonicalDispersionFinancialBatchState, resolveDispersionOperationTypeKey, type CanonicalFinancialBatchAccountState } from "../financing/dispersionFinancial";

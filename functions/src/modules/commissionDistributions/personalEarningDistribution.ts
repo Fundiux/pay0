@@ -4,7 +4,7 @@ import { calculateClientCommissionInstructions } from "./clientAllocation";
 import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { commissionMillis, commissionSettingsId, assertCommissionWithdrawalOwner } from "./userDestinations";
-import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { personalCommissionIqEvidence } from "./personalAllocationMirror";
 import { withInheritedAuthority } from "../users/inheritedAuthority";
 

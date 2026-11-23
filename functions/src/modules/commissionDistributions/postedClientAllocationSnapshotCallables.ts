@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { calculateClientCommissionInstructions, type ClientCommissionInstruction } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
-import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
 import { commissionAccountActor, commissionConfigurationAt, commissionMillis, commissionSettingsId } from "./userDestinations";
 

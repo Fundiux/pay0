@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
 const text = (value: unknown) => String(value ?? "").trim();
+/** Pure identity; importing this must never initialize the IQ API or callables. */
+export function personalCommissionIqLinkId(rootId: string, clientId: string, ownerUid: string, accountId: string) {
+  return createHash("sha256").update(JSON.stringify([rootId, clientId, ownerUid, accountId])).digest("hex");
+}
 export function personalCommissionMirrorId(rootId: string, clientId: string, ownerUid: string, accountId: string) {
   if (![rootId, clientId, ownerUid, accountId].every(v => v && !v.includes("/"))) throw new Error("PERSONAL_COMMISSION_MIRROR_SCOPE_INVALID");
   return "pcm_" + createHash("sha256").update(JSON.stringify([rootId, clientId, ownerUid, accountId])).digest("hex").slice(0, 40);

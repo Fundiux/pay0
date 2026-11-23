@@ -1,5 +1,4 @@
 import * as admin from "firebase-admin";
-import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { commissionAccountActor } from "./userDestinations";
@@ -7,7 +6,7 @@ import { decryptCommissionInstrument } from "./instrumentEncryption";
 import { isPostedCommissionPayment } from "./domain";
 import { loadIqAccess, IQ_CREDENTIALS_KEY } from "../iq/dispersionCreationCallables";
 import { resolveIqBeneficiaryInstrument } from "../iq/dispersionHttpCreateCore";
-import { personalCommissionMirrorId } from "./personalAllocationMirror";
+import { personalCommissionMirrorId, personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { linkOrCreateMethod } from "../beneficiaries/iqLinkService";
 import { productionIqLinkPorts } from "../beneficiaries/iqLinkPorts";
 import { IQ_CANCELLATION_CREDENTIALS_KEY } from "../iq/solicitudCancellationService";
@@ -22,10 +21,6 @@ const safe = (value: unknown, field: string) => {
   return v;
 };
 /** The IQ link is specific to the client: different clients may use different partners and IQ profiles. */
-export function personalCommissionIqLinkId(rootId: string, clientId: string, ownerUid: string, accountId: string) {
-  return createHash("sha256").update(JSON.stringify([rootId, clientId, ownerUid, accountId])).digest("hex");
-}
-
 /** Verify against the real IQ wizard. Only a full-number match can authorize later payouts. */
 export const resolvePersonalCommissionAccountIq = onCall({
   cors: true, timeoutSeconds: 300, memory: "1GiB", maxInstances: 2,

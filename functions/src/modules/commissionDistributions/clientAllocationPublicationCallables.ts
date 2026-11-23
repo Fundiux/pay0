@@ -3,7 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor, commissionMillis, commissionSettingsId } from "./userDestinations";
 import { calculateClientCommissionInstructions, type ClientCommissionInstruction } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
-import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { postedClientOperationBaseMinor, hasExactPersonalCommissionIqLink } from "./postedClientAllocationPreview";
 import { personalCommissionMirrorData } from "./personalAllocationMirror";
 
