@@ -17,6 +17,9 @@ export function normalizePersonalCommissionAccount(input: Omit<PersonalCommissio
   const beneficiaryName = String(input.beneficiaryName || "").trim();
   const instrumentNumber = String(input.instrumentNumber || "").replace(/\s|-/g, "");
   if (!ownerUid || !rootId || !bankName || !beneficiaryName) throw new Error("Faltan datos de titularidad o banco.");
+  if (bankName.length > 100 || beneficiaryName.length > 160 || /[\\u0000-\\u001f\\u007f]/.test(bankName + beneficiaryName)) {
+    throw new Error("Banco o beneficiario contienen datos inválidos.");
+  }
   if (input.instrumentType === "CLABE" && !/^\d{18}$/.test(instrumentNumber)) throw new Error("La CLABE debe contener 18 dígitos.");
   if (input.instrumentType === "CARD" && !/^\d{16,19}$/.test(instrumentNumber)) throw new Error("La tarjeta debe contener de 16 a 19 dígitos.");
   if (input.instrumentType !== "CLABE" && input.instrumentType !== "CARD") throw new Error("Tipo de instrumento inválido.");
@@ -30,8 +33,9 @@ export function maskPersonalCommissionInstrument(account: Pick<PersonalCommissio
 }
 
 /**
- * Public projection: never return the full CLABE/card to profile or client UIs.
- * Storage of full instruments requires a separate server-only encrypted vault.
+ * Masked projection for summaries and other UI contexts. The separately authorized
+ * personal-account callable may disclose full numbers to the account holder and
+ * organizational superadmin as explicitly required by the product contract.
  */
 export function publicPersonalCommissionAccount(account: PersonalCommissionAccount) {
   return {
