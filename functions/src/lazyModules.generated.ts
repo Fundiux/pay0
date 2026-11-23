@@ -208,6 +208,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   listHugoTeamTurns: { module: "./modules/agent007/teamCallables", export: "listHugoTeamTurns" },
   listHugoVoiceActivity: { module: "./modules/agent007/voiceHistory", export: "listHugoVoiceActivity" },
   listIqCredentialProfiles: { module: "./modules/iq/callables", export: "listIqCredentialProfiles" },
+  listIqDailySyncReviews: { module: "./modules/iqDailySync/reviewsCallable", export: "listIqDailySyncReviews" },
   listOperationRecoveryReviews: { module: "./modules/controlCenter/recoveryReviewCallables", export: "listOperationRecoveryReviews" },
   listOperationalDocuments: { module: "./modules/canonicalCenter/documentDossier", export: "listOperationalDocuments" },
   listPagoApplicationsForPayment: { module: "./modules/paymentApplications/callables", export: "listPagoApplicationsForPayment" },

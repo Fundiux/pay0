@@ -179,8 +179,14 @@ async function main() {
   IQ.ELIUT["/invoices"].push(invoice("7103", 500, "2026-11-23T10:00:00"));
   IQ.ELIUT["/deposits"].push(deposit("8103", 500, "2026-11-23T11:00:00"));
   const run4 = await run(ROOT_UID, mexico("2026-11-23T21:00:00"));
-  assert.equal(run4.status, "COMPLETE"); assert.deepEqual(run4.window, { start: "2026-11-22", end: "2026-11-23", timezone: "America/Mexico_City" }); checks += 2;
+  assert.equal(run4.status, "COMPLETE"); // Open reviews from 2026-11-21 are still pending, so the window reaches back to that day to re-evaluate them.
+  assert.deepEqual(run4.window, { start: "2026-11-21", end: "2026-11-23", timezone: "America/Mexico_City" }); checks += 2;
   IQ.ELIUT["/payment_applications"].push(application("9103", "7103", "8103", 500, "2026-11-24T09:00:00"));
+  // Every open review carries the readable data of its IQ operation (kind, client, amount, date), so a person can understand it.
+  const openReviews = (await db.collection("iqDailySyncReviews").where("rootId", "==", ROOT_UID).where("status", "==", "OPEN").get()).docs;
+  assert.ok(openReviews.length > 0); checks++;
+  assert.equal(openReviews.filter(doc => !doc.get("evidence.display.kind")).length, 0, "every open review has its readable data"); checks++;
+  assert.equal(openReviews.find(doc => doc.get("entityType") === "DISPERSION")?.get("evidence.display.kind"), "Dispersión"); checks++;
   const run5 = await run(ROOT_UID, mexico("2026-11-24T21:00:00"));
   assert.equal(run5.status, "COMPLETE", JSON.stringify(run5)); checks++;
   const parent = (await imported("solicitudes")).find((row) => row.originalIqEntityId === "7103"), deposit8103 = (await imported("pagos")).find((row) => row.originalIqEntityId === "8103");

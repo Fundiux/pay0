@@ -48,6 +48,21 @@ export function dailyWindow(now: Date, lastCompletedDate?: string | null): { sta
   return { start, end: today, timezone: DAILY_SYNC_TIMEZONE };
 }
 
+/** How far back an open review is re-read. Beyond this, a review waits for the person (or the historical import). */
+export const DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS = 10;
+
+/**
+ * Reviews are only re-evaluated while their day is inside the window, so a review of an operation from three days ago
+ * would stay open for ever even after the cause is fixed. The window reaches back to the oldest open review, at most
+ * DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS before today. It never moves forward and never changes which day counts as completed.
+ */
+export function widenWindowForOpenReviews(window: { start: string; end: string; timezone: typeof DAILY_SYNC_TIMEZONE }, oldestOpenReviewDate: string | null | undefined, now: Date) {
+  if (!oldestOpenReviewDate || !/^\d{4}-\d{2}-\d{2}$/.test(oldestOpenReviewDate)) return window;
+  const floor = addDays(mexicoDate(now), -DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS);
+  const wanted = oldestOpenReviewDate < floor ? floor : oldestOpenReviewDate;
+  return wanted < window.start ? { ...window, start: wanted } : window;
+}
+
 export const DAILY_EXECUTABLE_OPERATIONS = new Set(["CREATE_HISTORICAL", "DEPENDENCY_IMPORT"]);
 const REVIEW_OPERATIONS = new Set(["CANONICAL_DEPENDENCY_PENDING", "REVIEW_REQUIRED", "CLIENT_REVIEW_REQUIRED", "FINANCIAL_RECONCILIATION_REVIEW", "HISTORICAL_DATE_REVIEW_REQUIRED"]);
 const STRONG_IQ_FIELDS: Record<Exclude<P4EntityType, "CLIENT">, string[]> = {

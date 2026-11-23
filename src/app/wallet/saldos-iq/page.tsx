@@ -7,6 +7,7 @@ import WalletNavigation from "@/components/WalletNavigation";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
 import { getIqBalanceComparison, type IqBalanceComparison, type IqBalanceRow } from "@/services/iqBalances";
+import IqPendingReviews from "@/components/iq/IqPendingReviews";
 
 const money = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : `$${Number(value).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -151,6 +152,8 @@ export default function SaldosIqPage() {
           </table>
         </section>
       )}
+
+      <IqPendingReviews />
 
       <WalletNavigation />
     </div>
