@@ -233,11 +233,22 @@ export async function preflightPersonalEarningDistribution(
         text(iq?.iqClientId) !== clientIqId || text(iq?.iqBeneficiaryId) !== text(leg.iqBeneficiaryId) ||
         text(iq?.iqAccountId) !== text(leg.iqAccountId) || text(iq?.iqPartnerId) !== text(leg.iqPartnerId) ||
         text(iq?.despachoId) !== text(snapshot?.despachoId) ||
+        text(iq?.iqCredentialProfileId) !== text(method?.iqCredentialProfileId) ||
+        method?.sourceType !== "PERSONAL_COMMISSION" ||
+        method?.rootId !== distribution.rootId ||
+        text(method?.clientId || method?.clienteId) !== distribution.clientId ||
+        method?.beneficiaryId !== leg.beneficiaryId ||
         method?.personalCommissionAccountId !== leg.accountId ||
         method?.personalAccountFingerprint !== leg.instrumentFingerprint ||
         method?.commissionOwnerUid !== distribution.ownerUid || method?.active !== true ||
+        text(method?.iqAccountId) !== text(leg.iqAccountId) ||
+        text(method?.iqBeneficiaryId) !== text(leg.iqBeneficiaryId) ||
+        text(method?.iqDespachoId) !== text(snapshot?.despachoId) ||
+        text(method?.last4) !== text(leg.instrumentLast4) ||
         method?.iqEvidenceFingerprint !== leg.iqEvidenceFingerprint ||
-        beneficiary?.rootId !== distribution.rootId || beneficiary?.active !== true) {
+        beneficiary?.rootId !== distribution.rootId ||
+        text(beneficiary?.clientId || beneficiary?.clienteId) !== distribution.clientId ||
+        beneficiary?.active !== true) {
       legReasons.push("PERSONAL_IQ_DESTINATION_CHANGED");
     }
     evaluated.push({ ...leg, status: isTerminal(leg) ? leg.status : legReasons.length ? "BLOCKED" : "READY", preflightReasons: legReasons });
