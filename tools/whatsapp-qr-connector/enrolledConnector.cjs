@@ -4,6 +4,7 @@
 const { createAuthorityTransport } = require("./connectorAuthority.cjs");
 const readChats = require("./readChats.cjs");
 // Cada lote cabe holgadamente en el límite canónico de 64 KB del servidor.
+const MENTION_TOKEN = "{{MENCION}}"; // same placeholder as functions/src/modules/whatsappAutoReply/mention.ts
 const MAX_BATCH_MESSAGES = 25, MAX_BATCH_BYTES = 40000, MAX_BUFFERED_MESSAGES = 1000;
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const NOT_READY_LIMIT_MS = 5 * 60 * 1000, DESTROY_TIMEOUT_MS = 15000;
@@ -120,6 +121,21 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // 2) Se descargan los archivos y se arma el mensaje ANTES de pedir permiso de envio.
   // 3) ATTEMPT: sin esta autorizacion no se envia nada; si la respuesta se pierde, tampoco.
   // 4) sendMessage y reporte SENT. Un fallo durante el envio se reporta UNCERTAIN y espera a una persona.
+  // "Buen día @cliente": the text carries a placeholder and the id of the client's message. The author is resolved here, from that message,
+  // so the server never has the number. If it cannot be resolved the placeholder is dropped and the greeting goes without the mention.
+  async function buildTextMessage(d) {
+    if (!d.text.includes(MENTION_TOKEN)) return { content: d.text, options: {} };
+    const plain = d.text.replace(/,?\s*\{\{MENCION\}\}/g, "").replace(/\s+([.,;:!?])/g, "$1").replace(/\s+/g, " ").trim();
+    const messageId = d.mention && typeof d.mention.messageId === "string" ? d.mention.messageId : "";
+    if (!messageId || messageId.length > 200 || typeof client.getMessageById !== "function" || !plain) return { content: plain || d.text, options: {} };
+    try {
+      const source = await client.getMessageById(messageId);
+      const author = source && !source.fromMe ? String(source.author || source.from || "") : "";
+      // Only a person of the same group: never a number from another chat.
+      if (!source || String(source.from || "") !== d.chatId || !/^\d{5,20}(:\d+)?@(c\.us|lid)$/.test(author)) return { content: plain, options: {} };
+      return { content: d.text.split(MENTION_TOKEN).join("@" + author.split("@")[0].split(":")[0]), options: { mentions: [author] } };
+    } catch { return { content: plain, options: {} }; }
+  }
   async function deliver() {
     if (!sendDocuments || delivering || stopped || !ready) return;
     delivering = true;
@@ -133,7 +149,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
         if (typeof d.chatId !== "string" || !/@(g|c)\.us$/.test(d.chatId)) throw Error("DESTINATION_INVALID");
         if (d.kind === "TEXT") {
           if (typeof d.text !== "string" || !d.text) throw Error("TEXT_MISSING");
-          messages = [{ content: d.text, options: {} }];
+          messages = [await buildTextMessage(d)];
         } else {
           if (!Array.isArray(d.documents) || d.documents.length === 0) throw Error("DOCUMENTS_MISSING");
           messages = [];

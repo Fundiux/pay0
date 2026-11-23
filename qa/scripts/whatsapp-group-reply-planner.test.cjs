@@ -37,6 +37,8 @@ ok(() => assert.deepEqual(planGroupReplies(input({ config: { enabled: true, mode
 
 // A greeting is answered with the owner's name.
 ok(() => assert.deepEqual(planGroupReplies(input()), [{ messageId: 'm1', chatId: 'g1@g.us', ownerUserUid: 'user-betell', kind: 'GREETING', text: 'Buen día, Betell.', subject: null, notifyInternal: false }]));
+// With the WhatsApp id of the message, the greeting mentions whoever wrote it; the number is never known here.
+ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('m1', { waMessageId: 'false_g1@g.us_ABC_5215500000000@c.us' })] })), [{ messageId: 'm1', chatId: 'g1@g.us', ownerUserUid: 'user-betell', kind: 'GREETING', text: 'Buen día, {{MENCION}}.', subject: null, notifyInternal: false, mentionMessageId: 'false_g1@g.us_ABC_5215500000000@c.us' }]));
 // Team members and the agent itself are never answered; a team answer after the message stops it.
 ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('m1', { authorHash: 'operator-hash' })] })), []));
 ok(() => assert.deepEqual(planGroupReplies(input({ messages: [msg('m1', { fromMe: true })] })), []));

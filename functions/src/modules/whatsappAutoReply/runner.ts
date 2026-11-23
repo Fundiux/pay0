@@ -46,6 +46,7 @@ export function buildReplyDelivery(rootId: string, groupName: string, ownerName:
     message: "respuesta en grupo", caption: plan.text, textBody: plan.text, status: "READY_FOR_SEND", releaseStatus: "RELEASED", origin: "AUTOMATIC",
     deliveryMode: "MULTI_TARGET", targetLabel: groupName || "Grupo", targetChatId: plan.chatId, targetChatName: groupName || "Grupo", targetChatType: "GROUP",
     targetDestinationsCount: 1, replyKind: plan.kind, releasedAtMs: nowMs,
+    ...(plan.mentionMessageId ? { mentionInboundMessageId: plan.mentionMessageId } : {}),
   };
   const delivery = {
     rootId, channel: "WHATSAPP", status: "PENDING_SEND", connectorId: "default", chatId: plan.chatId, chatName: groupName || "Grupo", chatType: "GROUP",
@@ -110,7 +111,7 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     .where("timestampMs", ">=", nowMs - LOOKBACK_MS).orderBy("timestampMs").limit(MAX_MESSAGES_PER_RUN).get();
   const messages: InboundRow[] = recent.docs.filter(doc => ownerByChat[clean(doc.get("chatId"), 200)]).map(doc => ({
     id: doc.id, chatId: clean(doc.get("chatId"), 200), authorHash: doc.get("authorHash") || null, fromMe: doc.get("fromMe") === true,
-    timestampMs: Number(doc.get("timestampMs")) || 0, type: clean(doc.get("type"), 40), body: String(doc.get("body") ?? ""),
+    timestampMs: Number(doc.get("timestampMs")) || 0, type: clean(doc.get("type"), 40), body: String(doc.get("body") ?? ""), waMessageId: clean(doc.get("messageId"), 200) || undefined,
   }));
   if (!messages.length) return { skipped: "NO_MESSAGES" as const, queued: 0 };
 

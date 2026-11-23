@@ -1,4 +1,5 @@
 import { mexicoDayStartMs } from "../documentDelivery/whatsappDeliveryDomain";
+import { GREETING_WITH_MENTION } from "./mention";
 import { classifyMessage, decideGroupReply, statusSubject, type AutoReplyConfig, type ReplyKind, type RequestLookup, type StatusSubject } from "./domain";
 
 // Pure planner for the group reply runner: from the recent messages of the groups an agent observes,
@@ -16,6 +17,8 @@ export type InboundRow = {
   timestampMs: number;
   type: string;
   body: string;
+  /** The WhatsApp id of the message: the connector resolves its author to mention them. */
+  waMessageId?: string;
 };
 
 export type LastReply = { lastReplyAtMs: number; lastKind: string; lastSubject: string | null; lastGreetingAtMs: number | null };
@@ -39,6 +42,8 @@ export type PlannedReply = {
   subject: StatusSubject | null;
   /** The request was not found in the system: the internal team should be told. */
   notifyInternal: boolean;
+  /** The greeting mentions whoever wrote this message; the connector resolves them at send time. */
+  mentionMessageId?: string | null;
 };
 
 export type PlanInput = {
@@ -101,7 +106,9 @@ export function planGroupReplies(input: PlanInput): PlannedReply[] {
       if (decision.action !== "REPLY") continue;
       if (repeatBlockReason(input.lastReplyByChat?.[chatId], decision.kind, isStatus ? subject : null, nowMs)) continue;
       if (config.mode !== "STANDARD" && decision.kind !== "GREETING") continue;
-      planned.push({ messageId: row.id, chatId, ownerUserUid, kind: decision.kind, text: decision.text, subject: isStatus ? subject : null, notifyInternal: decision.kind === "REQUEST_DATA" });
+      // "Buen día @cliente": the greeting mentions the person who wrote, from the first day. Without a message id it falls back to the plain greeting.
+      const mention = decision.kind === "GREETING" && row.waMessageId ? row.waMessageId : null;
+      planned.push({ messageId: row.id, chatId, ownerUserUid, kind: decision.kind, text: mention ? GREETING_WITH_MENTION : decision.text, subject: isStatus ? subject : null, notifyInternal: decision.kind === "REQUEST_DATA", ...(mention ? { mentionMessageId: mention } : {}) });
       break;
     }
   }
