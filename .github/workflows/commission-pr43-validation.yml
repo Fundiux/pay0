@@ -21,6 +21,11 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Java 21 for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Install dependencies
         run: |
           npm ci --ignore-scripts
@@ -40,4 +45,4 @@ jobs:
           GCLOUD_PROJECT: demo-pay0-pr43
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
         run: |
-          npx firebase-tools emulators:exec --project demo-pay0-pr43 --only firestore "node qa/scripts/personal-commission-firestore-rules.cjs"
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore "node qa/scripts/personal-commission-firestore-rules.cjs"
