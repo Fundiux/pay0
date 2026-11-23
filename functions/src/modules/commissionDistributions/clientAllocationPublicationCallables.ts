@@ -212,3 +212,68 @@ export const getPublishedClientCommissionAllocation = onCall({ cors: true }, asy
     effectiveFromMs: commissionMillis(data.effectiveFrom),
   } };
 });
+
+/**
+ * Activate a previously published rule prospectively. Manual payout preparation
+ * remains subject to the canonical USER ledger and IQ preflight; automation stays off.
+ */
+export const activateClientCommissionAllocation = onCall({ cors: true, timeoutSeconds: 120 }, async request => {
+  const actor = await commissionAccountActor(request, true);
+  const clientId = safeId(request.data?.clientId);
+  const ownerUid = safeId(request.data?.ownerUid);
+  const versionExpected = expected(request.data?.expectedVersion);
+  const key = commissionSettingsId(actor.rootId, clientId, ownerUid);
+  const ref = db.doc(`clientCommissionAllocationRules/${key}`);
+  return db.runTransaction(async tx => {
+    const [ruleSnap, clientSnap, ownerSnap] = await Promise.all([
+      tx.get(ref), tx.get(db.doc(`clients/${clientId}`)), tx.get(db.doc(`users/${ownerUid}`)),
+    ]);
+    const rule = ruleSnap.data(), client = clientSnap.data(), owner = ownerSnap.data();
+    if (!rule || rule.rootId !== actor.rootId || rule.clientId !== clientId ||
+        rule.ownerUid !== ownerUid || !client || client.rootId !== actor.rootId ||
+        !owner || String(owner.rootId || ownerUid) !== actor.rootId ||
+        owner.active === false || owner.isActive === false || owner.disabled === true ||
+        owner.isDeleted === true || owner.deleted === true || !!owner.deletedAt) {
+      throw new HttpsError("permission-denied", "La regla o el participante están fuera de alcance.");
+    }
+    if (rule.version !== versionExpected || rule.status !== "CONFIGURED" ||
+        !Array.isArray(rule.destinations) || !rule.destinations.length) {
+      throw new HttpsError("aborted", "La regla cambió o no está lista para activarse.");
+    }
+    const accounts = await Promise.all(rule.destinations.map((item: any) =>
+      tx.get(db.doc(`personalCommissionAccounts/${safeId(item.accountId)}`))));
+    const links = await Promise.all(rule.destinations.map((item: any) =>
+      tx.get(db.doc(`personalCommissionIqLinks/${personalCommissionIqLinkId(actor.rootId, clientId, ownerUid, safeId(item.accountId))}`))));
+    const clientIqId = String(client.iqLink?.clientId || client.iqClientId || "");
+    const nowMs = Date.now();
+    rule.destinations.forEach((item: any, i: number) => {
+      const account = accounts[i].data(), iq = links[i].data();
+      const check = evaluateIqLink({
+        status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
+        nowMs, maxAgeMs: 86400000, storedLast4: iq?.last4, currentLast4: account?.last4,
+      });
+      if (!account || account.rootId !== actor.rootId || account.ownerUid !== ownerUid ||
+          account.active !== true || account.instrumentFingerprint !== item.fingerprint ||
+          !check.ready || !iq || iq.accountFingerprint !== item.fingerprint ||
+          iq.iqClientId !== clientIqId || iq.iqAccountId !== item.iqAccountId ||
+          iq.iqBeneficiaryId !== item.iqBeneficiaryId ||
+          iq.iqPartnerId !== item.iqPartnerId || !iq.iqCredentialProfileId) {
+        throw new HttpsError("failed-precondition", "Una cuenta cambió o requiere volver a verificarse en IQ.");
+      }
+    });
+    const version = versionExpected + 1;
+    const payload = {
+      ...rule, status: "ACTIVE", executionEnabled: false, version,
+      effectiveFrom: stamp(), updatedAt: stamp(), updatedBy: actor.uid,
+    };
+    tx.set(ref, payload);
+    tx.create(db.doc(`clientCommissionAllocationHistory/${key}__v${version}`), {
+      ...payload, configurationId: key, recordedAt: stamp(),
+    });
+    tx.create(db.collection("commissionAuditEvents").doc(), {
+      rootId: actor.rootId, clientId, ownerUid, version, actorUid: actor.uid,
+      event: "CLIENT_PERSONAL_COMMISSION_RULE_ACTIVATED_MANUAL", createdAt: stamp(),
+    });
+    return { ok: true, status: "ACTIVE", executionEnabled: false, version };
+  });
+});
