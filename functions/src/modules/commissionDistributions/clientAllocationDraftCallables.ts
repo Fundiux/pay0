@@ -43,6 +43,15 @@ export const saveClientCommissionAllocationDraft = onCall({ cors: true }, async 
       user.active === false || user.isActive === false || user.isDeleted === true || user.disabled === true) {
       throw new HttpsError("permission-denied", "Cliente o participante fuera de alcance.");
     }
+    const selectedIds = [...new Set(instructions.map(row => row.accountId).filter(Boolean))];
+    const selectedAccounts = await Promise.all(selectedIds.map(accountId =>
+      tx.get(db.doc(`personalCommissionAccounts/${accountId}`))));
+    for (const selected of selectedAccounts) {
+      const data = selected.data();
+      if (!data || data.rootId !== actor.rootId || data.ownerUid !== ownerUid) {
+        throw new HttpsError("permission-denied", "Cuenta seleccionada fuera del usuario u organización.");
+      }
+    }
     const oldVersion = Number(previous.data()?.version || 0);
     if (request.data?.expectedVersion !== oldVersion) throw new HttpsError("aborted", "El borrador cambió. Recarga antes de guardar.");
     const nextVersion = oldVersion + 1;
