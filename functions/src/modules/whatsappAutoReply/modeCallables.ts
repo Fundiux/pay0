@@ -103,3 +103,18 @@ export const markWhatsAppReplyCorrection = onCall({ cors: true, timeoutSeconds: 
   }).catch(() => undefined);
   return { ok: true, humanCorrection: corrected };
 });
+
+// The owner's list of what Hugo sent in groups this month, newest first, with the sent text and whether it was marked corrected.
+export const listWhatsAppAgentReplies = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
+  const { rootId } = await requireWhatsAppSuperadmin(request);
+  const requested = clean(request.data?.month, 7), month = /^\d{4}-(0[1-9]|1[0-2])$/.test(requested) ? requested : mexicoMonthKey(Date.now());
+  const snap = await db.collection(REPLY_METRICS).where("rootId", "==", rootId).where("monthKey", "==", month).limit(MAX_ROWS).get();
+  const rows = snap.docs.map(doc => ({ doc, at: Number(doc.get("queuedAtMs")) || 0 })).sort((a, b) => b.at - a.at).slice(0, 100);
+  const jobs = rows.length ? await db.getAll(...rows.map(row => db.doc(`documentDeliveryJobs/${row.doc.id}`))) : [];
+  const replies = rows.map(({ doc, at }, index) => ({
+    id: doc.id, agentId: clean(doc.get("agentId"), 64), groupName: clean(doc.get("groupName"), 160), kind: clean(doc.get("kind"), 40), subject: doc.get("subject") || null, atMs: at,
+    text: jobs[index]?.exists && jobs[index].get("rootId") === rootId ? clean(jobs[index].get("textBody"), 600) : "",
+    humanCorrection: doc.get("humanCorrection") === true,
+  }));
+  return { ok: true, month, replies };
+});
