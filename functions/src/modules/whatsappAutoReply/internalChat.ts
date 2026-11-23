@@ -29,7 +29,7 @@ export async function runInternalChat(rootId: string, nowMs = Date.now()) {
     const chatId = clean(doc.get("groupChatId"), 200), ownerAdminId = clean(doc.get("ownerAdminId"), 200);
     if (doc.get("rootId") === rootId && chatId && ownerAdminId) groupByChat.set(chatId, { ownerAdminId, name: clean(doc.get("groupName"), 160) });
   }
-  if (!groupByChat.size) return { queued: 0 };
+  if (!groupByChat.size) { console.log("WHATSAPP_INTERNAL_CHAT_RUN", JSON.stringify({ groupDocs: groups.size, groupsUsable: 0, internalRead: 0, planned: 0, queued: 0 })); return { queued: 0 }; }
 
   const recent = await db.collection("whatsappInboundMessages").where("rootId", "==", rootId).where("agentId", "==", REPLY_AGENT_ID)
     .where("timestampMs", ">=", nowMs - INTERNAL_MAX_AGE_MS - 60 * 1000).orderBy("timestampMs").limit(400).get();
@@ -37,7 +37,7 @@ export async function runInternalChat(rootId: string, nowMs = Date.now()) {
     id: doc.id, chatId: clean(doc.get("chatId"), 200), authorHash: doc.get("authorHash") || null, fromMe: doc.get("fromMe") === true,
     timestampMs: Number(doc.get("timestampMs")) || 0, body: String(doc.get("body") ?? ""), mentionsMe: doc.get("mentionsMe") === true, waMessageId: clean(doc.get("messageId"), 200) || undefined,
   }));
-  if (!messages.length) return { queued: 0 };
+  if (!messages.length) { console.log("WHATSAPP_INTERNAL_CHAT_RUN", JSON.stringify({ groupDocs: groups.size, groupsUsable: groupByChat.size, recentRead: recent.size, internalRead: 0, planned: 0, queued: 0 })); return { queued: 0 }; }
 
   // The agents' own numbers (Hugo's own account, María, Sofía) are never answered.
   const agentPhones: string[] = [];
@@ -54,8 +54,10 @@ export async function runInternalChat(rootId: string, nowMs = Date.now()) {
   const lastReplyAtByChat: Record<string, number | undefined> = {};
   stateDocs.forEach((doc, index) => { if (doc.exists) lastReplyAtByChat[chats[index]] = Number(doc.get("lastReplyAtMs")) || undefined; });
 
+  const planned = planInternalReplies({ nowMs, messages, ignoreHashes, repliedIds, lastReplyAtByChat });
+  const diag = { groupDocs: groups.size, groupsUsable: groupByChat.size, recentRead: recent.size, internalRead: messages.length, alreadyReplied: repliedIds.size, ignoredAgentNumbers: messages.filter(row => row.authorHash && ignoreHashes.has(row.authorHash)).length, planned: planned.length, queued: 0 };
   let queued = 0;
-  for (const reply of planInternalReplies({ nowMs, messages, ignoreHashes, repliedIds, lastReplyAtByChat })) {
+  for (const reply of planned) {
     const group = groupByChat.get(reply.chatId)!;
     const jobId = jobIdFor(rootId, reply.messageId), jobRef = db.doc(`documentDeliveryJobs/${jobId}`);
     const deliveryId = encodeURIComponent(reply.chatId);
@@ -81,5 +83,7 @@ export async function runInternalChat(rootId: string, nowMs = Date.now()) {
       entityId: jobId, entityType: "document_delivery", description: `Hugo respondió (${reply.kind === "INTERNAL_GREETING" ? "saludo" : "respuesta limitada"}) a una mención en el grupo interno ${group.name || ""}.`.trim(),
     }).catch(() => undefined);
   }
+  diag.queued = queued;
+  console.log("WHATSAPP_INTERNAL_CHAT_RUN", JSON.stringify(diag));
   return { queued };
 }
