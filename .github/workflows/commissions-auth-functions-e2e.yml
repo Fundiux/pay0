@@ -1,0 +1,51 @@
+name: Commission Auth Functions E2E
+on:
+  push:
+    branches:
+      - feature/user-commission-accounts-client-allocation-20261123
+    paths:
+      - '.github/workflows/commissions-auth-functions-e2e.yml'
+      - 'functions/src/modules/commissionDistributions/**'
+      - 'functions/src/index.ts'
+      - 'functions/src/lazyModules.generated.ts'
+      - 'qa/scripts/personal-commission-auth-functions-emulator.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: commissions-auth-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  callable-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GCLOUD_PROJECT: demo-pay0-pr43
+      FIREBASE_PROJECT_ID: demo-pay0-pr43
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+      FIREBASE_STORAGE_EMULATOR_HOST: 127.0.0.1:9199
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies without production credentials
+        run: |
+          npm ci
+          npm ci --prefix functions
+      - name: Compile Functions and verify lazy map
+        run: |
+          npm --prefix functions run build
+          node scripts/generate-lazy-function-map.mjs --check
+      - name: Prepare isolated Functions emulator configuration
+        run: |
+          node -e 'const fs=require("fs");const config=JSON.parse(fs.readFileSync("firebase.emulator-tests.json","utf8"));config.functions={source:"functions"};fs.writeFileSync(".firebase-commission-auth-test.json",JSON.stringify(config));'
+      - name: Auth and Functions callable E2E (demo project, no IQ access)
+        run: |
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
