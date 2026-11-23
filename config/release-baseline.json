@@ -684,6 +684,18 @@
     {
       "commit": "c3f4ff5a",
       "capability": "Saludo de Hugo con mencion al cliente sin guardar numeros"
+    },
+    {
+      "commit": "f87e1476",
+      "capability": "Abono al Wallet de depositos recuperados de IQ con la comision de IQ"
+    },
+    {
+      "commit": "84d6ba9a",
+      "capability": "Comprobantes de dispersiones recuperadas de IQ"
+    },
+    {
+      "commit": "037f8b27",
+      "capability": "Pantalla para encender la simulacion de respuestas de Hugo"
     }
   ],
   "requiredText": [
