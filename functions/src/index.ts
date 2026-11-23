@@ -281,4 +281,4 @@ export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppRe
 
 export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount } from "./modules/commissionDistributions/personalAccountCallables";
 
-export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft } from "./modules/commissionDistributions/clientAllocationDraftCallables";
+export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";
