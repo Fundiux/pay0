@@ -26,7 +26,7 @@ jobs:
           npm ci --ignore-scripts
           npm ci --prefix functions --ignore-scripts
       - name: Compile functions TypeScript
-        run: npm --prefix functions exec -- tsc --noEmit -p tsconfig.json
+        run: ./functions/node_modules/.bin/tsc --noEmit --project functions/tsconfig.json --target es2020
       - name: Commission calculations and security tests
         run: |
           node qa/scripts/client-commission-allocation.cjs
