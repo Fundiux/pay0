@@ -2,6 +2,7 @@
 // Runs the compiled scan (functions/lib) with synthetic data; the IQ transport and credentials are stubbed.
 //   npm run qa:dispersion-iq-receipt-auto
 const assert = require("node:assert/strict");
+process.env.IQ_CREDENTIALS_KEY = "demo-secret-never-used";
 
 for (const key of ["FIRESTORE_EMULATOR_HOST", "FIREBASE_STORAGE_EMULATOR_HOST"]) {
   if (!/^127\.0\.0\.1:\d+$/.test(process.env[key] || "")) throw new Error(`Local ${key} required`);
@@ -32,8 +33,10 @@ const fetchCalls = [];
 let fetchMode = "AVAILABLE"; // AVAILABLE | NOT_AVAILABLE | NETWORK
 creation.loadIqAccess = async () => ({ username: "stub", password: "stub", erpUrl: "https://iq.invalid" });
 creation.buildDispersionSchedulerAuth = async (principal) => ({ uid: principal.createdBy, role: "superadmin", rootId: root, username: "stub" });
-http.fetchIqDispersionReceipt = async ({ folio }) => {
+const fetchUsers = [];
+http.fetchIqDispersionReceipt = async ({ folio, username }) => {
   fetchCalls.push(folio);
+  fetchUsers.push(username);
   if (fetchMode === "NETWORK") throw new Error("ETIMEDOUT");
   if (fetchMode === "NOT_AVAILABLE") return { status: "NOT_AVAILABLE" };
   return { status: "AVAILABLE", bytes: PDF, contentType: "application/pdf", filename: `IQ-${folio}.pdf`, sha256: "a".repeat(64) };
@@ -172,6 +175,48 @@ async function main() {
     for (const doc of snap.docs) { check([history.id, noTime.id].every((id) => doc.data().referenceId !== id), "No pending event for untouched history"); pendingEvents++; }
   }
   same(pendingEvents, 1, "Exactly one pending event, for the tried row");
+
+  // --- A dispersion recovered from IQ has no leg and no despacho ---------------------
+  // Its owner authorizes the import and the credentials are the ones of its IQ group.
+  const canonical = require("../../functions/lib/modules/iq/iqCanonicalAccess.js");
+  const canonicalProfiles = [];
+  canonical.loadIqCanonicalProfileById = async (input) => { canonicalProfiles.push(input.profileId); return { username: "canonical-user", password: "canonical-pass" }; };
+  const ownerUid = `${prefix}-owner`;
+  await db.doc(`users/${ownerUid}`).set({ uid: ownerUid, role: "admin", rootId: root, active: true, username: "DUENO" });
+  await db.doc(`clients/${prefix}-client-owner`).set({ rootId: root, adminId: ownerUid, nombre: "CLIENTE DEL DUENO", active: true });
+  const schedulerAuthFolios = [];
+  const originalBuild = creation.buildDispersionSchedulerAuth;
+  creation.buildDispersionSchedulerAuth = async (principal) => { schedulerAuthFolios.push(String(principal.iqDispersionFolio)); return originalBuild(principal); };
+  async function seedRecovered(overrides = {}) {
+    const id = `${prefix}-r${++seq}`, folio = String(80000 + seq);
+    await db.doc(`clientDispersions/${id}`).set({
+      rootId: root, adminId: ownerUid, clientId: `${prefix}-client-owner`, clienteId: `${prefix}-client-owner`, clienteNombre: "CLIENTE DEL DUENO", folio: `DIQP${folio}`, status: "REGISTRADA",
+      amount: 500, currency: "MXN", createdBy: "system:iq-daily-sync", createdAt: Timestamp.now(), iqGenerationStatus: "IQ_GENERADA", iqDispersionFolio: folio, iqDispersionId: folio,
+      iqGenerationUpdatedAt: Timestamp.now(), source: "IQ_IMPORT", importMode: "DAILY_SYNC", importVersion: 1, importRunId: "iqdispersion-test-run", canonicalIqProfileId: "bEGPMuplqNHMZ3lvYkeb",
+      originalIqEntityId: folio, canonicalIqGroupId: "iq-group-pay0", ...overrides,
+    });
+    return { id, folio };
+  }
+  const recovered = await seedRecovered();
+  const noGroup = await seedRecovered({ canonicalIqGroupId: "iq-group-unknown" });
+  const noOwner = await seedRecovered({ adminId: `${prefix}-nobody` });
+  const usersBefore = fetchUsers.length;
+  result = await scan(now + 160 * 60000);
+  same((await activeReceipts(recovered.id)).length, 1, "A recovered dispersion gets its receipt without a leg or a despacho");
+  same((await activeReceipts(recovered.id))[0].data().entityType, "clientDispersions", "The receipt belongs to the dispersion");
+  check(fetchCalls.includes(recovered.folio), "IQ was asked for the recovered dispersion");
+  same(fetchUsers[fetchCalls.indexOf(recovered.folio)], "canonical-user", "IQ is read with the credentials of the dispersion's IQ group");
+  check(canonicalProfiles.includes("bEGPMuplqNHMZ3lvYkeb"), "The canonical profile of the group is the one used");
+  check(!schedulerAuthFolios.includes(recovered.folio), "A recovered dispersion is not authorized through a creator user");
+  same((await auditEvents(recovered.id)).length, 1, "One audit event for the recovered receipt");
+  same((await row(noGroup.id)).iqReceiptAutoStatus, "REVIEW", "A group IQ does not know waits for a person");
+  same((await activeReceipts(noGroup.id)).length, 0, "Nothing is stored for it");
+  same((await row(noOwner.id)).iqReceiptAutoStatus, "REVIEW", "Without an active owner nothing is imported");
+  same((await row(noOwner.id)).iqReceiptAutoError, "NO_AUTHORIZED_ACTOR", "And it says why");
+  check(!fetchCalls.slice(usersBefore).includes(noOwner.folio), "IQ is not asked for a dispersion nobody may import");
+  const again = await scan(now + 200 * 60000);
+  same((await activeReceipts(recovered.id)).length, 1, "A second scan does not duplicate the receipt");
+  check(again.counts.IMPORTED === undefined, "Nothing is imported twice");
 
   // --- Kill switch ----------------------------------------------------------------
   const killed = await seed();
