@@ -43,14 +43,14 @@ export function encryptCommissionInstrument(input: {
 export function fingerprintCommissionInstrument(input: {
   number: string; instrumentType: "CLABE" | "CARD"; rootId: string; ownerUid: string; keyBase64: string;
 }): string {
-  if (!/^(?:\\d{18}|\\d{16,19})$/.test(input.number) ||
+  if (!/^(?:\d{18}|\d{16,19})$/.test(input.number) ||
       (input.instrumentType === "CLABE" && input.number.length !== 18) ||
       (input.instrumentType !== "CLABE" && input.instrumentType !== "CARD") ||
       !input.rootId.trim() || !input.ownerUid.trim()) {
     throw new Error("Identificador de cuenta inválido.");
   }
   return createHmac("sha256", parseKey(input.keyBase64))
-    .update("pay0-personal-account-fingerprint-v1\\0")
+    .update("pay0-personal-account-fingerprint-v1\0")
     .update(JSON.stringify([input.rootId, input.ownerUid, input.instrumentType, input.number]))
     .digest("hex");
 }
