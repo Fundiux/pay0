@@ -159,49 +159,73 @@ export const deactivatePersonalCommissionAccount = onCall({ cors: true }, async 
   });
 });
 
-/** Reveal on explicit authenticated request only; never include plaintext in list responses. */
+/** Authenticated, audited full-number read for the owner or the same-root superadmin in Client Costs.
+ * Numbers remain encrypted at rest; only the intended profile/costs UI receives the plaintext.
+ * Batch mode avoids one Firebase callable round-trip per account.
+ */
 export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secrets: [ACCOUNT_KEY] }, async request => {
   const actor = await commissionAccountActor(request);
-  const accountId = cleanId(request.data?.accountId);
-  const snapshot = await db.doc(`personalCommissionAccounts/${accountId}`).get();
-  const account = snapshot.data();
-  if (!account || account.rootId !== actor.rootId || account.ownerUid !== actor.uid) {
-    throw new HttpsError("permission-denied", "Cuenta fuera de alcance.");
+  const bulk = Array.isArray(request.data?.accountIds);
+  const ids = bulk ? request.data.accountIds.map(cleanId) : [cleanId(request.data?.accountId)];
+  if (!ids.length || ids.length > 50 || new Set(ids).size !== ids.length) {
+    throw new HttpsError("invalid-argument", "Selecciona de una a 50 cuentas distintas.");
   }
-  const ownerSnap = await db.doc(`users/${account.ownerUid}`).get();
+  const purpose = request.data?.purpose === "CLIENT_COSTS" ? "CLIENT_COSTS" : "SELF_PROFILE";
+  const ownerUid = purpose === "CLIENT_COSTS" ? cleanId(request.data?.ownerUid) : actor.uid;
+  if (purpose === "CLIENT_COSTS") {
+    if (actor.role !== "superadmin") {
+      throw new HttpsError("permission-denied", "Solo el superadmin consulta cuentas de otros titulares.");
+    }
+    const clientId = cleanId(request.data?.clientId);
+    const client = await db.doc(`clients/${clientId}`).get();
+    if (!client.exists || client.data()?.rootId !== actor.rootId ||
+        client.data()?.active === false || client.data()?.isDeleted === true) {
+      throw new HttpsError("permission-denied", "Cliente fuera de alcance.");
+    }
+  }
+  const ownerSnap = await db.doc(`users/${ownerUid}`).get();
   const owner = ownerSnap.data() || {};
   try {
     authorizeCommissionAccountRead(
       { uid: actor.uid, rootId: actor.rootId, role: actor.role as "superadmin" | "admin" | "operador", active: true },
-      { uid: account.ownerUid, rootId: String(owner.rootId || account.ownerUid),
+      { uid: ownerUid, rootId: String(owner.rootId || ownerUid),
         active: ownerSnap.exists && owner.active !== false && owner.isActive !== false &&
           owner.isDeleted !== true && owner.deleted !== true && !owner.deletedAt && owner.disabled !== true },
-      "SELF_PROFILE",
+      purpose,
     );
   } catch {
-    throw new HttpsError("permission-denied", "No puedes ver los datos de esta cuenta.");
+    throw new HttpsError("permission-denied", "No tienes autorización para consultar estas cuentas.");
+  }
+  const snapshots = await Promise.all(ids.map(accountId => db.doc(`personalCommissionAccounts/${accountId}`).get()));
+  for (const snapshot of snapshots) {
+    const account = snapshot.data();
+    if (!account || account.rootId !== actor.rootId || account.ownerUid !== ownerUid) {
+      throw new HttpsError("permission-denied", "Cuenta fuera del alcance del titular.");
+    }
   }
   const keyBase64 = ACCOUNT_KEY.value();
-  if (!keyBase64) throw new HttpsError("failed-precondition", "Cifrado de cuentas no configurado.");
-  let number: string;
-  try {
-    number = decryptCommissionInstrument({
-      encrypted: account.encryptedInstrument,
-      rootId: actor.rootId,
-      ownerUid: account.ownerUid,
-      accountId: snapshot.id,
-      keyBase64,
-    });
-    const valid = account.instrumentType === "CLABE" ? /^\d{18}$/.test(number) :
-      account.instrumentType === "CARD" && /^\d{16,19}$/.test(number);
-    if (!valid || number.slice(-4) !== account.last4) throw new Error("Mismatch");
-  } catch {
-    throw new HttpsError("failed-precondition", "No se pudo validar el instrumento cifrado.");
-  }
+  if (!keyBase64) throw new HttpsError("failed-precondition", "Clave de cifrado de cuentas no configurada.");
+  const accounts = snapshots.map(snapshot => {
+    const account = snapshot.data()!;
+    let number: string;
+    try {
+      number = decryptCommissionInstrument({
+        encrypted: account.encryptedInstrument, rootId: actor.rootId,
+        ownerUid, accountId: snapshot.id, keyBase64,
+      });
+      const valid = account.instrumentType === "CLABE" ? /^\\d{18}$/.test(number) :
+        account.instrumentType === "CARD" && /^\\d{16,19}$/.test(number);
+      if (!valid || number.slice(-4) !== account.last4) throw new Error("Mismatch");
+    } catch {
+      throw new HttpsError("failed-precondition", "No se pudo validar el instrumento bancario guardado.");
+    }
+    return { accountId: snapshot.id, instrumentType: account.instrumentType, instrumentNumber: number };
+  });
   await db.collection("commissionAuditEvents").add({
-    rootId: actor.rootId, ownerUid: account.ownerUid, actorUid: actor.uid,
-    accountId, event: "PERSONAL_COMMISSION_ACCOUNT_REVEALED",
+    rootId: actor.rootId, ownerUid, actorUid: actor.uid,
+    accountIds: ids, count: accounts.length, purpose,
+    event: "PERSONAL_COMMISSION_ACCOUNT_REVEALED",
     createdAt: FieldValue.serverTimestamp(),
   });
-  return { ok: true, accountId, instrumentType: account.instrumentType, instrumentNumber: number };
+  return bulk ? { ok: true, accounts } : { ok: true, ...accounts[0] };
 });
