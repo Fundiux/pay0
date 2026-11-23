@@ -5,7 +5,7 @@ const { doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc } = requi
 
 const projectId = "demo-pay0-pr43";
 const host = process.env.FIRESTORE_EMULATOR_HOST || "";
-if (process.env.GCLOUD_PROJECT !== projectId || !/^127\\.0\\.0\\.1:\\d+$/.test(host)) {
+if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)) {
   throw new Error("Se requieren emuladores locales Firestore y proyecto demo-pay0-pr43; producción prohibida.");
 }
 
