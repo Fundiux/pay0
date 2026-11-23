@@ -12,13 +12,13 @@ export function commissionAccountOptions(
   accounts: PersonalCommissionAccount[],
   owner: { rootId: string; ownerUid: string },
 ) {
-  // Full numbers are returned ONLY after server-side authorization for this owner/root.
+  // Only masked identifiers may reach UI; authorization is still enforced server-side.
   return accounts
     .filter(account => account.rootId === owner.rootId && account.ownerUid === owner.ownerUid && account.active)
     .map(account => ({
       id: account.id,
       bankName: account.bankName,
-      instrumentNumber: account.instrumentNumber,
+      instrumentNumber: "••" + account.instrumentNumber.slice(-4),
       beneficiaryName: account.beneficiaryName,
       iqLinkStatus: account.iqLinkStatus,
       selectable: account.iqLinkStatus === "VERIFIED",
