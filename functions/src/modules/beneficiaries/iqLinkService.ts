@@ -181,12 +181,16 @@ async function reconcile(run: Run, reservationId: string, cause: "OUTCOME_UNKNOW
 
 // Link first, create only when IQ really lacks the account. Nothing here writes to IQ unless the create
 // gate (master switch, create switch, verified contract, catalog absence proof, daily limit, kill switch) allows it.
-export async function linkOrCreateMethod(input: { methodId: string; ports: IqLinkPorts; nowMs?: number; safety?: SafetyRuntime }): Promise<LinkOutcome[]> {
+export async function linkOrCreateMethod(input: { methodId: string; ports: IqLinkPorts; nowMs?: number; safety?: SafetyRuntime; /** Authorized, decrypted server-memory only; never stored in Firestore. */ methodOverride?: { clabe?: string | null; cardNumber?: string | null } }): Promise<LinkOutcome[]> {
   const nowMs = input.nowMs ?? Date.now();
   const safety = input.safety ?? new SafetyRuntime(db);
   const methodSnap = await db.doc(`clientBeneficiaryMethods/${input.methodId}`).get();
   if (!methodSnap.exists) return [];
-  const method = methodSnap.data() || {};
+  const storedMethod = methodSnap.data() || {};
+  if (input.methodOverride && (storedMethod.sourceType !== "PERSONAL_COMMISSION" ||
+      !storedMethod.personalCommissionAccountId || !storedMethod.personalAccountFingerprint ||
+      storedMethod.active !== true)) throw new Error("PERSONAL_IQ_OVERRIDE_NOT_ALLOWED");
+  const method = input.methodOverride ? { ...storedMethod, ...input.methodOverride } : storedMethod;
   const account = methodAccountRef(method);
   const rootId = text(method.rootId);
   if (!account || !rootId || method.active === false || method.isDeleted === true) return [];
