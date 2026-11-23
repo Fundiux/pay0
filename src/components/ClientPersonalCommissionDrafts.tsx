@@ -7,6 +7,12 @@ import { useUserProfile } from "@/lib/useUserProfile";
 import ClientCommissionAllocationEditor, { type ClientAllocationRow, type CommissionAccountOption } from "./ClientCommissionAllocationEditor";
 
 type Draft = { version: number; instructions: ClientAllocationRow[] };
+type PostedPreview = {
+  simulationOnly: true; canSubmitToIq: false; currency: string; draftVersion: number;
+  earnedMinor: number; distributedMinor: number; remainingMinor: number;
+  rows: Array<{ accountId: string; amountMinor: number }>;
+  blockedIqAccountIds: string[];
+};
 export default function ClientPersonalCommissionDrafts({ clientId }: { clientId: string }) {
   const { profile } = useUserProfile();
   const [users, setUsers] = useState<Array<{ uid: string; label: string }>>([]);
@@ -16,6 +22,9 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [paymentId, setPaymentId] = useState("");
+  const [preview, setPreview] = useState<PostedPreview | null>(null);
+  const [dirty, setDirty] = useState(false);
   const superadmin = String(profile?.role || "").toLowerCase() === "superadmin";
   useEffect(() => {
     if (!superadmin) return;
@@ -35,6 +44,7 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
   }, [superadmin]);
   useEffect(() => {
     setAccounts([]); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
+    setPreview(null); setDirty(false);
     if (!ownerUid || !superadmin) return;
     let live = true;
     Promise.all([
@@ -61,18 +71,44 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
         clientId, ownerUid, instructions: draft.instructions, expectedVersion: draft.version,
       });
       setDraft(current => ({ ...current, version: result.data.version }));
+      setDirty(false); setPreview(null);
       setMessage("Borrador guardado. No habilita dispersiones.");
     } catch (error: any) { setMessage(error.message || "No se pudo guardar el borrador."); }
     finally { setBusy(false); }
   }
+  async function calculatePostedPreview() {
+    if (!ownerUid || !clientId || !paymentId.trim() || busy || !loaded || dirty) return;
+    setBusy(true); setMessage(""); setPreview(null);
+    try {
+      const response = await httpsCallable<{ clientId: string; ownerUid: string; paymentId: string }, PostedPreview>(functions, "previewPostedClientCommissionAllocation")({
+        clientId, ownerUid, paymentId: paymentId.trim(),
+      });
+      setPreview(response.data);
+    } catch (error: any) { setMessage(error.message || "No fue posible comprobar el pago contabilizado."); }
+    finally { setBusy(false); }
+  }
+  const money = (minor: number, currency: string) => new Intl.NumberFormat("es-MX", { style: "currency", currency }).format(minor / 100);
   return <section className="mt-6 space-y-3 border-t border-white/10 pt-5">
     <h4 className="font-semibold">Cuentas personales · distribución por cliente</h4>
     <p className="text-xs text-slate-400">Selecciona un usuario y configura sus cuentas. Solo se guardan borradores hasta aprobar la validación financiera e IQ.</p>
     <select aria-label="Usuario titular" className="w-full rounded-lg bg-slate-950 p-2 text-sm" value={ownerUid} onChange={event => setOwnerUid(event.target.value)}>
       <option value="">Seleccionar usuario</option>{users.map(user => <option key={user.uid} value={user.uid}>{user.label}</option>)}
     </select>
-    {ownerUid && loaded && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accounts} initialRows={draft.instructions} onDraftChange={instructions => setDraft(current => ({ ...current, instructions }))} />}
+    {ownerUid && loaded && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accounts} initialRows={draft.instructions} onDraftChange={instructions => { setDraft(current => ({ ...current, instructions })); setDirty(true); setPreview(null); }} />}
     {ownerUid && <button type="button" disabled={busy || !loaded} className="rounded-lg bg-sky-600 px-4 py-2 text-sm disabled:opacity-40" onClick={() => void save()}>{busy ? "Guardando…" : "Guardar borrador"}</button>}
+    {ownerUid && loaded && <div className="space-y-2 rounded-lg border border-white/10 p-3">
+      <label className="block text-sm text-slate-300">Pago contabilizado para comprobar importes
+        <input aria-label="ID interno del pago contabilizado" value={paymentId} onChange={event => { setPaymentId(event.target.value); setPreview(null); }} placeholder="ID interno del pago" className="mt-1 w-full rounded-lg bg-slate-950 p-2 text-sm" />
+      </label>
+      <button type="button" disabled={busy || !paymentId.trim() || dirty} onClick={() => void calculatePostedPreview()} className="rounded-lg border border-white/20 px-3 py-2 text-sm disabled:opacity-40">Comprobar reparto</button>
+      {dirty && <p className="text-xs text-amber-200">Guarda primero los cambios del borrador para comprobar los importes.</p>}
+      {preview && <div role="status" className="space-y-2 text-sm">
+        <p className="font-medium">Comprobación del pago contabilizado · borrador v{preview.draftVersion}</p>
+        <p>Utilidad: {money(preview.earnedMinor, preview.currency)} · Distribuido: {money(preview.distributedMinor, preview.currency)} · Saldo restante: {money(preview.remainingMinor, preview.currency)}</p>
+        <ul className="space-y-1">{preview.rows.map((row, index) => <li key={index}>{accounts.find(a => a.id === row.accountId)?.instrumentNumber || "Cuenta"} · {money(row.amountMinor, preview.currency)}</li>)}</ul>
+        <p className="text-xs text-amber-200">Solo cálculo de consulta. No reserva saldo ni envía instrucciones a IQ.{preview.blockedIqAccountIds.length ? ` ${preview.blockedIqAccountIds.length} cuenta(s) sin verificación IQ exacta y vigente.` : ""}</p>
+      </div>}
+    </div>}
     {message && <p role="status" className="text-sm text-amber-200">{message}</p>}
   </section>;
 }
