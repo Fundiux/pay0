@@ -20,4 +20,5 @@ assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", points
 assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", earningsPercentBps: 10000 }, { accountId: "b", pointsBps: 1 }] }));
 assert.throws(() => calculate({ ...base, operationBaseMinor: null, instructions: [{ accountId: "a", pointsBps: 20 }] }));
 assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", earningsPercentBps: 10 }, { accountId: "a", earningsPercentBps: 20 }] }));
+assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", pointsBps: 60 }, { accountId: "b", pointsBps: 60 }] }));
 console.log("Client commission allocation tests passed.");
