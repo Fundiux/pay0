@@ -53,7 +53,7 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
     const verifiedAt = link?.verifiedAt?.toMillis?.() || 0;
     const valid = clientId && link?.rootId === actor.rootId && link?.clientId === clientId &&
       link?.ownerUid === ownerUid && link?.accountId === doc.id && link?.iqLinkStatus === "VERIFIED" &&
-      link?.accountFingerprint === data.instrumentFingerprint && link?.last4 === data.last4 &&
+      link?.iqFullDigitsMatched === true && link?.accountFingerprint === data.instrumentFingerprint && link?.last4 === data.last4 &&
       data.active === true && verifiedAt > 0 && now - verifiedAt <= 86400000 &&
       !!clientIqId && String(link?.iqClientId || "") === clientIqId && !!link?.iqPartnerId &&
       !!link?.iqBeneficiaryId && !!link?.iqAccountId && !!link?.iqCredentialProfileId;
