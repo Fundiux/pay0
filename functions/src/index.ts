@@ -283,3 +283,4 @@ export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deacti
 export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";
 export { resolvePersonalCommissionAccountIq } from "./modules/commissionDistributions/personalAccountIqCallables";
 export { publishClientCommissionAllocation, getPublishedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationPublicationCallables";
+export { materializePostedClientCommissionAllocation } from "./modules/commissionDistributions/postedClientAllocationSnapshotCallables";
