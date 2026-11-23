@@ -1,0 +1,49 @@
+name: Commission PR43 validation
+on:
+  push:
+    branches:
+      - feature/user-commission-accounts-client-allocation-20261123
+  pull_request:
+    paths:
+      - 'functions/src/modules/commissionDistributions/**'
+      - 'src/components/*Commission*'
+      - 'qa/scripts/*commission*'
+      - '.github/workflows/commission-pr43-validation.yml'
+permissions:
+  contents: read
+jobs:
+  commission-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 21 for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix functions --ignore-scripts
+      - name: Compile functions TypeScript
+        run: ./functions/node_modules/.bin/tsc --noEmit --project functions/tsconfig.json --target es2020
+      - name: Commission calculations and security tests
+        run: |
+          node qa/scripts/client-commission-allocation.cjs
+          node qa/scripts/personal-commission-accounts.cjs
+          node qa/scripts/commission-allocation-draft-policy.cjs
+          node qa/scripts/commission-account-read-authorization.cjs
+          node qa/scripts/commission-instrument-encryption.cjs
+          node qa/scripts/commission-encryption-secret-binding.cjs
+          node qa/scripts/commission-integration-preflight.cjs
+      - name: Firestore rules (emulator only)
+        env:
+          GCLOUD_PROJECT: demo-pay0-pr43
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+        run: |
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore "node qa/scripts/personal-commission-firestore-rules.cjs && node qa/scripts/personal-commission-financial-emulator.cjs"

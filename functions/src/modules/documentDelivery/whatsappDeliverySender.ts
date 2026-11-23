@@ -39,10 +39,8 @@ function fail(code: "invalid-argument" | "failed-precondition" | "permission-den
 function defaultSigner(): DocumentUrlSigner {
   return async (storagePath, expectedGeneration) => {
     // Loaded lazily: unit tests of the connector authority never touch Storage.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getStorage } = require("firebase-admin/storage");
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { signGenerationBoundDownload } = require("../documents/generationBoundDownload");
+        const { getStorage } = require("firebase-admin/storage");
+        const { signGenerationBoundDownload } = require("../documents/generationBoundDownload");
     return signGenerationBoundDownload(getStorage().bucket(), storagePath, expectedGeneration ?? null);
   };
 }

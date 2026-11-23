@@ -10,6 +10,7 @@ import {
   runCreateClientDispersionIqCore,
 } from "./dispersionCreationCallables";
 import { syncDispersionIqIncident } from "./dispersionIqIncident";
+import { PERSONAL_COMMISSION_ACCOUNT_KEY } from "../commissionDistributions/privateBankInstrument";
 
 const text = (value: unknown) => String(value ?? "").trim();
 
@@ -30,7 +31,7 @@ export const sendNewDispersionToIq = onDocumentCreated(
     concurrency: 1,
     timeoutSeconds: 540,
     memory: "2GiB",
-    secrets: [IQ_CREDENTIALS_KEY],
+    secrets: [IQ_CREDENTIALS_KEY, PERSONAL_COMMISSION_ACCOUNT_KEY],
   },
   async (event) => {
     const dispersionId = text(event.params.dispersionId);

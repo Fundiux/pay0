@@ -7,6 +7,7 @@ import { commissionAccountActor, commissionMillis } from "./userDestinations";
 import { stableCommissionId } from "./service";
 import { evaluateCommissionLegSubmission } from "./domain";
 import { requestUserCommissionDispersionCore } from "./requests";
+import { PERSONAL_COMMISSION_ACCOUNT_KEY } from "./privateBankInstrument";
 import { executeUserCommissionRequestCore, USER_COMMISSION_IQ_SECRET, type CommissionExecutor } from "./execution";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -130,11 +131,11 @@ export async function runDailyUserCommissionPreflightCore(rootId: string, actorU
     throw error;
   }
 }
-export const runDailyUserCommissionPreflight = onCall({ cors: true, timeoutSeconds: 540, memory: "2GiB", secrets: [USER_COMMISSION_IQ_SECRET] }, async request => {
+export const runDailyUserCommissionPreflight = onCall({ cors: true, timeoutSeconds: 540, memory: "2GiB", secrets: [USER_COMMISSION_IQ_SECRET, PERSONAL_COMMISSION_ACCOUNT_KEY] }, async request => {
   const actor = await commissionAccountActor(request, true);
   return runDailyUserCommissionPreflightCore(actor.rootId, actor.uid);
 });
-export const prepareDailyUserCommissions = onSchedule({ schedule: "every 15 minutes", timeZone: COMMISSION_TIMEZONE, timeoutSeconds: 540, memory: "2GiB", maxInstances: 1, secrets: [USER_COMMISSION_IQ_SECRET] }, async () => {
+export const prepareDailyUserCommissions = onSchedule({ schedule: "every 15 minutes", timeZone: COMMISSION_TIMEZONE, timeoutSeconds: 540, memory: "2GiB", maxInstances: 1, secrets: [USER_COMMISSION_IQ_SECRET, PERSONAL_COMMISSION_ACCOUNT_KEY] }, async () => {
   const configs = await db.collection("commissionAutomationConfigs").where("enabled", "==", true).limit(100).get();
   for (const config of configs.docs) {
     if (config.data().rootId !== config.id) continue;

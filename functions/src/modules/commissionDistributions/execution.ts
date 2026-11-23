@@ -4,6 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { assertCommissionWithdrawalOwner, commissionAccountActor } from "./userDestinations";
 import { preflightCommissionDistribution } from "./service";
+import { PERSONAL_COMMISSION_ACCOUNT_KEY } from "./privateBankInstrument";
 import { reverseCanonicalDispersionFinancialsTx } from "../financing/dispersionFinancial";
 import { releaseForwardOnlyDispersionTx } from "../dispatchBalances/forwardOnly";
 import { assertUserDispersionCanRelease } from "../financing/dispersionFunding";
@@ -113,5 +114,5 @@ async function authorizedExecutionInput(request: any): Promise<ExecutionInput> {
   if (!stored || stored.rootId !== actor.rootId || (stored.ownerUid !== actor.uid && actor.role !== "superadmin")) throw new HttpsError("permission-denied", "Solicitud fuera de alcance.");
   return { requestId, rootId: actor.rootId, ownerUid: stored.ownerUid, actorUid: actor.uid };
 }
-export const executeUserCommissionDispersion = onCall({ cors: true, timeoutSeconds: 540, memory: "2GiB", maxInstances: 2, secrets: [USER_COMMISSION_IQ_SECRET] }, async request => executeUserCommissionRequestCore(await authorizedExecutionInput(request)));
+export const executeUserCommissionDispersion = onCall({ cors: true, timeoutSeconds: 540, memory: "2GiB", maxInstances: 2, secrets: [USER_COMMISSION_IQ_SECRET, PERSONAL_COMMISSION_ACCOUNT_KEY] }, async request => executeUserCommissionRequestCore(await authorizedExecutionInput(request)));
 export const cancelUserCommissionDispersion = onCall({ cors: true, timeoutSeconds: 120 }, async request => cancelUserCommissionRequestCore(await authorizedExecutionInput(request)));
