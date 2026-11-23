@@ -33,7 +33,7 @@ function appFor(label) {
   connectFunctionsEmulator(fn, "127.0.0.1", 5001);
   const firestore = getFirestore(app);
   connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
-  const invoke = (name, data = {}) => httpsCallable(fn, name, { timeout: 90000 })(data).then(response => response.data);
+  const invoke = (name, data = {}) => httpsCallable(fn, name, { timeout: 20000 })(data).then(response => response.data);
   return { app, auth, fn, firestore, invoke };
 }
 async function expectDenied(action, label) {
