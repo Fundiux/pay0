@@ -34,3 +34,7 @@ export type CommissionAutomationConfig = { enabled: boolean; executionEnabled: b
 export const getCommissionAutomationConfig = () => call<{}, { ok: boolean; config: CommissionAutomationConfig }>("getCommissionAutomationConfig", {});
 export const saveCommissionAutomationConfig = (input: CommissionAutomationConfig & { expectedVersion: number }) => call<typeof input, { ok: boolean; version: number }>("saveCommissionAutomationConfig", input);
 export const runDailyUserCommissionPreflight = () => call<{}, { ok: boolean; reason?: string; scanned?: number; externalActions?: number }>("runDailyUserCommissionPreflight", {});
+
+export type CommissionPayoutMode = "MANUAL" | "AUTOMATIC";
+export const getMyCommissionPayoutMode = () => call<{}, { ok: boolean; mode: CommissionPayoutMode; version: number }>("getMyCommissionPayoutMode", {});
+export const saveMyCommissionPayoutMode = (input: { mode: CommissionPayoutMode; expectedVersion: number }) => call<typeof input, { ok: boolean; mode: CommissionPayoutMode; version: number }>("saveMyCommissionPayoutMode", input);
