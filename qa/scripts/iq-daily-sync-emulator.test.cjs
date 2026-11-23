@@ -147,7 +147,7 @@ async function main() {
   assert.deepEqual(byEntity("SOLICITUD", "7102").evidence.dailySync.candidates, ["solicitudes/pay0-native-777"]); checks++;
   assert.match(String(byEntity("SOLICITUD", "7201")?.code), /IDENTITY|CLIENT/, "unmapped IQ user goes to review"); checks++;
   assert.equal((await db.collection("solicitudes").where("originalIqEntityId", "==", "7201").get()).size, 0); checks++;
-  assert.equal(byEntity("DISPERSION", "555")?.code, "IQ_DISPERSION_NOT_IN_PAY0"); assert.equal(byEntity("DISPERSION", "556"), undefined); checks += 2;
+  assert.equal(byEntity("DISPERSION", "555")?.code, "DISPERSION_NOT_FINISHED", "an unfinished dispersion waits, with its reason"); assert.equal(byEntity("DISPERSION", "556"), undefined); checks += 2;
   assert.equal(byEntity("PAYMENT_POSTING", "8101")?.code, "WALLET_POSTING_REQUIRES_OPERATION_TYPE"); checks++;
   const incident = await db.doc(`analyticsRoots/${ROOT_UID}/incidents/iq-daily-sync-review`).get();
   assert.equal(incident.get("status"), "NEEDS_REVIEW"); assert.equal(incident.get("openCount"), open.filter((row) => row.status === "OPEN").length); checks += 2;
@@ -221,6 +221,52 @@ async function main() {
   const run8 = await run(ROOT_UID, mexico("2026-11-25T21:30:00"));
   assert.equal((await db.collection("clients").where("rootId", "==", ROOT_UID).get()).size, clientsBefore, "running again creates nothing"); checks++;
   assert.equal(created(run8), 0); checks++;
+
+  // A dispersion made directly in IQ is created in PAY0 with its original date, its beneficiary and its account, and debits the client's balance.
+  const CLABE_OK = "002580701012614311";
+  const dispersionRow = (id, over) => ({ id, created_at: "2026-11-25T10:00:00", total_to_disperse: 1250, currency: "MXN", operation_status: "TERMINADA", conciliation_status: "SIN CONCILIAR", dispersion_type: "Transferencia",
+    sale_percentage: "0.0%", client: "CLIENTE ENLACE SA", beneficiary_name: "BENEFICIARIO NUEVO SA", partner: "ELIUT", account: "CLABE: " + CLABE_OK, bank_name: "BANAMEX", ...over });
+  await db.doc("users/" + ROOT_UID).set({ userNumber: 1 }, { merge: true });
+  await db.doc("clients/pay0-link-client").set({ clientNumber: 7 }, { merge: true });
+  await db.doc("balanceAccounts/CLIENT_pay0-link-client").set({ rootId: ROOT_UID, holderType: "CLIENT", holderId: "pay0-link-client", availableBalance: 5000 });
+  await db.doc("clientDispersions/pay0-native-900").set({ rootId: ROOT_UID, clientId: "pay0-link-client", clienteId: "pay0-link-client", amount: 900, folio: "D900", createdAt: new Date("2026-11-25T15:00:00Z"), status: "REGISTRADA" });
+  IQ.ELIUT["/dispersions"].push(
+    dispersionRow("701"),
+    dispersionRow("702", { total_to_disperse: 300, created_at: "2026-11-25T11:00:00" }),                       // same beneficiary and account as 701
+    dispersionRow("703", { client: "CLIENTE QUE NO EXISTE SA" }),                                              // client not in PAY0
+    dispersionRow("704", { operation_status: "EN OPERACION" }),                                                // not finished
+    dispersionRow("705", { total_to_disperse: 900, beneficiary_name: "OTRO BENEFICIARIO", account: "CLABE: 661610005732587353", bank_name: "KLAR" }), // looks like PAY0's own dispersion
+    dispersionRow("706", { account: "CLABE: 002580701012614312" }),                                            // wrong check digit
+  );
+  const typeBefore = (await db.doc("operationTypes/TRANSFERENCIA").get()).exists;
+  const run9 = await run(ROOT_UID, mexico("2026-11-25T22:00:00"));
+  assert.equal(run9.status, "COMPLETE", JSON.stringify(run9)); checks++;
+  const principal = (await db.collection("clientDispersions").where("iqDispersionId", "==", "701").get()).docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  assert.equal(principal.length, 1); const d701 = principal[0]; checks++;
+  assert.equal(d701.folio, "DIQP701"); assert.equal(d701.amount, 1250); assert.equal(d701.clientChargeAmount, 0); assert.equal(d701.totalClientDebitAmount, 1250); assert.equal(d701.clientId, "pay0-link-client"); checks += 5;
+  assert.equal(d701.createdAt.toDate().toISOString().slice(0, 10), "2026-11-25", "original IQ date, not today"); checks++;
+  assert.equal(d701.iqGenerationStatus, "IQ_GENERADA"); assert.equal(d701.source, "IQ_IMPORT"); assert.equal(d701.forwardOnlyVersion, undefined, "no reservation flow"); assert.equal(d701.reservationStatus, undefined); checks += 4;
+  assert.equal(d701.operationTypeKey, "TRANSFERENCIA"); assert.equal(d701.destinationKind, "CLABE"); assert.equal(d701.clabe, CLABE_OK); assert.equal(d701.bankName, "BANAMEX"); checks += 4;
+  assert.equal((await db.doc("balanceAccounts/CLIENT_pay0-link-client").get()).data().availableBalance, 5000 - 1250 - 300, "the client's balance is debited by both dispersions");
+  checks++;
+  const movement = (await db.doc("balanceMovements/" + d701.principalMovementId).get()).data();
+  assert.equal(movement.direction, "OUT"); assert.equal(movement.amount, 1250); assert.equal(movement.movementType, "DISPERSION_REGISTRADA"); assert.equal(movement.createdAt.toDate().toISOString().slice(0, 10), "2026-11-25"); checks += 4;
+  assert.equal((await db.collection("balanceMovements").where("dispersionId", "==", d701.id).get()).size, 1, "no commission movement when IQ charged 0%"); checks++;
+  const beneficiaries = (await db.collection("clientBeneficiaries").where("clientId", "==", "pay0-link-client").get()).docs.filter((doc) => doc.get("nombre") === "BENEFICIARIO NUEVO SA");
+  assert.equal(beneficiaries.length, 1, "one beneficiary for both dispersions"); assert.equal(beneficiaries[0].get("methodCount"), 1); assert.match(beneficiaries[0].get("folio"), /^B/); checks += 3;
+  const methods = (await db.collection("clientBeneficiaryMethods").where("clientId", "==", "pay0-link-client").get()).docs.filter((doc) => doc.get("clabe") === CLABE_OK);
+  assert.equal(methods.length, 1, "one account for both dispersions"); assert.equal(methods[0].get("destinationKind"), "CLABE"); assert.equal(methods[0].get("active"), true); checks += 3;
+  assert.equal(typeBefore || (await db.doc("operationTypes/TRANSFERENCIA").get()).get("category") === "DISPERSION", true, "the dispersion type exists, created when it was missing"); checks++;
+  assert.equal((await db.collection("clientDispersions").where("iqDispersionId", "==", "702").get()).size, 1); checks++;
+  for (const id of ["703", "704", "705", "706"]) assert.equal((await db.collection("clientDispersions").where("iqDispersionId", "==", id).get()).size, 0, "not created: " + id);
+  checks += 4;
+  const openDispersions = Object.fromEntries((await db.collection("iqDailySyncReviews").where("rootId", "==", ROOT_UID).where("status", "==", "OPEN").get()).docs.filter((doc) => doc.get("entityType") === "DISPERSION").map((doc) => [doc.get("iqEntityId"), doc.get("code")]));
+  assert.equal(openDispersions["703"], "DISPERSION_CLIENT_NOT_IDENTIFIED"); assert.equal(openDispersions["704"], "DISPERSION_NOT_FINISHED"); assert.equal(openDispersions["705"], "POSSIBLE_PAY0_DUPLICATE"); assert.equal(openDispersions["706"], "DISPERSION_ACCOUNT_UNREADABLE"); checks += 4;
+  assert.equal(openDispersions["701"], undefined); assert.equal(openDispersions["702"], undefined); checks += 2;
+  const run10 = await run(ROOT_UID, mexico("2026-11-25T22:30:00"));
+  assert.equal(run10.groups.reduce((sum, group) => sum + (group.dispersionsImported || 0), 0), 0, "a second run creates nothing"); checks++;
+  assert.equal((await db.doc("balanceAccounts/CLIENT_pay0-link-client").get()).data().availableBalance, 3450, "and the balance does not move again"); checks++;
+  assert.equal((await db.collection("clientDispersions").where("iqDispersionId", "==", "701").get()).size, 1); checks++;
 
   // Breaker: three IQ 503 runs open the circuit; the next run is not admitted and does not read IQ.
   await db.doc(`iqOperationalAssignmentPolicies/${ROOT_B}`).set({ activeVersion: "none" });
