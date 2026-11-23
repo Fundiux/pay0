@@ -3,7 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
 import { normalizePersonalCommissionAccount } from "./personalAccounts";
-import { encryptCommissionInstrument } from "./instrumentEncryption";
+import { encryptCommissionInstrument, fingerprintCommissionInstrument } from "./instrumentEncryption";
 import { defineSecret } from "firebase-functions/params";
 const ACCOUNT_KEY = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
 
@@ -75,13 +75,14 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
   const keyBase64 = ACCOUNT_KEY.value();
   if (!keyBase64) throw new HttpsError("failed-precondition", "Cifrado de cuentas no configurado.");
   const collection = db.collection("personalCommissionAccounts");
-  const accountRef = collection.doc();
+  const fingerprint = fingerprintCommissionInstrument({ number: account.instrumentNumber, instrumentType: account.instrumentType, rootId: actor.rootId, ownerUid: actor.uid, keyBase64 });
+  const accountRef = collection.doc(fingerprint);
   const encryptedInstrument = encryptCommissionInstrument({ number: account.instrumentNumber, rootId: actor.rootId, ownerUid: actor.uid, accountId: accountRef.id, keyBase64, keyVersion: "v1" });
   const last4 = account.instrumentNumber.slice(-4);
   await db.runTransaction(async tx => {
     const existing = await tx.get(collection.where("rootId", "==", actor.rootId).where("ownerUid", "==", actor.uid).limit(50));
     if (existing.size >= 50) throw new HttpsError("resource-exhausted", "Límite de 50 cuentas.");
-    if (existing.docs.some(doc => doc.data().last4 === last4 && doc.data().instrumentType === account.instrumentType && doc.data().active !== false)) {
+    if (existing.docs.some(doc => doc.id === fingerprint)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     }
     tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
