@@ -696,6 +696,10 @@
     {
       "commit": "037f8b27",
       "capability": "Pantalla para encender la simulacion de respuestas de Hugo"
+    },
+    {
+      "commit": "9a580004",
+      "capability": "Hugo contesta en el grupo interno solo si lo mencionan y nombra a quien subio una solicitud sin grupo"
     }
   ],
   "requiredText": [
