@@ -133,6 +133,22 @@ const method = { rootId, clientId, clienteId: clientId, beneficiaryId: methodId,
   const preflight = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
   assert.equal(preflight.status, "READY_FOR_EXECUTION");
   assert.equal(preflight.executionAllowed, false);
+  // A verified-looking IQ account must never bypass the client and instrument
+  // boundaries if an existing mirror is edited or accidentally relinked.
+  const methodRef = db.doc("clientBeneficiaryMethods/" + methodId);
+  await methodRef.update({ sourceType: "OTHER" });
+  const wrongSource = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
+  assert.equal(wrongSource.status, "BLOCKED");
+  assert.ok(wrongSource.legs.some(leg => leg.preflightReasons.includes("PERSONAL_IQ_DESTINATION_CHANGED")));
+  await methodRef.update({ sourceType: "PERSONAL_COMMISSION" });
+  const beneficiaryRef = db.doc("clientBeneficiaries/" + methodId);
+  await beneficiaryRef.update({ clientId: "another-client" });
+  const wrongClient = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
+  assert.equal(wrongClient.status, "BLOCKED");
+  assert.ok(wrongClient.legs.some(leg => leg.preflightReasons.includes("PERSONAL_IQ_DESTINATION_CHANGED")));
+  await beneficiaryRef.update({ clientId });
+  const recovered = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
+  assert.equal(recovered.status, "READY_FOR_EXECUTION");
   await db.doc("personalCommissionAccounts/" + accountId).update({ active: false });
   const blocked = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
   assert.equal(blocked.status, "BLOCKED");
