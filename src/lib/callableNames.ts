@@ -50,6 +50,7 @@ export const CALLABLES = {
   getMaterialityDashboard: "getMaterialityDashboard",
   updateUserActive: "updateUserActive",
   updateUserModules: "updateUserModules",
+  getUserPermissionCeiling: "getUserPermissionCeiling",
   softDeleteUser: "softDeleteUser",
   restoreUser: "restoreUser",
   getUserClientAccessConfig: "getUserClientAccessConfig",

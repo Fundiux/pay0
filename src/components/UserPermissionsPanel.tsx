@@ -6,8 +6,8 @@ import { db } from "@/lib/firebaseClient";
 import { listCompanies } from "@/services/companies";
 import { setUserCompanies, watchDispatchCompanyAccess } from "@/services/access";
 import { setUserDespachos, watchUserDespachos } from "@/services/despachosAccess";
-import { normalizeRole, isSuperAdmin, isAdmin, getDefaultModulesForRole, mergeModules } from "@/lib/roles";
-import { saveUserModules } from "@/services/users";
+import { normalizeRole, isSuperAdmin, isAdmin, mergeModules } from "@/lib/roles";
+import { getUserPermissionCeiling, saveUserModules, type UserPermissionCeiling } from "@/services/users";
 
 type Props = {
   meUid: string;
@@ -22,6 +22,24 @@ type CompanyLite = { id: string; nombre: string; despachoId?: string };
 type ModulesShape = Record<string, Record<string, boolean>>;
 
 const H4_D82_A3_A6_A0_HUMAN_NAMES = true;
+
+// Solo se envian los permisos asignables; lo oculto conserva su valor guardado.
+function pickAssignable(selected: ModulesShape, assignable: ModulesShape): ModulesShape {
+  const result: ModulesShape = {};
+  Object.entries(assignable).forEach(([moduleKey, actions]) => {
+    Object.entries(actions || {}).forEach(([actionKey, allowed]) => {
+      if (allowed !== true) return;
+      result[moduleKey] = { ...(result[moduleKey] || {}), [actionKey]: selected?.[moduleKey]?.[actionKey] === true };
+    });
+  });
+  return result;
+}
+
+function droppedPermissionsText(result: any): string {
+  const dropped: string[] = Array.isArray(result?.dropped) ? result.dropped : [];
+  if (!dropped.length) return "";
+  return ` No se aplicaron porque el usuario responsable no los tiene: ${dropped.map((item) => item.replace(".", ": ")).join(", ")}.`;
+}
 
 function rawPermissionError(error: any) {
   return String(
@@ -53,6 +71,7 @@ export default function UserPermissionsPanel({
 
   const [selectedModules, setSelectedModules] = useState<ModulesShape>({});
   const [selectedSystems, setSelectedSystems] = useState({ assets: false });
+  const [ceiling, setCeiling] = useState<UserPermissionCeiling | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -80,6 +99,23 @@ export default function UserPermissionsPanel({
         setMsg(`No pude leer el usuario: ${e?.code || e?.message || e}`);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
+  }, [targetUid]);
+
+  useEffect(() => {
+    let alive = true;
+    setCeiling(null);
+
+    getUserPermissionCeiling(targetUid)
+      .then((result) => {
+        if (alive) setCeiling(result);
+      })
+      .catch(() => {
+        if (alive) setMsg("No se pudieron cargar los permisos que puedes asignar.");
+      });
 
     return () => {
       alive = false;
@@ -199,9 +235,17 @@ export default function UserPermissionsPanel({
     );
   };
 
-  const roleCeiling = useMemo(
-    () => getDefaultModulesForRole(targetProfile?.role),
-    [targetProfile?.role]
+  // Lo asignable lo calcula el servidor: techo del rol y, para operadores, lo que su padre tiene.
+  const assignable: ModulesShape = useMemo(() => ceiling?.assignable || {}, [ceiling]);
+  const visibleModules = useMemo(
+    () =>
+      Object.entries(assignable)
+        .map(([moduleKey, actions]) => [
+          moduleKey,
+          Object.keys(actions || {}).filter((actionKey) => actions[actionKey] === true),
+        ] as [string, string[]])
+        .filter(([, actionKeys]) => actionKeys.length > 0),
+    [assignable]
   );
 
   useEffect(() => {
@@ -389,6 +433,11 @@ export default function UserPermissionsPanel({
     setLoading(true);
 
     try {
+      if (!ceiling) {
+        setMsg("Espera a que carguen los permisos que puedes asignar.");
+        return;
+      }
+
       if (isSuper) {
         try {
           await setUserDespachos(targetUid, selectedDespachoIds, meUid);
@@ -424,10 +473,11 @@ export default function UserPermissionsPanel({
           return;
         }
 
+        let modulesResult: any = null;
         try {
-          await saveUserModules(
+          modulesResult = await saveUserModules(
             targetUid,
-            mergeModules(targetProfile?.role, selectedModules),
+            pickAssignable(selectedModules, assignable),
             selectedSystems,
           );
         } catch (e: any) {
@@ -438,7 +488,7 @@ export default function UserPermissionsPanel({
           return;
         }
 
-        setMsg(`Permisos guardados para ${targetUserLabel}.`);
+        setMsg(`Permisos guardados para ${targetUserLabel}.${droppedPermissionsText(modulesResult)}`);
         return;
       }
 
@@ -455,11 +505,11 @@ export default function UserPermissionsPanel({
             .map(([companyId]) => companyId);
 
           await setUserCompanies(targetUid, selectedCompanyIds, meUid);
-          await saveUserModules(
+          const modulesResult = await saveUserModules(
             targetUid,
-            mergeModules(targetProfile?.role, selectedModules)
+            pickAssignable(selectedModules, assignable)
           );
-          setMsg(`Permisos guardados para ${targetUserLabel}.`);
+          setMsg(`Permisos guardados para ${targetUserLabel}.${droppedPermissionsText(modulesResult)}`);
         } catch (e: any) {
           setMsg(
             `No se pudieron guardar los permisos de ${targetUserLabel}: ` +
@@ -543,21 +593,32 @@ export default function UserPermissionsPanel({
       <div className="mt-5">
         <div className="text-slate-100 font-semibold">Módulos</div>
 
+        {ceiling?.inherited && (
+          <p className="mt-1 text-xs text-slate-400">
+            {ceiling.parentResolved
+              ? `Solo se muestran los permisos que tiene ${ceiling.parentName || "el usuario responsable"}. Si los pierde, este operador también los pierde.`
+              : "No se pudo validar al usuario responsable de este operador; no es posible asignarle permisos."}
+          </p>
+        )}
+
         <div className="mt-3 grid gap-3">
-          {Object.entries(selectedModules).map(([moduleKey, actions]) => (
+          {!ceiling && <div className="text-slate-400 text-sm">Cargando permisos...</div>}
+          {ceiling && visibleModules.length === 0 && (
+            <div className="text-slate-400 text-sm">No hay permisos que puedas asignar a este usuario.</div>
+          )}
+          {visibleModules.map(([moduleKey, actionKeys]) => (
             <div key={moduleKey} className="rounded-xl bg-white/5 border border-white/10 p-3">
               <div className="text-slate-100 font-semibold capitalize mb-3">{moduleKey}</div>
 
               <div className="flex flex-wrap gap-3">
-                {Object.entries(actions).map(([actionKey, enabled]) => (
+                {actionKeys.map((actionKey) => (
                   <label
                     key={`${moduleKey}.${actionKey}`}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/20 border border-white/10"
                   >
                     <input
                       type="checkbox"
-                      checked={!!enabled}
-                      disabled={roleCeiling?.[moduleKey]?.[actionKey] !== true}
+                      checked={selectedModules?.[moduleKey]?.[actionKey] === true}
                       onChange={() => toggleModule(moduleKey, actionKey)}
                     />
                     <span className="text-slate-200 text-sm">{actionKey}</span>
@@ -572,7 +633,7 @@ export default function UserPermissionsPanel({
       <div className="mt-4 flex items-center gap-3">
         <button
           onClick={save}
-          disabled={loading}
+          disabled={loading || !ceiling}
           className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 text-slate-100 font-semibold disabled:opacity-60"
         >
           {loading ? "Guardando..." : "Guardar"}
