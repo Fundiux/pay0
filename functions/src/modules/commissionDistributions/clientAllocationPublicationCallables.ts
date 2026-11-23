@@ -57,6 +57,19 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
     if (!Array.isArray(instructions) || instructions.length === 0 || instructions.length > 50) {
       throw new HttpsError("failed-precondition", "Borrador sin instrucciones válidas.");
     }
+    const prior = previous.data();
+    if (prior?.rootId === actor.rootId && prior.clientId === clientId &&
+        prior.ownerUid === ownerUid && prior.status === "CONFIGURED" &&
+        prior.executionEnabled === false && prior.draftVersion === expectedDraftVersion &&
+        prior.sourcePaymentId === paymentId &&
+        JSON.stringify(prior.instructions || []) === JSON.stringify(instructions)) {
+      return {
+        ok: true, idempotent: true, version: Number(prior.version || 0),
+        status: "CONFIGURED", executionEnabled: false,
+        distributedMinor: Number(prior.referenceDistributedMinor || 0),
+        remainingMinor: Number(prior.referenceRemainingMinor || 0),
+      };
+    }
     const accountIds = [...new Set(instructions.map(row => safeId(row.accountId)))];
     const financialSnapshotId = safeId(payment.financialSnapshotId);
     const [snapshotSnap, ...accountSnaps] = await Promise.all([
