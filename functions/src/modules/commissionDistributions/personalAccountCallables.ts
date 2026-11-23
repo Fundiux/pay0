@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
@@ -33,17 +34,33 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
   } catch {
     throw new HttpsError("permission-denied", "No tienes autorización para consultar estas cuentas.");
   }
+  const clientId = purpose === "CLIENT_COSTS" ? cleanId(request.data?.clientId) : null;
+  if (clientId) {
+    const client = await db.doc(`clients/${clientId}`).get();
+    if (!client.exists || client.data()?.rootId !== actor.rootId) {
+      throw new HttpsError("permission-denied", "Cliente fuera de alcance.");
+    }
+  }
   const snapshot = await db.collection("personalCommissionAccounts")
     .where("rootId", "==", actor.rootId).where("ownerUid", "==", ownerUid).limit(50).get();
-  const accounts = snapshot.docs.map(doc => {
+  const now = Date.now();
+  const accounts = await Promise.all(snapshot.docs.map(async doc => {
     const data = doc.data();
+    const linkId = clientId ? createHash("sha256").update(JSON.stringify([actor.rootId, clientId, ownerUid, doc.id])).digest("hex") : null;
+    const link = linkId ? (await db.doc(`personalCommissionIqLinks/${linkId}`).get()).data() : null;
+    const verifiedAt = link?.verifiedAt?.toMillis?.() || 0;
+    const valid = clientId && link?.rootId === actor.rootId && link?.clientId === clientId &&
+      link?.ownerUid === ownerUid && link?.accountId === doc.id && link?.iqLinkStatus === "VERIFIED" &&
+      link?.accountFingerprint === data.instrumentFingerprint && link?.last4 === data.last4 &&
+      data.active === true && verifiedAt > 0 && now - verifiedAt <= 86400000 &&
+      !!link?.iqBeneficiaryId && !!link?.iqAccountId && !!link?.iqCredentialProfileId;
     return {
       id: doc.id, bankName: String(data.bankName || ""), beneficiaryName: String(data.beneficiaryName || ""),
       instrumentType: data.instrumentType === "CARD" ? "CARD" : "CLABE",
       instrumentNumber: "••" + String(data.last4 || "").slice(-4),
-      active: data.active === true, iqLinkStatus: String(data.iqLinkStatus || "PENDING"),
+      active: data.active === true, iqLinkStatus: clientId ? (valid ? "VERIFIED" : "PENDING") : "BY_CLIENT",
     };
-  });
+  }));
   return { ok: true, ownerUid, accounts };
 });
 
