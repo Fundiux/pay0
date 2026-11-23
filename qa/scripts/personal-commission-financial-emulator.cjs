@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
 const { createHash } = require("node:crypto");
 const admin = require("../../functions/node_modules/firebase-admin");
 const ts = require("../../functions/node_modules/typescript");
@@ -19,17 +18,16 @@ function load(name, dependencies = {}) {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
   }).outputText;
   const sandboxModule = { exports: {} };
-  vm.runInNewContext(code, {
-    module: sandboxModule, exports: sandboxModule.exports,
-    require: spec => {
-      if (spec === "firebase-admin") return admin;
-      if (spec === "node:crypto") return require("node:crypto");
-      if (!(spec in dependencies)) throw new Error("Unmocked module dependency: " + name + ": " + spec);
-      return dependencies[spec];
-    },
-    Date, Intl, BigInt, Number, String, JSON, Map, Set, Array, Boolean, Error, Promise, Object,
-    console,
-  }, { filename: name + ".js" });
+  // Firestore transactions require a Promise from the same Node realm.
+  // A vm.runInNewContext async callback creates a foreign-realm Promise and
+  // is rejected by @google-cloud/firestore, even when its logic is correct.
+  const loader = new Function("module", "exports", "require", code);
+  loader(sandboxModule, sandboxModule.exports, spec => {
+    if (spec === "firebase-admin") return admin;
+    if (spec === "node:crypto") return require("node:crypto");
+    if (!(spec in dependencies)) throw new Error("Unmocked module dependency: " + name + ": " + spec);
+    return dependencies[spec];
+  });
   return sandboxModule.exports;
 }
 const domain = load("domain", { "../pagos/domain": { normalizePagoStatus: value => String(value || "") } });
