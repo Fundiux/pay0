@@ -716,6 +716,10 @@
     {
       "commit": "3cc85928",
       "capability": "Conector de Hugo con version fijada de WhatsApp Web y salida para relanzar si falla el arranque"
+    },
+    {
+      "commit": "4bc79357",
+      "capability": "El QR pendiente de Hugo se mantiene visible en la pagina WhatsApp hasta escanearlo"
     }
   ],
   "requiredText": [
