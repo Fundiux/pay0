@@ -197,6 +197,31 @@ async function main() {
   const parentAgain = (await imported("solicitudes")).find((row) => row.originalIqEntityId === "7103");
   assert.equal(parentAgain.totalAbonado, 500, "parent balance is not moved twice"); checks++;
 
+  // A PAY0 client with the same RFC and owner as an IQ client is linked to it, and its deposit is brought in with the original date.
+  IQ.ELIUT["/clients"].push({ id: "502", name: "CLIENTE ENLACE SA", rfc: "CEN010101AAA", status: "ACTIVO" });
+  IQ.ELIUT["/deposits"].push(financial({ id: "8104", client: "CLIENTE ENLACE SA", voucher: "V-8104", deposit_date: "2026-11-25", conciliation_status: "CONCILIADO", sum: 300, created_at: "2026-11-25T10:00:00" }));
+  await db.doc("clients/pay0-link-client").set({ rootId: ROOT_UID, name: "CLIENTE ENLACE SA", rfc: "CEN010101AAA", adminId: ROOT_UID, source: "PAY0", active: true, createdAt: new Date("2026-01-15T10:00:00Z") });
+  // A look-alike owned by someone else must stay untouched: same RFC as another IQ client, other owner.
+  IQ.ELIUT["/clients"].push({ id: "503", name: "CLIENTE AJENO SA", rfc: "CAJ010101AAA", status: "ACTIVO" });
+  await db.doc("clients/pay0-other-owner").set({ rootId: ROOT_UID, name: "CLIENTE AJENO SA", rfc: "CAJ010101AAA", adminId: BETELL_UID, source: "PAY0", active: true });
+  const clientsBefore = (await db.collection("clients").where("rootId", "==", ROOT_UID).get()).size;
+  const run7 = await run(ROOT_UID, mexico("2026-11-25T21:00:00"));
+  assert.equal(run7.status, "COMPLETE", JSON.stringify(run7)); checks++;
+  const linkedClient = (await db.doc("clients/pay0-link-client").get()).data();
+  assert.equal(linkedClient.iqClientId, "502"); assert.equal(linkedClient.iqLink.clientId, "502"); assert.equal(linkedClient.iqLink.status, "LINKED"); assert.equal(linkedClient.iqLink.source, "RFC_EXACT_DAILY_SYNC"); checks += 4;
+  assert.equal(linkedClient.source, "PAY0", "the client is not rewritten as an import"); assert.equal(linkedClient.name, "CLIENTE ENLACE SA"); checks += 2;
+  assert.equal((await db.collection("clients").where("rootId", "==", ROOT_UID).get()).size, clientsBefore, "no second client was created for the same company"); checks++;
+  const linkedDeposit = (await imported("pagos")).find((row) => row.originalIqEntityId === "8104");
+  assert.ok(linkedDeposit, "the deposit of the linked client was brought in"); assert.equal(linkedDeposit.clientId, "pay0-link-client"); checks += 2;
+  assert.equal(String(linkedDeposit.createdAt?.toDate?.().toISOString?.() || "").slice(0, 10), "2026-11-25", "original IQ date, not today"); checks++;
+  const otherOwner = (await db.doc("clients/pay0-other-owner").get()).data();
+  assert.equal(otherOwner.iqClientId, undefined, "a client of another owner is never linked"); checks++;
+  const activity = (await db.collection("pay0ActivityLog").where("referenceId", "==", "pay0-link-client").get()).docs.map((doc) => doc.data());
+  assert.ok(activity.some((row) => row.event === "CLIENT_IQ_LINK"), "the link is recorded in the activity log"); checks++;
+  const run8 = await run(ROOT_UID, mexico("2026-11-25T21:30:00"));
+  assert.equal((await db.collection("clients").where("rootId", "==", ROOT_UID).get()).size, clientsBefore, "running again creates nothing"); checks++;
+  assert.equal(created(run8), 0); checks++;
+
   // Breaker: three IQ 503 runs open the circuit; the next run is not admitted and does not read IQ.
   await db.doc(`iqOperationalAssignmentPolicies/${ROOT_B}`).set({ activeVersion: "none" });
   failing.add(ROOT_B);

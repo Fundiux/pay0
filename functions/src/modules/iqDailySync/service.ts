@@ -12,6 +12,7 @@ import { buildServerPlan, P4_PLAN_GROUPS } from "../iqHistoricalImport/planner";
 import { executeAction, markDailySyncManifest, persistDailySyncManifest, type Context } from "../iqHistoricalImport/service";
 import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, widenWindowForOpenReviews, type DailyReview } from "./domain";
 import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDisplay";
+import { applyClientLinks, linkPatchForPlan, planClientLinks } from "./clientLinks";
 import { detectIqDispersions } from "./dispersions";
 
 /**
@@ -47,7 +48,7 @@ type Counts = Record<string, number>;
 type GroupResult = {
   groupId: string; status: "COMPLETE" | "PARTIAL" | "FAILED"; stopReason: string | null; layers: number;
   created: Counts; noop: number; failed: number; reviewsOpen: number; reviewsNew: number; reviewsResolved: number;
-  dispersionsObserved: number; dispersionsMissing: number;
+  dispersionsObserved: number; dispersionsMissing: number; clientsLinked?: number;
 };
 export type RootResult = { rootId: string; status: string; window: { start: string; end: string } | null; groups: GroupResult[]; safety: string };
 type Tracker = { started: number; writes: number; errors: number; budget: DailySyncBudget };
@@ -156,6 +157,18 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     const planningBudget: DiscoveryBudget = { maxPages: tracker.budget.maxPlanningPages, maxRecords: tracker.budget.maxPlanningRecords, maxFirestoreReads: tracker.budget.maxFirestoreReads, maxDurationMs: remainingMs(tracker) };
     const discovered = await discoverServerPlan({ rootId: ctx.rootId, groupIds: [groupId], range: window, secret, budget: planningBudget });
     if (discovered.partial) { result.status = "PARTIAL"; result.stopReason = "PLAN_BUDGET"; finalManifest = null; break; }
+    // A PAY0 client with the same RFC and owner as an IQ client is the same company: link it so the plan finds it
+    // (instead of a review that nobody can close) and its operations can follow.
+    const links = planClientLinks({ groupId, iqRows: discovered.iqRows, pay0Rows: discovered.pay0Rows });
+    if (links.length) {
+      const linked = await applyClientLinks(db(), ctx.rootId, links);
+      tracker.writes += linked.length; result.clientsLinked = (result.clientsLinked || 0) + linked.length;
+      for (const link of linked) {
+        const row = discovered.pay0Rows.find(candidate => candidate.collection === "clients" && candidate.id === link.pay0ClientId);
+        if (row) row.data = { ...row.data, ...linkPatchForPlan(link) };
+      }
+      if (linked.length) console.log("IQ_DAILY_SYNC_CLIENTS_LINKED", JSON.stringify({ groupId, linked: linked.length }));
+    }
     for (const row of discovered.iqRows) displayIndex.set(`${row.kind}:${row.id}`, displayFromIqRow(row.kind, row.raw));
     const { manifest, summary } = buildServerPlan({ rootId: ctx.rootId, range: window, groupIds: [groupId], iqRows: discovered.iqRows, pay0Rows: discovered.pay0Rows, tombstones: discovered.tombstones });
     const safe = applyDailySyncSafety(manifest, discovered.pay0Rows);
