@@ -227,7 +227,13 @@ export async function preflightPersonalEarningDistribution(
       maxAgeMs: MAX_IQ_AGE_MS, storedLast4: iq?.last4, currentLast4: account?.last4,
     });
     if (!link.ready || account?.active !== true || account?.rootId !== distribution.rootId ||
-        account?.ownerUid !== distribution.ownerUid || iq?.iqFullDigitsMatched !== true || iq?.accountFingerprint !== account?.instrumentFingerprint ||
+        account?.ownerUid !== distribution.ownerUid || !account?.instrumentFingerprint ||
+        // Never let a reverified bank number (even with identical last four digits)
+        // reuse the old reserved leg or client mirror without republication.
+        account.instrumentFingerprint !== leg.instrumentFingerprint ||
+        account.instrumentFingerprint !== method?.personalAccountFingerprint ||
+        account.last4 !== leg.instrumentLast4 ||
+        iq?.iqFullDigitsMatched !== true || iq?.accountFingerprint !== account.instrumentFingerprint ||
         iq?.rootId !== distribution.rootId || iq?.clientId !== distribution.clientId ||
         iq?.ownerUid !== distribution.ownerUid || iq?.accountId !== leg.accountId ||
         text(iq?.iqClientId) !== clientIqId || text(iq?.iqBeneficiaryId) !== text(leg.iqBeneficiaryId) ||

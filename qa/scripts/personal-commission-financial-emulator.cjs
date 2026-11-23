@@ -149,7 +149,20 @@ const method = { rootId, clientId, clienteId: clientId, beneficiaryId: methodId,
   await beneficiaryRef.update({ clientId });
   const recovered = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
   assert.equal(recovered.status, "READY_FOR_EXECUTION");
-  await db.doc("personalCommissionAccounts/" + accountId).update({ active: false });
+  // An IQ re-verification under a different full instrument with the same last4
+  // must not validate an older published leg or stale client mirror.
+  const accountRef = db.doc("personalCommissionAccounts/" + accountId);
+  const iqRef = db.doc("personalCommissionIqLinks/" + linkId(rootId, clientId, ownerUid, accountId));
+  await accountRef.update({ instrumentFingerprint: "rotated-qa-only" });
+  await iqRef.update({ accountFingerprint: "rotated-qa-only" });
+  const reverifiedDifferentAccount = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
+  assert.equal(reverifiedDifferentAccount.status, "BLOCKED");
+  assert.ok(reverifiedDifferentAccount.legs.some(leg => leg.preflightReasons.includes("PERSONAL_IQ_DESTINATION_CHANGED")));
+  await accountRef.update({ instrumentFingerprint: fingerprint });
+  await iqRef.update({ accountFingerprint: fingerprint });
+  const fingerprintRestored = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
+  assert.equal(fingerprintRestored.status, "READY_FOR_EXECUTION");
+  await accountRef.update({ active: false });
   const blocked = await service.preflightPersonalEarningDistribution(params.distributionId, actorUid, now);
   assert.equal(blocked.status, "BLOCKED");
   assert.ok(blocked.legs.some(leg => leg.preflightReasons.includes("PERSONAL_IQ_DESTINATION_CHANGED")));
