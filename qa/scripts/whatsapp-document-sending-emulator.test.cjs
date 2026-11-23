@@ -386,9 +386,9 @@ async function queueQuotation() {
     const day = mexicoDayStartMs(Date.now());
     const sourceOf = id => id + ':' + day;
     const groupA = '120363555000000101@g.us', groupB = '120363555000000102@g.us', groupS = '120363555000000103@g.us';
-    const adminA = run + '-admin-a', adminB = run + '-admin-b', adminC = run + '-admin-c', operatorA = run + '-operator-a';
+    const adminA = run + '-admin-a', adminB = run + '-admin-b', adminC = run + '-admin-c', operatorA = run + '-operator-a', operatorS = run + '-operator-s', operatorOld = run + '-operator-old';
     await setSwitch(true);
-    for (const [uid, role, extra] of [[adminA, 'admin', {}], [adminB, 'admin', {}], [adminC, 'admin', {}], [operatorA, 'operador', { adminId: adminA, parentRole: 'admin', parentUserId: adminA }]]) {
+    for (const [uid, role, extra] of [[adminA, 'admin', {}], [adminB, 'admin', {}], [adminC, 'admin', {}], [operatorA, 'operador', { parentRole: 'admin', parentUserId: adminA }], [operatorS, 'operador', { parentRole: 'superadmin', parentUserId: ownerUid }], [operatorOld, 'operador', { adminId: adminB }]]) {
       await db.doc('users/' + uid).set({ role, rootId, active: true, ...extra });
     }
     for (const [chatId, name] of [[groupA, 'Equipo A'], [groupB, 'Equipo B'], [groupS, 'Equipo superadmin']]) {
@@ -419,13 +419,20 @@ async function queueQuotation() {
     const cB = await client(run + '-c-b', adminB, 'Cliente De B');
     const cS = await client(run + '-c-s', ownerUid, 'Cliente Del Superadmin');
     const cOp = await client(run + '-c-op', operatorA, 'Cliente Del Operador');
+    const cOpS = await client(run + '-c-ops', operatorS, 'Cliente Del Operador Del Superadmin');
     const destinationOf = async id => (await jobsFor(sourceOf(id)))[0].targetDestinations.map(d => d.chatId);
-    for (const id of [cA, cB, cS, cOp]) assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: id }), 'NO_GROUP_ASSIGNED:RELEASED');
+    for (const id of [cA, cB, cS, cOp, cOpS]) assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: id }), 'NO_GROUP_ASSIGNED:RELEASED');
     assert.deepEqual(await destinationOf(cA), [groupA], 'admin A sees its client');
     assert.deepEqual(await destinationOf(cB), [groupB], 'admin B has a different group');
     assert.deepEqual(await destinationOf(cS), [groupS], 'the superadmin sees its own clients');
     assert.deepEqual(await destinationOf(cOp), [groupA], 'an operator resolves to the group of its admin');
-    for (const id of [cA, cB, cS, cOp]) assert.ok(!JSON.stringify((await jobsFor(sourceOf(id)))[0].targetDestinations).includes('@c.us'), 'never a private chat');
+    assert.deepEqual(await destinationOf(cOpS), [groupS], 'an operator of the superadmin resolves to the superadmin group');
+    for (const id of [cA, cB, cS, cOp, cOpS]) assert.ok(!JSON.stringify((await jobsFor(sourceOf(id)))[0].targetDestinations).includes('@c.us'), 'never a private chat');
+
+    // An operator that only has the older adminId field resolves to that admin.
+    const cOld = await client(run + '-c-old', operatorOld, 'Cliente Del Operador Antiguo');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cOld }), 'NO_GROUP_ASSIGNED:RELEASED');
+    assert.deepEqual(await destinationOf(cOld), [groupB]);
 
     // An admin without an internal group receives nothing.
     const cC = await client(run + '-c-c', adminC, 'Cliente De C');
