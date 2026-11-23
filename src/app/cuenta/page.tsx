@@ -6,6 +6,7 @@ import { changeMyPassword, reauthenticateCurrentUser } from "@/lib/auth";
 import { accountErrorMessage, normalizeAccountUsername } from "@/lib/accountValidation";
 import { setMyUsername } from "@/services/loginIdentity";
 import UserCommissionDestinations from "@/components/UserCommissionDestinations";
+import PersonalCommissionAccounts from "@/components/PersonalCommissionAccounts";
 
 const inputClass = "mt-1 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-sky-400";
 export default function AccountPage() {
@@ -40,7 +41,7 @@ export default function AccountPage() {
   return <main className="mx-auto max-w-2xl space-y-5 text-slate-100">
     <header><h1 className="text-2xl font-semibold">Mi cuenta</h1><p className="mt-2 text-sm text-slate-400">Administra tu acceso y tus destinos de comisión.</p></header>
     <nav className="flex gap-2" aria-label="Secciones de mi cuenta"><button type="button" aria-pressed={tab === "access"} onClick={() => setTab("access")} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Acceso y contraseña</button><button type="button" aria-pressed={tab === "commissions"} onClick={() => { setCurrentPassword(""); setNewPassword(""); setConfirmation(""); setTab("commissions"); }} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Tus destinos de comisión</button></nav>
-    {tab === "commissions" ? <UserCommissionDestinations /> : <form onSubmit={event => { event.preventDefault(); void submit("password"); }} className="space-y-5 rounded-2xl border border-white/10 bg-[#161d2b] p-5">
+    {tab === "commissions" ? <div className="space-y-5"><PersonalCommissionAccounts /><UserCommissionDestinations /></div> : <form onSubmit={event => { event.preventDefault(); void submit("password"); }} className="space-y-5 rounded-2xl border border-white/10 bg-[#161d2b] p-5">
       <fieldset disabled={busy} className="space-y-5 disabled:opacity-60">
         <label className="block text-sm">Contraseña actual<input className={inputClass} type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} required /></label>
         <section className="space-y-3 border-t border-white/10 pt-5">
