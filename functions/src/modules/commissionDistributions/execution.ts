@@ -31,6 +31,13 @@ export async function executeUserCommissionRequestCore(input: ExecutionInput, ex
   }
   const claimed = await db.runTransaction(async tx => {
     const current = await tx.get(ref);
+    // Read the preference in the same transaction that claims a daily payout.
+    // A concurrent preference change then conflicts rather than silently submitting.
+    if (current.data()?.source === "DAILY") {
+      const preferenceRef = db.doc(`commissionPayoutPreferences/${input.ownerUid}`);
+      const preference = await tx.get(preferenceRef);
+      if (resolveCommissionPayoutMode(preference.data()?.mode) !== "AUTOMATIC") throw new HttpsError("failed-precondition", "El participante desactivó el envío automático.");
+    }
     if (current.data()?.status !== "RESERVED_AWAITING_EXECUTION") return false;
     tx.update(ref, { status: "PROCESSING", executionStartedAt: timestamp(), executionActorUid: input.actorUid });
     for (const principalId of request.principalIds) tx.update(db.doc(`clientDispersions/${principalId}`), { commissionExecutionStatus: "PROCESSING" });
