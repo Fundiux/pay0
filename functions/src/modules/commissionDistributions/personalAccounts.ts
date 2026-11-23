@@ -28,3 +28,21 @@ export function canUsePersonalCommissionAccount(account: PersonalCommissionAccou
 export function maskPersonalCommissionInstrument(account: Pick<PersonalCommissionAccount, "instrumentNumber">) {
   return "••" + String(account.instrumentNumber || "").slice(-4);
 }
+
+/**
+ * Public projection: never return the full CLABE/card to profile or client UIs.
+ * Storage of full instruments requires a separate server-only encrypted vault.
+ */
+export function publicPersonalCommissionAccount(account: PersonalCommissionAccount) {
+  return {
+    id: account.id,
+    ownerUid: account.ownerUid,
+    rootId: account.rootId,
+    bankName: account.bankName,
+    beneficiaryName: account.beneficiaryName,
+    instrumentType: account.instrumentType,
+    instrumentMasked: maskPersonalCommissionInstrument(account),
+    active: account.active,
+    iqLinkStatus: account.iqLinkStatus,
+  };
+}
