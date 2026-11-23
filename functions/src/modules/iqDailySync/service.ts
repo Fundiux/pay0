@@ -14,7 +14,8 @@ import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate,
 import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDisplay";
 import { applyClientLinks, linkPatchForPlan, planClientLinks } from "./clientLinks";
 import { importIqDispersion } from "./dispersionImport";
-import { parseIqDispersion } from "./dispersionPlan";
+import { parseIqDispersion, resolveDispersionClient } from "./dispersionPlan";
+import { applyClientCreates, clientRowForPlan, planClientCreates, readIqClientCatalog } from "./clientCreate";
 import { postRecoveredPagoToWallet } from "./pagoPosting";
 import { isIqDailySyncImport } from "../iq/historicalImportGuard";
 import { detectIqDispersions } from "./dispersions";
@@ -54,7 +55,7 @@ type Counts = Record<string, number>;
 type GroupResult = {
   groupId: string; status: "COMPLETE" | "PARTIAL" | "FAILED"; stopReason: string | null; layers: number;
   created: Counts; noop: number; failed: number; reviewsOpen: number; reviewsNew: number; reviewsResolved: number;
-  dispersionsObserved: number; dispersionsMissing: number; clientsLinked?: number; dispersionsImported?: number; pagosPosted?: number;
+  dispersionsObserved: number; dispersionsMissing: number; clientsLinked?: number; clientsCreated?: number; dispersionsImported?: number; pagosPosted?: number;
 };
 export type RootResult = { rootId: string; status: string; window: { start: string; end: string } | null; groups: GroupResult[]; safety: string };
 type Tracker = { started: number; writes: number; errors: number; budget: DailySyncBudget };
@@ -248,6 +249,26 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     const brought = new Set<string>(), reasons = new Map<string, { code: string; detail: string }>();
     const importEnabled = lastPay0Rows.length > 0 && (await db().doc(`iqDailySyncState/${ctx.rootId}`).get()).get("dispersionImportEnabled") !== false;
     let imported = 0;
+    // A client IQ names that PAY0 does not have is created from IQ's own client record when its RFC is real and unique.
+    if (importEnabled && !exhausted(tracker) && (await db().doc(`iqDailySyncState/${ctx.rootId}`).get()).get("clientAutoCreateEnabled") !== false) {
+      const unknown = new Set<string>();
+      for (const row of missing) {
+        const parsed = parseIqDispersion(row.raw, groupId);
+        if (parsed.ok && resolveDispersionClient({ groupId, clientName: parsed.value.clientName, pay0Rows: lastPay0Rows }).ok === false) unknown.add(parsed.value.clientName);
+      }
+      if (unknown.size) {
+        try {
+          const catalog = await readIqClientCatalog({ rootId: ctx.rootId, groupId, secret });
+          const creates = planClientCreates({ rootId: ctx.rootId, groupId, names: [...unknown], catalog, pay0Rows: lastPay0Rows });
+          const made = await applyClientCreates(db(), ctx.rootId, creates);
+          tracker.writes += made.length; result.clientsCreated = made.length;
+          for (const create of made) lastPay0Rows.push(clientRowForPlan(ctx.rootId, create));
+          if (made.length) console.log("IQ_DAILY_SYNC_CLIENTS_CREATED", JSON.stringify({ groupId, created: made.length }));
+        } catch (error) {
+          console.error("IQ_DAILY_SYNC_CLIENT_CREATE_FAILED", JSON.stringify({ groupId, message: (error instanceof Error ? error.message : String(error)).slice(0, 160) }));
+        }
+      }
+    }
     for (const row of missing) {
       if (!importEnabled) break;
       if (imported >= MAX_DISPERSIONS_IMPORTED_PER_GROUP || exhausted(tracker)) break;
