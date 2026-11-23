@@ -175,8 +175,25 @@ async function checkPersonalPartialReservation(dispatchRef) {
   check(reserved.principalIds?.length === 2 && reserved.status === "RESERVED_AWAITING_EXECUTION",
         "canonical ledger reserves two personal destinations for a manual payout");
   const debit = withdrawalPreview.totalDebitMinor / 100;
-  check(Math.abs((await get(`balanceAccounts/USER_${root}`)).availableBalance -
-        (originalUser - debit)) < 0.001, "USER ledger debits the partial payout plus accepted fees only");
+  // The same superadmin who owns the USER wallet earns the canonical fee
+  // margin for these two dispersions. The ledger therefore posts the gross
+  // accepted debit AND the independently recorded earnings credit.
+  const postedPricing = await Promise.all(reserved.principalIds.map(async principalId => {
+    const financial = await get(`dispersionFinancialSnapshots/${principalId}`);
+    assert.equal(financial?.status, "POSTED", "each reserved principal posts canonical financials");
+    assert.equal(financial?.pricingSnapshot?.fundingSource?.holderType, "USER");
+    return financial.pricingSnapshot;
+  }));
+  const moneyMinor = value => Math.round(Number(value) * 100);
+  const postedDebitMinor = postedPricing.reduce((sum, pricing) =>
+    sum + moneyMinor(pricing.totalClientDebitAmount), 0);
+  const ownFeeMarginMinor = postedPricing.reduce((sum, pricing) =>
+    sum + moneyMinor(pricing.superadminEarningAmount), 0);
+  check(postedDebitMinor === withdrawalPreview.totalDebitMinor && ownFeeMarginMinor > 0,
+        "two canonical financial snapshots reconcile accepted debit and earned fee margin");
+  check(moneyMinor((await get(`balanceAccounts/USER_${root}`)).availableBalance) ===
+        moneyMinor(originalUser) - postedDebitMinor + ownFeeMarginMinor,
+        "USER ledger reserves only the partial payout and fees, net of its separately posted earnings");
   check(Math.abs((await dispatchRef.get()).data().availableBalance -
         (originalDispatch - debit)) < 0.001, "USER dispatch source is reserved without touching other funds");
   check((await get(`balanceAccounts/CLIENT_${client}`)).availableBalance === beforeClient,
