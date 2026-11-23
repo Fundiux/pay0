@@ -280,3 +280,5 @@ export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner"
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";
 
 export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount } from "./modules/commissionDistributions/personalAccountCallables";
+
+export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft } from "./modules/commissionDistributions/clientAllocationDraftCallables";
