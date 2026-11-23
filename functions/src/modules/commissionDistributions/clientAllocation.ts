@@ -23,7 +23,7 @@ function safeNonnegativeInteger(value: unknown, field: string): number {
 }
 function exactMinor(value: number, rateBps: number) {
   const numerator = BigInt(value) * BigInt(rateBps);
-  return { floor: Number(numerator / 10000n), residue: numerator % 10000n };
+  return { floor: Number(numerator / BigInt(10000)), residue: numerator % BigInt(10000) };
 }
 export function calculateClientCommissionInstructions(input: ClientCommissionCalculationInput) {
   const earnedMinor = safeNonnegativeInteger(input.earnedMinor, "earnedMinor");
@@ -52,8 +52,8 @@ export function calculateClientCommissionInstructions(input: ClientCommissionCal
   });
   const pointsTotal = rows.reduce((sum, row) => sum + (row.pointsBps || 0), 0);
   if (pointsTotal > 0 && (input.contractRateBps == null || pointsTotal > input.contractRateBps)) throw new Error("La suma de puntos supera la tasa contractual.");
-  const exactTotal = rows.reduce((sum, row) => sum + BigInt(row.amountMinor) * 10000n + row.residue, 0n);
-  const target = Number((exactTotal + 5000n) / 10000n);
+  const exactTotal = rows.reduce((sum, row) => sum + BigInt(row.amountMinor) * BigInt(10000) + row.residue, 0n);
+  const target = Number((exactTotal + BigInt(5000)) / BigInt(10000));
   if (!Number.isSafeInteger(target) || target > earnedMinor) throw new Error("La distribución supera la comisión ganada.");
   let remainingCents = target - rows.reduce((sum, row) => sum + row.amountMinor, 0);
   const ranked = rows.map((row, index) => ({ index, residue: row.residue })).sort((a, b) => a.residue === b.residue ? a.index - b.index : a.residue > b.residue ? -1 : 1);
