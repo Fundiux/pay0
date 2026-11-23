@@ -23,7 +23,7 @@ function money2(value: any) {
 }
 
 function currency(value: any) {
-  return money2(value).toLocaleString(undefined, {
+  return money2(value).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

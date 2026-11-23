@@ -112,7 +112,7 @@ function formatMoneyInput(value: any) {
 
   const hasDot = normalized.includes(".");
   const parts = normalized.split(".");
-  const integerPart = Number(parts[0] || 0).toLocaleString(undefined, {
+  const integerPart = Number(parts[0] || 0).toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
   const decimalPart = hasDot ? ((parts[1] || "") + "00").slice(0, 2) : "00";
