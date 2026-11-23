@@ -166,7 +166,8 @@ async function checkPersonalPartialReservation(dispatchRef) {
   check(withdrawalPreview.totalAmountMinor === 1700 && withdrawalPreview.totalDebitMinor >= 1700,
         "wallet preview prices only the partial distribution, not the full earned commission");
   const originalUser = (await get(`balanceAccounts/USER_${root}`)).availableBalance;
-  const originalDispatch = (await dispatchRef.get()).data().availableBalance;
+  const originalDispatchState = (await dispatchRef.get()).data();
+  const originalDispatch = originalDispatchState.availableBalance;
   const beforeClient = (await get(`balanceAccounts/CLIENT_${client}`)).availableBalance;
   const reserved = await requests.requestUserCommissionDispersionCore({
     rootId: root, paymentId, ownerUid: root, actorUid: root, source: "MANUAL",
@@ -194,8 +195,21 @@ async function checkPersonalPartialReservation(dispatchRef) {
   check(moneyMinor((await get(`balanceAccounts/USER_${root}`)).availableBalance) ===
         moneyMinor(originalUser) - postedDebitMinor + ownFeeMarginMinor,
         "USER ledger reserves only the partial payout and fees, net of its separately posted earnings");
-  check(Math.abs((await dispatchRef.get()).data().availableBalance -
-        (originalDispatch - debit)) < 0.001, "USER dispatch source is reserved without touching other funds");
+  // The forward-only account tracks the gross reservation separately from
+  // the dispatch-channel commission margin credited back to this same owner.
+  const principals = await Promise.all(reserved.principalIds.map(id => get(`clientDispersions/${id}`)));
+  const dispatchOwnEarningsMinor = principals.flatMap(row => row.forwardOnlyEarningAllocations || [])
+    .filter(row => row.ownerId === root && row.sourceClientId === client &&
+                   row.despachoId === dispatch && row.channel === "IQ")
+    .reduce((sum, row) => sum + moneyMinor(row.amount), 0);
+  const dispatchAfter = (await dispatchRef.get()).data();
+  check(dispatchOwnEarningsMinor === ownFeeMarginMinor,
+        "canonical and dispatch ledgers agree on the same owner's credited fee margin");
+  check(moneyMinor(dispatchAfter.availableBalance) ===
+        moneyMinor(originalDispatch) - postedDebitMinor + dispatchOwnEarningsMinor &&
+        moneyMinor(dispatchAfter.reservedBalance) ===
+        moneyMinor(originalDispatchState.reservedBalance || 0) + postedDebitMinor,
+        "USER dispatch account reserves gross partial debit and credits same-origin fee margin");
   check((await get(`balanceAccounts/CLIENT_${client}`)).availableBalance === beforeClient,
         "CLIENT ledger never funds a personal commission");
   const repeat = await requests.requestUserCommissionDispersionCore({
