@@ -65,6 +65,17 @@ export const saveClientCommissionAllocationDraft = onCall({ cors: true }, async 
       if (seen.has(key)) throw new HttpsError("invalid-argument", "Cuenta y modalidad duplicadas.");
       seen.add(key);
     }
+    // Never store an active configuration in the draft collection.
+    // A blank account/rate is permitted only while drafting.
+    for (const row of instructions) {
+      if (row.accountId && row.pointsBps != null && row.earningsPercentBps != null) {
+        throw new HttpsError("invalid-argument", "Una fila no puede usar ambas modalidades.");
+      }
+      if ((row.pointsBps != null && row.pointsBps === 0) ||
+          (row.earningsPercentBps != null && row.earningsPercentBps === 0)) {
+        throw new HttpsError("invalid-argument", "Las tasas definidas deben ser positivas.");
+      }
+    }
     const oldVersion = Number(previous.data()?.version || 0);
     if (request.data?.expectedVersion !== oldVersion) throw new HttpsError("aborted", "El borrador cambió. Recarga antes de guardar.");
     const nextVersion = oldVersion + 1;
