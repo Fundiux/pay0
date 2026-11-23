@@ -12,6 +12,7 @@ import { mexicoMonthKey } from "./metrics";
 import { runUnansweredAlerts } from "./unansweredRunner";
 import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
 import { refreshPlaybookProposals } from "./playbook";
+import { runReplySimulation } from "./simulationRunner";
 import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
 import { planGroupReplies, type InboundRow, type LastReply, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
@@ -159,6 +160,12 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     }).then(() => true).catch(() => false);
     if (wrote) await refreshPlaybookProposals(db, rootId, missed.chatId).catch(() => undefined);
   }
+
+  // Learning stage 3 (simulation only): drafts stored for the owner to review, never queued or sent. Errors never reach the real reply flow.
+  await runReplySimulation({
+    db, rootId, nowMs, messages, ownerByChat, groupNameByChat, operatorHashes, lookupByChat,
+    handledIds: new Set([...repliedIds, ...plan.map(item => item.messageId)]),
+  }).catch(error => console.error("WHATSAPP_REPLY_SIMULATION_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }));
 
   let queued = 0;
   for (const item of plan) {

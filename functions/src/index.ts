@@ -281,3 +281,4 @@ export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modu
 export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection, listWhatsAppAgentReplies } from "./modules/whatsappAutoReply/modeCallables";
 export { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } from "./modules/whatsappAutoReply/playbookCallables";
+export { setWhatsAppReplySimulation, getWhatsAppSimulatedReplies } from "./modules/whatsappAutoReply/simulationCallables";

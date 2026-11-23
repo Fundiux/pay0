@@ -67,9 +67,14 @@ export function proposeEntries(rootId: string, lessons: LessonRow[]): Proposal[]
  * Returns the problem in Spanish, or null when the text is acceptable.
  */
 export function validateGuidance(text: string): string | null {
+  return guardProblem(text, GUIDANCE_MIN, GUIDANCE_MAX);
+}
+
+/** The hard rules shared by the owner's guidance and by every drafted reply. */
+export function guardProblem(text: string, min: number, max: number): string | null {
   const value = String(text ?? "").replace(/\s+/g, " ").trim();
-  if (value.length < GUIDANCE_MIN) return "El texto es muy corto.";
-  if (value.length > GUIDANCE_MAX) return `El texto no puede pasar de ${GUIDANCE_MAX} caracteres.`;
+  if (value.length < min) return "El texto es muy corto.";
+  if (value.length > max) return `El texto no puede pasar de ${max} caracteres.`;
   if (/\d|\$|%|\b(pesos|mxn|usd|dolares|dólares)\b/i.test(value)) return "No se permiten cifras ni montos: los números a clientes se activarán cuando exista la calculadora.";
   if (/pay\s*-?\s*0|despacho|\biq\b|\bfolio\b/i.test(value)) return "No debe mencionar PAY0, despachos, IQ ni folios internos.";
   if (/(valid\w*|consult\w*|confirm\w*|autoriz\w*)\s+(con|ante)\s+(alguien|otra|otro|un tercero|terceros|proveedor|la empresa|el banco)|otra empresa|un tercero/i.test(value)) return "No debe decir que algo se valida o se consulta con alguien más.";
