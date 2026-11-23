@@ -1,6 +1,8 @@
 name: Personal commissions PR validation
 
 on:
+  push:
+    branches: ["feature/user-commission-accounts-client-allocation-20261123"]
   pull_request:
     paths:
       - ".github/workflows/commissions-pr-validation.yml"
