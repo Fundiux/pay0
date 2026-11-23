@@ -52,6 +52,13 @@ export const saveClientCommissionAllocationDraft = onCall({ cors: true }, async 
         throw new HttpsError("permission-denied", "Cuenta seleccionada fuera del usuario u organización.");
       }
     }
+    // Never allow a deactivated account to be newly referenced by a draft.
+    // Existing historical drafts remain readable, but cannot be resaved with revoked accounts.
+    for (const selected of selectedAccounts) {
+      if (selected.data()?.active !== true) {
+        throw new HttpsError("failed-precondition", "Una cuenta fue desactivada. Retírala del borrador.");
+      }
+    }
     // A draft may be incomplete, but complete rows must not contradict each other.
     const seen = new Set<string>();
     for (const row of instructions) {
