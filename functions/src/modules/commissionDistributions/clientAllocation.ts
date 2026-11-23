@@ -1,0 +1,55 @@
+/**
+ * Pure, side-effect-free calculator for client-specific commission payout instructions.
+ * This does not authorize a transfer or replace the legacy financial engine.
+ * Rates are integer basis points: 20 = 0.20 points or 0.20% of earnings.
+ */
+export type ClientCommissionInstruction = {
+  accountId: string;
+  pointsBps?: number | null;
+  earningsPercentBps?: number | null;
+};
+export type ClientCommissionCalculationInput = {
+  earnedMinor: number;
+  operationBaseMinor: number | null;
+  contractRateBps: number | null;
+  instructions: ClientCommissionInstruction[];
+};
+export type CalculatedClientCommissionInstruction = ClientCommissionInstruction & { amountMinor: number };
+
+function safeNonnegativeInteger(value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) throw new Error(`${field} debe ser entero no negativo.`);
+  return Number(value);
+}
+function roundRatio(value: number, rateBps: number): number {
+  const numerator = BigInt(value) * BigInt(rateBps);
+  return Number((numerator + 5000n) / 10000n);
+}
+export function calculateClientCommissionInstructions(input: ClientCommissionCalculationInput) {
+  const earnedMinor = safeNonnegativeInteger(input.earnedMinor, "earnedMinor");
+  if (!Array.isArray(input.instructions) || input.instructions.length > 50) throw new Error("Se admiten hasta 50 instrucciones.");
+  const accounts = new Set<string>();
+  const rows: CalculatedClientCommissionInstruction[] = input.instructions.map((row, index) => {
+    const accountId = String(row.accountId || "").trim();
+    if (!accountId) throw new Error(`Instrucción ${index + 1}: selecciona una cuenta.`);
+    const points = row.pointsBps != null;
+    const percent = row.earningsPercentBps != null;
+    if (points === percent) throw new Error("Cada fila debe utilizar Puntos o % de comisión, no ambos.");
+    const rate = safeNonnegativeInteger(points ? row.pointsBps : row.earningsPercentBps, "Tasa");
+    if (rate <= 0 || rate > 10000) throw new Error("La tasa debe ser mayor que cero y no exceder 100%.");
+    if (points) {
+      if (input.operationBaseMinor == null || input.contractRateBps == null) throw new Error("No hay base contractual comparable para calcular puntos.");
+      safeNonnegativeInteger(input.operationBaseMinor, "operationBaseMinor");
+      const contractRate = safeNonnegativeInteger(input.contractRateBps, "contractRateBps");
+      if (contractRate <= 0 || rate > contractRate) throw new Error("Los puntos exceden la tasa contractual.");
+    }
+    // Same account may have one row in each modality; duplicate same-modality rows are rejected.
+    const key = `${accountId}:${points ? "points" : "earnings"}`;
+    if (accounts.has(key)) throw new Error("Cuenta y modalidad duplicadas.");
+    accounts.add(key);
+    const amountMinor = roundRatio(points ? input.operationBaseMinor! : earnedMinor, rate);
+    return { accountId, ...(points ? { pointsBps: rate } : { earningsPercentBps: rate }), amountMinor };
+  });
+  const totalMinor = rows.reduce((sum, row) => sum + row.amountMinor, 0);
+  if (!Number.isSafeInteger(totalMinor) || totalMinor > earnedMinor) throw new Error("La distribución supera la comisión ganada.");
+  return { earnedMinor, distributedMinor: totalMinor, remainingMinor: earnedMinor - totalMinor, instructions: rows };
+}
