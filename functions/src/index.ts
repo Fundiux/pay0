@@ -88,6 +88,7 @@ export {
 } from "./modules/commissionDistributions/callables";
 export { onPaymentReadyForCommissionDistribution } from "./modules/commissionDistributions/triggers";
 export { getMyCommissionSettings, configureUserCommissionEntitlement, previewMyCommissionDestinations, saveMyCommissionDestinations } from "./modules/commissionDistributions/userDestinations";
+export { getMyCommissionPayoutMode, saveMyCommissionPayoutMode } from "./modules/commissionDistributions/payoutPreferenceCallables";
 export { requestUserCommissionDispersion, previewUserCommissionWithdrawal } from "./modules/commissionDistributions/requests";
 export { executeUserCommissionDispersion, cancelUserCommissionDispersion } from "./modules/commissionDistributions/execution";
 export { getCommissionAutomationConfig, saveCommissionAutomationConfig, runDailyUserCommissionPreflight, prepareDailyUserCommissions } from "./modules/commissionDistributions/daily";
