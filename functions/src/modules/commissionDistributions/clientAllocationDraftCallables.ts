@@ -68,7 +68,7 @@ export const getClientCommissionAllocationDraft = onCall({ cors: true }, async r
   const actor = await commissionAccountActor(request, true);
   const clientId = id(request.data?.clientId), ownerUid = id(request.data?.ownerUid);
   const [client, owner] = await Promise.all([db.doc(`clients/${clientId}`).get(), db.doc(`users/${ownerUid}`).get()]);
-  if (client.data()?.rootId !== actor.rootId || !owner.exists || String(owner.data()?.rootId || ownerUid) !== actor.rootId) {
+  if (client.data()?.rootId !== actor.rootId || !owner.exists || String(owner.data()?.rootId || ownerUid) !== actor.rootId || owner.data()?.active === false || owner.data()?.isActive === false || owner.data()?.isDeleted === true || owner.data()?.disabled === true) {
     throw new HttpsError("permission-denied", "Cliente o participante fuera de alcance.");
   }
   const doc = await db.doc(`clientCommissionAllocationDrafts/${commissionSettingsId(actor.rootId, clientId, ownerUid)}`).get();
