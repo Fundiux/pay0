@@ -29,14 +29,25 @@ export async function reserveUserCommissionWithdrawal(input: { distributionId: s
   return db.runTransaction(async tx => {
     const distributionRef = db.doc(`commissionDistributions/${input.distributionId}`), requestRef = db.doc(`commissionDispersionRequests/${input.distributionId}`);
     const [distributionSnap, requestSnap, ownerSnap] = await Promise.all([tx.get(distributionRef), tx.get(requestRef), tx.get(db.doc(`users/${input.ownerUid}`))]);
-    const previous = requestSnap.data();
-    if (previous?.principalIds?.length) {
-      if (input.dryRun) throw new HttpsError("failed-precondition", "Este pago ya tiene una solicitud; consulta Comisiones calculadas.");
-      return { ok: true, idempotent: true, requestId: requestRef.id, principalIds: previous.principalIds, status: previous.status };
-    }
     const distribution = distributionSnap.data(), owner = await withInheritedAuthority(ownerSnap.data(), input.ownerUid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
     if (!distribution || distribution.sourceType !== "USER_EARNINGS" || distribution.rootId !== input.rootId || distribution.ownerUid !== input.ownerUid || !owner || owner.active === false || owner.isActive === false || owner.isDeleted === true || text(owner.rootId || input.ownerUid) !== input.rootId) throw new HttpsError("permission-denied", "Comisión fuera de alcance o titular inactivo.");
     assertCommissionWithdrawalOwner(input.ownerUid, owner, input.rootId);
+    // A retry must never reveal a prior request or principal IDs before ownership
+    // of both the distribution AND the request is established.
+    const previous = requestSnap.data();
+    if (requestSnap.exists) {
+      if (!previous || previous.rootId !== input.rootId ||
+          previous.ownerUid !== input.ownerUid || previous.distributionId !== input.distributionId ||
+          previous.clientId !== distribution.clientId || previous.paymentId !== distribution.paymentId) {
+        throw new HttpsError("permission-denied", "Solicitud de retiro fuera de alcance.");
+      }
+      if (!Array.isArray(previous.principalIds) || previous.principalIds.length === 0 ||
+          previous.principalIds.some((id: unknown) => typeof id !== "string" || !id)) {
+        throw new HttpsError("failed-precondition", "Solicitud previa incompleta; requiere conciliación antes de reservar.");
+      }
+      if (input.dryRun) throw new HttpsError("failed-precondition", "Este pago ya tiene una solicitud; consulta Comisiones calculadas.");
+      return { ok: true, idempotent: true, requestId: requestRef.id, principalIds: previous.principalIds, status: previous.status };
+    }
     const clientId = text(distribution.clientId);
     const personal = distribution.distributionMode === "PERSONAL_MIXED";
     const configKey = commissionSettingsId(input.rootId, clientId, input.ownerUid);

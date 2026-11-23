@@ -218,6 +218,36 @@ async function checkPersonalPartialReservation(dispatchRef) {
   });
   check(repeat.idempotent && repeat.requestId === reserved.requestId,
         "second reserve request is idempotent and never charges twice");
+
+  // Ownership checks must happen before returning an idempotent replay, even
+  // when a previous reservation contains apparently valid principal IDs.
+  const foreignId = root + "-foreign-request";
+  await set("commissionDistributions/" + foreignId, { ...distribution, rootId: other, ownerUid: other });
+  await set("commissionDispersionRequests/" + foreignId, {
+    rootId: other, clientId: client, ownerUid: other, paymentId,
+    distributionId: foreignId, principalIds: ["FOREIGN-PRIVATE-ID"], status: "RESERVED_AWAITING_EXECUTION",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: foreignId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+  const requestScopeId = root + "-request-scope";
+  await set("commissionDistributions/" + requestScopeId, { ...distribution, rootId: root, ownerUid: root });
+  const requestScopeRef = db.doc("commissionDispersionRequests/" + requestScopeId);
+  await requestScopeRef.set({
+    rootId: other, clientId: client, ownerUid: other, paymentId,
+    distributionId: requestScopeId, principalIds: ["FOREIGN-PRIVATE-ID"], status: "RESERVED_AWAITING_EXECUTION",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: requestScopeId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+  await requestScopeRef.set({
+    rootId: root, clientId: client, ownerUid: root, paymentId,
+    distributionId: requestScopeId, principalIds: [], status: "UNKNOWN",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: requestScopeId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+
   await execution.cancelUserCommissionRequestCore({
     requestId: reserved.requestId, rootId: root, ownerUid: root, actorUid: root,
   });
