@@ -15,6 +15,7 @@ export type ClientCommissionCalculationInput = {
   instructions: ClientCommissionInstruction[];
 };
 export type CalculatedClientCommissionInstruction = ClientCommissionInstruction & { amountMinor: number };
+type CalculatedRowWithResidue = CalculatedClientCommissionInstruction & { residue: bigint };
 
 function safeNonnegativeInteger(value: unknown, field: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) throw new Error(`${field} debe ser entero no negativo.`);
@@ -28,7 +29,7 @@ export function calculateClientCommissionInstructions(input: ClientCommissionCal
   const earnedMinor = safeNonnegativeInteger(input.earnedMinor, "earnedMinor");
   if (!Array.isArray(input.instructions) || input.instructions.length > 50) throw new Error("Se admiten hasta 50 instrucciones.");
   const accounts = new Set<string>();
-  const rows: CalculatedClientCommissionInstruction[] = input.instructions.map((row, index) => {
+  const rows: CalculatedRowWithResidue[] = input.instructions.map((row, index) => {
     const accountId = String(row.accountId || "").trim();
     if (!accountId) throw new Error(`Instrucción ${index + 1}: selecciona una cuenta.`);
     const points = row.pointsBps != null;
