@@ -61,4 +61,4 @@ jobs:
           EOF
       - name: Auth and Functions callable E2E (demo project, no IQ access)
         run: |
-          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
+          timeout --signal=TERM --kill-after=15s 240s npx --yes firebase-tools@14.21.0 --debug emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
