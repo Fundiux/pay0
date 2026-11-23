@@ -20,7 +20,14 @@ import {
   type WhatsAppReplyMetricsBucket,
   type WhatsAppAgentObserversState,
   type WhatsAppReplyMode,
+  decideWhatsAppPlaybookEntry,
+  getWhatsAppAgentPlaybook,
+  listWhatsAppAgentReplies,
+  markWhatsAppReplyCorrection,
+  type WhatsAppAgentReply,
+  type WhatsAppCorrectionCategory,
   getWhatsAppAgentReplyMetrics,
+  type WhatsAppPlaybookEntry,
   setWhatsAppGroupAgentMode,
 } from "@/services/whatsappQr";
 
@@ -175,6 +182,126 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
   );
 }
 
+const PLAYBOOK_TITLES: Record<string, string> = {
+  "MISSED_QUESTION|STATUS_INQUIRY": "Preguntas de estatus sin respuesta",
+  "MISSED_QUESTION|QUESTION": "Preguntas sin respuesta",
+  "CORRECTION|WRONG_FACT": "Respuestas con datos incorrectos",
+  "CORRECTION|TONE": "Respuestas con tono que no gustó",
+  "CORRECTION|NOT_NEEDED": "Respuestas que no hacían falta",
+  "CORRECTION|TOO_LATE": "Respuestas tardías",
+  "CORRECTION|OTHER": "Respuestas corregidas por una persona",
+};
+const playbookTitle = (entry: WhatsAppPlaybookEntry) => PLAYBOOK_TITLES[`${entry.type}|${entry.type === "CORRECTION" ? entry.category : entry.kind}`] || "Aprendizaje del grupo";
+
+// What Hugo learned per group. Three cases of the same kind propose a rule; only the owner approves, and an approved one runs 3 days in simulation.
+function PlaybookEntryRow({ entry, onDecided }: { entry: WhatsAppPlaybookEntry; onDecided: () => Promise<void> }) {
+  const [guidance, setGuidance] = useState(entry.suggestedGuidance);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function decide(decision: "APPROVE" | "REJECT") {
+    setBusy(true); setError("");
+    try { await decideWhatsAppPlaybookEntry({ id: entry.id, decision, guidance }); await onDecided(); }
+    catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <li className="rounded-lg border border-slate-800 p-2 text-xs text-slate-300">
+      <p className="font-semibold text-slate-100">{entry.groupName || "Grupo"} · {playbookTitle(entry)} <span className="font-normal text-slate-500">({entry.evidenceCount} casos)</span></p>
+      {entry.examples.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-400">{entry.examples.map(text => <li key={text}>{text}</li>)}</ul>}
+      {entry.status === "PROPOSED" ? (
+        <div className="mt-2 space-y-1">
+          <textarea value={guidance} onChange={e => setGuidance(e.target.value)} maxLength={400} rows={3} aria-label="Indicación para Hugo en este grupo" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100" />
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={busy} onClick={() => void decide("APPROVE")} className="rounded-lg bg-emerald-600 px-2 py-1 text-white disabled:opacity-50">Aprobar (3 días en simulación)</button>
+            <button type="button" disabled={busy} onClick={() => void decide("REJECT")} className="rounded-lg bg-slate-700 px-2 py-1 text-white disabled:opacity-50">Rechazar</button>
+            {busy && <Loader2 size={14} className="animate-spin text-slate-400" />}
+          </div>
+          {error && <p className="text-rose-300">{error}</p>}
+        </div>
+      ) : (
+        <p className="mt-1 text-slate-400">{entry.status === "APPROVED" ? `Aprobado: ${entry.guidance}${entry.simulationEndsAtMs ? ` · simulación hasta ${new Date(entry.simulationEndsAtMs).toLocaleDateString("es-MX")}` : ""}` : "Rechazado"}</p>
+      )}
+    </li>
+  );
+}
+
+const CORRECTION_LABELS: Record<WhatsAppCorrectionCategory, string> = { WRONG_FACT: "Dato incorrecto", TONE: "Tono", NOT_NEEDED: "No hacía falta", TOO_LATE: "Llegó tarde", OTHER: "Otro" };
+
+// What Hugo sent in groups this month. The owner marks one as corrected (and why) or unmarks it; corrections feed the monthly measurement and the per-group learning.
+function ReplyRow({ reply, onChanged }: { reply: WhatsAppAgentReply; onChanged: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [category, setCategory] = useState<WhatsAppCorrectionCategory>("WRONG_FACT");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function save(corrected: boolean) {
+    setBusy(true); setError("");
+    try { await markWhatsAppReplyCorrection({ jobId: reply.id, corrected, ...(corrected ? { category, reason: reason.trim() } : {}) }); setEditing(false); setReason(""); await onChanged(); }
+    catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <li className="rounded-lg border border-slate-800 p-2 text-xs text-slate-300">
+      <p className="font-semibold text-slate-100">{reply.groupName || "Grupo"} <span className="font-normal text-slate-500">· {KIND_LABELS[reply.kind] || reply.kind} · {new Date(reply.atMs).toLocaleString("es-MX")}</span></p>
+      <p className="mt-1 text-slate-400">{reply.text || "(texto no disponible)"}</p>
+      {reply.humanCorrection ? (
+        <p className="mt-1 flex items-center gap-2 text-amber-300">Marcada como corregida <button type="button" disabled={busy} onClick={() => void save(false)} className="rounded bg-slate-700 px-2 py-0.5 text-white disabled:opacity-50">Quitar marca</button></p>
+      ) : editing ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <select value={category} onChange={e => setCategory(e.target.value as WhatsAppCorrectionCategory)} aria-label="Tipo de corrección" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100">
+            {(Object.keys(CORRECTION_LABELS) as WhatsAppCorrectionCategory[]).map(key => <option key={key} value={key}>{CORRECTION_LABELS[key]}</option>)}
+          </select>
+          <input value={reason} onChange={e => setReason(e.target.value)} maxLength={300} placeholder="Qué estuvo mal" aria-label="Motivo de la corrección" className="w-56 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100" />
+          <button type="button" disabled={busy || reason.trim().length < 3} onClick={() => void save(true)} className="rounded-lg bg-amber-600 px-2 py-1 text-white disabled:opacity-50">Guardar</button>
+          <button type="button" disabled={busy} onClick={() => setEditing(false)} className="px-1 text-slate-400">Cancelar</button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)} className="mt-1 rounded bg-slate-700 px-2 py-0.5 text-white">Marcar como corregida</button>
+      )}
+      {error && <p className="mt-1 text-rose-300">{error}</p>}
+    </li>
+  );
+}
+
+function RepliesBlock() {
+  const [open, setOpen] = useState(false);
+  const [replies, setReplies] = useState<WhatsAppAgentReply[] | null>(null);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { setReplies((await listWhatsAppAgentReplies()).replies); setError(""); }
+    catch (e: any) { setError(`No se pudo cargar: ${e?.message || e}`); }
+  };
+  useEffect(() => { if (open) void load(); }, [open]);
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Respuestas de Hugo</summary>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {replies && replies.length === 0 && <p className="mt-2 text-xs text-slate-500">Hugo todavía no ha respondido en grupos este mes.</p>}
+      {replies && replies.length > 0 && <ul className="mt-2 space-y-2">{replies.map(reply => <ReplyRow key={`${reply.id}:${reply.humanCorrection}`} reply={reply} onChanged={load} />)}</ul>}
+    </details>
+  );
+}
+
+function PlaybookBlock() {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState<WhatsAppPlaybookEntry[] | null>(null);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { setEntries((await getWhatsAppAgentPlaybook()).entries); setError(""); }
+    catch (e: any) { setError(`No se pudo cargar: ${e?.message || e}`); }
+  };
+  useEffect(() => { if (open) void load(); }, [open]);
+  const pending = entries?.filter(entry => entry.status === "PROPOSED").length ?? 0;
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Lo que Hugo aprende por grupo{pending > 0 ? ` (${pending} por revisar)` : ""}</summary>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {entries && entries.length === 0 && <p className="mt-2 text-xs text-slate-500">Todavía no hay propuestas: se crean cuando un grupo acumula 3 casos del mismo tipo.</p>}
+      {entries && entries.length > 0 && <ul className="mt-2 space-y-2">{entries.map(entry => <PlaybookEntryRow key={`${entry.id}:${entry.status}`} entry={entry} onDecided={load} />)}</ul>}
+    </details>
+  );
+}
+
 // Observador / Actuando for one agent in one group. Going back to Observador asks for the reason.
 function GroupModeControl({ agentId, agentName, config, onChanged }: { agentId: string; agentName: string; config: WhatsAppAgentObserversConfig; onChanged: () => Promise<void> }) {
   const acting = config.agentModes?.[agentId] === "ACTING";
@@ -281,6 +408,8 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
       <p className="mt-1 text-xs text-slate-500">Cada grupo observado debe tener su usuario: el agente solo usa información de ese usuario.</p>
       {agentId === "hugo" && <ReplySwitchBlock agentName={agentName} />}
       <ReplyMetricsBlock agentId={agentId} agentName={agentName} />
+      {agentId === "hugo" && <RepliesBlock />}
+      {agentId === "hugo" && <PlaybookBlock />}
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
 

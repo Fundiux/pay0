@@ -99,7 +99,7 @@ function logicalRows(input: PlannerInput): Logical[] {
 function operationalIdentity(item:Logical,logical:Logical[]){
   const direct=object(item.raw.__p4Responsibility);if(Object.keys(direct).length)return direct;
   if(item.kind!=="CLIENT")return direct;
-  const dependent=logical.find(candidate=>candidate.group.groupId===item.group.groupId&&candidate.kind!=="CLIENT"&&iqClientId(candidate.raw)===item.id&&Object.keys(object(candidate.raw.__p4Responsibility)).length);
+  const dependents=logical.filter(candidate=>candidate.group.groupId===item.group.groupId&&candidate.kind!=="CLIENT"&&iqClientId(candidate.raw)===item.id&&Object.keys(object(candidate.raw.__p4Responsibility)).length),dependent=dependents.find(candidate=>text(object(candidate.raw.__p4Responsibility).status)==="RESOLVED")||dependents[0];
   const inherited=object(dependent?.raw.__p4Responsibility);return Object.keys(inherited).length?{...inherited,associatedName:text(dependent?.raw.__p4AssociatedName)}:inherited;
 }
 

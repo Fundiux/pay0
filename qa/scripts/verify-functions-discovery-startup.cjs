@@ -28,7 +28,7 @@ const warmupTimeoutMs = 60_000;
 // documents callable, the Hugo team voice read and history callables, and the
 // five server-owned WhatsApp connector enrollment callables live since 2026-10-22.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 438; // main 427 + eleven personal-commission callables in PR #43. Keep synchronized with index exports. // 412 minus the five legacy WhatsApp callables removed, plus sendNewDispersionToIq, getClientWhatsAppGroups and assignWhatsAppGroupToClients, plus resolveWhatsAppUncertainDelivery, plus reconcileIqBalances and getIqBalanceComparison, plus setIqBeneficiaryCreateConfig, runIqDailyReverseSync, getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig and processWhatsAppGroupReplies, plus setWhatsAppInternalGroup and alertClientGroupOnSolicitud plus getRepCancellationImpact, confirmRepCancellation and advanceFacturamaCancellations, plus setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics and markWhatsAppReplyCorrection, plus getUserPermissionCeiling
+const expectedEndpointCount = 447; // 412 minus the five legacy WhatsApp callables removed, plus sendNewDispersionToIq, getClientWhatsAppGroups and assignWhatsAppGroupToClients, plus resolveWhatsAppUncertainDelivery, plus reconcileIqBalances and getIqBalanceComparison, plus setIqBeneficiaryCreateConfig, runIqDailyReverseSync, getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig and processWhatsAppGroupReplies, plus setWhatsAppInternalGroup and alertClientGroupOnSolicitud plus getRepCancellationImpact, confirmRepCancellation and advanceFacturamaCancellations, plus setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics and markWhatsAppReplyCorrection, plus getUserPermissionCeiling, plus listIqDailySyncReviews, plus adjustClientBalanceFromComparison, setIqBalanceAdjustmentsEnabled, getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry, listWhatsAppAgentReplies, setWhatsAppReplySimulation and getWhatsAppSimulatedReplies
 const requiredEndpoints = [
   "saveClientCallable",
   "mergeDuplicateClientCallable",
@@ -54,9 +54,7 @@ const requiredEndpoints = [
   "revalidateFacturamaFiscalDrafts",
   "getInvoicePaymentControl",
   "previewPaymentCommissionDistribution",
-  "listPersonalCommissionAccounts", "createPersonalCommissionAccount", "deactivatePersonalCommissionAccount", "revealPersonalCommissionAccountNumber",
-  "saveClientCommissionAllocationDraft", "getClientCommissionAllocationDraft", "previewPostedClientCommissionAllocation",
-  "resolvePersonalCommissionAccountIq", "publishClientCommissionAllocation", "getPublishedClientCommissionAllocation", "activateClientCommissionAllocation", "materializePostedClientCommissionAllocation",
+  "listPersonalCommissionAccounts", "createPersonalCommissionAccount", "deactivatePersonalCommissionAccount", "revealPersonalCommissionAccountNumber", "saveClientCommissionAllocationDraft", "getClientCommissionAllocationDraft", "previewPostedClientCommissionAllocation", "resolvePersonalCommissionAccountIq", "publishClientCommissionAllocation", "getPublishedClientCommissionAllocation", "activateClientCommissionAllocation", "materializePostedClientCommissionAllocation",
   "authorizeHugoVoiceGatewaySession",
   "loginWithUsername", "setMyUsername",
   "applyPaymentAutomaticallyOnReconciliation", "applyPaymentAutomaticallyOnReceipt",

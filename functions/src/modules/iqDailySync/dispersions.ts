@@ -3,6 +3,7 @@ import { loadIqCanonicalProfileById, openIqCanonicalSession } from "../iq/iqCano
 import { fetchIq } from "../iq/iqHttpClient";
 import { P4_PLAN_GROUPS } from "../iqHistoricalImport/planner";
 import { mexicoDate } from "./domain";
+import { displayFromIqDispersion, type ReviewDisplay } from "./reviewDisplay";
 
 /**
  * IQ dispersions created directly in IQ: DETECTION ONLY (owner rule: never duplicate; this pass does not create).
@@ -29,7 +30,7 @@ function localDate(value: unknown): string {
   const ms = Date.parse(raw); return Number.isFinite(ms) ? mexicoDate(new Date(ms)) : raw.slice(0, 10);
 }
 
-export type IqDispersionObservation = { iqDispersionId: string; profileId: string; date: string; amount: number | null; operationStatus: string; inPay0: boolean };
+export type IqDispersionObservation = { iqDispersionId: string; profileId: string; date: string; amount: number | null; operationStatus: string; inPay0: boolean; display: ReviewDisplay; raw: Record<string, unknown> };
 export type DispersionDetection = { observed: IqDispersionObservation[]; pages: number; truncated: boolean };
 
 export async function detectIqDispersions(input: { rootId: string; groupId: string; range: { start: string; end: string }; secret: string; maxPages?: number }): Promise<DispersionDetection> {
@@ -51,7 +52,7 @@ export async function detectIqDispersions(input: { rootId: string; groupId: stri
         const id = text(raw.id ?? raw.iq_id ?? raw.folio), date = localDate(raw.created_at ?? raw.createdAt ?? raw.date);
         if (!id || !date || date < input.range.start || date > input.range.end || seen.has(id)) continue;
         const amount = Number(raw.total_to_disperse ?? raw.amount ?? raw.sum);
-        seen.set(id, { iqDispersionId: id, profileId, date, amount: Number.isFinite(amount) ? amount : null, operationStatus: text(raw.operation_status ?? raw.status).toUpperCase(), inPay0: false });
+        seen.set(id, { iqDispersionId: id, profileId, date, amount: Number.isFinite(amount) ? amount : null, operationStatus: text(raw.operation_status ?? raw.status).toUpperCase(), inPay0: false, display: displayFromIqDispersion(raw), raw });
       }
       if (rows.length < 100) break;
     }

@@ -48,6 +48,21 @@ export function dailyWindow(now: Date, lastCompletedDate?: string | null): { sta
   return { start, end: today, timezone: DAILY_SYNC_TIMEZONE };
 }
 
+/** How far back an open review is re-read. Beyond this, a review waits for the person (or the historical import). */
+export const DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS = 10;
+
+/**
+ * Reviews are only re-evaluated while their day is inside the window, so a review of an operation from three days ago
+ * would stay open for ever even after the cause is fixed. The window reaches back to the oldest open review, at most
+ * DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS before today. It never moves forward and never changes which day counts as completed.
+ */
+export function widenWindowForOpenReviews(window: { start: string; end: string; timezone: typeof DAILY_SYNC_TIMEZONE }, oldestOpenReviewDate: string | null | undefined, now: Date) {
+  if (!oldestOpenReviewDate || !/^\d{4}-\d{2}-\d{2}$/.test(oldestOpenReviewDate)) return window;
+  const floor = addDays(mexicoDate(now), -DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS);
+  const wanted = oldestOpenReviewDate < floor ? floor : oldestOpenReviewDate;
+  return wanted < window.start ? { ...window, start: wanted } : window;
+}
+
 export const DAILY_EXECUTABLE_OPERATIONS = new Set(["CREATE_HISTORICAL", "DEPENDENCY_IMPORT"]);
 const REVIEW_OPERATIONS = new Set(["CANONICAL_DEPENDENCY_PENDING", "REVIEW_REQUIRED", "CLIENT_REVIEW_REQUIRED", "FINANCIAL_RECONCILIATION_REVIEW", "HISTORICAL_DATE_REVIEW_REQUIRED"]);
 const STRONG_IQ_FIELDS: Record<Exclude<P4EntityType, "CLIENT">, string[]> = {
@@ -162,13 +177,19 @@ export function applyDailySyncSafety(manifest: P4Manifest, pay0Rows: Pay0PlanRow
   return { manifest: rebuilt, converted };
 }
 
+const pickIdentity = (value: unknown) => {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return { status: text(row.status), iqUsername: text(row.iqUsername), associatedName: text(row.associatedName), canonicalIqGroupId: text(row.canonicalIqGroupId), reviewCode: text(row.reviewCode) };
+};
+
 /** Review items of a final manifest: every action the daily sync will not write and that is not already in PAY0. */
 export function reviewItems(manifest: P4Manifest): DailyReview[] {
   return manifest.actions.filter(action => REVIEW_OPERATIONS.has(action.operation) || action.operation === "RECONCILE").map(action => {
     const daily = (action.matchingEvidence?.dailySync || {}) as Record<string, unknown>;
     const code = text(daily.code) || text(action.reason).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 80) || action.operation;
     return { entityType: action.entityType, iqEntityId: action.iqEntityId, canonicalGroupId: action.canonicalGroupId, code, detail: text(action.reason).slice(0, 200),
-      evidence: { operation: action.operation, ...(Object.keys(daily).length ? { dailySync: daily } : {}), reviewReasons: action.canonicalEvidence?.reviewReasons || [] } };
+      evidence: { operation: action.operation, ...(Object.keys(daily).length ? { dailySync: daily } : {}), reviewReasons: action.canonicalEvidence?.reviewReasons || [],
+        ...(action.matchingEvidence?.operationalIdentity ? { operationalIdentity: pickIdentity(action.matchingEvidence.operationalIdentity) } : {}) } };
   });
 }
 

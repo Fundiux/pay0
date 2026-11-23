@@ -56,6 +56,8 @@ type ClaimedDelivery = {
   kind: "FILES" | "TEXT";
   caption: string;
   text: string | null;
+  /** Inbound message whose author the connector mentions (greetings in client groups). No number is ever stored or sent. */
+  mentionMessageId: string | null;
   documents: Array<{ fileName: string; contentType: string; storagePath: string; uploadId: string | null }>;
 };
 
@@ -171,6 +173,7 @@ export class WhatsAppDocumentSender {
           kind,
           caption: clean(job.caption, 1000) || `${deliverySource(sourceType).label}.`,
           text: kind === "TEXT" ? String(job.textBody || "").slice(0, 1500) : null,
+          mentionMessageId: kind === "TEXT" && sourceType === "GRUPO_RESPUESTA" ? clean(job.mentionInboundMessageId, 200) || null : null,
           documents: kind === "FILES" ? (Array.isArray(job.documents) ? job.documents : []).map((doc: any) => ({
             fileName: clean(doc.fileName || doc.name, 200) || "documento.pdf",
             contentType: clean(doc.contentType, 120) || "application/octet-stream",
@@ -211,7 +214,7 @@ export class WhatsAppDocumentSender {
     if (!delivery) return { delivery: null, reason: claim.reason || "NOTHING_TO_SEND" };
     if (delivery.kind === "TEXT") {
       return { delivery: { jobId: delivery.jobId, deliveryId: delivery.deliveryId, leaseId: delivery.leaseId, leaseExpiresAtMs: delivery.leaseExpiresAtMs,
-        chatId: delivery.chatId, kind: "TEXT", text: delivery.text, caption: null, documents: [] } };
+        chatId: delivery.chatId, kind: "TEXT", text: delivery.text, caption: null, documents: [], mention: delivery.mentionMessageId ? { messageId: delivery.mentionMessageId } : null } };
     }
     const documents: Array<{ fileName: string; contentType: string; url: string }> = [];
     try {

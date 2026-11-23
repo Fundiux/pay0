@@ -217,6 +217,7 @@ export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationRecei
 export { syncIqBeneficiaryCatalog } from "./modules/beneficiaries/iqCatalogSync";
 export { reconcileIqBalances } from "./modules/iqBalanceReconciliation/service";
 export { getIqBalanceComparison } from "./modules/iqBalanceReconciliation/callables";
+export { adjustClientBalanceFromComparison, setIqBalanceAdjustmentsEnabled } from "./modules/iqBalanceReconciliation/adjustment";
 export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger";
 export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
 export { getClientWhatsAppGroups, assignWhatsAppGroupToClients, setWhatsAppInternalGroup } from "./modules/documentDelivery/clientWhatsappGroups";
@@ -255,6 +256,7 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { runIqDailyReverseSync } from "./modules/iqDailySync/service";
+export { listIqDailySyncReviews } from "./modules/iqDailySync/reviewsCallable";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";
@@ -277,7 +279,9 @@ export { listWhatsAppAgentChats } from "./modules/documentDelivery/whatsappAgent
 export { getUserOperatorNumbers, saveUserOperatorNumbers } from "./modules/operatorNumbers/callables";
 export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modules/whatsappAutoReply/callables";
 export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
-export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";
+export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection, listWhatsAppAgentReplies } from "./modules/whatsappAutoReply/modeCallables";
+export { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } from "./modules/whatsappAutoReply/playbookCallables";
+export { setWhatsAppReplySimulation, getWhatsAppSimulatedReplies } from "./modules/whatsappAutoReply/simulationCallables";
 
 export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount, revealPersonalCommissionAccountNumber } from "./modules/commissionDistributions/personalAccountCallables";
 export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";

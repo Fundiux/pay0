@@ -114,6 +114,8 @@ export const ACTIVITY_EVENT_CATALOG: Record<string, ActivityEventCatalogEntry> =
   ADELANTO_CORREGIDO: eventEntry("ADELANTO_CORREGIDO", "Adelanto corregido", "wallet", "financial", "warning"),
 
   AJUSTE_MANUAL_APLICADO: eventEntry("AJUSTE_MANUAL_APLICADO", "Ajuste manual aplicado", "wallet", "financial", "warning"),
+  AJUSTES_EXCEPCIONALES_ACTIVADOS: eventEntry("AJUSTES_EXCEPCIONALES_ACTIVADOS", "Ajustes excepcionales de saldo activados", "wallet", "config", "warning"),
+  AJUSTES_EXCEPCIONALES_DESACTIVADOS: eventEntry("AJUSTES_EXCEPCIONALES_DESACTIVADOS", "Ajustes excepcionales de saldo desactivados", "wallet", "config", "success"),
 
   DISPERSION_REGISTRADA: eventEntry("DISPERSION_REGISTRADA", "Dispersion registrada", "dispersiones", "financial", "success"),
   DISPERSION_INCIDENCIA_ABIERTA: eventEntry("DISPERSION_INCIDENCIA_ABIERTA", "Incidencia de dispersion abierta", "dispersiones", "business", "warning"),

@@ -9,6 +9,10 @@ import { AGENTS } from "../agentOperations/contract";
 import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
 import { agentCanAct, readAgentModes } from "./modes";
 import { mexicoMonthKey } from "./metrics";
+import { runUnansweredAlerts } from "./unansweredRunner";
+import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
+import { refreshPlaybookProposals } from "./playbook";
+import { runReplySimulation } from "./simulationRunner";
 import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
 import { planGroupReplies, type InboundRow, type LastReply, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
@@ -16,14 +20,13 @@ if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
-export const REPLY_AGENT_ID = "hugo";
+import { REPLY_AGENT_ID, LOOKBACK_MS, MAX_MESSAGES_PER_RUN } from "./constants";
+export { REPLY_AGENT_ID };
 export const REPLY_CONFIGS = "whatsappAgentReplyConfigs";
 const REPLY_STATE = "whatsappAgentReplyState";
 export const REPLY_METRICS = "whatsappAgentReplyMetrics";
 export const CONVERSATION_STATE = "whatsappAgentConversationState";
 const conversationStateId = (rootId: string, chatId: string) => `${rootId}__${REPLY_AGENT_ID}__${encodeURIComponent(chatId)}`;
-const LOOKBACK_MS = MAX_REPLY_AGE_MS + 5 * 60 * 1000;
-const MAX_MESSAGES_PER_RUN = 400;
 const BRAND_OR_INTERNAL = /pay\s*-?\s*0|despacho/i;
 
 const clean = (value: unknown, max = 200) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -44,6 +47,7 @@ export function buildReplyDelivery(rootId: string, groupName: string, ownerName:
     message: "respuesta en grupo", caption: plan.text, textBody: plan.text, status: "READY_FOR_SEND", releaseStatus: "RELEASED", origin: "AUTOMATIC",
     deliveryMode: "MULTI_TARGET", targetLabel: groupName || "Grupo", targetChatId: plan.chatId, targetChatName: groupName || "Grupo", targetChatType: "GROUP",
     targetDestinationsCount: 1, replyKind: plan.kind, releasedAtMs: nowMs,
+    ...(plan.mentionMessageId ? { mentionInboundMessageId: plan.mentionMessageId } : {}),
   };
   const delivery = {
     rootId, channel: "WHATSAPP", status: "PENDING_SEND", connectorId: "default", chatId: plan.chatId, chatName: groupName || "Grupo", chatType: "GROUP",
@@ -108,7 +112,7 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     .where("timestampMs", ">=", nowMs - LOOKBACK_MS).orderBy("timestampMs").limit(MAX_MESSAGES_PER_RUN).get();
   const messages: InboundRow[] = recent.docs.filter(doc => ownerByChat[clean(doc.get("chatId"), 200)]).map(doc => ({
     id: doc.id, chatId: clean(doc.get("chatId"), 200), authorHash: doc.get("authorHash") || null, fromMe: doc.get("fromMe") === true,
-    timestampMs: Number(doc.get("timestampMs")) || 0, type: clean(doc.get("type"), 40), body: String(doc.get("body") ?? ""),
+    timestampMs: Number(doc.get("timestampMs")) || 0, type: clean(doc.get("type"), 40), body: String(doc.get("body") ?? ""), waMessageId: clean(doc.get("messageId"), 200) || undefined,
   }));
   if (!messages.length) return { skipped: "NO_MESSAGES" as const, queued: 0 };
 
@@ -148,6 +152,21 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     lookupRequest: (_owner, subject, row) => lookupByChat[row.chatId]?.[subject] ?? "UNKNOWN",
     hasOpenSolicitud: ownerUserUid => Object.entries(ownerByChat).some(([chatId, owner]) => owner === ownerUserUid && lookupByChat[chatId]?.INVOICE === "FOUND"),
   });
+
+  // Learning (capture only): client questions in acting groups that nobody answered. Created once per message, never overwritten.
+  for (const missed of findMissedQuestions({ messages, ownerByChat, operatorHashes, repliedIds, nowMs, workingHours: config.workingHours ?? null })) {
+    const wrote = await db.doc(`${LESSONS}/${missedLessonId(rootId, missed.messageId)}`).create({
+      rootId, agentId: REPLY_AGENT_ID, chatId: missed.chatId, groupName: groupNameByChat[missed.chatId] || "", type: "MISSED_QUESTION",
+      kind: missed.kind, subject: missed.subject, phrase: missed.phrase, withinHours: missed.withinHours, monthKey: mexicoMonthKey(nowMs), createdAt: FieldValue.serverTimestamp(),
+    }).then(() => true).catch(() => false);
+    if (wrote) await refreshPlaybookProposals(db, rootId, missed.chatId).catch(() => undefined);
+  }
+
+  // Learning stage 3 (simulation only): drafts stored for the owner to review, never queued or sent. Errors never reach the real reply flow.
+  await runReplySimulation({
+    db, rootId, nowMs, messages, ownerByChat, groupNameByChat, operatorHashes, lookupByChat,
+    handledIds: new Set([...repliedIds, ...plan.map(item => item.messageId)]),
+  }).catch(error => console.error("WHATSAPP_REPLY_SIMULATION_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }));
 
   let queued = 0;
   for (const item of plan) {
@@ -194,6 +213,8 @@ export const processWhatsAppGroupReplies = onSchedule(
       if (!rootId || doc.id !== replyConfigId(rootId)) continue;
       try { await runGroupReplies(rootId); }
       catch (error) { console.error("WHATSAPP_GROUP_REPLY_RUN_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
+      try { await runUnansweredAlerts(rootId); }
+      catch (error) { console.error("WHATSAPP_UNANSWERED_RUN_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
     }
   },
 );

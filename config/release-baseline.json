@@ -636,6 +636,54 @@
     {
       "commit": "51dd0a03",
       "capability": "Cancel the original invoice only when every complement is cancelled and verified with its receipt"
+    },
+    {
+      "commit": "798d2cf4",
+      "capability": "Permisos de operador heredados del padre y recortados en el servidor"
+    },
+    {
+      "commit": "35135636",
+      "capability": "Editor de permisos muestra solo lo que tiene el padre del operador"
+    },
+    {
+      "commit": "da8e6cff",
+      "capability": "Pendientes de la sincronizacion diaria IQ legibles en /wallet/saldos-iq"
+    },
+    {
+      "commit": "9a4aae08",
+      "capability": "Let the owner review Hugo's group replies and mark one as corrected with a category and reason"
+    },
+    {
+      "commit": "08ff3c49",
+      "capability": "Simulate Hugo's free-text replies for approved playbooks: guarded drafts stored for owner review, never queued or sent"
+    },
+    {
+      "commit": "28cb204a",
+      "capability": "Propose per-group learning from three cases and let only the owner approve it, with validated guidance and a 3-day simulation window"
+    },
+    {
+      "commit": "73b46047",
+      "capability": "Add the exceptional balance adjustment that brings a client's PAY0 balance to IQ"
+    },
+    {
+      "commit": "0dbf5060",
+      "capability": "Tell the internal group about client questions nobody answered: first notice after 3 minutes, a reminder every 5 minutes until answered"
+    },
+    {
+      "commit": "b74b010c",
+      "capability": "Capture Hugo's learning material per group: unanswered client questions (masked) and the reason a person corrected a reply"
+    },
+    {
+      "commit": "290574f6",
+      "capability": "Link a PAY0 client to its IQ client by exact RFC in the daily sync"
+    },
+    {
+      "commit": "1d456d3e",
+      "capability": "Sincronizacion diaria crea en PAY0 dispersiones IQ terminadas con fecha original"
+    },
+    {
+      "commit": "c3f4ff5a",
+      "capability": "Saludo de Hugo con mencion al cliente sin guardar numeros"
     }
   ],
   "requiredText": [

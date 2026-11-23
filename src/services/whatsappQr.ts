@@ -192,6 +192,30 @@ export type WhatsAppReplyMetricsBucket = {
   avgResponseMs: number | null; aiTokens: number; returnsToObserver: number; returnReasons: string[]; actingChanges: number;
 };
 
+export type WhatsAppPlaybookEntry = {
+  id: string; chatId: string; groupName: string; type: string; kind: string; subject: string | null; category: string | null; status: "PROPOSED" | "APPROVED" | "REJECTED";
+  evidenceCount: number; examples: string[]; suggestedGuidance: string; guidance: string; simulationEndsAtMs: number | null;
+};
+
+export async function getWhatsAppAgentPlaybook() {
+  return (await httpsCallable<Record<string, never>, { ok: boolean; entries: WhatsAppPlaybookEntry[] }>(functions, "getWhatsAppAgentPlaybook")({})).data;
+}
+
+export async function decideWhatsAppPlaybookEntry(input: { id: string; decision: "APPROVE" | "REJECT"; guidance?: string }) {
+  return (await httpsCallable<typeof input, { ok: boolean; status: string; simulationEndsAtMs: number | null }>(functions, "decideWhatsAppPlaybookEntry")(input)).data;
+}
+
+export type WhatsAppAgentReply = { id: string; agentId: string; groupName: string; kind: string; subject: string | null; atMs: number; text: string; humanCorrection: boolean };
+export type WhatsAppCorrectionCategory = "WRONG_FACT" | "TONE" | "NOT_NEEDED" | "TOO_LATE" | "OTHER";
+
+export async function listWhatsAppAgentReplies(month?: string) {
+  return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; replies: WhatsAppAgentReply[] }>(functions, "listWhatsAppAgentReplies")({ month })).data;
+}
+
+export async function markWhatsAppReplyCorrection(input: { jobId: string; corrected: boolean; reason?: string; category?: WhatsAppCorrectionCategory }) {
+  return (await httpsCallable<typeof input, { ok: boolean; humanCorrection: boolean }>(functions, "markWhatsAppReplyCorrection")(input)).data;
+}
+
 export async function getWhatsAppAgentReplyMetrics(month?: string) {
   return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; truncated: boolean; buckets: WhatsAppReplyMetricsBucket[] }>(functions, "getWhatsAppAgentReplyMetrics")({ month })).data;
 }
