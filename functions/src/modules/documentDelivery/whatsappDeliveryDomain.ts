@@ -294,11 +294,16 @@ const AGENT_LABEL: Record<string, string> = { hugo: "Hugo", maria: "María", sof
 const agentNames = (ids: string[]) => ids.map((id) => AGENT_LABEL[id] || id).join(", ");
 
 /** Text of the internal notice, or null when the client's group is complete. */
-export function buildGroupAlertText(input: { clientName: unknown; check: GroupAgentCheck }): string | null {
+export function buildGroupAlertText(input: { clientName: unknown; check: GroupAgentCheck; userName?: unknown }): string | null {
   const name = clean(input.clientName, 120) || "Un cliente";
   const check = input.check;
   if (check.status === "OK") return null;
-  if (check.status === "NO_GROUP_ASSIGNED") return `Aviso: el cliente ${name} tiene una solicitud nueva y no tiene grupo de WhatsApp asignado. Asigna un grupo para poder enviarle sus documentos.`;
+  if (check.status === "NO_GROUP_ASSIGNED") {
+    // Named after whoever uploaded it, so the team knows right away whose movement it is.
+    const who = clean(input.userName, 120);
+    if (who) return `Aviso: el usuario ${who} subió una solicitud del cliente ${name}, pero no tengo acceso a un grupo de WhatsApp para ese cliente porque aún no tiene uno asignado. Asigna un grupo para poder avisarle y enviarle sus documentos.`;
+    return `Aviso: el cliente ${name} tiene una solicitud nueva y no tiene grupo de WhatsApp asignado. Asigna un grupo para poder enviarle sus documentos.`;
+  }
   const parts: string[] = [];
   if (check.missing.length) parts.push(`en el grupo del cliente ${name} falta${check.missing.length > 1 ? "n" : ""}: ${agentNames(check.missing)}. Agrégal${check.missing.length > 1 ? "os" : "o"} al grupo`);
   if (check.notConnected.length) parts.push(`${agentNames(check.notConnected)} no tiene${check.notConnected.length > 1 ? "n" : ""} una conexión activa de WhatsApp`);

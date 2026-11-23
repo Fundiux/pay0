@@ -60,6 +60,7 @@ export const OWNER_WORKING_HOURS: WorkingHours = {
 };
 export type AutoReplyConfig = { enabled?: boolean; humanWaitMs?: number; workingHours?: WorkingHours | null };
 export type ReplyKind = "GREETING" | "PROCESSING" | "VALIDATING" | "REQUEST_DATA";
+// Replies in the internal team group are kept apart in internalChatPlan.ts (INTERNAL_GREETING, INTERNAL_LIMITED).
 /** What the system lookup found for the client's request: FOUND, NOT_FOUND, or UNKNOWN when it could not be checked. */
 export type RequestLookup = "FOUND" | "NOT_FOUND" | "UNKNOWN";
 export type GroupMessage = { timestampMs: number; fromMe: boolean; authorIsOperator: boolean; type: string; body: string };

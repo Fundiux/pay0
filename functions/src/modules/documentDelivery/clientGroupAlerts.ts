@@ -14,7 +14,7 @@ const clean = (value: unknown, max = 200) => String(value ?? "").trim().replace(
  * are all in it. If not, Hugo reports it once per client, problem and day in the owner's internal group.
  * Returns what happened so it can be tested and logged.
  */
-export async function alertIfClientGroupIncomplete(input: { rootId: string; clienteId: string; nowMs?: number }): Promise<string> {
+export async function alertIfClientGroupIncomplete(input: { rootId: string; clienteId: string; nowMs?: number; solicitudId?: string; createdBy?: string }): Promise<string> {
   const { rootId, clienteId } = input;
   const nowMs = input.nowMs ?? Date.now();
   if (!rootId || !clienteId) return "NO_CLIENT";
@@ -45,7 +45,14 @@ export async function alertIfClientGroupIncomplete(input: { rootId: string; clie
   });
 
   const clientName = clean(clientSnap.get("name") || clientSnap.get("nombre") || clientSnap.get("razonSocial"), 120);
-  const text = buildGroupAlertText({ clientName, check });
+  // Who uploaded it: a user of this same root only. Anyone else (or nobody) falls back to the generic notice.
+  let userName = "";
+  const creatorId = clean(input.createdBy, 300);
+  if (creatorId && !/[\\/\x00-\x1f]/.test(creatorId) && check.status === "NO_GROUP_ASSIGNED") {
+    const creator = await db.doc(`users/${creatorId}`).get();
+    if (creator.exists && clean(creator.get("rootId") || creator.id) === rootId) userName = clean(creator.get("displayName") || creator.get("nombreUsuario") || creator.get("username"), 120);
+  }
+  const text = buildGroupAlertText({ clientName, check, userName });
   if (!text) return "COMPLETE";
 
   // One notice per client, problem and Mexico City day: the text is part of the job fingerprint, so a changed problem sends again.
@@ -53,7 +60,8 @@ export async function alertIfClientGroupIncomplete(input: { rootId: string; clie
   const result = await queueAutomaticClientDelivery({
     rootId,
     sourceType: "AVISO_GRUPO_INTERNO",
-    sourceId: `${clienteId}:${day}`,
+    // A solicitud without a group is told at once, one notice per solicitud; the other problems stay one per client and day.
+    sourceId: check.status === "NO_GROUP_ASSIGNED" && clean(input.solicitudId, 300) ? `${clienteId}:sin-grupo:${clean(input.solicitudId, 300)}` : `${clienteId}:${day}`,
     clienteId,
     clienteNombre: clientName || null,
     caption: "",
@@ -70,7 +78,7 @@ export const alertClientGroupOnSolicitud = onDocumentCreated(
     const rootId = clean(solicitud.rootId);
     const clienteId = clean(solicitud.clienteId ?? solicitud.clientId, 300);
     try {
-      await alertIfClientGroupIncomplete({ rootId, clienteId });
+      await alertIfClientGroupIncomplete({ rootId, clienteId, solicitudId: event.params.solicitudId, createdBy: clean(solicitud.createdBy ?? solicitud.userId, 300) });
     } catch (error) {
       console.error("CLIENT_GROUP_ALERT_FAILED", { rootId, clienteId, message: (error instanceof Error ? error.message : String(error)).slice(0, 200) });
     }

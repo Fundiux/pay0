@@ -17,7 +17,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // supervisor relaunches it. A pending QR waits for a person, so it never counts as stuck.
   let awaitingQr = false, notReadySince = null;
   // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
-  let observedChats = new Set();
+  let observedChats = new Set(), addressedOnly = new Set();
   const buffer = [];
   const timers = [];
   async function close(reason = "CONNECTOR_FAILED") {
@@ -42,6 +42,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     try {
       const response = await transport.operate("HEARTBEAT", { ready, poll: true });
       observedChats = new Set(Array.isArray(response.observedChats) ? response.observedChats.filter(chat => typeof chat === "string") : []);
+      addressedOnly = new Set(Array.isArray(response.addressedOnlyChats) ? response.addressedOnlyChats.filter(chat => typeof chat === "string") : []);
       const command = response.command;
       if (!command) return;
       if (command.type === "SYNC_CHATS") await synchronize(command.id);
@@ -83,8 +84,13 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       if (!chatId.endsWith("@g.us") || !observedChats.has(chatId) || !messageId || !Number.isSafeInteger(timestampMs) || timestampMs < 1) return;
       const type = String(message?.type || "chat").slice(0, 40), author = message?.author || (fromMe ? "" : message?.from);
       if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
+      // A WhatsApp mention of this very account. In the team's internal group nothing leaves the phone unless it addresses Hugo (his mention or his name).
+      const ownId = String(client?.info?.wid?._serialized || "");
+      const mentioned = Array.isArray(message?.mentionedIds) && ownId !== "" && message.mentionedIds.some(item => String(item?._serialized || item) === ownId);
+      const text = type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "";
+      if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return;
       buffer.push({ messageId, chatId, fromMe, timestampMs, type, ...(author ? { authorId: String(author).slice(0, 200) } : {}),
-        body: type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "" });
+        body: text, ...(mentioned ? { mentionsMe: true } : {}) });
     } catch { /* un mensaje ilegible nunca detiene el conector */ }
   });
   // Every minute: a ready client must still read its chats (a detached frame fails here),
