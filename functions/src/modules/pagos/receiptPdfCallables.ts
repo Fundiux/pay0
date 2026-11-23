@@ -414,7 +414,18 @@ function resolveReceiptDate(lines: string[], text: string): { raw: string; value
   const dates = candidates.map(parse);
   const calendarValid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
   const validDates = [...new Set(dates.filter(calendarValid))];
-  const verified = candidates.length > 0 && dates.every(calendarValid) && validDates.length === 1 && !(monthFirst && dayFirst);
+  // Captured/scheduled timestamps and unlabelled dates are useful evidence,
+  // but they do not prove the date of an executed bank operation.
+  // A generic numeric date like 01/02/2026 is ambiguous without an explicit
+  // day/month ordering; keep its parsed value visible without certifying it.
+  const ambiguousGeneric = !monthFirst && !dayFirst && generic.some(value =>
+    [...value.matchAll(/\\b(\\d{1,2})[-\\/](\\d{1,2})[-\\/](20\\d{2})\\b/g)]
+      .some(match => Number(match[1]) <= 12 && Number(match[2]) <= 12));
+  const operationDateLabeled = operation.length > 0;
+  const nonAmbiguousGenericDate = generic.length > 0 && !ambiguousGeneric;
+  const verified = candidates.length > 0 && dates.every(calendarValid) &&
+    validDates.length === 1 && !(monthFirst && dayFirst) &&
+    (operationDateLabeled || nonAmbiguousGenericDate);
   // Do not invent a date or choose between conflicting dates. The original
   // extraction remains visible for review when it cannot be resolved uniquely.
   return { raw: labelled[0] || candidates[0] || "", value: validDates.length === 1 ? validDates[0] : "", verified };
