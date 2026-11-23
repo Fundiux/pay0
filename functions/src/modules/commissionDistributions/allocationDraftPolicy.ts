@@ -37,13 +37,17 @@ export function validateClientAllocationDraft(
   if (!Array.isArray(draft.instructions) || draft.instructions.length > 50) throw new Error("Demasiadas filas.");
   if (draft.status === "DRAFT") return { canExecute: false as const, savedAsDraft: true as const };
   if (draft.status !== "ACTIVE" || draft.instructions.length === 0) throw new Error("No se puede activar una distribución vacía.");
+  const seen = new Set<string>();
   for (const row of draft.instructions) {
     const account = accounts.find(a => a.id === row.accountId);
     if (!account || account.rootId !== owner.rootId || account.ownerUid !== owner.ownerUid || !account.active || account.iqLinkStatus !== "VERIFIED") {
       throw new Error("Cada cuenta debe pertenecer al usuario, estar activa y verificada en IQ.");
     }
     const points = row.pointsBps != null, percent = row.earningsPercentBps != null;
-    if (points === percent || !Number.isSafeInteger(points ? row.pointsBps : row.earningsPercentBps) || Number(points ? row.pointsBps : row.earningsPercentBps) <= 0) {
+    const key = `${row.accountId}:${points ? "points" : "earnings"}`;
+    if (seen.has(key)) throw new Error("Cuenta y modalidad duplicadas.");
+    seen.add(key);
+    if (points === percent || !Number.isSafeInteger(points ? row.pointsBps : row.earningsPercentBps) || Number(points ? row.pointsBps : row.earningsPercentBps) <= 0 || Number(points ? row.pointsBps : row.earningsPercentBps) > 10000) {
       throw new Error("Completa exactamente una columna positiva por fila.");
     }
   }
