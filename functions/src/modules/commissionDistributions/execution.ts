@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { assertCommissionWithdrawalOwner, commissionAccountActor } from "./userDestinations";
+import { resolveCommissionPayoutMode } from "./payoutPreference";
 import { preflightCommissionDistribution } from "./service";
 import { reverseCanonicalDispersionFinancialsTx } from "../financing/dispersionFinancial";
 import { releaseForwardOnlyDispersionTx } from "../dispatchBalances/forwardOnly";
@@ -23,6 +24,11 @@ async function scopedRequest(input: ExecutionInput) {
 export async function executeUserCommissionRequestCore(input: ExecutionInput, executor?: CommissionExecutor) {
   const { ref, request } = await scopedRequest(input);
   if (["COMPLETED", "UNCERTAIN", "PROCESSING", "CANCELLED", "CANCELLING"].includes(request.status)) return { ok: true, idempotent: true, requestId: ref.id, status: request.status };
+  // Manual requests remain executable regardless of preference. Daily requests fail closed.
+  if (request.source === "DAILY") {
+    const preference = (await db.doc(`commissionPayoutPreferences/${input.ownerUid}`).get()).data();
+    if (resolveCommissionPayoutMode(preference?.mode) !== "AUTOMATIC") throw new HttpsError("failed-precondition", "El participante desactivó la dispersión automática; la reserva requiere revisión manual.");
+  }
   const claimed = await db.runTransaction(async tx => {
     const current = await tx.get(ref);
     if (current.data()?.status !== "RESERVED_AWAITING_EXECUTION") return false;
