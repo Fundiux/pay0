@@ -156,7 +156,7 @@ export const previewPostedClientCommissionAllocation = onCall({ cors: true }, as
   }
   const accountSnaps = await Promise.all(selectedIds.map(accountId =>
     db.doc(`personalCommissionAccounts/${accountId}`).get()));
-  const accounts = accountSnaps.map(accountSnap => {
+  const accounts: Array<Record<string, any> & { id: string }> = accountSnaps.map(accountSnap => {
     const data = accountSnap.data();
     if (!data || data.rootId !== actor.rootId || data.ownerUid !== ownerUid || data.active !== true) {
       throw new HttpsError("failed-precondition", "Una cuenta fue eliminada, desactivada o está fuera de alcance.");
