@@ -85,7 +85,7 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
   try {
     account = normalizePersonalCommissionAccount({
       ownerUid: actor.uid, rootId: actor.rootId,
-      bankName: request.data?.bankName, beneficiaryName: request.data?.beneficiaryName,
+      bankName: request.data?.bankName, bankCode: request.data?.bankCode, beneficiaryName: request.data?.beneficiaryName,
       instrumentType: request.data?.instrumentType, instrumentNumber: request.data?.instrumentNumber,
     });
   } catch (error: any) {
@@ -108,7 +108,7 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
     if (existing.docs.some(doc => doc.id === fingerprint)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     }
-    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, instrumentFingerprint: fingerprint, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, bankCode: account.bankCode, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, instrumentFingerprint: fingerprint, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: admin.firestore.FieldValue.serverTimestamp() });
   });
   return { ok: true, accountId: accountRef.id, iqLinkStatus: "PENDING" };
