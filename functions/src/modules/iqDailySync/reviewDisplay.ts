@@ -118,6 +118,18 @@ const REASONS: Record<string, string> = {
   DISPERSION_DATE_INVALID: "IQ no entregó una fecha legible.",
   DISPERSION_AMOUNT_INVALID: "IQ no entregó un monto legible.",
   DISPERSION_IMPORT_FAILED: "No se pudo crear la dispersión; se reintenta en la siguiente corrida.",
+  PAGO_NOT_CONCILIATED_IN_IQ: "El depósito todavía no está conciliado en IQ; se abona a la cartera cuando se concilie.",
+  PAGO_NOT_CONCILIATED: "El pago todavía no está conciliado en PAY0.",
+  PAGO_CANCELLED_IN_IQ: "El depósito está rechazado o cancelado en IQ.",
+  PAGO_AMOUNT_MISMATCH: "El monto del pago en PAY0 no coincide con el del depósito en IQ.",
+  PAGO_AMOUNT_INVALID: "IQ no entregó un monto legible del depósito.",
+  PAGO_CURRENCY_MISMATCH: "La moneda del pago en PAY0 no coincide con la del depósito en IQ.",
+  PAGO_PERCENTAGE_INVALID: "IQ no entregó un porcentaje de venta legible en el depósito.",
+  PAGO_NET_NEGATIVE: "La comisión del depósito resulta mayor que el depósito.",
+  PAGO_DATE_INVALID: "IQ no entregó una fecha legible del depósito.",
+  PAGO_CLIENT_MISSING: "El pago no tiene un cliente de PAY0.",
+  PAGO_CLIENT_OUT_OF_SCOPE: "El cliente del pago no es de esta raíz.",
+  PAGO_POSTING_FAILED: "No se pudo abonar el pago a la cartera; se reintenta en la siguiente corrida.",
   WALLET_POSTING_REQUIRES_OPERATION_TYPE: "Depósito traído de IQ que falta registrar en la cartera con su tipo de operación.",
 };
 

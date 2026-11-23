@@ -130,6 +130,22 @@ check('group-alert-text', () => {
   assert.equal(d.deliverySource('AVISO_GRUPO_INTERNO').kind, 'TEXT');
 });
 
+// ---- a recovered dispersion from days ago is not announced to the client ----
+check('recovered-dispersion-delivery-age', () => {
+  const day = 24 * 60 * 60 * 1000, now = Date.UTC(2026, 10, 25, 18, 0, 0);
+  const recovered = (ageDays, over = {}) => ({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', createdAt: { toMillis: () => now - ageDays * day }, ...over });
+  assert.equal(d.isStaleRecoveredDispersion(recovered(1), now), false, 'yesterday is announced');
+  assert.equal(d.isStaleRecoveredDispersion(recovered(3), now), false, 'exactly three days is still announced');
+  assert.equal(d.isStaleRecoveredDispersion(recovered(3.01), now), true, 'older than three days is not');
+  assert.equal(d.isStaleRecoveredDispersion(recovered(400), now), true, 'history is never announced');
+  assert.equal(d.isStaleRecoveredDispersion(recovered(30, { source: 'PAY0' }), now), false, 'a dispersion PAY0 made keeps its own flow');
+  assert.equal(d.isStaleRecoveredDispersion(recovered(30, { importMode: 'MANUAL' }), now), false);
+  assert.equal(d.isStaleRecoveredDispersion({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }, now), false, 'without a date nothing is suppressed');
+  assert.equal(d.isStaleRecoveredDispersion(null, now), false);
+  assert.equal(d.isStaleRecoveredDispersion(recovered(10, { createdAt: new Date(now - 10 * day) }), now), true, 'a plain Date works');
+  assert.equal(d.RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS, 3 * day);
+});
+
 // ---- lease state machine ----
 const now = 1_000_000;
 const lease = { leaseId: '11111111-1111-4111-8111-111111111111', bindingId: 'b', generation: 1, expiresAtMs: now + 1000 };

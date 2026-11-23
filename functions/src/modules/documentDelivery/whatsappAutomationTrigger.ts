@@ -10,6 +10,7 @@ import {
 import {
   buildDeliveryCaption,
   deliverySource,
+  isStaleRecoveredDispersion,
   mexicoDayStartMs,
   sameDayCatchUpSourceType,
   sameUploadVersion,
@@ -126,6 +127,8 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
     if (!dispersion || cleanText(dispersion.rootId) !== rootId) return null;
     // Same rule as the Telegram notice: user-funded dispersions wait for a recipient policy.
     if (dispersion.fundingSource?.holderType === "USER") return null;
+    // A recovered dispersion from days ago keeps its receipt, but the client is not notified about it now.
+    if (isStaleRecoveredDispersion(dispersion, Date.now())) return null;
     return { sourceId: dispersionId, clienteId: cleanText(dispersion.clientId ?? dispersion.clienteId ?? upload.clienteId ?? upload.clientId),
       clienteNombre: cleanText(dispersion.clienteNombre ?? dispersion.clientName) || null, rows: [upload],
       counterpartyName: cleanText(dispersion.beneficiaryNombre ?? dispersion.beneficiarioNombre) || null,
