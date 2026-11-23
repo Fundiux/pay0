@@ -2287,6 +2287,7 @@ export const processIqDispersionCreate =
       concurrency: 1,
       secrets: [
         IQ_CREDENTIALS_KEY,
+        PERSONAL_COMMISSION_ACCOUNT_KEY,
       ],
     },
     async () => {
