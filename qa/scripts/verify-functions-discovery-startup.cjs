@@ -56,7 +56,7 @@ const requiredEndpoints = [
   "previewPaymentCommissionDistribution",
   "listPersonalCommissionAccounts", "createPersonalCommissionAccount", "deactivatePersonalCommissionAccount", "revealPersonalCommissionAccountNumber",
   "saveClientCommissionAllocationDraft", "getClientCommissionAllocationDraft", "previewPostedClientCommissionAllocation",
-  "resolvePersonalCommissionAccountIq", "publishClientCommissionAllocation", "getPublishedClientCommissionAllocation", "materializePostedClientCommissionAllocation",
+  "resolvePersonalCommissionAccountIq", "publishClientCommissionAllocation", "getPublishedClientCommissionAllocation", "activateClientCommissionAllocation", "materializePostedClientCommissionAllocation",
   "authorizeHugoVoiceGatewaySession",
   "loginWithUsername", "setMyUsername",
   "applyPaymentAutomaticallyOnReconciliation", "applyPaymentAutomaticallyOnReceipt",
