@@ -3,7 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), vm = require("node:v
 const ts = require("../../functions/node_modules/typescript");
 const source = fs.readFileSync(path.join(__dirname, "../../functions/src/modules/commissionDistributions/allocationDraftPolicy.ts"), "utf8");
 const moduleExports = {};
-vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: moduleExports, Number, String, Error, Array });
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: moduleExports, Number, String, Error, Array, Set });
 const { commissionAccountOptions, deactivatePersonalCommissionAccount, validateClientAllocationDraft } = moduleExports;
 const owner = { rootId: "root", ownerUid: "user" };
 const account = { id: "one", ...owner, bankName: "Banco", beneficiaryName: "Titular", instrumentNumber: "123456789012345678", instrumentType: "CLABE", active: true, iqLinkStatus: "PENDING" };
