@@ -24,18 +24,33 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
         bankName: "Banco prueba", beneficiaryName: "Titular prueba",
         instrumentType: "CLABE", instrumentNumber: "123456789012345678", iqLinkStatus: "PENDING",
       });
+      await setDoc(doc(database, "clientCommissionAllocationDrafts", "qa-draft"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", instructions: [], status: "DRAFT", version: 1,
+      });
+      await setDoc(doc(database, "clientCommissionAllocationDraftHistory", "qa-history"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", instructions: [], status: "DRAFT", version: 1,
+      });
     });
+    const protectedDocuments = [
+      ["personalCommissionAccounts", "qa-account"],
+      ["clientCommissionAllocationDrafts", "qa-draft"],
+      ["clientCommissionAllocationDraftHistory", "qa-history"],
+    ];
+    let denials = 0;
     for (const uid of ["qa-owner", "qa-super", "qa-other"]) {
       const database = environment.authenticatedContext(uid).firestore();
-      const target = doc(database, "personalCommissionAccounts", "qa-account");
-      await assertFails(getDoc(target));
-      await assertFails(getDocs(collection(database, "personalCommissionAccounts")));
-      await assertFails(setDoc(doc(database, "personalCommissionAccounts", uid), { ownerUid: uid }));
-      await assertFails(updateDoc(target, { active: false }));
-      await assertFails(deleteDoc(target));
+      for (const [collectionName, documentId] of protectedDocuments) {
+        const target = doc(database, collectionName, documentId);
+        await assertFails(getDoc(target));
+        await assertFails(getDocs(collection(database, collectionName)));
+        await assertFails(setDoc(doc(database, collectionName, uid), { ownerUid: uid }));
+        await assertFails(updateDoc(target, { active: false }));
+        await assertFails(deleteDoc(target));
+        denials += 5;
+      }
     }
-    assert.equal(3 * 5, 15);
-    console.log("PASS: 15 Firestore security rule denials; callable-only bank account registry.");
+    assert.equal(denials, 45);
+    console.log("PASS: 45 Firestore security rule denials; personal accounts, drafts and history are callable-only.");
   } finally {
     await environment.cleanup();
   }
