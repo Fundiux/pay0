@@ -676,6 +676,14 @@
     {
       "commit": "290574f6",
       "capability": "Link a PAY0 client to its IQ client by exact RFC in the daily sync"
+    },
+    {
+      "commit": "1d456d3e",
+      "capability": "Sincronizacion diaria crea en PAY0 dispersiones IQ terminadas con fecha original"
+    },
+    {
+      "commit": "c3f4ff5a",
+      "capability": "Saludo de Hugo con mencion al cliente sin guardar numeros"
     }
   ],
   "requiredText": [
