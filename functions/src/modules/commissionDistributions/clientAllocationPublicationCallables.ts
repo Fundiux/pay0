@@ -202,8 +202,8 @@ export const getPublishedClientCommissionAllocation = onCall({ cors: true }, asy
     throw new HttpsError("permission-denied", "Regla fuera de alcance.");
   }
   return { ok: true, rule: {
-    version: Number(data.version || 0), status: "CONFIGURED",
-    executionEnabled: false, draftVersion: Number(data.draftVersion || 0),
+    version: Number(data.version || 0), status: data.status === "ACTIVE" ? "ACTIVE" : "CONFIGURED",
+    executionEnabled: data.executionEnabled === true, draftVersion: Number(data.draftVersion || 0),
     instructions: data.instructions || [],
     sourcePaymentId: String(data.sourcePaymentId || ""),
     referenceEarningMinor: data.referenceEarningMinor || 0,
