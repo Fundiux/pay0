@@ -419,6 +419,10 @@ async function run() {
   batch.set(db.doc(`clientDispersions/${ownedId}`), { rootId: root, clientId: client, ownerUid: other, createdBy: other, createdAt: TS.fromMillis(now - 1000), fundingSource: { holderType: "USER", ownerUid: other, sourceClientId: client } });
   batch.set(db.doc(`clientDispersions/${legacyId}`), { rootId: root, clientId: client, createdBy: other, createdAt: TS.fromMillis(now - 2000) });
   await batch.commit();
+  // Module authorization for operadores requires a resolved parent ceiling.
+  // The earlier negative checks intentionally used an unattached operator;
+  // the authorized pagination fixture explicitly attaches its active root.
+  await db.doc(`users/${other}`).update({ parentUserId: root });
   const firstPage = await call(financing.listScopedClientDispersions, other, { limit: 1 });
   check(firstPage.rows.length === 1 && firstPage.rows[0].id === ownedId, "visible first page survives more than 200 private foreign rows");
   const cursor = firstPage.nextCursor;
