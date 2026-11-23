@@ -166,7 +166,7 @@ export const deactivatePersonalCommissionAccount = onCall({ cors: true }, async 
 export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secrets: [ACCOUNT_KEY] }, async request => {
   const actor = await commissionAccountActor(request);
   const bulk = Array.isArray(request.data?.accountIds);
-  const ids = bulk ? request.data.accountIds.map(cleanId) : [cleanId(request.data?.accountId)];
+  const ids: string[] = bulk ? request.data.accountIds.map((value: unknown) => cleanId(value)) : [cleanId(request.data?.accountId)];
   if (!ids.length || ids.length > 50 || new Set(ids).size !== ids.length) {
     throw new HttpsError("invalid-argument", "Selecciona de una a 50 cuentas distintas.");
   }
