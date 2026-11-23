@@ -57,6 +57,7 @@ jobs:
           node qa/scripts/commission-account-read-authorization.cjs
           node qa/scripts/commission-allocation-draft-policy.cjs
           node qa/scripts/client-commission-allocation.cjs
+          node qa/scripts/posted-commission-preview.cjs
           node qa/scripts/commission-integration-preflight.cjs
       - name: Compile Firebase Functions
         run: npm --prefix functions run build
