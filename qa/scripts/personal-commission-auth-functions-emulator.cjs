@@ -53,6 +53,12 @@ async function run() {
   ]);
   const rootId = s.user.uid, ownerUid = o.user.uid, foreignId = e.user.uid;
   const clientId = "qa-commission-" + stamp, accountId = "qa-account-" + stamp;
+  const bankNumber = "012180000000005678";
+  const keyBase64 = Buffer.alloc(32, 0x43).toString("base64"); // demo-only synthetic key
+  const { encryptCommissionInstrument } = require("../../functions/lib/modules/commissionDistributions/instrumentEncryption.js");
+  const encryptedInstrument = encryptCommissionInstrument({
+    number: bankNumber, rootId, ownerUid, accountId, keyBase64, keyVersion: "v1",
+  });
   await Promise.all([
     db.doc("users/" + rootId).set({ role: "superadmin", rootId, active: true, isActive: true, username: "qa-super-" + stamp }),
     db.doc("users/" + ownerUid).set({ role: "operador", rootId, active: true, isActive: true, parentUserId: rootId, username: "qa-owner-" + stamp }),
@@ -62,6 +68,7 @@ async function run() {
       rootId, ownerUid, bankName: "Banco prueba", beneficiaryName: "Titular prueba",
       instrumentType: "CLABE", last4: "5678", active: true,
       iqLinkStatus: "PENDING", instrumentFingerprint: "fixture-do-not-use-for-iq",
+      encryptedInstrument,
     }),
   ]);
   const noDraft = await superadmin.invoke("getClientCommissionAllocationDraft", { clientId, ownerUid });
@@ -70,6 +77,22 @@ async function run() {
   assert.equal(own.accounts.find(a => a.id === accountId)?.instrumentNumber, "••5678");
   const listed = await superadmin.invoke("listPersonalCommissionAccounts", { ownerUid, clientId, purpose: "CLIENT_COSTS" });
   assert.equal(listed.accounts.find(a => a.id === accountId)?.iqLinkStatus, "PENDING");
+  const ownNumbers = await owner.invoke("revealPersonalCommissionAccountNumber", { accountIds: [accountId] });
+  assert.equal(ownNumbers.accounts[0]?.instrumentNumber, bankNumber,
+    "Owner sees full CLABE on authenticated request");
+  const superNumbers = await superadmin.invoke("revealPersonalCommissionAccountNumber", {
+    accountIds: [accountId], ownerUid, clientId, purpose: "CLIENT_COSTS",
+  });
+  assert.equal(superNumbers.accounts[0]?.instrumentNumber, bankNumber,
+    "Same-root superadmin sees full CLABE for authorized client costs");
+  await expectDenied(() => outside.invoke("revealPersonalCommissionAccountNumber", {
+    accountIds: [accountId], ownerUid, clientId, purpose: "CLIENT_COSTS",
+  }), "Cross-root admin cannot reveal full bank number");
+  await expectDenied(() => owner.invoke("revealPersonalCommissionAccountNumber", {
+    accountIds: [accountId], ownerUid, clientId, purpose: "CLIENT_COSTS",
+  }), "Owner cannot claim superadmin client-costs purpose");
+  const stored = (await db.doc("personalCommissionAccounts/" + accountId).get()).data();
+  assert.equal(JSON.stringify(stored).includes(bankNumber), false, "Full number is not persisted unencrypted");
   await expectDenied(() => owner.invoke("getClientCommissionAllocationDraft", { clientId, ownerUid }), "Owner cannot read superadmin client drafts");
   await expectDenied(() => outside.invoke("listPersonalCommissionAccounts", { ownerUid, clientId, purpose: "CLIENT_COSTS" }), "Cross-root must not read accounts");
   // A server-side IQ match is scoped to both the client and the posted payment
@@ -141,7 +164,7 @@ async function run() {
     instructions: [{ accountId, earningsPercentBps: 2000, pointsBps: null }],
   }), "Revoked bank account rejected");
   assert.equal((await db.doc("clientCommissionAllocationDrafts/" + require("node:crypto").createHash("sha256").update(JSON.stringify([rootId, clientId, ownerUid])).digest("hex")).get()).data()?.version, 1);
-  console.log("PASS Auth+Functions+Firestore commission E2E: real callable auth, tenant guards, versioning, revocation, masked instruments; zero IQ/production calls");
+  console.log("PASS Auth+Functions+Firestore commission E2E: real callable auth, tenant guards, versioning, revocation, authenticated full bank details, encrypted storage; zero IQ/production calls");
 }
 run().catch(e => { console.error(e); process.exitCode = 1; })
   .finally(async () => { await Promise.all(apps.map(deleteApp)); await admin.app().delete(); });
