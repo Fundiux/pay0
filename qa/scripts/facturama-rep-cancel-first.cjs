@@ -31,7 +31,7 @@ const HOURS = 3600_000;
   // Ports over the real Firestore helpers; everything that would reach Facturama, the SAT or WhatsApp is recorded instead.
   const harness = (solId, options = {}) => {
     const log = { cancelCalls: [], acuses: [], alerts: [], originalRequests: 0, order: [] };
-    const state = { satCancelled: new Set(options.satCancelled || []), answers: options.answers || {}, original: options.original || { state: "NOT_REQUESTED", requestedAtMs: 0 }, offsetMs: options.offsetMs || 0 };
+    const state = { satCancelled: new Set(options.satCancelled || []), answers: options.answers || {}, original: options.original || { state: "NOT_REQUESTED", requestedAtMs: 0 }, offsetMs: options.offsetMs || 0, acuseFails: new Set(options.acuseFails || []) };
     const ports = {
       nowMs: () => Date.now() + state.offsetMs,
       reps: () => core.listFacturamaReps(db, rootId, solId),
@@ -42,7 +42,7 @@ const HOURS = 3600_000;
           cancelCfdi: async (cfdiId, motive) => { log.cancelCalls.push([cfdiId, motive]); const a = state.answers[cfdiId]; if (a instanceof Error) throw a; return { Status: a ?? "canceled" }; } });
       },
       markRepCancelled: r => core.markRepCancelled(db, r),
-      saveRepAcuse: async r => { log.acuses.push(r.installment); await db.doc(`paymentComplementJobs/${r.jobId}`).set({ repCancellationReceiptUploadId: `acuse-${r.jobId}` }, { merge: true }); },
+      saveRepAcuse: async r => { if (state.acuseFails?.has(r.installment)) return false; log.acuses.push(r.installment); await db.doc(`paymentComplementJobs/${r.jobId}`).set({ repCancellationReceiptUploadId: `acuse-${r.jobId}` }, { merge: true }); return true; },
       original: async () => state.original,
       requestOriginal: async () => { log.originalRequests++; log.order.push("ORIGINAL"); state.original = { state: "REQUESTED", requestedAtMs: Date.now() + state.offsetMs }; },
       alert: async a => { log.alerts.push(a); },
@@ -90,6 +90,20 @@ const HOURS = 3600_000;
   h.state.satCancelled.add(`cfdi-${k1}`);
   summary = await proc.advanceCancellation(h.ports);
   eq([summary.phase, h.log.originalRequests, h.log.acuses.includes(1)], ["ORIGINAL", 1, true], "al confirmar el SAT se guarda el acuse y recién entonces se cancela la original");
+
+  // Cancelled but without its receipt: the original does not go until every receipt is verified ------------------------------------------
+  const s2b = await solicitud("s2b");
+  const m1 = await rep(s2b, 1), m2 = await rep(s2b, 2);
+  h = harness(s2b, { acuseFails: [2] });
+  summary = await proc.advanceCancellation(h.ports);
+  eq([summary.phase, h.log.originalRequests, h.log.acuses], ["REPS", 0, [1]], "con un complemento cancelado pero sin acuse, la original no se cancela");
+  eq([(await db.doc(`paymentComplementJobs/${m2}`).get()).get("repCancellationStatus"), (await db.doc(`paymentComplementJobs/${m2}`).get()).get("repCancellationReceiptUploadId") ?? null], ["CANCELED", null], "queda cancelado y se sigue buscando su acuse");
+  h.log.cancelCalls.length = 0;
+  summary = await proc.advanceCancellation(h.ports);
+  eq([summary.phase, h.log.originalRequests, h.log.cancelCalls.length], ["REPS", 0, 0], "sin acuse sigue esperando, sin volver a cancelar el complemento");
+  h.state.acuseFails.clear();
+  summary = await proc.advanceCancellation(h.ports);
+  eq([summary.phase, h.log.originalRequests, h.log.acuses], ["ORIGINAL", 1, [1, 2]], "con todos los acuses guardados recién entonces se cancela la original, sin repetir el acuse ya guardado");
 
   // After 72 hours: ask again and tell the internal group, once -------------------------------------------------------------------
   const s3 = await solicitud("s3");
