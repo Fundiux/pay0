@@ -22,6 +22,9 @@ import {
   type WhatsAppReplyMode,
   decideWhatsAppPlaybookEntry,
   getWhatsAppAgentPlaybook,
+  getWhatsAppSimulatedReplies,
+  setWhatsAppReplySimulation,
+  type WhatsAppSimulatedReply,
   listWhatsAppAgentReplies,
   markWhatsAppReplyCorrection,
   type WhatsAppAgentReply,
@@ -282,6 +285,53 @@ function RepliesBlock() {
   );
 }
 
+const SIMULATION_STATUS: Record<string, string> = { SIMULATED: "Borrador válido", REJECTED_BY_GUARD: "Bloqueado por los frenos", MODEL_UNAVAILABLE: "El modelo no respondió" };
+
+// Simulation of free-text replies: switch (off by default) and the drafts to review. Nothing here is ever sent to a client.
+function SimulationBlock() {
+  const [open, setOpen] = useState(false);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [replies, setReplies] = useState<WhatsAppSimulatedReply[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { const result = await getWhatsAppSimulatedReplies(); setEnabled(result.enabled); setReplies(result.replies); setError(""); }
+    catch (e: any) { setError(`No se pudo cargar: ${e?.message || e}`); }
+  };
+  useEffect(() => { if (open) void load(); }, [open]);
+  async function toggle() {
+    if (enabled === null) return;
+    setBusy(true); setError("");
+    try { await setWhatsAppReplySimulation(!enabled); await load(); }
+    catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Simulación de respuestas de texto libre</summary>
+      <p className="mt-2 text-xs text-slate-400">Hugo redacta borradores solo en los grupos con un aprendizaje aprobado, durante sus 3 días de simulación. Los borradores no se envían a ningún cliente: son para que usted los revise.</p>
+      <div className="mt-2 flex items-center gap-2">
+        <button type="button" disabled={busy || enabled === null} aria-pressed={enabled === true} onClick={() => void toggle()}
+          className={`rounded-full px-3 py-1 text-xs text-white disabled:opacity-50 ${enabled ? "bg-emerald-600" : "bg-slate-600"}`}>{enabled === null ? "Cargando…" : enabled ? "Simulación encendida" : "Simulación apagada"}</button>
+        {busy && <Loader2 size={14} className="animate-spin text-slate-400" />}
+      </div>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {replies && replies.length === 0 && <p className="mt-2 text-xs text-slate-500">Todavía no hay borradores.</p>}
+      {replies && replies.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {replies.slice(0, 50).map(reply => (
+            <li key={reply.id} className="rounded-lg border border-slate-800 p-2 text-xs text-slate-300">
+              <p className="font-semibold text-slate-100">{reply.groupName || "Grupo"} <span className="font-normal text-slate-500">· {SIMULATION_STATUS[reply.status] || reply.status}{reply.createdAtMs ? ` · ${new Date(reply.createdAtMs).toLocaleString("es-MX")}` : ""}</span></p>
+              {reply.clientPhrase && <p className="text-slate-400">El cliente preguntó: {reply.clientPhrase}</p>}
+              {reply.usable && reply.draft ? <p className="mt-1 text-emerald-200">Hugo diría: {reply.draft}</p> : reply.guardReasons.length > 0 && <p className="mt-1 text-amber-300">{reply.guardReasons.join(" · ")}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
 function PlaybookBlock() {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<WhatsAppPlaybookEntry[] | null>(null);
@@ -410,6 +460,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
       <ReplyMetricsBlock agentId={agentId} agentName={agentName} />
       {agentId === "hugo" && <RepliesBlock />}
       {agentId === "hugo" && <PlaybookBlock />}
+      {agentId === "hugo" && <SimulationBlock />}
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
 

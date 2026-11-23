@@ -197,6 +197,18 @@ export type WhatsAppPlaybookEntry = {
   evidenceCount: number; examples: string[]; suggestedGuidance: string; guidance: string; simulationEndsAtMs: number | null;
 };
 
+export type WhatsAppSimulatedReply = {
+  id: string; chatId: string; groupName: string; clientPhrase: string; lookup: string; status: string; usable: boolean; draft: string | null; guardReasons: string[]; monthKey: string; createdAtMs: number | null;
+};
+
+export async function getWhatsAppSimulatedReplies() {
+  return (await httpsCallable<Record<string, never>, { ok: boolean; enabled: boolean; replies: WhatsAppSimulatedReply[] }>(functions, "getWhatsAppSimulatedReplies")({})).data;
+}
+
+export async function setWhatsAppReplySimulation(enabled: boolean) {
+  return (await httpsCallable<{ enabled: boolean }, { ok: boolean; enabled: boolean }>(functions, "setWhatsAppReplySimulation")({ enabled })).data;
+}
+
 export async function getWhatsAppAgentPlaybook() {
   return (await httpsCallable<Record<string, never>, { ok: boolean; entries: WhatsAppPlaybookEntry[] }>(functions, "getWhatsAppAgentPlaybook")({})).data;
 }
