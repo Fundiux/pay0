@@ -29,7 +29,9 @@ export async function materializeUserEarningDistribution(params: { paymentId: st
   if (text(snapshot.currency || payment.moneda || "MXN") !== "MXN") throw new Error("La distribución sólo admite utilidades en MXN.");
   const key = commissionSettingsId(rootId, clientId, params.ownerUid);
   const personalRule = await commissionConfigurationAt("clientCommissionAllocationRules", "clientCommissionAllocationHistory", key, postedAtMs);
-  if (personalRule) {
+  // CONFIGURED is not activated; preserve the existing legacy destination rules
+  // until a personal rule was ACTIVE at the immutable posting timestamp.
+  if (personalRule?.status === "ACTIVE") {
     return materializePersonalEarningDistribution({
       paymentId: params.paymentId, ownerUid: params.ownerUid, actorUid: params.actorUid,
       rootId, clientId, distributionId, paymentRef, snapshotRef, snapshotId,
