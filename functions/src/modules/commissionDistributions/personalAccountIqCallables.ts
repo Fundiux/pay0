@@ -4,6 +4,7 @@ import { defineSecret } from "firebase-functions/params";
 import { commissionAccountActor } from "./userDestinations";
 import { decryptCommissionInstrument } from "./instrumentEncryption";
 import { isPostedCommissionPayment } from "./domain";
+import { postedClientIqOrigin } from "./postedClientAllocationPreview";
 import { loadIqAccess, IQ_CREDENTIALS_KEY } from "../iq/dispersionCreationCallables";
 import { resolveIqBeneficiaryInstrument } from "../iq/dispersionHttpCreateCore";
 import { personalCommissionMirrorId, personalCommissionIqLinkId } from "./personalAllocationMirror";
@@ -45,7 +46,14 @@ export const resolvePersonalCommissionAccountIq = onCall({
       !isPostedCommissionPayment(payment)) {
     throw new HttpsError("failed-precondition", "No hay una cuenta, cliente y pago contabilizado autorizados.");
   }
-  const despachoId = safe(payment.despachoId, "Origen IQ");
+  const financialSnapshotId = safe(payment.financialSnapshotId, "Snapshot financiero");
+  const postedSnapshot = (await db.doc(`paymentFinancialSnapshots/${financialSnapshotId}`).get()).data();
+  const despachoId = postedClientIqOrigin({
+    rootId: actor.rootId, clientId, paymentId, payment, snapshot: postedSnapshot,
+  });
+  if (!despachoId) {
+    throw new HttpsError("failed-precondition", "El origen IQ no coincide con el snapshot financiero del pago.");
+  }
   const clientIqId = text(client.iqLink?.clientId || client.iqClientId);
   if (!clientIqId) throw new HttpsError("failed-precondition", "Cliente sin vínculo IQ.");
   if (!account.encryptedInstrument || !text(account.last4)) throw new HttpsError("failed-precondition", "Cuenta sin instrumento cifrado válido.");
