@@ -12,6 +12,7 @@ export function commissionAccountOptions(
   accounts: PersonalCommissionAccount[],
   owner: { rootId: string; ownerUid: string },
 ) {
+  // Never expose account.instrumentNumber through the client-facing options.
   return accounts
     .filter(account => account.rootId === owner.rootId && account.ownerUid === owner.ownerUid && account.active)
     .map(account => ({
