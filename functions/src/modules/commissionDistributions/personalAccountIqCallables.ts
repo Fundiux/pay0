@@ -10,7 +10,6 @@ import { resolveIqBeneficiaryInstrument } from "../iq/dispersionHttpCreateCore";
 import { personalCommissionMirrorId, personalCommissionIqLinkId } from "./personalAllocationMirror";
 import { linkOrCreateMethod } from "../beneficiaries/iqLinkService";
 import { productionIqLinkPorts } from "../beneficiaries/iqLinkPorts";
-import { IQ_CANCELLATION_CREDENTIALS_KEY } from "../iq/solicitudCancellationService";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -25,7 +24,8 @@ const safe = (value: unknown, field: string) => {
 /** Verify against the real IQ wizard. Only a full-number match can authorize later payouts. */
 export const resolvePersonalCommissionAccountIq = onCall({
   cors: true, timeoutSeconds: 300, memory: "1GiB", maxInstances: 2,
-  secrets: [ACCOUNT_KEY, IQ_CREDENTIALS_KEY, IQ_CANCELLATION_CREDENTIALS_KEY],
+  // IQ_CREDENTIALS_KEY also serves the beneficiary link (IQ_CANCELLATION_CREDENTIALS_KEY is the same secret); listing both duplicates the env var and Cloud Run rejects the function.
+  secrets: [ACCOUNT_KEY, IQ_CREDENTIALS_KEY],
 }, async request => {
   const actor = await commissionAccountActor(request, true);
   const clientId = safe(request.data?.clientId, "Cliente");
