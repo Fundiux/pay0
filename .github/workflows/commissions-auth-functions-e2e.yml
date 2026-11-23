@@ -52,7 +52,7 @@ jobs:
           node -e 'const fs=require("fs");const pkg=require("./functions/package.json");fs.writeFileSync("qa/.commissions-functions-emulator/package.json",JSON.stringify({name:"commission-auth-emulator",private:true,main:"index.js",engines:{node:"22"},dependencies:{"firebase-functions":pkg.dependencies["firebase-functions"],"firebase-admin":pkg.dependencies["firebase-admin"]}},null,2));const config=JSON.parse(fs.readFileSync("firebase.emulator-tests.json","utf8"));config.functions={source:"qa/.commissions-functions-emulator"};fs.writeFileSync(".firebase-commission-auth-test.json",JSON.stringify(config));'
           ln -s ../../functions/node_modules qa/.commissions-functions-emulator/node_modules
           # Demo-only synthetic secret; never a real bank or deployment credential.
-          node -e 'const fs=require("fs");fs.writeFileSync("qa/.commissions-functions-emulator/.secret.local","COMMISSION_ACCOUNT_ENCRYPTION_KEY="+Buffer.alloc(32,0x43).toString("base64")+"\\n",{mode:0o600});'
+          node -e 'const fs=require("fs");fs.writeFileSync("qa/.commissions-functions-emulator/.secret.local","COMMISSION_ACCOUNT_ENCRYPTION_KEY="+Buffer.alloc(32,0x43).toString("base64")+"\n",{mode:0o600});'
           cat > qa/.commissions-functions-emulator/index.js <<'EOF'
           const personal = require("../../functions/lib/modules/commissionDistributions/personalAccountCallables.js");
           const drafts = require("../../functions/lib/modules/commissionDistributions/clientAllocationDraftCallables.js");
