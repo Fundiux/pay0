@@ -138,7 +138,7 @@ export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secret
   const accountId = cleanId(request.data?.accountId);
   const snapshot = await db.doc(`personalCommissionAccounts/${accountId}`).get();
   const account = snapshot.data();
-  if (!account || account.rootId !== actor.rootId || !account.ownerUid) {
+  if (!account || account.rootId !== actor.rootId || account.ownerUid !== actor.uid) {
     throw new HttpsError("permission-denied", "Cuenta fuera de alcance.");
   }
   const ownerSnap = await db.doc(`users/${account.ownerUid}`).get();
@@ -149,7 +149,7 @@ export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secret
       { uid: account.ownerUid, rootId: String(owner.rootId || account.ownerUid),
         active: ownerSnap.exists && owner.active !== false && owner.isActive !== false &&
           owner.isDeleted !== true && owner.deleted !== true && !owner.deletedAt && owner.disabled !== true },
-      actor.uid === account.ownerUid ? "SELF_PROFILE" : "CLIENT_COSTS",
+      "SELF_PROFILE",
     );
   } catch {
     throw new HttpsError("permission-denied", "No puedes ver los datos de esta cuenta.");
