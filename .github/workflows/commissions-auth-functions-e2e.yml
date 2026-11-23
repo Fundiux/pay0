@@ -1,14 +1,10 @@
 name: Commission Auth Functions E2E
 on:
+  # Always test Auth/Functions on feature branch updates, including merges from main.
+  # Previously path filters could leave a new HEAD without an E2E run.
   push:
     branches:
       - feature/user-commission-accounts-client-allocation-20261123
-    paths:
-      - '.github/workflows/commissions-auth-functions-e2e.yml'
-      - 'functions/src/modules/commissionDistributions/**'
-      - 'functions/src/index.ts'
-      - 'functions/src/lazyModules.generated.ts'
-      - 'qa/scripts/personal-commission-auth-functions-emulator.cjs'
   workflow_dispatch:
 permissions:
   contents: read
