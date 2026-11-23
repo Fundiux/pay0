@@ -23,3 +23,10 @@ Estado: diseño de migración; NO habilitar ejecución ni sustituir reglas exist
 - Diferente base TOTAL/SUBTOTAL, utilidad nula, costo fijo/no comparable, redondeo de centavos y exceso de utilidad.
 - Aislamiento por rootId/uid, acceso a cuentas de otros usuarios, duplicados, baja de cuenta, verificación IQ obsoleta.
 - Snapshot histórico, cambios concurrentes, reservas, fallo/resultado incierto IQ y no duplicación.
+
+## Decisión de visualización y almacenamiento (23-nov-2026)
+- Mostrar banco, beneficiario y número completo de CLABE o tarjeta a usuarios autorizados para verificar visualmente el destino.
+- No integrar el cifrado de aplicación AES-256-GCM propuesto en esta rama; el archivo experimental `instrumentEncryption.ts` no forma parte del flujo operativo.
+- Firestore utiliza cifrado en reposo y en tránsito, pero eso no sustituye reglas de acceso, segregación por rootId/ownerUid ni auditoría de lecturas y escrituras.
+- Nunca publicar cuentas en logs, URLs o respuestas accesibles a terceros. Mantener validación de IQ y controles contra transferencias duplicadas.
+- Auditoría de secretos/credenciales de IQ queda fuera de este alcance, para revisión posterior.
