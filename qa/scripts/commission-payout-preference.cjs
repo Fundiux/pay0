@@ -17,4 +17,4 @@ for (const ownerPreference of [undefined, "MANUAL", "INVALID"]) {
 assert.deepEqual({ ...mayAutomaticallyProcessCommission({ ownerPreference: "AUTOMATIC", organizationEnabled: false, organizationExecutionEnabled: true }) }, { prepare: false, execute: false });
 assert.deepEqual({ ...mayAutomaticallyProcessCommission({ ownerPreference: "AUTOMATIC", organizationEnabled: true, organizationExecutionEnabled: false }) }, { prepare: true, execute: false });
 assert.deepEqual({ ...mayAutomaticallyProcessCommission({ ownerPreference: "AUTOMATIC", organizationEnabled: true, organizationExecutionEnabled: true }) }, { prepare: true, execute: true });
-console.log("Commission payout preference policy: 12 assertions passed");
+console.log("Commission payout preference policy: Policy assertions passed");
