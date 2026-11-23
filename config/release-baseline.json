@@ -644,6 +644,10 @@
     {
       "commit": "35135636",
       "capability": "Editor de permisos muestra solo lo que tiene el padre del operador"
+    },
+    {
+      "commit": "da8e6cff",
+      "capability": "Pendientes de la sincronizacion diaria IQ legibles en /wallet/saldos-iq"
     }
   ],
   "requiredText": [
