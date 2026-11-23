@@ -27,6 +27,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
   const [preview, setPreview] = useState<PostedPreview | null>(null);
   const [dirty, setDirty] = useState(false);
   const [publishedVersion, setPublishedVersion] = useState(0);
+  const [publishedStatus, setPublishedStatus] = useState("");
   const superadmin = String(profile?.role || "").toLowerCase() === "superadmin";
   useEffect(() => {
     if (!superadmin) return;
@@ -46,7 +47,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
   }, [superadmin]);
   useEffect(() => {
     setAccounts([]); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
-    setPreview(null); setDirty(false); setPublishedVersion(0);
+    setPreview(null); setDirty(false); setPublishedVersion(0); setPublishedStatus("");
     if (!ownerUid || !superadmin) return;
     let live = true;
     Promise.all([
@@ -62,6 +63,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
       })));
       setDraft(draftResponse.data.draft || { version: 0, instructions: [] });
       setPublishedVersion(ruleResponse.data.rule?.version || 0);
+      setPublishedStatus(ruleResponse.data.rule?.status || "");
       setLoaded(true);
     }).catch(error => { if (live) setMessage(error.message || "No se pudo cargar la distribución."); });
     return () => { live = false; };
@@ -129,10 +131,25 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
         expectedDraftVersion: draft.version, expectedVersion: publishedVersion,
       });
       setPublishedVersion(result.data.version);
+      setPublishedStatus("CONFIGURED");
       setMessage("Regla v" + result.data.version + " registrada y auditada. No activa dispersiones.");
     } catch (error: any) {
       setMessage(error.message || "No se pudo registrar la regla; comprueba la versión y las cuentas IQ.");
     } finally { setBusy(false); }
+  }
+  async function activateConfiguration() {
+    if (!ownerUid || !publishedVersion || publishedStatus !== "CONFIGURED" || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      const result = await httpsCallable<{ clientId: string; ownerUid: string; expectedVersion: number },
+        { version: number; status: string; executionEnabled: boolean }>(
+        functions, "activateClientCommissionAllocation",
+      )({ clientId, ownerUid, expectedVersion: publishedVersion });
+      setPublishedVersion(result.data.version);
+      setPublishedStatus(result.data.status);
+      setMessage("Regla v" + result.data.version + " activa para movimientos futuros. Los envíos automáticos siguen deshabilitados.");
+    } catch (error: any) { setMessage(error.message || "No se pudo activar la regla; revisa las cuentas IQ."); }
+    finally { setBusy(false); }
   }
   const money = (minor: number, currency: string) => new Intl.NumberFormat("es-MX", { style: "currency", currency }).format(minor / 100);
   return <section className="mt-6 space-y-3 border-t border-white/10 pt-5">
@@ -166,7 +183,12 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
         <button type="button" disabled={busy || preview.blockedIqAccountIds.length > 0 || dirty} onClick={() => void publishConfiguration()} className="rounded-lg border border-sky-400/30 px-3 py-2 text-sky-200 disabled:opacity-40">Registrar regla prospectiva sin ejecución</button>
       </div>}
     </div>}
-    {publishedVersion > 0 && <p className="text-xs text-slate-300">Regla registrada: versión {publishedVersion} · ejecución deshabilitada</p>}
+    {publishedVersion > 0 && <div className="space-y-2 text-xs text-slate-300">
+      <p>Regla versión {publishedVersion} · {publishedStatus === "ACTIVE" ? "Activa prospectivamente" : "Configurada, no activa"} · envío automático deshabilitado</p>
+      {publishedStatus === "CONFIGURED" && <button type="button" disabled={busy || !loaded}
+        className="rounded-lg border border-emerald-400/30 px-3 py-2 text-emerald-200 disabled:opacity-40"
+        onClick={() => void activateConfiguration()}>Activar para movimientos futuros</button>}
+    </div>}
     {message && <p role="status" className="text-sm text-amber-200">{message}</p>}
   </section>;
 }
