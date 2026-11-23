@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 
 /**
  * Server-only AES-256-GCM envelope for personal commission bank instruments.
@@ -38,6 +38,23 @@ export function encryptCommissionInstrument(input: {
   const ciphertext = Buffer.concat([cipher.update(input.number, "utf8"), cipher.final()]);
   return { algorithm: "aes-256-gcm", keyVersion: input.keyVersion, iv: iv.toString("base64"), ciphertext: ciphertext.toString("base64"), tag: cipher.getAuthTag().toString("base64") };
 }
+
+/** Stable, secret-keyed account identity prevents last-four-digit collisions and race duplicates. */
+export function fingerprintCommissionInstrument(input: {
+  number: string; instrumentType: "CLABE" | "CARD"; rootId: string; ownerUid: string; keyBase64: string;
+}): string {
+  if (!/^(?:\\d{18}|\\d{16,19})$/.test(input.number) ||
+      (input.instrumentType === "CLABE" && input.number.length !== 18) ||
+      (input.instrumentType !== "CLABE" && input.instrumentType !== "CARD") ||
+      !input.rootId.trim() || !input.ownerUid.trim()) {
+    throw new Error("Identificador de cuenta inválido.");
+  }
+  return createHmac("sha256", parseKey(input.keyBase64))
+    .update("pay0-personal-account-fingerprint-v1\\0")
+    .update(JSON.stringify([input.rootId, input.ownerUid, input.instrumentType, input.number]))
+    .digest("hex");
+}
+
 export function decryptCommissionInstrument(input: {
   encrypted: EncryptedCommissionInstrument;
   rootId: string;
