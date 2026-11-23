@@ -712,6 +712,10 @@
     {
       "commit": "bc8f4253",
       "capability": "Hugo contesta en el grupo interno cuando le responden citando su mensaje"
+    },
+    {
+      "commit": "3cc85928",
+      "capability": "Conector de Hugo con version fijada de WhatsApp Web y salida para relanzar si falla el arranque"
     }
   ],
   "requiredText": [
