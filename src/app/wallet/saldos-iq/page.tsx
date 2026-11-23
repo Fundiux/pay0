@@ -6,8 +6,9 @@ import NoAccess from "@/components/NoAccess";
 import WalletNavigation from "@/components/WalletNavigation";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { useModuleAccess } from "@/lib/useModuleAccess";
-import { getIqBalanceComparison, type IqBalanceComparison, type IqBalanceRow } from "@/services/iqBalances";
+import { getIqBalanceComparison, setIqBalanceAdjustmentsEnabled, type IqBalanceComparison, type IqBalanceRow } from "@/services/iqBalances";
 import IqPendingReviews from "@/components/iq/IqPendingReviews";
+import BalanceAdjustmentModal from "@/components/iq/BalanceAdjustmentModal";
 
 const money = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : `$${Number(value).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -44,6 +45,9 @@ export default function SaldosIqPage() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"ALL" | "DIFFERENT" | "UNMAPPED" | "MATCH">("DIFFERENT");
   const [open, setOpen] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [adjusting, setAdjusting] = useState<IqBalanceRow | null>(null);
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (!canAccess) return;
@@ -55,9 +59,28 @@ export default function SaldosIqPage() {
       .catch(() => { if (!cancelled) setError("No se pudo cargar la comparación de saldos."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [canAccess, ownerId]);
+  }, [canAccess, ownerId, reloadKey]);
 
   if (!canAccess) return <NoAccess className="p-6 text-slate-400" message="No tienes acceso a los saldos de Wallet." />;
+
+  const adjustmentsEnabled = data?.isSuperadmin === true && data.adjustmentsEnabled === true;
+
+  async function toggleAdjustments() {
+    const next = !(data?.adjustmentsEnabled === true);
+    const confirmed = window.confirm(next
+      ? "Se activan los ajustes excepcionales de saldo. Solo tú, como superadmin, podrás hacerlos, siempre con un motivo escrito. ¿Activar?"
+      : "Se desactivan los ajustes excepcionales de saldo. Nadie podrá hacerlos hasta que los actives otra vez. ¿Desactivar?");
+    if (!confirmed) return;
+    setSwitching(true);
+    try {
+      await setIqBalanceAdjustmentsEnabled(next);
+      setReloadKey(value => value + 1);
+    } catch {
+      setError("No se pudo cambiar el estado de los ajustes excepcionales.");
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   const rows = (data?.rows || []).filter(row => filter === "ALL" || row.status === filter);
   const counts = data?.run?.counts;
@@ -69,6 +92,16 @@ export default function SaldosIqPage() {
           <Scale size={18} className="text-sky-400" aria-hidden="true" />
           <h1 className="text-sm font-semibold uppercase tracking-widest text-white">Saldos IQ vs PAY0</h1>
         </div>
+        {data?.isSuperadmin && (
+          <button
+            type="button"
+            onClick={toggleAdjustments}
+            disabled={switching}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${data.adjustmentsEnabled ? "border-amber-400/40 bg-amber-500/10 text-amber-200" : "border-white/15 bg-white/5 text-slate-300"}`}
+          >
+            Ajustes excepcionales: {data.adjustmentsEnabled ? "activados" : "desactivados"}
+          </button>
+        )}
         {data?.isSuperadmin && (
           <label className="flex items-center gap-2 text-xs text-slate-400">
             Socio
@@ -142,7 +175,7 @@ export default function SaldosIqPage() {
                     </tr>
                     {expanded && (
                       <tr className="border-b border-white/5 bg-black/20">
-                        <td colSpan={data.isSuperadmin ? 6 : 5} className="px-6 py-4"><RowDetail row={row} /></td>
+                        <td colSpan={data.isSuperadmin ? 6 : 5} className="px-6 py-4"><RowDetail row={row} onAdjust={adjustmentsEnabled && row.status === "DIFFERENT" && row.iqBalance !== null && row.pay0Balance !== null && !row.reason ? () => setAdjusting(row) : undefined} /></td>
                       </tr>
                     )}
                   </React.Fragment>
@@ -156,11 +189,15 @@ export default function SaldosIqPage() {
       <IqPendingReviews />
 
       <WalletNavigation />
+
+      {adjusting && (
+        <BalanceAdjustmentModal row={adjusting} onClose={() => setAdjusting(null)} onDone={() => { setAdjusting(null); setReloadKey(value => value + 1); }} />
+      )}
     </div>
   );
 }
 
-function RowDetail({ row }: { row: IqBalanceRow }) {
+function RowDetail({ row, onAdjust }: { row: IqBalanceRow; onAdjust?: () => void }) {
   const notes: string[] = [];
   if (row.reason && REASON_LABEL[row.reason]) notes.push(REASON_LABEL[row.reason]);
   if (row.signInverted) notes.push("Los saldos tienen el mismo monto con signo contrario; puede ser una diferencia de convención de signo.");
@@ -173,6 +210,11 @@ function RowDetail({ row }: { row: IqBalanceRow }) {
         <p className="text-slate-400">Saldo en IQ por socio: {row.partners.map(partner => `${partner.name || "Sin socio"} ${money(partner.balance)}`).join(" · ")}{row.sources.length ? ` (${row.sources.join(", ")})` : ""}</p>
       )}
       {notes.map(note => <p key={note} className="text-amber-200">{note}</p>)}
+      {onAdjust && (
+        <button type="button" onClick={onAdjust} className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20">
+          Ajustar saldo para igualar a IQ
+        </button>
+      )}
       {explanation && (
         <div className="space-y-3">
           <p className="text-slate-400">

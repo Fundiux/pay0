@@ -217,6 +217,7 @@ export { checkIqCancellationReceiptsDaily } from "./modules/iq/cancellationRecei
 export { syncIqBeneficiaryCatalog } from "./modules/beneficiaries/iqCatalogSync";
 export { reconcileIqBalances } from "./modules/iqBalanceReconciliation/service";
 export { getIqBalanceComparison } from "./modules/iqBalanceReconciliation/callables";
+export { adjustClientBalanceFromComparison, setIqBalanceAdjustmentsEnabled } from "./modules/iqBalanceReconciliation/adjustment";
 export { linkBeneficiaryMethodToIq } from "./modules/beneficiaries/iqLinkTrigger";
 export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
 export { getClientWhatsAppGroups, assignWhatsAppGroupToClients, setWhatsAppInternalGroup } from "./modules/documentDelivery/clientWhatsappGroups";
