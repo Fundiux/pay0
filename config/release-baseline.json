@@ -708,6 +708,10 @@
     {
       "commit": "d165eabe",
       "capability": "Hugo reconoce la mencion con id de dispositivo vinculado y registra conteos del grupo interno"
+    },
+    {
+      "commit": "bc8f4253",
+      "capability": "Hugo contesta en el grupo interno cuando le responden citando su mensaje"
     }
   ],
   "requiredText": [
