@@ -18,6 +18,9 @@ const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappC
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
 const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
 const { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } = require(lib + 'whatsappAutoReply/playbookCallables.js');
+const { setWhatsAppReplySimulation, getWhatsAppSimulatedReplies } = require(lib + 'whatsappAutoReply/simulationCallables.js');
+const { setSimulationModelForTests } = require(lib + 'whatsappAutoReply/simulationRunner.js');
+const { mexicoDayStartMs } = require(lib + 'documentDelivery/whatsappDeliveryDomain.js');
 const { runUnansweredAlerts } = require(lib + 'whatsappAutoReply/unansweredRunner.js');
 const { operatorAuthorHashes, REPLY_TEXT_VARIANTS } = require(lib + 'whatsappAutoReply/domain.js');
 const { saveWhatsAppAgentObservers, getWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
@@ -26,7 +29,7 @@ const { createWorkerKey, createAuthorityTransport } = require('../../tools/whats
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us', groupL = '120363555000000012@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us', groupL = '120363555000000012@g.us', groupM = '120363555000000013@g.us', groupN = '120363555000000014@g.us', groupP = '120363555000000015@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -341,6 +344,77 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     // A fourth case refreshes nothing once decided, and a decided entry keeps its guidance.
     const after = (await call(getWhatsAppAgentPlaybook, ownerUid, {})).entries.find(e => e.id === entry.id);
     assert.equal(after.status, 'APPROVED'); assert.equal(after.guidance, entry.suggestedGuidance);
+  });
+
+  await test('simulation-stores-guarded-drafts-and-never-queues-or-sends-anything', async () => {
+    const prompts = [];
+    setSimulationModelForTests(async ({ system, prompt }) => {
+      prompts.push({ system, prompt });
+      if (/alfa/.test(prompt)) return { text: 'Son 5,000 pesos los que le depositamos.', tokens: 40 };
+      if (/beta/.test(prompt)) return { text: 'Lo validamos con IQ y le avisamos.', tokens: 40 };
+      if (/gamma/.test(prompt)) return { text: 'Se lo mandamos hoy mismo, se lo prometemos.', tokens: 40 };
+      if (/delta/.test(prompt)) return { text: 'Su transferencia ya está en proceso.', tokens: 40 };
+      return { text: 'Con gusto, permítanos validarlo y le confirmamos en cuanto lo tengamos.', tokens: 55 };
+    });
+    const ownerCall = (fn, data) => fn.run({ auth: { uid: ownerUid }, data });
+    const approve = (chatId, over = {}) => db.doc(`whatsappAgentPlaybooks/pb_sim_${chatId.slice(-8, -5)}`).set({ rootId, chatId, groupName: 'Grupo sim', status: 'APPROVED', guidance: 'Responder con amabilidad y avisar al equipo.', simulationEndsAtMs: NOW + 2 * 24 * HOUR, ...over });
+    await setReply(true, 'GREETINGS_ONLY');
+    for (const [chatId, name] of [[groupM, 'Grupo sim'], [groupN, 'Grupo tope'], [groupP, 'Grupo vencido']]) {
+      await chatDoc(chatId, name); await observe(chatId, name, betell); await inbound(chatId, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    }
+    await approve(groupM); await approve(groupN); await approve(groupP, { simulationEndsAtMs: NOW - 1 });
+    const ask = (chatId, body) => inbound(chatId, { body, timestampMs: NOW - 5 * MIN });
+    const simId = id => `whatsappAgentSimulatedReplies/sim__${rootId.slice(0, 40)}__${id}`;
+    const stored = async () => (await db.collection('whatsappAgentSimulatedReplies').where('rootId', '==', rootId).get()).docs;
+    const before = (await stored()).length;
+
+    // Off by default.
+    const good = await ask(groupM, '¿Ya salió mi transferencia, soy Juan Pérez, folio 12345 por $45,000?');
+    await runGroupReplies(rootId, NOW);
+    assert.equal((await stored()).length, before, 'simulation is off by default');
+
+    // On: a usable draft is stored, from a masked prompt, and nothing is queued for the client.
+    assert.equal((await ownerCall(setWhatsAppReplySimulation, { enabled: true })).enabled, true);
+    await assert.rejects(() => setWhatsAppReplySimulation.run({ auth: { uid: betell }, data: { enabled: true } }));
+    await runGroupReplies(rootId, NOW);
+    const goodDoc = (await db.doc(simId(good)).get()).data();
+    assert.equal(goodDoc.status, 'SIMULATED'); assert.equal(goodDoc.usable, true); assert.equal(goodDoc.sentToClient, false); assert.equal(goodDoc.tokens, 55);
+    assert.match(goodDoc.draft, /permítanos validarlo/);
+    assert.ok(prompts.length >= 1 && prompts.every(({ prompt }) => !/12345|45,000|juan|pérez|Grupo sim/i.test(prompt) && /Responder con amabilidad/.test(prompt)), 'the prompt is masked and carries only the approved guidance');
+    assert.ok(!/12345|juan/i.test(goodDoc.clientPhrase));
+    await runGroupReplies(rootId, NOW);
+    assert.equal(prompts.length, 1, 'the model is called once per message');
+
+    // Bad drafts are kept apart and never usable.
+    const rejected = [];
+    for (const word of ['alfa', 'beta', 'gamma', 'delta']) rejected.push(await ask(groupM, `¿Ya salió mi transferencia ${word}?`));
+    await runGroupReplies(rootId, NOW); await runGroupReplies(rootId, NOW);
+    for (const id of rejected) {
+      const doc = (await db.doc(simId(id)).get()).data();
+      assert.equal(doc.status, 'REJECTED_BY_GUARD'); assert.equal(doc.usable, false); assert.equal(doc.draft, null); assert.ok(doc.guardReasons.length > 0);
+    }
+    const listing = await ownerCall(getWhatsAppSimulatedReplies, {});
+    assert.equal(listing.enabled, true);
+    assert.equal(listing.replies.filter(row => row.status === 'REJECTED_BY_GUARD').every(row => row.usable === false && row.draft === null), true);
+    assert.equal(listing.replies.filter(row => row.usable).length >= 1, true);
+
+    // Nothing was ever queued as a delivery job for any simulated message.
+    for (const id of [good, ...rejected]) assert.equal((await jobsFor(id)).length, 0, 'no delivery job for a simulated message');
+
+    // Daily cap per group, and an expired playbook simulates nothing.
+    const day = String(mexicoDayStartMs(NOW));
+    for (let i = 0; i < 10; i++) await db.doc(`whatsappAgentSimulatedReplies/cap_${i}`).set({ rootId, chatId: groupN, dayKey: day, status: 'SIMULATED' });
+    const capped = await ask(groupN, '¿Hay avance de mi factura?'), expired = await ask(groupP, '¿Hay avance de mi factura?');
+    await runGroupReplies(rootId, NOW);
+    for (const id of [capped, expired]) assert.equal((await db.doc(simId(id)).get()).exists, false);
+
+    // Kill switch.
+    await ownerCall(setWhatsAppReplySimulation, { enabled: false });
+    const late = await ask(groupM, '¿Ya salió mi transferencia de nuevo?');
+    await runGroupReplies(rootId, NOW);
+    assert.equal((await db.doc(simId(late)).get()).exists, false);
+    setSimulationModelForTests(null);
+    await setReply(true, 'STANDARD');
   });
 
   await test('an-agents-own-number-is-never-answered', async () => {
