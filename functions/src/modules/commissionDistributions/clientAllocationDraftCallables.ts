@@ -3,7 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor, commissionMillis, commissionSettingsId } from "./userDestinations";
 import { calculateClientCommissionInstructions } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
-import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { postedClientOperationBaseMinor, hasExactPersonalCommissionIqLink } from "./postedClientAllocationPreview";
 import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
 import type { ClientCommissionInstruction } from "./clientAllocation";
 
@@ -140,7 +140,8 @@ export const previewPostedClientCommissionAllocation = onCall({ cors: true }, as
   const financialSnapshotId = id(payment.financialSnapshotId);
   const financialSnapshot = (await db.doc(`paymentFinancialSnapshots/${financialSnapshotId}`).get()).data();
   if (!financialSnapshot || financialSnapshot.rootId !== actor.rootId ||
-      financialSnapshot.pagoId !== paymentId || financialSnapshot.clienteId !== clientId) {
+      financialSnapshot.pagoId !== paymentId || financialSnapshot.clienteId !== clientId ||
+      String(financialSnapshot.currency || payment.moneda || "MXN").toUpperCase() !== "MXN") {
     throw new HttpsError("failed-precondition", "Snapshot financiero no corresponde al pago.");
   }
   const draft = draftSnap.data();
@@ -194,11 +195,10 @@ export const previewPostedClientCommissionAllocation = onCall({ cors: true }, as
       storedLast4: iq?.last4,
       currentLast4: account.last4,
     });
-    return !link.ready || !iq || iq.rootId !== actor.rootId || iq.clientId !== clientId ||
-      iq.ownerUid !== ownerUid || iq.accountId !== account.id ||
-      iq.accountFingerprint !== account.instrumentFingerprint ||
-      !clientIqId || String(iq.iqClientId || "") !== clientIqId ||
-      !iq.iqPartnerId || !iq.iqBeneficiaryId || !iq.iqAccountId;
+    return !link.ready || !hasExactPersonalCommissionIqLink({
+      rootId: actor.rootId, clientId, ownerUid, accountId: account.id, clientIqId,
+      despachoId: String(financialSnapshot.despachoId || ""), account, link: iq,
+    });
   }).map(account => account.id);
   return {
     ok: true,

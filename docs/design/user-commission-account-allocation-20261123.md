@@ -26,7 +26,9 @@ Estado: diseño de migración; NO habilitar ejecución ni sustituir reglas exist
 
 ## Decisión de visualización y almacenamiento (23-nov-2026)
 - Mostrar banco, beneficiario y número completo de CLABE o tarjeta a usuarios autorizados para verificar visualmente el destino.
-- No integrar el cifrado de aplicación AES-256-GCM propuesto en esta rama; el archivo experimental `instrumentEncryption.ts` no forma parte del flujo operativo.
-- Firestore utiliza cifrado en reposo y en tránsito, pero eso no sustituye reglas de acceso, segregación por rootId/ownerUid ni auditoría de lecturas y escrituras.
+- Guardar el número bancario **únicamente cifrado** en `personalCommissionAccounts.encryptedInstrument` con AES-256-GCM, AAD por raíz/titular/cuenta y clave administrada `COMMISSION_ACCOUNT_ENCRYPTION_KEY`. El número completo solo se revela al titular autorizado y se descifra en memoria para la validación IQ y el ejecutor autorizado; jamás se almacena en los espejos cliente.
+- Firestore utiliza cifrado en reposo y en tránsito; es una capa adicional, no sustituto del cifrado de aplicación, controles de acceso por raíz/titular ni auditoría de lecturas y escrituras.
+- La coincidencia IQ exige número bancario completo comprobado, perfil, cliente, origen (despacho), identificadores del beneficiario y cuenta y verificación reciente. La vista previa y publicación fallan cerradas si faltan o difieren; el resultado no autoriza por sí mismo pagos.
+- El secreto y la integración Auth/Functions/Firestore/IQ deben verificarse en el entorno destino antes de cualquier autorización de despliegue.
 - Nunca publicar cuentas en logs, URLs o respuestas accesibles a terceros. Mantener validación de IQ y controles contra transferencias duplicadas.
 - Auditoría de secretos/credenciales de IQ queda fuera de este alcance, para revisión posterior.

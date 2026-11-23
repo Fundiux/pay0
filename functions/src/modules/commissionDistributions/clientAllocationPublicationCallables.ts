@@ -4,7 +4,7 @@ import { commissionAccountActor, commissionMillis, commissionSettingsId } from "
 import { calculateClientCommissionInstructions, type ClientCommissionInstruction } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
-import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { postedClientOperationBaseMinor, hasExactPersonalCommissionIqLink } from "./postedClientAllocationPreview";
 import { personalCommissionMirrorData } from "./personalAllocationMirror";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -82,6 +82,7 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
         snapshot.clienteId !== clientId || String(snapshot.currency || payment.moneda || "MXN") !== "MXN") {
       throw new HttpsError("failed-precondition", "Snapshot financiero no válido para MXN.");
     }
+    const sourceDespachoId = safeId(snapshot.despachoId);
     const iqSnaps = await Promise.all(accountIds.map(accountId =>
       tx.get(db.doc(`personalCommissionIqLinks/${personalCommissionIqLinkId(actor.rootId, clientId, ownerUid, accountId)}`))));
     const nowMs = Date.now();
@@ -95,11 +96,10 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
         status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
         nowMs, maxAgeMs: 86400000, storedLast4: iq?.last4, currentLast4: account.last4,
       });
-      if (!link.ready || !iq || iq.rootId !== actor.rootId || iq.clientId !== clientId ||
-          iq.ownerUid !== ownerUid || iq.accountId !== accountId ||
-          iq.accountFingerprint !== account.instrumentFingerprint || iq.iqFullDigitsMatched !== true ||
-          String(iq.iqClientId || "") !== clientIqId || !iq.iqPartnerId ||
-          !iq.iqBeneficiaryId || !iq.iqAccountId || !iq.iqCredentialProfileId) {
+      if (!link.ready || !hasExactPersonalCommissionIqLink({
+        rootId: actor.rootId, clientId, ownerUid, accountId, clientIqId,
+        despachoId: sourceDespachoId, account, link: iq,
+      })) {
         throw new HttpsError("failed-precondition", "La cuenta requiere verificación exacta y vigente en IQ para este cliente.");
       }
       return {
@@ -108,7 +108,7 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
         fingerprint: account.instrumentFingerprint, last4: account.last4,
         iqClientId: clientIqId, iqPartnerId: iq.iqPartnerId,
         iqBeneficiaryId: iq.iqBeneficiaryId, iqAccountId: iq.iqAccountId,
-        iqCredentialProfileId: iq.iqCredentialProfileId,
+        iqCredentialProfileId: iq.iqCredentialProfileId, despachoId: sourceDespachoId,
       };
     });
     let earning: ReturnType<typeof canonicalUserCommission>;
@@ -252,12 +252,14 @@ export const activateClientCommissionAllocation = onCall({ cors: true, timeoutSe
         status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
         nowMs, maxAgeMs: 86400000, storedLast4: iq?.last4, currentLast4: account?.last4,
       });
-      if (!account || account.rootId !== actor.rootId || account.ownerUid !== ownerUid ||
-          account.active !== true || account.instrumentFingerprint !== item.fingerprint ||
-          !check.ready || !iq || iq.iqFullDigitsMatched !== true || iq.accountFingerprint !== item.fingerprint ||
-          iq.iqClientId !== clientIqId || iq.iqAccountId !== item.iqAccountId ||
-          iq.iqBeneficiaryId !== item.iqBeneficiaryId ||
-          iq.iqPartnerId !== item.iqPartnerId || !iq.iqCredentialProfileId) {
+      if (!check.ready || !hasExactPersonalCommissionIqLink({
+        rootId: actor.rootId, clientId, ownerUid, accountId: safeId(item.accountId), clientIqId,
+        despachoId: String(item.despachoId || ""), account, link: iq,
+      }) || account.instrumentFingerprint !== item.fingerprint ||
+          String(iq.iqAccountId) !== String(item.iqAccountId) ||
+          String(iq.iqBeneficiaryId) !== String(item.iqBeneficiaryId) ||
+          String(iq.iqPartnerId) !== String(item.iqPartnerId) ||
+          String(iq.iqCredentialProfileId) !== String(item.iqCredentialProfileId)) {
         throw new HttpsError("failed-precondition", "Una cuenta cambió o requiere volver a verificarse en IQ.");
       }
     });
