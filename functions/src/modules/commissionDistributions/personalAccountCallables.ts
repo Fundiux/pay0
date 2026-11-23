@@ -216,7 +216,14 @@ export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secret
       const valid = account.instrumentType === "CLABE" ? /^\\d{18}$/.test(number) :
         account.instrumentType === "CARD" && /^\\d{16,19}$/.test(number);
       if (!valid || number.slice(-4) !== account.last4) throw new Error("Mismatch");
-    } catch {
+    } catch (error) {
+      // Log a category only. Never log the number, cryptographic key or encrypted payload.
+      const cause = error instanceof Error ? error.message : "";
+      console.warn("COMMISSION_BANK_DETAIL_DECRYPT_FAILED", {
+        reason: /unable to authenticate|Unsupported state/i.test(cause) ? "AUTH_TAG" :
+          /key|32 bytes|Invalid key/i.test(cause) ? "KEY" :
+          /Mismatch/.test(cause) ? "ACCOUNT_VALIDATION" : "ENVELOPE",
+      });
       throw new HttpsError("failed-precondition", "No se pudo validar el instrumento bancario guardado.");
     }
     return { accountId: snapshot.id, instrumentType: account.instrumentType, instrumentNumber: number };
