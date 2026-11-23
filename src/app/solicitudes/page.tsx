@@ -47,13 +47,17 @@ import RecordCreatorFilter from "@/components/RecordCreatorFilter";
 import { recordCreatorLabel, type RecordCreatorOption } from "@/lib/recordCreator";
 
 function money2(value: any) {
-  const raw = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  let raw = value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    raw = /^\d+,\d{1,2}$/.test(trimmed) ? trimmed.replace(",", ".") : trimmed.replace(/,/g, "");
+  }
   const num = Number(raw || 0);
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
 
 function toCurrency(value: any) {
-  return money2(value).toLocaleString(undefined, {
+  return money2(value).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

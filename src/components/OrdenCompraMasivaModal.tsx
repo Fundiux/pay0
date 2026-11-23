@@ -50,7 +50,7 @@ function formatMoney(value: unknown) {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return "$0.00";
 
-  return "$" + n.toLocaleString(undefined, {
+  return "$" + n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

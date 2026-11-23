@@ -34,7 +34,7 @@ type WalletMovement = {
 };
 
 function formatMoney(value: number) {
-  return `$${Number(value || 0).toLocaleString(undefined, {
+  return `$${Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
