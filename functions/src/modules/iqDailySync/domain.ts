@@ -177,13 +177,19 @@ export function applyDailySyncSafety(manifest: P4Manifest, pay0Rows: Pay0PlanRow
   return { manifest: rebuilt, converted };
 }
 
+const pickIdentity = (value: unknown) => {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return { status: text(row.status), iqUsername: text(row.iqUsername), associatedName: text(row.associatedName), canonicalIqGroupId: text(row.canonicalIqGroupId), reviewCode: text(row.reviewCode) };
+};
+
 /** Review items of a final manifest: every action the daily sync will not write and that is not already in PAY0. */
 export function reviewItems(manifest: P4Manifest): DailyReview[] {
   return manifest.actions.filter(action => REVIEW_OPERATIONS.has(action.operation) || action.operation === "RECONCILE").map(action => {
     const daily = (action.matchingEvidence?.dailySync || {}) as Record<string, unknown>;
     const code = text(daily.code) || text(action.reason).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 80) || action.operation;
     return { entityType: action.entityType, iqEntityId: action.iqEntityId, canonicalGroupId: action.canonicalGroupId, code, detail: text(action.reason).slice(0, 200),
-      evidence: { operation: action.operation, ...(Object.keys(daily).length ? { dailySync: daily } : {}), reviewReasons: action.canonicalEvidence?.reviewReasons || [] } };
+      evidence: { operation: action.operation, ...(Object.keys(daily).length ? { dailySync: daily } : {}), reviewReasons: action.canonicalEvidence?.reviewReasons || [],
+        ...(action.matchingEvidence?.operationalIdentity ? { operationalIdentity: pickIdentity(action.matchingEvidence.operationalIdentity) } : {}) } };
   });
 }
 
