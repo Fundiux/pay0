@@ -35,11 +35,13 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
     throw new HttpsError("permission-denied", "No tienes autorización para consultar estas cuentas.");
   }
   const clientId = purpose === "CLIENT_COSTS" ? cleanId(request.data?.clientId) : null;
+  let clientIqId = "";
   if (clientId) {
     const client = await db.doc(`clients/${clientId}`).get();
     if (!client.exists || client.data()?.rootId !== actor.rootId) {
       throw new HttpsError("permission-denied", "Cliente fuera de alcance.");
     }
+    clientIqId = String(client.data()?.iqLink?.clientId || client.data()?.iqClientId || "");
   }
   const snapshot = await db.collection("personalCommissionAccounts")
     .where("rootId", "==", actor.rootId).where("ownerUid", "==", ownerUid).limit(50).get();
@@ -53,6 +55,7 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
       link?.ownerUid === ownerUid && link?.accountId === doc.id && link?.iqLinkStatus === "VERIFIED" &&
       link?.accountFingerprint === data.instrumentFingerprint && link?.last4 === data.last4 &&
       data.active === true && verifiedAt > 0 && now - verifiedAt <= 86400000 &&
+      !!clientIqId && String(link?.iqClientId || "") === clientIqId && !!link?.iqPartnerId &&
       !!link?.iqBeneficiaryId && !!link?.iqAccountId && !!link?.iqCredentialProfileId;
     return {
       id: doc.id, bankName: String(data.bankName || ""), beneficiaryName: String(data.beneficiaryName || ""),
