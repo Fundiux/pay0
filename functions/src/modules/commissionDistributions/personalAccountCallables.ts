@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { createHmac } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
@@ -79,13 +80,14 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
   const accountRef = collection.doc(fingerprint);
   const encryptedInstrument = encryptCommissionInstrument({ number: account.instrumentNumber, rootId: actor.rootId, ownerUid: actor.uid, accountId: accountRef.id, keyBase64, keyVersion: "v1" });
   const last4 = account.instrumentNumber.slice(-4);
+  const instrumentFingerprint = createHmac("sha256", Buffer.from(keyBase64, "base64")).update(JSON.stringify([actor.rootId, actor.uid, account.instrumentType, account.instrumentNumber])).digest("hex");
   await db.runTransaction(async tx => {
     const existing = await tx.get(collection.where("rootId", "==", actor.rootId).where("ownerUid", "==", actor.uid).limit(50));
     if (existing.size >= 50) throw new HttpsError("resource-exhausted", "Límite de 50 cuentas.");
     if (existing.docs.some(doc => doc.id === fingerprint)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     }
-    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, instrumentFingerprint, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: admin.firestore.FieldValue.serverTimestamp() });
   });
   return { ok: true, accountId: accountRef.id, iqLinkStatus: "PENDING" };
