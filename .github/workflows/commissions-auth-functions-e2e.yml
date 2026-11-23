@@ -55,9 +55,17 @@ jobs:
           node -e 'const fs=require("fs");fs.writeFileSync("qa/.commissions-functions-emulator/.secret.local","COMMISSION_ACCOUNT_ENCRYPTION_KEY="+Buffer.alloc(32,0x43).toString("base64")+"\n",{mode:0o600});'
           cat > qa/.commissions-functions-emulator/index.js <<'EOF'
           const personal = require("../../functions/lib/modules/commissionDistributions/personalAccountCallables.js");
+          const { onCall } = require("firebase-functions/v2/https");
+          const { defineSecret } = require("firebase-functions/params");
+          const fixtureKey = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
+          const qaCommissionSecretProbe = onCall({ secrets: [fixtureKey] }, () => ({
+            configured: !!fixtureKey.value(),
+            matchesDemoFixture: fixtureKey.value() === Buffer.alloc(32, 0x43).toString("base64"),
+          }));
           const drafts = require("../../functions/lib/modules/commissionDistributions/clientAllocationDraftCallables.js");
           const rules = require("../../functions/lib/modules/commissionDistributions/clientAllocationPublicationCallables.js");
           module.exports = {
+            qaCommissionSecretProbe,
             listPersonalCommissionAccounts: personal.listPersonalCommissionAccounts,
             revealPersonalCommissionAccountNumber: personal.revealPersonalCommissionAccountNumber,
             getClientCommissionAllocationDraft: drafts.getClientCommissionAllocationDraft,
