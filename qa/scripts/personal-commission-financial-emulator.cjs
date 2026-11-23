@@ -81,7 +81,7 @@ const rule = {
 };
 const link = {
   rootId, clientId, ownerUid, accountId, accountFingerprint: fingerprint,
-  last4: "5678", iqLinkStatus: "VERIFIED", iqClientId: "123", iqPartnerId: "88",
+  last4: "5678", iqLinkStatus: "VERIFIED", iqFullDigitsMatched: true, iqClientId: "123", iqPartnerId: "88",
   iqBeneficiaryId: "456", iqAccountId: "789", iqCredentialProfileId: "qa-profile",
   despachoId: "qa-despacho", verifiedAt: admin.firestore.Timestamp.fromMillis(now - 5000),
 };
