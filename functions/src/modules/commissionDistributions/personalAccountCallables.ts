@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
+import { normalizePersonalCommissionAccount } from "./personalAccounts";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -42,4 +43,42 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
     };
   });
   return { ok: true, ownerUid, accounts };
+});
+
+/** Self-service account registration. New accounts remain PENDING until IQ verification. */
+export const createPersonalCommissionAccount = onCall({ cors: true }, async request => {
+  const actor = await commissionAccountActor(request);
+  const ownerSnap = await db.doc(`users/${actor.uid}`).get();
+  const owner = ownerSnap.data() || {};
+  try {
+    authorizeCommissionAccountRead(
+      { uid: actor.uid, rootId: actor.rootId, role: actor.role as "superadmin" | "admin" | "operador", active: true },
+      { uid: actor.uid, rootId: String(owner.rootId || actor.uid), active: ownerSnap.exists && owner.isActive !== false && owner.active !== false && owner.isDeleted !== true && owner.disabled !== true },
+      "SELF_PROFILE",
+    );
+  } catch {
+    throw new HttpsError("permission-denied", "No tienes permiso para registrar cuentas.");
+  }
+  let account: ReturnType<typeof normalizePersonalCommissionAccount>;
+  try {
+    account = normalizePersonalCommissionAccount({
+      ownerUid: actor.uid, rootId: actor.rootId,
+      bankName: request.data?.bankName, beneficiaryName: request.data?.beneficiaryName,
+      instrumentType: request.data?.instrumentType, instrumentNumber: request.data?.instrumentNumber,
+    });
+  } catch (error: any) {
+    throw new HttpsError("invalid-argument", String(error?.message || "Cuenta inválida."));
+  }
+  const collection = db.collection("personalCommissionAccounts");
+  const accountRef = collection.doc();
+  await db.runTransaction(async tx => {
+    const existing = await tx.get(collection.where("rootId", "==", actor.rootId).where("ownerUid", "==", actor.uid).limit(50));
+    if (existing.size >= 50) throw new HttpsError("resource-exhausted", "Límite de 50 cuentas.");
+    if (existing.docs.some(doc => doc.data().instrumentNumber === account.instrumentNumber && doc.data().instrumentType === account.instrumentType && doc.data().active !== false)) {
+      throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
+    }
+    tx.create(accountRef, { ...account, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+  return { ok: true, accountId: accountRef.id, iqLinkStatus: "PENDING" };
 });
