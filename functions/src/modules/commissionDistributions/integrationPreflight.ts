@@ -29,9 +29,9 @@ export function preflightClientCommissionIntegration(input: CommissionIntegratio
   for (const instruction of input.instructions) {
     const account = accountById.get(instruction.accountId);
     if (!account || !canUsePersonalCommissionAccount(account, owner)) throw new Error("Cuenta no disponible para el titular.");
-    const iq = account as PersonalCommissionAccount & { iqVerifiedAtMs?: number; iqInstrumentLast4?: string; last4?: string; iqBeneficiaryId?: string; iqAccountId?: string };
+    const iq = account as PersonalCommissionAccount & { iqVerifiedAtMs?: number; iqInstrumentLast4?: string; last4?: string; iqBeneficiaryId?: string; iqAccountId?: string; iqFullDigitsMatched?: boolean };
     const link = evaluateIqLink({ status: iq.iqLinkStatus, verifiedAtMs: iq.iqVerifiedAtMs, nowMs: input.nowMs ?? Date.now(), maxAgeMs: 86400000, storedLast4: iq.iqInstrumentLast4, currentLast4: iq.last4 });
-    if (!link.ready || !iq.iqBeneficiaryId || !iq.iqAccountId) throw new Error("Cuenta sin vínculo IQ vigente y comprobable.");
+    if (!link.ready || iq.iqFullDigitsMatched !== true || !iq.iqBeneficiaryId || !iq.iqAccountId) throw new Error("Cuenta sin vínculo IQ vigente y comprobable.");
   }
   const result = calculateClientCommissionInstructions({
     earnedMinor: input.earnedMinor,
