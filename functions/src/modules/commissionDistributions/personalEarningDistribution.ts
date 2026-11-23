@@ -76,7 +76,7 @@ export async function materializePersonalEarningDistribution(input: {
       account?.last4 === destination.last4 && linkHealth.ready &&
       iq?.rootId === input.rootId && iq?.clientId === input.clientId &&
       iq?.ownerUid === input.ownerUid && iq?.accountId === accountId &&
-      iq?.accountFingerprint === destination.fingerprint && text(iq?.iqClientId) === clientIqId &&
+      iq?.iqFullDigitsMatched === true && iq?.accountFingerprint === destination.fingerprint && text(iq?.iqClientId) === clientIqId &&
       text(iq?.iqAccountId) === text(destination.iqAccountId) &&
       text(iq?.iqBeneficiaryId) === text(destination.iqBeneficiaryId) &&
       text(iq?.iqPartnerId) === text(destination.iqPartnerId) &&
@@ -227,7 +227,7 @@ export async function preflightPersonalEarningDistribution(
       maxAgeMs: MAX_IQ_AGE_MS, storedLast4: iq?.last4, currentLast4: account?.last4,
     });
     if (!link.ready || account?.active !== true || account?.rootId !== distribution.rootId ||
-        account?.ownerUid !== distribution.ownerUid || iq?.accountFingerprint !== account?.instrumentFingerprint ||
+        account?.ownerUid !== distribution.ownerUid || iq?.iqFullDigitsMatched !== true || iq?.accountFingerprint !== account?.instrumentFingerprint ||
         iq?.rootId !== distribution.rootId || iq?.clientId !== distribution.clientId ||
         iq?.ownerUid !== distribution.ownerUid || iq?.accountId !== leg.accountId ||
         text(iq?.iqClientId) !== clientIqId || text(iq?.iqBeneficiaryId) !== text(leg.iqBeneficiaryId) ||
