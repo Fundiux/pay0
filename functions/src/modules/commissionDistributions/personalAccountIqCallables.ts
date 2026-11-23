@@ -138,7 +138,7 @@ export const resolvePersonalCommissionAccountIq = onCall({
   } catch (error) {
     // Reuse the existing master-switch, catalog-absence, reservation, daily-cap
     // and uncertain-outcome safeguards. Never POST directly from this callable.
-    const code = text(error instanceof Error ? error.message : error).slice(0, 100);
+    const code = text(error instanceof Error ? error.message : error).replace(/\b\d{5,}\b/g, "[REDACTED]").slice(0, 100);
     if (/IQ_BENEFICIARY(_ACCOUNT)?_NOT_FOUND/.test(code)) {
       try {
         const outcomes = await linkOrCreateMethod({
