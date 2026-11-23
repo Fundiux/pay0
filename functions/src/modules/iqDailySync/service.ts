@@ -13,6 +13,8 @@ import { executeAction, markDailySyncManifest, persistDailySyncManifest, type Co
 import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, widenWindowForOpenReviews, type DailyReview } from "./domain";
 import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDisplay";
 import { applyClientLinks, linkPatchForPlan, planClientLinks } from "./clientLinks";
+import { postRecoveredPagoToWallet } from "./pagoPosting";
+import { isIqDailySyncImport } from "../iq/historicalImportGuard";
 import { detectIqDispersions } from "./dispersions";
 
 /**
@@ -48,7 +50,7 @@ type Counts = Record<string, number>;
 type GroupResult = {
   groupId: string; status: "COMPLETE" | "PARTIAL" | "FAILED"; stopReason: string | null; layers: number;
   created: Counts; noop: number; failed: number; reviewsOpen: number; reviewsNew: number; reviewsResolved: number;
-  dispersionsObserved: number; dispersionsMissing: number; clientsLinked?: number;
+  dispersionsObserved: number; dispersionsMissing: number; clientsLinked?: number; pagosPosted?: number;
 };
 export type RootResult = { rootId: string; status: string; window: { start: string; end: string } | null; groups: GroupResult[]; safety: string };
 type Tracker = { started: number; writes: number; errors: number; budget: DailySyncBudget };
@@ -133,7 +135,7 @@ async function upsertReviews(rootId: string, groupId: string, window: { start: s
 
 /** Recovered pagos need PAY0's operation type to build the wallet posting snapshot; once posted, close the review. */
 async function resolvePostedPaymentReviews(rootId: string) {
-  const firestore = db(), open = await firestore.collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").where("code", "==", "WALLET_POSTING_REQUIRES_OPERATION_TYPE").limit(200).get();
+  const firestore = db(), open = await firestore.collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").where("entityType", "==", "PAYMENT_POSTING").limit(400).get();
   let resolved = 0;
   for (const doc of open.docs) {
     const path = text(doc.get("evidence.pagoPath"));
@@ -146,10 +148,39 @@ async function resolvePostedPaymentReviews(rootId: string) {
   return resolved;
 }
 
+const MAX_PAGOS_POSTED_PER_GROUP = 40;
+
+/** Credits to the wallet the daily-sync pagos of this group that IQ already shows as conciliated; the rest stays in review with its reason. */
+async function postRecoveredPagos(rootId: string, groupId: string, deposits: Map<string, Record<string, unknown>>, tracker: Tracker) {
+  const group = P4_PLAN_GROUPS[groupId];
+  const out = { posted: 0, reviews: [] as DailyReview[] };
+  if (!group) return out;
+  const snap = await db().collection("pagos").where("rootId", "==", rootId).where("source", "==", "IQ_IMPORT").limit(2000).get();
+  for (const doc of snap.docs) {
+    if (out.posted >= MAX_PAGOS_POSTED_PER_GROUP || exhausted(tracker)) break;
+    const data = doc.data();
+    if (!isIqDailySyncImport(data) || text(data.canonicalIqProfileId) !== group.canonicalIqProfileId || text(data.financialPostingStatus).toUpperCase() === "POSTED") continue;
+    const iqId = text(data.originalIqEntityId || data.iqDepositId);
+    const deposit = deposits.get(iqId);
+    if (!deposit) continue; // outside the window read in this run
+    try {
+      const result = await postRecoveredPagoToWallet(db(), rootId, doc.id, deposit);
+      if (result.status === "POSTED") { out.posted++; tracker.writes += 3; continue; }
+      if (result.code === "PAGO_ALREADY_POSTED") continue;
+      out.reviews.push({ entityType: "PAYMENT_POSTING", iqEntityId: iqId, canonicalGroupId: groupId, code: result.code, detail: result.detail, evidence: { pagoPath: `pagos/${doc.id}` } });
+    } catch (error) {
+      console.error("IQ_DAILY_SYNC_PAGO_POSTING_FAILED", JSON.stringify({ groupId, iqDepositId: iqId, message: (error instanceof Error ? error.message : String(error)).slice(0, 160) }));
+      out.reviews.push({ entityType: "PAYMENT_POSTING", iqEntityId: iqId, canonicalGroupId: groupId, code: "PAGO_POSTING_FAILED", detail: "No se pudo abonar el pago a la cartera; se reintenta en la siguiente corrida.", evidence: { pagoPath: `pagos/${doc.id}` } });
+    }
+  }
+  return out;
+}
+
 async function syncGroup(ctx: Context, groupId: string, window: { start: string; end: string; timezone: "America/Mexico_City" }, tracker: Tracker, secret: string): Promise<GroupResult> {
   const result: GroupResult = { groupId, status: "COMPLETE", stopReason: null, layers: 0, created: {}, noop: 0, failed: 0, reviewsOpen: 0, reviewsNew: 0, reviewsResolved: 0, dispersionsObserved: 0, dispersionsMissing: 0 };
   let finalManifest: P4Manifest | null = null;
   const displayIndex = new Map<string, ReviewDisplay>();
+  const iqDeposits = new Map<string, Record<string, unknown>>();
   const failures: DailyReview[] = [], extraReviews: DailyReview[] = [], extraResolved: Array<{ entityType: string; iqEntityId: string }> = [];
   for (let layer = 0; layer < tracker.budget.maxLayers; layer++) {
     if (exhausted(tracker)) { result.status = "PARTIAL"; result.stopReason = "RUN_BUDGET"; break; }
@@ -169,6 +200,7 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
       }
       if (linked.length) console.log("IQ_DAILY_SYNC_CLIENTS_LINKED", JSON.stringify({ groupId, linked: linked.length }));
     }
+    for (const row of discovered.iqRows) if (row.kind === "PAYMENT" && !iqDeposits.has(row.id)) iqDeposits.set(row.id, row.raw);
     for (const row of discovered.iqRows) displayIndex.set(`${row.kind}:${row.id}`, displayFromIqRow(row.kind, row.raw));
     const { manifest, summary } = buildServerPlan({ rootId: ctx.rootId, range: window, groupIds: [groupId], iqRows: discovered.iqRows, pay0Rows: discovered.pay0Rows, tombstones: discovered.tombstones });
     const safe = applyDailySyncSafety(manifest, discovered.pay0Rows);
@@ -185,6 +217,12 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     if (executed.failed) { result.status = "PARTIAL"; result.stopReason = "EXECUTION_ERRORS"; break; }
     // A new client unlocks its invoices/deposits only on the next plan (the planner needs the PAY0 client root).
     if (!executed.clientsCreated) break;
+  }
+  // The pagos recovered from IQ are credited to the client's wallet on the day of the deposit, instead of waiting for a person.
+  if (iqDeposits.size) {
+    const posted = await postRecoveredPagos(ctx.rootId, groupId, iqDeposits, tracker);
+    result.pagosPosted = posted.posted;
+    extraReviews.push(...posted.reviews);
   }
   if (finalManifest && result.status === "COMPLETE") {
     const reviews = attachDisplay([...reviewItems(finalManifest).filter(review => !extraResolved.some(row => row.entityType === review.entityType && row.iqEntityId === review.iqEntityId)), ...failures, ...extraReviews], displayIndex);

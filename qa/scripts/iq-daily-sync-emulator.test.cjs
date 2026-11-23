@@ -148,7 +148,7 @@ async function main() {
   assert.match(String(byEntity("SOLICITUD", "7201")?.code), /IDENTITY|CLIENT/, "unmapped IQ user goes to review"); checks++;
   assert.equal((await db.collection("solicitudes").where("originalIqEntityId", "==", "7201").get()).size, 0); checks++;
   assert.equal(byEntity("DISPERSION", "555")?.code, "IQ_DISPERSION_NOT_IN_PAY0"); assert.equal(byEntity("DISPERSION", "556"), undefined); checks += 2;
-  assert.equal(byEntity("PAYMENT_POSTING", "8101")?.code, "WALLET_POSTING_REQUIRES_OPERATION_TYPE"); checks++;
+  assert.equal(byEntity("PAYMENT_POSTING", "8101")?.code, "PAGO_PERCENTAGE_INVALID", "a deposit IQ gives no sale percentage for is not credited, and says why"); checks++;
   const incident = await db.doc(`analyticsRoots/${ROOT_UID}/incidents/iq-daily-sync-review`).get();
   assert.equal(incident.get("status"), "NEEDS_REVIEW"); assert.equal(incident.get("openCount"), open.filter((row) => row.status === "OPEN").length); checks += 2;
   const audits = await db.collection("p4ImportAudit").where("rootId", "==", ROOT_UID).where("mode", "==", "EXECUTE").get();
@@ -221,6 +221,29 @@ async function main() {
   const run8 = await run(ROOT_UID, mexico("2026-11-25T21:30:00"));
   assert.equal((await db.collection("clients").where("rootId", "==", ROOT_UID).get()).size, clientsBefore, "running again creates nothing"); checks++;
   assert.equal(created(run8), 0); checks++;
+
+  // A deposit made in IQ is credited to the client's wallet on its own day, at the commission IQ itself charged.
+  const economics = { sale_type: "Subtotal", sale_percentage: "2.0", base_percentage: "2.0", operation_type: "CRUCE" };
+  IQ.ELIUT["/deposits"].push(financial({ id: "8201", client: "CLIENTE ENLACE SA", voucher: "V-8201", deposit_date: "2026-11-26", conciliation_status: "CONCILIADO", sum: 200000, created_at: "2026-11-26T11:07:00", ...economics }));
+  await db.doc("pagos/pay0-native-pago").set({ rootId: ROOT_UID, clienteId: "pay0-link-client", clientId: "pay0-link-client", companyId: "company-demo", status: "CONCILIADO", monto: 777, montoTotal: 777, moneda: "MXN", folio: "P-NATIVE", source: "PAY0", createdAt: new Date("2026-11-26T09:00:00Z") });
+  const walletBefore = Number(((await db.doc("balanceAccounts/CLIENT_pay0-link-client").get()).data() || {}).availableBalance || 0);
+  const run11 = await run(ROOT_UID, mexico("2026-11-26T21:00:00"));
+  assert.equal(run11.status, "COMPLETE", JSON.stringify(run11)); checks++;
+  const pago8201 = (await imported("pagos")).find((row) => row.originalIqEntityId === "8201");
+  assert.ok(pago8201, "the deposit was recovered as a pago"); assert.equal(pago8201.clientId, "pay0-link-client"); checks += 2;
+  assert.equal(pago8201.financialPostingStatus, "POSTED"); assert.equal(pago8201.walletPostingStatus, "POSTED"); assert.equal(pago8201.financialPostingSource, "IQ_IMPORT"); checks += 3;
+  assert.equal(pago8201.totalComisionCliente, 3448.28, "2% of the subtotal (200,000 / 1.16)"); assert.equal(pago8201.clientNetAmountGenerated, 196551.72, "IQ's own net"); assert.equal(pago8201.finalClientRate, 2); checks += 3;
+  assert.equal(pago8201.userEarningsEnabled, false); assert.equal(pago8201.superadminAmount, 0); checks += 2;
+  assert.equal(Math.round(Number((await db.doc("balanceAccounts/CLIENT_pay0-link-client").get()).data().availableBalance) * 100) / 100, Math.round((walletBefore + 196551.72) * 100) / 100, "the wallet receives the net"); checks++;
+  const pagoMovements = (await db.collection("balanceMovements").where("depositId", "==", pago8201.id).get()).docs.map((doc) => doc.data());
+  const gross = pagoMovements.find((row) => row.movementType === "PAGO_RECIBIDO_BRUTO"), commission = pagoMovements.find((row) => row.movementType === "COMISION_CLIENTE_COBRADA");
+  assert.equal(pagoMovements.length, 2); assert.equal(gross.direction, "IN"); assert.equal(gross.amount, 200000); assert.equal(commission.direction, "OUT"); assert.equal(commission.amount, 3448.28); checks += 5;
+  assert.equal(gross.createdAt.toDate().toISOString().slice(0, 10), "2026-11-26", "dated on the deposit's own day"); assert.equal(commission.createdAt.toDate().toISOString().slice(0, 10), "2026-11-26"); checks += 2;
+  assert.notEqual((await db.doc("pagos/pay0-native-pago").get()).get("financialPostingStatus"), "POSTED", "a pago PAY0 created is never posted by the IQ sync"); checks++;
+  assert.equal((await reviews()).find((row) => row.entityType === "PAYMENT_POSTING" && row.iqEntityId === "8201" && row.status === "OPEN"), undefined, "no review is left for a posted pago"); checks++;
+  const run12 = await run(ROOT_UID, mexico("2026-11-26T21:30:00"));
+  assert.equal((await db.collection("balanceMovements").where("depositId", "==", pago8201.id).get()).size, 2, "a second run posts nothing again"); checks++;
+  assert.equal(run12.groups.reduce((sum, group) => sum + (group.pagosPosted || 0), 0), 0); checks++;
 
   // Breaker: three IQ 503 runs open the circuit; the next run is not admitted and does not read IQ.
   await db.doc(`iqOperationalAssignmentPolicies/${ROOT_B}`).set({ activeVersion: "none" });
