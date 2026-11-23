@@ -397,12 +397,20 @@ async function run() {
   await assert.rejects(() => call(financing.requestClientDispersionIncident, root, { dispersionId: uncertainRef.id, incidentType: "CANCELACION" })); checks++;
   await assert.rejects(() => documents.initDispersionDocumentUploadCore({ auth: { uid: other }, data: { dispersionId: uncertainRef.id, originalName: "fixture.pdf", contentType: "application/pdf", sizeBytes: 100 } })); checks++;
   const uploadId = `${root}-doc`;
-  await set(`uploads/${uploadId}`, { rootId: root, dispersionId: uncertainRef.id, entityType: "clientDispersions", active: true, status: "READY", documentType: "COMPROBANTE_DISPERSION", clientId: client, storagePath: `roots/${root}/dispersiones/${uncertainRef.id}/fixture.pdf` });
+  await set(`uploads/${uploadId}`, {
+    rootId: root, dispersionId: uncertainRef.id, entityId: uncertainRef.id,
+    entityType: "clientDispersions", active: true, status: "READY",
+    documentType: "COMPROBANTE_DISPERSION", clientId: client, finalizedBy: root,
+    storageGeneration: "1", sizeBytes: 100, contentType: "application/pdf",
+    storagePath: `roots/${root}/dispersiones/${uncertainRef.id}/docs/COMPROBANTE_DISPERSION/${uploadId}-fixture.pdf`,
+  });
   let signed = 0;
   await assert.rejects(() => getAuthorizedDocumentDownloadUrlCore({ auth: { uid: other }, data: { uploadId } }, async () => { signed++; return "https://example.invalid"; })); checks++;
   await getAuthorizedDocumentDownloadUrlCore({ auth: { uid: root }, data: { uploadId } }, async () => { signed++; return "https://example.invalid"; });
   check(signed === 1, "only owner/root can obtain a temporary document URL");
-  check((await documents.notifyClientDispersionComprobanteFromUploadId(uploadId, "fake-unused-token")).reason === "private_user_withdrawal", "private withdrawal never notifies the client's Telegram group");
+  const privateNotification = await documents.notifyClientDispersionComprobanteFromUploadId(uploadId, "fake-unused-token");
+  check(privateNotification.notified === false && privateNotification.reason === "user_recipient_policy_pending",
+        "private USER-funded withdrawal is held for review and never notifies the client's Telegram group");
   const uncertainPrincipal = (await uncertainRef.get()).data();
   assert.throws(() => assertDispersionFundingOwner({ rootId: "different-root", uid: root, role: "superadmin", dispersion: uncertainPrincipal })); checks++;
   const batch = db.batch();
