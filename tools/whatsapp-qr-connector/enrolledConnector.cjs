@@ -16,6 +16,8 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // Self-recovery: a connector that cannot keep working closes and reports why, so the
   // supervisor relaunches it. A pending QR waits for a person, so it never counts as stuck.
   let awaitingQr = false, notReadySince = null;
+  // The QR stays on the page while it waits: every heartbeat repeats it, so the 10 s heartbeat never hides it as DISCONNECTED.
+  let pendingQr = null;
   // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
   let observedChats = new Set(), addressedOnly = new Set(), watchedInternal = -1, internalCaptured = 0;
   const buffer = [];
@@ -40,7 +42,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     if (busy || stopped) return;
     busy = true;
     try {
-      const response = await transport.operate("HEARTBEAT", { ready, poll: true });
+      const response = await transport.operate("HEARTBEAT", { ready, poll: true, ...(awaitingQr && pendingQr ? { status: "QR_REQUIRED", ...pendingQr } : {}) });
       observedChats = new Set(Array.isArray(response.observedChats) ? response.observedChats.filter(chat => typeof chat === "string") : []);
       addressedOnly = new Set(Array.isArray(response.addressedOnlyChats) ? response.addressedOnlyChats.filter(chat => typeof chat === "string") : []);
       // Diagnostic (counts only): how many internal groups this connector was told to watch, logged when the number changes.
@@ -67,9 +69,9 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       throw error;
     } finally { busy = false; }
   }
-  client.on("qr", event(async qr => { awaitingQr = true; await status({ status: "QR_REQUIRED", qrText: qr, qrDataUrl: await encodeQr(qr), error: null,
+  client.on("qr", event(async qr => { awaitingQr = true; pendingQr = { qrText: qr, qrDataUrl: await encodeQr(qr) }; await status({ status: "QR_REQUIRED", ...pendingQr, error: null,
     ...(pendingResetId ? { resetCommandId: pendingResetId } : {}) }); pendingResetId = null; }));
-  client.on("authenticated", event(async () => { awaitingQr = false; notReadySince = now(); return status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null }); }));
+  client.on("authenticated", event(async () => { awaitingQr = false; pendingQr = null; notReadySince = now(); return status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null }); }));
   client.on("ready", event(async () => { ownIds = null; ready = true; notReadySince = null; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
   client.on("auth_failure", event(async () => { ready = false; await status({ status: "ERROR", error: "AUTHENTICATION_FAILED" }); await close("AUTHENTICATION_FAILED"); }));
   // whatsapp-web.js does not reconnect by itself: close so the supervisor starts a fresh client.
