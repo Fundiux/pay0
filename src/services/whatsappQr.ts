@@ -205,6 +205,17 @@ export async function decideWhatsAppPlaybookEntry(input: { id: string; decision:
   return (await httpsCallable<typeof input, { ok: boolean; status: string; simulationEndsAtMs: number | null }>(functions, "decideWhatsAppPlaybookEntry")(input)).data;
 }
 
+export type WhatsAppAgentReply = { id: string; agentId: string; groupName: string; kind: string; subject: string | null; atMs: number; text: string; humanCorrection: boolean };
+export type WhatsAppCorrectionCategory = "WRONG_FACT" | "TONE" | "NOT_NEEDED" | "TOO_LATE" | "OTHER";
+
+export async function listWhatsAppAgentReplies(month?: string) {
+  return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; replies: WhatsAppAgentReply[] }>(functions, "listWhatsAppAgentReplies")({ month })).data;
+}
+
+export async function markWhatsAppReplyCorrection(input: { jobId: string; corrected: boolean; reason?: string; category?: WhatsAppCorrectionCategory }) {
+  return (await httpsCallable<typeof input, { ok: boolean; humanCorrection: boolean }>(functions, "markWhatsAppReplyCorrection")(input)).data;
+}
+
 export async function getWhatsAppAgentReplyMetrics(month?: string) {
   return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; truncated: boolean; buckets: WhatsAppReplyMetricsBucket[] }>(functions, "getWhatsAppAgentReplyMetrics")({ month })).data;
 }

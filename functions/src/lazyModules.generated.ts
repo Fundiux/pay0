@@ -224,6 +224,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   listUsers: { module: "./modules/users/list", export: "listUsers" },
   listWhatsAppAgentChats: { module: "./modules/documentDelivery/whatsappAgentChats", export: "listWhatsAppAgentChats" },
   listWhatsAppAgentConnectors: { module: "./modules/documentDelivery/whatsappConnectorCallables", export: "listWhatsAppAgentConnectors" },
+  listWhatsAppAgentReplies: { module: "./modules/whatsappAutoReply/modeCallables", export: "listWhatsAppAgentReplies" },
   logAuthEventCallable: { module: "./modules/activityLog/callables", export: "logAuthEventCallable" },
   logUnauthorizedRouteAttempt: { module: "./modules/activityLog/callables", export: "logUnauthorizedRouteAttempt" },
   loginWithUsername: { module: "./modules/users/loginIdentity", export: "loginWithUsername" },

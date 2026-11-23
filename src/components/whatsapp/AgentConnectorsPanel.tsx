@@ -22,6 +22,10 @@ import {
   type WhatsAppReplyMode,
   decideWhatsAppPlaybookEntry,
   getWhatsAppAgentPlaybook,
+  listWhatsAppAgentReplies,
+  markWhatsAppReplyCorrection,
+  type WhatsAppAgentReply,
+  type WhatsAppCorrectionCategory,
   getWhatsAppAgentReplyMetrics,
   type WhatsAppPlaybookEntry,
   setWhatsAppGroupAgentMode,
@@ -221,6 +225,63 @@ function PlaybookEntryRow({ entry, onDecided }: { entry: WhatsAppPlaybookEntry; 
   );
 }
 
+const CORRECTION_LABELS: Record<WhatsAppCorrectionCategory, string> = { WRONG_FACT: "Dato incorrecto", TONE: "Tono", NOT_NEEDED: "No hacía falta", TOO_LATE: "Llegó tarde", OTHER: "Otro" };
+
+// What Hugo sent in groups this month. The owner marks one as corrected (and why) or unmarks it; corrections feed the monthly measurement and the per-group learning.
+function ReplyRow({ reply, onChanged }: { reply: WhatsAppAgentReply; onChanged: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [category, setCategory] = useState<WhatsAppCorrectionCategory>("WRONG_FACT");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function save(corrected: boolean) {
+    setBusy(true); setError("");
+    try { await markWhatsAppReplyCorrection({ jobId: reply.id, corrected, ...(corrected ? { category, reason: reason.trim() } : {}) }); setEditing(false); setReason(""); await onChanged(); }
+    catch (e: any) { setError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <li className="rounded-lg border border-slate-800 p-2 text-xs text-slate-300">
+      <p className="font-semibold text-slate-100">{reply.groupName || "Grupo"} <span className="font-normal text-slate-500">· {KIND_LABELS[reply.kind] || reply.kind} · {new Date(reply.atMs).toLocaleString("es-MX")}</span></p>
+      <p className="mt-1 text-slate-400">{reply.text || "(texto no disponible)"}</p>
+      {reply.humanCorrection ? (
+        <p className="mt-1 flex items-center gap-2 text-amber-300">Marcada como corregida <button type="button" disabled={busy} onClick={() => void save(false)} className="rounded bg-slate-700 px-2 py-0.5 text-white disabled:opacity-50">Quitar marca</button></p>
+      ) : editing ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <select value={category} onChange={e => setCategory(e.target.value as WhatsAppCorrectionCategory)} aria-label="Tipo de corrección" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100">
+            {(Object.keys(CORRECTION_LABELS) as WhatsAppCorrectionCategory[]).map(key => <option key={key} value={key}>{CORRECTION_LABELS[key]}</option>)}
+          </select>
+          <input value={reason} onChange={e => setReason(e.target.value)} maxLength={300} placeholder="Qué estuvo mal" aria-label="Motivo de la corrección" className="w-56 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100" />
+          <button type="button" disabled={busy || reason.trim().length < 3} onClick={() => void save(true)} className="rounded-lg bg-amber-600 px-2 py-1 text-white disabled:opacity-50">Guardar</button>
+          <button type="button" disabled={busy} onClick={() => setEditing(false)} className="px-1 text-slate-400">Cancelar</button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)} className="mt-1 rounded bg-slate-700 px-2 py-0.5 text-white">Marcar como corregida</button>
+      )}
+      {error && <p className="mt-1 text-rose-300">{error}</p>}
+    </li>
+  );
+}
+
+function RepliesBlock() {
+  const [open, setOpen] = useState(false);
+  const [replies, setReplies] = useState<WhatsAppAgentReply[] | null>(null);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { setReplies((await listWhatsAppAgentReplies()).replies); setError(""); }
+    catch (e: any) { setError(`No se pudo cargar: ${e?.message || e}`); }
+  };
+  useEffect(() => { if (open) void load(); }, [open]);
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Respuestas de Hugo</summary>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {replies && replies.length === 0 && <p className="mt-2 text-xs text-slate-500">Hugo todavía no ha respondido en grupos este mes.</p>}
+      {replies && replies.length > 0 && <ul className="mt-2 space-y-2">{replies.map(reply => <ReplyRow key={`${reply.id}:${reply.humanCorrection}`} reply={reply} onChanged={load} />)}</ul>}
+    </details>
+  );
+}
+
 function PlaybookBlock() {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<WhatsAppPlaybookEntry[] | null>(null);
@@ -347,6 +408,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
       <p className="mt-1 text-xs text-slate-500">Cada grupo observado debe tener su usuario: el agente solo usa información de ese usuario.</p>
       {agentId === "hugo" && <ReplySwitchBlock agentName={agentName} />}
       <ReplyMetricsBlock agentId={agentId} agentName={agentName} />
+      {agentId === "hugo" && <RepliesBlock />}
       {agentId === "hugo" && <PlaybookBlock />}
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
