@@ -8,7 +8,18 @@ import { resolveFrontendBuildEnvironment, validateFrontendBuildEnvironment } fro
 const { environment } = resolveFrontendBuildEnvironment();
 await validateFrontendBuildEnvironment(environment);
 const expected = environment.NEXT_PUBLIC_HUGO_VOICE_GATEWAY_URL;
-const manifest = JSON.parse(fs.readFileSync(".next/app-build-manifest.json", "utf8"));
+const manifestPath = ".next/app-build-manifest.json";
+if (!fs.existsSync(manifestPath)) {
+  const files = fs.existsSync(".next") ? fs.readdirSync(".next", { recursive: true }).map(String) : [];
+  const relevant = files.filter(name => /hugo|manifest|static[/\\\\]chunks|client-build/i.test(name));
+  console.error("NEXT16_BUILD_ARTIFACT_DIAGNOSTIC", JSON.stringify({
+    nextRoot: fs.existsSync(".next") ? fs.readdirSync(".next") : [],
+    relevant: relevant.slice(0, 75),
+    chunks: files.filter(name => /\\.js$/.test(name)).length,
+  }));
+  throw Error("The current Next.js output does not contain the historical app-build-manifest.json.");
+}
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const assets = [...new Set([...manifest.pages["/hugo/page"], ...manifest.pages["/layout"]])];
 const pageAsset = assets.find(file => file.startsWith("static/chunks/app/hugo/page-"));
 assert.ok(pageAsset, "Manifest sin pagina Hugo");
