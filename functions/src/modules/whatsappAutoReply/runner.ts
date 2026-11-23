@@ -10,6 +10,7 @@ import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutoma
 import { agentCanAct, readAgentModes } from "./modes";
 import { mexicoMonthKey } from "./metrics";
 import { runUnansweredAlerts } from "./unansweredRunner";
+import { runInternalChat } from "./internalChat";
 import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
 import { refreshPlaybookProposals } from "./playbook";
 import { runReplySimulation } from "./simulationRunner";
@@ -207,6 +208,13 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
 export const processWhatsAppGroupReplies = onSchedule(
   { schedule: "every 1 minutes", region: "us-central1", timeZone: "America/Mexico_City", timeoutSeconds: 120, memory: "256MiB", maxInstances: 1, concurrency: 1 },
   async () => {
+    // The team's internal group is answered whenever someone addresses Hugo, independent of the client reply switch (the sender has its own).
+    const internalRoots = new Set<string>();
+    for (const doc of (await db.collection("whatsappInternalGroups").limit(50).get()).docs) { const rootId = clean(doc.get("rootId"), 200); if (rootId) internalRoots.add(rootId); }
+    for (const rootId of internalRoots) {
+      try { await runInternalChat(rootId); }
+      catch (error) { console.error("WHATSAPP_INTERNAL_CHAT_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
+    }
     const enabled = await db.collection(REPLY_CONFIGS).where("enabled", "==", true).limit(20).get();
     for (const doc of enabled.docs) {
       const rootId = clean(doc.get("rootId"), 200);

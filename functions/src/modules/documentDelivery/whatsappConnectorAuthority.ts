@@ -171,6 +171,7 @@ export class WhatsAppConnectorAuthority {
     const pending = data.poll ? await tx.get(this.db.collection("whatsappQrConnectorCommands").where("bindingId", "==", binding.id).where("status", "==", "PENDING").limit(1)) : null;
     // El conector solo recibe los grupos que su agente tiene autorizados; el resto nunca sale del teléfono.
     const observed = data.poll && agentId !== LEGACY_CONNECTOR_AGENT ? await tx.get(this.db.collection("whatsappAgentObservers").where("rootId", "==", binding.rootId).where("active", "==", true).limit(200)) : null;
+    const internalGroups = observed && agentId === "hugo" ? await tx.get(this.db.collection("whatsappInternalGroups").where("rootId", "==", binding.rootId).limit(50)) : null;
     const observedChats: string[] = observed ? observed.docs.map((doc: any) => doc.data() || {}).filter((config: any) => typeof config.ownerUserUid === "string" && config.ownerUserUid !== "" && (config.observers || []).some((o: any) => o?.agentId === agentId)).map((config: any) => String(config.groupChatId)) : [];
     let resetRef: any = null;
     if (data.resetCommandId !== undefined) {
@@ -194,7 +195,10 @@ export class WhatsAppConnectorAuthority {
       ...(resetRef ? { lastCommandId: resetRef.id, lastCommandType: "NEW_QR", lastCommandStatus: "DONE", lastCommandMessage: "QR local disponible para escaneo humano.", lastCommandFinishedAt: FieldValue.serverTimestamp() } : {}),
       ...(data.qrText !== undefined ? { qrText: data.qrText } : {}), ...(data.qrDataUrl !== undefined ? { qrDataUrl: data.qrDataUrl } : {}),
       ...(data.error !== undefined ? { error: data.error } : {}), lastSeenAt: FieldValue.serverTimestamp(), externalAccountVerified: false }, { merge: true });
-    return { command, observedChats };
+    // The team's internal group is watched too, but only messages that address Hugo leave the phone and are stored (see inbound).
+    const addressedOnlyChats: string[] = [];
+    if (internalGroups) for (const doc of internalGroups.docs) { const chatId = String(doc.get("groupChatId") || ""); if (doc.get("rootId") === binding.rootId && chatId.endsWith("@g.us") && !observedChats.includes(chatId)) { observedChats.push(chatId); addressedOnlyChats.push(chatId); } }
+    return { command, observedChats, ...(addressedOnlyChats.length ? { addressedOnlyChats } : {}) };
   }
   private async command(tx: any, binding: Binding, commandId: unknown, type: string) {
     const ref = this.db.doc(`whatsappQrConnectorCommands/${id(commandId)}`), command = (await tx.get(ref)).data();
@@ -267,10 +271,10 @@ export class WhatsAppConnectorAuthority {
     if (agentId === LEGACY_CONNECTOR_AGENT || !data || Object.keys(data).length !== 1 || !Array.isArray(data.messages) || data.messages.length < 1 || data.messages.length > 25) fail("invalid-argument");
     const seen = new Set<string>();
     const messages = data.messages.map((m: any) => {
-      if (!m || Object.keys(m).some(k => !["messageId", "chatId", "authorId", "fromMe", "timestampMs", "type", "body"].includes(k))) fail("invalid-argument");
+      if (!m || Object.keys(m).some(k => !["messageId", "chatId", "authorId", "fromMe", "timestampMs", "type", "body", "mentionsMe"].includes(k))) fail("invalid-argument");
       const messageId = id(m.messageId), chatId = id(m.chatId);
       if (!chatId.endsWith("@g.us") || typeof m.fromMe !== "boolean" || !Number.isSafeInteger(m.timestampMs) || m.timestampMs < 1 || typeof m.type !== "string" || m.type.length > 40 ||
-          (m.body !== undefined && (typeof m.body !== "string" || m.body.length > 1000)) || (m.authorId !== undefined && (typeof m.authorId !== "string" || m.authorId.length > 200))) fail("invalid-argument");
+          (m.body !== undefined && (typeof m.body !== "string" || m.body.length > 1000)) || (m.authorId !== undefined && (typeof m.authorId !== "string" || m.authorId.length > 200)) || (m.mentionsMe !== undefined && typeof m.mentionsMe !== "boolean")) fail("invalid-argument");
       const docId = `${binding.id}__${encodeURIComponent(messageId)}`;
       if (seen.has(docId)) fail("invalid-argument");
       seen.add(docId);
@@ -285,11 +289,31 @@ export class WhatsAppConnectorAuthority {
       if (config && config.rootId === binding.rootId && config.active === true && Array.isArray(config.observers) && config.observers.some((o: any) => o?.agentId === agentId) &&
           typeof config.ownerUserUid === "string" && config.ownerUserUid !== "") ownerByChat.set(chatId, config.ownerUserUid);
     });
+    // The team's internal group: nothing is kept except messages that address Hugo (his mention or his name). Its owner is the group's admin.
+    const internalOwnerByChat = new Map<string, string>();
+    if (agentId === "hugo" && chatIds.some(chatId => !ownerByChat.has(chatId))) {
+      const internal = await tx.get(this.db.collection("whatsappInternalGroups").where("rootId", "==", binding.rootId).limit(50));
+      for (const doc of internal.docs) {
+        const chatId = String(doc.get("groupChatId") || ""), owner = String(doc.get("ownerAdminId") || "");
+        if (chatId && owner && doc.get("rootId") === binding.rootId && chatIds.includes(chatId) && !ownerByChat.has(chatId)) internalOwnerByChat.set(chatId, owner);
+      }
+    }
+    const addressesHugo = (m: any) => m.mentionsMe === true || /\bhugo\b/i.test(String(m.body ?? "").normalize("NFD").replace(/[̀-ͯ]/g, ""));
     const allowed = new Set(ownerByChat.keys());
     const existing = await Promise.all(messages.map((m: any) => tx.get(this.db.collection("whatsappInboundMessages").doc(m.docId))));
     const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" });
     let stored = 0, discarded = 0, duplicates = 0;
     messages.forEach((m: any, index: number) => {
+      const internalOwner = internalOwnerByChat.get(m.chatId);
+      if (internalOwner && !m.fromMe && addressesHugo(m)) {
+        if (existing[index].exists) { duplicates++; return; }
+        tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, ownerUserUid: internalOwner, internalGroup: true, mentionsMe: m.mentionsMe === true, chatId: m.chatId, messageId: m.messageId, fromMe: false,
+          authorHash: m.authorId ? createHash("sha256").update(`${binding.rootId}|${m.authorId}`).digest("hex").slice(0, 32) : null,
+          timestampMs: m.timestampMs, type: m.type, body: m.body ?? "", reportDay: dayKey.format(new Date(m.timestampMs)),
+          expiresAt: new Date(Date.now() + INBOUND_RETENTION_MS), createdAt: FieldValue.serverTimestamp() });
+        stored++;
+        return;
+      }
       if (!allowed.has(m.chatId)) { discarded++; return; }
       if (existing[index].exists) { duplicates++; return; }
       tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, ownerUserUid: ownerByChat.get(m.chatId), chatId: m.chatId, messageId: m.messageId, fromMe: m.fromMe,

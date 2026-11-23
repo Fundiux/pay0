@@ -64,5 +64,31 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
   r = await run(delivery({ text: 'Gracias por avisarnos.', mention: null }), async () => { throw Error('must not be called'); });
   eq(r.sent[0].content, 'Gracias por avisarnos.'); eq(r.sent[0].options, {});
 
+  // Capture in the team's internal group: nothing leaves the phone unless it addresses Hugo; a WhatsApp mention of this account is flagged.
+  {
+    const INTERNAL = '120363555000000201@g.us', CLIENT = '120363555000000001@g.us', batches = [], callbacks = {};
+    const transport = { operate: async (action, data) => {
+      if (action === 'HEARTBEAT') return { observedChats: [CLIENT, INTERNAL], addressedOnlyChats: [INTERNAL] };
+      if (action === 'INBOUND_GROUP') { batches.push(data.messages); return { stored: data.messages.length }; }
+      return {};
+    }, synchronize: async () => ({}), getBinding: () => ({ id: 'b' }) };
+    const client = { info: { wid: { _serialized: '5215500000000@c.us' } }, on: (name, cb) => { callbacks[name] = cb; }, initialize: async () => {}, destroy: async () => {}, getChats: async () => [] };
+    const running = await runEnrolledConnector({ transport, client, encodeQr: async () => '', resetLocalSession: async () => {}, setTimer: fn => fn, clearTimer: () => {}, captureGroups: true });
+    await callbacks.ready();
+    await running.poll();
+    const message = (id, chat, body, over = {}) => ({ id: { _serialized: id }, from: chat, author: '5215511112222@c.us', fromMe: false, timestamp: Math.floor(Date.now() / 1000), type: 'chat', body, ...over });
+    for (const m of [
+      message('c1', CLIENT, 'comentario de un cliente'), message('i1', INTERNAL, 'Hugo buen día'), message('i2', INTERNAL, 'plática del equipo'),
+      message('i3', INTERNAL, '@5215500000000 ayuda', { mentionedIds: ['5215500000000@c.us'] }), message('i4', INTERNAL, 'plática', { mentionedIds: ['5215599999999@c.us'] }),
+      message('i5', INTERNAL, 'Húgo?'), message('i6', INTERNAL, 'sin mención', { mentionedIds: [{ _serialized: '5215500000000@c.us' }] }),
+    ]) callbacks.message_create(m);
+    await running.flush();
+    const sent = batches.flat();
+    eq(sent.map(m => m.messageId), ['c1', 'i1', 'i3', 'i5', 'i6'], 'client groups keep everything; the internal group only what addresses Hugo');
+    eq(sent.filter(m => m.mentionsMe).map(m => m.messageId), ['i3', 'i6']);
+    ok(!('mentionsMe' in sent[0]) && !('mentionsMe' in sent[1]), 'the flag is only sent when true');
+    await running.stop();
+  }
+
   console.log(`whatsapp-connector-mention: ${checks} checks passed`);
 })().catch(error => { console.error(error); process.exit(1); });

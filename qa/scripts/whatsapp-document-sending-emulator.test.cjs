@@ -467,6 +467,69 @@ async function queueQuotation() {
     assert.equal((await jobsFor(sourceOf(id))).length, 1);
   });
 
+  await test('internal-group-is-watched-for-hugo-but-only-addressed-messages-are-kept-and-answered', async () => {
+    const { runInternalChat } = require('../../functions/lib/modules/whatsappAutoReply/internalChat.js');
+    const internalChat = '120363555000000201@g.us', ownerAdmin = ownerUid;
+    await db.doc('whatsappInternalGroups/' + rootId + '__' + encodeURIComponent(ownerAdmin)).set({ rootId, ownerAdminId: ownerAdmin, groupChatId: internalChat, groupName: 'Equipo interno' });
+    await db.doc('whatsappAgentChats/' + hugo.binding.id + '__' + encodeURIComponent(internalChat)).set({ rootId, bindingId: hugo.binding.id, chatId: internalChat, name: 'Equipo interno', isGroup: true, active: true });
+    const beat = await hugo.transport.operate('HEARTBEAT', { ready: true, poll: true });
+    assert.ok(beat.observedChats.includes(internalChat), 'the connector watches the internal group');
+    assert.ok(beat.addressedOnlyChats.includes(internalChat), 'and is told that only addressed messages count there');
+
+    const now = Date.now();
+    const msg = (id, over = {}) => ({ messageId: id, chatId: internalChat, fromMe: false, timestampMs: now - 5000, type: 'chat', authorId: '5215511112222@c.us', body: 'comentario del equipo', ...over });
+    const stored = await hugo.transport.operate('INBOUND_GROUP', { messages: [
+      msg('i1', { body: 'Hugo buen día' }), msg('i2', { body: '@5215500000000 ¿me ayudas con algo?', mentionsMe: true, timestampMs: now - 4000 }),
+      msg('i3', { body: 'nos vemos mañana' }), msg('i4', { body: 'Hugo', fromMe: true }), msg('i5', { body: 'ya llegó el cliente' , mentionsMe: false }),
+    ] });
+    assert.equal(stored.stored, 2); assert.equal(stored.discarded, 3);
+    const keep = async id => (await db.doc('whatsappInboundMessages/' + hugo.binding.id + '__' + id).get());
+    assert.equal((await keep('i1')).get('internalGroup'), true); assert.equal((await keep('i1')).get('ownerUserUid'), ownerAdmin);
+    assert.equal((await keep('i2')).get('mentionsMe'), true);
+    for (const id of ['i3', 'i4', 'i5']) assert.equal((await keep(id)).exists, false, 'unaddressed chatter is never stored');
+    assert.ok(!JSON.stringify((await keep('i1')).data()).includes('5215511112222'), 'only a hash of the author is kept');
+
+    // Hugo answers once per group per run, with the limited script and a mention of whoever wrote.
+    assert.equal((await runInternalChat(rootId, now)).queued, 1);
+    const first = (await db.collection('documentDeliveryJobs').where('sourceId', '==', hugo.binding.id + '__i1').get()).docs.map(d => d.data());
+    assert.equal(first.length, 1); assert.equal(first[0].targetChatId, internalChat); assert.equal(first[0].replyKind, 'INTERNAL_GREETING');
+    assert.match(first[0].textBody, /^Buen día, \{\{MENCION\}\}\./); assert.equal(first[0].mentionInboundMessageId, 'i1');
+    assert.equal((await runInternalChat(rootId, now + 1000)).queued, 0, 'cooldown and no repeat');
+    assert.equal((await db.collection('documentDeliveryJobs').where('sourceId', '==', hugo.binding.id + '__i1').get()).size, 1);
+    const later = await runInternalChat(rootId, now + 30000);
+    assert.equal(later.queued, 1);
+    const second = (await db.collection('documentDeliveryJobs').where('sourceId', '==', hugo.binding.id + '__i2').get()).docs.map(d => d.data());
+    assert.equal(second[0].replyKind, 'INTERNAL_LIMITED'); assert.match(second[0].textBody, /no puedo resolver|todavía no puedo/);
+    assert.doesNotMatch(second[0].textBody, /\d/);
+    // The sender claims it like any other text and the connector gets the message to mention.
+    await setSwitch(true);
+    // Earlier cases leave other jobs waiting; set them aside so the claim scan reaches this one.
+    for (const doc of (await db.collection('documentDeliveryJobs').where('rootId', '==', rootId).where('status', 'in', ['READY_FOR_SEND', 'SENDING']).get()).docs) if (doc.get('targetChatId') !== internalChat) await doc.ref.update({ status: 'CANCELLED' });
+    const claim = await hugo.transport.operate('CLAIM_DELIVERY', {});
+    assert.ok(claim.delivery); assert.equal(claim.delivery.chatId, internalChat);
+    assert.ok(claim.delivery.mention && /^i\d$/.test(claim.delivery.mention.messageId));
+  });
+
+  await test('a-solicitud-without-group-names-the-user-who-uploaded-it-one-notice-each', async () => {
+    const { alertIfClientGroupIncomplete } = require('../../functions/lib/modules/documentDelivery/clientGroupAlerts.js');
+    const owner = ownerUid, juan = run + '-juan', cliente = run + '-c-juan';
+    await db.doc('users/' + juan).set({ role: 'operador', rootId, active: true, parentRole: 'superadmin', parentUserId: owner, displayName: 'Juan Operador' });
+    await db.doc('clients/' + cliente).set({ rootId, name: 'Cliente Betell', adminId: juan, whatsapp: '5215550000077' });
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cliente, solicitudId: 'sol-1', createdBy: juan }), 'NO_GROUP_ASSIGNED:RELEASED');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cliente, solicitudId: 'sol-2', createdBy: juan }), 'NO_GROUP_ASSIGNED:RELEASED');
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cliente, solicitudId: 'sol-2', createdBy: juan }) === 'NO_GROUP_ASSIGNED:RELEASED', false, 'the same solicitud is told once');
+    const notices = await db.collection('documentDeliveryJobs').where('sourceType', '==', 'AVISO_GRUPO_INTERNO').get();
+    const mine = notices.docs.map(d => d.data()).filter(d => /Cliente Betell/.test(d.textBody || ''));
+    assert.equal(mine.length, 2, 'one notice per solicitud, at once');
+    assert.match(mine[0].textBody, /el usuario Juan Operador subió una solicitud del cliente Cliente Betell, pero no tengo acceso a un grupo de WhatsApp para ese cliente porque aún no tiene uno asignado/);
+    // A creator from another root is never named.
+    const foreign = run + '-foreign';
+    await db.doc('users/' + foreign).set({ role: 'operador', rootId: 'otro-root', active: true, displayName: 'Persona Ajena' });
+    assert.equal(await alertIfClientGroupIncomplete({ rootId, clienteId: cliente, solicitudId: 'sol-3', createdBy: foreign }), 'NO_GROUP_ASSIGNED:RELEASED');
+    const all = (await db.collection('documentDeliveryJobs').where('sourceType', '==', 'AVISO_GRUPO_INTERNO').get()).docs.map(d => d.data().textBody || '');
+    assert.ok(!all.some(text => /Persona Ajena/.test(text)));
+  });
+
   console.log(JSON.stringify({ status: 'PASS', checks: cases.length, cases, emulator: true, realProviderRequests: 0 }));
   process.exit(0);
 })().catch(error => { console.error(error.stack || error); process.exit(1); });
