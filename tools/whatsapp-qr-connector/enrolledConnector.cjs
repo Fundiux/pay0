@@ -252,9 +252,11 @@ async function startExplicitly(config) {
   if (path.dirname(sessionDir) !== sessionRoot) throw Error("SESSION_BOUNDARY_REJECTED");
   // Optional pin of the WhatsApp Web version (from the local cache, strict): a new WhatsApp Web release can break the library's startup.
   const pinned = /^\d+\.\d+\.\d+$/.test(String(config.webVersion || "")) ? { webVersion: config.webVersion, webVersionCache: { type: "local", strict: true, path: path.resolve(config.webVersionCachePath || path.join(__dirname, ".wwebjs_cache")) } } : {};
-  // With a pinned version, the profile's Service Worker would still serve the newest WhatsApp Web it cached: drop that cache (not the login) before every start.
-  if (pinned.webVersion) { const cleared = await fs.rm(path.join(sessionDir, "Default", "Service Worker"), { recursive: true, force: true }).then(() => true, () => false); console.log(JSON.stringify({ status: "PINNED_WEB_VERSION", webVersion: pinned.webVersion, serviceWorkerCleared: cleared })); }
-  const client = new Client({ authStrategy: new LocalAuth({ clientId: binding.id, dataPath: sessionRoot }), ...pinned,
+  // With a pinned version, the profile's Service Worker would serve the newest WhatsApp Web it cached and the pin would never load:
+  // tell Chrome to bypass it before the page opens (the login lives elsewhere in the profile and is kept).
+  class PinnedLocalAuth extends LocalAuth { async afterBrowserInitialized() { await super.afterBrowserInitialized(); await this.client.pupPage.setBypassServiceWorker(true); console.log(JSON.stringify({ status: "PINNED_WEB_VERSION", webVersion: pinned.webVersion, serviceWorkerBypassed: true })); } }
+  const Auth = pinned.webVersion ? PinnedLocalAuth : LocalAuth;
+  const client = new Client({ authStrategy: new Auth({ clientId: binding.id, dataPath: sessionRoot }), ...pinned,
     puppeteer: { headless: true, ...(config.executablePath ? { executablePath: config.executablePath } : {}) } });
   // Signed Storage URLs only: HTTPS, no redirects, bounded time and size.
   const fetchFile = async url => {
