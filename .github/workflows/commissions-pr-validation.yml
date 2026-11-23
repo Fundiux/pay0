@@ -1,0 +1,77 @@
+name: Personal commissions PR validation
+
+on:
+  push:
+    branches: ["feature/user-commission-accounts-client-allocation-20261123"]
+  pull_request:
+    paths:
+      - ".github/workflows/commissions-pr-validation.yml"
+      - "functions/src/modules/commissionDistributions/**"
+      - "functions/src/index.ts"
+      - "src/components/ClientPersonalCommissionDrafts.tsx"
+      - "src/components/ClientCommissionAllocationEditor.tsx"
+      - "src/components/PersonalCommissionAccounts.tsx"
+      - "qa/scripts/*commission*.cjs"
+      - "package*.json"
+      - "functions/package*.json"
+      - "firestore.rules"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commissions-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GCLOUD_PROJECT: demo-pay0-pr43
+      FIREBASE_PROJECT_ID: demo-pay0-pr43
+    steps:
+      - name: Checkout PR without production credentials
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          npm ci --prefix functions
+      - name: Personal commission unit and integration preflight tests
+        run: |
+          set -euo pipefail
+          node qa/scripts/personal-commission-accounts.cjs
+          node qa/scripts/commission-instrument-encryption.cjs
+          node qa/scripts/commission-account-read-authorization.cjs
+          node qa/scripts/commission-allocation-draft-policy.cjs
+          node qa/scripts/client-commission-allocation.cjs
+          node qa/scripts/posted-commission-preview.cjs
+          node qa/scripts/commission-integration-preflight.cjs
+      - name: Compile Firebase Functions
+        run: npm --prefix functions run build
+      - name: Validate Firestore rules with demo emulator only
+        run: |
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore,storage "node qa/scripts/personal-commission-firestore-rules.cjs && node qa/scripts/iq-beneficiary-create-regression.cjs && node qa/scripts/user-commission-emulator.cjs"
+      - name: Configure public build-only frontend environment
+        run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
+      - name: Build frontend without deployment
+        # npm run build applies the release ancestry gate, which intentionally
+        # rejects unmerged feature branches. Compile the feature UI directly;
+        # the release gate remains unchanged for real publication.
+        run: |
+          node scripts/copy-canonical-assets.mjs
+          npx next build

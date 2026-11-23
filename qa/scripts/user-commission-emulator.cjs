@@ -101,6 +101,166 @@ async function checkDailyScanProgress() {
     execution.executeUserCommissionRequestCore = originalExecute;
   }
 }
+async function checkPersonalPartialReservation(dispatchRef) {
+  // Real canonical USER/dispatch balance transaction; all IQ operations are
+  // blocked by the demo emulator (no external requests or production credentials).
+  const crypto = require("node:crypto");
+  const { personalCommissionMirrorData, personalCommissionMirrorId } = require("../../functions/lib/modules/commissionDistributions/personalAllocationMirror.js");
+  const accountId = root + "-personal-account";
+  const key = api.commissionSettingsId(root, client, root);
+  const iqLinkId = crypto.createHash("sha256").update(JSON.stringify([root, client, root, accountId])).digest("hex");
+  const fingerprint = "fixture-personal-fingerprint";
+  const link = {
+    rootId: root, clientId: client, ownerUid: root, accountId,
+    accountFingerprint: fingerprint, last4: "5678",
+    iqLinkStatus: "VERIFIED", iqFullDigitsMatched: true,
+    iqClientId: "77", iqPartnerId: "88", iqBeneficiaryId: "456", iqAccountId: "789",
+    iqCredentialProfileId: profile, despachoId: dispatch, verifiedAt: TS.fromMillis(Date.now()),
+  };
+  const account = {
+    rootId: root, ownerUid: root, active: true, instrumentType: "CLABE",
+    instrumentFingerprint: fingerprint, last4: "5678", bankName: "BBVA MEXICO",
+    bankCode: "012", beneficiaryName: "Fixture personal", iqLinkStatus: "PENDING",
+  };
+  const mirror = personalCommissionMirrorData({
+    rootId: root, clientId: client, ownerUid: root, accountId,
+    account, verifiedLink: link, actorUid: root,
+  });
+  assert.equal(mirror.mirrorId, personalCommissionMirrorId(root, client, root, accountId)); checks++;
+  await db.doc(`clients/${client}`).update({ iqLink: { clientId: "77" } });
+  await set(`personalCommissionAccounts/${accountId}`, account);
+  await set(`personalCommissionIqLinks/${iqLinkId}`, link);
+  await set(`clientBeneficiaries/${mirror.mirrorId}`, { ...mirror.beneficiary, createdAt: TS.fromMillis(now) });
+  await set(`clientBeneficiaryMethods/${mirror.mirrorId}`, { ...mirror.method, createdAt: TS.fromMillis(now) });
+  const ruleRef = db.doc(`clientCommissionAllocationRules/${key}`);
+  await ruleRef.set({
+    rootId: root, clientId: client, ownerUid: root, status: "ACTIVE",
+    version: 1, executionEnabled: false, effectiveFrom: TS.fromMillis(yesterday + 5000),
+    instructions: [
+      { accountId, pointsBps: 20, earningsPercentBps: null },
+      { accountId, pointsBps: null, earningsPercentBps: 5000 },
+    ],
+    destinations: [{
+      accountId, methodId: mirror.mirrorId, beneficiaryId: mirror.mirrorId,
+      fingerprint, last4: "5678", iqClientId: "77", iqPartnerId: "88",
+      iqBeneficiaryId: "456", iqAccountId: "789", iqCredentialProfileId: profile,
+    }],
+  });
+  const paymentId = await payment("personal-partial", Date.now() + 2000, 30);
+  await db.doc(`paymentFinancialSnapshots/${paymentId}`).update({ grossAmount: 1000 });
+  const made = await service.materializeCommissionDistribution({
+    paymentId, ownerUid: root, actorUid: root, expectedRootId: root,
+  });
+  const distribution = await get(`commissionDistributions/${made.distributionId}`);
+  check(distribution.distributionMode === "PERSONAL_MIXED" &&
+        distribution.totalCommissionMinor === 1700 && distribution.remainingMinor === 1300,
+        "personal mixed rule reserves 17.00 from 30.00 earned; the remaining 13.00 stays unassigned");
+  check(distribution.legs.length === 2 && distribution.legs[0].amountMinor === 200 &&
+        distribution.legs[1].amountMinor === 1500, "mixed points and percent produce two immutable legs");
+  const pf = await service.preflightCommissionDistribution({ distributionId: made.distributionId, actorUid: root });
+  check(pf.status === "READY_FOR_EXECUTION", "personal IQ links allow only fresh fully verified accounts");
+  const withdrawalPreview = await withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: made.distributionId, rootId: root, ownerUid: root,
+    actorUid: root, source: "MANUAL", dryRun: true,
+  });
+  check(withdrawalPreview.totalAmountMinor === 1700 && withdrawalPreview.totalDebitMinor >= 1700,
+        "wallet preview prices only the partial distribution, not the full earned commission");
+  const originalUser = (await get(`balanceAccounts/USER_${root}`)).availableBalance;
+  const originalDispatchState = (await dispatchRef.get()).data();
+  const originalDispatch = originalDispatchState.availableBalance;
+  const beforeClient = (await get(`balanceAccounts/CLIENT_${client}`)).availableBalance;
+  const reserved = await requests.requestUserCommissionDispersionCore({
+    rootId: root, paymentId, ownerUid: root, actorUid: root, source: "MANUAL",
+    acceptTotalDebitMinor: withdrawalPreview.totalDebitMinor,
+  });
+  check(reserved.principalIds?.length === 2 && reserved.status === "RESERVED_AWAITING_EXECUTION",
+        "canonical ledger reserves two personal destinations for a manual payout");
+  const debit = withdrawalPreview.totalDebitMinor / 100;
+  // The same superadmin who owns the USER wallet earns the canonical fee
+  // margin for these two dispersions. The ledger therefore posts the gross
+  // accepted debit AND the independently recorded earnings credit.
+  const postedPricing = await Promise.all(reserved.principalIds.map(async principalId => {
+    const financial = await get(`dispersionFinancialSnapshots/${principalId}`);
+    assert.equal(financial?.status, "POSTED", "each reserved principal posts canonical financials");
+    assert.equal(financial?.pricingSnapshot?.fundingSource?.holderType, "USER");
+    return financial.pricingSnapshot;
+  }));
+  const moneyMinor = value => Math.round(Number(value) * 100);
+  const postedDebitMinor = postedPricing.reduce((sum, pricing) =>
+    sum + moneyMinor(pricing.totalClientDebitAmount), 0);
+  const ownFeeMarginMinor = postedPricing.reduce((sum, pricing) =>
+    sum + moneyMinor(pricing.superadminEarningAmount), 0);
+  check(postedDebitMinor === withdrawalPreview.totalDebitMinor && ownFeeMarginMinor > 0,
+        "two canonical financial snapshots reconcile accepted debit and earned fee margin");
+  check(moneyMinor((await get(`balanceAccounts/USER_${root}`)).availableBalance) ===
+        moneyMinor(originalUser) - postedDebitMinor + ownFeeMarginMinor,
+        "USER ledger reserves only the partial payout and fees, net of its separately posted earnings");
+  // The forward-only account tracks the gross reservation separately from
+  // the dispatch-channel commission margin credited back to this same owner.
+  const principals = await Promise.all(reserved.principalIds.map(id => get(`clientDispersions/${id}`)));
+  const dispatchOwnEarningsMinor = principals.flatMap(row => row.forwardOnlyEarningAllocations || [])
+    .filter(row => row.ownerId === root && row.sourceClientId === client &&
+                   row.despachoId === dispatch && row.channel === "IQ")
+    .reduce((sum, row) => sum + moneyMinor(row.amount), 0);
+  const dispatchAfter = (await dispatchRef.get()).data();
+  check(dispatchOwnEarningsMinor === ownFeeMarginMinor,
+        "canonical and dispatch ledgers agree on the same owner's credited fee margin");
+  check(moneyMinor(dispatchAfter.availableBalance) ===
+        moneyMinor(originalDispatch) - postedDebitMinor + dispatchOwnEarningsMinor &&
+        moneyMinor(dispatchAfter.reservedBalance) ===
+        moneyMinor(originalDispatchState.reservedBalance || 0) + postedDebitMinor,
+        "USER dispatch account reserves gross partial debit and credits same-origin fee margin");
+  check((await get(`balanceAccounts/CLIENT_${client}`)).availableBalance === beforeClient,
+        "CLIENT ledger never funds a personal commission");
+  const repeat = await requests.requestUserCommissionDispersionCore({
+    rootId: root, paymentId, ownerUid: root, actorUid: root, source: "MANUAL",
+    acceptTotalDebitMinor: withdrawalPreview.totalDebitMinor,
+  });
+  check(repeat.idempotent && repeat.requestId === reserved.requestId,
+        "second reserve request is idempotent and never charges twice");
+
+  // Ownership checks must happen before returning an idempotent replay, even
+  // when a previous reservation contains apparently valid principal IDs.
+  const foreignId = root + "-foreign-request";
+  await set("commissionDistributions/" + foreignId, { ...distribution, rootId: other, ownerUid: other });
+  await set("commissionDispersionRequests/" + foreignId, {
+    rootId: other, clientId: client, ownerUid: other, paymentId,
+    distributionId: foreignId, principalIds: ["FOREIGN-PRIVATE-ID"], status: "RESERVED_AWAITING_EXECUTION",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: foreignId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+  const requestScopeId = root + "-request-scope";
+  await set("commissionDistributions/" + requestScopeId, { ...distribution, rootId: root, ownerUid: root });
+  const requestScopeRef = db.doc("commissionDispersionRequests/" + requestScopeId);
+  await requestScopeRef.set({
+    rootId: other, clientId: client, ownerUid: other, paymentId,
+    distributionId: requestScopeId, principalIds: ["FOREIGN-PRIVATE-ID"], status: "RESERVED_AWAITING_EXECUTION",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: requestScopeId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+  await requestScopeRef.set({
+    rootId: root, clientId: client, ownerUid: root, paymentId,
+    distributionId: requestScopeId, principalIds: [], status: "UNKNOWN",
+  });
+  await assert.rejects(() => withdrawal.reserveUserCommissionWithdrawal({
+    distributionId: requestScopeId, rootId: root, ownerUid: root, actorUid: root, source: "MANUAL",
+  })); checks++;
+
+  await execution.cancelUserCommissionRequestCore({
+    requestId: reserved.requestId, rootId: root, ownerUid: root, actorUid: root,
+  });
+  await execution.cancelUserCommissionRequestCore({
+    requestId: reserved.requestId, rootId: root, ownerUid: root, actorUid: root,
+  });
+  check((await get(`balanceAccounts/USER_${root}`)).availableBalance === originalUser &&
+        (await dispatchRef.get()).data().availableBalance === originalDispatch,
+        "cancelling the partial payout restores USER balance and dispatch source exactly once");
+  await ruleRef.update({ status: "CONFIGURED", executionEnabled: false });
+  // All following fixture cases continue exercising legacy rules unchanged.
+}
+
 async function run() {
   for (const status of ["CONCILIADO", "APLICADO_PARCIAL", "APLICADO_TOTAL"]) check(domain.isPostedCommissionPayment({ status, financialPostingStatus: "POSTED" }), `posted earnings remain eligible: ${status}`);
   for (const status of ["CANCELADO", "RECHAZADO", "REGISTRADO"]) check(!domain.isPostedCommissionPayment({ status, financialPostingStatus: "POSTED" }), `ineligible payment: ${status}`);
@@ -203,6 +363,7 @@ async function run() {
   await execution.cancelUserCommissionRequestCore({ requestId: reserved.requestId, rootId: root, ownerUid: root, actorUid: root });
   check((await get(`balanceAccounts/USER_${root}`)).availableBalance === 1000, "cancel restores USER balance once");
   check((await dispatchRef.get()).data().availableBalance === 1000 && (await dispatchRef.get()).data().reservedBalance === 0, "cancel restores USER origin once");
+  await checkPersonalPartialReservation(dispatchRef);
   const second = await payment("second", Date.now() + 1);
   await db.doc(`pagos/${second}`).update({ status: "APLICADO_PARCIAL" });
   const made2 = await service.materializeCommissionDistribution({ paymentId: second, ownerUid: root, actorUid: root });
@@ -266,12 +427,20 @@ async function run() {
   await assert.rejects(() => call(financing.requestClientDispersionIncident, root, { dispersionId: uncertainRef.id, incidentType: "CANCELACION" })); checks++;
   await assert.rejects(() => documents.initDispersionDocumentUploadCore({ auth: { uid: other }, data: { dispersionId: uncertainRef.id, originalName: "fixture.pdf", contentType: "application/pdf", sizeBytes: 100 } })); checks++;
   const uploadId = `${root}-doc`;
-  await set(`uploads/${uploadId}`, { rootId: root, dispersionId: uncertainRef.id, entityType: "clientDispersions", active: true, status: "READY", documentType: "COMPROBANTE_DISPERSION", clientId: client, storagePath: `roots/${root}/dispersiones/${uncertainRef.id}/fixture.pdf` });
+  await set(`uploads/${uploadId}`, {
+    rootId: root, dispersionId: uncertainRef.id, entityId: uncertainRef.id,
+    entityType: "clientDispersions", active: true, status: "READY",
+    documentType: "COMPROBANTE_DISPERSION", clientId: client, finalizedBy: root,
+    storageGeneration: "1", sizeBytes: 100, contentType: "application/pdf",
+    storagePath: `roots/${root}/dispersiones/${uncertainRef.id}/docs/COMPROBANTE_DISPERSION/${uploadId}-fixture.pdf`,
+  });
   let signed = 0;
   await assert.rejects(() => getAuthorizedDocumentDownloadUrlCore({ auth: { uid: other }, data: { uploadId } }, async () => { signed++; return "https://example.invalid"; })); checks++;
   await getAuthorizedDocumentDownloadUrlCore({ auth: { uid: root }, data: { uploadId } }, async () => { signed++; return "https://example.invalid"; });
   check(signed === 1, "only owner/root can obtain a temporary document URL");
-  check((await documents.notifyClientDispersionComprobanteFromUploadId(uploadId, "fake-unused-token")).reason === "private_user_withdrawal", "private withdrawal never notifies the client's Telegram group");
+  const privateNotification = await documents.notifyClientDispersionComprobanteFromUploadId(uploadId, "fake-unused-token");
+  check(privateNotification.notified === false && privateNotification.reason === "user_recipient_policy_pending",
+        "private USER-funded withdrawal is held for review and never notifies the client's Telegram group");
   const uncertainPrincipal = (await uncertainRef.get()).data();
   assert.throws(() => assertDispersionFundingOwner({ rootId: "different-root", uid: root, role: "superadmin", dispersion: uncertainPrincipal })); checks++;
   const batch = db.batch();
@@ -280,6 +449,10 @@ async function run() {
   batch.set(db.doc(`clientDispersions/${ownedId}`), { rootId: root, clientId: client, ownerUid: other, createdBy: other, createdAt: TS.fromMillis(now - 1000), fundingSource: { holderType: "USER", ownerUid: other, sourceClientId: client } });
   batch.set(db.doc(`clientDispersions/${legacyId}`), { rootId: root, clientId: client, createdBy: other, createdAt: TS.fromMillis(now - 2000) });
   await batch.commit();
+  // Module authorization for operadores requires a resolved parent ceiling.
+  // The earlier negative checks intentionally used an unattached operator;
+  // the authorized pagination fixture explicitly attaches its active root.
+  await db.doc(`users/${other}`).update({ parentUserId: root });
   const firstPage = await call(financing.listScopedClientDispersions, other, { limit: 1 });
   check(firstPage.rows.length === 1 && firstPage.rows[0].id === ownedId, "visible first page survives more than 200 private foreign rows");
   const cursor = firstPage.nextCursor;

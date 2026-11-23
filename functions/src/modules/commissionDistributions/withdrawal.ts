@@ -4,6 +4,11 @@ import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertCommissionWithdrawalOwner, assertOwnedCommissionInstrument, commissionSettingsId } from "./userDestinations";
 import { calculateUserCommissionDestinations, canonicalUserCommission } from "./domain";
+import { calculateClientCommissionInstructions } from "./clientAllocation";
+import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { personalCommissionIqLinkId } from "./personalAllocationMirror";
+import { evaluateIqLink } from "./domain";
+import { commissionMillis } from "./userDestinations";
 import { applyCanonicalDispersionFinancialsTx, prepareCanonicalDispersionFinancialsTx, projectCanonicalDispersionFinancialBatchState, resolveDispersionOperationTypeKey, type CanonicalFinancialBatchAccountState } from "../financing/dispersionFinancial";
 import { applyForwardOnlyDispersionTx, prepareForwardOnlyDispersionTx, projectForwardOnlyDispersionBatchState, type ForwardOnlyBatchAccountState } from "../dispatchBalances/forwardOnly";
 import { readBalanceAccountTx } from "../balances/repository";
@@ -24,35 +29,131 @@ export async function reserveUserCommissionWithdrawal(input: { distributionId: s
   return db.runTransaction(async tx => {
     const distributionRef = db.doc(`commissionDistributions/${input.distributionId}`), requestRef = db.doc(`commissionDispersionRequests/${input.distributionId}`);
     const [distributionSnap, requestSnap, ownerSnap] = await Promise.all([tx.get(distributionRef), tx.get(requestRef), tx.get(db.doc(`users/${input.ownerUid}`))]);
-    const previous = requestSnap.data();
-    if (previous?.principalIds?.length) {
-      if (input.dryRun) throw new HttpsError("failed-precondition", "Este pago ya tiene una solicitud; consulta Comisiones calculadas.");
-      return { ok: true, idempotent: true, requestId: requestRef.id, principalIds: previous.principalIds, status: previous.status };
-    }
     const distribution = distributionSnap.data(), owner = await withInheritedAuthority(ownerSnap.data(), input.ownerUid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
     if (!distribution || distribution.sourceType !== "USER_EARNINGS" || distribution.rootId !== input.rootId || distribution.ownerUid !== input.ownerUid || !owner || owner.active === false || owner.isActive === false || owner.isDeleted === true || text(owner.rootId || input.ownerUid) !== input.rootId) throw new HttpsError("permission-denied", "Comisión fuera de alcance o titular inactivo.");
     assertCommissionWithdrawalOwner(input.ownerUid, owner, input.rootId);
+    // A retry must never reveal a prior request or principal IDs before ownership
+    // of both the distribution AND the request is established.
+    const previous = requestSnap.data();
+    if (requestSnap.exists) {
+      if (!previous || previous.rootId !== input.rootId ||
+          previous.ownerUid !== input.ownerUid || previous.distributionId !== input.distributionId ||
+          previous.clientId !== distribution.clientId || previous.paymentId !== distribution.paymentId) {
+        throw new HttpsError("permission-denied", "Solicitud de retiro fuera de alcance.");
+      }
+      if (!Array.isArray(previous.principalIds) || previous.principalIds.length === 0 ||
+          previous.principalIds.some((id: unknown) => typeof id !== "string" || !id)) {
+        throw new HttpsError("failed-precondition", "Solicitud previa incompleta; requiere conciliación antes de reservar.");
+      }
+      if (input.dryRun) throw new HttpsError("failed-precondition", "Este pago ya tiene una solicitud; consulta Comisiones calculadas.");
+      return { ok: true, idempotent: true, requestId: requestRef.id, principalIds: previous.principalIds, status: previous.status };
+    }
     const clientId = text(distribution.clientId);
-    const [clientSnap, paymentSnap, snapshotSnap, entitlementSnap, balance] = await Promise.all([tx.get(db.doc(`clients/${clientId}`)), tx.get(db.doc(`pagos/${distribution.paymentId}`)), tx.get(db.doc(`paymentFinancialSnapshots/${distribution.financialSnapshotId}`)), tx.get(db.doc(`commissionUserEntitlements/${commissionSettingsId(input.rootId, clientId, input.ownerUid)}`)), readBalanceAccountTx(tx, db, "USER", input.ownerUid)]);
-    const client = clientSnap.data(), payment = paymentSnap.data(), snapshot = snapshotSnap.data(), entitlement = entitlementSnap.data();
-    if (!client || client.rootId !== input.rootId || !payment || payment.rootId !== input.rootId || text(payment.clienteId || payment.clientId) !== clientId || !isPostedCommissionPayment(payment) || payment.financialSnapshotId !== distribution.financialSnapshotId || !snapshot || snapshot.rootId !== input.rootId || snapshot.pagoId !== distribution.paymentId || snapshot.clienteId !== clientId || !entitlement?.active) throw new HttpsError("failed-precondition", "La utilidad dejó de ser elegible.");
+    const personal = distribution.distributionMode === "PERSONAL_MIXED";
+    const configKey = commissionSettingsId(input.rootId, clientId, input.ownerUid);
+    const [clientSnap, paymentSnap, snapshotSnap, entitlementSnap, personalRuleSnap, balance] = await Promise.all([
+      tx.get(db.doc(`clients/${clientId}`)),
+      tx.get(db.doc(`pagos/${distribution.paymentId}`)),
+      tx.get(db.doc(`paymentFinancialSnapshots/${distribution.financialSnapshotId}`)),
+      tx.get(db.doc(`commissionUserEntitlements/${configKey}`)),
+      tx.get(db.doc(`clientCommissionAllocationRules/${configKey}`)),
+      readBalanceAccountTx(tx, db, "USER", input.ownerUid),
+    ]);
+    const client = clientSnap.data(), payment = paymentSnap.data(), snapshot = snapshotSnap.data();
+    const entitlement = entitlementSnap.data(), personalRule = personalRuleSnap.data();
+    if (!client || client.rootId !== input.rootId || !payment || payment.rootId !== input.rootId ||
+        text(payment.clienteId || payment.clientId) !== clientId || !isPostedCommissionPayment(payment) ||
+        payment.financialSnapshotId !== distribution.financialSnapshotId || !snapshot ||
+        snapshot.rootId !== input.rootId || snapshot.pagoId !== distribution.paymentId ||
+        snapshot.clienteId !== clientId || (personal ? personalRule?.status !== "ACTIVE" : !entitlement?.active)) {
+      throw new HttpsError("failed-precondition", "La utilidad dejó de ser elegible.");
+    }
+    if (personal && input.source === "DAILY" && !input.dryRun &&
+        personalRule?.executionEnabled !== true) {
+      throw new HttpsError("failed-precondition", "Esta distribución personal sólo admite retiro manual.");
+    }
     const earning = canonicalUserCommission(snapshot, input.ownerUid), rule = distribution.userRuleSnapshot;
+    if (!rule) throw new HttpsError("failed-precondition", "Falta el snapshot contractual.");
     if (rule.distributionMode === "CONTRACT_COMMISSION_POINTS" && rule.contractRateBps !== earning.contractRateBps) throw new HttpsError("failed-precondition", "Los puntos no coinciden con el contrato del pago.");
-    const calculation = calculateUserCommissionDestinations(earning.earnedMinor, earning.contractRateBps || 0, rule.distributionMode, rule.destinations);
-    if (calculation.earnedMinor !== distribution.totalCommissionMinor || distribution.legs.length !== calculation.destinations.length) throw new HttpsError("failed-precondition", "La comisión histórica no coincide con la utilidad contabilizada.");
+    let destinations: any[];
+    if (personal) {
+      if (rule.schemaVersion !== 3 || !Array.isArray(rule.instructions) ||
+          !Array.isArray(rule.destinations)) throw new HttpsError("failed-precondition", "Snapshot personal inválido.");
+      const recalculated = calculateClientCommissionInstructions({
+        earnedMinor: earning.earnedMinor,
+        operationBaseMinor: postedClientOperationBaseMinor(snapshot, earning.calculationBaseType),
+        contractRateBps: earning.contractRateBps,
+        instructions: rule.instructions,
+      });
+      if (earning.earnedMinor !== distribution.sourceEarningMinor ||
+          recalculated.distributedMinor !== distribution.totalCommissionMinor ||
+          recalculated.remainingMinor !== distribution.remainingMinor) {
+        throw new HttpsError("failed-precondition", "La distribución parcial no coincide con la utilidad contabilizada.");
+      }
+      destinations = recalculated.instructions.map(row => {
+        const match = rule.destinations.find((candidate: any) => candidate.accountId === row.accountId);
+        if (!match) throw new HttpsError("failed-precondition", "Cuenta fuera del snapshot publicado.");
+        return { ...row, methodId: match.methodId, beneficiaryId: match.beneficiaryId };
+      });
+    } else {
+      const legacy = calculateUserCommissionDestinations(earning.earnedMinor, earning.contractRateBps || 0, rule.distributionMode, rule.destinations);
+      if (legacy.earnedMinor !== distribution.totalCommissionMinor) throw new HttpsError("failed-precondition", "La comisión histórica no coincide con la utilidad contabilizada.");
+      destinations = legacy.destinations;
+    }
+    if (!destinations.length || distribution.legs.length !== destinations.length ||
+        destinations.some(destination => destination.amountMinor <= 0)) {
+      throw new HttpsError("failed-precondition", "Los destinos históricos no son aptos para reservar.");
+    }
     const clientNumber = Number(client.clientNumber || client.numeroCliente || client.sequenceNumber), userNumber = Number(owner.userNumber || owner.numeroUsuario || owner.sequenceNumber);
     if (!Number.isSafeInteger(clientNumber) || clientNumber <= 0 || !Number.isSafeInteger(userNumber) || userNumber <= 0) throw new HttpsError("failed-precondition", "Cliente o usuario sin numeración canónica.");
     const financialState: CanonicalFinancialBatchAccountState = new Map(), routeState: ForwardOnlyBatchAccountState = new Map();
     const plans: any[] = [];
     let estimatedWrites = 5;
-    for (const [index, destination] of calculation.destinations.entries()) {
+    for (const [index, destination] of destinations.entries()) {
       const leg = distribution.legs[index];
       if (leg.methodId !== destination.methodId || leg.beneficiaryId !== destination.beneficiaryId || leg.amountMinor !== destination.amountMinor || destination.amountMinor <= 0 || leg.iqFolio || leg.retryBlocked || ["COMPLETED", "UNCERTAIN", "PROCESSING", "CANCELLED"].includes(leg.status)) throw new HttpsError("failed-precondition", "Un destino histórico no es elegible para reservar.");
       const [methodSnap, beneficiarySnap, existingPrincipal] = await Promise.all([tx.get(db.doc(`clientBeneficiaryMethods/${leg.methodId}`)), tx.get(db.doc(`clientBeneficiaries/${leg.beneficiaryId}`)), tx.get(db.doc(`clientDispersions/${leg.canonicalDispersionId}`))]);
       if (existingPrincipal.exists) throw new HttpsError("failed-precondition", "Existe una dispersión sin solicitud enlazada; requiere conciliación.");
       const method = methodSnap.data()!, beneficiary = beneficiarySnap.data()!;
       assertOwnedCommissionInstrument(method, beneficiary, { rootId: input.rootId, clientId, ownerUid: input.ownerUid, beneficiaryId: leg.beneficiaryId });
-      if (!entitlement.allowedMethodIds?.includes(leg.methodId) || method.iqBeneficiaryId !== leg.iqBeneficiaryId || method.iqAccountId !== leg.iqAccountId || method.last4 !== leg.instrumentLast4 || method.iqCredentialProfileId !== identity.originIqProfileId || text(method.iqDespachoId) !== text(snapshot.despachoId)) throw new HttpsError("failed-precondition", "El instrumento o su identidad IQ cambió desde la distribución.");
+      if (personal) {
+        if (leg.accountId !== destination.accountId ||
+            method.personalCommissionAccountId !== destination.accountId ||
+            method.personalAccountFingerprint !== leg.instrumentFingerprint ||
+            method.iqEvidenceFingerprint !== leg.iqEvidenceFingerprint) {
+          throw new HttpsError("failed-precondition", "La cuenta personal cambió desde el snapshot.");
+        }
+        const [accountSnap, linkSnap] = await Promise.all([
+          tx.get(db.doc(`personalCommissionAccounts/${destination.accountId}`)),
+          tx.get(db.doc(`personalCommissionIqLinks/${personalCommissionIqLinkId(input.rootId, clientId, input.ownerUid, destination.accountId)}`)),
+        ]);
+        const account = accountSnap.data(), iq = linkSnap.data();
+        const freshness = evaluateIqLink({
+          status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
+          nowMs: Date.now(), maxAgeMs: 86400000,
+          storedLast4: iq?.last4, currentLast4: account?.last4,
+        });
+        if (!account || account.rootId !== input.rootId || account.ownerUid !== input.ownerUid ||
+            account.active !== true || account.instrumentFingerprint !== leg.instrumentFingerprint ||
+            !freshness.ready || !iq || iq.iqFullDigitsMatched !== true || iq.accountFingerprint !== account.instrumentFingerprint ||
+            iq.ownerUid !== input.ownerUid || iq.clientId !== clientId ||
+            text(iq.despachoId) !== text(snapshot.despachoId) ||
+            text(iq.iqClientId) !== text(client.iqLink?.clientId || client.iqClientId) ||
+            text(iq.iqAccountId) !== text(leg.iqAccountId) ||
+            text(iq.iqBeneficiaryId) !== text(leg.iqBeneficiaryId) ||
+            text(iq.iqPartnerId) !== text(leg.iqPartnerId)) {
+          throw new HttpsError("failed-precondition", "El vínculo IQ personal requiere revisión.");
+        }
+      } else if (!entitlement?.allowedMethodIds?.includes(leg.methodId)) {
+        throw new HttpsError("failed-precondition", "Instrumento no asignado al titular.");
+      }
+      if (method.iqBeneficiaryId !== leg.iqBeneficiaryId ||
+          method.iqAccountId !== leg.iqAccountId ||
+          method.last4 !== leg.instrumentLast4 ||
+          method.iqCredentialProfileId !== identity.originIqProfileId ||
+          text(method.iqDespachoId) !== text(snapshot.despachoId)) {
+        throw new HttpsError("failed-precondition", "El instrumento o su identidad IQ cambió desde la distribución.");
+      }
       const operationTypeKey = resolveDispersionOperationTypeKey(method.tipo, method.destinationKind);
       if (!["TRANSFERENCIA", "TDC"].includes(operationTypeKey)) throw new HttpsError("failed-precondition", "La comisión automática requiere transferencia o TDC.");
       const fundingSource: DispersionFundingSource = { holderType: "USER", ownerUid: input.ownerUid, sourceClientId: clientId, holderName: text(owner.displayName || owner.username || input.ownerUid), holderRole: owner.role, commissionDistributionId: input.distributionId, commissionLegId: leg.legId };

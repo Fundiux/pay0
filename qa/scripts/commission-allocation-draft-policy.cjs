@@ -1,0 +1,24 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
+const ts = require("../../functions/node_modules/typescript");
+const source = fs.readFileSync(path.join(__dirname, "../../functions/src/modules/commissionDistributions/allocationDraftPolicy.ts"), "utf8");
+const moduleExports = {};
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: moduleExports, Number, String, Error, Array, Set });
+const { commissionAccountOptions, deactivatePersonalCommissionAccount, validateClientAllocationDraft } = moduleExports;
+const owner = { rootId: "root", ownerUid: "user" };
+const account = { id: "one", ...owner, bankName: "Banco", beneficiaryName: "Titular", instrumentNumber: "123456789012345678", instrumentType: "CLABE", active: true, iqLinkStatus: "PENDING" };
+assert.equal(commissionAccountOptions([account], owner)[0].selectable, false);
+assert.equal(commissionAccountOptions([{ ...account, iqLinkStatus: "VERIFIED" }], owner)[0].selectable, true);
+assert.equal(commissionAccountOptions([{ ...account, ownerUid: "other" }], owner).length, 0);
+assert.equal(deactivatePersonalCommissionAccount(account).active, false);
+assert.equal(account.active, true);
+const draft = { ownerUid: "user", clientId: "client", status: "DRAFT", instructions: [{ accountId: "", pointsBps: null, earningsPercentBps: null }] };
+assert.equal(validateClientAllocationDraft(draft, [account], owner).canExecute, false);
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE" }, [account], owner));
+assert.equal(validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 20 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner).canExecute, true);
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 20 }] }, [account], owner));
+
+assert.equal(commissionAccountOptions([account], owner)[0].instrumentNumber, "••5678");
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", earningsPercentBps: 10001 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner));
+assert.throws(() => validateClientAllocationDraft({ ...draft, status: "ACTIVE", instructions: [{ accountId: "one", pointsBps: 10 }, { accountId: "one", pointsBps: 20 }] }, [{ ...account, iqLinkStatus: "VERIFIED" }], owner));
+console.log("Account and draft policy tests passed.");

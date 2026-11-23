@@ -157,6 +157,39 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   const outA2 = await link(a2Id);
   eq([outA2.status, (await entry(a2Id)).iqAccountId, iq.requests.length], ["NOT_CONCILIATED", eA.iqAccountId, 0], "la misma cuenta en otro método reutiliza la creación sin tocar IQ");
 
+  // A-personal. New personal commission account only stores masked digits in
+  // the client-scoped method. Full CLABE is provided to IQ in transient memory.
+  await resetSafety(); resetIq();
+  const personal = await setup("personal");
+  await db.doc(`clientBeneficiaryMethods/${personal.methodId}`).update({
+    clabe: FieldValue.delete(), cardNumber: FieldValue.delete(),
+    sourceType: "PERSONAL_COMMISSION", personalCommissionAccountId: "personal-owner-account",
+    personalAccountFingerprint: "fixture-fingerprint", last4: personal.clabe.slice(-4),
+    masked: "••" + personal.clabe.slice(-4),
+  });
+  const personalResult = (await linkOrCreateMethod({
+    methodId: personal.methodId, ports, safety,
+    methodOverride: { clabe: personal.clabe, cardNumber: null },
+  }))[0];
+  eq([personalResult.status, beneficiaryPosts(), accountPosts()],
+    ["NOT_CONCILIATED", 1, 1], "cuenta cifrada de comisión: creación IQ con CLABE solo en memoria");
+  const persistedPersonal = (await db.doc(`clientBeneficiaryMethods/${personal.methodId}`).get()).data();
+  ok(!persistedPersonal.clabe && !persistedPersonal.cardNumber &&
+    persistedPersonal.personalCommissionAccountId === "personal-owner-account",
+    "el método compatible conserva sólo máscara e identificador, nunca CLABE completa");
+  resetIq();
+  const personalAgain = (await linkOrCreateMethod({
+    methodId: personal.methodId, ports, safety,
+    methodOverride: { clabe: personal.clabe, cardNumber: null },
+  }))[0];
+  eq([personalAgain.status, accountPosts(), beneficiaryPosts()],
+    ["NOT_CONCILIATED", 0, 0], "solicitud repetida no crea dos veces en IQ");
+  await assert.rejects(() => linkOrCreateMethod({
+    methodId: a.methodId, ports, safety,
+    methodOverride: { clabe: personal.clabe },
+  }), /PERSONAL_IQ_OVERRIDE_NOT_ALLOWED/); checks++;
+  resetIq();
+
   // B. PAY0 catalog with the PAY0 login; the beneficiary already exists in IQ, only the account is added
   resetIq(); iq.accountConciliated = true;
   iq.beneficiaries.push({ id: iq.nextBeneficiary++, partnerId: 1, name: "Beneficiario b", accounts: [] });

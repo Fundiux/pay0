@@ -282,3 +282,9 @@ export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner"
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection, listWhatsAppAgentReplies } from "./modules/whatsappAutoReply/modeCallables";
 export { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } from "./modules/whatsappAutoReply/playbookCallables";
 export { setWhatsAppReplySimulation, getWhatsAppSimulatedReplies } from "./modules/whatsappAutoReply/simulationCallables";
+
+export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount, revealPersonalCommissionAccountNumber } from "./modules/commissionDistributions/personalAccountCallables";
+export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";
+export { resolvePersonalCommissionAccountIq } from "./modules/commissionDistributions/personalAccountIqCallables";
+export { publishClientCommissionAllocation, getPublishedClientCommissionAllocation, activateClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationPublicationCallables";
+export { materializePostedClientCommissionAllocation } from "./modules/commissionDistributions/postedClientAllocationSnapshotCallables";

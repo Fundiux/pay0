@@ -1,0 +1,74 @@
+name: Commission Auth Functions E2E
+on:
+  # Always test Auth/Functions on feature branch updates, including merges from main.
+  # Previously path filters could leave a new HEAD without an E2E run.
+  push:
+    branches:
+      - feature/user-commission-accounts-client-allocation-20261123
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: commissions-auth-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  callable-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GCLOUD_PROJECT: demo-pay0-pr43
+      FIREBASE_PROJECT_ID: demo-pay0-pr43
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+      FIREBASE_STORAGE_EMULATOR_HOST: 127.0.0.1:9199
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies without production credentials
+        run: |
+          npm ci
+          npm ci --prefix functions
+      - name: Trace legacy functions.config access in ephemeral emulator dependencies
+        run: |
+          node qa/authenticated-isolation/instrument-functions-config.cjs "$PWD/functions/node_modules/firebase-functions"
+      - name: Compile Functions and verify lazy map
+        run: |
+          npm --prefix functions run build
+          node scripts/generate-lazy-function-map.mjs --check
+      - name: Prepare isolated Functions emulator configuration
+        run: |
+          mkdir -p qa/.commissions-functions-emulator
+          node -e 'const fs=require("fs");const pkg=require("./functions/package.json");fs.writeFileSync("qa/.commissions-functions-emulator/package.json",JSON.stringify({name:"commission-auth-emulator",private:true,main:"index.js",engines:{node:"22"},dependencies:{"firebase-functions":pkg.dependencies["firebase-functions"],"firebase-admin":pkg.dependencies["firebase-admin"]}},null,2));const config=JSON.parse(fs.readFileSync("firebase.emulator-tests.json","utf8"));config.functions={source:"qa/.commissions-functions-emulator"};fs.writeFileSync(".firebase-commission-auth-test.json",JSON.stringify(config));'
+          ln -s ../../functions/node_modules qa/.commissions-functions-emulator/node_modules
+          # Demo-only synthetic secret; never a real bank or deployment credential.
+          node -e 'const fs=require("fs");fs.writeFileSync("qa/.commissions-functions-emulator/.secret.local","COMMISSION_ACCOUNT_ENCRYPTION_KEY="+Buffer.alloc(32,0x43).toString("base64")+"\n",{mode:0o600});'
+          cat > qa/.commissions-functions-emulator/index.js <<'EOF'
+          const personal = require("../../functions/lib/modules/commissionDistributions/personalAccountCallables.js");
+          const { onCall } = require("firebase-functions/v2/https");
+          const { defineSecret } = require("firebase-functions/params");
+          const fixtureKey = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
+          const qaCommissionSecretProbe = onCall({ secrets: [fixtureKey] }, () => ({
+            configured: !!fixtureKey.value(),
+            matchesDemoFixture: fixtureKey.value() === Buffer.alloc(32, 0x43).toString("base64"),
+          }));
+          const drafts = require("../../functions/lib/modules/commissionDistributions/clientAllocationDraftCallables.js");
+          const rules = require("../../functions/lib/modules/commissionDistributions/clientAllocationPublicationCallables.js");
+          module.exports = {
+            qaCommissionSecretProbe,
+            listPersonalCommissionAccounts: personal.listPersonalCommissionAccounts,
+            revealPersonalCommissionAccountNumber: personal.revealPersonalCommissionAccountNumber,
+            getClientCommissionAllocationDraft: drafts.getClientCommissionAllocationDraft,
+            saveClientCommissionAllocationDraft: drafts.saveClientCommissionAllocationDraft,
+            getPublishedClientCommissionAllocation: rules.getPublishedClientCommissionAllocation,
+          };
+          EOF
+      - name: Auth and Functions callable E2E (demo project, no IQ access)
+        run: |
+          timeout --signal=TERM --kill-after=15s 240s npx --yes firebase-tools@15.3.1 --debug emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
