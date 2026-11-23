@@ -636,6 +636,14 @@
     {
       "commit": "51dd0a03",
       "capability": "Cancel the original invoice only when every complement is cancelled and verified with its receipt"
+    },
+    {
+      "commit": "798d2cf4",
+      "capability": "Permisos de operador heredados del padre y recortados en el servidor"
+    },
+    {
+      "commit": "35135636",
+      "capability": "Editor de permisos muestra solo lo que tiene el padre del operador"
     }
   ],
   "requiredText": [
