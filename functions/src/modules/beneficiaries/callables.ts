@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { logActivityBatch } from "../../utils/logActivity";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { buildCanonicalFolio, nextSequenceTx } from "../sequences/service";
@@ -39,7 +40,7 @@ function requireAuth(request: any): string {
 
 async function getMyUser(uid: string) {
   const a = await db.doc(`users/${uid}`).get();
-  if (a.exists) return a.data() as any;
+  if (a.exists) return withInheritedAuthority(a.data() as any, uid);
 
   const b = await db.doc(`usuarios/${uid}`).get();
   if (b.exists) return b.data() as any;

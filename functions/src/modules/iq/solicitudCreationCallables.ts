@@ -16,6 +16,7 @@ import { enqueueIqReconciliationJob } from "./solicitudReconciliationCallables";
 import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
+import { getEffectiveUserModules } from "../users/authorization";
 import { enqueueQuotationForConfirmedIq } from "../cotizaciones/queueCallables";
 
 if (!admin.apps.length) {
@@ -215,8 +216,8 @@ function canCreateSolicitudes(auth: AuthContext): boolean {
 
   const modules = asRecord(auth.user.modules);
   const solicitudes = asRecord(modules.solicitudes);
-
-  return solicitudes.create === true;
+  // Ademas del permiso guardado, exige el efectivo (techo del rol y, en operadores, el heredado del padre).
+  return solicitudes.create === true && getEffectiveUserModules(auth.user).solicitudes?.create === true;
 }
 
 async function verifyDespachoAccess(

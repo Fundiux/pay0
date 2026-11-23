@@ -64,7 +64,7 @@ const recovery = load('functions/src/modules/controlCenter/recovery.ts', {
   'firebase-admin/firestore': { FieldValue: { serverTimestamp: () => 1, delete: () => null }, Timestamp: { now: () => 1, fromMillis: value => ({ toMillis: () => value }) } },
   'firebase-functions/v2/firestore': { onDocumentWritten: (_, handler) => handler },
   'firebase-functions/v2/scheduler': { onSchedule: (_, handler) => handler },
-  '../sharedCallables/helpers': { db: recoveryDb }, '../../utils/logActivity': { logActivityTx: () => {} }, '../../utils/authGuard': {},
+  '../sharedCallables/helpers': { db: recoveryDb }, '../../utils/logActivity': { logActivityTx: () => {} }, '../../utils/authGuard': {}, '../users/inheritedAuthority': { withInheritedAuthority: async user => user },
   '../clientDelegations/access': {}, '../facturama/issuerGuard': { belongsToPay0Dispatch: () => true },
 });
 test('recovery terminal source guards include soft deletion and cancellation/rejection', () => {

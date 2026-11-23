@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 import { bindVerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
@@ -272,9 +273,9 @@ async function requireAuth(
     );
   }
 
-  const user = record(
+  const user = await withInheritedAuthority(record(
     userSnap.data(),
-  );
+  ), uid);
   const role = clean(
     request.auth?.token?.role ??
       user.role,
@@ -329,7 +330,7 @@ export async function buildDispersionSchedulerAuth(
     );
   }
 
-  const user = record(userSnap.data());
+  const user = await withInheritedAuthority(record(userSnap.data()), uid);
   await authorizeDeferredIntent({uid, rootId: expectedRootId, module: "wallet", action: "dispersiones"});
   const role = clean(user.role).toLowerCase();
   const rootId =
@@ -1586,7 +1587,7 @@ export async function runCreateClientDispersionIqCore(input: {
       db.doc(`users/${clean(funding.ownerUid)}`).get(),
     ]);
     const commission = record(commissionSnap.data());
-    const owner = record(ownerSnap.data());
+    const owner = await withInheritedAuthority(record(ownerSnap.data()), clean(funding.ownerUid));
     const historicalLeg = (Array.isArray(commission.legs) ? commission.legs : []).find((leg: AnyDoc) => clean(leg.legId) === clean(funding.commissionLegId));
     assertAuthorized({ uid: clean(funding.ownerUid) }, owner, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const verifiedAt = timestampMillis(method.iqVerifiedAt);

@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -24,7 +25,7 @@ export const addSolicitudNota = onCall(
     const noteRef = ref.collection("notas").doc();
     await db.runTransaction(async (transaction) => {
       const user = await transaction.get(db.doc(`users/${uid}`));
-      const me = user.exists ? user.data() : null;
+      const me = user.exists ? await withInheritedAuthority(user.data(), uid, async parentUid => (await transaction.get(db.doc(`users/${parentUid}`))).data() || null) : null;
       const role = assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "comment" });
       // Preserve the existing profile-derived fallback, never infer from parent.
       const rootId = String(me!.rootId || uid);
@@ -62,7 +63,7 @@ export const addPagoNota = onCall(
     const noteRef = ref.collection("notas").doc();
     await db.runTransaction(async (transaction) => {
       const user = await transaction.get(db.doc(`users/${uid}`));
-      const me = user.exists ? user.data() : null;
+      const me = user.exists ? await withInheritedAuthority(user.data(), uid, async parentUid => (await transaction.get(db.doc(`users/${parentUid}`))).data() || null) : null;
       const role = assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "view" });
       // Preserve the existing profile-derived fallback, never infer from parent.
       const rootId = String(me!.rootId || uid);

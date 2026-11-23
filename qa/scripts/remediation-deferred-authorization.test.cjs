@@ -9,6 +9,10 @@ global.fetch = async () => { throw Error('EXTERNAL_NETWORK_FORBIDDEN'); };
 const guard = require('../../functions/src/utils/authGuard.ts');
 const restriction = require('../../functions/src/modules/users/restrictions.ts');
 const {HttpsError} = fr('firebase-functions/v2/https');
+const inheritedAuthority = require('../../functions/src/modules/users/inheritedAuthority.ts');
+// Operators inherit module permissions from their parent admin (one parent read).
+const parentAdmin = {role:'admin',rootId:'root',active:true};
+const inherited = {withInheritedAuthority: (user, uid) => inheritedAuthority.withInheritedAuthority(user, uid, async id => id === 'parent' ? parentAdmin : null)};
 function load(file, deps) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
@@ -18,12 +22,12 @@ function load(file, deps) {
 let profile, legacy = null, granted = true, posts = 0, states = [];
 const db = {doc: name => ({get: async () => ({exists: !!(name.startsWith('users/') ? profile : legacy), data: () => name.startsWith('users/') ? profile : legacy})})};
 const authorization = load('functions/src/utils/authorizeDeferredIntent.ts', {
-  'firebase-admin/firestore': {getFirestore: () => db}, 'firebase-functions/v2/https': {HttpsError}, './authGuard': guard,
+  'firebase-admin/firestore': {getFirestore: () => db}, 'firebase-functions/v2/https': {HttpsError}, './authGuard': guard, '../modules/users/inheritedAuthority': inherited,
   '../modules/clientDelegations/access': {requireClientOperationalAccess: async () => {if(!granted)throw new HttpsError('permission-denied','REVOKED_GRANT');}},
 });
 const helpers = load('functions/src/modules/sharedCallables/helpers.ts', {
   'firebase-admin/app': {getApps: () => [{}]}, 'firebase-admin/firestore': {getFirestore: () => db},
-  'firebase-functions/v2/https': {HttpsError}, '../../utils/authGuard': guard, '../pagos/domain': {},
+  'firebase-functions/v2/https': {HttpsError}, '../../utils/authGuard': guard, '../pagos/domain': {}, '../users/inheritedAuthority': inherited,
 });
 const core = load('functions/src/modules/iq/depositHttpCreateCore.ts', {
   'node:crypto': require('node:crypto'), './iqDateTime': require('../../functions/src/modules/iq/iqDateTime.ts'),
@@ -32,7 +36,7 @@ const core = load('functions/src/modules/iq/depositHttpCreateCore.ts', {
     return new Response('[]',{status:200});
   }},
 });
-const valid = () => ({rootId:'root',role:'operador',active:true,modules:{pagos:{create:true,conciliate:true}}});
+const valid = () => ({rootId:'root',role:'operador',active:true,parentUserId:'parent',modules:{pagos:{create:true,conciliate:true}}});
 const now = Date.now();
 const trusted = {schemaVersion:1,writer:restriction.TRUSTED_RESTRICTION_WRITER,policyVersion:restriction.TRUSTED_RESTRICTION_POLICY,
   restrictionId:'restriction',rootId:'root',subjectUid:'actor',state:'ACTIVE',scope:'ACCOUNT_OPERATIONS',authority:'HUMAN_SECURITY_ADMIN',
@@ -43,9 +47,9 @@ let httpNode;
 function find(node) {if(ts.isVariableDeclaration(node) && node.name.getText(httpAst)==='getHttpAuthContextH4D50F')httpNode=node;ts.forEachChild(node,find);}
 find(httpAst);assert(httpNode);
 const httpCode = ts.transpileModule(`const ${httpNode.getText(httpAst)};`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
-const httpAuth = new Function('admin','db','HttpsError','cleanText','asRecord','assertAuthorized',`${httpCode};return getHttpAuthContextH4D50F;`)(
+const httpAuth = new Function('admin','db','HttpsError','cleanText','asRecord','assertAuthorized','withInheritedAuthority',`${httpCode};return getHttpAuthContextH4D50F;`)(
   {auth:()=>({verifyIdToken:async()=>({uid:'actor',role:'superadmin',rootId:'forged-claim'})})},
-  {collection:()=>({doc:()=>({get:async()=>({exists:!!profile,data:()=>profile})})})},HttpsError,x=>String(x??'').trim(),x=>x||{},guard.assertAuthorized);
+  {collection:()=>({doc:()=>({get:async()=>({exists:!!profile,data:()=>profile})})})},HttpsError,x=>String(x??'').trim(),x=>x||{},guard.assertAuthorized,inherited.withInheritedAuthority);
 const solAst = ts.createSourceFile('sol.ts',fs.readFileSync('functions/src/modules/iq/solicitudHttpCreateA53.ts','utf8'),ts.ScriptTarget.Latest,true);
 const solPost = solAst.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='postOnce');assert(solPost);
 const solCode = ts.transpileModule(solPost.getText(solAst),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;

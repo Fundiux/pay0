@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -40,7 +41,7 @@ export async function isOperationalRecordVisible(collection: Kind, actor: { uid:
 }
 
 async function authorizedSnapshot(transaction: admin.firestore.Transaction, auth: any, collection: Kind, id: string) {
-  const profile = (await transaction.get(db.doc(`users/${auth.uid}`))).data();
+  const profile = await withInheritedAuthority((await transaction.get(db.doc(`users/${auth.uid}`))).data(), auth.uid, async parentUid => (await transaction.get(db.doc(`users/${parentUid}`))).data() || null);
   const policy = kinds[collection];
   const role = assertAuthorized(auth, profile, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: policy.module, requiredAction: policy.action });
   const rootId = String(profile?.rootId || auth.uid).trim();

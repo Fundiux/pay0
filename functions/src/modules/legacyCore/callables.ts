@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { assertCreatePagoAuthorityTx } from "../pagos/createPagoAuthority";
 import { changeSolicitudVisibilityCore } from "../solicitudes/deletion";
 import { requestedRecordCreator, resolveRecordCreators, creatorDisplayFields } from "../sharedCallables/recordCreators";
@@ -711,7 +712,7 @@ export const finalizeUpload = onCall(
 
 async function getMyUser(uid: string) {
   const a = await db.doc(`users/${uid}`).get();
-  if (a.exists) return (a.data() as any);
+  if (a.exists) return withInheritedAuthority(a.data() as any, uid);
 
   const b = await db.doc(`usuarios/${uid}`).get();
   if (b.exists) return (b.data() as any);
@@ -1680,7 +1681,7 @@ export const createPago = onCall(
       throw new HttpsError("not-found", "Usuario no encontrado.");
     }
 
-    const me: any = meSnap.data() || {};
+    const me: any = await withInheritedAuthority(meSnap.data() || {}, uid);
     const rootId = String(me.rootId || uid);
 
     assertAuthorized(request.auth, me, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" });
@@ -2430,7 +2431,7 @@ export const listPagos = onCall(
     const meSnap = await db.doc(`users/${uid}`).get();
     if (!meSnap.exists) throw new HttpsError("not-found", "Usuario no encontrado.");
 
-    const me: any = meSnap.data() || {};
+    const me: any = await withInheritedAuthority(meSnap.data() || {}, uid);
     const rootId = String(me.rootId || uid);
     assertAuthorized(request.auth, me, {
       allowedRoles: ["superadmin", "admin", "operador"],
@@ -2500,7 +2501,7 @@ export const listSolicitudes = onCall(
     const uid = requireAuth(request);
     const meSnap = await db.doc(`users/${uid}`).get();
     if (!meSnap.exists) throw new HttpsError("not-found", "Usuario no encontrado.");
-    const me: any = meSnap.data() || {};
+    const me: any = await withInheritedAuthority(meSnap.data() || {}, uid);
     assertAuthorized(request.auth, me, {
       allowedRoles: ["superadmin", "admin", "operador"],
       requiredModule: "solicitudes",

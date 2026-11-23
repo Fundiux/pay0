@@ -157,6 +157,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   getUserBalanceSummary: { module: "./modules/ledger/callables", export: "getUserBalanceSummary" },
   getUserClientAccessConfig: { module: "./modules/clientDelegations/callables", export: "getUserClientAccessConfig" },
   getUserOperatorNumbers: { module: "./modules/operatorNumbers/callables", export: "getUserOperatorNumbers" },
+  getUserPermissionCeiling: { module: "./modules/users/modules", export: "getUserPermissionCeiling" },
   getUserStatement: { module: "./modules/ledger/callables", export: "getUserStatement" },
   getUserWalletOverview: { module: "./modules/ledger/callables", export: "getUserWalletOverview" },
   getWhatsAppAgentActivity: { module: "./modules/documentDelivery/whatsappAgentActivity", export: "getWhatsAppAgentActivity" },

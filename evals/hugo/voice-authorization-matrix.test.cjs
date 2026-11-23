@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { decideUserAuthorization } = require("../../functions/lib/modules/users/authorization");
+const { decideUserAuthorization, attachInheritedModuleCeiling } = require("../../functions/lib/modules/users/authorization");
+const { getDefaultModules } = require("../../functions/lib/modules/users/defaultModules");
 const { isUserVisibleToCaller, userQueryMatchLevel } = require("../../functions/lib/modules/agent007/platformReadConnector");
 
 const requirement = { allowedRoles: ["superadmin", "admin"], module: "clientes", action: "view" };
@@ -22,7 +23,7 @@ test("root and hierarchy scope cannot be expanded by a supplied name", () => {
 });
 
 test("an individual grant cannot raise the role ceiling", () => {
-  const result = decideUserAuthorization({ authenticatedUid: "caller", user: { role: "operador", active: true, modules: { usuarios: { view: true } } }, requirement: { module: "usuarios", action: "view" } });
+  const result = decideUserAuthorization({ authenticatedUid: "caller", user: attachInheritedModuleCeiling({ role: "operador", active: true, modules: { usuarios: { view: true } } }, { status: "RESOLVED", parentUid: "parent", parentRole: "superadmin", modules: getDefaultModules("superadmin") }), requirement: { module: "usuarios", action: "view" } });
   assert.equal(result.reason, "MODULE_NOT_ALLOWED");
 });
 

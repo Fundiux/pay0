@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { operationTiming } from "../../utils/operationTiming";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -21,6 +22,7 @@ import { notifyIqPagoTelegramH4D59B } from "./pagoTelegramNotifications";
 import { postCanonicalPagoFinancials } from "../deposits/financial";
 import { evaluateIqCompanyDespachoGate } from "../paymentApplications/iqBusinessGate";
 import { assertIqAuthorized } from "./authorization";
+import { getEffectiveUserModules } from "../users/authorization";
 import { assertAuthorized } from "../../utils/authGuard";
 
 import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
@@ -246,7 +248,7 @@ async function getAuthContext(request: {
     throw new HttpsError("permission-denied", "Usuario PAY0 no encontrado.");
   }
 
-  const user = asRecord(userSnap.data());
+  const user = await withInheritedAuthority(asRecord(userSnap.data()), uid);
   const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
   const rootId = cleanText(user.rootId ?? uid);
 
@@ -264,8 +266,12 @@ function canUsePagos(auth: AuthContext): boolean {
 
   const modules = asRecord(auth.user.modules);
   const pagos = asRecord(modules.pagos);
+  // Ademas del permiso guardado, exige el efectivo (techo del rol y, en operadores, el heredado del padre).
+  const effective = getEffectiveUserModules(auth.user).pagos || {};
 
-  return pagos.create === true || pagos.conciliate === true || pagos.view === true;
+  return (pagos.create === true && effective.create === true) ||
+    (pagos.conciliate === true && effective.conciliate === true) ||
+    (pagos.view === true && effective.view === true);
 }
 
 async function getIqAccessForPagoOrigin(
@@ -2240,7 +2246,7 @@ async function buildPagoIqSystemAuthH4D44(pago: Record<string, unknown>): Promis
       .catch(() => null);
 
     if (snap?.exists) {
-      user = asRecord(snap.data());
+      user = await withInheritedAuthority(asRecord(snap.data()), uid);
       userFound = true;
       break;
     }
@@ -4399,7 +4405,7 @@ const getHttpAuthContextH4D50F = async (req: any): Promise<{
   if (!userSnap.exists) {
     throw new HttpsError("permission-denied", "Perfil PAY0 no autorizado.");
   }
-  const user = asRecord(userSnap.data());
+  const user = await withInheritedAuthority(asRecord(userSnap.data()), uid);
   assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
   const role = cleanText(user.role).toLowerCase();
   const rootId = cleanText(user.rootId ?? (role === "superadmin" ? uid : ""));

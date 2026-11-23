@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 
-const { decideUserAuthorization } = require("../../functions/lib/modules/users/authorization.js");
+const { decideUserAuthorization, computeInheritedModuleCeiling, attachInheritedModuleCeiling } = require("../../functions/lib/modules/users/authorization.js");
 const { resolveDispersionDespachoIdForRole } = require("../../functions/lib/modules/financing/dispersionDispatchResolver.js");
 const { decideIqDispersionExecutionAccess } = require("../../functions/lib/modules/iq/dispersionExecutionAccess.js");
 const { assertDispersionDestination } = require("../../functions/lib/modules/iq/dispersionDestinationGuard.js");
@@ -24,8 +24,13 @@ const destination = {
   legs: [{ rootId, clientId, principalDispersionId: dispersionId, amount: 1250 }],
 };
 
+// Operators inherit module permissions from their parent admin (resolved server-side before authorization).
+const parentAdmin = { role: "admin", rootId, active: true };
 function profile(role, modules = undefined) {
-  return { role, rootId, active: true, ...(modules ? { modules } : {}) };
+  const user = { role, rootId, active: true, ...(role === "operador" ? { parentUserId: "adminA" } : {}), ...(modules ? { modules } : {}) };
+  return role === "operador"
+    ? attachInheritedModuleCeiling(user, computeInheritedModuleCeiling({ operator: user, operatorUid: "operadorA", parentUid: "adminA", parent: parentAdmin }))
+    : user;
 }
 
 async function runSimulatedFlow({ role, user = profile(role), delegation = { active: true }, despacho = dispatch, access = iqAccess, target = destination }) {

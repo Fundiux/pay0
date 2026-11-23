@@ -30,8 +30,10 @@ const authz = load('functions/src/modules/users/authorization.ts', { './defaultM
 const guard = load('functions/src/utils/authGuard.ts', {
   'firebase-functions': { https: { HttpsError } }, '../modules/users/authorization': authz,
 });
+// Operators inherit module permissions from a resolved parent; this fixture models a superadmin parent.
+const inheritedParent = { withInheritedAuthority: async user => user && authz.attachInheritedModuleCeiling(user, { status: 'RESOLVED', parentUid: 'parent', parentRole: 'superadmin', modules: defaults.getDefaultModules('superadmin') }) };
 const quota = load('functions/src/modules/pagos/receiptOcrQuota.ts', {
-  crypto, 'firebase-functions/v2/https': { HttpsError }, '../../utils/authGuard': guard,
+  crypto, 'firebase-functions/v2/https': { HttpsError }, '../../utils/authGuard': guard, '../users/inheritedAuthority': inheritedParent,
 });
 const key = (scope, value) => `receiptProcessingQuotas/${scope}_${crypto.createHash('sha256').update(value).digest('hex')}`;
 const profile = (rootId = 'r1') => ({ role: 'operador', rootId, active: true });
@@ -124,7 +126,7 @@ function receiptHandler(db, counters, providerError = false, pdfPages = 1, pdfOc
     'firebase-functions/v2/https': http,
     'firebase-admin/firestore': { FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP', increment: value => value } }, './receiptOcrQuota': quota,
     'node:crypto': crypto,
-    '../sharedCallables/helpers': { db, getMyUser: async uid => db.docs.get(`users/${uid}`), getRootId: async uid => db.docs.get(`users/${uid}`)?.rootId || uid },
+    '../sharedCallables/helpers': { db, getMyUser: async uid => inheritedParent.withInheritedAuthority(db.docs.get(`users/${uid}`)), getRootId: async uid => db.docs.get(`users/${uid}`)?.rootId || uid },
     '../../utils/authGuard': guard,
     './receiptSemantics': load('functions/src/modules/pagos/receiptSemantics.ts', {}),
     './receiptLearning': load('functions/src/modules/pagos/receiptLearning.ts', { 'node:crypto': crypto }),

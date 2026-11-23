@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -15,7 +16,7 @@ async function auth(request: any, action: "view" | "configure" = "view") {
   if (!uid) throw new HttpsError("unauthenticated", "Debes iniciar sesión.");
   const snap = await db.doc(`users/${uid}`).get();
   if (!snap.exists) throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
-  const user: any = snap.data() || {};
+  const user: any = await withInheritedAuthority(snap.data() || {}, uid);
   const role = text(user.role).toLowerCase();
   assertAuthorized(request.auth, user, {
     allowedRoles: action === "configure" ? ["superadmin", "admin"] : ["superadmin", "admin", "operador"],

@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import {
   decideUserAuthorization,
+  getAttachedInheritedModuleCeiling,
   normalizeCanonicalRole,
 } from "../modules/users/authorization";
 
@@ -36,6 +37,15 @@ export function assertAuthorized(
   });
 
   if (!decision.allowed) {
+    if (decision.reason === "PARENT_AUTHORITY_UNRESOLVED") {
+      // Operador sin techo heredado: su padre no se resolvio o esta ruta no llamo withInheritedAuthority.
+      functions.logger?.warn?.("authorization.parent_authority_unresolved", {
+        module: options.requiredModule || null,
+        ceiling: getAttachedInheritedModuleCeiling(userData)?.status === "UNRESOLVED"
+          ? (getAttachedInheritedModuleCeiling(userData) as any).reason
+          : "NOT_ATTACHED",
+      });
+    }
     const unauthenticated = decision.reason === "UNAUTHENTICATED";
     const restricted = decision.reason === "USER_RESTRICTED" || decision.reason === "USER_RESTRICTION_INVALID";
     throw new functions.https.HttpsError(

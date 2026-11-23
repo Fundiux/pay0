@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -32,7 +33,7 @@ async function getSuperadminContext(request: any) {
     throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
   }
 
-  const profile = userSnap.data() || {};
+  const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
   const role = String(profile.role || "").trim().toLowerCase();
   if (role !== "superadmin") {
     throw new HttpsError("permission-denied", "Solo superadmin puede ejecutar esta accion.");
@@ -61,7 +62,7 @@ async function getRatesManagerContext(request: any) {
     throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
   }
 
-  const profile = userSnap.data() || {};
+  const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
   const role = String(profile.role || "").trim().toLowerCase();
 
   if (role !== "superadmin" && role !== "admin") {
@@ -473,7 +474,7 @@ async function getClientRatesManagerContext(request: any) {
     throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
   }
 
-  const profile = userSnap.data() || {};
+  const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
   const role = String(profile.role || "").trim().toLowerCase();
 
   if (role !== "superadmin" && role !== "admin" && role !== "operador") {

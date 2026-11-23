@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -257,7 +258,7 @@ export async function loadIqCanonicalUserAccess(input: {
 
   if (input.moduleKey === "dispersiones") {
     const userSnap = await db.collection("users").doc(uid).get();
-    const user = record(userSnap.data());
+    const user = await withInheritedAuthority(record(userSnap.data()), uid);
     if (!userSnap.exists || (clean(user.rootId) || uid) !== rootId) {
       throw new HttpsError("permission-denied", "El usuario esta fuera de scope.");
     }

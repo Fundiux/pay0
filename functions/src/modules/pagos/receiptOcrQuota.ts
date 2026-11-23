@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { createHash } from "crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -30,7 +31,7 @@ export async function reserveReceiptProcessing(
     // Reading the profile in the reservation transaction also retries on a
     // concurrent permission/root change before accepting the reservation.
     const profile = await tx.get(db.doc(`users/${uid}`));
-    const user = profile.exists ? profile.data() : undefined;
+    const user = profile.exists ? await withInheritedAuthority(profile.data(), uid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null) : undefined;
     assertAuthorized(auth, user, {
       allowedRoles: ["superadmin", "admin", "operador"],
       requiredModule: "pagos",

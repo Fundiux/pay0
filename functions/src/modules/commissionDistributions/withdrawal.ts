@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { isPostedCommissionPayment } from "./domain";
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -16,7 +17,7 @@ const text = (value: unknown) => String(value ?? "").trim();
 
 /** Reuse canonical pricing, USER ledger and forward-only route/reservation in one transaction. */
 export async function reserveUserCommissionWithdrawal(input: { distributionId: string; rootId: string; ownerUid: string; actorUid: string; source: "MANUAL" | "DAILY"; dryRun?: boolean; acceptTotalDebitMinor?: number }) {
-  const ownerBefore = (await db.doc(`users/${input.ownerUid}`).get()).data();
+  const ownerBefore = await withInheritedAuthority((await db.doc(`users/${input.ownerUid}`).get()).data(), input.ownerUid);
   if (!ownerBefore || text(ownerBefore.rootId || input.ownerUid) !== input.rootId) throw new HttpsError("permission-denied", "Titular fuera de alcance.");
   assertCommissionWithdrawalOwner(input.ownerUid, ownerBefore, input.rootId);
   const identity = await captureIqOriginIdentity({ actorUid: input.ownerUid, rootId: input.rootId, role: ownerBefore.role, moduleKey: "dispersiones" });
@@ -28,7 +29,7 @@ export async function reserveUserCommissionWithdrawal(input: { distributionId: s
       if (input.dryRun) throw new HttpsError("failed-precondition", "Este pago ya tiene una solicitud; consulta Comisiones calculadas.");
       return { ok: true, idempotent: true, requestId: requestRef.id, principalIds: previous.principalIds, status: previous.status };
     }
-    const distribution = distributionSnap.data(), owner = ownerSnap.data();
+    const distribution = distributionSnap.data(), owner = await withInheritedAuthority(ownerSnap.data(), input.ownerUid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
     if (!distribution || distribution.sourceType !== "USER_EARNINGS" || distribution.rootId !== input.rootId || distribution.ownerUid !== input.ownerUid || !owner || owner.active === false || owner.isActive === false || owner.isDeleted === true || text(owner.rootId || input.ownerUid) !== input.rootId) throw new HttpsError("permission-denied", "Comisión fuera de alcance o titular inactivo.");
     assertCommissionWithdrawalOwner(input.ownerUid, owner, input.rootId);
     const clientId = text(distribution.clientId);

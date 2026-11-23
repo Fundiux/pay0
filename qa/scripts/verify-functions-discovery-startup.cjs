@@ -28,7 +28,7 @@ const warmupTimeoutMs = 60_000;
 // documents callable, the Hugo team voice read and history callables, and the
 // five server-owned WhatsApp connector enrollment callables live since 2026-10-22.
 // Keep the exact count and timed discovery gate; do not accept missing exports.
-const expectedEndpointCount = 426; // 412 minus the five legacy WhatsApp callables removed, plus sendNewDispersionToIq, getClientWhatsAppGroups and assignWhatsAppGroupToClients, plus resolveWhatsAppUncertainDelivery, plus reconcileIqBalances and getIqBalanceComparison, plus setIqBeneficiaryCreateConfig, runIqDailyReverseSync, getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig and processWhatsAppGroupReplies, plus setWhatsAppInternalGroup and alertClientGroupOnSolicitud plus getRepCancellationImpact, confirmRepCancellation and advanceFacturamaCancellations, plus setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics and markWhatsAppReplyCorrection
+const expectedEndpointCount = 427; // 412 minus the five legacy WhatsApp callables removed, plus sendNewDispersionToIq, getClientWhatsAppGroups and assignWhatsAppGroupToClients, plus resolveWhatsAppUncertainDelivery, plus reconcileIqBalances and getIqBalanceComparison, plus setIqBeneficiaryCreateConfig, runIqDailyReverseSync, getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig and processWhatsAppGroupReplies, plus setWhatsAppInternalGroup and alertClientGroupOnSolicitud plus getRepCancellationImpact, confirmRepCancellation and advanceFacturamaCancellations, plus setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics and markWhatsAppReplyCorrection, plus getUserPermissionCeiling
 const requiredEndpoints = [
   "saveClientCallable",
   "mergeDuplicateClientCallable",
