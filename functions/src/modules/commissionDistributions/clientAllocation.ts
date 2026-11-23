@@ -49,6 +49,8 @@ export function calculateClientCommissionInstructions(input: ClientCommissionCal
     const amountMinor = roundRatio(points ? input.operationBaseMinor! : earnedMinor, rate);
     return { accountId, ...(points ? { pointsBps: rate } : { earningsPercentBps: rate }), amountMinor };
   });
+  const pointsTotal = rows.reduce((sum, row) => sum + (row.pointsBps || 0), 0);
+  if (pointsTotal > 0 && (input.contractRateBps == null || pointsTotal > input.contractRateBps)) throw new Error("La suma de puntos supera la tasa contractual.");
   const totalMinor = rows.reduce((sum, row) => sum + row.amountMinor, 0);
   if (!Number.isSafeInteger(totalMinor) || totalMinor > earnedMinor) throw new Error("La distribución supera la comisión ganada.");
   return { earnedMinor, distributedMinor: totalMinor, remainingMinor: earnedMinor - totalMinor, instructions: rows };
