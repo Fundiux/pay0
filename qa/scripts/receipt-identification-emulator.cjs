@@ -62,7 +62,7 @@ async function main() {
   for (const [replace, expected] of [['$1,000', 1000], ['$1.000,50', 1000.5], ['$1,000.50', 1000.5], ['$100', 100]])
     check(parseReceiptText(body.replace('$1,000.50', replace)).amount === expected, 'Thousand and decimal formats retain magnitude');
   const mexicanDate = parseReceiptText(body.replace('2026-09-27', '04/05/2026'));
-  check(mexicanDate.date === '2026-05-04' && mexicanDate.dateVerified === true && !receiptRegistrationReasons(mexicanDate, operation).includes('DATE_REQUIRES_REVIEW'), 'Mexican day/month date accepted without extra confirmation');
+  check(mexicanDate.date === '2026-05-04' && mexicanDate.dateVerified === false && receiptRegistrationReasons(mexicanDate, operation).includes('DATE_REQUIRES_REVIEW'), 'Ambiguous numeric date requires review without changing extracted date');
   for (const [text, reason] of [
     [body.replace('Monto: $1,000.50', 'Saldo disponible: $9,999.00'), 'INVALID_AMOUNT'],
     [body.replace('Monto: $1,000.50', 'Monto: $100\nMonto: $200'), 'INVALID_AMOUNT'],
