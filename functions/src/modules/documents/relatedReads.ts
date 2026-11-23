@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -11,7 +12,7 @@ const kinds = new Set<Kind>(["clientBeneficiaries", "clientBeneficiaryMethods", 
 
 async function readPage(transaction: admin.firestore.Transaction, request: any, collection: Kind, id: string, cursor: string | undefined) {
   const uid = request.auth.uid as string;
-  const user = (await transaction.get(db.doc(`users/${uid}`))).data();
+  const user = await withInheritedAuthority((await transaction.get(db.doc(`users/${uid}`))).data(), uid, async parentUid => (await transaction.get(db.doc(`users/${parentUid}`))).data() || null);
   let role;
   if (collection === "pagoAplicaciones") {
     try { role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: "create" }); }

@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { documentId, noteDocumentId, timestamp, nativeNoteCursor, readNotesPage, NOTES_READ_BATCH_SIZE, NativeNoteCursor } from "./readPagination";
 export { NOTES_RESPONSE_BYTES, NOTES_READ_BATCH_SIZE, noteDisplayDate, NoteDisplayDate } from "./readPagination";
@@ -27,7 +28,7 @@ async function authorize(transaction: admin.firestore.Transaction, auth: any, so
   const uid = auth.uid as string;
   const user = await transaction.get(db.doc(`users/${uid}`));
   if (!user.exists) throw new HttpsError("permission-denied", "Notas no disponibles.");
-  const profile = user.data()!;
+  const profile = await withInheritedAuthority(user.data()!, uid, async parentUid => (await transaction.get(db.doc(`users/${parentUid}`))).data() || null);
   const role = assertAuthorized(auth, profile, {
     allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "view",
   });

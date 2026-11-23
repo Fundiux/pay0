@@ -664,7 +664,7 @@ function cancellationPorts(input: PortsInput): ProcessPorts {
     repSatCancelled: async (rep: FacturamaRep) => satIsCancelled({ uuid: rep.uuid, ...(await rfcs()), total: 0 }).catch(() => false),
     requestRepCancel: rep => requestOneRepCancellation({ db, rootId, solicitudId, solicitudFolio: sol.folio || null, actorUid: input.uid, actorRole: input.actorRole, rep, cancelCfdi }),
     markRepCancelled: rep => markRepCancelled(db, rep),
-    saveRepAcuse: async (rep: FacturamaRep) => {
+    saveRepAcuse: async (rep: FacturamaRep): Promise<boolean> => {
       try {
         const receipt = await requestFacturama(PRODUCTION_BASE_URL, `/api/Acuse/pdf/issuedLite/${encodeURIComponent(rep.cfdiId)}`);
         const buffer = Buffer.from(clean(receipt?.Content, 20_000_000), "base64");
@@ -673,8 +673,10 @@ function cancellationPorts(input: PortsInput): ProcessPorts {
         const saved = await saveIssuedDocument({ rootId, solicitud: sol, solicitudId, uid: input.uid, invoiceId: rep.jobId, environment: "PRODUCTION", type: "ACUSE_CANCELACION_CFDI",
           contentType: "application/pdf", extension: "pdf", buffer, variant: { key: `REP:${rep.requestId}`, label: `COMPLEMENTO-${rep.installment}` } });
         await db.doc(`paymentComplementJobs/${rep.jobId}`).set({ repCancellationReceiptUploadId: saved.uploadId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return true;
       } catch (error: any) {
         console.error("REP_CANCELLATION_ACUSE_PENDING", rep.jobId, clean(error?.message || error, 200));
+        return false;
       }
     },
     original: async () => {

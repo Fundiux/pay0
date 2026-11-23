@@ -16,8 +16,8 @@ export type ProcessPorts = {
   requestRepCancel(rep: FacturamaRep): Promise<string>;
   /** Marks the complement cancelled. */
   markRepCancelled(rep: FacturamaRep): Promise<void>;
-  /** Saves the complement's cancellation receipt once; the upload goes to the client by itself. Never throws. */
-  saveRepAcuse(rep: FacturamaRep): Promise<void>;
+  /** Saves the complement's cancellation receipt once; the upload goes to the client by itself. Never throws. Returns true when the receipt is saved. */
+  saveRepAcuse(rep: FacturamaRep): Promise<boolean>;
   original(): Promise<OriginalState>;
   /** Cancels the original invoice. Only called when every complement is cancelled. */
   requestOriginal(): Promise<void>;
@@ -33,7 +33,7 @@ export type ProcessSummary = {
 /**
  * One idempotent pass of the cancellation of an invoice that has payment complements. It can run as often as needed:
  * - the complements are cancelled first, each one on its own;
- * - the original invoice is cancelled only when EVERY complement is effectively cancelled;
+ * - the original invoice is cancelled only when EVERY complement is cancelled and verified with its receipt (acuse);
  * - whatever is not confirmed stays pending, nothing is cancelled early;
  * - after 72 hours without confirmation the request is repeated once and the internal group is told.
  */
@@ -42,26 +42,39 @@ export async function advanceCancellation(ports: ProcessPorts, options: { repsOn
   const now = ports.nowMs();
   const reps = await ports.reps();
   let pending = 0;
+  // A complement counts as done only when the SAT confirmed its cancellation AND its receipt (acuse) is saved: the original
+  // invoice is never cancelled before that. A missing receipt is looked for again on every pass.
+  const ensureAcuse = async (rep: FacturamaRep) => {
+    if (rep.receiptUploadId) return true;
+    const saved = await ports.saveRepAcuse(rep);
+    actions.push(saved ? `ACUSE_REP_${rep.installment}` : `ACUSE_REP_${rep.installment}_PENDIENTE`);
+    return saved;
+  };
   for (const rep of reps) {
     if (isConfirmedFacturamaCancellation(rep.cancellationStatus)) {
-      if (!rep.receiptUploadId) { await ports.saveRepAcuse(rep); actions.push(`ACUSE_REP_${rep.installment}`); }
+      if (!(await ensureAcuse(rep))) pending += 1;
       continue;
     }
     if (rep.cancellationRequestedAtMs && await ports.repSatCancelled(rep)) {
       await ports.markRepCancelled(rep);
-      await ports.saveRepAcuse(rep);
       actions.push(`REP_${rep.installment}_CANCELADO`);
+      if (!(await ensureAcuse(rep))) pending += 1;
       continue;
     }
+    let status = "";
     if (!rep.cancellationRequestedAtMs) {
-      const status = await ports.requestRepCancel(rep);
+      status = await ports.requestRepCancel(rep);
       actions.push(`REP_${rep.installment}_SOLICITADO`);
-      if (isConfirmedFacturamaCancellation(status)) { await ports.markRepCancelled(rep); await ports.saveRepAcuse(rep); actions.push(`REP_${rep.installment}_CANCELADO`); continue; }
     } else if (now - rep.cancellationRequestedAtMs >= CANCELLATION_WAIT_MS) {
       await ports.alert({ kind: "REP", installment: rep.installment, attempt: rep.cancellationAttempts + 1 });
-      const status = await ports.requestRepCancel(rep);
+      status = await ports.requestRepCancel(rep);
       actions.push(`REP_${rep.installment}_REINTENTO`);
-      if (isConfirmedFacturamaCancellation(status)) { await ports.markRepCancelled(rep); await ports.saveRepAcuse(rep); actions.push(`REP_${rep.installment}_CANCELADO`); continue; }
+    }
+    if (isConfirmedFacturamaCancellation(status)) {
+      await ports.markRepCancelled(rep);
+      actions.push(`REP_${rep.installment}_CANCELADO`);
+      if (!(await ensureAcuse(rep))) pending += 1;
+      continue;
     }
     pending += 1;
   }

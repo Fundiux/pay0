@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "../sharedCallables/helpers";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -64,7 +65,7 @@ async function state(job: any) {
     db.doc(`users/${job.actorUid}`).get(), db.doc(`iqUserAccess/${job.actorUid}`).get(),
     db.doc(`iqCredentialProfiles/${effectiveProfileId(job)}`).get(),
   ]);
-  return { config: config.data(), master: master.data(), user: user.data(), access: access.data(), profile: profile.data() };
+  return { config: config.data(), master: master.data(), user: await withInheritedAuthority(user.data(), job.actorUid), access: access.data(), profile: profile.data() };
 }
 
 export async function inspectIqComplementGate(job: any, action: IqComplementAction): Promise<GateDecision> {
@@ -96,7 +97,7 @@ export async function claimIqComplementGate(jobId: string, action: IqComplementA
       tx.get(db.doc(`users/${job.actorUid}`)), tx.get(db.doc(`iqUserAccess/${job.actorUid}`)),
       tx.get(db.doc(`iqCredentialProfiles/${profileId}`)), tx.get(quotaRef),
     ]);
-    let decision = decide(job, action, config.data(), master.data(), user.data(), access.data(), profile.data());
+    let decision = decide(job, action, config.data(), master.data(), await withInheritedAuthority(user.data(), job.actorUid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null), access.data(), profile.data());
     if (decision.allowed && action === "REQUEST" && job.status !== "PREPARING") decision = { ...decision, allowed: false, reason: "REP_GATE_JOB_STATE" };
     const eligibilityLookup = job.status === "BLOCKED" && job.error === "IQ_REP_REQUEST_ELIGIBILITY_UNVERIFIED";
     if (decision.allowed && action === "LOOKUP" && !eligibilityLookup && !["PREPARING", "REQUESTED", "UNKNOWN", "ISSUED_PENDING_FILES"].includes(job.status))

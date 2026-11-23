@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { db } from "../sharedCallables/helpers";
@@ -25,7 +26,7 @@ export async function changeSolicitudVisibilityCore(request: any) {
   if (!deleting && typeof request.data?.ocultar !== "boolean") throw new HttpsError("invalid-argument", "Accion requerida.");
   return db.runTransaction(async tx => {
     const [person, source] = await Promise.all([tx.get(db.doc(`users/${uid}`)), tx.get(db.doc(`solicitudes/${id}`))]);
-    const me = person.data();
+    const me = await withInheritedAuthority(person.data(), uid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
     assertAuthorized(request.auth, me, {allowedRoles:["superadmin","admin","operador"],requiredModule:"solicitudes",requiredAction:"cancel"});
     if (!source.exists) throw new HttpsError("not-found", "Solicitud no existe.");
     const row = source.data()!, rootId = text(me?.rootId || uid), role = getUserRole(me);

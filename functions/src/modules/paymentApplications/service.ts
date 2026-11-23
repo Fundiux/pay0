@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { hasOpenCancellation } from "../../utils/solicitudCancellationState";
 import { systemNoteAuthor } from "../notes/domain";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -399,7 +400,7 @@ export async function applyPaymentApplicationBatchAtomic(params: {
     let automaticReason = "";
     if (params.automaticSourceDigest) {
       const user = await tx.get(db.doc(`users/${actor.uid}`));
-      assertAuthorized({ uid: actor.uid }, user.data(), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
+      assertAuthorized({ uid: actor.uid }, await withInheritedAuthority(user.data(), actor.uid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] });
       if (String(user.get("rootId") || actor.uid) !== actor.rootId) throw new HttpsError("permission-denied", "Usuario fuera del root del pago.");
       const receipts = await tx.get(db.collection("uploads").where("pagoId", "==", batch.pagoId).where("documentType", "==", "COMPROBANTE_PAGO").where("active", "==", true).limit(10));
       if (!receipts.docs.some(doc => doc.get("rootId") === actor.rootId && doc.get("status") === "READY" && doc.get("storagePath")))

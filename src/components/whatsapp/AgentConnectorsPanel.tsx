@@ -15,11 +15,16 @@ import {
   type WhatsAppAgentActivityRow,
   type WhatsAppAgentChats,
   type WhatsAppAgentConnector,
+  type WhatsAppAgentMode,
+  type WhatsAppAgentObserversConfig,
+  type WhatsAppReplyMetricsBucket,
   type WhatsAppAgentObserversState,
   type WhatsAppReplyMode,
+  getWhatsAppAgentReplyMetrics,
+  setWhatsAppGroupAgentMode,
 } from "@/services/whatsappQr";
 
-const minutes = (ms: number | null) => (ms === null ? "—" : `${(ms / 60000).toFixed(1)} min`);
+const formatMinutes = (ms: number | null) => (ms === null ? "—" : `${(ms / 60000).toFixed(1)} min`);
 
 // Grupos que ve el conector de un agente: aquí se elige cuáles observa y a qué usuario de PAY0 pertenece cada uno.
 // De los chats privados solo se cuenta cuántos hay.
@@ -107,6 +112,110 @@ function ReplySwitchBlock({ agentName }: { agentName: string }) {
   );
 }
 
+const KIND_LABELS: Record<string, string> = { GREETING: "Saludos", PROCESSING: "En proceso", VALIDATING: "Validando", REQUEST_DATA: "Pidió datos" };
+const monthOptions = () => Array.from({ length: 3 }, (_, index) => {
+  const date = new Date(); date.setMonth(date.getMonth() - index, 1);
+  return date.toISOString().slice(0, 7);
+});
+
+// Monthly measurement per agent and per group: is each agent worth keeping?
+function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName: string }) {
+  const [month, setMonth] = useState(monthOptions()[0]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [buckets, setBuckets] = useState<WhatsAppReplyMetricsBucket[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setLoading(true); setError("");
+    getWhatsAppAgentReplyMetrics(month)
+      .then(result => { if (alive) setBuckets(result.buckets.filter(row => row.agentId === agentId)); })
+      .catch((e: any) => { if (alive) setError(`No se pudo cargar: ${e?.message || e}`); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [open, month, agentId]);
+
+  const total = buckets?.find(row => row.chatId === null);
+  const groups = (buckets || []).filter(row => row.chatId !== null);
+  return (
+    <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-100">Medición del mes de {agentName}</summary>
+      <div className="mt-2 flex items-center gap-2">
+        <select value={month} onChange={e => setMonth(e.target.value)} aria-label="Mes" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100">
+          {monthOptions().map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+        {loading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+      </div>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {buckets && !total && <p className="mt-2 text-xs text-slate-500">Sin respuestas ni cambios de modo en este mes.</p>}
+      {total && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="text-slate-500"><tr>
+              <th className="py-1 pr-3 font-medium">Grupo</th><th className="pr-3 font-medium">Respuestas</th><th className="pr-3 font-medium">Correcciones</th>
+              <th className="pr-3 font-medium">Escalaciones</th><th className="pr-3 font-medium">Tiempo medio</th><th className="pr-3 font-medium">Regresos a Observador</th>
+            </tr></thead>
+            <tbody>
+              {[total, ...groups].map(row => (
+                <tr key={row.chatId || "total"} className={row.chatId === null ? "border-t border-slate-700 font-semibold text-slate-100" : "border-t border-slate-800"}>
+                  <td className="py-1 pr-3">{row.chatId === null ? "Total" : row.groupName || "Grupo"}</td>
+                  <td className="pr-3" title={Object.entries(row.byKind).map(([kind, count]) => `${KIND_LABELS[kind] || kind}: ${count}`).join(" · ")}>{row.replies}</td>
+                  <td className="pr-3">{row.humanCorrections}</td><td className="pr-3">{row.escalations}</td><td className="pr-3">{formatMinutes(row.avgResponseMs)}</td>
+                  <td className="pr-3" title={row.returnReasons.join(" · ")}>{row.returnsToObserver}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[11px] text-slate-500">Las correcciones son las respuestas que una persona marcó como mal dadas. Consumo de IA: {total.aiTokens} tokens (las respuestas actuales son texto fijo).</p>
+        </div>
+      )}
+    </details>
+  );
+}
+
+// Observador / Actuando for one agent in one group. Going back to Observador asks for the reason.
+function GroupModeControl({ agentId, agentName, config, onChanged }: { agentId: string; agentName: string; config: WhatsAppAgentObserversConfig; onChanged: () => Promise<void> }) {
+  const acting = config.agentModes?.[agentId] === "ACTING";
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function change(mode: WhatsAppAgentMode, why?: string) {
+    setBusy(true); setNote(null);
+    try {
+      await setWhatsAppGroupAgentMode({ groupChatId: config.groupChatId, agentId, mode, reason: why });
+      await onChanged();
+      setReasonOpen(false); setReason("");
+      setNote({ ok: true, text: mode === "ACTING" ? `${agentName} está actuando en este grupo.` : `${agentName} volvió a Observador.` });
+    } catch (e: any) {
+      setNote({ ok: false, text: e?.message || String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const base = "px-2.5 py-0.5 text-xs transition-colors disabled:opacity-50";
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div role="group" aria-label={`Modo de ${agentName} en ${config.groupName}`} className="inline-flex overflow-hidden rounded-full border border-slate-600">
+        <button type="button" disabled={busy || !acting && !reasonOpen} aria-pressed={!acting} onClick={() => { if (acting) setReasonOpen(true); }} className={`${base} ${!acting ? "bg-slate-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}>Observador</button>
+        <button type="button" disabled={busy || !config.ownerUserUid} aria-pressed={acting} onClick={() => { if (!acting) void change("ACTING"); }} title={config.ownerUserUid ? undefined : "Asigna un usuario al grupo primero"} className={`${base} ${acting ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}>Actuando</button>
+      </div>
+      {reasonOpen && (
+        <div className="flex items-center gap-1">
+          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo" aria-label="Motivo para volver a Observador" maxLength={300} className="w-48 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100" />
+          <button type="button" disabled={busy || reason.trim().length < 3} onClick={() => void change("OBSERVER", reason.trim())} className="rounded-lg bg-slate-700 px-2 py-1 text-xs text-white disabled:opacity-50">Confirmar</button>
+          <button type="button" disabled={busy} onClick={() => { setReasonOpen(false); setReason(""); }} className="px-1 text-xs text-slate-400">Cancelar</button>
+        </div>
+      )}
+      {note && <p className={`text-[11px] ${note.ok ? "text-emerald-300" : "text-rose-300"}`}>{note.text}</p>}
+    </div>
+  );
+}
+
 function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { bindingId: string; agentId: string; agentName: string; meta: WhatsAppAgentObserversState; onChanged: () => Promise<void> }) {
   const [chats, setChats] = useState<WhatsAppAgentChats | null>(null);
   const [error, setError] = useState("");
@@ -171,6 +280,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
       </div>
       <p className="mt-1 text-xs text-slate-500">Cada grupo observado debe tener su usuario: el agente solo usa información de ese usuario.</p>
       {agentId === "hugo" && <ReplySwitchBlock agentName={agentName} />}
+      <ReplyMetricsBlock agentId={agentId} agentName={agentName} />
       {loading && <div className="mt-3 flex items-center gap-2 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Cargando grupos...</div>}
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
 
@@ -211,6 +321,7 @@ function AgentGroupsBlock({ bindingId, agentId, agentName, meta, onChanged }: { 
                             {userName(config?.ownerUserUid || "")}
                           </button>
                         )}
+                        {config && <GroupModeControl agentId={agentId} agentName={agentName} config={config} onChanged={onChanged} />}
                         <Switch on busy={busy} label={`Dejar de observar ${group.name}`} onClick={() => void apply(group.chatId, false, config?.ownerUserUid || "", "Ya no se observa este grupo.")} />
                       </div>
                       {note(group.chatId)}
@@ -423,7 +534,7 @@ export function AgentConnectorsPanel() {
                     <td className="p-2 text-right text-slate-100">{row.received}</td>
                     <td className="p-2 text-right text-slate-100">{row.answered}</td>
                     <td className="p-2 text-right text-slate-100">{row.unanswered}</td>
-                    <td className="p-2 text-right text-slate-100">{minutes(row.avgResponseMs)}</td>
+                    <td className="p-2 text-right text-slate-100">{formatMinutes(row.avgResponseMs)}</td>
                   </tr>
                 ))}
               </tbody>

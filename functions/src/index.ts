@@ -18,7 +18,7 @@ export {
 } from "./modules/legacyCore/callables";
 export { logAuthEventCallable, logUnauthorizedRouteAttempt, redeemMySecurityUnlockCode } from "./modules/activityLog/callables";
 export { loginWithUsername, setMyUsername } from "./modules/users/loginIdentity";
-export { updateUserModules } from "./modules/users/modules";
+export { updateUserModules, getUserPermissionCeiling } from "./modules/users/modules";
 export { updateUserActive } from "./modules/users/active";
 export { listUsers } from "./modules/users/list";
 export { mergeDuplicateClientCallable, listDuplicateClientGroupsCallable } from "./modules/clients/mergeCallables";
@@ -280,6 +280,5 @@ export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner"
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";
 
 export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount, revealPersonalCommissionAccountNumber } from "./modules/commissionDistributions/personalAccountCallables";
-
 export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";
 export { resolvePersonalCommissionAccountIq } from "./modules/commissionDistributions/personalAccountIqCallables";

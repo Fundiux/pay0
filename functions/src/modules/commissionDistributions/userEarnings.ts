@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { isPostedCommissionPayment } from "./domain";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
@@ -65,7 +66,7 @@ export async function preflightUserEarningDistribution(distributionId: string, a
   if (!distribution || distribution.sourceType !== "USER_EARNINGS") throw new Error("Distribución de usuario no encontrada.");
   const reasons: string[] = [];
   const [paymentSnap, snapshotSnap, entitlementSnap, userSnap] = await Promise.all([db.doc(`pagos/${distribution.paymentId}`).get(), db.doc(`paymentFinancialSnapshots/${distribution.financialSnapshotId}`).get(), db.doc(`commissionUserEntitlements/${commissionSettingsId(distribution.rootId, distribution.clientId, distribution.ownerUid)}`).get(), db.doc(`users/${distribution.ownerUid}`).get()]);
-  const payment = paymentSnap.data(), snapshot = snapshotSnap.data(), entitlement = entitlementSnap.data(), user = userSnap.data();
+  const payment = paymentSnap.data(), snapshot = snapshotSnap.data(), entitlement = entitlementSnap.data(), user = await withInheritedAuthority(userSnap.data(), distribution.ownerUid);
   if (!payment || payment.rootId !== distribution.rootId || text(payment.clienteId || payment.clientId) !== distribution.clientId || !isPostedCommissionPayment(payment) || payment.financialSnapshotId !== distribution.financialSnapshotId) reasons.push("PAYMENT_NOT_ELIGIBLE");
   if (!entitlement?.active || entitlement.rootId !== distribution.rootId || entitlement.ownerUid !== distribution.ownerUid) reasons.push("ENTITLEMENT_INACTIVE");
   try { assertCommissionWithdrawalOwner(distribution.ownerUid, user, distribution.rootId); } catch { reasons.push("OWNER_INACTIVE_OR_NOT_AUTHORIZED"); }

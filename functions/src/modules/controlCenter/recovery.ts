@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { isLegacyIqHistoricalImport } from "../iq/historicalImportGuard";
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -98,7 +99,7 @@ export async function executeRecovery(job: any): Promise<RecoveryExecutionResult
   if (String(row.ocFiscalMetadataUploadId || "initial") !== job.generation) return { status: "SUPERSEDED", reason: "SOURCE_GENERATION_CHANGED" };
   const auth = { uid: job.actorUid, token: { uid: job.actorUid, role: actor.data()?.role } };
   const role = getUserRole(actor.data());
-  assertAuthorized(auth, actor.data(), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
+  assertAuthorized(auth, await withInheritedAuthority(actor.data(), job.actorUid), { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
   if ((role === "admin" && row.adminId !== job.actorUid) || (role === "operador" && row.createdBy !== job.actorUid)) throw Error("RECOVERY_OWNER_DENIED");
   const companyId = String(row.companyId || row.empresaId || ""), clientId = String(row.clienteId || row.clientId || "");
   if (!companyId || !clientId || companyId.includes("/") || clientId.includes("/")) throw Error("RECOVERY_RELATIONS_MISSING");

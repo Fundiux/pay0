@@ -121,6 +121,22 @@ export async function saveUserClientAccess(
 }
 
 
+export type UserPermissionCeiling = {
+  ok: boolean;
+  targetRole: "superadmin" | "admin" | "operador" | "";
+  inherited: boolean;
+  parentResolved: boolean;
+  parentName: string | null;
+  assignable: Record<string, Record<string, boolean>>;
+};
+
+/** Permisos que el editor puede asignar al usuario (calculado en el servidor). */
+export async function getUserPermissionCeiling(targetUid: string): Promise<UserPermissionCeiling> {
+  const fn = httpsCallable(functions, CALLABLES.getUserPermissionCeiling);
+  const res: any = await fn({ targetUid });
+  return res?.data as UserPermissionCeiling;
+}
+
 export async function saveUserModules(
   targetUid: string,
   modules: Record<string, Record<string, boolean>>,

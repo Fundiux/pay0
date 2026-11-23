@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../modules/users/inheritedAuthority";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized } from "./authGuard";
@@ -10,7 +11,7 @@ export async function authorizeDeferredIntent(input: {
 }) {
   if (!input.uid || input.uid.includes("/") || !input.rootId) throw new HttpsError("permission-denied", "AUTH_STOPPED");
   const snap = await getFirestore().doc(`users/${input.uid}`).get();
-  const user = snap.exists ? snap.data() : null;
+  const user = snap.exists ? await withInheritedAuthority(snap.data(), input.uid) : null;
   const role = assertAuthorized({ uid: input.uid }, user, {
     allowedRoles: ["superadmin", "admin", "operador"], requiredModule: input.module, requiredAction: input.action,
   });

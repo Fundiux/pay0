@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { applyWhatsAppDestinationsToJob } from "./whatsappRoutes";
 import { recordOperationalMetric } from "../operationalMetrics/service";
 import { createHash } from "crypto";
@@ -144,7 +145,7 @@ async function resolveActor(uid: string): Promise<{
 }> {
   const db = getFirestore();
   const snap = await db.doc(`users/${uid}`).get();
-  const data = snap.exists ? snap.data() || {} : {};
+  const data = await withInheritedAuthority(snap.exists ? snap.data() || {} : {}, uid);
 
   const role = cleanText((data as any).role || (data as any).rol || "", 80).toLowerCase();
   const rootId = cleanText((data as any).rootId || uid, 200);

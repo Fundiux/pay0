@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { manualNoteAuthor } from "../notes/domain";
 import {
   getApps,
@@ -108,7 +109,7 @@ export const listScopedClientDispersions = onCall(
     const userSnap = await db.doc(`users/${uid}`).get();
     if (!userSnap.exists) throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
 
-    const profile: any = userSnap.data() || {};
+    const profile: any = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, {
       allowedRoles: ["superadmin", "admin", "operador"],
       requiredModule: "wallet",
@@ -198,7 +199,7 @@ export const grantClientAdvance = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin"], requiredModule: "wallet", requiredAction: "adelantos" });
     const role = String(profile.role || "").trim().toLowerCase();
     if (role !== "superadmin") {
@@ -403,7 +404,7 @@ export const createClientDispersion = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const role = String(profile.role || "").trim().toLowerCase();
     if (role !== "superadmin" && role !== "admin" && role !== "operador" && role !== "operator") {
@@ -969,7 +970,7 @@ export const createClientDispersionsMassive = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const role = String(profile.role || "").trim().toLowerCase();
 
@@ -2206,7 +2207,7 @@ export const requestClientDispersionIncident = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const role = String(profile.role || "").trim().toLowerCase();
     const rootId = String(profile.rootId || uid).trim();
@@ -2320,7 +2321,7 @@ export const resolveClientDispersionIncident = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const role = String(profile.role || "").trim().toLowerCase();
     if (role !== "superadmin") {
@@ -2567,7 +2568,7 @@ export const addClientDispersionNota = onCall(
       throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
     }
 
-    const profile = userSnap.data() || {};
+    const profile = await withInheritedAuthority(userSnap.data() || {}, uid);
     assertAuthorized(request.auth, profile, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
     const role = String(profile.role || "").trim().toLowerCase();
     const rootId = String(profile.rootId || uid).trim();

@@ -22,7 +22,7 @@ function bucketFake(options={}) {
  return {reads,file(p,opts){reads.push({p,opts});return {getMetadata:async()=>{calls++;if(calls===2)options.afterRead?.();return [{...initial,...(options.dynamicPaths ? {name:p,metadata:{...initial.metadata,entityDocumentId:p.split('/').at(-1).split('-')[0]}} : {}),...(calls===2?options.changedMetadata:{})}];},createReadStream:()=>Readable.from(options.chunks||[bytes])};}};
 }
 function fixture(options={}) {
- const docs=new Map([['users/u',{rootId:'r',role:options.role||'superadmin',active:true}],['clients/c',{rootId:'r',createdBy:'u',fiscalProfile:{csfIntakeId:'i'}}],['clientCsfIntakes/i',{rootId:'r',createdBy:'u',clientId:'c',status:'CLIENT_CREATED'}],['entityDocuments/d',document(options.document)]]);
+ const docs=new Map([['users/u',{rootId:'r',role:options.role||'superadmin',active:true,parentUserId:'pa'}],['users/pa',{rootId:'r',role:'admin',active:true}],['clients/c',{rootId:'r',createdBy:'u',fiscalProfile:{csfIntakeId:'i'}}],['clientCsfIntakes/i',{rootId:'r',createdBy:'u',clientId:'c',status:'CLIENT_CREATED'}],['entityDocuments/d',document(options.document)]]);
  let revision=0; const mutate=(p,patch)=>{docs.set(p,{...docs.get(p),...patch});revision++;};
  const ref=p=>({path:p,id:p.split('/').at(-1),get:async()=>snapshot(p),update:async patch=>mutate(p,patch),set:async value=>{docs.set(p,value);revision++;}});
  const snapshot=p=>{const value=docs.get(p);return {id:p.split('/').at(-1),ref:ref(p),exists:!!value,data:()=>value?structuredClone(value):undefined};};
@@ -32,7 +32,7 @@ function fixture(options={}) {
  const bucket=bucketFake({...options,afterRead:()=>options.duringRead?.({docs,mutate})});
  const fields={serverTimestamp:()=> 'SERVER_TIMESTAMP'};
  const csf=load('functions/src/modules/clients/csfService.ts',{'crypto':crypto,'firebase-admin/firestore':{FieldValue:fields},'firebase-functions/v2/https':{HttpsError},'../sharedCallables/helpers':{db},'../clientKyc/service':{},'pdf-parse':()=>{throw Error('Parser must not run');}});
- const service=load('functions/src/modules/entityDocuments/service.ts',{'firebase-admin':{apps:[{}]},'firebase-admin/firestore':{FieldValue:fields,getFirestore:()=>db},'firebase-admin/storage':{getStorage:()=>({bucket:()=>bucket})},'firebase-functions/v2/https':{HttpsError},'../../utils/authGuard':guard,'../../utils/verifiedStorageObject':verifier,'../clients/csfService':csf,'./domain':domain});
+ const service=load('functions/src/modules/entityDocuments/service.ts',{'firebase-admin':{apps:[{}]},'firebase-admin/firestore':{FieldValue:fields,getFirestore:()=>db},'firebase-admin/storage':{getStorage:()=>({bucket:()=>bucket})},'firebase-functions/v2/https':{HttpsError},'../../utils/authGuard':guard,'../../utils/verifiedStorageObject':verifier,'../clients/csfService':csf,'./domain':domain,'../users/inheritedAuthority':load('functions/src/modules/users/inheritedAuthority.ts',{'firebase-admin/firestore':{getFirestore:()=>db},'./authorization':authz})});
  return {service,docs,bucket,mutate,request:{auth:{uid:'u'},data:{entityDocumentId:'d'}}};
 }
 

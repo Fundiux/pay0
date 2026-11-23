@@ -2,6 +2,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 
 if (!getApps().length) {
   initializeApp();
@@ -33,7 +34,7 @@ export async function getMyUser(uid: string): Promise<any> {
   const userSnap = await db.doc(`users/${uid}`).get();
 
   if (userSnap.exists) {
-    const user = userSnap.data() as any;
+    const user = await withInheritedAuthority(userSnap.data() as any, uid);
     assertAuthorized({ uid }, user);
     profileIdentities.set(user, uid);
     return user;

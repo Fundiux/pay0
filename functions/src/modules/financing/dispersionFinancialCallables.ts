@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import {
   getApps,
   initializeApp,
@@ -99,7 +100,7 @@ export const previewClientDispersionPricing =
       }
 
       const profile =
-        userSnap.data() || {};
+        await withInheritedAuthority(userSnap.data() || {}, uid);
 
       assertAuthorized(
         request.auth,

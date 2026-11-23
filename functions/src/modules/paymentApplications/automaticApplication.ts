@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue } from "firebase-admin/firestore";
@@ -33,7 +34,7 @@ export async function applyAutomaticPayment(pagoId: string, options: { retryRevi
   try {
     const receipts = await db.collection("uploads").where("pagoId", "==", pagoId).where("documentType", "==", "COMPROBANTE_PAGO").where("active", "==", true).limit(10).get();
     if (!receipts.docs.some(doc => doc.get("rootId") === pago.rootId && doc.get("status") === "READY" && doc.get("storagePath"))) return { status: "WAITING", reason: "RECEIPT_NOT_READY" };
-    const uid = clean(pago.createdBy), user = (await db.doc(`users/${uid}`).get()).data();
+    const uid = clean(pago.createdBy), user = await withInheritedAuthority((await db.doc(`users/${uid}`).get()).data(), uid);
     if (!user) throw new HttpsError("permission-denied", "Usuario de origen no disponible.");
     const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "pagos", requiredAction: ["create", "conciliate"] }) as PaymentApplicationActor["role"];
     if (await getRootId(uid) !== pago.rootId) throw new HttpsError("permission-denied", "Usuario fuera del root del pago.");

@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { randomBytes, createHash } from "crypto";
@@ -284,7 +285,7 @@ export const submitSolicitudSignature = onCall(
     await db.runTransaction(async (tx) => {
       const current = (await tx.get(tokenRef)).data();
       const currentSolicitud = (await tx.get(solicitudSnap.ref)).data();
-      const currentActor = (await tx.get(db.collection("users").doc(actorUid))).data();
+      const currentActor = await withInheritedAuthority((await tx.get(db.collection("users").doc(actorUid))).data(), actorUid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
       assertAuthorized({ uid: actorUid }, currentActor, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "solicitudes", requiredAction: "uploadDocs" });
       if (current?.status !== "PROCESSING" || current.uploadId !== uploadId)
         throw new HttpsError("failed-precondition", "La reserva de firma cambió.");

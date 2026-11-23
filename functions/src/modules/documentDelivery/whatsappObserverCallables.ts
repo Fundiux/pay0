@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { readInternalGroupChatIds } from "../whatsappAutoReply/internalGroups";
+import { readAgentModes } from "../whatsappAutoReply/modes";
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { normalizeClientWhatsapp } from "../clients/domain";
@@ -35,7 +36,7 @@ export const getWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 60
     users: users.docs.filter(doc => doc.get("isDeleted") !== true && (doc.get("active") ?? doc.get("isActive") ?? true) !== false)
       .map(doc => ({ uid: doc.id, name: clean(doc.get("displayName") || doc.get("nombreUsuario") || doc.get("usernameNormalized") || doc.get("username") || "Usuario", 120) }))
       .sort((a, b) => a.name.localeCompare(b.name, "es")),
-    configs: configs.docs.map(doc => ({ groupChatId: doc.get("groupChatId"), groupName: doc.get("groupName") || "", active: doc.get("active") === true, ownerUserUid: doc.get("ownerUserUid") || "", observers: doc.get("observers") || [] })),
+    configs: configs.docs.map(doc => ({ groupChatId: doc.get("groupChatId"), groupName: doc.get("groupName") || "", active: doc.get("active") === true, ownerUserUid: doc.get("ownerUserUid") || "", observers: doc.get("observers") || [], agentModes: readAgentModes(doc.get("agentModes")) })),
   };
 });
 
@@ -72,9 +73,15 @@ export const saveWhatsAppAgentObservers = onCall({ cors: true, timeoutSeconds: 6
   const group = await resolveObservableGroup(db as unknown as ObserverGroupDb, rootId, groupChatId);
   if (!group) throw new HttpsError("failed-precondition", "El grupo no existe en los chats sincronizados de este root.");
 
-  await db.doc(`whatsappAgentObservers/${configId(rootId, groupChatId)}`).set({
+  // An agent that leaves the group (or a deactivated group) goes back to Observador: acting is never kept by accident.
+  const observerRef = db.doc(`whatsappAgentObservers/${configId(rootId, groupChatId)}`);
+  const previousModes = readAgentModes((await observerRef.get()).get("agentModes"));
+  const agentModes = active ? Object.fromEntries(Object.entries(previousModes).filter(([agentId]) => seenAgents.has(agentId))) : {};
+  await observerRef.set({
     rootId, groupChatId, groupName: group.name, observers, active, ownerUserUid,
     updatedBy: uid, updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
+  // A merge would keep the old keys of a map, so the modes are replaced as a whole.
+  await observerRef.update({ agentModes });
   return { ok: true, observers: observers.length };
 });

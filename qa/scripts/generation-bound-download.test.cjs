@@ -92,6 +92,7 @@ function coreFixture(bucket) {
     'firebase-functions/v2/https': { HttpsError, onCall: (_options, handler) => handler },
     '../../utils/authGuard': { normalizeRole: role => role, assertAuthorized: (_auth, user) => { if (user.blocked) throw new HttpsError('permission-denied', 'Denied'); } },
     '../clientDelegations/access': { requireClientOperationalAccess: async () => {} },
+    '../users/inheritedAuthority': { withInheritedAuthority: async user => user },
     '../financing/dispersionFunding': { assertDispersionFundingOwner: () => {} },
     './generationBoundDownload': { signGenerationBoundDownload },
   });

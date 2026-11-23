@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized, normalizeRole } from "../../utils/authGuard";
@@ -71,7 +72,7 @@ export async function getAuthorizedDocumentDownloadUrlCore(
     if (!userSnap.exists) throw new HttpsError("permission-denied", "Perfil no encontrado.");
     if (!uploadSnap.exists) throw new HttpsError("not-found", "Documento no encontrado.");
 
-    const user: any = userSnap.data() || {};
+    const user: any = await withInheritedAuthority(userSnap.data() || {}, uid);
     const upload: any = uploadSnap.data() || {};
     const family = inferFamily(upload);
     if (!family) throw new HttpsError("failed-precondition", "Familia documental no soportada.");

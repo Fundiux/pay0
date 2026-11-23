@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { createHash, randomUUID } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onTaskDispatched } from "firebase-functions/tasks";
@@ -762,7 +763,7 @@ export const processPagoApplicationIqPlanOnDemandTask =
         .get();
 
       const user = userSnap.exists
-        ? userSnap.data() || {}
+        ? await withInheritedAuthority(userSnap.data() || {}, uid)
         : {};
 
       const hasPersistedIqOrigin = Boolean(

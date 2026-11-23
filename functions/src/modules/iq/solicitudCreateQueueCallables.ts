@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { assertAuthorized } from "../../utils/authGuard";
 import { operationTiming } from "../../utils/operationTiming";
@@ -25,6 +26,7 @@ import { enqueueIqStatusMonitorJob } from "./solicitudStatusMonitorCallables";
 import { logActivity, type ActivityLogParams } from "../../utils/logActivity";
 import { sendTelegramMessage } from "../telegram/service";
 import { assertIqAuthorized } from "./authorization";
+import { getEffectiveUserModules } from "../users/authorization";
 
 import { loadEnabledIqAutomationRoots, readEnabledIqAutomationRoots } from "./automationRuntime";
 import {
@@ -732,7 +734,7 @@ async function getAuthContext(request: {
     throw new HttpsError("permission-denied", "Usuario PAY0 no encontrado.");
   }
 
-  const user = asRecord(userSnap.data());
+  const user = await withInheritedAuthority(asRecord(userSnap.data()), uid);
   const role = assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
   const rootId = cleanText(user.rootId ?? uid);
 
@@ -743,13 +745,14 @@ function canCreateSolicitudes(auth: AuthContext): boolean {
   if (auth.role === "superadmin") return true;
   const modules = asRecord(auth.user.modules);
   const solicitudes = asRecord(modules.solicitudes);
-  return solicitudes.create === true;
+  // Ademas del permiso guardado, exige el efectivo (techo del rol y, en operadores, el heredado del padre).
+  return solicitudes.create === true && getEffectiveUserModules(auth.user).solicitudes?.create === true;
 }
 
 async function loadUserContext(uid: string): Promise<AuthContext | null> {
   const snap = await db.collection("users").doc(uid).get();
   if (!snap.exists) return null;
-  const user = asRecord(snap.data());
+  const user = await withInheritedAuthority(asRecord(snap.data()), uid);
   const role = cleanText(user.role).toLowerCase();
   const rootId = cleanText(user.rootId ?? uid) || uid;
   return { uid, role, rootId, user };

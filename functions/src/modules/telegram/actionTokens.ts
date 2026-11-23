@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { logger } from "firebase-functions";
@@ -30,7 +31,7 @@ async function assertCurrentAccess(row: any, tx?: FirebaseFirestore.Transaction)
   if (![row.uid, row.rootId, row.entityId, row.documentId].every(validId) ||
       !["solicitud", "dispersion"].includes(row.entityType)) throw new DownloadTokenError(403);
   const read = (ref: FirebaseFirestore.DocumentReference) => tx ? tx.get(ref) : ref.get();
-  const user = (await read(db.collection("users").doc(row.uid))).data();
+  const user = await withInheritedAuthority((await read(db.collection("users").doc(row.uid))).data(), row.uid, async parentUid => (await read(db.collection("users").doc(parentUid))).data() || null);
   const role = assertAuthorized({ uid: row.uid }, user, {
     allowedRoles: ["superadmin", "admin", "operador"],
     requiredModule: row.entityType === "solicitud" ? "solicitudes" : "wallet",

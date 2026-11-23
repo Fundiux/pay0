@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -45,7 +46,7 @@ async function getProfile(uid: string) {
     throw new HttpsError("permission-denied", "Perfil de usuario no encontrado.");
   }
 
-  const profile = snap.data() || {};
+  const profile = await withInheritedAuthority(snap.data() || {}, uid);
   const role = normalizeRole((profile as any).role ?? (profile as any).supervisorRole);
   const rootId = cleanText((profile as any).rootId || uid);
 

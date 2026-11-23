@@ -33,10 +33,10 @@ async function expectCode(promise, code, label) {
   const users = {
     superA: { role: "superadmin", rootId: rootA, active: true },
     adminA: { role: "admin", rootId: rootA, active: true },
-    operatorA: { role: "operador", rootId: rootA, active: true },
-    revokedA: { role: "operador", rootId: rootA, active: true },
+    operatorA: { role: "operador", parentUserId: `${runId}-adminA`, parentRole: "admin", rootId: rootA, active: true },
+    revokedA: { role: "operador", parentUserId: `${runId}-adminA`, parentRole: "admin", rootId: rootA, active: true },
     disabledA: { role: "admin", rootId: rootA, active: true, modules: { pagos: { view: false } } },
-    disabledOperatorA: { role: "operador", rootId: rootA, active: true, modules: { wallet: { view: false } } },
+    disabledOperatorA: { role: "operador", parentUserId: `${runId}-adminA`, parentRole: "admin", rootId: rootA, active: true, modules: { wallet: { view: false } } },
     adminB: { role: "admin", rootId: rootB, active: true },
   };
   for (const [uid, data] of Object.entries(users)) await seed(`users/${runId}-${uid}`, data);

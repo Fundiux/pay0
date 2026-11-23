@@ -22,7 +22,8 @@ export async function resolveInternalOwnerAdminId(db: admin.firestore.Firestore,
   const role = clean(snap.get("role") || snap.get("supervisorRole"), 40).toLowerCase();
   if (role === "admin" || role === "superadmin") return snap.id;
   if (role === "operador" || role === "operator") {
-    const parent = clean(snap.get("adminId") || (clean(snap.get("parentRole")) === "admin" ? snap.get("parentUserId") : ""));
+    // Operators are created with parentUserId and parentRole (the parent is an admin or the superadmin); adminId is the older field.
+    const parent = clean(snap.get("parentUserId") || snap.get("adminId"));
     if (!parent || parent === snap.id || /[\\/\x00-\x1f]/.test(parent)) return "";
     const parentSnap = await db.doc(`users/${parent}`).get();
     if (!parentSnap.exists || clean(parentSnap.get("rootId") || parentSnap.id) !== rootId) return "";

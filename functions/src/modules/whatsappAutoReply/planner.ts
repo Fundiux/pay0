@@ -1,3 +1,4 @@
+import { mexicoDayStartMs } from "../documentDelivery/whatsappDeliveryDomain";
 import { classifyMessage, decideGroupReply, statusSubject, type AutoReplyConfig, type ReplyKind, type RequestLookup, type StatusSubject } from "./domain";
 
 // Pure planner for the group reply runner: from the recent messages of the groups an agent observes,
@@ -16,6 +17,17 @@ export type InboundRow = {
   type: string;
   body: string;
 };
+
+export type LastReply = { lastReplyAtMs: number; lastKind: string; lastSubject: string | null; lastGreetingAtMs: number | null };
+
+export const REPEAT_COOLDOWN_MS = 30 * 60 * 1000;
+
+/** Turn memory: why a decided reply must be skipped for this group, or null. */
+export function repeatBlockReason(last: LastReply | undefined, kind: string, subject: string | null, nowMs: number): "ALREADY_GREETED_TODAY" | "REPEAT_COOLDOWN" | null {
+  if (!last) return null;
+  if (kind === "GREETING") return last.lastGreetingAtMs != null && mexicoDayStartMs(last.lastGreetingAtMs) === mexicoDayStartMs(nowMs) ? "ALREADY_GREETED_TODAY" : null;
+  return last.lastKind === kind && (last.lastSubject ?? null) === (subject ?? null) && nowMs - last.lastReplyAtMs < REPEAT_COOLDOWN_MS ? "REPEAT_COOLDOWN" : null;
+}
 
 export type PlannedReply = {
   messageId: string;
@@ -47,6 +59,8 @@ export type PlanInput = {
   /** Looks the client's request up in the system. Absent means it is not checked (the neutral reply is used). */
   lookupRequest?: (ownerUserUid: string, subject: StatusSubject, row: InboundRow) => RequestLookup;
   clientNameByOwner: Record<string, string>;
+  /** Turn memory of each group: what Hugo last answered. Greets once per day and does not repeat the same answer too soon. */
+  lastReplyByChat?: Record<string, LastReply | undefined>;
   /** Hard cap per run so a burst can never flood a group. */
   maxReplies?: number;
 };
@@ -85,6 +99,7 @@ export function planGroupReplies(input: PlanInput): PlannedReply[] {
         clientName: input.clientNameByOwner[ownerUserUid] || null,
       });
       if (decision.action !== "REPLY") continue;
+      if (repeatBlockReason(input.lastReplyByChat?.[chatId], decision.kind, isStatus ? subject : null, nowMs)) continue;
       if (config.mode !== "STANDARD" && decision.kind !== "GREETING") continue;
       planned.push({ messageId: row.id, chatId, ownerUserUid, kind: decision.kind, text: decision.text, subject: isStatus ? subject : null, notifyInternal: decision.kind === "REQUEST_DATA" });
       break;

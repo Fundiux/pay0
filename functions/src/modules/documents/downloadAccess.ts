@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { createHash } from "node:crypto";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -34,7 +35,8 @@ export async function resolveAuthorizedDocumentObject(uid: string, input: Privat
     const [userSnap, documentSnap] = await Promise.all([
       tx.get(database.doc(`users/${uid}`)), tx.get(database.doc(`${reference.family}/${reference.documentId}`)),
     ]);
-    const user = userSnap.data(), document = documentSnap.data();
+    const document = documentSnap.data();
+    const user = await withInheritedAuthority(userSnap.data(), uid, async parentUid => (await tx.get(database.doc(`users/${parentUid}`))).data() || null);
     assertAuthorized({ uid }, user, { allowedRoles: ["superadmin", "admin", "operador"] });
     const role = getUserRole(user), rootId = clean(user?.rootId || uid);
     if (!document || unavailable(document)) throw new HttpsError("not-found", "Documento no disponible.");

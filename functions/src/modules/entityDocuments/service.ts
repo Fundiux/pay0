@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -146,7 +147,7 @@ async function requireAuthContext(request: any): Promise<AuthContext> {
     throw new HttpsError("permission-denied", "Usuario no encontrado.");
   }
 
-  const user = userSnap.data() || {};
+  const user = await withInheritedAuthority(userSnap.data() || {}, uid);
   const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"] });
   const rootId = cleanText(user.rootId) || uid;
 
@@ -510,7 +511,7 @@ export async function finalizeEntityDocumentUploadCore(request: any) {
     const comparable = alreadyVerified ? { ...current, sha256: document.sha256 } : current;
     if (contract(comparable) !== expectedContract) throw new HttpsError("failed-precondition", "La carga preparada cambio durante la verificacion.");
     const userSnap = await tx.get(db.collection("users").doc(ctx.uid));
-    const user = userSnap.data() || {};
+    const user = await withInheritedAuthority(userSnap.data() || {}, ctx.uid, async parentUid => (await tx.get(db.collection("users").doc(parentUid))).data() || null);
     const role = assertAuthorized(request.auth, user, { allowedRoles: ["superadmin", "admin", "operador"] });
     if ((cleanText(user.rootId) || ctx.uid) !== ctx.rootId) throw new HttpsError("permission-denied", "El acceso cambio durante la carga.");
     const entitySnap = await tx.get(db.collection(getEntityCollectionName(entityType)).doc(entityId));

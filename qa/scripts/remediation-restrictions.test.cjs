@@ -21,7 +21,9 @@ const record = (patch = {}) => ({
   authority: 'HUMAN_SECURITY_ADMIN', authorityUid: 'security-admin', reasonCode: 'SECURITY_REVIEW', incidentId: 'incident1',
   issuedAtMs: NOW - 1000, expiresAtMs: NOW + 1000, authorizationVersion: 1, ...patch,
 });
-const profile = (restriction, patch = {}) => ({ role: 'operador', rootId: 'r1', active: true, ...(restriction === undefined ? {} : { trustedRestrictionV1: restriction }), ...patch });
+// Operators inherit module permissions from a resolved parent; these restriction cases use a superadmin parent.
+const inherited = user => authorization.attachInheritedModuleCeiling(user, { status: 'RESOLVED', parentUid: 'p1', parentRole: 'superadmin', modules: defaults.getDefaultModules('superadmin') });
+const profile = (restriction, patch = {}) => inherited({ role: 'operador', rootId: 'r1', active: true, ...(restriction === undefined ? {} : { trustedRestrictionV1: restriction }), ...patch });
 const decide = (user, nowMs = NOW) => authorization.decideUserAuthorization({ authenticatedUid: 'u1', user, requirement: { module: 'pagos', action: 'create' }, nowMs });
 
 test('new trusted record blocks every role before superadmin bypass; absent/legacy field never activates it', () => {

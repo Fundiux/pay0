@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { assertAuthorized, getUserRole } from '../../utils/authGuard';
@@ -12,7 +13,7 @@ export async function assertCreatePagoAuthorityTx(input: {
   const denied = () => new HttpsError('permission-denied', 'La autorización del pago cambió; vuelve a validar el acceso.');
   const actor = await tx.get(db.doc(`users/${uid}`));
   if (!actor.exists) throw denied();
-  const user = actor.data()!;
+  const user = await withInheritedAuthority(actor.data()!, uid, async parentUid => (await tx.get(db.doc(`users/${parentUid}`))).data() || null);
   assertAuthorized(auth, user, { allowedRoles: ['superadmin', 'admin', 'operador'], requiredModule: 'pagos', requiredAction: 'create' });
   if (String(user.rootId || uid) !== rootId) throw denied();
   const role = getUserRole(user);

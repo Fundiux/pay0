@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { randomUUID } from "crypto";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
@@ -33,7 +34,7 @@ function requireAuthLike(request: any): string {
 
 async function getUser(uid: string): Promise<any> {
   const snap = await db.doc(`users/${uid}`).get();
-  if (snap.exists) return snap.data() || {};
+  if (snap.exists) return withInheritedAuthority(snap.data() || {}, uid);
   return null;
 }
 
@@ -63,7 +64,7 @@ function unavailable(row: any) {
 export async function currentAuthority(uid: string, rootId: string, dispersionId: string, tx?: admin.firestore.Transaction) {
   if (![uid, rootId, dispersionId].every(validId)) throw new HttpsError("invalid-argument", "Referencia invalida.");
   const read = (path: string) => tx ? tx.get(db.doc(path)) : db.doc(path).get();
-  const user = (await read(`users/${uid}`)).data();
+  const user = await withInheritedAuthority((await read(`users/${uid}`)).data(), uid, async parentUid => (await read(`users/${parentUid}`)).data() || null);
   authorizeUser(uid, user);
   if (getRootIdFromUser(user, uid) !== rootId) throw new HttpsError("permission-denied", "Usuario fuera de alcance.");
   const dispersion = (await read(`clientDispersions/${dispersionId}`)).data();

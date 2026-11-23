@@ -1,3 +1,4 @@
+import { withInheritedAuthority } from "../users/inheritedAuthority";
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
@@ -35,7 +36,7 @@ export async function executeUserCommissionRequestCore(input: ExecutionInput, ex
   try {
     const preflight = await preflightCommissionDistribution({ distributionId: request.distributionId, actorUid: input.actorUid });
     if (preflight.status !== "READY_FOR_EXECUTION") throw new HttpsError("failed-precondition", "El preflight de la comisión requiere revisión.");
-    owner = (await db.doc(`users/${input.ownerUid}`).get()).data();
+    owner = await withInheritedAuthority((await db.doc(`users/${input.ownerUid}`).get()).data(), input.ownerUid);
     assertCommissionWithdrawalOwner(input.ownerUid, owner, input.rootId);
   } catch (error) {
     // No executor has run yet: a validation failure can safely return to its reserved state.

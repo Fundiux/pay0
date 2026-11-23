@@ -36,6 +36,7 @@ function harness(environment = {}) {
     'firebase-functions/v2/https':{onRequest:(_opts,handler)=>handler},
     '../../utils/authGuard':{assertAuthorized:(_auth,user)=>{if(!roleAllowed||!user||user.active===false)throw Object.assign(Error('PRIVATE_BEARER'),{code:'permission-denied'});return user.role;}},
     '../clientDelegations/access':{requireClientOperationalAccess:async input=>{accessTransactions.push(input.transaction);if(!delegationAllowed)throw Object.assign(Error('denied'),{code:'permission-denied'});return {source:'DELEGATED'};},normalizeClientAccessPermissions:p=>p||{}},
+    '../users/inheritedAuthority':{withInheritedAuthority:async user=>user},
     '../clientDelegations/policy':{delegationIsCurrent:g=>!!g?.active&&!g.revokedAt&&(!g.expiresAt||g.expiresAt.toMillis()>Date.now())},
     './downloadTokenPolicy':policy,
   }, environment);
