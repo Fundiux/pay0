@@ -276,6 +276,20 @@ export function checkClientGroupAgents(input: {
   return missing.length || notConnected.length ? { status: "AGENTS_MISSING", missing, notConnected } : { status: "OK" };
 }
 
+/** How old a dispersion recovered from IQ may be and still have its receipt sent to the client's group. */
+export const RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * A dispersion the daily sync recovered from IQ keeps its original date. When it is older than three days its receipt
+ * is stored with the dispersion but not sent to the client: the client already knew, and old documents must not flood the group.
+ */
+export function isStaleRecoveredDispersion(dispersion: Record<string, unknown> | null | undefined, nowMs: number): boolean {
+  if (!dispersion || dispersion.source !== "IQ_IMPORT" || dispersion.importMode !== "DAILY_SYNC") return false;
+  const created = dispersion.createdAt as { toMillis?: () => number } | Date | number | null | undefined;
+  const ms = typeof created === "number" ? created : created instanceof Date ? created.getTime() : typeof (created as { toMillis?: unknown })?.toMillis === "function" ? (created as { toMillis: () => number }).toMillis() : 0;
+  return ms > 0 && nowMs - ms > RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS;
+}
+
 const AGENT_LABEL: Record<string, string> = { hugo: "Hugo", maria: "María", sofia: "Sofía" };
 const agentNames = (ids: string[]) => ids.map((id) => AGENT_LABEL[id] || id).join(", ");
 

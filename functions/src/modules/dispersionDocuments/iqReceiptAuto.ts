@@ -6,6 +6,7 @@ import { SafetyRuntime } from "../automationSafety/runtime";
 import { loadEnabledIqAutomationRoots } from "../iq/automationRuntime";
 import { IQ_CREDENTIALS_KEY, buildDispersionSchedulerAuth } from "../iq/dispersionCreationCallables";
 import { importIqDispersionReceiptCore } from "./iqReceiptImport";
+import { isIqDailySyncImport } from "../iq/historicalImportGuard";
 import {
   RECEIPT_AUTO_EXPIRE_PER_RUN, RECEIPT_AUTO_MAX_PER_ROOT, RECEIPT_AUTO_PAGE_SIZE, RECEIPT_AUTO_RECHECK_MS, RECEIPT_AUTO_WINDOW_MS,
   decideReceiptAuto, receiptAutoFolio,
@@ -31,10 +32,23 @@ function toSafetyError(error: unknown): Error {
   return error instanceof Error ? error : new Error("IQ_RECEIPT_FAILED");
 }
 
+/** The owner of a recovered dispersion (an admin or the superadmin of the root) acts for it: it has no creator user. */
+async function buildRecoveredReceiptAuth(rootId: string, principal: Record<string, unknown>) {
+  const uid = clean(principal.adminId);
+  if (!uid) return null;
+  const snap = await db.doc(`users/${uid}`).get();
+  const user = (snap.data() || {}) as Record<string, unknown>;
+  const role = clean(user.role).toLowerCase();
+  if (!snap.exists || clean(user.rootId || uid) !== rootId || user.active === false || user.isActive === false || user.isDeleted === true || !["admin", "superadmin"].includes(role)) return null;
+  return { uid, role, rootId, username: clean(user.username || user.displayName || user.name) || uid };
+}
+
 export async function processDispersionReceipt(rootId: string, dispersionId: string, principal: Record<string, unknown>, nowMs: number): Promise<ItemResult> {
   const ref = db.doc(`clientDispersions/${dispersionId}`);
   const folio = receiptAutoFolio(principal);
-  const auth = await buildDispersionSchedulerAuth(principal, rootId).catch(() => null);
+  const auth = isIqDailySyncImport(principal)
+    ? await buildRecoveredReceiptAuth(rootId, principal).catch(() => null)
+    : await buildDispersionSchedulerAuth(principal, rootId).catch(() => null);
   if (!auth) {
     await ref.set({ iqReceiptAutoStatus: "REVIEW", iqReceiptAutoError: "NO_AUTHORIZED_ACTOR", iqReceiptAutoCheckedAt: FieldValue.serverTimestamp() }, { merge: true });
     return "REVIEW";

@@ -5,6 +5,9 @@ import * as logger from "firebase-functions/logger";
 import { IQ_CREDENTIALS_KEY, loadIqAccess } from "../iq/dispersionCreationCallables";
 import { fetchIq } from "../iq/iqHttpClient";
 import { iqApiOrigin } from "../iq/solicitudHttpCancellation";
+import { isIqDailySyncImport } from "../iq/historicalImportGuard";
+import { loadIqCanonicalProfileById } from "../iq/iqCanonicalAccess";
+import { P4_PLAN_GROUPS } from "../iqHistoricalImport/planner";
 import { decideIqDispersionExecutionAccess } from "../iq/dispersionExecutionAccess";
 import { logActivityBatch } from "../../utils/logActivity";
 import { currentAuthority, finalizeDispersionDocumentUploadCore, initDispersionDocumentUploadCore } from "./service";
@@ -26,6 +29,15 @@ function id(value: unknown): string {
   return result;
 }
 
+// A dispersion the daily sync recovered from IQ has no leg and no despacho: its receipt is read with the credentials of
+// its IQ group, the same canonical profile the sync itself reads IQ with.
+async function recoveredReceiptAccess(rootId: string, dispersion: Record<string, any>) {
+  const group = P4_PLAN_GROUPS[clean(dispersion.canonicalIqGroupId)];
+  if (!group) throw new HttpsError("failed-precondition", "El grupo de IQ de la dispersion no esta configurado.");
+  const canonical = await loadIqCanonicalProfileById({ profileId: group.canonicalIqProfileId, rootId, encryptionSecret: IQ_CREDENTIALS_KEY.value() });
+  return { username: canonical.username, password: canonical.password };
+}
+
 export type IqReceiptImportOutcome = { ok: true; status: "IMPORTED" | "ALREADY_ATTACHED" | "NOT_AVAILABLE"; uploadId?: string };
 
 // Shared by the manual button and the scheduled job. The caller has already
@@ -45,18 +57,22 @@ export async function importIqDispersionReceiptCore(input: {
     if (!/^[1-9][0-9]{0,15}$/.test(folio)) {
       throw new HttpsError("failed-precondition", "La dispersion aun no tiene un folio IQ unico.");
     }
-    const legs = await db.collection("clientDispersionLegs")
-      .where("principalDispersionId", "==", dispersionId).limit(20).get();
-    const matches = legs.docs.filter((doc) => {
-      const row = doc.data();
-      return row.rootId === rootId && clean(row.iqDispersionFolio || row.iqDispersionId) === folio;
-    });
-    if (matches.length !== 1) throw new HttpsError("failed-precondition", "No hay un tramo IQ unico para el folio.");
-    const leg = matches[0].data();
-    if (!["CREATED", "CREATED_PENDING_FOLIO"].includes(clean(leg.iqCreationStatus).toUpperCase())) {
-      throw new HttpsError("failed-precondition", "El tramo IQ no esta vinculado como creado.");
+    const recovered = isIqDailySyncImport(dispersion);
+    let leg: Record<string, any> = {};
+    if (!recovered) {
+      const legs = await db.collection("clientDispersionLegs")
+        .where("principalDispersionId", "==", dispersionId).limit(20).get();
+      const matches = legs.docs.filter((doc) => {
+        const row = doc.data();
+        return row.rootId === rootId && clean(row.iqDispersionFolio || row.iqDispersionId) === folio;
+      });
+      if (matches.length !== 1) throw new HttpsError("failed-precondition", "No hay un tramo IQ unico para el folio.");
+      leg = matches[0].data();
+      if (!["CREATED", "CREATED_PENDING_FOLIO"].includes(clean(leg.iqCreationStatus).toUpperCase())) {
+        throw new HttpsError("failed-precondition", "El tramo IQ no esta vinculado como creado.");
+      }
+      await input.authorizeLeg?.(leg);
     }
-    await input.authorizeLeg?.(leg);
 
     const currentUploads = await db.collection("uploads")
       .where("rootId", "==", rootId)
@@ -100,9 +116,11 @@ export async function importIqDispersionReceiptCore(input: {
 
     let uploadId = "";
     try {
-      const access = await loadIqAccess({
-        uid, rootId, role: clean(user.role).toLowerCase(), username: clean(user.username) || uid,
-      }, id(leg.despachoId), "IQ", dispersion);
+      const access = recovered
+        ? await recoveredReceiptAccess(rootId, dispersion)
+        : await loadIqAccess({
+          uid, rootId, role: clean(user.role).toLowerCase(), username: clean(user.username) || uid,
+        }, id(leg.despachoId), "IQ", dispersion);
       const receipt = await fetchIqDispersionReceipt({
         apiOrigin: iqApiOrigin(),
         username: access.username,
