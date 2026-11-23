@@ -132,3 +132,37 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
       distributedMinor: calculation.distributedMinor, remainingMinor: calculation.remainingMinor };
   });
 });
+
+/** Authorized read of the prospective, non-executing allocation rule. */
+export const getPublishedClientCommissionAllocation = onCall({ cors: true }, async request => {
+  const actor = await commissionAccountActor(request, true);
+  const clientId = safeId(request.data?.clientId), ownerUid = safeId(request.data?.ownerUid);
+  const [client, owner, rule] = await Promise.all([
+    db.doc(`clients/${clientId}`).get(),
+    db.doc(`users/${ownerUid}`).get(),
+    db.doc(`clientCommissionAllocationRules/${commissionSettingsId(actor.rootId, clientId, ownerUid)}`).get(),
+  ]);
+  const ownerData = owner.data() || {};
+  if (!client.exists || client.data()?.rootId !== actor.rootId || !owner.exists ||
+      String(ownerData.rootId || ownerUid) !== actor.rootId ||
+      ownerData.active === false || ownerData.isActive === false ||
+      ownerData.disabled === true || ownerData.deleted === true ||
+      ownerData.isDeleted === true || !!ownerData.deletedAt) {
+    throw new HttpsError("permission-denied", "Cliente o titular fuera de alcance.");
+  }
+  const data = rule.data();
+  if (!data) return { ok: true, rule: null };
+  if (data.rootId !== actor.rootId || data.clientId !== clientId || data.ownerUid !== ownerUid) {
+    throw new HttpsError("permission-denied", "Regla fuera de alcance.");
+  }
+  return { ok: true, rule: {
+    version: Number(data.version || 0), status: "CONFIGURED",
+    executionEnabled: false, draftVersion: Number(data.draftVersion || 0),
+    instructions: data.instructions || [],
+    sourcePaymentId: String(data.sourcePaymentId || ""),
+    referenceEarningMinor: data.referenceEarningMinor || 0,
+    referenceDistributedMinor: data.referenceDistributedMinor || 0,
+    referenceRemainingMinor: data.referenceRemainingMinor || 0,
+    effectiveFromMs: commissionMillis(data.effectiveFrom),
+  } };
+});
