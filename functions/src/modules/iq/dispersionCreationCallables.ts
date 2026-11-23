@@ -2,6 +2,7 @@ import { withInheritedAuthority } from "../users/inheritedAuthority";
 import { authorizeDeferredIntent } from "../../utils/authorizeDeferredIntent";
 import { assertDispersionFundingOwner } from "../financing/dispersionFunding";
 import { bindVerifiedIqCommissionInstrument } from "./commissionInstrumentBinding";
+import { loadPersonalCommissionInstrumentForIq, PERSONAL_COMMISSION_ACCOUNT_KEY } from "../commissionDistributions/privateBankInstrument";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import {
@@ -1575,7 +1576,7 @@ export async function runCreateClientDispersionIqCore(input: {
   const beneficiary = record(
     beneficiarySnap.data(),
   );
-  const method = record(
+  let method = record(
     methodSnap.data(),
   );
   let commissionHistoricalLeg: AnyDoc | undefined;
@@ -1590,6 +1591,26 @@ export async function runCreateClientDispersionIqCore(input: {
     const owner = await withInheritedAuthority(record(ownerSnap.data()), clean(funding.ownerUid));
     const historicalLeg = (Array.isArray(commission.legs) ? commission.legs : []).find((leg: AnyDoc) => clean(leg.legId) === clean(funding.commissionLegId));
     assertAuthorized({ uid: clean(funding.ownerUid) }, owner, { allowedRoles: ["superadmin", "admin", "operador"], requiredModule: "wallet", requiredAction: "dispersiones" });
+    if (clean(method.personalCommissionAccountId)) {
+      const accountId = clean(method.personalCommissionAccountId);
+      if (clean(method.commissionOwnerUid) !== clean(funding.ownerUid) ||
+          clean(method.rootId) !== auth.rootId || clean(method.clientId || method.clienteId) !== clientId ||
+          clean(historicalLeg?.accountId) !== accountId ||
+          clean(historicalLeg?.instrumentFingerprint) !== clean(method.personalAccountFingerprint)) {
+        throw new HttpsError("failed-precondition", "Cuenta personal no corresponde a la reserva histórica.");
+      }
+      const personal = await loadPersonalCommissionInstrumentForIq({
+        rootId: auth.rootId, ownerUid: clean(funding.ownerUid), accountId,
+        fingerprint: clean(method.personalAccountFingerprint), expectedLast4: clean(method.last4),
+      });
+      if ((personal.operationTypeKey !== operationTypeKey) ||
+          clean(method.iqInstrumentLast4) !== personal.number.slice(-4)) {
+        throw new HttpsError("failed-precondition", "El número bancario o modalidad cambió.");
+      }
+      // Decrypt in memory only; never persist these digits in the beneficiary method.
+      method = { ...method, clabe: personal.instrumentType === "CLABE" ? personal.number : null,
+        cardNumber: personal.instrumentType === "CARD" ? personal.number : null };
+    }
     const verifiedAt = timestampMillis(method.iqVerifiedAt);
     if (owner.disabled === true || owner.deleted === true || owner.deletedAt || clean(owner.rootId || funding.ownerUid) !== auth.rootId || auth.uid !== clean(funding.ownerUid) || clean(funding.sourceClientId) !== clientId || commission.ownerUid !== funding.ownerUid || commission.rootId !== auth.rootId || commission.clientId !== clientId || commissionRequestSnap.data()?.status !== "PROCESSING" || !historicalLeg || historicalLeg.canonicalDispersionId !== dispersionId || historicalLeg.methodId !== methodId || historicalLeg.beneficiaryId !== beneficiaryId || historicalLeg.amountMinor !== Math.round(money(principal.amount) * 100) || clean(method.commissionOwnerUid) !== clean(funding.ownerUid) || upper(method.iqLinkStatus) !== "VERIFIED" || !verifiedAt || Date.now() - verifiedAt > 86400000 || clean(method.iqAccountId) !== clean(historicalLeg.iqAccountId) || clean(method.iqBeneficiaryId) !== clean(historicalLeg.iqBeneficiaryId) || clean(method.last4) !== clean(historicalLeg.instrumentLast4)) throw new HttpsError("failed-precondition", "El titular, la reserva o el instrumento histórico de comisión requiere revisión.");
     commissionHistoricalLeg = historicalLeg;
@@ -2150,6 +2171,7 @@ export const createClientDispersionIq =
       concurrency: 1,
       secrets: [
         IQ_CREDENTIALS_KEY,
+        PERSONAL_COMMISSION_ACCOUNT_KEY,
       ],
     },
     async (request) => {
