@@ -93,7 +93,7 @@ async function run() {
       last4: "5678", iqClientId: "101", despachoId: "despacho-incorrecto",
       iqPartnerId: "201", iqBeneficiaryId: "301", iqAccountId: "401",
       iqCredentialProfileId: "profile-qa",
-      verifiedAt: require("firebase-admin/firestore").Timestamp.now(),
+      verifiedAt: new Date(), // Firestore converts Date to its local SDK Timestamp; no cross-package instance
     }),
   ]);
   const scopedList = () => superadmin.invoke("listPersonalCommissionAccounts", {
