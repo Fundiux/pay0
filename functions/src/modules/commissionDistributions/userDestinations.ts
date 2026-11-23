@@ -141,6 +141,31 @@ export const getMyCommissionSettings = onCall({ cors: true }, async request => {
     }
     configurations.push({ clientId: entitlement.clientId, clientName: text(client.data()?.nombre || client.data()?.razonSocial || entitlement.clientId), ownerUid, contractRateBps: entitlement.contractRateBps, entitlementVersion: entitlement.version, active: entitlement.active === true, instruments, rule: rule.exists ? { distributionMode: rule.data()?.distributionMode, destinations: rule.data()?.destinations, version: rule.data()?.version, effectiveFrom: commissionMillis(rule.data()?.effectiveFrom) } : null });
   }
+  // Active personal rules are configured by Superadmin in Client Costs, not by
+  // the user. Include them here so the owner's existing wallet withdrawal UI
+  // can reserve the actual posted amount without a legacy entitlement.
+  const personalRules = await db.collection("clientCommissionAllocationRules")
+    .where("ownerUid", "==", ownerUid).limit(500).get();
+  for (const doc of personalRules.docs) {
+    const personal = doc.data();
+    if (personal.rootId !== actor.rootId || personal.status !== "ACTIVE" ||
+        personal.ownerUid !== ownerUid || !personal.clientId) continue;
+    const client = await db.doc(`clients/${personal.clientId}`).get();
+    if (!client.exists || client.data()?.rootId !== actor.rootId) continue;
+    const participant = { version: Number(personal.version || 0), status: "ACTIVE", executionEnabled: false };
+    const existing = configurations.find(row => row.clientId === personal.clientId);
+    if (existing) {
+      existing.personalRule = participant;
+      existing.active = true;
+      continue;
+    }
+    configurations.push({
+      clientId: personal.clientId,
+      clientName: text(client.data()?.nombre || client.data()?.razonSocial || personal.clientId),
+      ownerUid, contractRateBps: personal.referenceContractRateBps || null,
+      entitlementVersion: 0, active: true, instruments: [], rule: null, personalRule: participant,
+    });
+  }
   const history = await db.collection("commissionDistributions").where("ownerUid", "==", ownerUid).limit(500).get();
   return { ok: true, ownerUid, configurations, history: await Promise.all(history.docs.filter(doc => doc.data().rootId === actor.rootId).map(async doc => { const row = doc.data(); const request = (await db.doc(`commissionDispersionRequests/${doc.id}`).get()).data(); return { distributionId: doc.id, clientId: row.clientId, requestId: request ? doc.id : null, requestStatus: request?.status || null, totalDebitMinor: request?.totalDebitMinor || null, paymentId: row.paymentId, pay0Folio: row.pay0Folio, operationalDate: row.operationalDate, status: row.status, totalAmountMinor: row.totalCommissionMinor, ruleVersion: row.userRuleVersion, distributionMode: row.distributionMode, legs: (row.legs || []).map((leg: any) => ({ amountMinor: leg.amountMinor, instrumentMasked: leg.instrumentMasked, beneficiaryName: leg.beneficiaryName, status: leg.status, errorCode: leg.errorCode || null })) }; })) };
 });
