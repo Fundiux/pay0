@@ -52,6 +52,9 @@ async function run() {
     createUserWithEmailAndPassword(outside.auth, "e-" + stamp + "@example.invalid", "test-password-123"),
   ]);
   const rootId = s.user.uid, ownerUid = o.user.uid, foreignId = e.user.uid;
+  const secretProbe = await superadmin.invoke("qaCommissionSecretProbe");
+  console.log("QA_SECRET_BINDING", { configured: secretProbe.configured, matchesDemoFixture: secretProbe.matchesDemoFixture });
+  assert.equal(secretProbe.matchesDemoFixture, true, "Emulator must provide the exact demo-only encryption key");
   const clientId = "qa-commission-" + stamp, accountId = "qa-account-" + stamp;
   const bankNumber = "012180000000005678";
   const keyBase64 = Buffer.alloc(32, 0x43).toString("base64"); // demo-only synthetic key
