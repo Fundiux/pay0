@@ -6,9 +6,9 @@ const vm = require("node:vm");
 const ts = require("../../functions/node_modules/typescript");
 const file = path.join(__dirname, "../../functions/src/modules/commissionDistributions/payoutPreference.ts");
 const js = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-const exports = {};
-vm.runInNewContext(js, { exports });
-const { resolveCommissionPayoutMode, mayAutomaticallyProcessCommission } = exports;
+const moduleExports = {};
+vm.runInNewContext(js, { exports: moduleExports });
+const { resolveCommissionPayoutMode, mayAutomaticallyProcessCommission } = moduleExports;
 for (const value of [undefined, null, "", "manual", "AUTO", "AUTOMATIC ", false, 1]) assert.equal(resolveCommissionPayoutMode(value), "MANUAL");
 assert.equal(resolveCommissionPayoutMode("AUTOMATIC"), "AUTOMATIC");
 for (const ownerPreference of [undefined, "MANUAL", "INVALID"]) {
