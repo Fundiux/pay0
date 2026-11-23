@@ -74,6 +74,11 @@ async function run() {
       encryptedInstrument,
     }),
   ]);
+  const localEncryptedDoc = (await db.doc("personalCommissionAccounts/" + accountId).get()).data();
+  const { decryptCommissionInstrument } = require("../../functions/lib/modules/commissionDistributions/instrumentEncryption.js");
+  assert.equal(decryptCommissionInstrument({
+    encrypted: localEncryptedDoc.encryptedInstrument, rootId, ownerUid, accountId, keyBase64,
+  }), bankNumber, "Synthetic encrypted fixture must be decryptable after Firestore round-trip");
   const noDraft = await superadmin.invoke("getClientCommissionAllocationDraft", { clientId, ownerUid });
   assert.equal(noDraft.draft, null);
   const own = await owner.invoke("listPersonalCommissionAccounts", {});
