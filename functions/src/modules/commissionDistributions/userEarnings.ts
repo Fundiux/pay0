@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { calculateUserCommissionDestinations, canonicalUserCommission } from "./domain";
 import { assertCommissionWithdrawalOwner, assertOwnedCommissionInstrument, commissionConfigurationAt, commissionMillis, commissionSettingsId } from "./userDestinations";
+import { materializePersonalEarningDistribution, preflightPersonalEarningDistribution } from "./personalEarningDistribution";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(), timestamp = admin.firestore.FieldValue.serverTimestamp;
@@ -27,6 +28,14 @@ export async function materializeUserEarningDistribution(params: { paymentId: st
   if (!postedAtMs || earning.earnedMinor <= 0) return { ok: true, skipped: true, reason: "NO_POSTED_USER_EARNING" };
   if (text(snapshot.currency || payment.moneda || "MXN") !== "MXN") throw new Error("La distribución sólo admite utilidades en MXN.");
   const key = commissionSettingsId(rootId, clientId, params.ownerUid);
+  const personalRule = await commissionConfigurationAt("clientCommissionAllocationRules", "clientCommissionAllocationHistory", key, postedAtMs);
+  if (personalRule) {
+    return materializePersonalEarningDistribution({
+      paymentId: params.paymentId, ownerUid: params.ownerUid, actorUid: params.actorUid,
+      rootId, clientId, distributionId, paymentRef, snapshotRef, snapshotId,
+      payment, snapshot, earning, postedAtMs, rule: personalRule, ruleKey: key, dryRun: params.dryRun,
+    });
+  }
   const [entitlement, rule, currentEntitlement] = await Promise.all([
     commissionConfigurationAt("commissionUserEntitlements", "commissionUserEntitlementHistory", key, postedAtMs),
     commissionConfigurationAt("commissionUserDestinationRules", "commissionUserDestinationHistory", key, postedAtMs),
@@ -64,6 +73,9 @@ export async function materializeUserEarningDistribution(params: { paymentId: st
 export async function preflightUserEarningDistribution(distributionId: string, actorUid: string, now = Date.now()) {
   const ref = db.doc(`commissionDistributions/${distributionId}`), before = await ref.get(), distribution = before.data();
   if (!distribution || distribution.sourceType !== "USER_EARNINGS") throw new Error("Distribución de usuario no encontrada.");
+  if (distribution.distributionMode === "PERSONAL_MIXED") {
+    return preflightPersonalEarningDistribution(distributionId, actorUid, now);
+  }
   const reasons: string[] = [];
   const [paymentSnap, snapshotSnap, entitlementSnap, userSnap] = await Promise.all([db.doc(`pagos/${distribution.paymentId}`).get(), db.doc(`paymentFinancialSnapshots/${distribution.financialSnapshotId}`).get(), db.doc(`commissionUserEntitlements/${commissionSettingsId(distribution.rootId, distribution.clientId, distribution.ownerUid)}`).get(), db.doc(`users/${distribution.ownerUid}`).get()]);
   const payment = paymentSnap.data(), snapshot = snapshotSnap.data(), entitlement = entitlementSnap.data(), user = await withInheritedAuthority(userSnap.data(), distribution.ownerUid);
