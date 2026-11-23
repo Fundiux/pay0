@@ -9,6 +9,7 @@ function load(name) {
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
   const module = { exports: {} };
   const requireLocal = spec => {
+    if (spec === "../pagos/domain") return { normalizePagoStatus: value => String(value || "") };
     if (!spec.startsWith("./")) throw new Error("Unexpected dependency " + spec);
     return load(spec.slice(2));
   };
@@ -16,8 +17,8 @@ function load(name) {
   return cache[name] = module.exports;
 }
 const { preflightClientCommissionIntegration } = load("integrationPreflight");
-const account = { id: "acc1", rootId: "root", ownerUid: "user", bankName: "Banco", beneficiaryName: "Titular", instrumentType: "CLABE", instrumentNumber: "123456789012345678", active: true, iqLinkStatus: "VERIFIED" };
-const input = { rootId: "root", ownerUid: "user", clientId: "client", earnedMinor: 100000, operationBaseMinor: 10000000, contractRateBps: 100, accounts: [account], instructions: [{ accountId: "acc1", pointsBps: 20 }, { accountId: "acc1", earningsPercentBps: 5000 }] };
+const account = { id: "acc1", rootId: "root", ownerUid: "user", bankName: "Banco", beneficiaryName: "Titular", instrumentType: "CLABE", instrumentNumber: "123456789012345678", active: true, iqLinkStatus: "VERIFIED", last4: "5678", iqInstrumentLast4: "5678", iqVerifiedAtMs: 100000, iqFullDigitsMatched: true, iqBeneficiaryId: "iq-beneficiary", iqAccountId: "iq-account" };
+const input = { nowMs: 130000, rootId: "root", ownerUid: "user", clientId: "client", earnedMinor: 100000, operationBaseMinor: 10000000, contractRateBps: 100, accounts: [account], instructions: [{ accountId: "acc1", pointsBps: 20 }, { accountId: "acc1", earningsPercentBps: 5000 }] };
 const result = preflightClientCommissionIntegration(input);
 assert.equal(result.distributedMinor, 70000);
 assert.equal(result.remainingMinor, 30000);
@@ -27,4 +28,8 @@ assert.throws(() => preflightClientCommissionIntegration({ ...input, accounts: [
 assert.throws(() => preflightClientCommissionIntegration({ ...input, accounts: [{ ...account, active: false }] }));
 assert.throws(() => preflightClientCommissionIntegration({ ...input, instructions: [{ accountId: "acc1", earningsPercentBps: 10000 }, { accountId: "acc1", pointsBps: 20 }] }));
 assert.throws(() => preflightClientCommissionIntegration({ ...input, instructions: [{ accountId: "missing", pointsBps: 20 }] }));
+assert.throws(() => preflightClientCommissionIntegration({ ...input, nowMs: 100000 + 86400001 }));
+assert.throws(() => preflightClientCommissionIntegration({ ...input, accounts: [{ ...account, iqInstrumentLast4: "0000" }] }));
+assert.throws(() => preflightClientCommissionIntegration({ ...input, accounts: [{ ...account, iqAccountId: "" }] }));
+assert.throws(() => preflightClientCommissionIntegration({ ...input, accounts: [{ ...account, iqFullDigitsMatched: false }] }));
 console.log("Read-only integration preflight tests passed.");
