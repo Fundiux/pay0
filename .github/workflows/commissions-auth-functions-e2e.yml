@@ -39,6 +39,9 @@ jobs:
         run: |
           npm ci
           npm ci --prefix functions
+      - name: Trace legacy functions.config access in ephemeral emulator dependencies
+        run: |
+          node qa/authenticated-isolation/instrument-functions-config.cjs "$PWD/functions/node_modules/firebase-functions"
       - name: Compile Functions and verify lazy map
         run: |
           npm --prefix functions run build
@@ -61,4 +64,4 @@ jobs:
           EOF
       - name: Auth and Functions callable E2E (demo project, no IQ access)
         run: |
-          timeout --signal=TERM --kill-after=15s 240s npx --yes firebase-tools@14.21.0 --debug emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
+          timeout --signal=TERM --kill-after=15s 240s npx --yes firebase-tools@15.3.1 --debug emulators:exec --project demo-pay0-pr43 --config .firebase-commission-auth-test.json --only auth,firestore,functions "node qa/scripts/personal-commission-auth-functions-emulator.cjs"
