@@ -13,6 +13,7 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
   const [ownerUid, setOwnerUid] = useState("");
   const [accounts, setAccounts] = useState<CommissionAccountOption[]>([]);
   const [draft, setDraft] = useState<Draft>({ version: 0, instructions: [] });
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const superadmin = String(profile?.role || "").toLowerCase() === "superadmin";
@@ -33,7 +34,7 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
     return () => { live = false; };
   }, [superadmin]);
   useEffect(() => {
-    setAccounts([]); setDraft({ version: 0, instructions: [] }); setMessage("");
+    setAccounts([]); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
     if (!ownerUid || !superadmin) return;
     let live = true;
     Promise.all([
@@ -47,12 +48,13 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
         reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
       })));
       setDraft(draftResponse.data.draft || { version: 0, instructions: [] });
+      setLoaded(true);
     }).catch(error => { if (live) setMessage(error.message || "No se pudo cargar la distribución."); });
     return () => { live = false; };
   }, [clientId, ownerUid, superadmin]);
   if (!superadmin) return null;
   async function save() {
-    if (!ownerUid || busy) return;
+    if (!ownerUid || busy || !loaded) return;
     setBusy(true); setMessage("");
     try {
       const result = await httpsCallable<{ clientId: string; ownerUid: string; instructions: ClientAllocationRow[]; expectedVersion: number }, { version: number }>(functions, "saveClientCommissionAllocationDraft")({
@@ -69,8 +71,8 @@ export default function ClientPersonalCommissionDrafts({ clientId }: { clientId:
     <select aria-label="Usuario titular" className="w-full rounded-lg bg-slate-950 p-2 text-sm" value={ownerUid} onChange={event => setOwnerUid(event.target.value)}>
       <option value="">Seleccionar usuario</option>{users.map(user => <option key={user.uid} value={user.uid}>{user.label}</option>)}
     </select>
-    {ownerUid && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accounts} initialRows={draft.instructions} onDraftChange={instructions => setDraft(current => ({ ...current, instructions }))} />}
-    {ownerUid && <button type="button" disabled={busy} className="rounded-lg bg-sky-600 px-4 py-2 text-sm disabled:opacity-40" onClick={() => void save()}>{busy ? "Guardando…" : "Guardar borrador"}</button>}
+    {ownerUid && loaded && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accounts} initialRows={draft.instructions} onDraftChange={instructions => setDraft(current => ({ ...current, instructions }))} />}
+    {ownerUid && <button type="button" disabled={busy || !loaded} className="rounded-lg bg-sky-600 px-4 py-2 text-sm disabled:opacity-40" onClick={() => void save()}>{busy ? "Guardando…" : "Guardar borrador"}</button>}
     {message && <p role="status" className="text-sm text-amber-200">{message}</p>}
   </section>;
 }
