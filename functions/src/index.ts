@@ -282,3 +282,4 @@ export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppRe
 export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount, revealPersonalCommissionAccountNumber } from "./modules/commissionDistributions/personalAccountCallables";
 export { saveClientCommissionAllocationDraft, getClientCommissionAllocationDraft, previewPostedClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationDraftCallables";
 export { resolvePersonalCommissionAccountIq } from "./modules/commissionDistributions/personalAccountIqCallables";
+export { publishClientCommissionAllocation } from "./modules/commissionDistributions/clientAllocationPublicationCallables";
