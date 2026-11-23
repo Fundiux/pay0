@@ -45,4 +45,4 @@ jobs:
           GCLOUD_PROJECT: demo-pay0-pr43
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
         run: |
-          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore "node qa/scripts/personal-commission-firestore-rules.cjs"
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore "node qa/scripts/personal-commission-firestore-rules.cjs && node qa/scripts/personal-commission-financial-emulator.cjs"
