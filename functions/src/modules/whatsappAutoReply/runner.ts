@@ -4,7 +4,13 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logActivity } from "../../utils/logActivity";
 import { operatorAuthorHashes, MAX_REPLY_AGE_MS, OWNER_WORKING_HOURS } from "./domain";
 import { readInternalGroupChatIds } from "./internalGroups";
-import { planGroupReplies, type InboundRow, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
+import type { RequestLookup, StatusSubject } from "./domain";
+import { AGENTS } from "../agentOperations/contract";
+import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
+import { agentCanAct, readAgentModes } from "./modes";
+import { mexicoMonthKey } from "./metrics";
+import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
+import { planGroupReplies, type InboundRow, type LastReply, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -13,6 +19,9 @@ const FieldValue = admin.firestore.FieldValue;
 export const REPLY_AGENT_ID = "hugo";
 export const REPLY_CONFIGS = "whatsappAgentReplyConfigs";
 const REPLY_STATE = "whatsappAgentReplyState";
+export const REPLY_METRICS = "whatsappAgentReplyMetrics";
+export const CONVERSATION_STATE = "whatsappAgentConversationState";
+const conversationStateId = (rootId: string, chatId: string) => `${rootId}__${REPLY_AGENT_ID}__${encodeURIComponent(chatId)}`;
 const LOOKBACK_MS = MAX_REPLY_AGE_MS + 5 * 60 * 1000;
 const MAX_MESSAGES_PER_RUN = 400;
 const BRAND_OR_INTERNAL = /pay\s*-?\s*0|despacho/i;
@@ -61,6 +70,19 @@ async function firstObservedAt(rootId: string, chatId: string): Promise<number |
   return at > 0 ? at : null;
 }
 
+/** Tells the team's internal group that a client's request was not found. Goes through the internal-notice route; no client is ever the target. */
+async function noticeInternalTeam(rootId: string, item: PlannedReply, groupName: string, clienteId: string | null) {
+  if (!clienteId) return;
+  const what = item.subject === "TRANSFER" ? "su transferencia" : item.subject === "INVOICE" ? "su factura" : "una solicitud";
+  try {
+    await queueAutomaticClientDelivery({
+      rootId, sourceType: "AVISO_GRUPO_INTERNO", sourceId: `${clienteId}:solicitud-no-encontrada:${item.messageId}`, clienteId, clienteNombre: null, caption: "",
+      textBody: `Aviso de Hugo: en el grupo «${groupName || "sin nombre"}» un cliente preguntó por ${what} y no encontré la solicitud en el sistema. Ya le pedí confirmar el nombre del cliente o de quien hizo el pago. Por favor revísenlo.`,
+      notes: "Aviso interno: solicitud no encontrada en una pregunta del grupo.",
+    });
+  } catch (error) { console.error("WHATSAPP_REPLY_INTERNAL_NOTICE_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
+}
+
 export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
   const stored = await readReplyConfig(rootId);
   const internalChatIds = await readInternalGroupChatIds(db, rootId);
@@ -69,11 +91,16 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
 
   // Only groups assigned to a user are answered.
   const observers = await db.collection("whatsappAgentObservers").where("rootId", "==", rootId).where("active", "==", true).limit(200).get();
-  const ownerByChat: Record<string, string> = {}, groupNameByChat: Record<string, string> = {};
+  const ownerByChat: Record<string, string> = {}, groupNameByChat: Record<string, string> = {}, agentPhones: string[] = [];
+  const hugoEnabled = AGENTS.find(agent => agent.id === REPLY_AGENT_ID)?.enabled === true;
   for (const doc of observers.docs) {
     const owner = clean(doc.get("ownerUserUid"), 128), chatId = clean(doc.get("groupChatId"), 200);
-    const observed = ((doc.get("observers") as any[]) || []).some(row => row?.agentId === REPLY_AGENT_ID);
-    if (owner && chatId && observed && !internalChatIds.has(chatId)) { ownerByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
+    const observerRows = (doc.get("observers") as any[]) || [];
+    for (const row of observerRows) if (typeof row?.phone === "string" && row.phone) agentPhones.push(row.phone);
+    const observed = observerRows.some(row => row?.agentId === REPLY_AGENT_ID);
+    // Observer mode is the default: Hugo answers only in the groups the owner switched to acting.
+    const acting = agentCanAct(REPLY_AGENT_ID, readAgentModes(doc.get("agentModes")), hugoEnabled);
+    if (owner && chatId && observed && acting && !internalChatIds.has(chatId)) { ownerByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
   }
   if (!Object.keys(ownerByChat).length) return { skipped: "NO_GROUPS" as const, queued: 0 };
 
@@ -93,6 +120,9 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
   const operatorHashes = new Set<string>();
   for (const doc of operatorDocs.docs) for (const hash of operatorAuthorHashes(rootId, (doc.get("numbers") as string[]) || [])) operatorHashes.add(hash);
 
+  // The agents' own numbers are never clients: a message from another agent is neither answered nor counted as a person.
+  for (const hash of operatorAuthorHashes(rootId, agentPhones)) operatorHashes.add(hash);
+
   const jobRefs = messages.map(row => db.doc(`documentDeliveryJobs/${replyJobId(rootId, row.id)}`));
   const existing = await db.getAll(...jobRefs);
   const repliedIds = new Set(messages.filter((_row, index) => existing[index].exists).map(row => row.id));
@@ -102,21 +132,43 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
   const clientNameByOwner: Record<string, string> = {};
   ownerDocs.forEach((doc, index) => { clientNameByOwner[owners[index]] = safeName(doc.get("displayName") || doc.get("nombreUsuario") || doc.get("username")); });
 
+  // Real lookup of the client's request, prefetched per group because the planner is synchronous.
+  const lookupByChat: Record<string, Partial<Record<StatusSubject, RequestLookup>>> = {}, clienteByChat: Record<string, string | null> = {};
+  for (const chatId of chats.slice(0, 25)) {
+    clienteByChat[chatId] = await clienteIdOfGroup(db, rootId, chatId);
+    lookupByChat[chatId] = {};
+    for (const subject of ["TRANSFER", "INVOICE"] as StatusSubject[]) lookupByChat[chatId][subject] = await lookupRequestForClient(db, rootId, clienteByChat[chatId], subject);
+  }
+  const stateDocs = await db.getAll(...chats.map(chatId => db.doc(`${CONVERSATION_STATE}/${conversationStateId(rootId, chatId)}`)));
+  const lastReplyByChat: Record<string, LastReply | undefined> = {};
+  stateDocs.forEach((doc, index) => { if (doc.exists) lastReplyByChat[chats[index]] = { lastReplyAtMs: Number(doc.get("lastReplyAtMs")) || 0, lastKind: clean(doc.get("lastKind"), 40), lastSubject: doc.get("lastSubject") || null, lastGreetingAtMs: Number(doc.get("lastGreetingAtMs")) || null }; });
+
   const plan = planGroupReplies({
-    config, nowMs, messages, ownerByChat, operatorHashes, firstObservedByChat, repliedIds, clientNameByOwner,
-    // "Already processing" needs the user's open requests; until that lookup exists, questions get the neutral "let us validate".
-    hasOpenSolicitud: () => false,
+    config, nowMs, messages, ownerByChat, operatorHashes, firstObservedByChat, repliedIds, clientNameByOwner, lastReplyByChat,
+    lookupRequest: (_owner, subject, row) => lookupByChat[row.chatId]?.[subject] ?? "UNKNOWN",
+    hasOpenSolicitud: ownerUserUid => Object.entries(ownerByChat).some(([chatId, owner]) => owner === ownerUserUid && lookupByChat[chatId]?.INVOICE === "FOUND"),
   });
 
   let queued = 0;
   for (const item of plan) {
     const built = buildReplyDelivery(rootId, groupNameByChat[item.chatId], clientNameByOwner[item.ownerUserUid] || "", item, nowMs);
     const jobRef = db.doc(`documentDeliveryJobs/${built.jobId}`);
+    const inboundAtMs = messages.find(row => row.id === item.messageId)?.timestampMs ?? nowMs;
     const created = await db.runTransaction(async tx => {
       if ((await tx.get(jobRef)).exists) return false;
       const stamp = { createdAt: FieldValue.serverTimestamp(), releasedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
       tx.create(jobRef, { ...built.job, ...stamp });
       tx.create(jobRef.collection("deliveries").doc(built.deliveryId), { ...built.delivery, ...stamp });
+      // Measurement: what kind of reply, how fast, whether it needed the team. Never the client's message.
+      tx.create(db.doc(`${REPLY_METRICS}/${built.jobId}`), {
+        rootId, agentId: REPLY_AGENT_ID, chatId: item.chatId, groupName: groupNameByChat[item.chatId] || "", kind: item.kind, subject: item.subject,
+        inboundAtMs, queuedAtMs: nowMs, responseMs: Math.max(0, nowMs - inboundAtMs), aiTokens: 0, escalated: item.notifyInternal, humanCorrection: false,
+        monthKey: mexicoMonthKey(nowMs), createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.set(db.doc(`${CONVERSATION_STATE}/${conversationStateId(rootId, item.chatId)}`), {
+        rootId, agentId: REPLY_AGENT_ID, chatId: item.chatId, lastReplyAtMs: nowMs, lastKind: item.kind, lastSubject: item.subject,
+        ...(item.kind === "GREETING" ? { lastGreetingAtMs: nowMs } : {}), updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
       return true;
     });
     if (!created) continue;
@@ -127,6 +179,7 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
       referenceId: built.jobId, referenceType: "documentDeliveryJob", entityId: built.jobId, entityType: "document_delivery",
       description: `Hugo preparó una respuesta (${item.kind}) en el grupo ${groupNameByChat[item.chatId] || ""}.`.trim(),
     }).catch(() => undefined);
+    if (item.notifyInternal) await noticeInternalTeam(rootId, item, groupNameByChat[item.chatId] || "", clienteByChat[item.chatId] ?? null);
   }
   return { skipped: null, queued };
 }

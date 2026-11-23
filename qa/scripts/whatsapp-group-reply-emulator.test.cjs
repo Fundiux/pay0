@@ -18,12 +18,13 @@ const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappC
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
 const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
 const { operatorAuthorHashes, REPLY_TEXT_VARIANTS } = require(lib + 'whatsappAutoReply/domain.js');
-const { saveWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
+const { saveWhatsAppAgentObservers, getWhatsAppAgentObservers } = require(lib + 'documentDelivery/whatsappObserverCallables.js');
+const { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } = require(lib + 'whatsappAutoReply/modeCallables.js');
 const { createWorkerKey, createAuthorityTransport } = require('../../tools/whatsapp-qr-connector/connectorAuthority.cjs');
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -45,8 +46,9 @@ async function inbound(chatId, over = {}) {
     timestampMs: NOW - MIN, type: 'chat', body: 'Buenos días', reportDay: '2026-11-09', ...over });
   return id;
 }
-const observe = (chatId, name, ownerUserUid) => db.doc(`whatsappAgentObservers/${rootId}__${encodeURIComponent(chatId)}`).set({
-  rootId, groupChatId: chatId, groupName: name, active: true, ...(ownerUserUid ? { ownerUserUid } : {}), observers: [{ agentId: 'hugo', phone: '' }] });
+// Observer mode is the default; the existing cases need Hugo acting, so the helper switches it on unless told otherwise.
+const observe = (chatId, name, ownerUserUid, over = {}) => db.doc(`whatsappAgentObservers/${rootId}__${encodeURIComponent(chatId)}`).set({
+  rootId, groupChatId: chatId, groupName: name, active: true, ...(ownerUserUid ? { ownerUserUid } : {}), observers: [{ agentId: 'hugo', phone: '' }], agentModes: { hugo: 'ACTING' }, ...over });
 const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyConfigId(rootId)}`).set({ rootId, agentId: 'hugo', enabled, mode });
 
 (async () => {
@@ -171,6 +173,118 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     await db.doc(`whatsappInternalGroups/other-root__${encodeURIComponent(adminUid)}`).set({ rootId: 'other-root', ownerAdminId: adminUid, groupChatId: groupE, groupName: 'Otro' });
     await saveWhatsAppAgentObservers.run(asOwner({ groupChatId: groupE, active: true, ownerUserUid: betell, observers: [{ agentId: 'hugo', phone: '' }] }));
     await db.doc(`whatsappInternalGroups/other-root__${encodeURIComponent(adminUid)}`).delete();
+  });
+
+  const asOwner2 = data => ({ auth: { uid: ownerUid }, data });
+  const chatDoc = (chatId, name) => db.doc(`whatsappAgentChats/${bindingId}__${encodeURIComponent(chatId)}`).set({ rootId, bindingId, chatId, name, isGroup: true, active: true });
+  await test('observer-is-the-default-and-nothing-is-queued', async () => {
+    await setReply(true, 'STANDARD');
+    await chatDoc(groupG, 'Grupo modos');
+    await observe(groupG, 'Grupo modos', betell, { agentModes: {} });
+    const hello = await inbound(groupG);
+    await runGroupReplies(rootId, NOW);
+    assert.equal((await jobsFor(hello)).length, 0);
+  });
+
+  await test('switching-to-acting-queues-the-greeting-and-records-the-measurement', async () => {
+    const changed = await setWhatsAppGroupAgentMode.run(asOwner2({ groupChatId: groupG, agentId: 'hugo', mode: 'ACTING' }));
+    assert.equal(changed.agentModes.hugo, 'ACTING');
+    await runGroupReplies(rootId, NOW);
+    const [hello] = (await db.collection('whatsappInboundMessages').where('rootId', '==', rootId).where('chatId', '==', groupG).get()).docs;
+    const [job] = await jobsFor(hello.id);
+    assert.ok(job, 'greeting job');
+    const metric = (await db.doc(`whatsappAgentReplyMetrics/${job.id}`).get()).data();
+    assert.equal(metric.kind, 'GREETING');
+    assert.equal(metric.agentId, 'hugo');
+    assert.equal(metric.aiTokens, 0);
+    assert.equal(metric.responseMs, MIN);
+    assert.equal(metric.monthKey, '2026-11');
+    assert.equal(metric.humanCorrection, false);
+  });
+
+  await test('a-second-greeting-the-same-day-is-not-sent', async () => {
+    const again = await inbound(groupG, { body: 'Buenas tardes', timestampMs: NOW - 30 * 1000 });
+    await runGroupReplies(rootId, NOW);
+    assert.equal((await jobsFor(again)).length, 0);
+  });
+
+  await test('maria-and-sofia-cannot-act-and-hugo-observer-needs-a-reason', async () => {
+    await observe(groupG, 'Grupo modos', betell, { observers: [{ agentId: 'hugo', phone: '' }, { agentId: 'maria', phone: '' }, { agentId: 'sofia', phone: '' }], agentModes: { hugo: 'ACTING' } });
+    for (const agentId of ['maria', 'sofia']) await assert.rejects(() => setWhatsAppGroupAgentMode.run(asOwner2({ groupChatId: groupG, agentId, mode: 'ACTING' })), error => /apagado/.test(String(error.message)));
+    await assert.rejects(() => setWhatsAppGroupAgentMode.run(asOwner2({ groupChatId: groupG, agentId: 'hugo', mode: 'OBSERVER' })), error => /motivo/.test(String(error.message)));
+    await assert.rejects(() => setWhatsAppGroupAgentMode.run({ auth: { uid: betell }, data: { groupChatId: groupG, agentId: 'hugo', mode: 'OBSERVER', reason: 'prueba' } }));
+    await assert.rejects(() => setWhatsAppGroupAgentMode.run(asOwner2({ groupChatId: groupG, agentId: 'iq', mode: 'ACTING' })));
+  });
+
+  await test('returning-hugo-to-observer-stops-replies-and-is-measured', async () => {
+    const back = await setWhatsAppGroupAgentMode.run(asOwner2({ groupChatId: groupG, agentId: 'hugo', mode: 'OBSERVER', reason: 'Respondió mal a un cliente' }));
+    assert.deepEqual(back.agentModes, {});
+    const later = await inbound(groupG, { body: 'Buenos días', timestampMs: NOW + 24 * HOUR - 20 * 1000 });
+    await runGroupReplies(rootId, NOW + 24 * HOUR);
+    assert.equal((await jobsFor(later)).length, 0);
+    const report = await getWhatsAppAgentReplyMetrics.run(asOwner2({ month: '2026-11' }));
+    const total = report.buckets.find(row => row.agentId === 'hugo' && row.chatId === null);
+    assert.ok(total.replies >= 1);
+    assert.equal(total.returnsToObserver, 1);
+    assert.deepEqual(total.returnReasons, ['Respondió mal a un cliente']);
+    assert.ok(report.buckets.some(row => row.agentId === 'hugo' && row.chatId === groupG));
+  });
+
+  await test('a-person-can-mark-a-reply-as-corrected', async () => {
+    const [metric] = (await db.collection('whatsappAgentReplyMetrics').where('rootId', '==', rootId).limit(1).get()).docs;
+    await markWhatsAppReplyCorrection.run(asOwner2({ jobId: metric.id }));
+    assert.equal((await db.doc(`whatsappAgentReplyMetrics/${metric.id}`).get()).data().humanCorrection, true);
+    const total = (await getWhatsAppAgentReplyMetrics.run(asOwner2({ month: '2026-11' }))).buckets.find(row => row.agentId === 'hugo' && row.chatId === null);
+    assert.ok(total.humanCorrections >= 1);
+    await assert.rejects(() => markWhatsAppReplyCorrection.run(asOwner2({ jobId: 'no-existe' })));
+  });
+
+  await test('the-real-lookup-decides-processing-or-request-data', async () => {
+    await setReply(true, 'STANDARD');
+    for (const [chatId, name, clienteId] of [[groupH, 'Cliente con factura', 'cli-con'], [groupI, 'Cliente sin registros', 'cli-sin']]) {
+      await chatDoc(chatId, name);
+      await db.doc(`clientWhatsappGroups/${rootId}__${clienteId}`).set({ rootId, clienteId, groupChatId: chatId, groupName: name });
+      await observe(chatId, name, betell);
+      await inbound(chatId, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    }
+    await db.doc('solicitudes/sol-lookup-1').set({ rootId, clienteId: 'cli-con', status: 'EN_PROCESO', folio: 'S1LOOKUP' });
+    const invoiceQuestion = await inbound(groupH, { body: '¿Hay avance de mi factura?', timestampMs: NOW - 5 * MIN });
+    const transferQuestion = await inbound(groupI, { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 5 * MIN });
+    await runGroupReplies(rootId, NOW);
+    const [processing] = await jobsFor(invoiceQuestion), [requestData] = await jobsFor(transferQuestion);
+    assert.equal(processing.data().replyKind, 'PROCESSING');
+    assert.equal(requestData.data().replyKind, 'REQUEST_DATA');
+    assert.equal((await db.doc(`whatsappAgentReplyMetrics/${requestData.id}`).get()).data().escalated, true);
+    assert.equal((await db.doc(`whatsappAgentReplyMetrics/${processing.id}`).get()).data().escalated, false);
+  });
+
+  await test('an-answered-subject-is-not-repeated-within-the-cooldown', async () => {
+    const repeat = await inbound(groupH, { body: '¿Hay avance de mi factura?', timestampMs: NOW - 4 * MIN });
+    await runGroupReplies(rootId, NOW + 2 * MIN);
+    assert.equal((await jobsFor(repeat)).length, 0);
+  });
+
+  await test('an-agents-own-number-is-never-answered', async () => {
+    await chatDoc(groupJ, 'Grupo agentes');
+    await observe(groupJ, 'Grupo agentes', betell, { observers: [{ agentId: 'hugo', phone: '525522222222' }] });
+    await inbound(groupJ, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const fromAgent = await inbound(groupJ, { authorHash: [...operatorAuthorHashes(rootId, ['525522222222'])][0], body: 'Buenos días', timestampMs: NOW - 2 * MIN });
+    await runGroupReplies(rootId, NOW);
+    assert.equal((await jobsFor(fromAgent)).length, 0);
+  });
+
+  await test('observer-callables-limit-and-filter-the-agents', async () => {
+    const save = observers => saveWhatsAppAgentObservers.run(asOwner2({ groupChatId: groupG, active: true, ownerUserUid: betell, observers }));
+    await assert.rejects(() => save([{ agentId: 'iq', phone: '' }]), error => /Agente desconocido/.test(String(error.message)));
+    await assert.rejects(() => save([{ agentId: 'hugo', phone: '' }, { agentId: 'hugo', phone: '' }]), error => /solo puede aparecer una vez/.test(String(error.message)));
+    await assert.rejects(() => save(Array.from({ length: 11 }, () => ({ agentId: 'hugo', phone: '' }))), error => /máximo 10/.test(String(error.message)));
+    const listing = await getWhatsAppAgentObservers.run(asOwner2({}));
+    assert.deepEqual(listing.agents.map(row => row.id).sort(), ['hugo', 'maria', 'sofia']);
+    assert.ok(listing.configs.every(row => typeof row.agentModes === 'object'));
+    // Saving the group again keeps only the modes of agents that are still in it.
+    await observe(groupG, 'Grupo modos', betell, { observers: [{ agentId: 'hugo', phone: '' }, { agentId: 'maria', phone: '' }], agentModes: { hugo: 'ACTING', maria: 'ACTING' } });
+    await save([{ agentId: 'hugo', phone: '' }]);
+    assert.deepEqual((await db.doc(`whatsappAgentObservers/${rootId}__${encodeURIComponent(groupG)}`).get()).data().agentModes, { hugo: 'ACTING' });
   });
 
   await test('switching-replies-off-stops-new-replies', async () => {

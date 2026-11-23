@@ -277,3 +277,4 @@ export { listWhatsAppAgentChats } from "./modules/documentDelivery/whatsappAgent
 export { getUserOperatorNumbers, saveUserOperatorNumbers } from "./modules/operatorNumbers/callables";
 export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modules/whatsappAutoReply/callables";
 export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
+export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";

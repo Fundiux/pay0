@@ -169,7 +169,8 @@ export async function setWhatsAppAgentReplyConfig(input: { enabled: boolean; mod
 }
 
 export type WhatsAppAgentObserver = { agentId: string; phone: string };
-export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] };
+export type WhatsAppAgentMode = "OBSERVER" | "ACTING";
+export type WhatsAppAgentObserversConfig = { groupChatId: string; groupName: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[]; agentModes?: Record<string, WhatsAppAgentMode> };
 export type WhatsAppAgentObserversState = {
   ok: boolean;
   agents: Array<{ id: string; name: string }>;
@@ -180,6 +181,19 @@ export type WhatsAppAgentObserversState = {
 
 export async function getWhatsAppAgentObservers() {
   return (await httpsCallable<Record<string, never>, WhatsAppAgentObserversState>(functions, "getWhatsAppAgentObservers")({})).data;
+}
+
+export async function setWhatsAppGroupAgentMode(input: { groupChatId: string; agentId: string; mode: WhatsAppAgentMode; reason?: string }) {
+  return (await httpsCallable<typeof input, { ok: boolean; agentModes: Record<string, WhatsAppAgentMode>; changed: string[] }>(functions, "setWhatsAppGroupAgentMode")(input)).data;
+}
+
+export type WhatsAppReplyMetricsBucket = {
+  agentId: string; chatId: string | null; groupName: string | null; replies: number; byKind: Record<string, number>; humanCorrections: number; escalations: number;
+  avgResponseMs: number | null; aiTokens: number; returnsToObserver: number; returnReasons: string[]; actingChanges: number;
+};
+
+export async function getWhatsAppAgentReplyMetrics(month?: string) {
+  return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; truncated: boolean; buckets: WhatsAppReplyMetricsBucket[] }>(functions, "getWhatsAppAgentReplyMetrics")({ month })).data;
 }
 
 export async function saveWhatsAppAgentObservers(input: { groupChatId: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] }) {
