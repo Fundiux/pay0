@@ -213,8 +213,8 @@ export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secret
         encrypted: account.encryptedInstrument, rootId: actor.rootId,
         ownerUid, accountId: snapshot.id, keyBase64,
       });
-      const valid = account.instrumentType === "CLABE" ? /^\\d{18}$/.test(number) :
-        account.instrumentType === "CARD" && /^\\d{16,19}$/.test(number);
+      const valid = account.instrumentType === "CLABE" ? /^\d{18}$/.test(number) :
+        account.instrumentType === "CARD" && /^\d{16,19}$/.test(number);
       if (!valid || number.slice(-4) !== account.last4) throw new Error("Mismatch");
     } catch (error) {
       // Log a category only. Never log the number, cryptographic key or encrypted payload.
