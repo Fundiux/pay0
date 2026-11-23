@@ -419,7 +419,7 @@ function resolveReceiptDate(lines: string[], text: string): { raw: string; value
   // A generic numeric date like 01/02/2026 is ambiguous without an explicit
   // day/month ordering; keep its parsed value visible without certifying it.
   const ambiguousGeneric = !monthFirst && !dayFirst && generic.some(value =>
-    [...value.matchAll(/\\b(\\d{1,2})[-\\/](\\d{1,2})[-\\/](20\\d{2})\\b/g)]
+    [...value.matchAll(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/g)]
       .some(match => Number(match[1]) <= 12 && Number(match[2]) <= 12));
   const operationDateLabeled = operation.length > 0;
   const nonAmbiguousGenericDate = generic.length > 0 && !ambiguousGeneric;
