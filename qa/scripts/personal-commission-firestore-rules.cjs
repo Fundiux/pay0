@@ -30,11 +30,23 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
       await setDoc(doc(database, "clientCommissionAllocationDraftHistory", "qa-history"), {
         rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", instructions: [], status: "DRAFT", version: 1,
       });
+      await setDoc(doc(database, "clientCommissionAllocationRules", "qa-rule"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", instructions: [], status: "CONFIGURED", executionEnabled: false, version: 1,
+      });
+      await setDoc(doc(database, "clientCommissionAllocationHistory", "qa-published-history"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", instructions: [], status: "CONFIGURED", executionEnabled: false, version: 1,
+      });
+      await setDoc(doc(database, "personalCommissionIqLinks", "qa-iq-link"), {
+        rootId: "root-qa", clientId: "qa-client", ownerUid: "qa-owner", accountId: "qa-account", iqLinkStatus: "VERIFIED",
+      });
     });
     const protectedDocuments = [
       ["personalCommissionAccounts", "qa-account"],
       ["clientCommissionAllocationDrafts", "qa-draft"],
       ["clientCommissionAllocationDraftHistory", "qa-history"],
+      ["clientCommissionAllocationRules", "qa-rule"],
+      ["clientCommissionAllocationHistory", "qa-published-history"],
+      ["personalCommissionIqLinks", "qa-iq-link"],
     ];
     let denials = 0;
     for (const uid of ["qa-owner", "qa-super", "qa-other"]) {
@@ -49,8 +61,8 @@ if (process.env.GCLOUD_PROJECT !== projectId || !/^127\.0\.0\.1:\d+$/.test(host)
         denials += 5;
       }
     }
-    assert.equal(denials, 45);
-    console.log("PASS: 45 Firestore security rule denials; personal accounts, drafts and history are callable-only.");
+    assert.equal(denials, 90);
+    console.log("PASS: 90 Firestore rule denials across accounts, IQ links, drafts and prospective rules.");
   } finally {
     await environment.cleanup();
   }
