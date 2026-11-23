@@ -80,6 +80,10 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
   const last4 = account.instrumentNumber.slice(-4);
   await db.runTransaction(async tx => {
     const existing = await tx.get(collection.where("rootId", "==", actor.rootId).where("ownerUid", "==", actor.uid).limit(50));
+    // Read the deterministic document as well as the owner query so a concurrent
+    // registration cannot silently reuse the same account identifier.
+    const exact = await tx.get(accountRef);
+    if (exact.exists) throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     if (existing.size >= 50) throw new HttpsError("resource-exhausted", "Límite de 50 cuentas.");
     if (existing.docs.some(doc => doc.id === fingerprint)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
