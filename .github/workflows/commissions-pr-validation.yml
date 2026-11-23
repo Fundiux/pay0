@@ -65,7 +65,7 @@ jobs:
         run: npm --prefix functions run build
       - name: Validate Firestore rules with demo emulator only
         run: |
-          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore,storage "node qa/scripts/personal-commission-firestore-rules.cjs && node qa/scripts/iq-beneficiary-create-regression.cjs"
+          npx --yes firebase-tools@14.21.0 emulators:exec --project demo-pay0-pr43 --config firebase.emulator-tests.json --only firestore,storage "node qa/scripts/personal-commission-firestore-rules.cjs && node qa/scripts/iq-beneficiary-create-regression.cjs && node qa/scripts/user-commission-emulator.cjs"
       - name: Configure public build-only frontend environment
         run: node qa/scripts/ci-frontend-build-env.mjs --write-github-env
       - name: Build frontend without deployment
