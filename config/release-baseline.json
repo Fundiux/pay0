@@ -704,6 +704,10 @@
     {
       "commit": "05da2c49",
       "capability": "Sincronizacion diaria crea el cliente desde el registro de IQ por RFC exacto"
+    },
+    {
+      "commit": "d165eabe",
+      "capability": "Hugo reconoce la mencion con id de dispositivo vinculado y registra conteos del grupo interno"
     }
   ],
   "requiredText": [
