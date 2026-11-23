@@ -19,6 +19,6 @@ assert.equal(canUsePersonalCommissionAccount({ ...account, iqLinkStatus: "VERIFI
 assert.throws(() => normalizePersonalCommissionAccount({ ...input, instrumentNumber: "123" }));
 assert.throws(() => normalizePersonalCommissionAccount({ ...input, bankName: "B".repeat(101) }));
 assert.throws(() => normalizePersonalCommissionAccount({ ...input, beneficiaryName: "T".repeat(161) }));
-assert.throws(() => normalizePersonalCommissionAccount({ ...input, bankName: "Banco\\nOtro" }));
+assert.throws(() => normalizePersonalCommissionAccount({ ...input, bankName: "Banco" + String.fromCharCode(10) + "Otro" }));
 assert.throws(() => normalizePersonalCommissionAccount({ ...input, instrumentType: "CARD", instrumentNumber: "123456" }));
 console.log("Personal commission account validation tests passed.");
