@@ -21,4 +21,8 @@ assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", earnin
 assert.throws(() => calculate({ ...base, operationBaseMinor: null, instructions: [{ accountId: "a", pointsBps: 20 }] }));
 assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", earningsPercentBps: 10 }, { accountId: "a", earningsPercentBps: 20 }] }));
 assert.throws(() => calculate({ ...base, instructions: [{ accountId: "a", pointsBps: 60 }, { accountId: "b", pointsBps: 60 }] }));
+const cents = calculate({ earnedMinor: 3, operationBaseMinor: 3, contractRateBps: 10000, instructions: [{ accountId: "a", earningsPercentBps: 3333 }, { accountId: "b", earningsPercentBps: 3333 }, { accountId: "c", earningsPercentBps: 3334 }] });
+assert.equal(cents.distributedMinor, 3);
+assert.equal(cents.instructions.reduce((sum, row) => sum + row.amountMinor, 0), 3);
+assert.equal(cents.remainingMinor, 0);
 console.log("Client commission allocation tests passed.");
