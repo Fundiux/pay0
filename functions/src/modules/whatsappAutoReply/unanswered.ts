@@ -1,4 +1,5 @@
 import { classifyMessage, isWithinWorkingHours, type WorkingHours } from "./domain";
+import { matchesSentText } from "./mention";
 import type { InboundRow } from "./planner";
 
 // A client question that nobody answers is told to the team's internal group: the first notice after 3 minutes and a reminder
@@ -41,7 +42,7 @@ export function planUnansweredAlerts(input: AlertInput): AlertPlan {
   const plan: AlertPlan = { alerts: [], resolve: [], expire: [] };
   const { nowMs } = input;
   const isTeam = (row: InboundRow) => (!!row.authorHash && input.operatorHashes.has(row.authorHash))
-    || (row.fromMe && !input.hugoTexts[row.chatId]?.has(normalizeText(row.body)));
+    || (row.fromMe && !matchesSentText(input.hugoTexts[row.chatId], row.body, normalizeText));
   const answeredAfter = (chatId: string, atMs: number) => input.messages.some(row => row.chatId === chatId && row.timestampMs > atMs && isTeam(row));
   const inHours = isWithinWorkingHours(input.workingHours, nowMs);
 

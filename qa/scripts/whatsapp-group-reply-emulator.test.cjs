@@ -84,7 +84,8 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     const job = jobDoc.data();
     assert.equal(job.sourceType, 'GRUPO_RESPUESTA');
     assert.equal(job.status, 'READY_FOR_SEND');
-    assert.equal(job.textBody, 'Buen día, Betell.');
+    assert.equal(job.textBody, 'Buen día, {{MENCION}}.');
+    assert.equal(job.mentionInboundMessageId, greeting.split('__')[1], 'the greeting mentions whoever wrote; no number is stored');
     assert.doesNotMatch(job.textBody, /pay\s*-?\s*0|despacho/i);
     const [delivery] = (await jobDoc.ref.collection('deliveries').get()).docs.map(doc => doc.data());
     assert.equal(delivery.status, 'PENDING_SEND');
@@ -102,7 +103,8 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     const d = claim.delivery;
     assert.ok(d);
     assert.equal(d.kind, 'TEXT');
-    assert.equal(d.text, 'Buen día, Betell.');
+    assert.equal(d.text, 'Buen día, {{MENCION}}.');
+    assert.ok(d.mention && /^msg-\d+$/.test(d.mention.messageId), 'the claim carries the message to mention, not a number');
     assert.equal(d.chatId, groupA);
     assert.equal((await hugo.operate('REPORT_DELIVERY', { jobId: d.jobId, deliveryId: d.deliveryId, leaseId: d.leaseId, outcome: 'ATTEMPT' })).attemptAuthorized, true);
     const sent = await hugo.operate('REPORT_DELIVERY', { jobId: d.jobId, deliveryId: d.deliveryId, leaseId: d.leaseId, outcome: 'SENT', messageIds: ['true_x@g.us_ABC'] });
@@ -146,7 +148,7 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal((await jobsFor(question)).length, 0);
     const hello = await inbound(groupD, { timestampMs: NOW - 2 * MIN });
     assert.equal((await runGroupReplies(rootId, NOW)).queued, 1);
-    assert.equal((await jobsFor(hello))[0].data().textBody, 'Buen día, Betell.');
+    assert.equal((await jobsFor(hello))[0].data().textBody, 'Buen día, {{MENCION}}.');
   });
 
   const asOwner = data => ({ auth: { uid: ownerUid }, data });
