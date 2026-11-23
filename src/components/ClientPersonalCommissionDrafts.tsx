@@ -26,6 +26,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
   const [paymentId, setPaymentId] = useState("");
   const [preview, setPreview] = useState<PostedPreview | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [publishedVersion, setPublishedVersion] = useState(0);
   const superadmin = String(profile?.role || "").toLowerCase() === "superadmin";
   useEffect(() => {
     if (!superadmin) return;
@@ -45,13 +46,14 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
   }, [superadmin]);
   useEffect(() => {
     setAccounts([]); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
-    setPreview(null); setDirty(false);
+    setPreview(null); setDirty(false); setPublishedVersion(0);
     if (!ownerUid || !superadmin) return;
     let live = true;
     Promise.all([
       httpsCallable<{ ownerUid: string; purpose: string; clientId: string }, { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({ ownerUid, purpose: "CLIENT_COSTS", clientId }),
       httpsCallable<{ clientId: string; ownerUid: string }, { draft: Draft | null }>(functions, "getClientCommissionAllocationDraft")({ clientId, ownerUid }),
-    ]).then(([accountResponse, draftResponse]) => {
+      httpsCallable<{ clientId: string; ownerUid: string }, { rule: { version: number; status: string; executionEnabled: false } | null }>(functions, "getPublishedClientCommissionAllocation")({ clientId, ownerUid }),
+    ]).then(([accountResponse, draftResponse, ruleResponse]) => {
       if (!live) return;
       setAccounts(accountResponse.data.accounts.filter(a => a.active).map(a => ({
         id: a.id, bankName: a.bankName, beneficiaryName: a.beneficiaryName,
@@ -59,6 +61,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
         reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
       })));
       setDraft(draftResponse.data.draft || { version: 0, instructions: [] });
+      setPublishedVersion(ruleResponse.data.rule?.version || 0);
       setLoaded(true);
     }).catch(error => { if (live) setMessage(error.message || "No se pudo cargar la distribución."); });
     return () => { live = false; };
@@ -113,6 +116,24 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
     } catch (error: any) { setMessage(error.message || "No fue posible comprobar el pago contabilizado."); }
     finally { setBusy(false); }
   }
+  async function publishConfiguration() {
+    if (!ownerUid || !paymentId.trim() || !preview || preview.blockedIqAccountIds.length ||
+        busy || dirty || preview.draftVersion !== draft.version) return;
+    setBusy(true); setMessage("");
+    try {
+      const result = await httpsCallable<{
+        clientId: string; ownerUid: string; paymentId: string;
+        expectedDraftVersion: number; expectedVersion: number;
+      }, { version: number; executionEnabled: false }>(functions, "publishClientCommissionAllocation")({
+        clientId, ownerUid, paymentId: paymentId.trim(),
+        expectedDraftVersion: draft.version, expectedVersion: publishedVersion,
+      });
+      setPublishedVersion(result.data.version);
+      setMessage("Regla v" + result.data.version + " registrada y auditada. No activa dispersiones.");
+    } catch (error: any) {
+      setMessage(error.message || "No se pudo registrar la regla; comprueba la versión y las cuentas IQ.");
+    } finally { setBusy(false); }
+  }
   const money = (minor: number, currency: string) => new Intl.NumberFormat("es-MX", { style: "currency", currency }).format(minor / 100);
   return <section className="mt-6 space-y-3 border-t border-white/10 pt-5">
     <h4 className="font-semibold">Cuentas personales · distribución por cliente</h4>
@@ -142,8 +163,10 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
         <p>Utilidad: {money(preview.earnedMinor, preview.currency)} · Distribuido: {money(preview.distributedMinor, preview.currency)} · Saldo restante: {money(preview.remainingMinor, preview.currency)}</p>
         <ul className="space-y-1">{preview.rows.map((row, index) => <li key={index}>{accounts.find(a => a.id === row.accountId)?.instrumentNumber || "Cuenta"} · {money(row.amountMinor, preview.currency)}</li>)}</ul>
         <p className="text-xs text-amber-200">Solo cálculo de consulta. No reserva saldo ni envía instrucciones a IQ.{preview.blockedIqAccountIds.length ? ` ${preview.blockedIqAccountIds.length} cuenta(s) sin verificación IQ exacta y vigente.` : ""}</p>
+        <button type="button" disabled={busy || preview.blockedIqAccountIds.length > 0 || dirty} onClick={() => void publishConfiguration()} className="rounded-lg border border-sky-400/30 px-3 py-2 text-sky-200 disabled:opacity-40">Registrar regla prospectiva sin ejecución</button>
       </div>}
     </div>}
+    {publishedVersion > 0 && <p className="text-xs text-slate-300">Regla registrada: versión {publishedVersion} · ejecución deshabilitada</p>}
     {message && <p role="status" className="text-sm text-amber-200">{message}</p>}
   </section>;
 }
