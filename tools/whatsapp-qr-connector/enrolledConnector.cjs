@@ -248,7 +248,9 @@ async function startExplicitly(config) {
   if (!binding || !/^[a-f0-9-]{36}$/.test(binding.id)) throw Error("SERVER_BINDING_REQUIRED");
   const sessionRoot = path.resolve(config.sessionRoot), sessionDir = path.resolve(sessionRoot, "session-" + binding.id);
   if (path.dirname(sessionDir) !== sessionRoot) throw Error("SESSION_BOUNDARY_REJECTED");
-  const client = new Client({ authStrategy: new LocalAuth({ clientId: binding.id, dataPath: sessionRoot }),
+  // Optional pin of the WhatsApp Web version (from the local cache, strict): a new WhatsApp Web release can break the library's startup.
+  const pinned = /^\d+\.\d+\.\d+$/.test(String(config.webVersion || "")) ? { webVersion: config.webVersion, webVersionCache: { type: "local", strict: true, path: path.resolve(config.webVersionCachePath || path.join(__dirname, ".wwebjs_cache")) } } : {};
+  const client = new Client({ authStrategy: new LocalAuth({ clientId: binding.id, dataPath: sessionRoot }), ...pinned,
     puppeteer: { headless: true, ...(config.executablePath ? { executablePath: config.executablePath } : {}) } });
   // Signed Storage URLs only: HTTPS, no redirects, bounded time and size.
   const fetchFile = async url => {

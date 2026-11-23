@@ -19,7 +19,7 @@ function loadConfig(file, readFile = fs.readFileSync) {
   if (raw.sendDocuments !== undefined && typeof raw.sendDocuments !== "boolean") throw Error("CONFIG_SEND_DOCUMENTS_BOOLEAN");
   const policyModule = raw.policyModule ? path.resolve(raw.policyModule) : path.resolve(__dirname, "../../functions/lib/modules/documentDelivery/whatsappConnectorPolicy.js");
   return { baseUrl: raw.baseUrl, pythonPath: raw.pythonPath, vaultPath: raw.vaultPath, sessionRoot: raw.sessionRoot,
-    executablePath: raw.executablePath, captureGroups: raw.captureGroups === true, sendDocuments: raw.sendDocuments === true, policyModule };
+    executablePath: raw.executablePath, webVersion: typeof raw.webVersion === "string" ? raw.webVersion : undefined, webVersionCachePath: typeof raw.webVersionCachePath === "string" ? raw.webVersionCachePath : undefined, captureGroups: raw.captureGroups === true, sendDocuments: raw.sendDocuments === true, policyModule };
 }
 
 function argument(argv, name) {
@@ -55,7 +55,7 @@ async function main(argv) {
   const { startExplicitly } = require("./enrolledConnector.cjs");
   const runtime = await loadWorkerRuntime(options);
   fs.mkdirSync(config.sessionRoot, { recursive: true });
-  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments,
+  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, webVersion: config.webVersion, webVersionCachePath: config.webVersionCachePath, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments,
     // The connector stopped working: exit so the supervisor (run-pay0-whatsapp-enrolled.ps1) relaunches it.
     onStopped: reason => { console.error(JSON.stringify({ status: "STOPPED", code: reason })); process.exit(RESTART_EXIT_CODE); } });
   console.log(JSON.stringify({ status: "RUNNING", bindingId: runtime.binding.id, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments }));
@@ -65,7 +65,9 @@ if (require.main === module) {
   main(process.argv.slice(2)).catch(error => {
     // Solo códigos estables: nunca imprimir llaves, vínculos ni cuerpos de respuesta.
     console.error(JSON.stringify({ status: "ERROR", code: /^[A-Z0-9_:-]+$/.test(error.message) ? error.message : "LAUNCHER_FAILED" }));
+    // A failed start must end the process (Chrome would keep it alive) so the supervisor relaunches it; only "run" is supervised.
     process.exitCode = 1;
+    if (process.argv[2] === "run") process.exit(RESTART_EXIT_CODE);
   });
 }
 
