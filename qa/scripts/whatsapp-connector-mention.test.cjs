@@ -81,11 +81,14 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
       message('c1', CLIENT, 'comentario de un cliente'), message('i1', INTERNAL, 'Hugo buen día'), message('i2', INTERNAL, 'plática del equipo'),
       message('i3', INTERNAL, '@5215500000000 ayuda', { mentionedIds: ['5215500000000@c.us'] }), message('i4', INTERNAL, 'plática', { mentionedIds: ['5215599999999@c.us'] }),
       message('i5', INTERNAL, 'Húgo?'), message('i6', INTERNAL, 'sin mención', { mentionedIds: [{ _serialized: '5215500000000@c.us' }] }),
+      message('i7', INTERNAL, 'respuesta a Hugo', { hasQuotedMsg: true, getQuotedMessage: async () => ({ fromMe: true }) }),
+      message('i8', INTERNAL, 'respuesta a otra persona', { hasQuotedMsg: true, getQuotedMessage: async () => ({ fromMe: false }) }),
+      message('i9', INTERNAL, 'cita ilegible', { hasQuotedMsg: true, getQuotedMessage: async () => { throw new Error('gone'); } }),
     ]) await callbacks.message_create(m);
     await running.flush();
     const sent = batches.flat();
-    eq(sent.map(m => m.messageId), ['c1', 'i1', 'i3', 'i5', 'i6'], 'client groups keep everything; the internal group only what addresses Hugo');
-    eq(sent.filter(m => m.mentionsMe).map(m => m.messageId), ['i3', 'i6']);
+    eq(sent.map(m => m.messageId), ['c1', 'i1', 'i3', 'i5', 'i6', 'i7'], 'client groups keep everything; the internal group only what addresses Hugo');
+    eq(sent.filter(m => m.mentionsMe).map(m => m.messageId), ['i3', 'i6', 'i7'], 'quoting one of his own messages addresses him');
     ok(!('mentionsMe' in sent[0]) && !('mentionsMe' in sent[1]), 'the flag is only sent when true');
     await running.stop();
   }

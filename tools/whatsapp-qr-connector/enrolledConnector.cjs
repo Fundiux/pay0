@@ -118,7 +118,11 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
       // A WhatsApp mention of this very account. In the team's internal group nothing leaves the phone unless it addresses Hugo (his mention or his name).
       // Only a message that mentions someone needs the lookup; every other message is buffered without waiting.
-      const mentioned = Array.isArray(message?.mentionedIds) && message.mentionedIds.length > 0 ? await mentionsThisAccount(message) : false;
+      let mentioned = Array.isArray(message?.mentionedIds) && message.mentionedIds.length > 0 ? await mentionsThisAccount(message) : false;
+      // Answering (quoting) one of this account's own messages is addressing it, same as a mention.
+      if (!mentioned && !fromMe && message?.hasQuotedMsg === true && typeof message.getQuotedMessage === "function") {
+        try { mentioned = (await message.getQuotedMessage())?.fromMe === true; } catch { /* no quoted message, not addressed */ }
+      }
       const text = type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "";
       if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return;
       if (addressedOnly.has(chatId)) { internalCaptured++; console.log(JSON.stringify({ status: "INTERNAL_ADDRESSED_CAPTURED", total: internalCaptured, mentioned })); }
