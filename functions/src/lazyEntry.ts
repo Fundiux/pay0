@@ -17,9 +17,7 @@ const target = process.env.FUNCTION_TARGET;
 const entry = target ? LAZY_MODULES[target] : undefined;
 
 if (entry && target) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  module.exports = { [target]: require(entry.module)[entry.export] };
+    module.exports = { [target]: require(entry.module)[entry.export] };
 } else {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  module.exports = require("./index");
+    module.exports = require("./index");
 }
