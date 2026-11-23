@@ -15,10 +15,10 @@ const parseRows = (value: unknown): ClientCommissionInstruction[] => {
   return value.map(row => {
     if (!row || typeof row !== "object") throw new HttpsError("invalid-argument", "Fila inválida.");
     const accountId = row.accountId ? id(row.accountId) : "";
-    const pointsBps = row.pointsBps == null ? null : Number(row.pointsBps);
-    const earningsPercentBps = row.earningsPercentBps == null ? null : Number(row.earningsPercentBps);
+    const pointsBps = row.pointsBps == null ? null : row.pointsBps;
+    const earningsPercentBps = row.earningsPercentBps == null ? null : row.earningsPercentBps;
     for (const rate of [pointsBps, earningsPercentBps]) {
-      if (rate !== null && (!Number.isSafeInteger(rate) || rate < 0 || rate > 10000)) {
+      if (rate !== null && (typeof rate !== "number" || !Number.isSafeInteger(rate) || rate < 0 || rate > 10000)) {
         throw new HttpsError("invalid-argument", "Tasa fuera de rango.");
       }
     }
