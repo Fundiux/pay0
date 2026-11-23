@@ -5,6 +5,7 @@ import { calculateClientCommissionInstructions, type ClientCommissionInstruction
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { personalCommissionIqLinkId } from "./personalAccountIqCallables";
 import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { personalCommissionMirrorData } from "./personalAllocationMirror";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(), stamp = admin.firestore.FieldValue.serverTimestamp;
@@ -102,7 +103,9 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
         throw new HttpsError("failed-precondition", "La cuenta requiere verificación exacta y vigente en IQ para este cliente.");
       }
       return {
-        accountId, fingerprint: account.instrumentFingerprint, last4: account.last4,
+        accountId, methodId: personalCommissionMirrorData({ rootId: actor.rootId, clientId, ownerUid, accountId, account, verifiedLink: iq, actorUid: actor.uid }).mirrorId,
+        beneficiaryId: personalCommissionMirrorData({ rootId: actor.rootId, clientId, ownerUid, accountId, account, verifiedLink: iq, actorUid: actor.uid }).mirrorId,
+        fingerprint: account.instrumentFingerprint, last4: account.last4,
         iqClientId: clientIqId, iqPartnerId: iq.iqPartnerId,
         iqBeneficiaryId: iq.iqBeneficiaryId, iqAccountId: iq.iqAccountId,
         iqCredentialProfileId: iq.iqCredentialProfileId,
@@ -122,6 +125,36 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
     } catch (error: any) {
       throw new HttpsError("failed-precondition", error.message || "La suma excede la comisión disponible.");
     }
+    // Create client-scoped compatibility records for the existing canonical
+    // reservation and IQ executor. Never persist full bank numbers here.
+    const mirrorPlans = accountIds.map((accountId, index) => personalCommissionMirrorData({
+      rootId: actor.rootId, clientId, ownerUid, accountId,
+      account: accountSnaps[index].data()!, verifiedLink: iqSnaps[index].data()!,
+      actorUid: actor.uid,
+    }));
+    const mirrorSnaps = await Promise.all(mirrorPlans.flatMap(plan => [
+      tx.get(db.doc(`clientBeneficiaries/${plan.mirrorId}`)),
+      tx.get(db.doc(`clientBeneficiaryMethods/${plan.mirrorId}`)),
+    ]));
+    mirrorPlans.forEach((plan, index) => {
+      const existingBeneficiary = mirrorSnaps[2 * index].data();
+      const existingMethod = mirrorSnaps[2 * index + 1].data();
+      for (const old of [existingBeneficiary, existingMethod]) {
+        if (old && (old.rootId !== actor.rootId || String(old.clientId || old.clienteId) !== clientId ||
+          old.sourceType !== "PERSONAL_COMMISSION" || old.personalCommissionAccountId !== accountIds[index])) {
+          throw new HttpsError("failed-precondition", "Conflicto con un destino bancario existente.");
+        }
+      }
+      if (!existingBeneficiary) tx.create(db.doc(`clientBeneficiaries/${plan.mirrorId}`), {
+        ...plan.beneficiary, createdAt: stamp(), updatedAt: stamp(),
+      });
+      if (!existingMethod) tx.create(db.doc(`clientBeneficiaryMethods/${plan.mirrorId}`), {
+        ...plan.method, createdAt: stamp(), updatedAt: stamp(),
+      });
+      else tx.update(db.doc(`clientBeneficiaryMethods/${plan.mirrorId}`), {
+        ...plan.method, updatedAt: stamp(),
+      });
+    });
     const oldVersion = Number(previous.data()?.version || 0);
     if (oldVersion !== expectedVersion) throw new HttpsError("aborted", "La configuración cambió; recarga antes de publicar.");
     const version = oldVersion + 1;
