@@ -28,11 +28,13 @@ const matching = { rootId: "r", clientId: "c", ownerUid: "u", accountId: "a",
 assert.equal(exactLink(matching), true, "exact account, client, origin, fingerprint and IQ IDs");
 for (const field of ["rootId", "clientId", "ownerUid", "accountId", "iqClientId",
   "despachoId", "accountFingerprint", "last4", "iqPartnerId", "iqBeneficiaryId",
-  "iqAccountId", "iqCredentialProfileId", "iqLinkStatus"]) {
+  "iqAccountId", "iqLinkStatus"]) {
   assert.equal(exactLink({ ...matching, link: { ...link, [field]: "WRONG" } }), false,
     "wrong IQ proof field: " + field);
 }
 assert.equal(exactLink({ ...matching, link: { ...link, iqFullDigitsMatched: false } }), false);
+assert.equal(exactLink({ ...matching, link: { ...link, iqCredentialProfileId: "" } }), false);
+assert.equal(exactLink({ ...matching, link: { ...link, iqAccountId: "9007199254740993" } }), false);
 assert.equal(exactLink({ ...matching, account: { ...account, active: false } }), false);
 assert.equal(exactLink({ ...matching, account: { ...account, ownerUid: "other" } }), false);
 assert.equal(exactLink({ ...matching, clientIqId: "" }), false);

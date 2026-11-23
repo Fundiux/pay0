@@ -39,6 +39,7 @@ export function hasExactPersonalCommissionIqLink(input: {
     link.ownerUid === ownerUid && link.accountId === accountId &&
     link.accountFingerprint === account.instrumentFingerprint && link.last4 === account.last4 &&
     String(link.iqClientId || "") === clientIqId && String(link.despachoId || "") === despachoId &&
-    Boolean(link.iqPartnerId) && Boolean(link.iqBeneficiaryId) &&
-    Boolean(link.iqAccountId) && Boolean(link.iqCredentialProfileId);
+    [link.iqPartnerId, link.iqBeneficiaryId, link.iqAccountId].every(value =>
+      /^[1-9]\d*$/.test(String(value ?? "")) && Number.isSafeInteger(Number(value))) &&
+    Boolean(link.iqCredentialProfileId);
 }

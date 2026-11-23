@@ -96,7 +96,7 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
         status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
         nowMs, maxAgeMs: 86400000, storedLast4: iq?.last4, currentLast4: account.last4,
       });
-      if (!link.ready || !hasExactPersonalCommissionIqLink({
+      if (!account || !iq || !link.ready || !hasExactPersonalCommissionIqLink({
         rootId: actor.rootId, clientId, ownerUid, accountId, clientIqId,
         despachoId: sourceDespachoId, account, link: iq,
       })) {
@@ -252,7 +252,7 @@ export const activateClientCommissionAllocation = onCall({ cors: true, timeoutSe
         status: iq?.iqLinkStatus, verifiedAtMs: commissionMillis(iq?.verifiedAt),
         nowMs, maxAgeMs: 86400000, storedLast4: iq?.last4, currentLast4: account?.last4,
       });
-      if (!check.ready || !hasExactPersonalCommissionIqLink({
+      if (!account || !iq || !check.ready || !hasExactPersonalCommissionIqLink({
         rootId: actor.rootId, clientId, ownerUid, accountId: safeId(item.accountId), clientIqId,
         despachoId: String(item.despachoId || ""), account, link: iq,
       }) || account.instrumentFingerprint !== item.fingerprint ||
