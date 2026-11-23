@@ -1,3 +1,21 @@
+/** Resolve IQ origin strictly from the immutable posted-payment snapshot.
+ * A mutable payment-level despacho cannot override the recorded financial origin.
+ * Return null for missing, cross-client or contradictory evidence.
+ */
+export function postedClientIqOrigin(input: {
+  rootId: string; clientId: string; paymentId: string; payment: any; snapshot: any;
+}): string | null {
+  const { rootId, clientId, paymentId, payment, snapshot } = input;
+  if (!rootId || !clientId || !paymentId || !payment || !snapshot ||
+      payment.rootId !== rootId || snapshot.rootId !== rootId ||
+      String(payment.clienteId || payment.clientId || "") !== clientId ||
+      snapshot.clienteId !== clientId || snapshot.pagoId !== paymentId ||
+      String(snapshot.currency || payment.moneda || "MXN").toUpperCase() !== "MXN") return null;
+  const despachoId = String(snapshot.despachoId || "").trim();
+  const paymentDespachoId = String(payment.despachoId || "").trim();
+  return despachoId && (!paymentDespachoId || paymentDespachoId === despachoId) ? despachoId : null;
+}
+
 /**
  * Derive a preview-only contractual basis from an immutable posted financial snapshot.
  * Never infer an amount from user input, a current client price, or a new ledger credit.
