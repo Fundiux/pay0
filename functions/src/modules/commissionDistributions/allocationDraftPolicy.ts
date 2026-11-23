@@ -12,13 +12,14 @@ export function commissionAccountOptions(
   accounts: PersonalCommissionAccount[],
   owner: { rootId: string; ownerUid: string },
 ) {
-  // Never expose account.instrumentNumber through the client-facing options.
+  // Full numbers are returned ONLY after server-side authorization for this owner/root.
   return accounts
     .filter(account => account.rootId === owner.rootId && account.ownerUid === owner.ownerUid && account.active)
     .map(account => ({
       id: account.id,
       bankName: account.bankName,
-      masked: "••" + account.instrumentNumber.slice(-4),
+      instrumentNumber: account.instrumentNumber,
+      beneficiaryName: account.beneficiaryName,
       iqLinkStatus: account.iqLinkStatus,
       selectable: account.iqLinkStatus === "VERIFIED",
       reason: account.iqLinkStatus === "VERIFIED" ? null : "Cuenta pendiente de verificación IQ",
