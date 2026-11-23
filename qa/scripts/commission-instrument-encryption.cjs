@@ -5,7 +5,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../functions/src/modules
 const module = { exports: {} };
 const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
 vm.runInNewContext(output, { module, exports: module.exports, require, Buffer, Error, String, JSON });
-const { encryptCommissionInstrument, decryptCommissionInstrument } = module.exports;
+const { encryptCommissionInstrument, decryptCommissionInstrument, fingerprintCommissionInstrument } = module.exports;
 const keyBase64 = require("node:crypto").randomBytes(32).toString("base64");
 const input = { number: "123456789012345678", rootId: "root", ownerUid: "owner", accountId: "account", keyBase64, keyVersion: "v1" };
 const encrypted = encryptCommissionInstrument(input);
@@ -16,4 +16,11 @@ assert.equal(decryptCommissionInstrument({ encrypted, rootId: input.rootId, owne
 assert.throws(() => decryptCommissionInstrument({ encrypted, rootId: input.rootId, ownerUid: "other", accountId: input.accountId, keyBase64 }));
 assert.throws(() => decryptCommissionInstrument({ encrypted: { ...encrypted, ciphertext: "AA==" }, rootId: input.rootId, ownerUid: input.ownerUid, accountId: input.accountId, keyBase64 }));
 assert.throws(() => encryptCommissionInstrument({ ...input, keyBase64: "invalid" }));
+const fp = fingerprintCommissionInstrument({ ...input, instrumentType: "CLABE" });
+assert.match(fp, /^[a-f0-9]{64}$/);
+assert.equal(fp, fingerprintCommissionInstrument({ ...input, instrumentType: "CLABE" }));
+assert.notEqual(fp, fingerprintCommissionInstrument({ ...input, instrumentType: "CLABE", number: "999999999999995678" }));
+assert.notEqual(fp, fingerprintCommissionInstrument({ ...input, instrumentType: "CLABE", ownerUid: "other" }));
+assert.notEqual(fp, fingerprintCommissionInstrument({ ...input, instrumentType: "CARD" }));
+assert.throws(() => fingerprintCommissionInstrument({ ...input, instrumentType: "CLABE", number: "invalid" }));
 console.log("Commission instrument encryption tests passed.");
