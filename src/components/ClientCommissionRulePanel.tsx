@@ -67,7 +67,7 @@ export default function ClientCommissionRulePanel({ clientId, rootId, canEdit, c
     <div className={`mt-3 text-sm ${assignedBps === totalBps ? "text-emerald-300" : "text-amber-300"}`}>Asignado {(assignedBps / 100).toFixed(2)}% · Disponible {((totalBps - assignedBps) / 100).toFixed(2)}%</div>
     {canEdit && <div className="mt-4 flex flex-wrap items-center gap-3"><button onClick={() => setLegs((rows) => [...rows, emptyLeg()])} className="rounded-lg border border-white/10 px-3 py-2 text-sm">Agregar destino</button><label className="text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="mr-2" />Regla activa</label><label className="text-sm"><input type="checkbox" checked={automationEnabled} onChange={(e) => setAutomationEnabled(e.target.checked)} className="mr-2" />Automatización activa</label><button disabled={saving || assignedBps !== totalBps} onClick={save} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{saving ? "Guardando…" : "Guardar regla"}</button></div>}
     {message && <p className="mt-3 text-sm text-slate-300">{message}</p>}
-    <ClientPersonalCommissionDrafts clientId={clientId} />
+    <ClientPersonalCommissionDrafts clientId={clientId} referencePaymentId={referencePaymentId} />
     <CommissionUserAssignments clientId={clientId} methods={methods} referencePaymentId={referencePaymentId} />
   </section>;
 }
