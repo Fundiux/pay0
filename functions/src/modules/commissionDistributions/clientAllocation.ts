@@ -52,7 +52,7 @@ export function calculateClientCommissionInstructions(input: ClientCommissionCal
   });
   const pointsTotal = rows.reduce((sum, row) => sum + (row.pointsBps || 0), 0);
   if (pointsTotal > 0 && (input.contractRateBps == null || pointsTotal > input.contractRateBps)) throw new Error("La suma de puntos supera la tasa contractual.");
-  const exactTotal = rows.reduce((sum, row) => sum + BigInt(row.amountMinor) * BigInt(10000) + row.residue, 0n);
+  const exactTotal = rows.reduce((sum, row) => sum + BigInt(row.amountMinor) * BigInt(10000) + row.residue, BigInt(0));
   const target = Number((exactTotal + BigInt(5000)) / BigInt(10000));
   if (!Number.isSafeInteger(target) || target > earnedMinor) throw new Error("La distribución supera la comisión ganada.");
   let remainingCents = target - rows.reduce((sum, row) => sum + row.amountMinor, 0);
