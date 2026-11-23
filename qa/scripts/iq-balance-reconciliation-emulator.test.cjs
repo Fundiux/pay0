@@ -125,7 +125,81 @@ const call = (uid, data = {}) => getIqBalanceComparison.run({ auth: { uid, token
   await assert.rejects(call(operador), error => error.code === "permission-denied", "operador no ve saldos de socios");
   await assert.rejects(getIqBalanceComparison.run({ data: {}, rawRequest: {} }), error => error.code === "unauthenticated");
 
+  // Exceptional balance adjustment: superadmin only, written reason, bounded by the difference, audited, switchable off.
+  const { adjustClientBalanceFromComparison, setIqBalanceAdjustmentsEnabled } = require("../../functions/lib/modules/iqBalanceReconciliation/adjustment.js");
+  const adjust = (uid, data) => adjustClientBalanceFromComparison.run({ auth: { uid, token: {} }, data, rawRequest: {} });
+  const reasonText = "Cuadre inicial de migración: el depósito se registró en IQ antes de que PAY0 pudiera recibirlo.";
+  const rowByName = (response, name) => response.rows.find(row => row.clientName === name);
+  const c2Key = rowByName(asSuper, "Cliente Dos").rowKey;
+  const failsWith = (promise, code) => assert.rejects(promise, error => error.code === code, code);
+
+  await failsWith(adjust(adminA, { rowKey: c2Key, amount: 50, reason: reasonText, idempotencyKey: "adj-key-0001" }), "permission-denied");
+  await failsWith(adjust(operador, { rowKey: c2Key, amount: 50, reason: reasonText, idempotencyKey: "adj-key-0001" }), "permission-denied");
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 50, reason: "corto", idempotencyKey: "adj-key-0001" }), "invalid-argument");
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 50, reason: reasonText, idempotencyKey: "x" }), "invalid-argument");
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 60, reason: reasonText, idempotencyKey: "adj-key-0002" }), "failed-precondition"); // more than the difference
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 0, reason: reasonText, idempotencyKey: "adj-key-0002" }), "failed-precondition");
+  await failsWith(adjust(superUid, { rowKey: rowByName(asSuper, "Cliente Uno").rowKey, amount: 1, reason: reasonText, idempotencyKey: "adj-key-0003" }), "failed-precondition"); // already matches
+  await failsWith(adjust(superUid, { rowKey: rowByName(asSuper, "Cliente Tres").rowKey, amount: 20, reason: reasonText, idempotencyKey: "adj-key-0004" }), "failed-precondition"); // IQ has no row
+  await failsWith(adjust(superUid, { rowKey: rowByName(asSuper, "SIN VINCULO SA").rowKey, amount: 5, reason: reasonText, idempotencyKey: "adj-key-0005" }), "failed-precondition"); // not linked to a PAY0 client
+  await failsWith(adjust(superUid, { rowKey: "no-such-row", amount: 5, reason: reasonText, idempotencyKey: "adj-key-0006" }), "not-found");
+  assert.equal((await db.doc("balanceAccounts/CLIENT_c2").get()).data().availableBalance, 500, "nothing changed while every request was refused");
+
+  const done = await adjust(superUid, { rowKey: c2Key, amount: 50, reason: reasonText, idempotencyKey: "adj-key-0007" });
+  assert.deepEqual({ before: done.beforeBalance, after: done.afterBalance, status: done.status }, { before: 500, after: 450, status: "MATCH" });
+  const account = (await db.doc("balanceAccounts/CLIENT_c2").get()).data();
+  assert.equal(account.availableBalance, 450); assert.equal(account.totalAdjusted, 50);
+  const adjustmentMovements = async () => (await db.collection("balanceMovements").where("holderId", "==", "c2").get()).docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(row => row.movementSubType === "AJUSTE_EXCEPCIONAL_MIGRACION");
+  const movement = (await adjustmentMovements())[0];
+  assert.equal(movement.movementType, "AJUSTE_MANUAL"); assert.equal(movement.direction, "OUT"); assert.equal(movement.amount, 50);
+  assert.equal(movement.beforeBalance, 500); assert.equal(movement.afterBalance, 450); assert.equal(movement.createdBy, superUid); assert.equal(movement.isSystemGenerated, false);
+  assert.match(movement.note, /no estaba listo/); assert.ok(movement.note.includes(reasonText));
+  const logRow = (await db.collection("pay0ActivityLog").where("referenceId", "==", done.movementId).get()).docs.map(doc => doc.data()).find(row => row.event === "AJUSTE_MANUAL_APLICADO");
+  assert.ok(logRow, "the adjustment is in the activity log");
+  assert.ok(logRow.description.includes(reasonText), "the typed reason is in the log");
+  assert.match(logRow.description, /Autorizado por el superadmin DUENO/); assert.match(logRow.description, /no estaba listo para registrar esta operación/);
+  assert.equal(logRow.actorRole, "superadmin");
+
+  const afterAdjust = await call(superUid);
+  assert.equal(rowByName(afterAdjust, "Cliente Dos").status, "MATCH", "the comparison row follows the new balance");
+  assert.equal(rowByName(afterAdjust, "Cliente Dos").pay0Balance, 450);
+
+  // The same request twice moves the money once; a second adjustment on a client that now matches is refused.
+  const repeated = await adjust(superUid, { rowKey: c2Key, amount: 50, reason: reasonText, idempotencyKey: "adj-key-0007" });
+  assert.equal(repeated.movementId, done.movementId); assert.equal((await adjustmentMovements()).length, 1);
+  assert.equal((await db.doc("balanceAccounts/CLIENT_c2").get()).data().availableBalance, 450);
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 10, reason: reasonText, idempotencyKey: "adj-key-0008" }), "failed-precondition");
+
+  // The balance moved after the comparison was taken: the adjustment is refused and nothing changes.
+  const c2Snapshot = (await db.collection("iqBalanceSnapshots").where("rootId", "==", rootId).where("runId", "==", summary.runId).get()).docs.find(doc => doc.data().clientId === "c2");
+  await c2Snapshot.ref.set({ pay0Balance: 470, iqBalance: 450 }, { merge: true });
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 20, reason: reasonText, idempotencyKey: "adj-key-0009" }), "failed-precondition");
+  assert.equal((await db.doc("balanceAccounts/CLIENT_c2").get()).data().availableBalance, 450);
+
+  // IQ above PAY0 is an IN, never more than the difference.
+  await c2Snapshot.ref.set({ pay0Balance: 450, iqBalance: 460, status: "DIFFERENT" }, { merge: true });
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 10.01, reason: reasonText, idempotencyKey: "adj-key-0010" }), "failed-precondition");
+  const incoming = await adjust(superUid, { rowKey: c2Key, amount: 10, reason: reasonText, idempotencyKey: "adj-key-0011" });
+  assert.equal(incoming.afterBalance, 460);
+  assert.equal((await adjustmentMovements()).filter(row => row.direction === "IN").length, 1);
+
+  // The switch: off means no adjustment at all; only the superadmin can change it; it is audited.
+  await c2Snapshot.ref.set({ pay0Balance: 460, iqBalance: 480, status: "DIFFERENT" }, { merge: true });
+  await assert.rejects(setIqBalanceAdjustmentsEnabled.run({ auth: { uid: adminA, token: {} }, data: { enabled: false }, rawRequest: {} }), error => error.code === "permission-denied");
+  await assert.rejects(setIqBalanceAdjustmentsEnabled.run({ auth: { uid: superUid, token: {} }, data: { enabled: "no" }, rawRequest: {} }), error => error.code === "invalid-argument");
+  assert.equal((await call(superUid)).adjustmentsEnabled, true, "enabled by default");
+  assert.equal((await call(adminA)).adjustmentsEnabled, false, "a partner never sees the switch on");
+  await setIqBalanceAdjustmentsEnabled.run({ auth: { uid: superUid, token: {} }, data: { enabled: false }, rawRequest: {} });
+  assert.equal((await call(superUid)).adjustmentsEnabled, false);
+  await failsWith(adjust(superUid, { rowKey: c2Key, amount: 20, reason: reasonText, idempotencyKey: "adj-key-0012" }), "failed-precondition");
+  assert.equal((await db.doc("balanceAccounts/CLIENT_c2").get()).data().availableBalance, 460);
+  await setIqBalanceAdjustmentsEnabled.run({ auth: { uid: superUid, token: {} }, data: { enabled: true }, rawRequest: {} });
+  const switchLog = (await db.collection("pay0ActivityLog").where("referenceId", "==", rootId).get()).docs.map(doc => doc.data().event);
+  assert.ok(switchLog.includes("AJUSTES_EXCEPCIONALES_DESACTIVADOS") && switchLog.includes("AJUSTES_EXCEPCIONALES_ACTIVADOS"), "the switch is audited");
+  assert.equal((await adjust(superUid, { rowKey: c2Key, amount: 20, reason: reasonText, idempotencyKey: "adj-key-0013" })).afterBalance, 480);
+
   // Hugo's daily summary count.
+  await c2Snapshot.ref.set({ pay0Balance: 500, iqBalance: 450, status: "DIFFERENT" }, { merge: true });
   assert.equal((await loadPendingItems(rootId)).iqBalanceDifferences, 2);
 
   // Breaker: an open circuit means IQ is not called and nothing is judged.

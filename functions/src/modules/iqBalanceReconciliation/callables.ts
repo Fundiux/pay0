@@ -4,7 +4,7 @@ import { onCall } from "firebase-functions/v2/https";
 
 import { assertAuthorized, getUserRole } from "../../utils/authGuard";
 import { getMyUser, requireAuth } from "../sharedCallables/helpers";
-import { SNAPSHOTS, STATE } from "./domain";
+import { CONFIG, SNAPSHOTS, STATE } from "./domain";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -12,7 +12,7 @@ const db = admin.firestore();
 const text = (value: unknown) => String(value ?? "").trim();
 export const NO_OWNER = "__SIN_SOCIO__";
 const CATALOG_LABEL: Record<string, string> = { "iq-group-rr": "IQ RR", "iq-group-pay0": "IQ PAY0" };
-const opaque = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
+export const opaque = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
 
 /** What the page shows: names, folios, amounts and dates. No document ids, UIDs or IQ ids. */
 function rowDto(id: string, data: Record<string, any>, ownerLabel: string | null) {
@@ -55,7 +55,8 @@ export const getIqBalanceComparison = onCall({ cors: true, region: "us-central1"
   const role = getUserRole(user);
   const rootId = text(user?.rootId) || uid;
   const state = (await db.doc(`${STATE}/${rootId}`).get()).data();
-  if (!state?.lastRunId) return { ok: true, run: null, rows: [], owners: [], isSuperadmin: role === "superadmin" };
+  const adjustmentsEnabled = role === "superadmin" ? ((await db.doc(`${CONFIG}/${rootId}`).get()).data() || {}).adjustmentsEnabled !== false : false;
+  if (!state?.lastRunId) return { ok: true, run: null, rows: [], owners: [], isSuperadmin: role === "superadmin", adjustmentsEnabled };
 
   const snap = await db.collection(SNAPSHOTS).where("rootId", "==", rootId).where("runId", "==", text(state.lastRunId)).get();
   const all = snap.docs.filter(doc => doc.data().rootId === rootId);
@@ -82,6 +83,7 @@ export const getIqBalanceComparison = onCall({ cors: true, region: "us-central1"
   return {
     ok: true,
     isSuperadmin: role === "superadmin",
+    adjustmentsEnabled,
     run: { day: text(state.lastRunDay), ranAt: state.lastRunAt?.toMillis?.() ?? null, complete: state.complete === true,
       counts: { match: count("MATCH"), different: count("DIFFERENT"), unmapped: count("UNMAPPED") } },
     rows,
