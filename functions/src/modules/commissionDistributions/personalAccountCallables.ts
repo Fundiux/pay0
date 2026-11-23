@@ -3,6 +3,9 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
 import { normalizePersonalCommissionAccount } from "./personalAccounts";
+import { encryptCommissionInstrument } from "./instrumentEncryption";
+import { defineSecret } from "firebase-functions/params";
+const ACCOUNT_KEY = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -38,7 +41,7 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
     return {
       id: doc.id, bankName: String(data.bankName || ""), beneficiaryName: String(data.beneficiaryName || ""),
       instrumentType: data.instrumentType === "CARD" ? "CARD" : "CLABE",
-      instrumentNumber: String(data.instrumentNumber || ""),
+      instrumentNumber: "••" + String(data.last4 || "").slice(-4),
       active: data.active === true, iqLinkStatus: String(data.iqLinkStatus || "PENDING"),
     };
   });
@@ -46,7 +49,7 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
 });
 
 /** Self-service account registration. New accounts remain PENDING until IQ verification. */
-export const createPersonalCommissionAccount = onCall({ cors: true }, async request => {
+export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [ACCOUNT_KEY] }, async request => {
   const actor = await commissionAccountActor(request);
   const ownerSnap = await db.doc(`users/${actor.uid}`).get();
   const owner = ownerSnap.data() || {};
@@ -69,15 +72,19 @@ export const createPersonalCommissionAccount = onCall({ cors: true }, async requ
   } catch (error: any) {
     throw new HttpsError("invalid-argument", String(error?.message || "Cuenta inválida."));
   }
+  const keyBase64 = ACCOUNT_KEY.value();
+  if (!keyBase64) throw new HttpsError("failed-precondition", "Cifrado de cuentas no configurado.");
   const collection = db.collection("personalCommissionAccounts");
   const accountRef = collection.doc();
+  const encryptedInstrument = encryptCommissionInstrument({ number: account.instrumentNumber, rootId: actor.rootId, ownerUid: actor.uid, accountId: accountRef.id, keyBase64, keyVersion: "v1" });
+  const last4 = account.instrumentNumber.slice(-4);
   await db.runTransaction(async tx => {
     const existing = await tx.get(collection.where("rootId", "==", actor.rootId).where("ownerUid", "==", actor.uid).limit(50));
     if (existing.size >= 50) throw new HttpsError("resource-exhausted", "Límite de 50 cuentas.");
-    if (existing.docs.some(doc => doc.data().instrumentNumber === account.instrumentNumber && doc.data().instrumentType === account.instrumentType && doc.data().active !== false)) {
+    if (existing.docs.some(doc => doc.data().last4 === last4 && doc.data().instrumentType === account.instrumentType && doc.data().active !== false)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     }
-    tx.create(accountRef, { ...account, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: admin.firestore.FieldValue.serverTimestamp() });
   });
   return { ok: true, accountId: accountRef.id, iqLinkStatus: "PENDING" };
