@@ -4,7 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { calculateClientCommissionInstructions, type ClientCommissionInstruction } from "./clientAllocation";
 import { canonicalUserCommission, evaluateIqLink, isPostedCommissionPayment } from "./domain";
 import { personalCommissionIqLinkId } from "./personalAllocationMirror";
-import { postedClientOperationBaseMinor } from "./postedClientAllocationPreview";
+import { postedClientOperationBaseMinor, postedClientIqOrigin, hasExactPublishedPersonalCommissionDestination } from "./postedClientAllocationPreview";
 import { commissionAccountActor, commissionConfigurationAt, commissionMillis, commissionSettingsId } from "./userDestinations";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -50,6 +50,10 @@ export const materializePostedClientCommissionAllocation = onCall({ cors: true, 
       snapshot.pagoId !== paymentId || String(snapshot.currency || payment.moneda || "MXN") !== "MXN") {
     throw new HttpsError("failed-precondition", "Snapshot financiero inválido para MXN.");
   }
+  const sourceDespachoId = postedClientIqOrigin({ rootId: actor.rootId, clientId, paymentId, payment, snapshot });
+  if (!sourceDespachoId) {
+    throw new HttpsError("failed-precondition", "El origen IQ contradice el registro financiero del pago.");
+  }
   const postedAtMs = commissionMillis(snapshot.createdAt);
   if (!(postedAtMs > 0)) throw new HttpsError("failed-precondition", "No hay fecha de contabilización.");
   const key = commissionSettingsId(actor.rootId, clientId, ownerUid);
@@ -90,6 +94,8 @@ export const materializePostedClientCommissionAllocation = onCall({ cors: true, 
     if (!currentPayment.exists || !isPostedCommissionPayment(currentPayment.data()) ||
         currentPayment.data()?.financialSnapshotId !== snapshotId ||
         currentSnapshot.data()?.pagoId !== paymentId ||
+        !postedClientIqOrigin({ rootId: actor.rootId, clientId, paymentId,
+          payment: currentPayment.data(), snapshot: currentSnapshot.data() }) ||
         canonicalUserCommission(currentSnapshot.data(), ownerUid).earnedMinor !== earning.earnedMinor) {
       throw new HttpsError("aborted", "La contabilización cambió durante el cálculo.");
     }
@@ -109,10 +115,12 @@ export const materializePostedClientCommissionAllocation = onCall({ cors: true, 
         nowMs: now, maxAgeMs: 86400000, storedLast4: iq.last4, currentLast4: account.last4 });
       if (!link.ready) throw new HttpsError("failed-precondition", "Vínculo IQ caducado o alterado.");
       const publishedDestination = (rule.destinations || []).find((d: any) => d.accountId === accountSnap.id);
-      if (!publishedDestination || publishedDestination.fingerprint !== account.instrumentFingerprint ||
-          String(publishedDestination.iqBeneficiaryId) !== String(iq.iqBeneficiaryId) ||
-          String(publishedDestination.iqAccountId) !== String(iq.iqAccountId)) {
-        throw new HttpsError("failed-precondition", "Destino distinto del registrado al publicar la regla.");
+      if (!hasExactPublishedPersonalCommissionDestination({
+        rootId: actor.rootId, clientId, ownerUid, accountId: accountSnap.id,
+        clientIqId, despachoId: sourceDespachoId, account, link: iq,
+        published: publishedDestination,
+      })) {
+        throw new HttpsError("failed-precondition", "La evidencia completa de IQ no coincide con el destino publicado.");
       }
       return {
         accountId: accountSnap.id, instrumentMasked: "••" + String(account.last4 || ""),

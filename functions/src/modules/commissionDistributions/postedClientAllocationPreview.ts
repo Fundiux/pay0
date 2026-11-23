@@ -61,3 +61,24 @@ export function hasExactPersonalCommissionIqLink(input: {
       /^[1-9]\d*$/.test(String(value ?? "")) && Number.isSafeInteger(Number(value))) &&
     Boolean(link.iqCredentialProfileId);
 }
+
+/** Require the full published account and IQ identity for historical snapshots.
+ * Callers must additionally enforce 24h IQ verification freshness.
+ */
+export function hasExactPublishedPersonalCommissionDestination(input: {
+  rootId: string; clientId: string; ownerUid: string; accountId: string;
+  clientIqId: string; despachoId: string; account: any; link: any; published: any;
+}): boolean {
+  const { accountId, account, link, published, clientIqId, despachoId } = input;
+  if (!hasExactPersonalCommissionIqLink(input) || !published) return false;
+  return published.accountId === accountId &&
+    published.fingerprint === account.instrumentFingerprint &&
+    published.last4 === account.last4 &&
+    String(published.iqClientId || "") === clientIqId &&
+    String(published.despachoId || "") === despachoId &&
+    String(published.iqPartnerId || "") === String(link.iqPartnerId) &&
+    String(published.iqBeneficiaryId || "") === String(link.iqBeneficiaryId) &&
+    String(published.iqAccountId || "") === String(link.iqAccountId) &&
+    String(published.iqCredentialProfileId || "") === String(link.iqCredentialProfileId) &&
+    Boolean(published.methodId && published.beneficiaryId);
+}

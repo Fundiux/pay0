@@ -8,7 +8,7 @@ const moduleExports = {};
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 vm.runInNewContext(compiled, { exports: moduleExports, Number, String, Error });
 const { postedClientOperationBaseMinor: basis, hasExactPersonalCommissionIqLink: exactLink,
-  postedClientIqOrigin: iqOrigin } = moduleExports;
+  postedClientIqOrigin: iqOrigin, hasExactPublishedPersonalCommissionDestination: publishedExact } = moduleExports;
 const payment = { rootId: "r", clientId: "c", financialSnapshotId: "s", moneda: "MXN", despachoId: "d" };
 const snapshot = { rootId: "r", clienteId: "c", pagoId: "p", currency: "MXN", despachoId: "d" };
 const origin = { rootId: "r", clientId: "c", paymentId: "p", payment, snapshot };
@@ -56,4 +56,20 @@ assert.equal(exactLink({ ...matching, account: { ...account, ownerUid: "other" }
 assert.equal(exactLink({ ...matching, clientIqId: "" }), false);
 assert.equal(exactLink({ ...matching, despachoId: "" }), false);
 assert.equal(exactLink({ ...matching, link: undefined }), false);
-console.log("Posted basis + exact client-scoped IQ identity tests passed (no external calls).");
+const published = {
+  accountId: "a", methodId: "m", beneficiaryId: "b", fingerprint: "HMAC-1", last4: "1234",
+  iqClientId: "101", despachoId: "d", iqPartnerId: "201",
+  iqBeneficiaryId: "301", iqAccountId: "401", iqCredentialProfileId: "p",
+};
+const proof = { ...matching, published };
+assert.equal(publishedExact(proof), true, "same full IQ and published identity");
+for (const field of ["accountId", "fingerprint", "last4", "iqClientId", "despachoId",
+  "iqPartnerId", "iqBeneficiaryId", "iqAccountId", "iqCredentialProfileId", "methodId", "beneficiaryId"]) {
+  assert.equal(publishedExact({ ...proof, published: { ...published, [field]: "" } }), false,
+    "altered publication must be blocked: " + field);
+}
+assert.equal(publishedExact({ ...proof, link: { ...link, iqFullDigitsMatched: false } }), false);
+assert.equal(publishedExact({ ...proof, link: { ...link, iqCredentialProfileId: "other" } }), false);
+assert.equal(publishedExact({ ...proof, account: { ...account, instrumentFingerprint: "HMAC-2" } }), false,
+  "same-last-four reverified bank number must not inherit old proof");
+console.log("Posted basis + exact client-scoped IQ identity and published snapshot tests passed (no external calls).");
