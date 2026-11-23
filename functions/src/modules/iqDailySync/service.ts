@@ -10,7 +10,8 @@ import { discoverServerPlan, type DiscoveryBudget } from "../iqHistoricalImport/
 import { actionEligibility, type P4ActionProgress } from "../iqHistoricalImport/phasedExecution";
 import { buildServerPlan, P4_PLAN_GROUPS } from "../iqHistoricalImport/planner";
 import { executeAction, markDailySyncManifest, persistDailySyncManifest, type Context } from "../iqHistoricalImport/service";
-import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, type DailyReview } from "./domain";
+import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, widenWindowForOpenReviews, type DailyReview } from "./domain";
+import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDisplay";
 import { detectIqDispersions } from "./dispersions";
 
 /**
@@ -147,6 +148,7 @@ async function resolvePostedPaymentReviews(rootId: string) {
 async function syncGroup(ctx: Context, groupId: string, window: { start: string; end: string; timezone: "America/Mexico_City" }, tracker: Tracker, secret: string): Promise<GroupResult> {
   const result: GroupResult = { groupId, status: "COMPLETE", stopReason: null, layers: 0, created: {}, noop: 0, failed: 0, reviewsOpen: 0, reviewsNew: 0, reviewsResolved: 0, dispersionsObserved: 0, dispersionsMissing: 0 };
   let finalManifest: P4Manifest | null = null;
+  const displayIndex = new Map<string, ReviewDisplay>();
   const failures: DailyReview[] = [], extraReviews: DailyReview[] = [], extraResolved: Array<{ entityType: string; iqEntityId: string }> = [];
   for (let layer = 0; layer < tracker.budget.maxLayers; layer++) {
     if (exhausted(tracker)) { result.status = "PARTIAL"; result.stopReason = "RUN_BUDGET"; break; }
@@ -154,6 +156,7 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     const planningBudget: DiscoveryBudget = { maxPages: tracker.budget.maxPlanningPages, maxRecords: tracker.budget.maxPlanningRecords, maxFirestoreReads: tracker.budget.maxFirestoreReads, maxDurationMs: remainingMs(tracker) };
     const discovered = await discoverServerPlan({ rootId: ctx.rootId, groupIds: [groupId], range: window, secret, budget: planningBudget });
     if (discovered.partial) { result.status = "PARTIAL"; result.stopReason = "PLAN_BUDGET"; finalManifest = null; break; }
+    for (const row of discovered.iqRows) displayIndex.set(`${row.kind}:${row.id}`, displayFromIqRow(row.kind, row.raw));
     const { manifest, summary } = buildServerPlan({ rootId: ctx.rootId, range: window, groupIds: [groupId], iqRows: discovered.iqRows, pay0Rows: discovered.pay0Rows, tombstones: discovered.tombstones });
     const safe = applyDailySyncSafety(manifest, discovered.pay0Rows);
     finalManifest = safe.manifest;
@@ -171,13 +174,13 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     if (!executed.clientsCreated) break;
   }
   if (finalManifest && result.status === "COMPLETE") {
-    const reviews = [...reviewItems(finalManifest).filter(review => !extraResolved.some(row => row.entityType === review.entityType && row.iqEntityId === review.iqEntityId)), ...failures, ...extraReviews];
+    const reviews = attachDisplay([...reviewItems(finalManifest).filter(review => !extraResolved.some(row => row.entityType === review.entityType && row.iqEntityId === review.iqEntityId)), ...failures, ...extraReviews], displayIndex);
     const resolved = [...resolvedEntities(finalManifest), ...extraResolved];
     const written = await upsertReviews(ctx.rootId, groupId, window, reviews, resolved);
     result.reviewsNew += written.reviewsNew; result.reviewsResolved += written.reviewsResolved; result.reviewsOpen += reviews.length;
   } else if (failures.length || extraReviews.length) {
     // A partial run still records its failures and the wallet follow-ups of what it created.
-    const written = await upsertReviews(ctx.rootId, groupId, window, [...failures, ...extraReviews], extraResolved);
+    const written = await upsertReviews(ctx.rootId, groupId, window, attachDisplay([...failures, ...extraReviews], displayIndex), extraResolved);
     result.reviewsNew += written.reviewsNew; result.reviewsResolved += written.reviewsResolved; result.reviewsOpen += failures.length + extraReviews.length;
   }
   if (!exhausted(tracker)) {
@@ -185,7 +188,7 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     const missing = detection.observed.filter(row => !row.inPay0);
     result.dispersionsObserved = detection.observed.length; result.dispersionsMissing = missing.length;
     const written = await upsertReviews(ctx.rootId, groupId, window,
-      missing.map(row => ({ entityType: "DISPERSION", iqEntityId: row.iqDispersionId, canonicalGroupId: groupId, code: "IQ_DISPERSION_NOT_IN_PAY0", detail: "Dispersión registrada directamente en IQ sin dispersión equivalente en PAY0.", evidence: { date: row.date, amount: row.amount, operationStatus: row.operationStatus, observedThroughProfileId: row.profileId } })),
+      missing.map(row => ({ entityType: "DISPERSION", iqEntityId: row.iqDispersionId, canonicalGroupId: groupId, code: "IQ_DISPERSION_NOT_IN_PAY0", detail: "Dispersión registrada directamente en IQ sin dispersión equivalente en PAY0.", evidence: { date: row.date, amount: row.amount, operationStatus: row.operationStatus, observedThroughProfileId: row.profileId, display: row.display } })),
       detection.observed.filter(row => row.inPay0).map(row => ({ entityType: "DISPERSION", iqEntityId: row.iqDispersionId })));
     result.reviewsNew += written.reviewsNew; result.reviewsResolved += written.reviewsResolved; result.reviewsOpen += missing.length;
     if (detection.truncated && result.status === "COMPLETE") { result.status = "PARTIAL"; result.stopReason = "DISPERSION_PAGE_BUDGET"; }
@@ -203,6 +206,18 @@ async function publishIncident(rootId: string) {
   await ref.set({ source: "iqDailySyncReviews", entityId: "IQ_DAILY_SYNC", solicitudId: "", kind: "IQ_DAILY_SYNC_REVIEW", status: "NEEDS_REVIEW", lastErrorCode: topCode,
     openCount: open.size, openCountTruncated: open.size >= 2000, countsByCode, title: "Sincronización diaria IQ: operaciones por revisar", updatedAt: FieldValue.serverTimestamp() });
   return { openCount: open.size, countsByCode };
+}
+
+/** Oldest day an open review refers to (its operation date, else the first window that saw it). */
+async function oldestOpenReviewDate(rootId: string): Promise<string | null> {
+  const open = await db().collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").limit(2000).get();
+  let oldest: string | null = null;
+  for (const doc of open.docs) {
+    const candidates = [text(doc.get("evidence.display.date")), text(doc.get("evidence.date")), text(doc.get("lastSeenWindow.start"))].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
+    const date = candidates.sort()[0];
+    if (date && (!oldest || date < oldest)) oldest = date;
+  }
+  return oldest;
 }
 
 async function acquireLease(rootId: string, now: number) {
@@ -229,7 +244,7 @@ export async function runIqDailySyncForRoot(input: { rootId: string; secret: str
   const runKey = text(input.runKey) || `${mexicoDate(now)}-${Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Mexico_City", hour: "numeric", hourCycle: "h23" }).format(now)) < 12 ? "AM" : "PM"}`;
   const lease = await acquireLease(rootId, Date.now());
   if (!lease) return { rootId, status: "BUSY", window: null, groups: [], safety: "LEASE_HELD" };
-  const window = dailyWindow(now, text(lease.state.lastCompletedDate) || null);
+  const window = widenWindowForOpenReviews(dailyWindow(now, text(lease.state.lastCompletedDate) || null), await oldestOpenReviewDate(rootId).catch(() => null), now);
   const tracker: Tracker = { started: Date.now(), writes: 0, errors: 0, budget: { ...DEFAULT_DAILY_SYNC_BUDGET, ...(input.budget || {}) } };
   const ctx: Context = { uid: IQ_DAILY_SYNC_ACTOR_UID, rootId };
   const groups: GroupResult[] = [], runDoc = db().collection("iqDailySyncRuns").doc(`iqds_${deterministicId(rootId, runKey).slice(0, 24)}`);

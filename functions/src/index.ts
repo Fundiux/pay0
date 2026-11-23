@@ -255,6 +255,7 @@ export { saveHugoVoiceHistory, getHugoVoiceSession, listHugoVoiceActivity } from
 export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./modules/agent007/reconciliationMaintenance";
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { runIqDailyReverseSync } from "./modules/iqDailySync/service";
+export { listIqDailySyncReviews } from "./modules/iqDailySync/reviewsCallable";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";
