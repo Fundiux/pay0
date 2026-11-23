@@ -124,7 +124,7 @@ export async function reserveUserCommissionWithdrawal(input: { distributionId: s
         });
         if (!account || account.rootId !== input.rootId || account.ownerUid !== input.ownerUid ||
             account.active !== true || account.instrumentFingerprint !== leg.instrumentFingerprint ||
-            !freshness.ready || !iq || iq.accountFingerprint !== account.instrumentFingerprint ||
+            !freshness.ready || !iq || iq.iqFullDigitsMatched !== true || iq.accountFingerprint !== account.instrumentFingerprint ||
             iq.ownerUid !== input.ownerUid || iq.clientId !== clientId ||
             text(iq.despachoId) !== text(snapshot.despachoId) ||
             text(iq.iqClientId) !== text(client.iqLink?.clientId || client.iqClientId) ||
