@@ -97,7 +97,7 @@ export const publishClientCommissionAllocation = onCall({ cors: true, timeoutSec
       });
       if (!link.ready || !iq || iq.rootId !== actor.rootId || iq.clientId !== clientId ||
           iq.ownerUid !== ownerUid || iq.accountId !== accountId ||
-          iq.accountFingerprint !== account.instrumentFingerprint ||
+          iq.accountFingerprint !== account.instrumentFingerprint || iq.iqFullDigitsMatched !== true ||
           String(iq.iqClientId || "") !== clientIqId || !iq.iqPartnerId ||
           !iq.iqBeneficiaryId || !iq.iqAccountId || !iq.iqCredentialProfileId) {
         throw new HttpsError("failed-precondition", "La cuenta requiere verificación exacta y vigente en IQ para este cliente.");
@@ -254,7 +254,7 @@ export const activateClientCommissionAllocation = onCall({ cors: true, timeoutSe
       });
       if (!account || account.rootId !== actor.rootId || account.ownerUid !== ownerUid ||
           account.active !== true || account.instrumentFingerprint !== item.fingerprint ||
-          !check.ready || !iq || iq.accountFingerprint !== item.fingerprint ||
+          !check.ready || !iq || iq.iqFullDigitsMatched !== true || iq.accountFingerprint !== item.fingerprint ||
           iq.iqClientId !== clientIqId || iq.iqAccountId !== item.iqAccountId ||
           iq.iqBeneficiaryId !== item.iqBeneficiaryId ||
           iq.iqPartnerId !== item.iqPartnerId || !iq.iqCredentialProfileId) {
