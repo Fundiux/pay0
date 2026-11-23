@@ -724,6 +724,18 @@
     {
       "commit": "8567a955",
       "capability": "Con version fijada de WhatsApp Web, Hugo limpia la cache Service Worker antes de arrancar"
+    },
+    {
+      "commit": "72501968",
+      "capability": "Con version fijada de WhatsApp Web, Chrome ignora el Service Worker del perfil para cargar la version fijada"
+    },
+    {
+      "commit": "2fe9bf6f",
+      "capability": "PR 43: cuentas personales cifradas de comisiones y asignacion por cliente (12 callables)"
+    },
+    {
+      "commit": "3dcb0199",
+      "capability": "resolvePersonalCommissionAccountIq declara una sola vez el secreto de credenciales IQ"
     }
   ],
   "requiredText": [
