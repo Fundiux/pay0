@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/lib/firebaseClient";
 
 type Account = { id: string; bankName: string; beneficiaryName: string; instrumentType: "CLABE" | "CARD"; instrumentNumber: string; active: boolean; iqLinkStatus: string };
 const inputStyle = "w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-sm";
@@ -13,7 +14,7 @@ export default function PersonalCommissionAccounts() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   async function refresh() {
-    const result = await httpsCallable<{}, { accounts: Account[] }>(getFunctions(), "listPersonalCommissionAccounts")({});
+    const result = await httpsCallable<{}, { accounts: Account[] }>(functions, "listPersonalCommissionAccounts")({});
     setAccounts(result.data.accounts || []);
   }
   useEffect(() => { void refresh().catch(() => setMessage("No fue posible consultar tus cuentas.")); }, []);
@@ -21,7 +22,7 @@ export default function PersonalCommissionAccounts() {
     if (busy) return;
     setBusy(true); setMessage("");
     try {
-      await httpsCallable(getFunctions(), "createPersonalCommissionAccount")({ bankName, beneficiaryName, instrumentType, instrumentNumber });
+      await httpsCallable(functions, "createPersonalCommissionAccount")({ bankName, beneficiaryName, instrumentType, instrumentNumber });
       setInstrumentNumber("");
       await refresh();
       setMessage("Cuenta registrada. Queda pendiente de validación IQ antes de poder dispersar.");
