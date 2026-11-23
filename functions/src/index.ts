@@ -279,4 +279,4 @@ export { getWhatsAppAgentReplyConfig, setWhatsAppAgentReplyConfig } from "./modu
 export { processWhatsAppGroupReplies } from "./modules/whatsappAutoReply/runner";
 export { setWhatsAppGroupAgentMode, getWhatsAppAgentReplyMetrics, markWhatsAppReplyCorrection } from "./modules/whatsappAutoReply/modeCallables";
 
-export { listPersonalCommissionAccounts, createPersonalCommissionAccount } from "./modules/commissionDistributions/personalAccountCallables";
+export { listPersonalCommissionAccounts, createPersonalCommissionAccount, deactivatePersonalCommissionAccount } from "./modules/commissionDistributions/personalAccountCallables";
