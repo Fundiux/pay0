@@ -17,6 +17,24 @@ if (!fs.existsSync(manifestPath)) {
     relevant: relevant.slice(0, 75),
     chunks: files.filter(name => /\\.js$/.test(name)).length,
   }));
+  const chunksRoot = ".next/static/chunks";
+  const chunkFiles = fs.existsSync(chunksRoot)
+    ? fs.readdirSync(chunksRoot, { recursive: true }).map(String).filter(name => name.endsWith(".js"))
+    : [];
+  const matches = { gateway: [], socket: [], voice: [], legacy: [] };
+  for (const file of chunkFiles) {
+    const source = fs.readFileSync(path.join(chunksRoot, file), "utf8");
+    if (source.includes(expected)) matches.gateway.push(file);
+    if (source.includes("new WebSocket(")) matches.socket.push(file);
+    if (source.includes("El gateway de voz") || source.includes("getUserMedia")) matches.voice.push(file);
+    if (source.includes("api.openai.com/v1/realtime")) matches.legacy.push(file);
+  }
+  const refs = ".next/server/app/hugo/page_client-reference-manifest.js";
+  console.error("NEXT16_VOICE_ARTIFACT_DIAGNOSTIC", JSON.stringify({
+    totalChunks: chunkFiles.length, matches,
+    referencePresent: fs.existsSync(refs),
+    referenceSnippet: fs.existsSync(refs) ? fs.readFileSync(refs, "utf8").slice(0, 1800) : "",
+  }));
   throw Error("The current Next.js output does not contain the historical app-build-manifest.json.");
 }
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
