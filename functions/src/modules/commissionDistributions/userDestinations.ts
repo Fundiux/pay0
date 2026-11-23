@@ -1,5 +1,6 @@
 import { isPostedCommissionPayment } from "./domain";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { createHash } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { assertAuthorized } from "../../utils/authGuard";
@@ -7,7 +8,7 @@ import { calculateUserCommissionDestinations, canonicalUserCommission, evaluateI
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
-const timestamp = admin.firestore.FieldValue.serverTimestamp;
+const timestamp = FieldValue.serverTimestamp;
 const text = (value: unknown) => String(value ?? "").trim();
 export const commissionSettingsId = (rootId: string, clientId: string, ownerUid: string) => createHash("sha256").update(JSON.stringify([rootId, clientId, ownerUid])).digest("hex");
 export const commissionMillis = (value: any): number => typeof value?.toMillis === "function" ? value.toMillis() : Number(value?.seconds || 0) * 1000;

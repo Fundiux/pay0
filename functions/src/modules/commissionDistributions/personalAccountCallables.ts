@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
@@ -108,8 +109,8 @@ export const createPersonalCommissionAccount = onCall({ cors: true, secrets: [AC
     if (existing.docs.some(doc => doc.id === fingerprint)) {
       throw new HttpsError("already-exists", "Esta cuenta ya está registrada.");
     }
-    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, bankCode: account.bankCode, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, instrumentFingerprint: fingerprint, last4, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-    tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(accountRef, { ownerUid: account.ownerUid, rootId: account.rootId, bankName: account.bankName, beneficiaryName: account.beneficiaryName, bankCode: account.bankCode, instrumentType: account.instrumentType, active: true, iqLinkStatus: "PENDING", encryptedInstrument, instrumentFingerprint: fingerprint, last4, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_CREATED", accountId: accountRef.id, createdAt: FieldValue.serverTimestamp() });
   });
   return { ok: true, accountId: accountRef.id, iqLinkStatus: "PENDING" };
 });
@@ -126,8 +127,8 @@ export const deactivatePersonalCommissionAccount = onCall({ cors: true }, async 
       throw new HttpsError("permission-denied", "Cuenta fuera de alcance.");
     }
     if (account.active === false) return { ok: true, idempotent: true };
-    tx.update(ref, { active: false, iqLinkStatus: "STALE", updatedAt: admin.firestore.FieldValue.serverTimestamp(), deactivatedBy: actor.uid });
-    tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_DEACTIVATED", accountId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.update(ref, { active: false, iqLinkStatus: "STALE", updatedAt: FieldValue.serverTimestamp(), deactivatedBy: actor.uid });
+    tx.create(db.collection("commissionAuditEvents").doc(), { rootId: actor.rootId, ownerUid: actor.uid, actorUid: actor.uid, event: "PERSONAL_COMMISSION_ACCOUNT_DEACTIVATED", accountId, createdAt: FieldValue.serverTimestamp() });
     return { ok: true, idempotent: false };
   });
 });
@@ -174,7 +175,7 @@ export const revealPersonalCommissionAccountNumber = onCall({ cors: true, secret
   await db.collection("commissionAuditEvents").add({
     rootId: actor.rootId, ownerUid: account.ownerUid, actorUid: actor.uid,
     accountId, event: "PERSONAL_COMMISSION_ACCOUNT_REVEALED",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
   return { ok: true, accountId, instrumentType: account.instrumentType, instrumentNumber: number };
 });

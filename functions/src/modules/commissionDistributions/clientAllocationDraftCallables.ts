@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor, commissionMillis, commissionSettingsId } from "./userDestinations";
 import { calculateClientCommissionInstructions } from "./clientAllocation";
@@ -91,10 +92,10 @@ export const saveClientCommissionAllocationDraft = onCall({ cors: true }, async 
     if (request.data?.expectedVersion !== oldVersion) throw new HttpsError("aborted", "El borrador cambió. Recarga antes de guardar.");
     const nextVersion = oldVersion + 1;
     tx.set(ref, { rootId: actor.rootId, clientId, ownerUid, instructions, status: "DRAFT",
-      version: nextVersion, updatedBy: actor.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      version: nextVersion, updatedBy: actor.uid, updatedAt: FieldValue.serverTimestamp() });
     tx.create(db.doc(`clientCommissionAllocationDraftHistory/${key}__v${nextVersion}`),
       { rootId: actor.rootId, clientId, ownerUid, instructions, status: "DRAFT", version: nextVersion,
-        updatedBy: actor.uid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+        updatedBy: actor.uid, createdAt: FieldValue.serverTimestamp() });
     return nextVersion;
   });
   return { ok: true, status: "DRAFT", canExecute: false, version };

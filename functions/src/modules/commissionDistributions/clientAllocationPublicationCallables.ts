@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor, commissionMillis, commissionSettingsId } from "./userDestinations";
 import { calculateClientCommissionInstructions, type ClientCommissionInstruction } from "./clientAllocation";
@@ -8,7 +9,7 @@ import { postedClientOperationBaseMinor, hasExactPersonalCommissionIqLink } from
 import { personalCommissionMirrorData } from "./personalAllocationMirror";
 
 if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore(), stamp = admin.firestore.FieldValue.serverTimestamp;
+const db = admin.firestore(), stamp = FieldValue.serverTimestamp;
 const safeId = (value: unknown) => {
   const v = String(value || "").trim();
   if (!v || v.length > 128 || v.includes("/")) throw new HttpsError("invalid-argument", "Identificador inválido.");
