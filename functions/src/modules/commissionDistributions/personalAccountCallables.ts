@@ -5,6 +5,8 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { commissionAccountActor } from "./userDestinations";
 import { authorizeCommissionAccountRead } from "./accountReadAuthorization";
 import { normalizePersonalCommissionAccount } from "./personalAccounts";
+import { evaluateIqLink, isPostedCommissionPayment } from "./domain";
+import { hasExactPersonalCommissionIqLink } from "./postedClientAllocationPreview";
 import { decryptCommissionInstrument, encryptCommissionInstrument, fingerprintCommissionInstrument } from "./instrumentEncryption";
 import { defineSecret } from "firebase-functions/params";
 const ACCOUNT_KEY = defineSecret("COMMISSION_ACCOUNT_ENCRYPTION_KEY");
@@ -37,12 +39,33 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
   }
   const clientId = purpose === "CLIENT_COSTS" ? cleanId(request.data?.clientId) : null;
   let clientIqId = "";
+  let sourceDespachoId = "";
   if (clientId) {
     const client = await db.doc(`clients/${clientId}`).get();
     if (!client.exists || client.data()?.rootId !== actor.rootId) {
       throw new HttpsError("permission-denied", "Cliente fuera de alcance.");
     }
     clientIqId = String(client.data()?.iqLink?.clientId || client.data()?.iqClientId || "");
+    // A link is never shown as usable for Costos unless its IQ origin matches
+    // the immutable posted payment selected as reference by the operator.
+    const referenceId = typeof request.data?.paymentId === "string" ? request.data.paymentId.trim() : "";
+    if (referenceId) {
+      const paymentId = cleanId(referenceId);
+      const payment = (await db.doc(`pagos/${paymentId}`).get()).data();
+      if (!payment || payment.rootId !== actor.rootId ||
+          String(payment.clienteId || payment.clientId || "") !== clientId ||
+          !isPostedCommissionPayment(payment)) {
+        throw new HttpsError("failed-precondition", "El pago de referencia no está contabilizado para este cliente.");
+      }
+      const financialSnapshotId = cleanId(payment.financialSnapshotId);
+      const financialSnapshot = (await db.doc(`paymentFinancialSnapshots/${financialSnapshotId}`).get()).data();
+      if (!financialSnapshot || financialSnapshot.rootId !== actor.rootId ||
+          financialSnapshot.pagoId !== paymentId || financialSnapshot.clienteId !== clientId ||
+          String(financialSnapshot.currency || payment.moneda || "MXN").toUpperCase() !== "MXN") {
+        throw new HttpsError("failed-precondition", "El snapshot del pago de referencia no corresponde a MXN.");
+      }
+      sourceDespachoId = String(financialSnapshot.despachoId || "");
+    }
   }
   const snapshot = await db.collection("personalCommissionAccounts")
     .where("rootId", "==", actor.rootId).where("ownerUid", "==", ownerUid).limit(50).get();
@@ -51,13 +74,16 @@ export const listPersonalCommissionAccounts = onCall({ cors: true }, async reque
     const data = doc.data();
     const linkId = clientId ? createHash("sha256").update(JSON.stringify([actor.rootId, clientId, ownerUid, doc.id])).digest("hex") : null;
     const link = linkId ? (await db.doc(`personalCommissionIqLinks/${linkId}`).get()).data() : null;
-    const verifiedAt = link?.verifiedAt?.toMillis?.() || 0;
-    const valid = clientId && link?.rootId === actor.rootId && link?.clientId === clientId &&
-      link?.ownerUid === ownerUid && link?.accountId === doc.id && link?.iqLinkStatus === "VERIFIED" &&
-      link?.iqFullDigitsMatched === true && link?.accountFingerprint === data.instrumentFingerprint && link?.last4 === data.last4 &&
-      data.active === true && verifiedAt > 0 && now - verifiedAt <= 86400000 &&
-      !!clientIqId && String(link?.iqClientId || "") === clientIqId && !!link?.iqPartnerId &&
-      !!link?.iqBeneficiaryId && !!link?.iqAccountId && !!link?.iqCredentialProfileId;
+    const freshness = evaluateIqLink({
+      status: link?.iqLinkStatus, verifiedAtMs: link?.verifiedAt?.toMillis?.() || 0,
+      nowMs: now, maxAgeMs: 86400000,
+      storedLast4: link?.last4, currentLast4: data.last4,
+    });
+    const valid = Boolean(clientId && sourceDespachoId && freshness.ready &&
+      hasExactPersonalCommissionIqLink({
+        rootId: actor.rootId, clientId, ownerUid, accountId: doc.id,
+        clientIqId, despachoId: sourceDespachoId, account: data, link,
+      }));
     return {
       id: doc.id, bankName: String(data.bankName || ""), beneficiaryName: String(data.beneficiaryName || ""),
       instrumentType: data.instrumentType === "CARD" ? "CARD" : "CLABE",

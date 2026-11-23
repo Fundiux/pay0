@@ -18,6 +18,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
   const [users, setUsers] = useState<Array<{ uid: string; label: string }>>([]);
   const [ownerUid, setOwnerUid] = useState("");
   const [accounts, setAccounts] = useState<CommissionAccountOption[]>([]);
+  const [accountsReferencePaymentId, setAccountsReferencePaymentId] = useState("");
   const [draft, setDraft] = useState<Draft>({ version: 0, instructions: [] });
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,12 +47,12 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
     return () => { live = false; };
   }, [superadmin]);
   useEffect(() => {
-    setAccounts([]); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
+    setAccounts([]); setAccountsReferencePaymentId(""); setDraft({ version: 0, instructions: [] }); setLoaded(false); setMessage("");
     setPreview(null); setDirty(false); setPublishedVersion(0); setPublishedStatus("");
     if (!ownerUid || !superadmin) return;
     let live = true;
     Promise.all([
-      httpsCallable<{ ownerUid: string; purpose: string; clientId: string }, { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({ ownerUid, purpose: "CLIENT_COSTS", clientId }),
+      httpsCallable<{ ownerUid: string; purpose: string; clientId: string; paymentId: string }, { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({ ownerUid, purpose: "CLIENT_COSTS", clientId, paymentId: referencePaymentId.trim() }),
       httpsCallable<{ clientId: string; ownerUid: string }, { draft: Draft | null }>(functions, "getClientCommissionAllocationDraft")({ clientId, ownerUid }),
       httpsCallable<{ clientId: string; ownerUid: string }, { rule: { version: number; status: string; executionEnabled: false } | null }>(functions, "getPublishedClientCommissionAllocation")({ clientId, ownerUid }),
     ]).then(([accountResponse, draftResponse, ruleResponse]) => {
@@ -61,6 +62,7 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
         instrumentNumber: a.instrumentNumber, selectable: a.iqLinkStatus === "VERIFIED",
         reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
       })));
+      setAccountsReferencePaymentId(referencePaymentId.trim());
       setDraft(draftResponse.data.draft || { version: 0, instructions: [] });
       setPublishedVersion(ruleResponse.data.rule?.version || 0);
       setPublishedStatus(ruleResponse.data.rule?.status || "");
@@ -79,20 +81,23 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
       if (!result.data.ok) {
         setMessage("IQ requiere revisión: " + (result.data.reason || result.data.status));
       } else {
-        const refreshed = await httpsCallable<{ ownerUid: string; purpose: string; clientId: string },
+        const refreshed = await httpsCallable<{ ownerUid: string; purpose: string; clientId: string; paymentId: string },
           { accounts: Array<{ id: string; bankName: string; beneficiaryName: string; instrumentNumber: string; active: boolean; iqLinkStatus: string }> }>(functions, "listPersonalCommissionAccounts")({
-          ownerUid, purpose: "CLIENT_COSTS", clientId,
+          ownerUid, purpose: "CLIENT_COSTS", clientId, paymentId: referencePaymentId.trim(),
         });
         setAccounts(refreshed.data.accounts.filter(a => a.active).map(a => ({
           id: a.id, bankName: a.bankName, beneficiaryName: a.beneficiaryName,
           instrumentNumber: a.instrumentNumber, selectable: a.iqLinkStatus === "VERIFIED",
           reason: a.iqLinkStatus === "VERIFIED" ? null : "Pendiente IQ",
         })));
-        setMessage("Cuenta verificada en IQ para este cliente. No se ha enviado ninguna dispersión.");
+        setAccountsReferencePaymentId(referencePaymentId.trim());
+        setMessage("Cuenta verificada en IQ para este cliente y origen de pago. No se ha enviado ninguna dispersión.");
       }
     } catch (error: any) { setMessage(error.message || "No se pudo verificar la cuenta en IQ."); }
     finally { setVerifying(""); }
   }
+  const accountsForReference = accounts.map(account => accountsReferencePaymentId === referencePaymentId.trim()
+    ? account : { ...account, selectable: false, reason: "Cambió el pago de referencia; comprueba IQ nuevamente" });
   if (!superadmin) return null;
   async function save() {
     if (!ownerUid || busy || !loaded) return;
@@ -157,16 +162,16 @@ export default function ClientPersonalCommissionDrafts({ clientId, referencePaym
     <select aria-label="Usuario titular" className="w-full rounded-lg bg-slate-950 p-2 text-sm" value={ownerUid} onChange={event => setOwnerUid(event.target.value)}>
       <option value="">Seleccionar usuario</option>{users.map(user => <option key={user.uid} value={user.uid}>{user.label}</option>)}
     </select>
-    {ownerUid && loaded && accounts.some(a => !a.selectable) && <div className="space-y-2 text-xs">
+    {ownerUid && loaded && accountsForReference.some(a => !a.selectable) && <div className="space-y-2 text-xs">
       <p className="text-amber-200">La verificación IQ utiliza el pago contabilizado de referencia del cliente indicado arriba.</p>
-      {accounts.filter(a => !a.selectable).map(a => <div key={a.id} className="flex flex-wrap items-center gap-2">
+      {accountsForReference.filter(a => !a.selectable).map(a => <div key={a.id} className="flex flex-wrap items-center gap-2">
         <span>{a.bankName} · {a.instrumentNumber}</span>
         <button type="button" disabled={!!verifying || !referencePaymentId.trim()}
           className="rounded-lg border border-sky-400/40 px-2 py-1 text-sky-200 disabled:opacity-40"
           onClick={() => void verifyAccount(a.id)}>{verifying === a.id ? "Verificando…" : "Verificar en IQ"}</button>
       </div>)}
     </div>}
-    {ownerUid && loaded && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accounts} initialRows={draft.instructions} onDraftChange={instructions => { setDraft(current => ({ ...current, instructions })); setDirty(true); setPreview(null); }} />}
+    {ownerUid && loaded && <ClientCommissionAllocationEditor key={clientId + ":" + ownerUid + ":" + draft.version} accounts={accountsForReference} initialRows={draft.instructions} onDraftChange={instructions => { setDraft(current => ({ ...current, instructions })); setDirty(true); setPreview(null); }} />}
     {ownerUid && <button type="button" disabled={busy || !loaded} className="rounded-lg bg-sky-600 px-4 py-2 text-sm disabled:opacity-40" onClick={() => void save()}>{busy ? "Guardando…" : "Guardar borrador"}</button>}
     {ownerUid && loaded && <div className="space-y-2 rounded-lg border border-white/10 p-3">
       <label className="block text-sm text-slate-300">Pago contabilizado de referencia para validar reglas

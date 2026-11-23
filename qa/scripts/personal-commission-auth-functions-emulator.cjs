@@ -72,6 +72,48 @@ async function run() {
   assert.equal(listed.accounts.find(a => a.id === accountId)?.iqLinkStatus, "PENDING");
   await expectDenied(() => owner.invoke("getClientCommissionAllocationDraft", { clientId, ownerUid }), "Owner cannot read superadmin client drafts");
   await expectDenied(() => outside.invoke("listPersonalCommissionAccounts", { ownerUid, clientId, purpose: "CLIENT_COSTS" }), "Cross-root must not read accounts");
+  // A server-side IQ match is scoped to both the client and the posted payment
+  // origin; an otherwise valid-looking link from another despacho is not selectable.
+  const paymentId = "qa-pago-" + stamp, snapshotId = "qa-snapshot-" + stamp;
+  const linkId = require("node:crypto").createHash("sha256")
+    .update(JSON.stringify([rootId, clientId, ownerUid, accountId])).digest("hex");
+  const iqRef = db.doc("personalCommissionIqLinks/" + linkId);
+  await Promise.all([
+    db.doc("clients/" + clientId).update({ iqClientId: "101" }),
+    db.doc("pagos/" + paymentId).set({
+      rootId, clientId, status: "CONCILIADO", financialPostingStatus: "POSTED",
+      financialSnapshotId: snapshotId, moneda: "MXN",
+    }),
+    db.doc("paymentFinancialSnapshots/" + snapshotId).set({
+      rootId, clienteId: clientId, pagoId: paymentId, despachoId: "despacho-correcto", currency: "MXN",
+    }),
+    iqRef.set({
+      rootId, clientId, ownerUid, accountId, iqLinkStatus: "VERIFIED",
+      iqFullDigitsMatched: true, accountFingerprint: "fixture-do-not-use-for-iq",
+      last4: "5678", iqClientId: "101", despachoId: "despacho-incorrecto",
+      iqPartnerId: "201", iqBeneficiaryId: "301", iqAccountId: "401",
+      iqCredentialProfileId: "profile-qa",
+      verifiedAt: require("firebase-admin/firestore").Timestamp.now(),
+    }),
+  ]);
+  const scopedList = () => superadmin.invoke("listPersonalCommissionAccounts", {
+    ownerUid, clientId, purpose: "CLIENT_COSTS", paymentId,
+  });
+  assert.equal((await scopedList()).accounts.find(a => a.id === accountId)?.iqLinkStatus, "PENDING",
+    "Matching client but wrong despacho must fail closed");
+  await iqRef.update({ despachoId: "despacho-correcto" });
+  assert.equal((await scopedList()).accounts.find(a => a.id === accountId)?.iqLinkStatus, "VERIFIED",
+    "Exact IQ proof from the posted source is selectable");
+  await iqRef.update({ iqBeneficiaryId: "invalid-id" });
+  assert.equal((await scopedList()).accounts.find(a => a.id === accountId)?.iqLinkStatus, "PENDING",
+    "Malformed IQ beneficiary IDs must fail closed");
+  await iqRef.update({ iqBeneficiaryId: "301", accountFingerprint: "wrong-fingerprint" });
+  assert.equal((await scopedList()).accounts.find(a => a.id === accountId)?.iqLinkStatus, "PENDING",
+    "Instrument fingerprint changes invalidate client selection");
+  await iqRef.update({ accountFingerprint: "fixture-do-not-use-for-iq" });
+  await expectDenied(() => superadmin.invoke("listPersonalCommissionAccounts", {
+    ownerUid, clientId, purpose: "CLIENT_COSTS", paymentId: "another-payment",
+  }), "Unknown posted source is not accepted");
   const save = await superadmin.invoke("saveClientCommissionAllocationDraft", {
     clientId, ownerUid, expectedVersion: 0,
     instructions: [{ accountId, pointsBps: 20, earningsPercentBps: null }],
