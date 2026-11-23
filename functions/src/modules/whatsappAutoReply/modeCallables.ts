@@ -6,6 +6,7 @@ import { logActivity } from "../../utils/logActivity";
 import { readInternalGroupChatIds } from "./internalGroups";
 import { mexicoMonthKey, summarizeReplyMetrics, type ModeEventRow, type ReplyMetricRow } from "./metrics";
 import { applyModeChange, readAgentModes, type AgentMode } from "./modes";
+import { correctionLessonId, isCorrectionCategory, LESSONS } from "./lessons";
 import { REPLY_METRICS } from "./runner";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -79,11 +80,21 @@ export const getWhatsAppAgentReplyMetrics = onCall({ cors: true, timeoutSeconds:
 export const markWhatsAppReplyCorrection = onCall({ cors: true, timeoutSeconds: 30, memory: "256MiB" }, async request => {
   const { uid, rootId } = await requireWhatsAppSuperadmin(request);
   const jobId = clean(request.data?.jobId, 80), corrected = request.data?.corrected !== false;
+  const reason = clean(request.data?.reason, 300), category = isCorrectionCategory(request.data?.category) ? request.data.category : "OTHER";
   if (!jobId) throw new HttpsError("invalid-argument", "Respuesta requerida.");
   const ref = db.doc(`${REPLY_METRICS}/${jobId}`);
   const snap = await ref.get();
   if (!snap.exists || snap.get("rootId") !== rootId) throw new HttpsError("not-found", "No se encontró esa respuesta.");
   await ref.update({ humanCorrection: corrected, correctionMarkedBy: uid, correctionMarkedAt: FieldValue.serverTimestamp() });
+  // Learning (capture only): why the reply needed a person, kept per group. Unmarking removes the lesson.
+  const lessonRef = db.doc(`${LESSONS}/${correctionLessonId(jobId)}`);
+  if (corrected) {
+    await lessonRef.set({
+      rootId, agentId: clean(snap.get("agentId"), 64), chatId: clean(snap.get("chatId")), groupName: clean(snap.get("groupName"), 160), type: "CORRECTION",
+      kind: clean(snap.get("kind"), 40), subject: snap.get("subject") || null, category, reason, jobId, monthKey: clean(snap.get("monthKey"), 7),
+      markedBy: uid, createdAt: FieldValue.serverTimestamp(),
+    });
+  } else await lessonRef.delete();
   await logActivity({
     event: "WHATSAPP_RESPUESTA_CORREGIDA", rootId, actorUid: uid, actorRole: "superadmin", referenceId: jobId, referenceType: "documentDeliveryJob", entityId: jobId, entityType: "document_delivery",
     description: corrected ? "Una persona corrigió una respuesta de Hugo en un grupo." : "Se quitó la marca de corrección de una respuesta de Hugo.",

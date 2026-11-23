@@ -24,7 +24,7 @@ const { createWorkerKey, createAuthorityTransport } = require('../../tools/whats
 
 const run = `wa-reply-${Date.now()}`;
 const rootId = `${run}-root`, ownerUid = `${run}-owner`, betell = `${run}-betell`;
-const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us';
+const groupA = '120363555000000001@g.us', groupB = '120363555000000002@g.us', groupC = '120363555000000003@g.us', groupD = '120363555000000004@g.us', groupE = '120363555000000005@g.us', groupF = '120363555000000006@g.us', groupG = '120363555000000007@g.us', groupH = '120363555000000008@g.us', groupI = '120363555000000009@g.us', groupJ = '120363555000000010@g.us', groupK = '120363555000000011@g.us';
 const MIN = 60_000, HOUR = 60 * MIN;
 // Monday 2026-11-09 10:00 in Mexico City (UTC-6): inside Hugo's hours.
 const NOW = Date.UTC(2026, 10, 9, 16, 0, 0);
@@ -262,6 +262,32 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     const repeat = await inbound(groupH, { body: '¿Hay avance de mi factura?', timestampMs: NOW - 4 * MIN });
     await runGroupReplies(rootId, NOW + 2 * MIN);
     assert.equal((await jobsFor(repeat)).length, 0);
+  });
+
+  await test('an-unanswered-question-becomes-a-masked-lesson-once', async () => {
+    await chatDoc(groupK, 'Grupo lecciones');
+    await observe(groupK, 'Grupo lecciones', betell);
+    await inbound(groupK, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    const missed = await inbound(groupK, { body: '¿Ya salió mi transferencia de $45,000 a Juan Pérez?', timestampMs: NOW - 32 * MIN });
+    await runGroupReplies(rootId, NOW);
+    await runGroupReplies(rootId, NOW + MIN);
+    const lessons = (await db.collection('whatsappAgentLessons').where('rootId', '==', rootId).where('type', '==', 'MISSED_QUESTION').get()).docs.filter(doc => doc.get('chatId') === groupK);
+    assert.equal(lessons.length, 1);
+    assert.equal(lessons[0].get('kind'), 'STATUS_INQUIRY');
+    assert.equal(lessons[0].get('subject'), 'TRANSFER');
+    assert.equal(lessons[0].get('groupName'), 'Grupo lecciones');
+    assert.ok(!/\d|juan/i.test(lessons[0].get('phrase')), 'the stored phrase is masked');
+    assert.equal(missed.length > 0, true);
+  });
+
+  await test('a-correction-keeps-the-reason-per-group-and-unmarking-removes-it', async () => {
+    const [metric] = (await db.collection('whatsappAgentReplyMetrics').where('rootId', '==', rootId).limit(1).get()).docs;
+    await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, reason: 'Dijo que estaba en proceso y no era cierto', category: 'WRONG_FACT' } });
+    const lesson = (await db.doc(`whatsappAgentLessons/corr__${metric.id}`).get()).data();
+    assert.equal(lesson.type, 'CORRECTION'); assert.equal(lesson.category, 'WRONG_FACT');
+    assert.equal(lesson.chatId, metric.get('chatId')); assert.equal(lesson.reason, 'Dijo que estaba en proceso y no era cierto');
+    await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, corrected: false } });
+    assert.equal((await db.doc(`whatsappAgentLessons/corr__${metric.id}`).get()).exists, false);
   });
 
   await test('an-agents-own-number-is-never-answered', async () => {

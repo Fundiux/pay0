@@ -9,6 +9,7 @@ import { AGENTS } from "../agentOperations/contract";
 import { queueAutomaticClientDelivery } from "../documentDelivery/whatsappAutomaticDelivery";
 import { agentCanAct, readAgentModes } from "./modes";
 import { mexicoMonthKey } from "./metrics";
+import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
 import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
 import { planGroupReplies, type InboundRow, type LastReply, type PlannedReply, type ReplyMode, type ReplyRuntimeConfig } from "./planner";
 
@@ -148,6 +149,14 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     lookupRequest: (_owner, subject, row) => lookupByChat[row.chatId]?.[subject] ?? "UNKNOWN",
     hasOpenSolicitud: ownerUserUid => Object.entries(ownerByChat).some(([chatId, owner]) => owner === ownerUserUid && lookupByChat[chatId]?.INVOICE === "FOUND"),
   });
+
+  // Learning (capture only): client questions in acting groups that nobody answered. Created once per message, never overwritten.
+  for (const missed of findMissedQuestions({ messages, ownerByChat, operatorHashes, repliedIds, nowMs, workingHours: config.workingHours ?? null })) {
+    await db.doc(`${LESSONS}/${missedLessonId(rootId, missed.messageId)}`).create({
+      rootId, agentId: REPLY_AGENT_ID, chatId: missed.chatId, groupName: groupNameByChat[missed.chatId] || "", type: "MISSED_QUESTION",
+      kind: missed.kind, subject: missed.subject, phrase: missed.phrase, withinHours: missed.withinHours, monthKey: mexicoMonthKey(nowMs), createdAt: FieldValue.serverTimestamp(),
+    }).catch(() => undefined);
+  }
 
   let queued = 0;
   for (const item of plan) {
