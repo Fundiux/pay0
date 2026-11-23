@@ -35,7 +35,7 @@ export async function loadPersonalCommissionInstrumentForIq(input: {
   if (account.instrumentType === "CLABE" && number.length !== 18) throw new Error("PERSONAL_COMMISSION_CLABE_INVALID");
   if (account.instrumentType !== "CLABE" && account.instrumentType !== "CARD") throw new Error("PERSONAL_COMMISSION_INSTRUMENT_TYPE_INVALID");
   return {
-    ...account, number,
+    ...account, instrumentType: account.instrumentType as "CLABE" | "CARD", number,
     operationTypeKey: account.instrumentType === "CLABE" ? "TRANSFERENCIA" as const : "TDC" as const,
   };
 }
