@@ -81,13 +81,40 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
       message('c1', CLIENT, 'comentario de un cliente'), message('i1', INTERNAL, 'Hugo buen día'), message('i2', INTERNAL, 'plática del equipo'),
       message('i3', INTERNAL, '@5215500000000 ayuda', { mentionedIds: ['5215500000000@c.us'] }), message('i4', INTERNAL, 'plática', { mentionedIds: ['5215599999999@c.us'] }),
       message('i5', INTERNAL, 'Húgo?'), message('i6', INTERNAL, 'sin mención', { mentionedIds: [{ _serialized: '5215500000000@c.us' }] }),
-    ]) callbacks.message_create(m);
+    ]) await callbacks.message_create(m);
     await running.flush();
     const sent = batches.flat();
     eq(sent.map(m => m.messageId), ['c1', 'i1', 'i3', 'i5', 'i6'], 'client groups keep everything; the internal group only what addresses Hugo');
     eq(sent.filter(m => m.mentionsMe).map(m => m.messageId), ['i3', 'i6']);
     ok(!('mentionsMe' in sent[0]) && !('mentionsMe' in sent[1]), 'the flag is only sent when true');
     await running.stop();
+  }
+
+  // A mention of Hugo's account may carry the linked-device id (@lid) instead of the phone id: every way to recognise it.
+  {
+    const INTERNAL = '120363555000000201@g.us';
+    async function mentionedWith(clientExtra, mentionedIds, body = '@alguien ayuda') {
+      const batches = [], callbacks = {};
+      const transport = { operate: async (action, data) => {
+        if (action === 'HEARTBEAT') return { observedChats: [INTERNAL], addressedOnlyChats: [INTERNAL] };
+        if (action === 'INBOUND_GROUP') { batches.push(data.messages); return {}; }
+        return {};
+      }, synchronize: async () => ({}), getBinding: () => ({ id: 'b' }) };
+      const client = { info: { wid: { _serialized: '5215500000000@c.us', user: '5215500000000' } }, on: (name, cb) => { callbacks[name] = cb; }, initialize: async () => {}, destroy: async () => {}, getChats: async () => [], ...clientExtra };
+      const running = await runEnrolledConnector({ transport, client, encodeQr: async () => '', resetLocalSession: async () => {}, setTimer: fn => fn, clearTimer: () => {}, captureGroups: true });
+      await callbacks.ready(); await running.poll();
+      await callbacks.message_create({ id: { _serialized: 'm1' }, from: INTERNAL, author: '5215511112222@c.us', fromMe: false, timestamp: Math.floor(Date.now() / 1000), type: 'chat', body, mentionedIds });
+      await running.flush(); await running.stop();
+      return batches.flat().map(m => ({ id: m.messageId, mentionsMe: m.mentionsMe === true }));
+    }
+    eq(await mentionedWith({}, ['5215500000000@c.us']), [{ id: 'm1', mentionsMe: true }], 'the phone id');
+    eq(await mentionedWith({}, ['5215500000000:12@c.us']), [{ id: 'm1', mentionsMe: true }], 'the phone id with a device suffix');
+    eq(await mentionedWith({ info: { wid: { _serialized: '5215500000000@c.us' }, lid: { _serialized: '88776655@lid' } } }, ['88776655@lid']), [{ id: 'm1', mentionsMe: true }], 'the own lid from client.info');
+    eq(await mentionedWith({ getContactLidAndPhone: async ids => { eq(ids, ['5215500000000@c.us']); return [{ lid: '88776655@lid', pn: '5215500000000@c.us' }]; } }, ['88776655@lid']), [{ id: 'm1', mentionsMe: true }], 'the own lid from getContactLidAndPhone');
+    eq(await mentionedWith({ getContactById: async id => { eq(id, '88776655@lid'); return { id: { _serialized: '88776655@lid' }, number: '5215500000000' }; } }, ['88776655@lid']), [{ id: 'm1', mentionsMe: true }], 'an unknown lid resolved to the own contact');
+    eq(await mentionedWith({ getContactById: async () => ({ id: { _serialized: '1@lid' }, number: '5215599999999' }) }, ['1@lid']), [], 'a lid of someone else is not a mention (and nothing else addresses Hugo)');
+    eq(await mentionedWith({ getContactById: async () => { throw Error('boom'); } }, ['1@lid']), [], 'a lookup that fails is not a mention');
+    eq(await mentionedWith({ getContactById: async () => ({ number: '5215500000000' }) }, ['2@lid'], 'Hugo ayuda'), [{ id: 'm1', mentionsMe: true }], 'the name still addresses him and the lid resolves too');
   }
 
   console.log(`whatsapp-connector-mention: ${checks} checks passed`);

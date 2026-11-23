@@ -303,18 +303,23 @@ export class WhatsAppConnectorAuthority {
     const existing = await Promise.all(messages.map((m: any) => tx.get(this.db.collection("whatsappInboundMessages").doc(m.docId))));
     const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" });
     let stored = 0, discarded = 0, duplicates = 0;
+    // Diagnostics for the internal group: counts only, never ids or text.
+    const diag = { received: messages.length, internalGroupsKnown: internalOwnerByChat.size, internalChatsInBatch: chatIds.filter(chatId => internalOwnerByChat.has(chatId)).length, internalMessages: 0, accepted: 0, rejectedFromMe: 0, rejectedNotAddressed: 0, duplicates: 0, unknownChat: 0 };
     messages.forEach((m: any, index: number) => {
       const internalOwner = internalOwnerByChat.get(m.chatId);
+      if (internalOwner) diag.internalMessages++;
+      if (internalOwner && m.fromMe) diag.rejectedFromMe++;
+      else if (internalOwner && !addressesHugo(m)) diag.rejectedNotAddressed++;
       if (internalOwner && !m.fromMe && addressesHugo(m)) {
-        if (existing[index].exists) { duplicates++; return; }
+        if (existing[index].exists) { duplicates++; diag.duplicates++; return; }
         tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, ownerUserUid: internalOwner, internalGroup: true, mentionsMe: m.mentionsMe === true, chatId: m.chatId, messageId: m.messageId, fromMe: false,
           authorHash: m.authorId ? createHash("sha256").update(`${binding.rootId}|${m.authorId}`).digest("hex").slice(0, 32) : null,
           timestampMs: m.timestampMs, type: m.type, body: m.body ?? "", reportDay: dayKey.format(new Date(m.timestampMs)),
           expiresAt: new Date(Date.now() + INBOUND_RETENTION_MS), createdAt: FieldValue.serverTimestamp() });
-        stored++;
+        stored++; diag.accepted++;
         return;
       }
-      if (!allowed.has(m.chatId)) { discarded++; return; }
+      if (!allowed.has(m.chatId)) { discarded++; if (agentId === "hugo" && !internalOwner) diag.unknownChat++; return; }
       if (existing[index].exists) { duplicates++; return; }
       tx.create(existing[index].ref, { rootId: binding.rootId, bindingId: binding.id, agentId, ownerUserUid: ownerByChat.get(m.chatId), chatId: m.chatId, messageId: m.messageId, fromMe: m.fromMe,
         authorHash: m.authorId ? createHash("sha256").update(`${binding.rootId}|${m.authorId}`).digest("hex").slice(0, 32) : null,
@@ -322,6 +327,8 @@ export class WhatsAppConnectorAuthority {
         expiresAt: new Date(Date.now() + INBOUND_RETENTION_MS), createdAt: FieldValue.serverTimestamp() });
       stored++;
     });
+    // One line only when the internal group is involved, or when Hugo discarded a chat nobody assigned (the usual reason an internal group is silent).
+    if (agentId === "hugo" && (diag.internalMessages > 0 || diag.unknownChat > 0)) console.log("WHATSAPP_INTERNAL_INBOUND", JSON.stringify(diag));
     return { stored, discarded, duplicates };
   }
 }

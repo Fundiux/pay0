@@ -17,7 +17,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // supervisor relaunches it. A pending QR waits for a person, so it never counts as stuck.
   let awaitingQr = false, notReadySince = null;
   // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
-  let observedChats = new Set(), addressedOnly = new Set();
+  let observedChats = new Set(), addressedOnly = new Set(), watchedInternal = -1, internalCaptured = 0;
   const buffer = [];
   const timers = [];
   async function close(reason = "CONNECTOR_FAILED") {
@@ -43,6 +43,8 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       const response = await transport.operate("HEARTBEAT", { ready, poll: true });
       observedChats = new Set(Array.isArray(response.observedChats) ? response.observedChats.filter(chat => typeof chat === "string") : []);
       addressedOnly = new Set(Array.isArray(response.addressedOnlyChats) ? response.addressedOnlyChats.filter(chat => typeof chat === "string") : []);
+      // Diagnostic (counts only): how many internal groups this connector was told to watch, logged when the number changes.
+      if (addressedOnly.size !== watchedInternal) { watchedInternal = addressedOnly.size; console.log(JSON.stringify({ status: "INTERNAL_GROUPS_WATCHED", count: watchedInternal, observedGroups: observedChats.size, captureGroups })); }
       const command = response.command;
       if (!command) return;
       if (command.type === "SYNC_CHATS") await synchronize(command.id);
@@ -68,7 +70,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   client.on("qr", event(async qr => { awaitingQr = true; await status({ status: "QR_REQUIRED", qrText: qr, qrDataUrl: await encodeQr(qr), error: null,
     ...(pendingResetId ? { resetCommandId: pendingResetId } : {}) }); pendingResetId = null; }));
   client.on("authenticated", event(async () => { awaitingQr = false; notReadySince = now(); return status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null }); }));
-  client.on("ready", event(async () => { ready = true; notReadySince = null; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
+  client.on("ready", event(async () => { ownIds = null; ready = true; notReadySince = null; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
   client.on("auth_failure", event(async () => { ready = false; await status({ status: "ERROR", error: "AUTHENTICATION_FAILED" }); await close("AUTHENTICATION_FAILED"); }));
   // whatsapp-web.js does not reconnect by itself: close so the supervisor starts a fresh client.
   client.on("disconnected", event(async () => { ready = false; await status({ status: "DISCONNECTED" }).catch(() => undefined); await close("DISCONNECTED"); }));
@@ -76,7 +78,37 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // document/complement polling remain outside this enrolled control entry.
   client.on("message", async () => undefined);
   // Captura opcional (apagada por defecto): solo grupos autorizados, sin responder ni enviar nada.
-  client.on("message_create", message => {
+  // Is this message a WhatsApp mention of this very account? A mention may carry the linked-device id (@lid) while client.info
+  // holds the phone id (@c.us), so every known id of the account is compared, and an unknown @lid is resolved to its contact.
+  let ownIds = null;
+  const idOf = value => String((value && value._serialized) || value || "");
+  const numberOf = id => id.split("@")[0].split(":")[0];
+  async function loadOwnIds() {
+    if (ownIds) return ownIds;
+    const ids = new Set(), add = value => { const id = idOf(value); if (id) ids.add(id); };
+    add(client?.info?.wid); add(client?.info?.lid); add(client?.info?.me?.lid);
+    try {
+      const own = idOf(client?.info?.wid);
+      if (own && typeof client.getContactLidAndPhone === "function") for (const row of (await client.getContactLidAndPhone([own])) || []) { add(row?.lid); add(row?.pn); }
+    } catch { /* an older client does not expose it */ }
+    if (ids.size) ownIds = ids;
+    return ids;
+  }
+  async function mentionsThisAccount(message) {
+    const mentioned = Array.isArray(message?.mentionedIds) ? message.mentionedIds.map(idOf).filter(Boolean) : [];
+    if (!mentioned.length) return false;
+    const own = await loadOwnIds(), ownNumbers = new Set([...own].filter(id => id.endsWith("@c.us")).map(numberOf));
+    if (mentioned.some(id => own.has(id) || (id.endsWith("@c.us") && ownNumbers.has(numberOf(id))))) return true;
+    for (const id of mentioned.filter(id => id.endsWith("@lid"))) {
+      try {
+        const contact = typeof client.getContactById === "function" ? await client.getContactById(id) : null;
+        const resolved = [idOf(contact?.id), contact?.number ? contact.number + "@c.us" : ""].filter(Boolean);
+        if (resolved.some(value => own.has(value) || ownNumbers.has(numberOf(value)))) return true;
+      } catch { /* an unresolved id is simply not a mention of this account */ }
+    }
+    return false;
+  }
+  client.on("message_create", async message => {
     if (!captureGroups || stopped) return;
     try {
       const fromMe = !!message?.fromMe, chatId = String((fromMe ? message?.to : message?.from) || "");
@@ -85,10 +117,10 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       const type = String(message?.type || "chat").slice(0, 40), author = message?.author || (fromMe ? "" : message?.from);
       if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
       // A WhatsApp mention of this very account. In the team's internal group nothing leaves the phone unless it addresses Hugo (his mention or his name).
-      const ownId = String(client?.info?.wid?._serialized || "");
-      const mentioned = Array.isArray(message?.mentionedIds) && ownId !== "" && message.mentionedIds.some(item => String(item?._serialized || item) === ownId);
+      const mentioned = await mentionsThisAccount(message);
       const text = type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "";
       if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return;
+      if (addressedOnly.has(chatId)) { internalCaptured++; console.log(JSON.stringify({ status: "INTERNAL_ADDRESSED_CAPTURED", total: internalCaptured, mentioned })); }
       buffer.push({ messageId, chatId, fromMe, timestampMs, type, ...(author ? { authorId: String(author).slice(0, 200) } : {}),
         body: text, ...(mentioned ? { mentionsMe: true } : {}) });
     } catch { /* un mensaje ilegible nunca detiene el conector */ }
