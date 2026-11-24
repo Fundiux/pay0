@@ -736,6 +736,14 @@
     {
       "commit": "3dcb0199",
       "capability": "resolvePersonalCommissionAccountIq declara una sola vez el secreto de credenciales IQ"
+    },
+    {
+      "commit": "8f83cb12",
+      "capability": "Las solicitudes recuperadas de IQ descargan el PDF y XML de su factura"
+    },
+    {
+      "commit": "5e0f2ef1",
+      "capability": "Los documentos de solicitudes recuperadas de IQ nunca se envian al grupo de WhatsApp del cliente"
     }
   ],
   "requiredText": [
