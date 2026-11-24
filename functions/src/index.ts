@@ -257,6 +257,8 @@ export { reconcileHugoOnSolicitudChange, reconcileHugoOnPagoChange } from "./mod
 export { manageP4HistoricalIqImport } from "./modules/iqHistoricalImport/service";
 export { runIqDailyReverseSync } from "./modules/iqDailySync/service";
 export { listIqDailySyncReviews } from "./modules/iqDailySync/reviewsCallable";
+export { getIqBackfillStatus, setIqBackfillEnabled, getIqBackfillMissingDocuments } from "./modules/iqDailySync/backfillCallables";
+export { runIqHistoricalBackfill } from "./modules/iqDailySync/backfill";
 export { purgeExpiredHugoTraces } from "./modules/agent007/traceStore";
 export { getAgentOperations, setAgentKillSwitch, reviewAgentProposal, resolveAgentIncident, createAgentBlueprintDraft } from "./modules/agentOperations/callables";
 export { sendAgentDailyStatusAlert } from "./modules/agentOperations/dailyAlert";

@@ -10,7 +10,7 @@ import { discoverServerPlan, type DiscoveryBudget } from "../iqHistoricalImport/
 import { actionEligibility, type P4ActionProgress } from "../iqHistoricalImport/phasedExecution";
 import { buildServerPlan, P4_PLAN_GROUPS, type Pay0PlanRow } from "../iqHistoricalImport/planner";
 import { executeAction, markDailySyncManifest, persistDailySyncManifest, type Context } from "../iqHistoricalImport/service";
-import { addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, widenWindowForOpenReviews, type DailyReview } from "./domain";
+import { DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS, addDays, applyDailySyncSafety, dailyWindow, executionQueue, mexicoDate, resolvedEntities, reviewItems, widenWindowForOpenReviews, type DailyReview } from "./domain";
 import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDisplay";
 import { applyClientLinks, linkPatchForPlan, planClientLinks } from "./clientLinks";
 import { importIqDispersion } from "./dispersionImport";
@@ -44,7 +44,7 @@ const LEASE_MS = 570_000;
 /** A bounded number of dispersions is created per group and run; the rest waits for the next run. */
 const MAX_DISPERSIONS_IMPORTED_PER_GROUP = 25;
 
-export type DailySyncBudget = { maxWrites: number; maxDurationMs: number; maxErrors: number; maxLayers: number; maxPlanningPages: number; maxPlanningRecords: number; maxFirestoreReads: number; maxDispersionPages: number };
+export type DailySyncBudget = { maxWrites: number; maxDurationMs: number; maxErrors: number; maxLayers: number; maxPlanningPages: number; maxPlanningRecords: number; maxFirestoreReads: number; maxDispersionPages: number; maxDispersionsImported?: number; maxPagosPosted?: number; onlyConcretized?: boolean };
 export const DEFAULT_DAILY_SYNC_BUDGET: DailySyncBudget = { maxWrites: 150, maxDurationMs: 420_000, maxErrors: 5, maxLayers: 3, maxPlanningPages: 1800, maxPlanningRecords: 10_000, maxFirestoreReads: 10_000, maxDispersionPages: 20 };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -155,14 +155,21 @@ async function resolvePostedPaymentReviews(rootId: string) {
 
 const MAX_PAGOS_POSTED_PER_GROUP = 40;
 
+const DISCARDED_IQ_STATUS = /CANCEL|RECHAZ|ELIMIN|FALL|FAIL|ERROR|ANULAD/;
+/** An IQ operation that did not conclude (cancelled, rejected, deleted or failed). */
+export function isDiscardedIqStatus(raw: Record<string, unknown>): boolean {
+  return [raw.operation_status, raw.status, raw.state].some(value => DISCARDED_IQ_STATUS.test(text(value).toUpperCase()));
+}
+
 /** Credits to the wallet the daily-sync pagos of this group that IQ already shows as conciliated; the rest stays in review with its reason. */
 async function postRecoveredPagos(rootId: string, groupId: string, deposits: Map<string, Record<string, unknown>>, tracker: Tracker) {
+  const maxPosted = tracker.budget.maxPagosPosted ?? MAX_PAGOS_POSTED_PER_GROUP;
   const group = P4_PLAN_GROUPS[groupId];
   const out = { posted: 0, reviews: [] as DailyReview[] };
   if (!group) return out;
   const snap = await db().collection("pagos").where("rootId", "==", rootId).where("source", "==", "IQ_IMPORT").limit(2000).get();
   for (const doc of snap.docs) {
-    if (out.posted >= MAX_PAGOS_POSTED_PER_GROUP || exhausted(tracker)) break;
+    if (out.posted >= maxPosted || exhausted(tracker)) break;
     const data = doc.data();
     if (!isIqDailySyncImport(data) || text(data.canonicalIqProfileId) !== group.canonicalIqProfileId || text(data.financialPostingStatus).toUpperCase() === "POSTED") continue;
     const iqId = text(data.originalIqEntityId || data.iqDepositId);
@@ -194,6 +201,8 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     const planningBudget: DiscoveryBudget = { maxPages: tracker.budget.maxPlanningPages, maxRecords: tracker.budget.maxPlanningRecords, maxFirestoreReads: tracker.budget.maxFirestoreReads, maxDurationMs: remainingMs(tracker) };
     const discovered = await discoverServerPlan({ rootId: ctx.rootId, groupIds: [groupId], range: window, secret, budget: planningBudget });
     if (discovered.partial) { result.status = "PARTIAL"; result.stopReason = "PLAN_BUDGET"; finalManifest = null; break; }
+    // The historical backfill brings only what IQ concluded: cancelled, rejected or failed operations are left out.
+    if (tracker.budget.onlyConcretized) discovered.iqRows = discovered.iqRows.filter(row => row.kind === "CLIENT" || !isDiscardedIqStatus(row.raw));
     // A PAY0 client with the same RFC and owner as an IQ client is the same company: link it so the plan finds it
     // (instead of a review that nobody can close) and its operations can follow.
     lastPay0Rows = discovered.pay0Rows;
@@ -271,7 +280,7 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     }
     for (const row of missing) {
       if (!importEnabled) break;
-      if (imported >= MAX_DISPERSIONS_IMPORTED_PER_GROUP || exhausted(tracker)) break;
+      if (imported >= (tracker.budget.maxDispersionsImported ?? MAX_DISPERSIONS_IMPORTED_PER_GROUP) || exhausted(tracker)) break;
       const parsed = parseIqDispersion(row.raw, groupId);
       if (!parsed.ok) { reasons.set(row.iqDispersionId, { code: parsed.code, detail: parsed.detail }); continue; }
       try {
@@ -308,19 +317,21 @@ async function publishIncident(rootId: string) {
 }
 
 /** Oldest day an open review refers to (its operation date, else the first window that saw it). */
-async function oldestOpenReviewDate(rootId: string): Promise<string | null> {
+async function oldestOpenReviewDate(rootId: string, now: Date = new Date()): Promise<string | null> {
+  // A review older than the look-back belongs to the historical backfill or to a person; it must not widen every daily window.
+  const recentFloor = addDays(mexicoDate(now), -DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS);
   const open = await db().collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").limit(2000).get();
   let oldest: string | null = null;
   for (const doc of open.docs) {
     const candidates = [text(doc.get("evidence.display.date")), text(doc.get("evidence.date")), text(doc.get("lastSeenWindow.start"))].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
     const date = candidates.sort()[0];
-    if (date && (!oldest || date < oldest)) oldest = date;
+    if (date && date >= recentFloor && (!oldest || date < oldest)) oldest = date;
   }
   return oldest;
 }
 
-async function acquireLease(rootId: string, now: number) {
-  const ref = db().collection("iqDailySyncState").doc(rootId), token = randomUUID();
+async function acquireLease(stateDocId: string, now: number, rootId: string = stateDocId) {
+  const ref = db().collection("iqDailySyncState").doc(stateDocId), token = randomUUID();
   const state = await db().runTransaction(async tx => {
     const snap = await tx.get(ref), data = snap.data() || {};
     if (Number(data.leaseUntil || 0) > now) return null;
@@ -338,19 +349,21 @@ async function releaseLease(ref: FirebaseFirestore.DocumentReference, token: str
   });
 }
 
-export async function runIqDailySyncForRoot(input: { rootId: string; secret: string; now?: Date; runKey?: string; budget?: Partial<DailySyncBudget>; groups?: readonly string[] }): Promise<RootResult> {
+export type BackfillRun = { window: { start: string; end: string }; stateDocId: string; process: string };
+
+export async function runIqDailySyncForRoot(input: { rootId: string; secret: string; now?: Date; runKey?: string; budget?: Partial<DailySyncBudget>; groups?: readonly string[]; backfill?: BackfillRun }): Promise<RootResult> {
   const now = input.now ?? new Date(), rootId = text(input.rootId);
   const runKey = text(input.runKey) || `${mexicoDate(now)}-${Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Mexico_City", hour: "numeric", hourCycle: "h23" }).format(now)) < 12 ? "AM" : "PM"}`;
-  const lease = await acquireLease(rootId, Date.now());
+  const lease = await acquireLease(input.backfill?.stateDocId || rootId, Date.now(), rootId);
   if (!lease) return { rootId, status: "BUSY", window: null, groups: [], safety: "LEASE_HELD" };
-  const window = widenWindowForOpenReviews(dailyWindow(now, text(lease.state.lastCompletedDate) || null), await oldestOpenReviewDate(rootId).catch(() => null), now);
+  const window = input.backfill ? { ...input.backfill.window, timezone: "America/Mexico_City" as const } : widenWindowForOpenReviews(dailyWindow(now, text(lease.state.lastCompletedDate) || null), await oldestOpenReviewDate(rootId, now).catch(() => null), now);
   const tracker: Tracker = { started: Date.now(), writes: 0, errors: 0, budget: { ...DEFAULT_DAILY_SYNC_BUDGET, ...(input.budget || {}) } };
   const ctx: Context = { uid: IQ_DAILY_SYNC_ACTOR_UID, rootId };
   const groups: GroupResult[] = [], runDoc = db().collection("iqDailySyncRuns").doc(`iqds_${deterministicId(rootId, runKey).slice(0, 24)}`);
   let safety = "NOT_RUN", status = "FAILED";
   try {
     const guarded = await new SafetyRuntime(db()).run({
-      rootId, process: IQ_DAILY_SYNC_PROCESS, operationType: "IQ_DAILY_REVERSE_SYNC", operationId: `${rootId}:${runKey}`, idempotencyKey: `${runKey}:${window.start}:${window.end}`,
+      rootId, process: input.backfill?.process || IQ_DAILY_SYNC_PROCESS, operationType: input.backfill ? "IQ_HISTORICAL_BACKFILL" : "IQ_DAILY_REVERSE_SYNC", operationId: `${rootId}:${runKey}`, idempotencyKey: `${runKey}:${window.start}:${window.end}`,
       origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ", policy: IQ_DAILY_SYNC_POLICY,
     }, async () => {
       const ordered = [...(input.groups || IQ_DAILY_SYNC_GROUPS)];
@@ -372,7 +385,7 @@ export async function runIqDailySyncForRoot(input: { rootId: string; secret: str
     const complete = status === "COMPLETE", lastCompletedDate = addDays(window.end, -1);
     const priorCompleted = text(lease.state.lastCompletedDate);
     await releaseLease(lease.ref, lease.token, { lastRunKey: runKey, lastRunStatus: status, lastSafetyResult: safety, lastWindow: window, lastRunAt: FieldValue.serverTimestamp(),
-      ...(complete && (!priorCompleted || lastCompletedDate > priorCompleted) ? { lastCompletedDate } : {}) });
+      ...(!input.backfill && complete && (!priorCompleted || lastCompletedDate > priorCompleted) ? { lastCompletedDate } : {}) });
   }
   const postedResolved = status === "NOT_ADMITTED" ? 0 : await resolvePostedPaymentReviews(rootId);
   const incident = await publishIncident(rootId);
