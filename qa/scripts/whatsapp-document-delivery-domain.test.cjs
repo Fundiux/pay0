@@ -146,6 +146,15 @@ check('recovered-dispersion-delivery-age', () => {
   assert.equal(d.RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS, 3 * day);
 });
 
+// ---- a solicitud recovered from IQ never sends its documents to the client ----
+check('recovered-solicitud-never-delivered', () => {
+  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', createdAt: { toMillis: () => Date.now() } }), true, 'even a recovered solicitud from today');
+  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }), true, 'without a date');
+  assert.equal(d.isRecoveredSolicitud({ source: 'PAY0' }), false, 'a solicitud PAY0 created keeps its delivery');
+  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'MANUAL' }), false);
+  assert.equal(d.isRecoveredSolicitud(null), false);
+});
+
 // ---- lease state machine ----
 const now = 1_000_000;
 const lease = { leaseId: '11111111-1111-4111-8111-111111111111', bindingId: 'b', generation: 1, expiresAtMs: now + 1000 };

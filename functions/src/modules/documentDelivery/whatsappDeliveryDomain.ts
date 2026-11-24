@@ -290,6 +290,14 @@ export function isStaleRecoveredDispersion(dispersion: Record<string, unknown> |
   return ms > 0 && nowMs - ms > RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS;
 }
 
+/**
+ * A solicitud the daily sync recovered from IQ never sends its documents to the client: the client already has them.
+ * They are stored with the solicitud only. Owner decision 2026-11-24.
+ */
+export function isRecoveredSolicitud(solicitud: Record<string, unknown> | null | undefined): boolean {
+  return Boolean(solicitud) && solicitud!.source === "IQ_IMPORT" && solicitud!.importMode === "DAILY_SYNC";
+}
+
 const AGENT_LABEL: Record<string, string> = { hugo: "Hugo", maria: "María", sofia: "Sofía" };
 const agentNames = (ids: string[]) => ids.map((id) => AGENT_LABEL[id] || id).join(", ");
 
