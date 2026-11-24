@@ -14,7 +14,7 @@ import { generateCotizacionForSolicitudCore } from "../cotizaciones/callables";
 import { generateConstanciaRecepcionForSolicitudCore } from "../constancias/service";
 import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { isOcTemplateHelp } from "../../utils/ocTemplateText";
-import { candidateToCommercialMetadata, decodeTextDocument, parseDelimitedText, recognitionLogEntry, recognitionSummary, recognizeOcFromRows, recognizeOcFromText, type OcRecognitionResult, type OcSourceFormat, type OcValidationContext } from "./ocRecognition";
+import { candidateToCommercialMetadata, decodeTextDocument, parseDelimitedText, parseLocaleAmount, recognitionLogEntry, recognitionSummary, recognizeOcFromRows, recognizeOcFromText, type OcRecognitionResult, type OcSourceFormat, type OcValidationContext } from "./ocRecognition";
 import { extractOcSemantically } from "./ocSemanticExtraction";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -160,6 +160,86 @@ export function parseOcDate(raw: string): string {
 function xmlValue(value: string) { return String(value || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
 function excelColumn(reference: string) { let value = 0; for (const char of String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "") value = value * 26 + char.charCodeAt(0) - 64; return value; }
 
+function parseNewIqTemplateRows(rows: string[][]): OcFiscalMetadata | undefined {
+  const label = (value?: string) => (value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+  const section = (name: string) => rows.findIndex((row) => label(row[0]).replace(/[\s:]/g, "") === name);
+  const supplierSection = section("PROVEEDOR");
+  const clientSection = section("CLIENTE");
+  const header = rows.findIndex((row) =>
+    label(row[7]) === "CONCEPTO" && label(row[13]) === "CANTIDAD" &&
+    label(row[15]) === "PRECIO UNITARIO" && label(row[16]) === "IMPORTE",
+  );
+  if (
+    label(rows[0]?.[0]) !== "ORDEN DE COMPRA" || supplierSection < 0 ||
+    clientSection <= supplierSection || header <= clientSection ||
+    !rows.some((row) => label(row[12]) === "METODO DE PAGO")
+  ) return undefined;
+
+  const clientRows = rows.slice(clientSection + 1, header);
+  const fiscalRow = clientRows.find((row) => label(row[0]) === "RAZON SOCIAL");
+  const summaryStart = rows.findIndex((row, index) => index > header && ["SUBTOTAL", "IVA", "TOTAL"].includes(label(row[14])));
+  const items: OcLineItem[] = [];
+  for (const row of rows.slice(header + 1, summaryStart < 0 ? undefined : summaryStart)) {
+    const description = String(row[7] || "").trim();
+    const statedQuantity = parseLocaleAmount(row[13]);
+    const unitPrice = parseLocaleAmount(row[15]);
+    const statedAmount = parseLocaleAmount(row[16]);
+    if (!description && !row[3] && !statedQuantity && !unitPrice && !statedAmount) continue;
+    const quantity = statedQuantity ?? 0;
+    const amount = statedAmount ?? (unitPrice !== null && quantity > 0
+      ? Math.round(Number((quantity * unitPrice * 100).toPrecision(12))) / 100
+      : null);
+    items.push({
+      quantity,
+      unit: label(row[1]).match(/^[A-Z0-9]{2,3}\b/)?.[0] || "",
+      productCode: String(row[3] || "").trim().match(/^\d{8}\b/)?.[0] || "",
+      description,
+      unitPrice: unitPrice ?? (amount !== null && quantity > 0 ? Math.round(amount / quantity * 10000) / 10000 : null),
+      amount,
+    });
+  }
+
+  const firstItem = items.find((item) => item.productCode && item.unit) || items[0];
+  const fiscalField = (name: string) => clientRows.find((row) => label(row[12]) === name)?.[13] || "";
+  const streetRow = clientRows.find((row) => label(row[0]) === "CALLE");
+  const postalRow = clientRows.find((row) => label(row[0]) === "CODIGO POSTAL");
+  const localityRow = clientRows.find((row) => label(row[0]) === "LOCALIDAD");
+  const postalCode = postalRow?.[2]?.match(/^\d{5}\b/)?.[0] || "";
+  const clientAddress = [
+    [streetRow?.[2], streetRow?.[9], streetRow?.[11]].filter(Boolean).join(" "),
+    postalRow?.[4],
+    localityRow?.[2],
+    postalRow?.[9] !== localityRow?.[2] ? postalRow?.[9] : "",
+    localityRow?.[9],
+    postalCode ? `CP ${postalCode}` : "",
+  ].filter(Boolean).join(", ");
+  const subtotalRow = rows.find((row, index) => index > header && label(row[14]) === "SUBTOTAL");
+  const vatRow = rows.find((row, index) => index > header && label(row[14]) === "IVA");
+  const totalRow = rows.find((row, index) => index > header && label(row[14]) === "TOTAL");
+  return {
+    productCode: firstItem?.productCode || "",
+    unitCode: firstItem?.unit || "",
+    description: firstItem?.description || "",
+    quantity: firstItem?.quantity ?? 0,
+    clientName: fiscalRow?.[2] || "",
+    clientRfc: label(fiscalRow?.[10]),
+    clientAddress,
+    cfdiUse: label(fiscalField("USO DEL CFDI")).match(/^[A-Z]\d{2}\b/)?.[0] || "",
+    fiscalRegime: label(fiscalRow?.[13]).match(/^\d{3}\b/)?.[0] || "",
+    postalCode,
+    paymentMethod: label(fiscalField("METODO DE PAGO")).match(/^(PUE|PPD)\b/)?.[0] || "",
+    paymentForm: label(fiscalField("FORMA DE PAGO")).match(/^\d{2}\b/)?.[0] || "",
+    currency: label(vatRow?.[13]).match(/^[A-Z]{3}\b/)?.[0] || "",
+    deliveryLocation: clientAddress,
+    items,
+    subtotal: parseLocaleAmount(subtotalRow?.[16]) ?? undefined,
+    iva: parseLocaleAmount(vatRow?.[16]) ?? undefined,
+    total: parseLocaleAmount(totalRow?.[16]) ?? undefined,
+    date: parseOcDate(rows.find((row) => label(row[15]) === "FECHA")?.[16] || ""),
+    number: "",
+  };
+}
+
 async function readOcFiscalMetadata(bucket: any, storagePath: string): Promise<OcFiscalMetadata | null> {
   // Fetch one extra byte so an oversized object is rejected before full allocation.
   const [buffer] = await bucket.file(storagePath).download({ start: 0, end: MAX_SOLICITUD_DOCUMENT_SIZE_BYTES });
@@ -201,6 +281,16 @@ export async function parseOcFiscalMetadataBuffer(buffer: Buffer, commercial = f
     if (!rows.length) rows = candidate;
   }
   if (!rows.length) return null;
+  const newIq = parseNewIqTemplateRows(rows);
+  if (newIq) {
+    const { items, subtotal, iva, total, currency } = newIq;
+    const commercialValid = items.length > 0 && items.every((item) => item.description && item.quantity > 0) &&
+      subtotal !== undefined && iva !== undefined && total !== undefined && total > 0 &&
+      Math.abs(subtotal + iva - total) <= 0.01 && currency === "MXN";
+    if (diagnostics) Object.assign(diagnostics, { items: items.length, itemDescriptions: items.map((item) => !!item.description), subtotal, iva, total, currency, commercialValid });
+    if (quotationLines) return items.length ? newIq : null;
+    return (commercial ? commercialValid : newIq.productCode && newIq.unitCode) ? newIq : null;
+  }
   const normalized = (value: unknown) => String(value || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toUpperCase().replace(/[.:;_\-/\\]+/g, " ").replace(/\s+/g, " ").trim();

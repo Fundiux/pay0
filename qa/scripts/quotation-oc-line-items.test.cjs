@@ -51,6 +51,42 @@ const quoteLines = buffer => parseOcFiscalMetadataBuffer(buffer, true, undefined
   assert.equal(labelled.date, '2026-09-15', 'text dates are day first');
   assert.equal(requirePricedQuoteLines(labelled, 1160).items[0].unitPrice, 500);
 
+  const iq = new ExcelJS.Workbook();
+  const order = iq.addWorksheet('Orden de Compra');
+  const iqCells = {
+    A1: 'ORDEN DE COMPRA', A3: 'P R O V E E D O R :', C4: 'PROVEEDOR QA', P4: 'Fecha', Q4: 46350,
+    A6: 'C L I E N T E :', A7: 'Razón Social', C7: 'CLIENTE QA', J7: 'R.F.C.', K7: 'XAXX010101000',
+    M7: 'Régimen Fiscal', N7: '601 - General de Ley', M8: 'Uso del CFDI', N8: 'G03 - Gastos en general',
+    A9: 'Código Postal', C9: '64650', M9: 'Método de Pago', N9: 'PPD - Pago diferido',
+    M10: 'Forma de Pago', N10: '99 - Por definir',
+    B12: 'Unidad de Medida', D12: 'Clave Productos y Servicios', H12: 'Concepto',
+    N12: 'Cantidad', P12: 'Precio Unitario', Q12: 'Importe',
+    A13: 1, B13: 'E48 - Unidad de servicio', D13: '80101500 - Consultoría',
+    H13: 'Servicio', N13: 1, P13: 500, Q13: { formula: 'N13*P13', result: 500 },
+    A14: 2, Q14: { formula: 'N14*P14', result: 0 },
+    A15: 3, B15: 'H87 - Pieza', D15: '26101700 - Refacción',
+    H15: 'Refacción', N15: 2, P15: 250, Q15: 500,
+    N26: 'Moneda', N27: 'MXN', O26: 'Subtotal', Q26: 1000, O27: 'IVA', Q27: 160, O28: 'Total', Q28: 1160,
+  };
+  for (const [address, value] of Object.entries(iqCells)) order.getCell(address).value = value;
+  order.mergeCells('A6:Q6');
+  order.mergeCells('C7:I7');
+  order.mergeCells('N9:Q9');
+  order.mergeCells('O28:P28');
+  const iqBytes = Buffer.from(await iq.xlsx.writeBuffer());
+  const iqMetadata = await quoteLines(iqBytes);
+  assert.deepEqual(await parseOcFiscalMetadataBuffer(iqBytes), iqMetadata);
+  assert.deepEqual(await parseOcFiscalMetadataBuffer(iqBytes, true), iqMetadata);
+  assert.deepEqual(iqMetadata.items.map(item => [item.productCode, item.unit, item.quantity, item.amount]), [
+    ['80101500', 'E48', 1, 500], ['26101700', 'H87', 2, 500],
+  ]);
+  assert.equal(iqMetadata.clientName, 'CLIENTE QA');
+  assert.equal(iqMetadata.postalCode, '64650');
+  assert.equal(iqMetadata.paymentMethod, 'PPD');
+  assert.equal(iqMetadata.paymentForm, '99');
+  assert.equal(iqMetadata.cfdiUse, 'G03');
+  assert.equal(requirePricedQuoteLines(iqMetadata, 1160).iva, 160);
+
   // Saved without recalculation: amount and totals are formulas with no cached
   // value, and template rows sit at quantity 0 with no concept.
   const uncached = await quoteLines(await workbook([
