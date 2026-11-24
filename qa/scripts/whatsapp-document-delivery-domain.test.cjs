@@ -130,36 +130,22 @@ check('group-alert-text', () => {
   assert.equal(d.deliverySource('AVISO_GRUPO_INTERNO').kind, 'TEXT');
 });
 
-// ---- a recovered dispersion from days ago is not announced to the client ----
-check('recovered-dispersion-delivery-age', () => {
-  const day = 24 * 60 * 60 * 1000, now = Date.UTC(2026, 10, 25, 18, 0, 0);
-  const recovered = (ageDays, over = {}) => ({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', createdAt: { toMillis: () => now - ageDays * day }, ...over });
-  assert.equal(d.isStaleRecoveredDispersion(recovered(1), now), false, 'yesterday is announced');
-  assert.equal(d.isStaleRecoveredDispersion(recovered(3), now), false, 'exactly three days is still announced');
-  assert.equal(d.isStaleRecoveredDispersion(recovered(3.01), now), true, 'older than three days is not');
-  assert.equal(d.isStaleRecoveredDispersion(recovered(400), now), true, 'history is never announced');
-  assert.equal(d.isStaleRecoveredDispersion(recovered(30, { source: 'PAY0' }), now), false, 'a dispersion PAY0 made keeps its own flow');
-  assert.equal(d.isStaleRecoveredDispersion(recovered(30, { importMode: 'MANUAL' }), now), false);
-  assert.equal(d.isStaleRecoveredDispersion({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }, now), false, 'without a date nothing is suppressed');
-  assert.equal(d.isStaleRecoveredDispersion(null, now), false);
-  assert.equal(d.isStaleRecoveredDispersion(recovered(10, { createdAt: new Date(now - 10 * day) }), now), true, 'a plain Date works');
-  assert.equal(d.RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS, 3 * day);
-});
-
-// ---- backlog solicitudes recovered from IQ (up to 2026-11-24) never send documents; later ones do ----
-check('backlog-recovered-solicitud-not-delivered', () => {
-  const cut = d.RECOVERED_SOLICITUD_BACKLOG_CUTOFF_MS, hour = 60 * 60 * 1000;
-  const rec = (ms, over = {}) => ({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', importedAt: { toMillis: () => ms }, ...over });
-  assert.equal(cut, Date.UTC(2026, 10, 25, 6, 0, 0), 'end of 2026-11-24 in Mexico');
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut - hour)), true, 'recovered on 2026-11-24 evening is backlog');
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(Date.UTC(2026, 10, 22))), true);
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut)), false, 'recovered from 2026-11-25 is sent');
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut + 30 * 24 * hour)), false);
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut + hour, { importedAt: new Date(cut + hour) })), false, 'a plain Date works');
-  assert.equal(d.isBacklogRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }), true, 'no import time counts as backlog');
-  assert.equal(d.isBacklogRecoveredSolicitud({ source: 'PAY0' }), false, 'a solicitud PAY0 created keeps its delivery');
-  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut - hour, { importMode: 'MANUAL' })), false);
-  assert.equal(d.isBacklogRecoveredSolicitud(null), false);
+// ---- recovered from IQ: what is dated up to 2026-11-23 is never sent; from 2026-11-24 everything is sent, even late ----
+check('recovered-backlog-by-original-date', () => {
+  const cut = d.RECOVERED_BACKLOG_CUTOFF_MS, hour = 60 * 60 * 1000;
+  const rec = (ms, over = {}) => ({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', createdAt: { toMillis: () => ms }, ...over });
+  assert.equal(cut, Date.UTC(2026, 10, 24, 6, 0, 0), 'start of 2026-11-24 in Mexico');
+  for (const fn of [d.isBacklogRecoveredSolicitud, d.isBacklogRecoveredDispersion]) {
+    assert.equal(fn(rec(cut - hour)), true, 'dated 2026-11-23 evening is backlog');
+    assert.equal(fn(rec(Date.UTC(2026, 10, 6))), true);
+    assert.equal(fn(rec(cut)), false, 'dated 2026-11-24 is sent');
+    assert.equal(fn(rec(cut + 10 * 24 * hour)), false, 'later is sent whatever the age');
+    assert.equal(fn(rec(cut + hour, { createdAt: new Date(cut + hour) })), false, 'a plain Date works');
+    assert.equal(fn({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }), true, 'no date counts as backlog');
+    assert.equal(fn({ source: 'PAY0', createdAt: new Date(0) }), false, 'a record PAY0 made keeps its own delivery');
+    assert.equal(fn(rec(cut - hour, { importMode: 'MANUAL' })), false);
+    assert.equal(fn(null), false);
+  }
 });
 
 // ---- lease state machine ----
