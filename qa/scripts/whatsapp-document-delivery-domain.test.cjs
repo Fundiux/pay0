@@ -146,13 +146,20 @@ check('recovered-dispersion-delivery-age', () => {
   assert.equal(d.RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS, 3 * day);
 });
 
-// ---- a solicitud recovered from IQ never sends its documents to the client ----
-check('recovered-solicitud-never-delivered', () => {
-  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', createdAt: { toMillis: () => Date.now() } }), true, 'even a recovered solicitud from today');
-  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }), true, 'without a date');
-  assert.equal(d.isRecoveredSolicitud({ source: 'PAY0' }), false, 'a solicitud PAY0 created keeps its delivery');
-  assert.equal(d.isRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'MANUAL' }), false);
-  assert.equal(d.isRecoveredSolicitud(null), false);
+// ---- backlog solicitudes recovered from IQ (up to 2026-11-24) never send documents; later ones do ----
+check('backlog-recovered-solicitud-not-delivered', () => {
+  const cut = d.RECOVERED_SOLICITUD_BACKLOG_CUTOFF_MS, hour = 60 * 60 * 1000;
+  const rec = (ms, over = {}) => ({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC', importedAt: { toMillis: () => ms }, ...over });
+  assert.equal(cut, Date.UTC(2026, 10, 25, 6, 0, 0), 'end of 2026-11-24 in Mexico');
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut - hour)), true, 'recovered on 2026-11-24 evening is backlog');
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(Date.UTC(2026, 10, 22))), true);
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut)), false, 'recovered from 2026-11-25 is sent');
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut + 30 * 24 * hour)), false);
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut + hour, { importedAt: new Date(cut + hour) })), false, 'a plain Date works');
+  assert.equal(d.isBacklogRecoveredSolicitud({ source: 'IQ_IMPORT', importMode: 'DAILY_SYNC' }), true, 'no import time counts as backlog');
+  assert.equal(d.isBacklogRecoveredSolicitud({ source: 'PAY0' }), false, 'a solicitud PAY0 created keeps its delivery');
+  assert.equal(d.isBacklogRecoveredSolicitud(rec(cut - hour, { importMode: 'MANUAL' })), false);
+  assert.equal(d.isBacklogRecoveredSolicitud(null), false);
 });
 
 // ---- lease state machine ----

@@ -290,12 +290,19 @@ export function isStaleRecoveredDispersion(dispersion: Record<string, unknown> |
   return ms > 0 && nowMs - ms > RECOVERED_DISPERSION_DELIVERY_MAX_AGE_MS;
 }
 
+/** End of 2026-11-24 in Mexico City (UTC-6): solicitudes recovered from IQ up to this moment are the backlog. */
+export const RECOVERED_SOLICITUD_BACKLOG_CUTOFF_MS = Date.UTC(2026, 10, 25, 6, 0, 0);
+
 /**
- * A solicitud the daily sync recovered from IQ never sends its documents to the client: the client already has them.
- * They are stored with the solicitud only. Owner decision 2026-11-24.
+ * A solicitud the daily sync recovered from IQ up to 2026-11-24 belongs to the backlog: the client already has its
+ * documents, so they are stored and never sent. One recovered after that date is sent normally, in case PAY0 missed
+ * the delivery. Without a readable import time it counts as backlog. Owner decision 2026-11-24.
  */
-export function isRecoveredSolicitud(solicitud: Record<string, unknown> | null | undefined): boolean {
-  return Boolean(solicitud) && solicitud!.source === "IQ_IMPORT" && solicitud!.importMode === "DAILY_SYNC";
+export function isBacklogRecoveredSolicitud(solicitud: Record<string, unknown> | null | undefined): boolean {
+  if (!solicitud || solicitud.source !== "IQ_IMPORT" || solicitud.importMode !== "DAILY_SYNC") return false;
+  const imported = solicitud.importedAt as { toMillis?: () => number } | Date | number | null | undefined;
+  const ms = typeof imported === "number" ? imported : imported instanceof Date ? imported.getTime() : typeof (imported as { toMillis?: unknown })?.toMillis === "function" ? (imported as { toMillis: () => number }).toMillis() : 0;
+  return !(ms > 0) || ms < RECOVERED_SOLICITUD_BACKLOG_CUTOFF_MS;
 }
 
 const AGENT_LABEL: Record<string, string> = { hugo: "Hugo", maria: "María", sofia: "Sofía" };

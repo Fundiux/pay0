@@ -10,7 +10,7 @@ import {
 import {
   buildDeliveryCaption,
   deliverySource,
-  isRecoveredSolicitud,
+  isBacklogRecoveredSolicitud,
   isStaleRecoveredDispersion,
   mexicoDayStartMs,
   sameDayCatchUpSourceType,
@@ -97,8 +97,8 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
     const pair = completePackage(rows, types);
     const solicitud = await readSolicitud(rootId, solicitudId);
     if (!pair || !solicitud) return null;
-    // An invoice of a solicitud recovered from IQ is stored, never sent: the client already has it.
-    if (isRecoveredSolicitud(solicitud)) return null;
+    // An invoice of a backlog solicitud recovered from IQ is stored, never sent: the client already has it.
+    if (isBacklogRecoveredSolicitud(solicitud)) return null;
     return { sourceId: solicitudId, clienteId: cleanText(upload.clienteId ?? upload.clientId ?? pair[0].clienteId ?? solicitud.clienteId ?? solicitud.clientId),
       clienteNombre: cleanText(upload.clienteNombre ?? solicitud.clienteNombre ?? solicitud.clientName) || null, rows: pair,
       counterpartyName: cleanText(solicitud.empresaNombre || solicitud.companyName) || null,
@@ -116,7 +116,7 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
       readSolicitud(rootId, cleanText(upload.solicitudId)),
       cleanText(upload.applicationId) ? db.doc(`pagoAplicaciones/${cleanText(upload.applicationId)}`).get() : Promise.resolve(null),
     ]);
-    if (isRecoveredSolicitud(solicitud)) return null;
+    if (isBacklogRecoveredSolicitud(solicitud)) return null;
     const app = application?.exists && cleanText(application.get("rootId")) === rootId ? application.data() || {} : {};
     return { sourceId: key, clienteId: cleanText(upload.clienteId ?? solicitud?.clienteId ?? solicitud?.clientId),
       clienteNombre: cleanText(solicitud?.clienteNombre ?? solicitud?.clientName) || null, rows: pair,
@@ -143,7 +143,7 @@ async function buildPackage(sourceType: DeliverySourceType, upload: UploadRow): 
   const solicitudId = cleanText(upload.solicitudId ?? upload.entityId);
   const solicitud = await readSolicitud(rootId, solicitudId);
   if (!solicitud) return null;
-  if (isRecoveredSolicitud(solicitud)) return null;
+  if (isBacklogRecoveredSolicitud(solicitud)) return null;
   return { sourceId: solicitudId, clienteId: cleanText(upload.clienteId ?? solicitud.clienteId ?? solicitud.clientId),
     clienteNombre: cleanText(upload.clienteNombre ?? solicitud.clienteNombre ?? solicitud.clientName) || null, rows: [upload],
     counterpartyName: cleanText(solicitud.empresaNombre || solicitud.companyName) || null,
