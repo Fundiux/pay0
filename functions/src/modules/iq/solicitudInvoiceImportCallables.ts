@@ -1,4 +1,5 @@
 import { evaluateIqDispatchGate } from "../dispatches/iqGate";
+import { isIqDailySyncImport } from "./historicalImportGuard";
 import { DEFAULT_IQ_ERP_URL } from "./config";
 import * as crypto from "crypto";
 import * as zlib from "zlib";
@@ -477,7 +478,10 @@ export async function enqueueIqInvoiceImportJob(input: {
     input.solicitudId,
   );
 
+  // A solicitud recovered from IQ is asked for by its IQ id (the same id PAY0 stores as iqFolio when it creates one itself).
+  const recoveredSolicitud = isIqDailySyncImport(solicitud);
   input.iqFolio = cleanText(
+    (recoveredSolicitud ? solicitud.iqId ?? solicitud.originalIqEntityId : undefined) ??
     solicitud.iqFolio ??
     solicitud.iqId ??
     creation.iqId ??
@@ -487,6 +491,7 @@ export async function enqueueIqInvoiceImportJob(input: {
   input.profileId = cleanText(
     solicitud.iqCredentialProfileId ??
     creation.profileId ??
+    (recoveredSolicitud ? solicitud.canonicalIqProfileId : undefined) ??
     input.profileId,
   );
 
@@ -1459,7 +1464,9 @@ async function processJobGroup(input: { jobs: IqInvoiceJob[]; source: "MANUAL" |
       jobH4D73A8.solicitudId,
     );
 
+    const recoveredH4D73A8 = isIqDailySyncImport(solicitudH4D73A8);
     const currentIqFolioH4D73A8 = cleanText(
+      (recoveredH4D73A8 ? solicitudH4D73A8.iqId ?? solicitudH4D73A8.originalIqEntityId : undefined) ??
       solicitudH4D73A8.iqFolio ??
       solicitudH4D73A8.iqId ??
       creationH4D73A8.iqId ??
@@ -1469,6 +1476,7 @@ async function processJobGroup(input: { jobs: IqInvoiceJob[]; source: "MANUAL" |
     const currentProfileIdH4D73A8 = cleanText(
       solicitudH4D73A8.iqCredentialProfileId ??
       creationH4D73A8.profileId ??
+      (recoveredH4D73A8 ? solicitudH4D73A8.canonicalIqProfileId : undefined) ??
       jobH4D73A8.profileId,
     );
 
@@ -1985,7 +1993,9 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     const solicitudId = doc.id;
     const solicitudFolio = cleanText(solicitud.folio ?? solicitud.folioSolicitud ?? solicitudId);
     const rootId = cleanText(solicitud.rootId ?? solicitud.ownerRootId ?? solicitud.adminId);
-    const iqFolio = cleanText(solicitud.iqFolio ?? solicitud.iqId);
+    // A solicitud recovered from IQ by the daily sync has no PAY0 creation record: its IQ id and canonical profile identify the invoice.
+    const recovered = isIqDailySyncImport(solicitud) && cleanText(solicitud.invoiceStatus).toUpperCase() === "INVOICED";
+    const iqFolio = recovered ? cleanText(solicitud.iqId ?? solicitud.originalIqEntityId) : cleanText(solicitud.iqFolio ?? solicitud.iqId);
 
     if (!rootId || !iqFolio) {
       skipped += 1;
@@ -2015,9 +2025,10 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
 
     const creationSnap = await db.collection("iqSolicitudCreations").doc(solicitudId).get();
     const creation = creationSnap.exists ? asRecord(creationSnap.data()) : {};
-    const profileId = cleanText(solicitud.iqCredentialProfileId ?? creation.profileId);
+    const profileId = cleanText(solicitud.iqCredentialProfileId ?? creation.profileId) || (recovered ? cleanText(solicitud.canonicalIqProfileId) : "");
     const profileAlias = cleanText(creation.profileAlias ?? solicitud.iqProfileAlias);
-    const marker = cleanText(solicitud.iqReconciliationMarker ?? creation.marker ?? creation.creationMarker);
+    // The download asks IQ by invoice id; the marker is only a label for a recovered solicitud.
+    const marker = cleanText(solicitud.iqReconciliationMarker ?? creation.marker ?? creation.creationMarker) || (recovered ? `IQ_IMPORT:${iqFolio}` : "");
 
     if (!profileId || !marker) {
       await doc.ref.set({
