@@ -744,6 +744,10 @@
     {
       "commit": "5e0f2ef1",
       "capability": "Los documentos de solicitudes recuperadas de IQ nunca se envian al grupo de WhatsApp del cliente"
+    },
+    {
+      "commit": "3330a16a",
+      "capability": "Solo las solicitudes recuperadas de IQ hasta el 2026-11-24 se guardan sin enviar; las recuperadas despues se envian al cliente"
     }
   ],
   "requiredText": [
