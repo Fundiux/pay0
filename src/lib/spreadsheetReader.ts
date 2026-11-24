@@ -123,13 +123,14 @@ function csvSheet(data: ArrayBuffer): SpreadsheetSheet {
   };
 }
 
-async function withoutHiddenWorksheets(data: ArrayBuffer): Promise<ArrayBuffer> {
+async function withoutHiddenWorksheets(data: ArrayBuffer) {
   const [zipModule, { SaxesParser }] = await Promise.all([import("jszip"), import("saxes")]);
   const JSZip = zipModule.default ?? zipModule;
   const archive = await JSZip.loadAsync(data);
   const workbook = archive.file("xl/workbook.xml");
   const relationships = archive.file("xl/_rels/workbook.xml.rels");
-  if (!workbook || !relationships) return data;
+  const hiddenSheetNames: string[] = [];
+  if (!workbook || !relationships) return { data, hiddenSheetNames };
 
   const hiddenIds = new Set<string>();
   const visibleIds = new Set<string>();
@@ -137,10 +138,11 @@ async function withoutHiddenWorksheets(data: ArrayBuffer): Promise<ArrayBuffer> 
   workbookParser.on("opentag", ({ name, attributes }) => {
     if (name !== "sheet" || !attributes["r:id"]) return;
     const hidden = attributes.state === "hidden" || attributes.state === "veryHidden";
+    if (hidden) hiddenSheetNames.push(attributes.name);
     (hidden ? hiddenIds : visibleIds).add(attributes["r:id"]);
   });
   workbookParser.write(await workbook.async("string")).close();
-  if (hiddenIds.size === 0) return data;
+  if (hiddenIds.size === 0) return { data, hiddenSheetNames };
 
   const hiddenPaths = new Set<string>();
   const visiblePaths = new Set<string>();
@@ -157,9 +159,38 @@ async function withoutHiddenWorksheets(data: ArrayBuffer): Promise<ArrayBuffer> 
 
   // Keep the upload intact and avoid inflating catalogs just to discard them.
   const removablePaths = [...hiddenPaths].filter((path) => !visiblePaths.has(path));
-  if (removablePaths.length === 0) return data;
+  if (removablePaths.length === 0) return { data, hiddenSheetNames };
   removablePaths.forEach((path) => archive.remove(path));
-  return archive.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+  return {
+    data: await archive.generateAsync({ type: "arraybuffer", compression: "DEFLATE" }),
+    hiddenSheetNames,
+  };
+}
+
+async function spreadsheetBytes(file: File): Promise<ArrayBuffer> {
+  if (file.size > MAX_SPREADSHEET_BYTES) {
+    throw new Error("El archivo excede el límite de lectura de 10 MB.");
+  }
+  const data = await file.arrayBuffer();
+  if (data.byteLength > MAX_SPREADSHEET_BYTES) {
+    throw new Error("El archivo excede el límite de lectura de 10 MB.");
+  }
+  return data;
+}
+
+export async function loadSpreadsheetWorkbook(file: File, { visibleOnly = false } = {}) {
+  const original = await spreadsheetBytes(file);
+  const ExcelJS = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  try {
+    const { data, hiddenSheetNames } = visibleOnly
+      ? await withoutHiddenWorksheets(original)
+      : { data: original, hiddenSheetNames: [] };
+    await workbook.xlsx.load(data);
+    return { workbook, hiddenSheetNames };
+  } catch {
+    throw new Error("No se pudo leer el archivo XLSX. Está dañado, protegido o no es un libro válido.");
+  }
 }
 
 export async function readSpreadsheetFile(
@@ -170,22 +201,8 @@ export async function readSpreadsheetFile(
   if (extension !== "csv" && extension !== "xlsx") {
     throw new Error("Solo se admiten archivos .xlsx o .csv.");
   }
-  if (file.size > MAX_SPREADSHEET_BYTES) {
-    throw new Error("El archivo excede el límite de lectura de 10 MB.");
-  }
-  const data = await file.arrayBuffer();
-  if (data.byteLength > MAX_SPREADSHEET_BYTES) {
-    throw new Error("El archivo excede el límite de lectura de 10 MB.");
-  }
-  if (extension === "csv") return [csvSheet(data)];
-
-  const ExcelJS = await import("exceljs");
-  const workbook = new ExcelJS.Workbook();
-  try {
-    await workbook.xlsx.load(visibleOnly ? await withoutHiddenWorksheets(data) : data);
-  } catch {
-    throw new Error("No se pudo leer el archivo XLSX. Está dañado, protegido o no es un libro válido.");
-  }
+  if (extension === "csv") return [csvSheet(await spreadsheetBytes(file))];
+  const { workbook } = await loadSpreadsheetWorkbook(file, { visibleOnly });
 
   const worksheets = visibleOnly
     ? workbook.worksheets.filter((worksheet) => worksheet.state === "visible")

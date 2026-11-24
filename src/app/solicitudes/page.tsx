@@ -655,7 +655,8 @@ export default function SolicitudesPage() {
   const [newMsg, setNewMsg] = useState("");
   const [noteSending, setNoteSending] = useState(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [ordenCompraMassiveFiles, setOrdenCompraMassiveFiles] = useState<File[]>([]);
+  const [ordenCompraMassiveFiles, setOrdenCompraMassiveFiles] = useState<File[] | null>(null);
+  const isMassivePreviewOpen = ordenCompraMassiveFiles !== null;
   const [replacementContext, setReplacementContext] = useState<{ solicitudId: string; folio?: string; reason?: string } | null>(null);
   const [isOrdenCompraPageDragging, setIsOrdenCompraPageDragging] = useState(false);
 
@@ -676,7 +677,7 @@ export default function SolicitudesPage() {
 
     function handleWindowDragOver(event: DragEvent) {
       if (!hasFiles(event)) return;
-      if (isNewModalOpen || ordenCompraMassiveFiles.length > 0) return;
+      if (isNewModalOpen || isMassivePreviewOpen) return;
 
       event.preventDefault();
       setIsOrdenCompraPageDragging(true);
@@ -690,7 +691,7 @@ export default function SolicitudesPage() {
 
     function handleWindowDrop(event: DragEvent) {
       if (!hasFiles(event)) return;
-      if (isNewModalOpen) return;
+      if (isNewModalOpen || isMassivePreviewOpen) return;
 
       event.preventDefault();
       setIsOrdenCompraPageDragging(false);
@@ -716,7 +717,7 @@ export default function SolicitudesPage() {
       window.removeEventListener("dragleave", handleWindowDragLeave, true);
       window.removeEventListener("drop", handleWindowDrop, true);
     };
-  }, [isNewModalOpen, ordenCompraMassiveFiles.length]);
+  }, [isNewModalOpen, isMassivePreviewOpen]);
 
   useEffect(() => {
     if (!isNewModalOpen) return;
@@ -724,7 +725,7 @@ export default function SolicitudesPage() {
   }, [isNewModalOpen]);
   function openNewSolicitudModalClean() {
     setIsOrdenCompraPageDragging(false);
-    setOrdenCompraMassiveFiles([]);
+    setOrdenCompraMassiveFiles(null);
     setIsNewModalOpen(true);
   }
 
@@ -1495,13 +1496,13 @@ export default function SolicitudesPage() {
       onDragEnter={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
-        if (isNewModalOpen || ordenCompraMassiveFiles.length > 0) return;
+        if (isNewModalOpen || isMassivePreviewOpen) return;
         setIsOrdenCompraPageDragging(true);
       }}
       onDragOver={(e) => {
         if (e.defaultPrevented) return;
         e.preventDefault();
-        if (isNewModalOpen || ordenCompraMassiveFiles.length > 0) return;
+        if (isNewModalOpen || isMassivePreviewOpen) return;
         setIsOrdenCompraPageDragging(true);
       }}
       onDragLeave={(e) => {
@@ -1516,7 +1517,7 @@ export default function SolicitudesPage() {
         e.preventDefault();
         setIsOrdenCompraPageDragging(false);
 
-        if (isNewModalOpen) return;
+        if (isNewModalOpen || isMassivePreviewOpen) return;
 
         const files = Array.from(e.dataTransfer.files || []);
         const sourceFiles = files.filter((file) => {
@@ -1748,14 +1749,17 @@ export default function SolicitudesPage() {
       <NuevaSolicitudModal open={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} />
 
       <OrdenCompraMasivaModal
-        open={ordenCompraMassiveFiles.length > 0}
-        files={ordenCompraMassiveFiles}
+        open={isMassivePreviewOpen}
+        files={ordenCompraMassiveFiles ?? []}
         onClose={() => {
           setIsOrdenCompraPageDragging(false);
-          setOrdenCompraMassiveFiles([]);
+          setOrdenCompraMassiveFiles(null);
           setReplacementContext(null);
         }}
-        onFilesConsumed={() => setIsOrdenCompraPageDragging(false)}
+        onFilesConsumed={() => {
+          setIsOrdenCompraPageDragging(false);
+          setOrdenCompraMassiveFiles([]);
+        }}
         replacementOf={replacementContext}
       />
 

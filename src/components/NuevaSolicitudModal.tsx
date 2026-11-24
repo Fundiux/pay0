@@ -18,8 +18,9 @@ import { normalizeRole, mergeModules } from "@/lib/roles";
 import { UploadCloud, X } from "lucide-react";
 import { listCompanies } from "@/services/companies";
 import { listScopedClients } from "@/services/clients";
-import { uploadSolicitudDoc } from "@/lib/uploadSolicitudDoc";
+import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, uploadSolicitudDoc } from "@/lib/uploadSolicitudDoc";
 import { parseOrdenCompraFile, type ParsedOrdenCompra } from "@/lib/ordenCompraParser";
+import { prepareOrdenCompraAttachment } from "@/lib/prepareOrdenCompraAttachment";
 import { parseFacturaXmlFile, type ParsedFacturaXml } from "@/lib/facturaXmlParser";
 import { findFacturaSubtotalOperation } from "@/lib/solicitudes/operationOptions";
 
@@ -322,8 +323,13 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
     setSourceCompanyConfirmed(false);
     const sequence = ++parseSequence.current;
     try {
-      const parsed = await parseOrdenCompraFile(file);
+      const attachment = await prepareOrdenCompraAttachment(file, MAX_SOLICITUD_DOCUMENT_SIZE_BYTES);
+      const parsed = await parseOrdenCompraFile(attachment);
       if (sequence !== parseSequence.current) return;
+      if (attachment !== file && !parsed.ok) {
+        throw new Error(parsed.warnings.join(" ") || "La copia ligera no contiene todos los datos necesarios.");
+      }
+      setOrdenCompraFile(attachment);
       setOrdenCompraParsed(parsed);
 
       const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
@@ -396,18 +402,19 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
       ].filter(Boolean);
 
       if (filled.length > 0) {
-        setOrdenCompraParseMsg(
+        const imported = attachment === file ? "" : "Se adjuntará la copia ligera. ";
+        setOrdenCompraParseMsg(imported + (
           missing.length > 0
             ? `OC leida. Autollenado: ${filled.join(", ")}. Falta revisar: ${missing.join(", ")}.`
             : `OC leida. Autollenado completo usando TOTAL OC y Factura subtotal.`
-        );
+        ));
       } else {
         setOrdenCompraParseMsg("OC cargada. No pude autollenar campos; corrige el archivo o catalogos.");
       }
     } catch (err: any) {
       if (sequence !== parseSequence.current) return;
       console.error("[NuevaSolicitudModal] OC parse error", err);
-      setOrdenCompraParseMsg("OC cargada. No se pudo leer para autollenado.");
+      setOrdenCompraParseMsg(err instanceof Error ? err.message : "No se pudo preparar la OC.");
     } finally {
       if (sequence === parseSequence.current) setOrdenCompraParseBusy(false);
     }
@@ -533,7 +540,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
       return;
     }
 
-    if (file.size > 1024 * 1024) {
+    if (file.size > MAX_SOLICITUD_DOCUMENT_SIZE_BYTES && (variant === "mat" || !/\.xlsx$/i.test(file.name))) {
       alert("El archivo no debe exceder 1 MB.");
       return;
     }
@@ -552,7 +559,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
     }
 
     setFacturaXmlFile(null);
-    setOrdenCompraFile(file);
+    setOrdenCompraFile(null);
     void applyOrdenCompraAutofill(file);
   };
   const handleSave = async (e: React.FormEvent) => {
@@ -816,7 +823,11 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div className="text-[12px] text-slate-200">Orden de Compra o Factura XML *</div>
-                <div className="text-[11px] text-slate-500">Excel .xlsx, .csv o XML - max 1 MB</div>
+                <div className="text-[11px] text-slate-500">
+                  {variant === "mat"
+                    ? "Excel .xlsx, .csv o XML - max 1 MB"
+                    : "Adjunto de hasta 1 MB. La nueva OC de IQ se reduce automáticamente si excede ese límite."}
+                </div>
               </div>
               <UploadCloud size={18} className="text-sky-300" />
             </div>

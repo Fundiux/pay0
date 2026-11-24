@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
 const ExcelJS = require("exceljs");
+const JSZip = require("jszip");
 
 require.extensions[".ts"] = (module, filename) => {
   const source = fs.readFileSync(filename, "utf8");
@@ -12,6 +13,16 @@ require.extensions[".ts"] = (module, filename) => {
 
 const { resolveOrdenCompraTotalsFromFile } = require("../../src/lib/ordenCompraTotalResolver.ts");
 const { parseOrdenCompraWorkbookFile } = require("../../src/lib/ordenCompraParser.ts");
+const { prepareOrdenCompraAttachment } = require("../../src/lib/prepareOrdenCompraAttachment.ts");
+
+const uploadLimit = 1024 * 1024;
+
+async function oversizedWorkbook(workbook) {
+  const archive = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+  // Exercise the upload size boundary without thousands of generated catalog rows.
+  archive.file("xl/test-catalog-padding.bin", Buffer.alloc(uploadLimit));
+  return new File([await archive.generateAsync({ type: "nodebuffer", compression: "STORE" })], "orden-iq.xlsx");
+}
 
 async function main() {
   for (const [name, subtotal, iva, expected] of [
@@ -84,6 +95,44 @@ async function main() {
     /50,000 filas/,
   );
   console.log("PASS plantilla IQ con catálogo oculto y límite para hojas visibles");
+
+  catalog.state = "veryHidden";
+  order.getCell("J9").value = { formula: "'CP'!A1", result: "Municipio de prueba" };
+  order.getCell("C9").dataValidation = { type: "list", formulae: ["CP!$A$1:$A$10"] };
+  order.getCell("N9").dataValidation = { type: "list", formulae: ['"PUE,PPD"'] };
+  order.getCell("H14").value = "Segunda partida de prueba";
+  order.getCell("Q14").value = 18;
+  const source = await oversizedWorkbook(workbook);
+  const attachment = await prepareOrdenCompraAttachment(source, uploadLimit);
+  assert.notEqual(attachment, source);
+  assert.equal(attachment.name, source.name);
+  assert.ok(attachment.size < uploadLimit);
+  assert.equal(await prepareOrdenCompraAttachment(attachment, uploadLimit), attachment);
+
+  const compact = new ExcelJS.Workbook();
+  await compact.xlsx.load(await attachment.arrayBuffer());
+  assert.deepEqual(compact.worksheets.map(sheet => sheet.name), ["Orden de Compra"]);
+  const compactSheet = compact.worksheets[0];
+  assert.deepEqual(compactSheet.getCell("Q28").value, { formula: "Q26+Q27", result: 116 });
+  assert.equal(compactSheet.getCell("J9").value, "Municipio de prueba");
+  assert.equal(compactSheet.getCell("C9").dataValidation, undefined);
+  assert.deepEqual(compactSheet.getCell("N9").dataValidation.formulae, ['"PUE,PPD"']);
+  assert.equal(compactSheet.getCell("H14").value, "Segunda partida de prueba");
+  assert.equal(compactSheet.getCell("Q14").value, 18);
+  const [converted] = await parseOrdenCompraWorkbookFile(attachment);
+  assert.deepEqual(converted, parsed);
+
+  order.getCell("J9").value = { formula: "'CP'!A1" };
+  await assert.rejects(prepareOrdenCompraAttachment(await oversizedWorkbook(workbook), uploadLimit), /J9.*resultado guardado/);
+  order.getCell("J9").value = null;
+  workbook.addWorksheet("Anexo");
+  await assert.rejects(prepareOrdenCompraAttachment(await oversizedWorkbook(workbook), uploadLimit), /hojas adicionales/);
+  workbook.removeWorksheet(workbook.getWorksheet("Anexo").id);
+  workbook.addWorksheet("Anexo oculto", { state: "hidden" });
+  await assert.rejects(prepareOrdenCompraAttachment(await oversizedWorkbook(workbook), uploadLimit), /hojas adicionales/);
+  const legacy = new File([bytes], "orden-previa.xlsx");
+  assert.equal(await prepareOrdenCompraAttachment(legacy, uploadLimit), legacy);
+  console.log("PASS copia ligera, verificación de partidas, validaciones locales y rechazo sin pérdida silenciosa");
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -10,7 +10,8 @@ import { mergeModules, normalizeRole } from "@/lib/roles";
 import { listCompanies } from "@/services/companies";
 import { listScopedClients } from "@/services/clients";
 import { createSolicitud } from "@/services/solicitudes";
-import { uploadSolicitudDoc } from "@/lib/uploadSolicitudDoc";
+import { MAX_SOLICITUD_DOCUMENT_SIZE_BYTES, uploadSolicitudDoc } from "@/lib/uploadSolicitudDoc";
+import { prepareOrdenCompraAttachment } from "@/lib/prepareOrdenCompraAttachment";
 import {
   parseOrdenCompraWorkbookFile,
   type ParsedOrdenCompra,
@@ -339,12 +340,20 @@ export default function OrdenCompraMasivaModal(props: {
             continue;
           }
 
-          const parsedSheets = await parseOrdenCompraWorkbookFile(file);
+          let attachment = file;
+          let parsedSheets: ParsedOrdenCompra[] = [];
+          let readError = "No se pudo leer la Orden de Compra.";
+          try {
+            attachment = await prepareOrdenCompraAttachment(file, MAX_SOLICITUD_DOCUMENT_SIZE_BYTES);
+            parsedSheets = await parseOrdenCompraWorkbookFile(attachment);
+          } catch (error) {
+            if (error instanceof Error) readError = error.message;
+          }
 
           if (parsedSheets.length === 0) {
             nextRows.push({
               key: `${file.name}-empty`,
-              file,
+              file: attachment,
               sheetName: "",
               parsed: {
                 ok: false,
@@ -365,13 +374,13 @@ export default function OrdenCompraMasivaModal(props: {
                 conceptoPrincipal: "",
                 referencia: file.name,
                 operationTypeName: "Factura subtotal",
-                warnings: ["No se pudo leer la Orden de Compra."],
+                warnings: [readError],
               },
               documentType: "ORDEN_COMPRA",
               clientOption: null,
               companyOption: null,
               operationOption: facturaSubtotalOperation,
-              errors: ["No se pudo leer la Orden de Compra."],
+              errors: [readError],
               status: "ERROR",
             });
             continue;
@@ -388,18 +397,19 @@ export default function OrdenCompraMasivaModal(props: {
               operationOption ? "" : "Tipo de operacion Factura subtotal no encontrado.",
               parsed.montoSolicitud > 0 ? "" : "Total OC no detectado.",
               parsed.tipoFactura ? "" : "Tipo factura PUE/PPD no detectado.",
+              ...(attachment !== file ? parsed.warnings : []),
             ].filter(Boolean);
 
             nextRows.push({
               key: `${file.name}-${parsed.sheetName || sheetIndex}`,
-              file,
+              file: attachment,
               sheetName: parsed.sheetName || `Hoja ${sheetIndex + 1}`,
               parsed,
               documentType: "ORDEN_COMPRA",
               clientOption,
               companyOption,
               operationOption,
-              errors,
+              errors: [...new Set(errors)],
               status: errors.length > 0 ? "ERROR" : "LISTA",
             });
           });

@@ -119,7 +119,13 @@ test('OC autofill feedback remains correct when React defers the state updater',
   function visit(n) { if (ts.isVariableDeclaration(n) && n.name.getText(ast) === 'applyOrdenCompraAutofill') body = n.initializer.getText(ast); ts.forEachChild(n, visit); } visit(ast);
   let message = '', warning = '', updater;
   const ctx = { setSourceCompanyConfirmed() {}, parseSequence: {current:0}, formData: {companyId:'previous',companyName:'Previous Company'}, setSourceCompanyWarning:v=>{warning=v;}, setOrdenCompraParseBusy() {}, setOrdenCompraParseMsg: v => { message = v; }, setOrdenCompraParsed() {},
-    parseOrdenCompraFile: async () => ({ clienteNombre: 'Client', proveedorNombre: 'Company', montoSolicitud: 98000, tipoFactura: 'PUE' }),
+    prepareOrdenCompraAttachment: async () => ({ name: 'prepared.xlsx' }),
+    MAX_SOLICITUD_DOCUMENT_SIZE_BYTES: 1024 * 1024,
+    setOrdenCompraFile: file => assert.equal(file.name, 'prepared.xlsx'),
+    parseOrdenCompraFile: async file => {
+      assert.equal(file.name, 'prepared.xlsx');
+      return { ok: true, clienteNombre: 'Client', proveedorNombre: 'Company', montoSolicitud: 98000, tipoFactura: 'PUE' };
+    },
     matchOptionByLabel: (_, label) => ({ value: label, label }), clientOptions: [], companyOptions: [], operationOptions: [],
     findFacturaSubtotalOperation: () => ({ value: 'FACTURA_SUBTOTAL', label: 'Factura subtotal' }), setFormData: fn => { updater = fn; },
   };

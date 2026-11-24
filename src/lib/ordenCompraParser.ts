@@ -140,6 +140,13 @@ function detectTipoFactura(metodoPago: string): OrdenCompraTipoFactura {
   return "";
 }
 
+export function isNewIqOrdenCompraLayout(getCell: (address: string) => unknown) {
+  return normalizeText(getCell("A1")) === "orden de compra" &&
+    normalizeText(getCell("A3")).replace(/[\s:]/g, "") === "proveedor" &&
+    normalizeText(getCell("A6")).replace(/[\s:]/g, "") === "cliente" &&
+    normalizeText(getCell("M9")) === "metodo de pago";
+}
+
 function parseSingleSheet(params: {
   sourceFileName: string;
   sheetName: string;
@@ -147,11 +154,7 @@ function parseSingleSheet(params: {
   rows: any[][];
 }): ParsedOrdenCompra {
   const { sourceFileName, sheetName, sheet, rows } = params;
-  const isNewIqLayout =
-    normalizeText(cellValue(sheet, "A1")) === "orden de compra" &&
-    normalizeText(cellValue(sheet, "A3")).replace(/[\s:]/g, "") === "proveedor" &&
-    normalizeText(cellValue(sheet, "A6")).replace(/[\s:]/g, "") === "cliente" &&
-    normalizeText(cellValue(sheet, "M9")) === "metodo de pago";
+  const isNewIqLayout = isNewIqOrdenCompraLayout((address) => cellValue(sheet, address));
 
   const proveedorNombre = isNewIqLayout ? cleanText(cellValue(sheet, "C4")) :
     cleanText(cellValue(sheet, "D4")) ||
