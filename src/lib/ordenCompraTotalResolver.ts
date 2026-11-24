@@ -1,4 +1,4 @@
-import { readSpreadsheetFile } from "./spreadsheetReader";
+import { readSpreadsheetFile, type SpreadsheetSheet } from "./spreadsheetReader";
 
 export type OrdenCompraTotalConfidence = "ALTA" | "MEDIA" | "NINGUNA";
 
@@ -562,9 +562,14 @@ function resolveSheet(sheetName: string, rows: unknown[][]): ResolvedOrdenCompra
 export async function resolveOrdenCompraTotalsFromFile(
   file: File,
 ): Promise<Map<string, ResolvedOrdenCompraTotal>> {
-  const sheets = await readSpreadsheetFile(file);
+  const sheets = await readSpreadsheetFile(file, { visibleOnly: true });
   console.info("[OC_XLSX_TOTAL_FILE]", { fileName: file.name, sheets: sheets.map((sheet) => sheet.name) });
+  return resolveOrdenCompraTotalsFromSheets(sheets);
+}
 
+export function resolveOrdenCompraTotalsFromSheets(
+  sheets: SpreadsheetSheet[],
+): Map<string, ResolvedOrdenCompraTotal> {
   const result = new Map<string, ResolvedOrdenCompraTotal>();
 
   for (const sheet of sheets) {

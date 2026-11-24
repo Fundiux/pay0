@@ -1,9 +1,9 @@
 import {
   normalizeOrdenCompraSheetKey,
-  resolveOrdenCompraTotalsFromFile,
+  resolveOrdenCompraTotalsFromSheets,
   type ResolvedOrdenCompraTotal,
 } from "./ordenCompraTotalResolver"; // H4_D83_A1_SEMANTIC_TOTAL_IMPORT
-import { readSpreadsheetFile } from "./spreadsheetReader";
+import { readSpreadsheetFile, type SpreadsheetSheet } from "./spreadsheetReader";
 export type OrdenCompraTipoFactura = "PUE" | "PPD" | "";
 
 export interface ParsedOrdenCompra {
@@ -147,36 +147,41 @@ function parseSingleSheet(params: {
   rows: any[][];
 }): ParsedOrdenCompra {
   const { sourceFileName, sheetName, sheet, rows } = params;
+  const isNewIqLayout =
+    normalizeText(cellValue(sheet, "A1")) === "orden de compra" &&
+    normalizeText(cellValue(sheet, "A3")).replace(/[\s:]/g, "") === "proveedor" &&
+    normalizeText(cellValue(sheet, "A6")).replace(/[\s:]/g, "") === "cliente" &&
+    normalizeText(cellValue(sheet, "M9")) === "metodo de pago";
 
-  const proveedorNombre =
+  const proveedorNombre = isNewIqLayout ? cleanText(cellValue(sheet, "C4")) :
     cleanText(cellValue(sheet, "D4")) ||
     cleanText(findValueByLabel(rows, ["proveedor", "proveedor:", "empresa proveedor"]));
 
-  const clienteNombre =
+  const clienteNombre = isNewIqLayout ? cleanText(cellValue(sheet, "C7")) :
     cleanText(cellValue(sheet, "D8")) ||
     cleanText(findValueByLabel(rows, ["razon social", "razon social:", "cliente", "nombre cliente"]));
 
-  const rfc =
+  const rfc = isNewIqLayout ? cleanText(cellValue(sheet, "K7")) :
     cleanText(cellValue(sheet, "D9")) ||
     cleanText(findValueByLabel(rows, ["rfc", "rfc:"]));
 
-  const metodoPago =
+  const metodoPago = isNewIqLayout ? cleanText(cellValue(sheet, "N9")) :
     cleanText(cellValue(sheet, "D17")) ||
     cleanText(findValueByLabel(rows, ["metodo de pago", "metodo pago"]));
 
-  const moneda =
+  const moneda = isNewIqLayout ? cleanText(cellValue(sheet, "N27")) :
     cleanText(cellValue(sheet, "D18")) ||
     cleanText(findValueByLabel(rows, ["moneda"]));
 
-  const formaPago =
+  const formaPago = isNewIqLayout ? cleanText(cellValue(sheet, "N10")) :
     cleanText(cellValue(sheet, "D19")) ||
     cleanText(findValueByLabel(rows, ["forma de pago", "forma pago"]));
 
-  const usoCfdi =
+  const usoCfdi = isNewIqLayout ? cleanText(cellValue(sheet, "N8")) :
     cleanText(cellValue(sheet, "D20")) ||
     cleanText(findValueByLabel(rows, ["uso de cfdi", "uso cfdi"]));
 
-  const conceptoPrincipal =
+  const conceptoPrincipal = isNewIqLayout ? cleanText(cellValue(sheet, "H13")) :
     cleanText(cellValue(sheet, "E23")) ||
     cleanText(findValueByLabel(rows, ["concepto", "descripcion", "servicio"]));
 
@@ -222,8 +227,7 @@ function parseSingleSheet(params: {
   };
 }
 
-async function parseOrdenCompraWorkbookFileLegacyH4D83A1(file: File): Promise<ParsedOrdenCompra[]> {
-  const sheets = await readSpreadsheetFile(file);
+function parseOrdenCompraWorkbookFileLegacyH4D83A1(file: File, sheets: SpreadsheetSheet[]): ParsedOrdenCompra[] {
 
   const results: ParsedOrdenCompra[] = [];
 
@@ -347,35 +351,23 @@ function applySemanticTotalH4D83A1(
       Number(parsed.iva || 0),
     total: semantic.total,
     montoSolicitud: semantic.total,
+    ok: warnings.length === 0,
     warnings,
   };
 }
 
 export async function parseOrdenCompraWorkbookFile(
-  ...args: Parameters<
-    typeof parseOrdenCompraWorkbookFileLegacyH4D83A1
-  >
-): Promise<
-  Awaited<
-    ReturnType<
-      typeof parseOrdenCompraWorkbookFileLegacyH4D83A1
-    >
-  >
-> {
-  const parsedLegacy =
-    await parseOrdenCompraWorkbookFileLegacyH4D83A1(
-      ...args,
-    );
+  file: File,
+): Promise<ParsedOrdenCompra[]> {
+  const sheets = await readSpreadsheetFile(file, { visibleOnly: true });
+  const parsedLegacy = parseOrdenCompraWorkbookFileLegacyH4D83A1(file, sheets);
 
   let semanticBySheet =
     new Map<string, ResolvedOrdenCompraTotal>();
   let resolverError = "";
 
   try {
-    semanticBySheet =
-      await resolveOrdenCompraTotalsFromFile(
-        args[0] as File,
-      );
+    semanticBySheet = resolveOrdenCompraTotalsFromSheets(sheets);
   } catch (error) {
     resolverError =
       error instanceof Error
@@ -383,18 +375,12 @@ export async function parseOrdenCompraWorkbookFile(
         : String(error);
   }
 
-  return (
-    parsedLegacy as ParsedOrdenCompra[]
-  ).map((parsed) =>
+  return parsedLegacy.map((parsed) =>
     applySemanticTotalH4D83A1(
       parsed,
       semanticBySheet,
       resolverError,
     ),
-  ) as Awaited<
-    ReturnType<
-      typeof parseOrdenCompraWorkbookFileLegacyH4D83A1
-    >
-  >;
+  );
 }
 // H4_D83_A1_SEMANTIC_TOTAL_WRAPPER_END

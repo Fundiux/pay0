@@ -123,7 +123,49 @@ function csvSheet(data: ArrayBuffer): SpreadsheetSheet {
   };
 }
 
-export async function readSpreadsheetFile(file: File): Promise<SpreadsheetSheet[]> {
+async function withoutHiddenWorksheets(data: ArrayBuffer): Promise<ArrayBuffer> {
+  const [zipModule, { SaxesParser }] = await Promise.all([import("jszip"), import("saxes")]);
+  const JSZip = zipModule.default ?? zipModule;
+  const archive = await JSZip.loadAsync(data);
+  const workbook = archive.file("xl/workbook.xml");
+  const relationships = archive.file("xl/_rels/workbook.xml.rels");
+  if (!workbook || !relationships) return data;
+
+  const hiddenIds = new Set<string>();
+  const visibleIds = new Set<string>();
+  const workbookParser = new SaxesParser();
+  workbookParser.on("opentag", ({ name, attributes }) => {
+    if (name !== "sheet" || !attributes["r:id"]) return;
+    const hidden = attributes.state === "hidden" || attributes.state === "veryHidden";
+    (hidden ? hiddenIds : visibleIds).add(attributes["r:id"]);
+  });
+  workbookParser.write(await workbook.async("string")).close();
+  if (hiddenIds.size === 0) return data;
+
+  const hiddenPaths = new Set<string>();
+  const visiblePaths = new Set<string>();
+  const relationshipParser = new SaxesParser();
+  relationshipParser.on("opentag", ({ name, attributes }) => {
+    if (name !== "Relationship" || !attributes.Type?.endsWith("/worksheet")) return;
+    const target = attributes.Target?.trim().replace(/^\/xl\//, "");
+    if (!target || !/^worksheets\/sheet\d+\.xml$/.test(target)) return;
+    const path = `xl/${target}`;
+    if (hiddenIds.has(attributes.Id)) hiddenPaths.add(path);
+    if (visibleIds.has(attributes.Id)) visiblePaths.add(path);
+  });
+  relationshipParser.write(await relationships.async("string")).close();
+
+  // Keep the upload intact and avoid inflating catalogs just to discard them.
+  const removablePaths = [...hiddenPaths].filter((path) => !visiblePaths.has(path));
+  if (removablePaths.length === 0) return data;
+  removablePaths.forEach((path) => archive.remove(path));
+  return archive.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+}
+
+export async function readSpreadsheetFile(
+  file: File,
+  { visibleOnly = false }: { visibleOnly?: boolean } = {},
+): Promise<SpreadsheetSheet[]> {
   const extension = file.name.toLowerCase().split(".").pop();
   if (extension !== "csv" && extension !== "xlsx") {
     throw new Error("Solo se admiten archivos .xlsx o .csv.");
@@ -140,12 +182,15 @@ export async function readSpreadsheetFile(file: File): Promise<SpreadsheetSheet[
   const ExcelJS = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   try {
-    await workbook.xlsx.load(data);
+    await workbook.xlsx.load(visibleOnly ? await withoutHiddenWorksheets(data) : data);
   } catch {
     throw new Error("No se pudo leer el archivo XLSX. Está dañado, protegido o no es un libro válido.");
   }
 
-  return workbook.worksheets.map((worksheet) => {
+  const worksheets = visibleOnly
+    ? workbook.worksheets.filter((worksheet) => worksheet.state === "visible")
+    : workbook.worksheets;
+  return worksheets.map((worksheet) => {
     assertSheetSize(worksheet.rowCount, worksheet.columnCount);
     const rows: unknown[][] = [];
     worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
