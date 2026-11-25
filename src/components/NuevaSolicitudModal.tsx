@@ -91,9 +91,11 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
   );
 
   // A merged or inactive client never receives new solicitudes: automatic matching only considers the canonical ones.
-  const matchableClientOptions = useMemo<UiSelectOption[]>(
+  const matchableClientOptions = useMemo<Array<UiSelectOption & { iqLinked?: boolean; clientNumber?: number | null }>>(
     () => clientes.filter((c: any) => !String(c?.mergedInto || "").trim() && c?.active !== false)
-      .map((c) => ({ value: String(c.id || ""), label: String(c.name || "Sin nombre") })),
+      .map((c: any) => ({ value: String(c.id || ""), label: String(c.name || "Sin nombre"),
+        iqLinked: String(c?.iqLink?.status || "").toUpperCase() === "LINKED" || Boolean(String(c?.iqClientId || "").trim()),
+        clientNumber: Number(c?.clientNumber || c?.numeroCliente || 0) || null })),
     [clientes]
   );
 

@@ -38,4 +38,14 @@ eq(matchOptionByName(clients, "SA de CV"), null, "only a legal form never matche
 eq(matchOptionByName(clients, ""), null, "empty name");
 eq(matchOptionByName([{ value: "x", label: "Terra Labor Consulting Group" }], "TERRA LABOR CONSULTING GROUP SA DE CV")?.value, "x", "client stored without legal form");
 
+// Two active clients with the same name (Terra Labor C09 and its duplicate C26): the canonical one gets new work (owner rule 2026-11-10).
+const dup = [
+  { value: "c26", label: "TERRA LABOR CONSULTING GROUP SA DE CV", iqLinked: true, clientNumber: 26 },
+  { value: "c9", label: "TERRA LABOR CONSULTING GROUP S.A DE C.V", iqLinked: true, clientNumber: 9 },
+];
+eq(matchOptionByName(dup, "TERRA LABOR CONSULTING GROUP SA DE CV")?.value, "c9", "same name: the lowest client number wins");
+eq(matchOptionByName([{ ...dup[0], iqLinked: false }, dup[1]], "Terra Labor Consulting Group")?.value, "c9", "same name: the one linked in IQ wins");
+eq(matchOptionByName([{ ...dup[0], iqLinked: true, clientNumber: 9 }, { ...dup[1], iqLinked: true, clientNumber: 9 }], "TERRA LABOR CONSULTING GROUP"), null, "no way to break the tie: nothing chosen");
+eq(matchOptionByName([dup[0], { value: "c30", label: "TERRA LABOR CONSULTING GROUP SERVICIOS", iqLinked: true, clientNumber: 1 }], "TERRA LABOR CONSULTING"), null, "different companies that only share words are never resolved by number");
+
 console.log(`name-matching: ${checks} checks passed`);

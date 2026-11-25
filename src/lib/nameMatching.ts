@@ -46,7 +46,21 @@ export function coreName(value: unknown): string {
   return name.replace(/\s+/g, " ").trim();
 }
 
-type Named = { label?: unknown; value?: unknown };
+type Named = { label?: unknown; value?: unknown; iqLinked?: boolean; clientNumber?: number | null };
+
+/**
+ * Among options with the same name, the canonical client wins (owner rule 2026-11-10): the one linked in IQ, then the lowest
+ * client number. Without that information, or when it does not break the tie, nothing is chosen.
+ */
+function canonicalAmong<T extends Named>(found: T[]): T | null {
+  const linked = found.filter((option) => option.iqLinked === true);
+  const pool = linked.length ? linked : found;
+  if (pool.length === 1) return pool[0];
+  const numbered = pool.filter((option) => Number.isFinite(Number(option.clientNumber)) && Number(option.clientNumber) > 0)
+    .sort((a, b) => Number(a.clientNumber) - Number(b.clientNumber));
+  if (numbered.length === pool.length && numbered.length > 1 && Number(numbered[0].clientNumber) !== Number(numbered[1].clientNumber)) return numbered[0];
+  return null;
+}
 
 /** The single option whose name matches the target, tolerating punctuation and legal-form spelling; null when none or ambiguous. */
 export function matchOptionByName<T extends Named>(options: T[], target: unknown): T | null {
@@ -59,7 +73,8 @@ export function matchOptionByName<T extends Named>(options: T[], target: unknown
   for (const fits of tiers) {
     const found = options.filter((option) => fits(coreName(option.label)) || fits(coreName(option.value)));
     if (found.length === 1) return found[0];
-    if (found.length > 1) return null;
+    // Two clients with the very same name are duplicates of one company: the canonical one receives new work.
+    if (found.length > 1) return found.every((option) => coreName(option.label) === coreName(found[0].label)) ? canonicalAmong(found) : null;
   }
   return null;
 }

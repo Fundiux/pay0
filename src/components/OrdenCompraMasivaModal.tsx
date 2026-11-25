@@ -107,11 +107,13 @@ export default function OrdenCompraMasivaModal(props: {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const clientOptions = useMemo<UiSelectOption[]>(
+  const clientOptions = useMemo<Array<UiSelectOption & { iqLinked?: boolean; clientNumber?: number | null }>>(
     () =>
       // A merged or inactive client never receives new solicitudes: the match goes to the canonical client.
       clients.filter((client) => !String(client?.mergedInto || "").trim() && client?.active !== false).map((client) => ({
         value: String(client.id || ""),
+        iqLinked: String(client?.iqLink?.status || "").toUpperCase() === "LINKED" || Boolean(String(client?.iqClientId || "").trim()),
+        clientNumber: Number(client?.clientNumber || client?.numeroCliente || 0) || null,
         label: String(
           client.name ||
             client.nombre ||
