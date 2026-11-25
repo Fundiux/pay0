@@ -856,8 +856,5 @@ html:has(.mat-embedded-payment) body aside { display: none !important; }
 .mat-native-create-only > :not(.fixed.inset-0) { display: none !important; }
 .mat-native-create-only > .fixed.inset-0 { backdrop-filter: blur(4px); }
 
-/* Beneficiary account not reconciled in IQ yet: unmistakable orange, wins over the zebra rows. */
-tr.pay0-row-iq-pending { background-color: rgb(249 115 22 / 0.34); border-bottom: 1px solid rgb(249 115 22 / 0.55); color: #ffedd5; }
-tr.pay0-row-iq-pending:hover { background-color: rgb(249 115 22 / 0.44); }
-tr.pay0-row-iq-pending :is(.pay0-td, .pay0-td-date, .pay0-td-money) { color: #ffedd5; }
-.pay0-badge-iq-pending { display: inline-flex; align-items: center; border-radius: 9999px; background-color: #f97316; padding: 0.1rem 0.6rem; font-size: 11px; font-weight: 700; color: #fff; }
+/* Beneficiary account not reconciled in IQ yet: all the text of the row is orange; the row background stays normal. */
+tr.pay0-row-iq-pending, tr.pay0-row-iq-pending :is(td, .pay0-td, .pay0-td-date, .pay0-td-money) { color: #fb923c; }

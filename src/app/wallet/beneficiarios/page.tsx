@@ -1859,7 +1859,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       {rows.map((row, methodIndex) => (
                         <tr
                           key={row.id}
-                          className={row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? "pay0-row-iq-pending" : methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}
+                          className={`${methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}${row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? " pay0-row-iq-pending" : ""}`}
                           title={row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? IQ_PENDING_LABEL : undefined}
                         >
                           <td className="pay0-td">{row.tipo || "-"}</td>
@@ -1867,7 +1867,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                           <td className="pay0-td-date">{row.clabe || "-"}</td>
                           <td className="pay0-td-date">{row.cardNumber || "-"}</td>
                           <td className="pay0-td">
-                            {isMethodReplaced(row) ? "Reemplazado" : row.active ? (isIqReconciled(row) ? "Activo" : <span className="pay0-badge-iq-pending">Pendiente IQ</span>) : "Inactivo"}
+                            {isMethodReplaced(row) ? "Reemplazado" : row.active ? (isIqReconciled(row) ? "Activo" : "PENDIENTE") : "Inactivo"}
                           </td>
                           <td className="pay0-td text-center">
                             <div className="inline-flex items-center justify-center gap-1">

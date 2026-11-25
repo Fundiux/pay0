@@ -233,15 +233,21 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   eq([waiting.status, (await rawEntry(r3b.methodId)).attempts], ["PENDING_RETRY", 1], "esperar un interruptor no consume intentos");
   await setMaster(true); reset();
 
-  // R4. a stale catalog never proves the account is missing: it waits without spending attempts
+  // R4. a stale catalog does not make a new beneficiary wait: IQ is read for the account now
   await setCatalogFresh(130);
-  createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x", conciliated: true };
+  reset(); createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x", conciliated: true };
   const r4 = await setup("r4");
   const outR4 = await link(r4.methodId);
-  eq([outR4.createState, calls.create], ["CATALOG_STALE", 0], "catálogo viejo: no se crea");
-  eq((await db.collection("iqBeneficiaryCreateReservations").where("methodId", "==", r4.methodId).get()).size, 0, "sin reserva");
-  await entryField(r4.methodId, "attempts", 30);
-  eq([(await link(r4.methodId, Date.now() + 7 * 3_600_000)).createState, (await rawEntry(r4.methodId)).attempts], ["CATALOG_STALE", 1], "esperar al catálogo no consume intentos");
+  eq([outR4.status, calls.find, calls.create], ["LINKED", 1, 1], "catálogo viejo: se lee IQ en el momento y se crea");
+  reset(); findResult = { found: true, iqBeneficiaryId: 4200, iqAccountId: 9200, iqBeneficiaryName: "Ana", conciliated: true };
+  const r4b = await setup("r4b");
+  const outR4b = await link(r4b.methodId);
+  eq([outR4b.status, (await entry(r4b.methodId)).source, calls.find, calls.create], ["LINKED", "LIVE_LOOKUP", 1, 0], "catálogo viejo y la cuenta ya existe en IQ: se vincula sin crear");
+  reset(); findResult = { found: "AMBIGUOUS", candidates: [1, 2] };
+  const r4c = await setup("r4c");
+  for (const name of ["automationSafetyScopes", "automationSafetyEvents"]) for (const doc of (await db.collection(name).get()).docs) await db.recursiveDelete(doc.ref);
+  const outR4c = await link(r4c.methodId);
+  eq([outR4c.status, calls.create], ["REVIEW_REQUIRED", 0], "catálogo viejo y varias coincidencias: lo revisa una persona, no se crea");
   await setCatalogFresh(1);
 
   // R5. the same CLABE under another IQ associate is neither a link nor a review

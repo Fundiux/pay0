@@ -80,11 +80,11 @@ const review = (ctx: IqLinkContext, createState: string, candidates: number[] = 
 
 // A new IQ account usually waits for IQ's conciliation. Until then the ids are kept, but the entry is not LINKED,
 // so no dispersion uses it; the nightly catalog turns it LINKED once IQ shows it conciliated.
-async function settleCreated(ctx: IqLinkContext, ids: CreatedIds): Promise<LinkOutcome> {
-  if (ids.conciliated === true) return settle(ctx, linked(ids), "CREATED_IN_IQ");
-  await writeEntry(ctx, { status: "NOT_CONCILIATED", iqBeneficiaryId: ids.iqBeneficiaryId, iqAccountId: ids.iqAccountId, key: ctx.account.key, last4: ctx.account.last4, source: "CREATED_IN_IQ", createState: "PENDING_CONCILIATION", checkedAt: FieldValue.serverTimestamp() },
-    { event: AUDIT_EVENT.CREATED, status: "NOT_CONCILIATED", source: "CREATED_IN_IQ", outcomeKey: "NOT_CONCILIATED:CREATED_IN_IQ:PENDING_CONCILIATION",
-      description: `Beneficiario dado de alta en IQ, cuenta ****${ctx.account.last4}; IQ debe conciliar la cuenta antes de usarla.` });
+async function settleCreated(ctx: IqLinkContext, ids: CreatedIds, source: "CREATED_IN_IQ" | "LIVE_LOOKUP" = "CREATED_IN_IQ"): Promise<LinkOutcome> {
+  if (ids.conciliated === true) return settle(ctx, linked(ids), source);
+  await writeEntry(ctx, { status: "NOT_CONCILIATED", iqBeneficiaryId: ids.iqBeneficiaryId, iqAccountId: ids.iqAccountId, key: ctx.account.key, last4: ctx.account.last4, source, createState: "PENDING_CONCILIATION", checkedAt: FieldValue.serverTimestamp() },
+    { event: source === "LIVE_LOOKUP" ? AUDIT_EVENT.LINKED : AUDIT_EVENT.CREATED, status: "NOT_CONCILIATED", source, outcomeKey: `NOT_CONCILIATED:${source}:PENDING_CONCILIATION`,
+      description: source === "LIVE_LOOKUP" ? `La cuenta ****${ctx.account.last4} ya estaba en IQ; falta que IQ la concilie antes de usarla.` : `Beneficiario dado de alta en IQ, cuenta ****${ctx.account.last4}; IQ debe conciliar la cuenta antes de usarla.` });
   return { methodId: ctx.methodId, catalog: ctx.catalog, status: "NOT_CONCILIATED", createState: "PENDING_CONCILIATION" };
 }
 
@@ -246,7 +246,21 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
     // Proof of absence is the catalog: the associate read whole recently and no row for this account.
     const [catalogState, createConfig] = await Promise.all([db.doc(`iqBeneficiaryCatalogState/${rootId}_${profile.catalog}`).get(), db.doc(`iqBeneficiaryCreateConfig/${rootId}`).get()]);
     const proof = catalogAbsenceProof({ partnerId: profile.partnerId, partnerRows, state: catalogState.data(), nowMs, maxAgeMs: catalogMaxAgeMs(createConfig.data()) });
-    if (!proof.proven) { outcomes.push(proof.reason === "CATALOG_STALE" ? await stop(ctx, "CATALOG_STALE", attempts, nowMs, pendingSince) : await review(ctx, proof.reason)); continue; }
+    // A beneficiary never waits for the catalog pass: with an old catalog IQ is read now, only for this associate, name and account.
+    // Found: it is linked. Several matches: a person decides. Nothing: IQ is told to create it (its own duplicate answer is reconciled).
+    let absent = proof.proven;
+    const proofReason = proof.proven ? null : proof.reason;
+    if (proofReason === "CATALOG_STALE" && Number(profile.partnerId) > 0) {
+      const liveRead = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`,
+        idempotencyKey: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`, origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.findExisting(ctx));
+      if (!liveRead.admitted) { outcomes.push(DEFERRABLE.has(String(liveRead.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${liveRead.reason}`, attempts, nowMs, pendingSince)); continue; }
+      const seen = (liveRead as { value?: FindResult }).value;
+      if (!seen) { outcomes.push(await stop(ctx, "LOOKUP_FAILED", attempts, nowMs, pendingSince)); continue; }
+      if (seen.found === true) { outcomes.push(await settleCreated(ctx, seen, "LIVE_LOOKUP")); continue; }
+      if (seen.found === "AMBIGUOUS") { outcomes.push(await settle(ctx, { status: "REVIEW_REQUIRED", candidates: seen.candidates }, "LIVE_LOOKUP")); continue; }
+      absent = true;
+    }
+    if (!absent) { outcomes.push(proofReason === "CATALOG_STALE" ? await stop(ctx, "CATALOG_STALE", attempts, nowMs, pendingSince) : await review(ctx, proofReason ?? "CATALOG_STALE")); continue; }
 
     const reservation = await reserveCreate(ctx, nowMs);
     if (reservation.state === "BLOCKED") {

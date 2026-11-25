@@ -248,11 +248,19 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   eq([(await link(f3.methodId)).status, accountPosts()], ["NOT_CONCILIATED", 1], "sin límite configurado la 101 del día se crea");
   await counter().set({ count: 0 }, { merge: true });
 
-  // G. stale catalog defers without any IQ request
+  // G. stale catalog does not make a new beneficiary wait: IQ is read for this associate and account, then created once
   resetIq(); await setFresh(130);
   const g = await setup("g");
   const outG = await link(g.methodId);
-  eq([outG.status, outG.createState, iq.requests.length], ["PENDING_RETRY", "CATALOG_STALE", 0], "catálogo de más de 36 h: se difiere sin tocar IQ");
+  eq([outG.status, outG.createState, accountPosts(), beneficiaryPosts()], ["NOT_CONCILIATED", "PENDING_CONCILIATION", 1, 1], "catálogo viejo: se consulta IQ en el momento y se crea una sola vez");
+  eq([outG.methodId, (await entry(g.methodId)).source], [g.methodId, "CREATED_IN_IQ"], "se registra como creado en IQ");
+  // G2. stale catalog and the account is already in IQ for that associate: linked, nothing created
+  resetIq();
+  const g2 = await setup("g2");
+  iq.beneficiaries.push({ id: iq.nextBeneficiary++, partnerId: 1, name: g2.benName, accounts: [{ id: iq.nextAccount++, clabe: g2.clabe, bank_id: 7, owner_name: g2.benName, conciliation_status: "Conciliado" }] });
+  const outG2 = await link(g2.methodId);
+  eq([outG2.status, accountPosts(), beneficiaryPosts()], ["LINKED", 0, 0], "catálogo viejo y la cuenta ya existe en IQ: se vincula sin crear");
+  eq((await entry(g2.methodId)).source, "LIVE_LOOKUP", "se vinculó por consulta en vivo");
   await setFresh(1);
 
   // H. unknown bank: stops before writing and gives the day's slot back
