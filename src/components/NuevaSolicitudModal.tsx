@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { matchOptionByName } from "@/lib/nameMatching";
 import UiSelect, { UiSelectOption } from "@/components/UiSelect";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
@@ -86,6 +87,13 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
         value: String(c.id || ""),
         label: String(c.name || "Sin nombre"),
       })),
+    [clientes]
+  );
+
+  // A merged or inactive client never receives new solicitudes: automatic matching only considers the canonical ones.
+  const matchableClientOptions = useMemo<UiSelectOption[]>(
+    () => clientes.filter((c: any) => !String(c?.mergedInto || "").trim() && c?.active !== false)
+      .map((c) => ({ value: String(c.id || ""), label: String(c.name || "Sin nombre") })),
     [clientes]
   );
 
@@ -300,23 +308,9 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
     return "";
   };
 
-  const matchOptionByLabel = (options: UiSelectOption[], target: unknown) => {
-    const cleanTarget = normalizeOcText(target);
-    if (!cleanTarget) return null;
-
-    return (
-      options.find((option) => {
-        const label = normalizeOcText(option.label);
-        const value = normalizeOcText(option.value);
-        return (
-          label === cleanTarget ||
-          value === cleanTarget ||
-          (cleanTarget.length >= 4 && label.includes(cleanTarget)) ||
-          (label.length >= 4 && cleanTarget.includes(label))
-        );
-      }) || null
-    );
-  };  const applyOrdenCompraAutofill = async (file: File) => {
+  // Tolerant to dots, commas and how the legal form is written; a match must be unique (owner 2026-11-24).
+  const matchOptionByLabel = (options: UiSelectOption[], target: unknown) => matchOptionByName(options, target);
+  const applyOrdenCompraAutofill = async (file: File) => {
     setOrdenCompraParseBusy(true);
     setOrdenCompraParseMsg("Leyendo Orden de Compra...");
 
@@ -332,7 +326,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
       setOrdenCompraFile(attachment);
       setOrdenCompraParsed(parsed);
 
-      const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
+      const matchedClient = matchOptionByLabel(matchableClientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
       setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value
@@ -431,7 +425,7 @@ export default function NuevaSolicitudModal({ open, onClose, variant = "default"
       if (sequence !== parseSequence.current) return;
       setFacturaXmlParsed(parsed);
 
-      const matchedClient = matchOptionByLabel(clientOptions, parsed.clienteNombre);
+      const matchedClient = matchOptionByLabel(matchableClientOptions, parsed.clienteNombre);
       const matchedCompany = matchOptionByLabel(companyOptions, parsed.proveedorNombre);
       const matchedOperation = findFacturaSubtotalOperation(operationOptions);
       setSourceCompanyWarning(formData.companyId && matchedCompany && formData.companyId !== matchedCompany.value

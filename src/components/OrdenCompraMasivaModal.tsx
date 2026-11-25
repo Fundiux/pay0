@@ -7,6 +7,7 @@ import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/lib/auth";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { mergeModules, normalizeRole } from "@/lib/roles";
+import { matchOptionByName } from "@/lib/nameMatching";
 import { listCompanies } from "@/services/companies";
 import { listScopedClients } from "@/services/clients";
 import { createSolicitud } from "@/services/solicitudes";
@@ -71,24 +72,11 @@ function isSolicitudSourceFile(file: File) {
   return isOcExcel(file) || isFacturaXml(file);
 }
 
+// Tolerant to dots, commas and how the legal form is written; a match must be unique (owner 2026-11-24).
 function matchOptionByLabel<T extends UiSelectOption>(options: T[], target: unknown): T | null {
-  const cleanTarget = normalizeText(target);
-  if (!cleanTarget) return null;
-
-  return (
-    options.find((option) => {
-      const label = normalizeText(option.label);
-      const value = normalizeText(option.value);
-
-      return (
-        label === cleanTarget ||
-        value === cleanTarget ||
-        (cleanTarget.length >= 4 && label.includes(cleanTarget)) ||
-        (label.length >= 4 && cleanTarget.includes(label))
-      );
-    }) || null
-  );
+  return matchOptionByName(options, target);
 }
+
 export default function OrdenCompraMasivaModal(props: {
   open: boolean;
   files: File[];
@@ -121,7 +109,8 @@ export default function OrdenCompraMasivaModal(props: {
 
   const clientOptions = useMemo<UiSelectOption[]>(
     () =>
-      clients.map((client) => ({
+      // A merged or inactive client never receives new solicitudes: the match goes to the canonical client.
+      clients.filter((client) => !String(client?.mergedInto || "").trim() && client?.active !== false).map((client) => ({
         value: String(client.id || ""),
         label: String(
           client.name ||

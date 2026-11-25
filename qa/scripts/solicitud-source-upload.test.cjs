@@ -126,7 +126,7 @@ test('OC autofill feedback remains correct when React defers the state updater',
       assert.equal(file.name, 'prepared.xlsx');
       return { ok: true, clienteNombre: 'Client', proveedorNombre: 'Company', montoSolicitud: 98000, tipoFactura: 'PUE' };
     },
-    matchOptionByLabel: (_, label) => ({ value: label, label }), clientOptions: [], companyOptions: [], operationOptions: [],
+    matchOptionByLabel: (_, label) => ({ value: label, label }), clientOptions: [], matchableClientOptions: [], companyOptions: [], operationOptions: [],
     findFacturaSubtotalOperation: () => ({ value: 'FACTURA_SUBTOTAL', label: 'Factura subtotal' }), setFormData: fn => { updater = fn; },
   };
   const run = new Function(...Object.keys(ctx), ts.transpileModule(`return ${body}`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText)(...Object.values(ctx));
