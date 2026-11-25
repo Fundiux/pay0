@@ -1984,6 +1984,8 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
   let invoiceQueued = 0;
   let skipped = 0;
   let lastCreatedAtMs: number | null = null;
+  const skippedByReason: Record<string, number> = {};
+  const recoveredStats = { seen: 0, queued: 0, skipped: {} as Record<string, number> };
 
   for (const doc of snap.docs) {
     scanned += 1;
@@ -1996,20 +1998,27 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     // A solicitud recovered from IQ by the daily sync has no PAY0 creation record: its IQ id and canonical profile identify the invoice.
     const recovered = isIqDailySyncImport(solicitud) && cleanText(solicitud.invoiceStatus).toUpperCase() === "INVOICED";
     const iqFolio = recovered ? cleanText(solicitud.iqId ?? solicitud.originalIqEntityId) : cleanText(solicitud.iqFolio ?? solicitud.iqId);
+    if (recovered) recoveredStats.seen += 1;
 
     if (!rootId || !iqFolio) {
       skipped += 1;
+      skippedByReason.MISSING_ROOT_OR_IQ_ID = (skippedByReason.MISSING_ROOT_OR_IQ_ID ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.MISSING_ROOT_OR_IQ_ID = (recoveredStats.skipped.MISSING_ROOT_OR_IQ_ID ?? 0) + 1;
       continue;
     }
 
     if (hasInvoiceImportedFlag(solicitud)) {
       skipped += 1;
+      skippedByReason.INVOICE_ALREADY_IMPORTED = (skippedByReason.INVOICE_ALREADY_IMPORTED ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.INVOICE_ALREADY_IMPORTED = (recoveredStats.skipped.INVOICE_ALREADY_IMPORTED ?? 0) + 1;
       continue;
     }
 
     const existingJobSnap = await getQueueRef(solicitudId).get();
     if (existingJobSnap.exists && isInvoiceJobActive(asRecord(existingJobSnap.data()))) {
       skipped += 1;
+      skippedByReason.JOB_ALREADY_ACTIVE = (skippedByReason.JOB_ALREADY_ACTIVE ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.JOB_ALREADY_ACTIVE = (recoveredStats.skipped.JOB_ALREADY_ACTIVE ?? 0) + 1;
       continue;
     }
 
@@ -2020,6 +2029,8 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
         iqInvoiceSyncUpdatedAt: FieldValue.serverTimestamp(),
       }, { merge: true }).catch(() => undefined);
       skipped += 1;
+      skippedByReason.DOCUMENTS_ALREADY_PRESENT = (skippedByReason.DOCUMENTS_ALREADY_PRESENT ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.DOCUMENTS_ALREADY_PRESENT = (recoveredStats.skipped.DOCUMENTS_ALREADY_PRESENT ?? 0) + 1;
       continue;
     }
 
@@ -2037,6 +2048,8 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
         iqInvoiceSyncUpdatedAt: FieldValue.serverTimestamp(),
       }, { merge: true }).catch(() => undefined);
       skipped += 1;
+      skippedByReason.MISSING_IQ_METADATA = (skippedByReason.MISSING_IQ_METADATA ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.MISSING_IQ_METADATA = (recoveredStats.skipped.MISSING_IQ_METADATA ?? 0) + 1;
       continue;
     }
 
@@ -2049,6 +2062,8 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
         iqInvoiceSyncUpdatedAt: FieldValue.serverTimestamp(),
       }, { merge: true }).catch(() => undefined);
       skipped += 1;
+      skippedByReason.RATE_LIMIT = (skippedByReason.RATE_LIMIT ?? 0) + 1;
+      if (recovered) recoveredStats.skipped.RATE_LIMIT = (recoveredStats.skipped.RATE_LIMIT ?? 0) + 1;
       continue;
     }
 
@@ -2089,6 +2104,7 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     }, { merge: true }).catch(() => undefined);
 
     invoiceQueued += 1;
+    if (recovered) recoveredStats.queued += 1;
   }
 
   const reachedEnd = snap.empty || snap.size < IQ_WORK_DISCOVERY_BATCH_SIZE;
@@ -2105,6 +2121,12 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     },
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
+
+  // Counts only: no ids, tokens or urls reach the log.
+  console.log("IQ_INVOICE_DISCOVERY_SUMMARY", JSON.stringify({
+    event: "IQ_INVOICE_DISCOVERY_SUMMARY", scanned, invoiceCandidates, invoiceQueued, skipped, reachedEnd, skippedByReason,
+    recovered: { seen: recoveredStats.seen, queued: recoveredStats.queued, skippedByReason: recoveredStats.skipped },
+  }));
 
   return {
     scanned,
@@ -2191,11 +2213,30 @@ export const processIqInvoiceImportQueue = onSchedule(
     }
     let processed = 0;
     let imported = 0;
+    const byStatus: Record<string, number> = {};
+    const recoveredRun = { processed: 0, imported: 0, byStatus: {} as Record<string, number> };
     for (const group of byProfile.values()) {
       const statuses = await processJobGroup({ jobs: group, source: "SCHEDULER" });
       processed += statuses.size;
-      imported += Array.from(statuses.values()).filter((status) => status === "IMPORTED" || status === "IMPORTED_REUSED").length;
+      for (const job of group) {
+        const status = statuses.get(job.id);
+        if (!status) continue;
+        const done = status === "IMPORTED" || status === "IMPORTED_REUSED";
+        if (done) imported += 1;
+        const code = String(status).replace(/[^A-Z0-9_]/gi, "").slice(0, 60) || "UNKNOWN";
+        byStatus[code] = (byStatus[code] ?? 0) + 1;
+        if (job.marker.startsWith("IQ_IMPORT:")) {
+          recoveredRun.processed += 1;
+          if (done) recoveredRun.imported += 1;
+          recoveredRun.byStatus[code] = (recoveredRun.byStatus[code] ?? 0) + 1;
+        }
+      }
     }
+    const waiting = Object.entries(byStatus).filter(([code]) => code.startsWith("WAITING") || code === "QUEUED").reduce((sum, [, n]) => sum + n, 0);
+    const errors = Object.fromEntries(Object.entries(byStatus).filter(([code]) => code.startsWith("ERROR") || code.startsWith("FAILED")));
+    console.log("IQ_INVOICE_IMPORT_SUMMARY", JSON.stringify({
+      event: "IQ_INVOICE_IMPORT_SUMMARY", processed, imported, waiting, errors, byStatus, profileGroups: byProfile.size, recovered: recoveredRun,
+    }));
     await db.collection("iqQueueRuns").doc(`invoice-${Date.now()}`).set({
       type: "INVOICE_IMPORT",
       processed,
