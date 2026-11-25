@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getMyCommissionPayoutMode, saveMyCommissionPayoutMode, type CommissionPayoutMode } from "@/services/commissions";
 import { cancelUserCommissionDispersion, executeUserCommissionDispersion, getMyCommissionSettings, previewMyCommissionDestinations, previewUserCommissionWithdrawal, requestUserCommissionDispersion, saveMyCommissionDestinations, type UserCommissionDestination, type UserCommissionMode, type UserCommissionSettings } from "@/services/commissions";
 
 const inputClass = "rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm";
@@ -11,6 +12,18 @@ const statusLabel = (status?: string) => ({
   FAILED_SAFE: "Envío bloqueado", NOT_EXECUTED: "Sin enviar", RESERVED: "Reservada",
 }[status || ""] || "Requiere revisión");
 export default function UserCommissionDestinations() {
+  const [payoutMode, setPayoutMode] = useState<CommissionPayoutMode>("MANUAL");
+  const [payoutVersion, setPayoutVersion] = useState(0);
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const [payoutMessage, setPayoutMessage] = useState("");
+  useEffect(() => { let live = true; getMyCommissionPayoutMode().then(result => { if (live) { setPayoutMode(result.mode); setPayoutVersion(result.version); } }).catch(() => { if (live) setPayoutMessage("No se pudo consultar la preferencia; se mantiene manual."); }); return () => { live = false; }; }, []);
+  async function changePayoutMode(mode: CommissionPayoutMode) {
+    if (payoutBusy || mode === payoutMode) return;
+    setPayoutBusy(true); setPayoutMessage("");
+    try { const result = await saveMyCommissionPayoutMode({ mode, expectedVersion: payoutVersion }); setPayoutMode(result.mode); setPayoutVersion(result.version); setPayoutMessage("Preferencia guardada. La ejecución automática aún no está habilitada en esta versión."); }
+    catch (error: any) { setPayoutMessage(error.message || "No se pudo guardar la modalidad."); }
+    finally { setPayoutBusy(false); }
+  }
   const [settings, setSettings] = useState<UserCommissionSettings | null>(null), [clientId, setClientId] = useState("");
   const [mode, setMode] = useState<UserCommissionMode>("USER_EARNINGS_PERCENTAGE"), [destinations, setDestinations] = useState<UserCommissionDestination[]>([]);
   const [example, setExample] = useState("10000.00"), [preview, setPreview] = useState<Awaited<ReturnType<typeof previewMyCommissionDestinations>> | null>(null);
@@ -43,6 +56,7 @@ export default function UserCommissionDestinations() {
   return <section className="space-y-4 rounded-2xl border border-white/10 bg-[#161d2b] p-5">
     <h2 className="text-lg font-semibold">Tus destinos de comisión</h2>
     <p className="text-sm text-slate-400">Cada cliente tiene su propia distribución. Tu comisión procede de la utilidad contabilizada; elegir cuentas no modifica cuánto ganas.</p>
+    <div className="space-y-2 rounded-xl border border-white/10 p-3"><h3 className="text-sm font-semibold">Cómo recibir mis comisiones</h3><p className="text-xs text-slate-400">Manual por defecto. La opción automática requiere activación expresa y solo tendrá efecto cuando se conecte el proceso programado.</p><label className="block text-sm">Modalidad de cobro<select aria-label="Modalidad de cobro de comisiones" disabled={payoutBusy} className={`${inputClass} ml-2`} value={payoutMode} onChange={event => void changePayoutMode(event.target.value as CommissionPayoutMode)}><option value="MANUAL">Manual</option><option value="AUTOMATIC">Automática</option></select></label>{payoutMessage && <p role="status" className="text-xs text-slate-300">{payoutMessage}</p>}</div>
     {!settings ? <p>Cargando…</p> : !settings.configurations.length ? <p className="text-sm text-amber-200">Aún no tienes clientes e instrumentos asignados para distribuir tu comisión. Solicita la asignación a Superadmin.</p> : <>
       <label className="block text-sm">Cliente que genera la comisión<select disabled={busy} className={`${inputClass} mt-1 w-full`} value={clientId} onChange={event => setClientId(event.target.value)}>{settings.configurations.map(row => <option key={row.clientId} value={row.clientId}>{row.clientName}</option>)}</select></label>
       {configuration && !configuration.personalRule && <fieldset disabled={busy || !configuration.active} className="space-y-4 disabled:opacity-60">

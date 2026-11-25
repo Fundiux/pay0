@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { assertCommissionWithdrawalOwner, commissionAccountActor } from "./userDestinations";
+import { resolveCommissionPayoutMode } from "./payoutPreference";
 import { preflightCommissionDistribution } from "./service";
 import { PERSONAL_COMMISSION_ACCOUNT_KEY } from "./privateBankInstrument";
 import { reverseCanonicalDispersionFinancialsTx } from "../financing/dispersionFinancial";
@@ -25,8 +26,20 @@ async function scopedRequest(input: ExecutionInput) {
 export async function executeUserCommissionRequestCore(input: ExecutionInput, executor?: CommissionExecutor) {
   const { ref, request } = await scopedRequest(input);
   if (["COMPLETED", "UNCERTAIN", "PROCESSING", "CANCELLED", "CANCELLING"].includes(request.status)) return { ok: true, idempotent: true, requestId: ref.id, status: request.status };
+  // Manual requests remain executable regardless of preference. Daily requests fail closed.
+  if (request.source === "DAILY") {
+    const preference = (await db.doc(`commissionPayoutPreferences/${input.ownerUid}`).get()).data();
+    if (resolveCommissionPayoutMode(preference?.mode) !== "AUTOMATIC") throw new HttpsError("failed-precondition", "El participante desactivó la dispersión automática; la reserva requiere revisión manual.");
+  }
   const claimed = await db.runTransaction(async tx => {
     const current = await tx.get(ref);
+    // Read the preference in the same transaction that claims a daily payout.
+    // A concurrent preference change then conflicts rather than silently submitting.
+    if (current.data()?.source === "DAILY") {
+      const preferenceRef = db.doc(`commissionPayoutPreferences/${input.ownerUid}`);
+      const preference = await tx.get(preferenceRef);
+      if (resolveCommissionPayoutMode(preference.data()?.mode) !== "AUTOMATIC") throw new HttpsError("failed-precondition", "El participante desactivó el envío automático.");
+    }
     if (current.data()?.status !== "RESERVED_AWAITING_EXECUTION") return false;
     tx.update(ref, { status: "PROCESSING", executionStartedAt: timestamp(), executionActorUid: input.actorUid });
     for (const principalId of request.principalIds) tx.update(db.doc(`clientDispersions/${principalId}`), { commissionExecutionStatus: "PROCESSING" });
