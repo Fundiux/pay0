@@ -234,7 +234,7 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   await setMaster(true); reset();
 
   // R4. a stale catalog never proves the account is missing: it waits without spending attempts
-  await setCatalogFresh(40);
+  await setCatalogFresh(130);
   createResult = { outcome: "CREATED", iqBeneficiaryId: 1, iqAccountId: 1, iqBeneficiaryName: "x", conciliated: true };
   const r4 = await setup("r4");
   const outR4 = await link(r4.methodId);

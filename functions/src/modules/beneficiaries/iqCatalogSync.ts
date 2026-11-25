@@ -73,12 +73,19 @@ export async function syncIqCatalog(input: { rootId: string; catalog: string; se
   let partnerIndex = Math.max(0, partners.findIndex(row => Number(row.id) === Number(state.partnerId)));
   let offset = Number(state.offset || 0);
   const skipped: number[] = [];
+  // A pass over one associate spans several nights, so its start and whether it is still clean are kept in the state.
+  // The proof date is the START of the pass: every row was read at or after it. A resumed pass with no stored start
+  // (older state) proves nothing and the associate is read again from its first page.
+  const Ts = admin.firestore.Timestamp;
+  const resumable = Number(state.passPartnerId) === Number(partners[partnerIndex]?.id) && typeof state.passStartedAt?.toMillis === "function";
+  let passStart: admin.firestore.Timestamp | null = offset === 0 ? Ts.now() : resumable ? state.passStartedAt : null;
+  let passClean = offset === 0 ? true : resumable ? state.passClean !== false : false;
   const save = (lastError: string | null = null) => ref.set({ rootId: input.rootId, catalog: input.catalog, partnerId: partners[partnerIndex]?.id ?? null, offset, lastError,
+    passPartnerId: partners[partnerIndex]?.id ?? null, passStartedAt: passStart, passClean,
     ...(skipped.length ? { skippedBeneficiaryIds: FieldValue.arrayUnion(...skipped.slice(0, MAX_SKIPPED_IDS)) } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
   // An associate read from its first page to its last in this run, with no row skipped, is proof material:
   // its partnerSyncedAt says when its slice of the catalog was last complete.
-  let wholeFromStart = offset === 0, partnerSkipped = 0;
   while (partnerIndex < partners.length) {
     const partner = partners[partnerIndex];
     let beneficiaries: Array<Record<string, any>>;
@@ -100,7 +107,7 @@ export async function syncIqCatalog(input: { rootId: string; catalog: string; se
       } catch (error) {
         if (!SKIPPABLE_STATUS.has(httpStatus(error))) { offset += done; await save(errorText(error)); throw error; }
         skipped.push(Number(beneficiary.id));
-        partnerSkipped += 1;
+        passClean = false;
       }
       done += 1;
       await sleep(input.spacingMs ?? READ_SPACING_MS);
@@ -108,13 +115,13 @@ export async function syncIqCatalog(input: { rootId: string; catalog: string; se
     }
     if (beneficiaries.length === PAGE) offset += PAGE;
     else {
-      if (wholeFromStart && partnerSkipped === 0) await ref.update(new admin.firestore.FieldPath("partnerSyncedAt", String(partner.id)), FieldValue.serverTimestamp()).catch(() => ref.set({ partnerSyncedAt: { [String(partner.id)]: FieldValue.serverTimestamp() } }, { merge: true }));
-      partnerIndex += 1; offset = 0; wholeFromStart = true; partnerSkipped = 0;
+      if (passStart && passClean) await ref.update(new admin.firestore.FieldPath("partnerSyncedAt", String(partner.id)), passStart).catch(() => ref.set({ partnerSyncedAt: { [String(partner.id)]: passStart } }, { merge: true }));
+      partnerIndex += 1; offset = 0; passStart = Ts.now(); passClean = true;
     }
     await save();
   }
   const nextRunAfter = admin.firestore.Timestamp.fromMillis(Date.now() + (input.refreshDays ?? DEFAULT_REFRESH_DAYS) * 86_400_000);
-  await ref.set({ partnerId: null, offset: 0, lastError: null, completedAt: FieldValue.serverTimestamp(), nextRunAfter, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await ref.set({ partnerId: null, offset: 0, passPartnerId: null, passStartedAt: null, passClean: null, lastError: null, completedAt: FieldValue.serverTimestamp(), nextRunAfter, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return true;
 }
 

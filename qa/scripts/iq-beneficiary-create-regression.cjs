@@ -249,7 +249,7 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   await counter().set({ count: 0 }, { merge: true });
 
   // G. stale catalog defers without any IQ request
-  resetIq(); await setFresh(40);
+  resetIq(); await setFresh(130);
   const g = await setup("g");
   const outG = await link(g.methodId);
   eq([outG.status, outG.createState, iq.requests.length], ["PENDING_RETRY", "CATALOG_STALE", 0], "catálogo de más de 36 h: se difiere sin tocar IQ");
@@ -296,6 +296,17 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   const kState = (await db.doc(`iqBeneficiaryCatalogState/${kRoot}_iq-group-pay0`).get()).data();
   ok(kState.partnerSyncedAt?.["1"], "asociado leído completo: queda fechado");
   eq(kState.partnerSyncedAt?.["2"], undefined, "asociado con una fila omitida: no prueba ausencias");
+
+  // K2. a pass resumed on a later night keeps its start date; a resumed pass with no stored start proves nothing
+  const session = { apiOrigin: "https://iq.test", accessToken: "tok" };
+  const startedAt = Timestamp.fromMillis(Date.now() - 3 * 86_400_000);
+  const resumedRoot = `${run}-k2`, unknownRoot = `${run}-k3`;
+  await db.doc(`iqBeneficiaryCatalogState/${resumedRoot}_iq-group-pay0`).set({ partnerId: 1, offset: 1, passPartnerId: 1, passStartedAt: startedAt, passClean: true });
+  await db.doc(`iqBeneficiaryCatalogState/${unknownRoot}_iq-group-pay0`).set({ partnerId: 1, offset: 1 });
+  await syncIqCatalog({ rootId: resumedRoot, catalog: "iq-group-pay0", session, deadlineMs: Date.now() + 120_000, spacingMs: 0 });
+  await syncIqCatalog({ rootId: unknownRoot, catalog: "iq-group-pay0", session, deadlineMs: Date.now() + 120_000, spacingMs: 0 });
+  eq((await db.doc(`iqBeneficiaryCatalogState/${resumedRoot}_iq-group-pay0`).get()).data().partnerSyncedAt?.["1"]?.toMillis(), startedAt.toMillis(), "pasada reanudada: se fecha con el inicio de la pasada");
+  eq((await db.doc(`iqBeneficiaryCatalogState/${unknownRoot}_iq-group-pay0`).get()).data().partnerSyncedAt?.["1"], undefined, "pasada reanudada sin inicio guardado: no prueba ausencias");
 
   // L. daily summary: counts without identifiers and an incident for methods stuck more than a day
   const stuck = await setup("stuck");
