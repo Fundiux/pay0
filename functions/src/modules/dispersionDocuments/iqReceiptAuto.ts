@@ -4,6 +4,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logActivity } from "../../utils/logActivity";
 import { SafetyRuntime } from "../automationSafety/runtime";
 import { loadEnabledIqAutomationRoots } from "../iq/automationRuntime";
+import { evaluateIqOperatingWindow } from "../iq/operatingCalendar";
 import { IQ_CREDENTIALS_KEY, buildDispersionSchedulerAuth } from "../iq/dispersionCreationCallables";
 import { importIqDispersionReceiptCore } from "./iqReceiptImport";
 import { isIqDailySyncImport } from "../iq/historicalImportGuard";
@@ -96,7 +97,7 @@ async function giveUp(rootId: string, dispersionId: string, principal: Record<st
   }).catch(() => undefined);
 }
 
-export async function runIqDispersionReceiptScan(rootId: string, nowMs = Date.now()) {
+export async function runIqDispersionReceiptScan(rootId: string, nowMs = Date.now(), options: { recoveredOnly?: boolean } = {}) {
   const configRef = db.collection("iqIntegrationConfigs").doc(rootId);
   const configSnap = await configRef.get();
   const runtime = (configSnap.data()?.automationRuntime?.dispersionReceipt || {}) as Record<string, unknown>;
@@ -119,14 +120,19 @@ export async function runIqDispersionReceiptScan(rootId: string, nowMs = Date.no
     await giveUp(rootId, doc.id, doc.data());
     counts.EXPIRED = (counts.EXPIRED || 0) + 1;
   }
-  let handled = 0, holdCursor = false, stopped = false;
+  let handled = 0, handledOwn = 0, handledRecovered = 0, holdCursor = false, stopped = false;
   for (const doc of snap.docs) {
     const principal = doc.data();
     if (decideReceiptAuto(principal, rootId, nowMs).action !== "CHECK") continue;
-    if (handled >= RECEIPT_AUTO_MAX_PER_ROOT) { holdCursor = true; break; }
+    const recovered = isIqDailySyncImport(principal);
+    // Outside IQ's operating window only recovered dispersions are read; PAY0's own wait for the window.
+    if (options.recoveredOnly && !recovered) continue;
+    // Separate quotas so recovered history never takes the slots of PAY0's own dispersions.
+    if ((recovered ? handledRecovered : handledOwn) >= RECEIPT_AUTO_MAX_PER_ROOT) { holdCursor = true; continue; }
     // The safety runtime admits one IQ operation per second; wait instead of deferring the rest of the page.
     if (handled > 0) await new Promise((resolve) => setTimeout(resolve, ITEM_SPACING_MS));
     handled += 1;
+    if (recovered) handledRecovered += 1; else handledOwn += 1;
     let result: ItemResult;
     try {
       result = await processDispersionReceipt(rootId, doc.id, principal, nowMs);
@@ -166,9 +172,10 @@ export const processIqDispersionReceipts = onSchedule(
   },
   async () => {
     // IQ master switch + "dispersiones" flow + operating window + interval claim.
-    const enabledRoots = await loadEnabledIqAutomationRoots({ process: "dispersionReceipt", purpose: "RECONCILIATION" });
-    for (const rootId of enabledRoots.keys()) {
-      const result = await runIqDispersionReceiptScan(rootId);
+    const enabledRoots = await loadEnabledIqAutomationRoots({ process: "dispersionReceipt", purpose: "RECONCILIATION", respectWindow: false });
+    for (const [rootId, rootConfig] of enabledRoots) {
+      const inWindow = evaluateIqOperatingWindow(rootConfig, new Date(), "RECONCILIATION").allowed;
+      const result = await runIqDispersionReceiptScan(rootId, Date.now(), { recoveredOnly: !inWindow });
       await db.collection("iqQueueRuns").doc(`dispersion-receipt-${rootId}-${Date.now()}`).set({
         type: "DISPERSION_RECEIPT_IMPORT", rootId, ...result, createdAt: FieldValue.serverTimestamp(),
       }).catch(() => undefined);
