@@ -11,7 +11,7 @@ import { agentCanAct, readAgentModes } from "./modes";
 import { mexicoMonthKey } from "./metrics";
 import { runUnansweredAlerts } from "./unansweredRunner";
 import { runInternalChat } from "./internalChat";
-import { findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
+import { answeredLessonId, findHumanAnswers, findMissedQuestions, LESSONS, missedLessonId } from "./lessons";
 import { refreshPlaybookProposals } from "./playbook";
 import { runReplySimulation } from "./simulationRunner";
 import { clienteIdOfGroup, lookupRequestForClient } from "./requestLookup";
@@ -88,15 +88,22 @@ async function noticeInternalTeam(rootId: string, item: PlannedReply, groupName:
   } catch (error) { console.error("WHATSAPP_REPLY_INTERNAL_NOTICE_FAILED", { rootId, message: error instanceof Error ? error.message.slice(0, 160) : "UNKNOWN" }); }
 }
 
-export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
+type RunSummary = { skipped: "OFF" | "NO_GROUPS" | "NO_MESSAGES" | null; queued: number };
+
+// One summary line per run, counts only: never ids, group names or message text.
+function logRunSummary(rootId: string, counts: Record<string, number | string | null>) {
+  console.log("WHATSAPP_GROUP_REPLY_RUN", { rootId, ...counts });
+}
+
+export async function runGroupReplies(rootId: string, nowMs = Date.now()): Promise<RunSummary> {
   const stored = await readReplyConfig(rootId);
   const internalChatIds = await readInternalGroupChatIds(db, rootId);
-  if (!stored.enabled) return { skipped: "OFF" as const, queued: 0 };
+  if (!stored.enabled) { logRunSummary(rootId, { skipped: "OFF" }); return { skipped: "OFF", queued: 0 }; }
   const config: ReplyRuntimeConfig = { enabled: true, mode: stored.mode, workingHours: OWNER_WORKING_HOURS };
 
   // Only groups assigned to a user are answered.
   const observers = await db.collection("whatsappAgentObservers").where("rootId", "==", rootId).where("active", "==", true).limit(200).get();
-  const ownerByChat: Record<string, string> = {}, groupNameByChat: Record<string, string> = {}, agentPhones: string[] = [];
+  const ownerByChat: Record<string, string> = {}, observedByChat: Record<string, string> = {}, groupNameByChat: Record<string, string> = {}, agentPhones: string[] = [];
   const hugoEnabled = AGENTS.find(agent => agent.id === REPLY_AGENT_ID)?.enabled === true;
   for (const doc of observers.docs) {
     const owner = clean(doc.get("ownerUserUid"), 128), chatId = clean(doc.get("groupChatId"), 200);
@@ -105,28 +112,46 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     const observed = observerRows.some(row => row?.agentId === REPLY_AGENT_ID);
     // Observer mode is the default: Hugo answers only in the groups the owner switched to acting.
     const acting = agentCanAct(REPLY_AGENT_ID, readAgentModes(doc.get("agentModes")), hugoEnabled);
-    if (owner && chatId && observed && acting && !internalChatIds.has(chatId)) { ownerByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
+    if (chatId && observed && !internalChatIds.has(chatId)) { observedByChat[chatId] = owner; groupNameByChat[chatId] = clean(doc.get("groupName"), 160); }
+    if (owner && chatId && observed && acting && !internalChatIds.has(chatId)) ownerByChat[chatId] = owner;
   }
-  if (!Object.keys(ownerByChat).length) return { skipped: "NO_GROUPS" as const, queued: 0 };
+  const observedCount = Object.keys(observedByChat).length, actingCount = Object.keys(ownerByChat).length;
+  if (!observedCount) { logRunSummary(rootId, { skipped: "NO_GROUPS", observedGroups: 0, actingGroups: 0 }); return { skipped: "NO_GROUPS", queued: 0 }; }
 
   const recent = await db.collection("whatsappInboundMessages").where("rootId", "==", rootId).where("agentId", "==", REPLY_AGENT_ID)
     .where("timestampMs", ">=", nowMs - LOOKBACK_MS).orderBy("timestampMs").limit(MAX_MESSAGES_PER_RUN).get();
-  const messages: InboundRow[] = recent.docs.filter(doc => ownerByChat[clean(doc.get("chatId"), 200)]).map(doc => ({
+  // Learning reads every observed group; replies are planned only for the acting ones.
+  const observedMessages: InboundRow[] = recent.docs.filter(doc => observedByChat[clean(doc.get("chatId"), 200)] !== undefined).map(doc => ({
     id: doc.id, chatId: clean(doc.get("chatId"), 200), authorHash: doc.get("authorHash") || null, fromMe: doc.get("fromMe") === true,
     timestampMs: Number(doc.get("timestampMs")) || 0, type: clean(doc.get("type"), 40), body: String(doc.get("body") ?? ""), waMessageId: clean(doc.get("messageId"), 200) || undefined,
   }));
-  if (!messages.length) return { skipped: "NO_MESSAGES" as const, queued: 0 };
-
-  const chats = [...new Set(messages.map(row => row.chatId))];
-  const firstObservedByChat: Record<string, number | null> = {};
-  for (const chatId of chats) firstObservedByChat[chatId] = await firstObservedAt(rootId, chatId);
+  const messages = observedMessages.filter(row => ownerByChat[row.chatId]);
+  const baseCounts = { observedGroups: observedCount, actingGroups: actingCount, observedMessages: observedMessages.length, actingMessages: messages.length };
+  if (!observedMessages.length) { logRunSummary(rootId, { skipped: "NO_MESSAGES", ...baseCounts }); return { skipped: "NO_MESSAGES", queued: 0 }; }
 
   const operatorDocs = await db.collection("userOperatorNumbers").where("rootId", "==", rootId).limit(500).get();
   const operatorHashes = new Set<string>();
   for (const doc of operatorDocs.docs) for (const hash of operatorAuthorHashes(rootId, (doc.get("numbers") as string[]) || [])) operatorHashes.add(hash);
-
   // The agents' own numbers are never clients: a message from another agent is neither answered nor counted as a person.
   for (const hash of operatorAuthorHashes(rootId, agentPhones)) operatorHashes.add(hash);
+
+  // Learning (capture only) in every observed group: a person answered a client message and Hugo stayed silent.
+  const answerJobs = await db.getAll(...observedMessages.map(row => db.doc(`documentDeliveryJobs/${replyJobId(rootId, row.id)}`)));
+  const hugoRepliedIds = new Set(observedMessages.filter((_row, index) => answerJobs[index].exists).map(row => row.id));
+  let humanAnswerLessons = 0;
+  for (const answered of findHumanAnswers({ messages: observedMessages, observedChats: new Set(Object.keys(observedByChat)), operatorHashes, repliedIds: hugoRepliedIds, nowMs, workingHours: config.workingHours ?? null })) {
+    const wrote = await db.doc(`${LESSONS}/${answeredLessonId(rootId, answered.messageId)}`).create({
+      rootId, agentId: REPLY_AGENT_ID, chatId: answered.chatId, groupName: groupNameByChat[answered.chatId] || "", type: "HUMAN_ANSWERED",
+      kind: answered.kind, subject: answered.subject, phrase: answered.phrase, withinHours: answered.withinHours, actingGroup: !!ownerByChat[answered.chatId],
+      monthKey: mexicoMonthKey(nowMs), createdAt: FieldValue.serverTimestamp(),
+    }).then(() => true).catch(() => false);
+    if (wrote) { humanAnswerLessons++; await refreshPlaybookProposals(db, rootId, answered.chatId).catch(() => undefined); }
+  }
+  if (!messages.length) { logRunSummary(rootId, { skipped: "NO_MESSAGES", ...baseCounts, humanAnswerLessons }); return { skipped: "NO_MESSAGES", queued: 0 }; }
+
+  const chats = [...new Set(messages.map(row => row.chatId))];
+  const firstObservedByChat: Record<string, number | null> = {};
+  for (const chatId of chats) firstObservedByChat[chatId] = await firstObservedAt(rootId, chatId);
 
   const jobRefs = messages.map(row => db.doc(`documentDeliveryJobs/${replyJobId(rootId, row.id)}`));
   const existing = await db.getAll(...jobRefs);
@@ -201,6 +226,7 @@ export async function runGroupReplies(rootId: string, nowMs = Date.now()) {
     }).catch(() => undefined);
     if (item.notifyInternal) await noticeInternalTeam(rootId, item, groupNameByChat[item.chatId] || "", clienteByChat[item.chatId] ?? null);
   }
+  logRunSummary(rootId, { skipped: null, ...baseCounts, planned: plan.length, queued, humanAnswerLessons });
   return { skipped: null, queued };
 }
 

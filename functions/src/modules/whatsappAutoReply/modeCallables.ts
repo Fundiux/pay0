@@ -7,6 +7,7 @@ import { readInternalGroupChatIds } from "./internalGroups";
 import { mexicoMonthKey, summarizeReplyMetrics, type ModeEventRow, type ReplyMetricRow } from "./metrics";
 import { applyModeChange, readAgentModes, type AgentMode } from "./modes";
 import { correctionLessonId, isCorrectionCategory, LESSONS } from "./lessons";
+import { REPLY_AGENT_ID } from "./constants";
 import { refreshPlaybookProposals } from "./playbook";
 import { REPLY_METRICS } from "./runner";
 
@@ -59,6 +60,34 @@ export const setWhatsAppGroupAgentMode = onCall({ cors: true, timeoutSeconds: 30
   return { ok: true, agentModes: result.modes, changed: result.changed };
 });
 
+// What Hugo observes in the month, over every observed group (not only the acting ones). Counts only; documents are counted apart from conversation.
+async function observationSummary(rootId: string, month: string) {
+  const [year, mon] = month.split("-").map(Number);
+  // Mexico City is UTC-6 all year since 2022.
+  const fromMs = Date.UTC(year, mon - 1, 1, 6), toMs = Date.UTC(year, mon, 1, 6);
+  const [observers, inbound, answers] = await Promise.all([
+    db.collection("whatsappAgentObservers").where("rootId", "==", rootId).where("active", "==", true).limit(500).get(),
+    db.collection("whatsappInboundMessages").where("rootId", "==", rootId).where("agentId", "==", REPLY_AGENT_ID).where("timestampMs", ">=", fromMs).where("timestampMs", "<", toMs).limit(5000).get(),
+    db.collection(LESSONS).where("rootId", "==", rootId).where("monthKey", "==", month).limit(MAX_ROWS).get(),
+  ]);
+  const observed = new Set(observers.docs.filter(doc => ((doc.get("observers") as any[]) || []).some(row => row?.agentId === REPLY_AGENT_ID)).map(doc => clean(doc.get("groupChatId"))));
+  const chatsWithMessages = new Set<string>(), chatsWithDocuments = new Set<string>();
+  let conversationMessages = 0, documentMessages = 0;
+  for (const doc of inbound.docs) {
+    const chatId = clean(doc.get("chatId")), type = clean(doc.get("type"), 40);
+    if (!observed.has(chatId)) continue;
+    if (type === "document" || type === "image") { documentMessages++; chatsWithDocuments.add(chatId); }
+    else if (type === "chat") { conversationMessages++; chatsWithMessages.add(chatId); }
+  }
+  const answered = answers.docs.filter(doc => doc.get("type") === "HUMAN_ANSWERED");
+  return {
+    observedGroups: observed.size, groupsWithConversation: chatsWithMessages.size, conversationMessages,
+    groupsWithDocuments: chatsWithDocuments.size, documentMessages,
+    humanAnswers: answered.length, humanAnswerGroups: new Set(answered.map(doc => clean(doc.get("chatId")))).size,
+    truncated: inbound.size >= 5000,
+  };
+}
+
 // Monthly measurement per agent and per group.
 export const getWhatsAppAgentReplyMetrics = onCall({ cors: true, timeoutSeconds: 60, memory: "256MiB" }, async request => {
   const { rootId } = await requireWhatsAppSuperadmin(request);
@@ -74,7 +103,7 @@ export const getWhatsAppAgentReplyMetrics = onCall({ cors: true, timeoutSeconds:
   const eventRows: ModeEventRow[] = events.docs.map(doc => ({
     agentId: clean(doc.get("agentId"), 64), chatId: clean(doc.get("chatId")), groupName: clean(doc.get("groupName"), 160), mode: doc.get("mode") === "ACTING" ? "ACTING" : "OBSERVER", reason: clean(doc.get("reason"), 300) || null, monthKey: month,
   }));
-  return { ok: true, month, truncated: replies.size >= MAX_ROWS || events.size >= MAX_ROWS, buckets: summarizeReplyMetrics(replyRows, eventRows, month) };
+  return { ok: true, month, truncated: replies.size >= MAX_ROWS || events.size >= MAX_ROWS, buckets: summarizeReplyMetrics(replyRows, eventRows, month), observation: await observationSummary(rootId, month) };
 });
 
 // The owner marks that a person had to correct one of Hugo's replies. It feeds the monthly measurement.
