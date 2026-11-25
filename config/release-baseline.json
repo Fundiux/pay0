@@ -808,6 +808,26 @@
     {
       "commit": "df4dd597",
       "capability": "Recuperacion de envios de WhatsApp tras desconexion: reintento de fallos previos, reenrutado, alerta en /whatsapp y aviso al grupo interno"
+    },
+    {
+      "commit": "f1dbc7c6",
+      "capability": "Hugo aprende de respuestas humanas en todos los grupos observados, metricas de observacion y log de captura"
+    },
+    {
+      "commit": "e85aa40e",
+      "capability": "Hugo recupera al reconectar lo recibido en grupos observados durante la caida (hasta 24 h, sin contestar nada viejo)"
+    },
+    {
+      "commit": "8b6df985",
+      "capability": "Soporte de la nueva plantilla de orden de compra de IQ"
+    },
+    {
+      "commit": "a31be769",
+      "capability": "Copia ligera verificada de ordenes de compra IQ que exceden 1 MB en carga individual y masiva"
+    },
+    {
+      "commit": "8f7e083c",
+      "capability": "Cotizaciones y metadatos fiscales leen el nuevo formato de orden de compra de IQ"
     }
   ],
   "requiredText": [
