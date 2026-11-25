@@ -844,6 +844,10 @@
     {
       "commit": "cea565d9",
       "capability": "El conector de Hugo registra localmente cada reporte de envio y por que no envia (solo conteos y codigos)"
+    },
+    {
+      "commit": "bee509b9",
+      "capability": "Enlaces IQ legacy VERIFIED cuentan como listos; pendientes de beneficiarios solo sin enlace en ningun grupo; dispersion no ofrece cuentas no conciliadas"
     }
   ],
   "requiredText": [
