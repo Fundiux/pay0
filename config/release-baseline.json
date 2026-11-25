@@ -832,6 +832,10 @@
     {
       "commit": "56692679",
       "capability": "Cliente y empresa de la OC se reconocen sin importar puntos, comas ni forma de sociedad; nunca se adivina entre dos"
+    },
+    {
+      "commit": "0f327b92",
+      "capability": "OC con dos clientes activos del mismo nombre va al canonico (vinculado en IQ, luego numero mas bajo)"
     }
   ],
   "requiredText": [
