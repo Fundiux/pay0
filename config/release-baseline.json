@@ -748,6 +748,22 @@
     {
       "commit": "3330a16a",
       "capability": "Solo las solicitudes recuperadas de IQ hasta el 2026-11-24 se guardan sin enviar; las recuperadas despues se envian al cliente"
+    },
+    {
+      "commit": "ea7ce448",
+      "capability": "Solicitudes y dispersiones recuperadas de IQ con fecha original hasta el 2026-11-23 se guardan sin enviar; desde el 2026-11-24 todo se envia"
+    },
+    {
+      "commit": "4e1560e6",
+      "capability": "Cuenta de beneficiario sin vinculo IQ conciliado: Pendiente IQ en naranja, no elegible ni enviada en dispersiones; respaldo del asociado legado"
+    },
+    {
+      "commit": "297cb365",
+      "capability": "Alta automatica de beneficiarios en IQ sin tope diario salvo dailyLimit explicito"
+    },
+    {
+      "commit": "3a66d4ae",
+      "capability": "Pruebas de emulador del alta de beneficiarios sin tope y con limite explicito"
     }
   ],
   "requiredText": [
