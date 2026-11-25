@@ -836,6 +836,14 @@
     {
       "commit": "0f327b92",
       "capability": "OC con dos clientes activos del mismo nombre va al canonico (vinculado en IQ, luego numero mas bajo)"
+    },
+    {
+      "commit": "de9a6225",
+      "capability": "Creacion de clientes PAY0 desde facturas, depositos y aplicaciones IQ por RFC unico (apagada hasta aprobar), con conteo IQ_DAILY_SYNC_CLIENT_CREATE_PLAN"
+    },
+    {
+      "commit": "cea565d9",
+      "capability": "El conector de Hugo registra localmente cada reporte de envio y por que no envia (solo conteos y codigos)"
     }
   ],
   "requiredText": [
