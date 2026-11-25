@@ -828,6 +828,10 @@
     {
       "commit": "8f7e083c",
       "capability": "Cotizaciones y metadatos fiscales leen el nuevo formato de orden de compra de IQ"
+    },
+    {
+      "commit": "56692679",
+      "capability": "Cliente y empresa de la OC se reconocen sin importar puntos, comas ni forma de sociedad; nunca se adivina entre dos"
     }
   ],
   "requiredText": [
