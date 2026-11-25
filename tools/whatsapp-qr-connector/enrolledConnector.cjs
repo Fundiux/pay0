@@ -275,14 +275,31 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       return { content: d.text.split(MENTION_TOKEN).join("@" + author.split("@")[0].split(":")[0]), options: { mentions: [author] } };
     } catch { return { content: plain, options: {} }; }
   }
+  // Delivery log (counts and stable codes only: never ids, names or text), so what went out can be verified from this machine without the database.
+  const deliveryCounts = { sent: 0, error: 0, uncertain: 0 };
+  let lastIdleReason = null;
+  function logDeliveryReport(outcome, kind, code) {
+    deliveryCounts[outcome === "SENT" ? "sent" : outcome === "ERROR" ? "error" : "uncertain"]++;
+    console.log(JSON.stringify({ status: "DELIVERY_REPORTED", outcome, kind: kind === "TEXT" ? "TEXT" : "DOCUMENTS", ...(typeof code === "string" && /^[A-Z0-9_]{1,60}$/.test(code) ? { code } : {}), ...deliveryCounts }));
+  }
   async function deliver() {
     if (!sendDocuments || delivering || stopped || !ready) return;
     delivering = true;
     try {
       const response = await transport.operate("CLAIM_DELIVERY", {});
       const d = response.delivery;
-      if (!d) return;
-      const report = (outcome, extra = {}) => transport.operate("REPORT_DELIVERY", { jobId: d.jobId, deliveryId: d.deliveryId, leaseId: d.leaseId, outcome, ...extra });
+      if (!d) {
+        // Why nothing is going out (off hours, switch off, nothing waiting), logged only when it changes.
+        const reason = typeof response.reason === "string" && /^[A-Z0-9_]{1,40}$/.test(response.reason) ? response.reason : "NOTHING_TO_SEND";
+        if (reason !== lastIdleReason) { lastIdleReason = reason; console.log(JSON.stringify({ status: "DELIVERY_IDLE", reason })); }
+        return;
+      }
+      lastIdleReason = null;
+      const report = async (outcome, extra = {}) => {
+        const result = await transport.operate("REPORT_DELIVERY", { jobId: d.jobId, deliveryId: d.deliveryId, leaseId: d.leaseId, outcome, ...extra });
+        if (outcome === "SENT" || outcome === "ERROR" || outcome === "UNCERTAIN") logDeliveryReport(outcome, d.kind, extra.errorCode);
+        return result;
+      };
       let messages;
       try {
         if (typeof d.chatId !== "string" || !/@(g|c)\.us$/.test(d.chatId)) throw Error("DESTINATION_INVALID");

@@ -64,6 +64,21 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
   r = await run(delivery({ text: 'Gracias por avisarnos.', mention: null }), async () => { throw Error('must not be called'); });
   eq(r.sent[0].content, 'Gracias por avisarnos.'); eq(r.sent[0].options, {});
 
+// The delivery log is counts and stable codes only, so what went out can be checked from this machine.
+{
+  const lines = [], realLog = console.log;
+  console.log = (...args) => { try { lines.push(JSON.parse(args[0])); } catch { /* not a JSON line */ } };
+  try {
+    await run(delivery({ text: 'Gracias por avisarnos.', mention: null }));
+    await run(delivery({ kind: 'DOCUMENTS', documents: [] }));
+    await run(null);
+  } finally { console.log = realLog; }
+  const reported = lines.filter(line => line.status === 'DELIVERY_REPORTED');
+  eq(reported.map(line => [line.outcome, line.kind, line.code || null, line.sent, line.error]), [['SENT', 'TEXT', null, 1, 0], ['ERROR', 'DOCUMENTS', 'DOCUMENTS_MISSING', 0, 1]], 'one line per report, with the outcome and the stable error code');
+  eq(lines.filter(line => line.status === 'DELIVERY_IDLE').map(line => line.reason), ['NOTHING_TO_SEND'], 'why nothing went out');
+  ok(!/@g\.us|Gracias|\bj\b|\bd\b/.test(JSON.stringify(lines.filter(line => /^DELIVERY_/.test(line.status || '')))), 'counts and codes only: no ids, no chats, no text');
+}
+
   // Capture in the team's internal group: nothing leaves the phone unless it addresses Hugo; a WhatsApp mention of this account is flagged.
   {
     const INTERNAL = '120363555000000201@g.us', CLIENT = '120363555000000001@g.us', batches = [], callbacks = {};
