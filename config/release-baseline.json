@@ -764,6 +764,18 @@
     {
       "commit": "3a66d4ae",
       "capability": "Pruebas de emulador del alta de beneficiarios sin tope y con limite explicito"
+    },
+    {
+      "commit": "42e57821",
+      "capability": "Resumen por corrida en registros de la busqueda y descarga de facturas IQ, con conteo de recuperadas"
+    },
+    {
+      "commit": "2932ed22",
+      "capability": "Motor de respaldo historico IQ 2025-01 a 2026-11-23 por mes, solo lo concretado, con lease y proceso propios"
+    },
+    {
+      "commit": "ac02a082",
+      "capability": "Pagina /wallet/respaldo-historico para el superadmin con interruptor y reporte de archivos faltantes"
     }
   ],
   "requiredText": [
