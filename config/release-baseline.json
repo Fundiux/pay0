@@ -776,6 +776,18 @@
     {
       "commit": "ac02a082",
       "capability": "Pagina /wallet/respaldo-historico para el superadmin con interruptor y reporte de archivos faltantes"
+    },
+    {
+      "commit": "8d25114e",
+      "capability": "El QR del agente en /whatsapp se actualiza solo mientras espera escaneo, con boton Actualizar"
+    },
+    {
+      "commit": "53797634",
+      "capability": "Panel superadmin en /wallet/beneficiarios para encender la creacion IQ, limite opcional y reintentar con motivo en espanol"
+    },
+    {
+      "commit": "5aa92521",
+      "capability": "Pasada del catalogo IQ de varias noches fechada por su inicio; prueba de ausencia hasta 120 h"
     }
   ],
   "requiredText": [
