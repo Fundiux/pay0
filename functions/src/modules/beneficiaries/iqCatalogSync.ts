@@ -174,10 +174,11 @@ export async function linkMethodsToCatalog(input: { rootId: string; catalog: str
 
 const safety = new SafetyRuntime(db);
 
-export const syncIqBeneficiaryCatalog = onSchedule({ schedule: "30 20 * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: [IQ_CANCELLATION_CREDENTIALS_KEY], retryCount: 0, maxInstances: 1, concurrency: 1 }, async () => {
+export const syncIqBeneficiaryCatalog = onSchedule({ schedule: "*/30 * * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "512MiB", secrets: [IQ_CANCELLATION_CREDENTIALS_KEY], retryCount: 0, maxInstances: 1, concurrency: 1 }, async () => {
   const profiles = await db.collection("iqCredentialProfiles").where("active", "==", true).get();
   const seen = new Set<string>();
-  const day = new Date().toISOString().slice(0, 10);
+  // One safety operation per 30-minute slot, so a run later the same day is not deduplicated against an earlier one.
+  const slotAt = new Date(), slot = `${slotAt.toISOString().slice(0, 13)}:${slotAt.getUTCMinutes() < 30 ? "00" : "30"}`;
   for (const doc of profiles.docs) {
     const profile = doc.data();
     const catalog = iqCatalogForAlias(profile.alias);
@@ -190,7 +191,7 @@ export const syncIqBeneficiaryCatalog = onSchedule({ schedule: "30 20 * * *", ti
       if (gate.sync) {
         const config = (await db.doc(`iqBeneficiaryCatalogConfig/${rootId}`).get()).data() || {};
         const budget = Math.min(MAX_BUDGET_MS, Math.max(MIN_BUDGET_MS, Number(config.runBudgetMs) || DEFAULT_BUDGET_MS));
-        await safety.run({ rootId, process: "IQ_CATALOG", partition: catalog, operationType: "IQ_CATALOG_SYNC", operationId: `${catalog}:${day}`, idempotencyKey: `${catalog}:${day}`,
+        await safety.run({ rootId, process: "IQ_CATALOG", partition: catalog, operationType: "IQ_CATALOG_SYNC", operationId: `${catalog}:${slot}`, idempotencyKey: `${catalog}:${slot}`,
           origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ", policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 1000 } }, async () => {
           const session = await loginIqHttpDirect({ apiOrigin: iqApiOrigin(), credentials: { username: text(profile.username), password: decryptSecret(profile) }, requiredPermissions: "NONE" });
           await syncIqCatalog({ rootId, catalog, session, deadlineMs: Date.now() + budget, refreshDays: Number(config.refreshDays) || DEFAULT_REFRESH_DAYS });
