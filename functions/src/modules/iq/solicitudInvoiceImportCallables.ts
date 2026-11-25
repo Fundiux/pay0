@@ -42,6 +42,7 @@ const IQ_INVOICE_IMPORT_VERSION = "IQ-INVOICE-IMPORT-1";
 const PROFILE_LOCK_MS = 15 * 60 * 1000;
 const MAX_JOBS_PER_RUN = 30;
 const MAX_JOBS_PER_PROFILE = 10;
+const MAX_RECOVERED_JOBS_PER_RUN = 10;
 const CONFIG_NOT_READY_RETRY_MS = 24 * 60 * 60 * 1000;
 const MAX_ZIP_BYTES = 25 * 1024 * 1024;
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
@@ -396,12 +397,17 @@ function invoiceRetryDelayMs(failedAttemptCount: number): number {
   return 30 * 60 * 1000;
 }
 
+/** A solicitud recovered from IQ is already in the system: reading its invoice never waits for IQ's operating window. */
+export const isRecoveredInvoiceMarker = (marker: unknown): boolean => String(marker ?? "").startsWith("IQ_IMPORT:");
+
 function nextInvoiceRunAt(
   config: IqOperatingCalendarConfig,
   failedAttemptCount: number,
   now = new Date(),
+  windowExempt = false,
 ): Date {
   const candidate = new Date(now.getTime() + invoiceRetryDelayMs(failedAttemptCount));
+  if (windowExempt) return candidate;
   const invoiceConfig = withCanonicalIqInvoiceOperatingConfig(config, candidate);
   const decision = evaluateIqOperatingWindow(invoiceConfig, candidate, "INVOICE");
   if (decision.allowed) {
@@ -1223,7 +1229,7 @@ async function rescheduleJob(input: {
   status?: string;
 }): Promise<void> {
   const attemptCount = input.job.attemptCount + 1;
-  const nextRunAt = nextInvoiceRunAt(input.config, attemptCount);
+  const nextRunAt = nextInvoiceRunAt(input.config, attemptCount, new Date(), isRecoveredInvoiceMarker(input.job.marker));
   const classifiedError = input.error ? classifyIqInvoiceErrorMessage(input.error) : "";
   const errorCode = classifiedError ? getIqInvoiceErrorCode(classifiedError) : null;
   await input.job.ref.set({
@@ -1600,7 +1606,8 @@ async function processJobGroup(input: { jobs: IqInvoiceJob[]; source: "MANUAL" |
   }
   try {
     const config = await loadOperatingConfig(firstJob.rootId);
-    if (!input.force) {
+    // Recovered jobs only read what IQ already holds; they never wait for the operating window.
+    if (!input.force && !input.jobs.every((job) => isRecoveredInvoiceMarker(job.marker))) {
       const operatingNow = new Date();
       const invoiceConfig = typeof withCanonicalIqInvoiceOperatingConfig === "function"
         ? withCanonicalIqInvoiceOperatingConfig(config, operatingNow)
@@ -1985,6 +1992,7 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
   let skipped = 0;
   let lastCreatedAtMs: number | null = null;
   const skippedByReason: Record<string, number> = {};
+  let recoveredQueuedForQuota = 0;
   const recoveredStats = { seen: 0, queued: 0, skipped: {} as Record<string, number> };
 
   for (const doc of snap.docs) {
@@ -2055,7 +2063,8 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
 
     invoiceCandidates += 1;
 
-    if (invoiceQueued >= IQ_WORK_MAX_INVOICE_QUEUE_PER_RUN) {
+    // Recovered solicitudes have their own quota so they never take the slots of PAY0's own invoices.
+    if (recovered ? recoveredQueuedForQuota >= IQ_WORK_MAX_INVOICE_QUEUE_PER_RUN : (invoiceQueued - recoveredQueuedForQuota) >= IQ_WORK_MAX_INVOICE_QUEUE_PER_RUN) {
       await doc.ref.set({
         iqInvoiceAutoDiscoveryStatus: "CANDIDATE_NOT_QUEUED_RATE_LIMIT",
         iqInvoiceAutoDiscoveryLastCheckedAt: FieldValue.serverTimestamp(),
@@ -2079,7 +2088,7 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     const targetDateIso =
       normalizeIsoDate(solicitud.iqTargetDateIso ?? creation.targetDateIso) ||
       dateIsoInTimeZone(iqCreatedAt, config.timezone || DEFAULT_IQ_TIME_ZONE);
-    const nextRunAt = firstInvoiceAttemptAt(config, iqCreatedAt);
+    const nextRunAt = recovered ? new Date() : firstInvoiceAttemptAt(config, iqCreatedAt);
 
     await enqueueIqInvoiceImportJob({
       solicitudId,
@@ -2104,7 +2113,7 @@ async function discoverIqWorkCandidatesOnce(): Promise<IqWorkDiscoveryResult> {
     }, { merge: true }).catch(() => undefined);
 
     invoiceQueued += 1;
-    if (recovered) recoveredStats.queued += 1;
+    if (recovered) { recoveredStats.queued += 1; recoveredQueuedForQuota += 1; }
   }
 
   const reachedEnd = snap.empty || snap.size < IQ_WORK_DISCOVERY_BATCH_SIZE;
@@ -2152,6 +2161,8 @@ export const discoverIqWorkCandidates = onSchedule(
     const enabledRoots = await loadEnabledIqAutomationRoots({
       process: "discovery",
       purpose: "INVOICE",
+      // Discovery only queues work from Firestore. PAY0's own jobs still get a window-aware nextRunAt.
+      respectWindow: false,
     });
 
     if (enabledRoots.size === 0) {
@@ -2182,6 +2193,8 @@ export const processIqInvoiceImportQueue = onSchedule(
     const enabledRoots = await loadEnabledIqAutomationRoots({
       process: "invoiceImport",
       purpose: "INVOICE",
+      // The window is applied below, per job: only PAY0's own invoices wait for it.
+      respectWindow: false,
     });
 
     if (enabledRoots.size === 0) {
@@ -2191,9 +2204,17 @@ export const processIqInvoiceImportQueue = onSchedule(
     const snap = await db
       .collection("iqInvoiceJobs")
       .where("status", "in", ["QUEUED", "WAITING", "WAITING_FOR_OPERATING_WINDOW", "ERROR_RETRYABLE"])
-      .limit(MAX_JOBS_PER_RUN)
+      .limit(MAX_JOBS_PER_RUN * 3)
       .get();
     const nowMs = Date.now();
+    const rootInWindow = new Map<string, boolean>();
+    for (const rootId of enabledRoots.keys()) {
+      const rootConfig = await loadOperatingConfig(rootId);
+      const now = new Date();
+      rootInWindow.set(rootId, evaluateIqOperatingWindow(withCanonicalIqInvoiceOperatingConfig(rootConfig, now), now, "INVOICE").allowed);
+    }
+    let ownCount = 0;
+    let recoveredCount = 0;
     const jobs = snap.docs
       .map(parseJob)
       .filter((job): job is IqInvoiceJob => Boolean(job))
@@ -2202,13 +2223,19 @@ export const processIqInvoiceImportQueue = onSchedule(
         const data = asRecord(snap.docs.find((doc) => doc.id === job.id)?.data());
         const nextRunAtMs = timestampMillis(data.nextRunAt);
         return !nextRunAtMs || nextRunAtMs <= nowMs;
+      })
+      .filter((job) => {
+        // Separate quotas: recovered work never takes PAY0's own slots, and own work waits for the window.
+        if (isRecoveredInvoiceMarker(job.marker)) return recoveredCount++ < MAX_RECOVERED_JOBS_PER_RUN;
+        return rootInWindow.get(job.rootId) === true && ownCount++ < MAX_JOBS_PER_RUN;
       });
     const byProfile = new Map<string, IqInvoiceJob[]>();
     for (const job of jobs) {
-      const bucket = byProfile.get(job.profileId) ?? [];
+      const key = `${job.profileId}|${isRecoveredInvoiceMarker(job.marker) ? "R" : "O"}`;
+      const bucket = byProfile.get(key) ?? [];
       if (bucket.length < MAX_JOBS_PER_PROFILE) {
         bucket.push(job);
-        byProfile.set(job.profileId, bucket);
+        byProfile.set(key, bucket);
       }
     }
     let processed = 0;
