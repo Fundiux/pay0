@@ -97,6 +97,68 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
     await running.stop();
   }
 
+  // History recovery on reconnect: what the observed groups received while the connector was away, read spaced out, bounded, never twice.
+  {
+    const A = '120363555000000001@g.us', B = '120363555000000002@g.us', C = '120363555000000003@g.us', INTERNAL = '120363555000000201@g.us';
+    const NOW = Date.now(), MIN = 60000, HOUR = 60 * MIN;
+    const msg = (id, chat, minutesAgo, over = {}) => ({ id: { _serialized: id }, from: chat, author: '5215511112222@c.us', fromMe: false, timestamp: Math.floor((NOW - minutesAgo * MIN) / 1000), type: 'chat', body: 'Buenos días', ...over });
+    // The recovery runs in the background after a beat; its one count-only log line is what the tests read.
+    const logs = [], realLog = console.log;
+    console.log = (...args) => { try { const line = JSON.parse(args[0]); if (line && line.status === 'HISTORY_BACKFILL') logs.push(line); } catch { /* not a JSON line */ } realLog(...args); };
+    async function recover({ previousReadyAtMs, history = {}, observed = [A, B], addressed = [], failing = [] }) {
+      logs.length = 0;
+      const batches = [], callbacks = {}, fetched = []; let waits = 0;
+      const transport = { operate: async (action, data) => {
+        if (action === 'HEARTBEAT') return { observedChats: observed, addressedOnlyChats: addressed, previousReadyAtMs };
+        if (action === 'INBOUND_GROUP') { batches.push(data.messages); return { stored: data.messages.length }; }
+        return {};
+      }, synchronize: async () => ({}), getBinding: () => ({ id: 'b' }) };
+      const client = { info: { wid: { _serialized: '5215500000000@c.us' } }, on: (name, cb) => { callbacks[name] = cb; }, initialize: async () => {}, destroy: async () => {}, getChats: async () => [],
+        getChatById: async id => { if (failing.includes(id)) throw Error('chat gone'); return { fetchMessages: async options => { fetched.push([id, options.limit]); return history[id] || []; } }; } };
+      const running = await runEnrolledConnector({ transport, client, encodeQr: async () => '', resetLocalSession: async () => {}, setTimer: fn => fn, clearTimer: () => {}, captureGroups: true,
+        historySpacingMs: 0, wait: async () => { waits++; } });
+      await callbacks.ready();
+      return { running, callbacks, batches, fetched, waits: () => waits, poll: () => running.poll(), finish: async () => { await running.poll(); await new Promise(resolve => setTimeout(resolve, 40)); return logs.at(-1); } };
+    }
+    const sentIds = async r => { await r.running.flush(); return r.batches.flat().map(m => m.messageId); };
+
+    // Window: since the last time it was ready (a minute of margin), group by group, spaced out, only the observed groups.
+    let r = await recover({ previousReadyAtMs: NOW - 90 * MIN, observed: [A, B], history: {
+      [A]: [msg('old', A, 200), msg('a1', A, 80), msg('a2', A, 40, { fromMe: true, from: '5215500000000@c.us', to: A, author: undefined })],
+      [B]: [msg('b1', B, 60), msg('b1', B, 60)], [C]: [msg('c1', C, 30)] } });
+    let counts = await r.finish();
+    eq(r.fetched, [[A, 100], [B, 100]], 'one read per observed group, capped per chat');
+    eq(counts.chats, 2); eq(counts.chatsRead, 2); eq(counts.errors, 0);
+    eq(await sentIds(r), ['a1', 'a2', 'b1'], 'only what is inside the window, never the unobserved group, never twice');
+    ok(counts.windowMinutes >= 90 && counts.windowMinutes <= 92, 'the window is the time away plus the margin');
+    ok(!/@g\.us|Buenos/.test(JSON.stringify(counts)), 'the log has counts only: no ids and no text');
+    ok(r.waits() >= 2, 'reads are spaced out');
+
+    // Poll starts it once per process, in the background.
+    r = await recover({ previousReadyAtMs: NOW - 10 * MIN, history: { [A]: [msg('a1', A, 5)] } });
+    await r.poll(); await r.poll(); await new Promise(resolve => setTimeout(resolve, 30));
+    eq(r.fetched.map(item => item[0]), [A, B], 'started once, not on every beat');
+
+    // No baseline (first run) and a very short gap read nothing.
+    r = await recover({ previousReadyAtMs: null, history: { [A]: [msg('a1', A, 5)] } }); counts = await r.finish(); eq(counts.skipped, 'NO_BASELINE'); eq(r.fetched, []);
+    r = await recover({ previousReadyAtMs: NOW - 30000, history: { [A]: [msg('a1', A, 5)] } }); counts = await r.finish(); eq(counts.skipped, 'SHORT_GAP'); eq(r.fetched, []);
+
+    // Never more than a day back, even after a long outage.
+    r = await recover({ previousReadyAtMs: NOW - 5 * 24 * HOUR, observed: [A], history: { [A]: [msg('too-old', A, 25 * 60), msg('inside', A, 23 * 60)] } }); counts = await r.finish(); eq(await sentIds(r), ['inside']); ok(counts.windowMinutes <= 24 * 60);
+
+    // Caps: a total cap, and the live buffer is never pushed out by recovery.
+    const many = Array.from({ length: 700 }, (_unused, index) => msg('m' + index, A, 100 - index / 10));
+    r = await recover({ previousReadyAtMs: NOW - 3 * HOUR, observed: [A, B], history: { [A]: many, [B]: [msg('b-late', B, 20)] } }); counts = await r.finish(); eq(counts.buffered, 600); eq(counts.capped, true, 'a total cap'); eq(r.fetched.filter(item => item[0] === B).length, 0, 'it stops at the cap');
+
+    // The team's internal group keeps only what addresses Hugo, also when recovered.
+    r = await recover({ previousReadyAtMs: NOW - 60 * MIN, observed: [A, INTERNAL], addressed: [INTERNAL], history: { [INTERNAL]: [msg('i1', INTERNAL, 30, { body: 'Hugo ayúdame' }), msg('i2', INTERNAL, 20, { body: 'plática del equipo' })] } }); await r.finish(); eq(await sentIds(r), ['i1']);
+
+    // A group that cannot be read costs one error, not the rest.
+    r = await recover({ previousReadyAtMs: NOW - 60 * MIN, observed: [A, B], failing: [A], history: { [B]: [msg('b1', B, 20)] } }); counts = await r.finish(); eq(counts.errors, 1); eq(counts.chatsRead, 1); eq(await sentIds(r), ['b1']);
+    await r.running.stop();
+    console.log = realLog;
+  }
+
   // A mention of Hugo's account may carry the linked-device id (@lid) instead of the phone id: every way to recognise it.
   {
     const INTERNAL = '120363555000000201@g.us';

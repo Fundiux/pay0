@@ -194,6 +194,9 @@ export class WhatsAppConnectorAuthority {
     const observed = data.poll && agentId !== LEGACY_CONNECTOR_AGENT ? await tx.get(this.db.collection("whatsappAgentObservers").where("rootId", "==", binding.rootId).where("active", "==", true).limit(200)) : null;
     const internalGroups = observed && agentId === "hugo" ? await tx.get(this.db.collection("whatsappInternalGroups").where("rootId", "==", binding.rootId).limit(50)) : null;
     const observedChats: string[] = observed ? observed.docs.map((doc: any) => doc.data() || {}).filter((config: any) => typeof config.ownerUserUid === "string" && config.ownerUserUid !== "" && (config.observers || []).some((o: any) => o?.agentId === agentId)).map((config: any) => String(config.groupChatId)) : [];
+    // When a ready connector last spoke (before this beat): a connector that comes back uses it to read what it missed.
+    const previousLive = (await tx.get(this.db.doc(`whatsappQrConnectors/${binding.id}`))).data();
+    const previousReadyAtMs = Number.isSafeInteger(previousLive?.lastReadyAtMs) ? previousLive.lastReadyAtMs : null;
     let resetRef: any = null;
     if (data.resetCommandId !== undefined) {
       resetRef = this.db.doc(`whatsappQrConnectorCommands/${id(data.resetCommandId)}`);
@@ -220,11 +223,11 @@ export class WhatsAppConnectorAuthority {
       ...(command ? { lastCommandId: command.id, lastCommandType: command.type, lastCommandStatus: "PROCESSING", lastCommandMessage: "El conector autorizado está procesando la solicitud." } : {}),
       ...(resetRef ? { lastCommandId: resetRef.id, lastCommandType: "NEW_QR", lastCommandStatus: "DONE", lastCommandMessage: "QR local disponible para escaneo humano.", lastCommandFinishedAt: FieldValue.serverTimestamp() } : {}),
       ...(data.qrText !== undefined ? { qrText: data.qrText } : {}), ...(data.qrDataUrl !== undefined ? { qrDataUrl: data.qrDataUrl } : {}),
-      ...(data.error !== undefined ? { error: data.error } : {}), lastSeenAt: FieldValue.serverTimestamp(), externalAccountVerified: false }, { merge: true });
+      ...(data.error !== undefined ? { error: data.error } : {}), lastSeenAt: FieldValue.serverTimestamp(), ...(data.ready ? { lastReadyAtMs: Date.now() } : {}), externalAccountVerified: false }, { merge: true });
     // The team's internal group is watched too, but only messages that address Hugo leave the phone and are stored (see inbound).
     const addressedOnlyChats: string[] = [];
     if (internalGroups) for (const doc of internalGroups.docs) { const chatId = String(doc.get("groupChatId") || ""); if (doc.get("rootId") === binding.rootId && chatId.endsWith("@g.us") && !observedChats.includes(chatId)) { observedChats.push(chatId); addressedOnlyChats.push(chatId); } }
-    return { command, observedChats, ...(addressedOnlyChats.length ? { addressedOnlyChats } : {}) };
+    return { command, observedChats, previousReadyAtMs, ...(addressedOnlyChats.length ? { addressedOnlyChats } : {}) };
   }
   private async command(tx: any, binding: Binding, commandId: unknown, type: string) {
     const ref = this.db.doc(`whatsappQrConnectorCommands/${id(commandId)}`), command = (await tx.get(ref)).data();

@@ -310,6 +310,18 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal(entries[0].status, 'PROPOSED'); assert.equal(entries[0].evidenceCount, 3);
   });
 
+  await test('history-recovered-after-an-outage-is-never-answered', async () => {
+    const groupR = '120363555000000017@g.us';
+    await observe(groupR, 'Grupo con historial', betell);
+    await inbound(groupR, { timestampMs: NOW - 80 * HOUR, body: 'hola' });
+    // What recovery brings back after an outage: greetings and questions from hours ago.
+    const old = [await inbound(groupR, { body: 'Buenos días', timestampMs: NOW - 3 * HOUR }), await inbound(groupR, { body: '¿Ya salió mi transferencia?', timestampMs: NOW - 2 * HOUR }), await inbound(groupR, { body: 'Buenas tardes', timestampMs: NOW - 40 * MIN })];
+    const before = (await db.collection('documentDeliveryJobs').where('rootId', '==', rootId).get()).size;
+    await runGroupReplies(rootId, NOW);
+    for (const id of old) assert.equal((await db.doc(`documentDeliveryJobs/${replyJobId(rootId, id)}`).get()).exists, false, 'nothing older than the reply window is answered');
+    assert.equal((await db.collection('documentDeliveryJobs').where('rootId', '==', rootId).get()).size, before, 'and nothing at all is queued for the group');
+  });
+
   await test('a-correction-keeps-the-reason-per-group-and-unmarking-removes-it', async () => {
     const [metric] = (await db.collection('whatsappAgentReplyMetrics').where('rootId', '==', rootId).limit(1).get()).docs;
     await markWhatsAppReplyCorrection.run({ auth: { uid: ownerUid }, data: { jobId: metric.id, reason: 'Dijo que estaba en proceso y no era cierto', category: 'WRONG_FACT' } });

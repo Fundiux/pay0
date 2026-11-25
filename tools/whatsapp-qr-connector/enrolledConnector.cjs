@@ -12,11 +12,15 @@ const NOT_READY_LIMIT_MS = 5 * 60 * 1000, DESTROY_TIMEOUT_MS = 15000;
 const QR_IDLE_LIMIT_MS = 4 * 60 * 1000;
 // Auto-update: how often the connector compares its own code on disk with the code it started with.
 const CODE_CHECK_MS = 3 * 60 * 1000;
+// History recovery on reconnect: what a group received while the connector was away. Bounded window, per-chat and total caps, reads spaced out.
+const HISTORY_MAX_WINDOW_MS = 24 * 60 * 60 * 1000, HISTORY_MARGIN_MS = 60 * 1000, HISTORY_MIN_GAP_MS = 2 * 60 * 1000;
+const HISTORY_PER_CHAT = 100, HISTORY_TOTAL = 600, HISTORY_SPACING_MS = 1500, HISTORY_CALL_TIMEOUT_MS = 20000;
 // Since 2026-11 WhatsApp Web shows its QR as a link; phones no longer accept the bare payload whatsapp-web.js 1.34.8 emits.
 const LINKED_DEVICES_QR_PREFIX = "https://wa.me/settings/linked_devices#";
 const linkedDevicesQr = qr => /^https?:\/\//i.test(String(qr)) ? String(qr) : LINKED_DEVICES_QR_PREFIX + String(qr);
 async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval, captureGroups = false,
-  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS, qrIdleLimitMs = QR_IDLE_LIMIT_MS, codeFingerprint, codeCheckMs = CODE_CHECK_MS }) {
+  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS, qrIdleLimitMs = QR_IDLE_LIMIT_MS, codeFingerprint, codeCheckMs = CODE_CHECK_MS,
+  historySpacingMs = HISTORY_SPACING_MS, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   if (!transport?.getBinding() || !client || typeof resetLocalSession !== "function") throw Error("ENROLLED_DEPENDENCIES_REQUIRED");
   if (sendDocuments && (typeof fetchFile !== "function" || typeof createMedia !== "function")) throw Error("SEND_DEPENDENCIES_REQUIRED");
   let ready = false, busy = false, stopped = false, pendingResetId = null, delivering = false;
@@ -52,6 +56,8 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       const response = await transport.operate("HEARTBEAT", { ready, poll: true, ...(awaitingQr && pendingQr ? { status: "QR_REQUIRED", ...pendingQr } : {}) });
       observedChats = new Set(Array.isArray(response.observedChats) ? response.observedChats.filter(chat => typeof chat === "string") : []);
       addressedOnly = new Set(Array.isArray(response.addressedOnlyChats) ? response.addressedOnlyChats.filter(chat => typeof chat === "string") : []);
+      // Once per process, as soon as the client is ready and the observed groups are known: read what was missed while away (in the background).
+      if (ready && captureGroups && !historyStarted && observedChats.size > 0) { historyStarted = true; recoverHistory().catch(() => undefined); }
       // Diagnostic (counts only): how many internal groups this connector was told to watch, logged when the number changes.
       if (addressedOnly.size !== watchedInternal) { watchedInternal = addressedOnly.size; console.log(JSON.stringify({ status: "INTERNAL_GROUPS_WATCHED", count: watchedInternal, observedGroups: observedChats.size, captureGroups })); }
       const command = response.command;
@@ -121,6 +127,9 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     console.log(JSON.stringify(line));
     return line;
   }
+  // History recovery state. baselineMs = when this connector was last ready before this start, from the server's first answer.
+  let baselineMs = null, historyStarted = false;
+  const bufferedIds = new Set();
   let ownIds = null;
   const idOf = value => String((value && value._serialized) || value || "");
   const numberOf = id => id.split("@")[0].split(":")[0];
@@ -149,16 +158,21 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     }
     return false;
   }
-  client.on("message_create", async message => {
-    if (!captureGroups || stopped) return;
+  // Captures one message (live, or recovered from history with backfill = true). Returns true when it was buffered.
+  async function capture(message, backfill = false) {
+    if (!captureGroups || stopped) return false;
     try {
       const fromMe = !!message?.fromMe, chatId = String((fromMe ? message?.to : message?.from) || "");
       const messageId = String(message?.id?._serialized || ""), timestampMs = Number(message?.timestamp) * 1000;
-      captureStats.events++;
-      if (chatId.endsWith("@g.us")) { captureStats.groupEvents++; if (!observedChats.has(chatId)) captureStats.notObserved++; }
-      if (!chatId.endsWith("@g.us") || !observedChats.has(chatId) || !messageId || !Number.isSafeInteger(timestampMs) || timestampMs < 1) return;
+      if (!backfill) {
+        captureStats.events++;
+        if (chatId.endsWith("@g.us")) { captureStats.groupEvents++; if (!observedChats.has(chatId)) captureStats.notObserved++; }
+      }
+      if (!chatId.endsWith("@g.us") || !observedChats.has(chatId) || !messageId || !Number.isSafeInteger(timestampMs) || timestampMs < 1) return false;
+      // A recovered message that was already captured live (or recovered) is not buffered twice, and recovery never pushes live messages out.
+      if (backfill && (bufferedIds.has(messageId) || buffer.length >= MAX_BUFFERED_MESSAGES)) return false;
       const type = String(message?.type || "chat").slice(0, 40), author = message?.author || (fromMe ? "" : message?.from);
-      if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
+      if (!backfill && buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
       // A WhatsApp mention of this very account. In the team's internal group nothing leaves the phone unless it addresses Hugo (his mention or his name).
       // Only a message that mentions someone needs the lookup; every other message is buffered without waiting.
       let mentioned = Array.isArray(message?.mentionedIds) && message.mentionedIds.length > 0 ? await mentionsThisAccount(message) : false;
@@ -167,13 +181,50 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
         try { mentioned = (await message.getQuotedMessage())?.fromMe === true; } catch { /* no quoted message, not addressed */ }
       }
       const text = type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "";
-      if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return;
+      if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return false;
       if (addressedOnly.has(chatId)) { internalCaptured++; console.log(JSON.stringify({ status: "INTERNAL_ADDRESSED_CAPTURED", total: internalCaptured, mentioned })); }
-      captureStats.buffered++; capturedChats.add(chatId);
+      if (!backfill) captureStats.buffered++;
+      capturedChats.add(chatId);
+      if (bufferedIds.size > 5000) bufferedIds.clear();
+      bufferedIds.add(messageId);
       buffer.push({ messageId, chatId, fromMe, timestampMs, type, ...(author ? { authorId: String(author).slice(0, 200) } : {}),
         body: text, ...(mentioned ? { mentionsMe: true } : {}) });
-    } catch { /* un mensaje ilegible nunca detiene el conector */ }
-  });
+      return true;
+    } catch { /* un mensaje ilegible nunca detiene el conector */ return false; }
+  }
+  client.on("message_create", message => capture(message));
+  // Reads, group by group and spaced out, what the observed groups received while this connector was away (since it was last ready,
+  // at most a day). Everything goes through the same filters as live capture and the same idempotent INBOUND_GROUP; nothing here sends or replies.
+  async function recoverHistory() {
+    const withTimeout = promise => { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error("HISTORY_TIMEOUT")), HISTORY_CALL_TIMEOUT_MS); })]).finally(() => clearTimeout(timer)); };
+    const counts = { status: "HISTORY_BACKFILL", skipped: null, chats: 0, chatsRead: 0, seen: 0, buffered: 0, errors: 0, windowMinutes: 0, capped: false };
+    const nowMs = now();
+    if (baselineMs === null) { counts.skipped = "NO_BASELINE"; console.log(JSON.stringify(counts)); return counts; }
+    if (nowMs - baselineMs < HISTORY_MIN_GAP_MS) { counts.skipped = "SHORT_GAP"; console.log(JSON.stringify(counts)); return counts; }
+    const since = Math.max(baselineMs - HISTORY_MARGIN_MS, nowMs - HISTORY_MAX_WINDOW_MS);
+    const chats = [...observedChats];
+    counts.chats = chats.length; counts.windowMinutes = Math.round((nowMs - since) / 60000);
+    for (const chatId of chats) {
+      if (stopped || !ready) break;
+      if (counts.buffered >= HISTORY_TOTAL) { counts.capped = true; break; }
+      await wait(historySpacingMs);
+      try {
+        if (typeof client.getChatById !== "function") throw Error("HISTORY_UNAVAILABLE");
+        const chat = await withTimeout(client.getChatById(chatId));
+        const messages = await withTimeout(chat.fetchMessages({ limit: HISTORY_PER_CHAT }));
+        counts.chatsRead++;
+        for (const message of Array.isArray(messages) ? messages : []) {
+          const at = Number(message?.timestamp) * 1000;
+          if (!Number.isSafeInteger(at) || at < since) continue;
+          counts.seen++;
+          if (counts.buffered >= HISTORY_TOTAL) { counts.capped = true; break; }
+          if (await capture(message, true)) counts.buffered++;
+        }
+      } catch { counts.errors++; }
+    }
+    console.log(JSON.stringify(counts));
+    return counts;
+  }
   // Every minute: a ready client must still read its chats (a detached frame fails here),
   // and a client that never becomes ready without waiting for a QR is restarted.
   async function watchdog() {
@@ -273,8 +324,9 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       // Claim or attempt rejected, or transport failure: nothing was sent; the next cycle asks again.
     } finally { delivering = false; }
   }
-  // Verify live server ownership/revocation BEFORE initializing WhatsApp.
-  await status({ status: "DISCONNECTED" });
+  // Verify live server ownership/revocation BEFORE initializing WhatsApp. The answer also says when this connector was last ready.
+  const firstAnswer = await status({ status: "DISCONNECTED" });
+  baselineMs = Number.isSafeInteger(firstAnswer?.previousReadyAtMs) ? firstAnswer.previousReadyAtMs : null;
   notReadySince = now();
   await client.initialize();
   timers.push(setTimer(() => poll().catch(() => undefined), 10000));
@@ -283,7 +335,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   if (sendDocuments) timers.push(setTimer(() => deliver().catch(() => undefined), 10000));
   timers.push(setTimer(() => watchdog().catch(() => undefined), 60000));
   if (startedCode !== null) timers.push(setTimer(() => checkCodeUpdate().catch(() => undefined), codeCheckMs));
-  return { poll, synchronize, flush, deliver, watchdog, checkCodeUpdate, logCaptureStats, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
+  return { poll, synchronize, flush, deliver, watchdog, checkCodeUpdate, logCaptureStats, recoverHistory, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
 }
 
 async function startExplicitly(config) {

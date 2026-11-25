@@ -87,6 +87,13 @@ const fakeFetch=async(url,options)=>{fetches++;const body=JSON.parse(options.bod
   const next=await service.enqueue(req(),'RESTART');assert.notEqual(next.commandId,first.commandId,'after it is done a new restart is a new command');
   const beat2=await transport.operate('HEARTBEAT',{ready:true,poll:true});await transport.operate('RESTART_ACK',{commandId:beat2.command.id});
  });
+ await test('heartbeat-says-when-a-ready-connector-last-spoke-and-only-ready-beats-move-it',async()=>{
+  const first=await transport.operate('HEARTBEAT',{ready:false,poll:false});assert.ok(first.previousReadyAtMs===null||Number.isSafeInteger(first.previousReadyAtMs));
+  const before=Date.now();await transport.operate('HEARTBEAT',{ready:true,poll:false});
+  const afterReady=await transport.operate('HEARTBEAT',{ready:false,poll:false});assert.ok(Number.isSafeInteger(afterReady.previousReadyAtMs)&&afterReady.previousReadyAtMs>=before,'a ready beat is remembered');
+  const again=await transport.operate('HEARTBEAT',{ready:false,poll:false});assert.equal(again.previousReadyAtMs,afterReady.previousReadyAtMs,'a connector that is not ready does not move it: a failing restart loop cannot hide an outage');
+  assert.equal(db.data('whatsappQrConnectors/'+binding.id).lastReadyAtMs,afterReady.previousReadyAtMs);
+ });
  await test('restart-goes-before-other-pending-commands',async()=>{
   const sync=await service.enqueue(req(),'SYNC_CHATS'),restart=await service.enqueue(req(),'RESTART');
   const h1=await transport.operate('HEARTBEAT',{ready:true,poll:true});assert.equal(h1.command.id,restart.commandId,'a restart is not kept waiting behind a sync');
