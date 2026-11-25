@@ -148,6 +148,7 @@ export default function WalletPage() {
           {canManageDispersions && <WalletShortcut href="/wallet/dispersiones" icon={<Send size={17} />} title="Dispersiones" description="Crear y consultar salidas." />}
           {canManageBeneficiaries && <WalletShortcut href="/wallet/beneficiarios" icon={<Users size={17} />} title="Beneficiarios" description="Cuentas destino de clientes." />}
           {(role === "superadmin" || role === "admin") && <WalletShortcut href="/wallet/saldos-iq" icon={<Scale size={17} />} title="Saldos IQ vs PAY0" description="Revisión nocturna de diferencias." />}
+          {role === "superadmin" && <WalletShortcut href="/wallet/respaldo-historico" icon={<Scale size={17} />} title="Respaldo histórico de IQ" description="Traer 2025 y 2026 desde IQ, mes por mes." />}
         </div>
       </section>
 
