@@ -123,11 +123,22 @@ function normalizeConnectorStatus(value: unknown): string {
   return cleanText(value).toUpperCase() || "UNKNOWN";
 }
 
+/** The last stored "Hugo is not sending" evaluation (written by the recovery sweep), or null when it never ran or is not active. */
+function deliveryAlertOf(data: Record<string, any> | undefined) {
+  if (!data || data.active !== true) return null;
+  return {
+    heartbeatMissing: data.heartbeatMissing === true,
+    unclaimedCount: Number(data.unclaimedCount || 0),
+    oldestUnclaimedMinutes: Number(data.oldestUnclaimedMinutes || 0),
+  };
+}
+
 /** Readiness comes from Hugo's enrolled connector (the only sender), never the historic "default" connector. */
 export async function readWhatsAppAutomationState(rootId: string) {
-  const [configSnap, binding] = await Promise.all([
+  const [configSnap, binding, alertSnap] = await Promise.all([
     db.collection("whatsappAutomationConfigs").doc(rootId).get(),
     findDocumentSenderBinding(db, rootId),
+    db.collection("whatsappDeliveryAlerts").doc(rootId).get(),
   ]);
   const connectorSnap = binding
     ? await db.collection("whatsappQrConnectors").doc(binding.id).get()
@@ -185,6 +196,8 @@ export async function readWhatsAppAutomationState(rootId: string) {
       senderBound,
 
     withinSendingHours: isWithinHugoHours(Date.now()),
+
+    deliveryAlert: deliveryAlertOf(alertSnap.data()),
 
     connector: {
       id: "hugo",

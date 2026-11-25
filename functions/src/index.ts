@@ -195,6 +195,7 @@ export {
 } from "./modules/documentDelivery/whatsappQrCallables";
 
 export { releaseWhatsAppJobDeliveries, retryWhatsAppJobErrors, resolveWhatsAppUncertainDelivery } from "./modules/documentDelivery/whatsappReleaseCallables";
+export { recoverWhatsAppDeliveries } from "./modules/documentDelivery/whatsappRecoverySweep";
 export { getWhatsAppAgentObservers, saveWhatsAppAgentObservers } from "./modules/documentDelivery/whatsappObserverCallables";
 export { getWhatsAppAutomationConfig, setWhatsAppAutomationEnabled } from "./modules/documentDelivery/whatsappAutomationCallables";
 export { processWhatsAppInvoiceAutomation } from "./modules/documentDelivery/whatsappAutomationTrigger";

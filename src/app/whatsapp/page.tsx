@@ -3,6 +3,7 @@
 import { AgentConnectorsPanel } from "@/components/whatsapp/AgentConnectorsPanel";
 import { GroupClientAssignment } from "@/components/whatsapp/GroupClientAssignment";
 import { DeliveryHistory } from "@/components/whatsapp/DeliveryHistory";
+import { DeliveryAlertBanner } from "@/components/whatsapp/DeliveryAlertBanner";
 
 export default function WhatsAppPage() {
   return (
@@ -11,6 +12,8 @@ export default function WhatsAppPage() {
         <h1 className="text-2xl font-bold">WhatsApp</h1>
         <p className="mt-1 text-sm text-slate-400">Conexión de los agentes y grupos que observan.</p>
       </div>
+
+      <DeliveryAlertBanner />
 
       <AgentConnectorsPanel />
 

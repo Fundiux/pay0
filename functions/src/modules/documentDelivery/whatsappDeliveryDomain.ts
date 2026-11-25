@@ -383,3 +383,63 @@ export function aggregateJobStatus(statuses: unknown[], fallback: string): strin
   if (sent === list.length) return "SENT";
   return sent > 0 ? "ERROR_PARTIAL" : "ERROR";
 }
+
+// ---------------------------------------------------------------------------
+// Recovery after Hugo was offline. Only what is certainly safe is retried by itself.
+// ---------------------------------------------------------------------------
+
+/** A job older than this is never resurrected by the sweep: a client should not receive yesterday's document by surprise. */
+export const AUTO_RETRY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const AUTO_RETRY_MAX_ATTEMPTS = 3;
+/** Wait after a failure before trying again, so a flapping connection is not hammered. */
+export const AUTO_RETRY_BACKOFF_MS = 10 * 60 * 1000;
+/** Failures that happened before anything reached WhatsApp and may pass on their own. A permanent one (bad destination, missing file) is not here. */
+export const AUTO_RETRY_CODES: ReadonlySet<string> = new Set(["DOCUMENT_DOWNLOAD_FAILED", "PRE_SEND_FAILED", "FILE_SIGNING_FAILED", "SEND_FAILED_BEFORE_ATTEMPT"]);
+
+const createdMsOf = (job: Record<string, unknown>) => millisOf(job.createdAt);
+const jobInRecoveryWindow = (job: Record<string, unknown>, nowMs: number) => {
+  const created = createdMsOf(job);
+  return upper(job.origin) === "AUTOMATIC" && created >= RECOVERED_BACKLOG_CUTOFF_MS && nowMs - created <= AUTO_RETRY_MAX_AGE_MS;
+};
+
+/**
+ * RETRY puts a failed delivery back in the queue. Never for SEND_UNCERTAIN (a person decides), never for a delivery
+ * that reached the attempt step, never for a manual job, a job older than 24 h or one created before the backlog cutoff.
+ */
+export function decideAutoRetry(input: { delivery: Record<string, unknown>; job: Record<string, unknown>; nowMs: number }): "RETRY" | "SKIP" {
+  const { delivery, job, nowMs } = input;
+  if (upper(delivery.status) !== "ERROR" || delivery.retryBlocked === true) return "SKIP";
+  if (!AUTO_RETRY_CODES.has(clean(delivery.lastError, 80))) return "SKIP";
+  if (Number(delivery.attemptStartedAtMs || 0) > 0) return "SKIP";
+  if (Number(delivery.autoRetryCount || 0) >= AUTO_RETRY_MAX_ATTEMPTS) return "SKIP";
+  if (!jobInRecoveryWindow(job, nowMs)) return "SKIP";
+  const failedAt = millisOf(delivery.errorAt);
+  if (failedAt > 0 && nowMs - failedAt < AUTO_RETRY_BACKOFF_MS) return "SKIP";
+  return "RETRY";
+}
+
+/** An automatic job that has no destination only because Hugo did not see the client's group yet; the group exists. */
+export function shouldRerouteWaitingJob(job: Record<string, unknown>, nowMs: number): boolean {
+  return upper(job.status) === "READY_FOR_MANUAL_SEND" && Number(job.targetDestinationsCount || 0) === 0
+    && upper(job.targetResolutionStatus) === "CLIENT_GROUP_NOT_VISIBLE" && jobInRecoveryWindow(job, nowMs);
+}
+
+export const DELIVERY_ALERT_UNCLAIMED_MS = 15 * 60 * 1000;
+export const DELIVERY_ALERT_HEARTBEAT_MS = 5 * 60 * 1000;
+
+export type DeliveryAlert = { active: boolean; heartbeatMissing: boolean; unclaimedCount: number; oldestUnclaimedMinutes: number };
+
+/**
+ * Hugo's hours only. heartbeatMissing: no heartbeat for more than 5 minutes. unclaimed: documents released more than
+ * 15 minutes ago that nobody claimed, counted only when the hours have been open for at least that long (a document released
+ * after closing is not "late" at 7:30 sharp).
+ */
+export function evaluateDeliveryAlert(input: { nowMs: number; heartbeatAgeMs: number | null; releasedAtMs: number[] }): DeliveryAlert {
+  const { nowMs } = input;
+  const openThroughout = isWithinHugoHours(nowMs) && isWithinHugoHours(nowMs - DELIVERY_ALERT_UNCLAIMED_MS);
+  if (!isWithinHugoHours(nowMs)) return { active: false, heartbeatMissing: false, unclaimedCount: 0, oldestUnclaimedMinutes: 0 };
+  const heartbeatMissing = input.heartbeatAgeMs === null || input.heartbeatAgeMs > DELIVERY_ALERT_HEARTBEAT_MS;
+  const late = openThroughout ? input.releasedAtMs.filter(ms => ms > 0 && nowMs - ms > DELIVERY_ALERT_UNCLAIMED_MS) : [];
+  const oldest = late.length ? Math.floor((nowMs - Math.min(...late)) / 60000) : 0;
+  return { active: heartbeatMissing || late.length > 0, heartbeatMissing, unclaimedCount: late.length, oldestUnclaimedMinutes: oldest };
+}

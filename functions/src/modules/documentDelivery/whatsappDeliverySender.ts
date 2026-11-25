@@ -25,7 +25,8 @@ export type DocumentSenderOptions = {
   isOpen?: (nowMs: number) => boolean;
 };
 
-const MAX_JOBS_SCANNED = 10;
+// Jobs read per claim. The reads have no orderBy (no new index), so the window must hold every ready job: 10 could hide older ones.
+const MAX_JOBS_SCANNED = 40;
 const clean = (value: unknown, max = 500) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const millis = (value: any) => (typeof value?.toMillis === "function" ? Number(value.toMillis()) : 0);
 const CHAT_ID = /^[0-9A-Za-z._-]{3,120}@(g|c)\.us$/;
