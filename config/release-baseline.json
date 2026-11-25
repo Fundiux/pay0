@@ -848,6 +848,10 @@
     {
       "commit": "bee509b9",
       "capability": "Enlaces IQ legacy VERIFIED cuentan como listos; pendientes de beneficiarios solo sin enlace en ningun grupo; dispersion no ofrece cuentas no conciliadas"
+    },
+    {
+      "commit": "7a62069d",
+      "capability": "Catalogo de beneficiarios IQ se lee cada 30 minutos mientras una pasada este abierta; Pendiente IQ en naranja solido"
     }
   ],
   "requiredText": [
