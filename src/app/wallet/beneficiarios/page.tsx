@@ -1859,7 +1859,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                       {rows.map((row, methodIndex) => (
                         <tr
                           key={row.id}
-                          className={`${methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"} ${row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? "bg-orange-500/15 text-orange-200" : ""}`}
+                          className={`${methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"} ${row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? "bg-orange-500/40 text-orange-50 font-semibold" : ""}`}
                           title={row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? IQ_PENDING_LABEL : undefined}
                         >
                           <td className="pay0-td">{row.tipo || "-"}</td>

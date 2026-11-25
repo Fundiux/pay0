@@ -33,6 +33,8 @@ async function pendingRows(rootId: string): Promise<PendingRow[]> {
     for (const doc of snap.docs) {
       const method = doc.data(), entry = (method.iqLinksByCatalog?.[catalog] ?? {}) as Record<string, any>;
       if (method.active === false || method.isDeleted === true) continue;
+      // Reconciled in another IQ group (white in the app): the group that does not hold it is not a pending alta.
+      if (Object.values((method.iqLinksByCatalog ?? {}) as Record<string, any>).some(link => text(link?.status).toUpperCase() === "LINKED" && link?.nameDiffers !== true)) continue;
       const status = text(entry.status), reason = text(entry.reason) || text(entry.createState);
       rows.push({ methodId: doc.id, catalog, status, reason, attempts: Number(entry.attempts || 0), beneficiaryName: "", clientName: "", bankName: text(method.bankName), last4: text(method.last4),
         retryAfterMs: entry.retryAfter?.toMillis?.() ?? null,
