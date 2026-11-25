@@ -5,6 +5,7 @@ import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo, type Pay0Massiv
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import IqBeneficiaryCreatePanel from "@/components/IqBeneficiaryCreatePanel";
 import { IQ_PENDING_LABEL, isIqReconciled } from "@/lib/iqMethodReadiness";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { listScopedClients } from "@/services/clients";
@@ -1193,6 +1194,7 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
           </div>
         </div>
       ) : null}
+      {isSuperadmin ? <IqBeneficiaryCreatePanel /> : null}
       <div className="grid gap-3 xl:grid-cols-[280px_1fr_170px_170px] xl:items-center">
         <div className="relative w-full">
           <Search

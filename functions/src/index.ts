@@ -224,6 +224,7 @@ export { getClientWhatsAppGroups, assignWhatsAppGroupToClients, setWhatsAppInter
 export { alertClientGroupOnSolicitud } from "./modules/documentDelivery/clientGroupAlerts";
 export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
 export { setIqBeneficiaryCreateConfig } from "./modules/beneficiaries/iqCreateConfigCallables";
+export { getIqBeneficiaryCreateState, retryIqBeneficiaryLinks } from "./modules/beneficiaries/iqCreateControlCallables";
 export {
   processIqPagoDepositCreateQueue,
   dispatchQueuedPagoIqCreation,
