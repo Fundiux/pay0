@@ -4,7 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
 import { assertIqAuthorized } from "../iq/authorization";
 import { db } from "../sharedCallables/helpers";
-import { DEFAULT_CATALOG_MAX_AGE_HOURS, MAX_DAILY_CREATE_LIMIT } from "./iqLinkDomain";
+import { DEFAULT_CATALOG_MAX_AGE_HOURS, MAX_CATALOG_MAX_AGE_HOURS, MAX_DAILY_CREATE_LIMIT } from "./iqLinkDomain";
 
 const text = (value: unknown) => String(value ?? "").trim();
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -24,7 +24,7 @@ export function parseCreateConfigPatch(data: unknown): Record<string, boolean | 
   }
   if (input.catalogMaxAgeHours !== undefined) {
     const hours = Number(input.catalogMaxAgeHours);
-    if (!Number.isFinite(hours) || hours < 1 || hours > 72) throw new HttpsError("invalid-argument", "catalogMaxAgeHours debe estar entre 1 y 72.");
+    if (!Number.isFinite(hours) || hours < 1 || hours > MAX_CATALOG_MAX_AGE_HOURS) throw new HttpsError("invalid-argument", `catalogMaxAgeHours debe estar entre 1 y ${MAX_CATALOG_MAX_AGE_HOURS}.`);
     patch.catalogMaxAgeHours = hours;
   }
   if (!Object.keys(patch).length) throw new HttpsError("invalid-argument", "Sin cambios: envía enabled, contractVerified, dailyLimit o catalogMaxAgeHours.");

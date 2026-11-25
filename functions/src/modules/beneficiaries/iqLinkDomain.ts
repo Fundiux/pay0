@@ -40,11 +40,13 @@ export const MAX_DAILY_CREATE_LIMIT = 200;
 
 export type CreateConfig = { enabled?: unknown; contractVerified?: unknown; dailyLimit?: unknown; catalogMaxAgeHours?: unknown };
 
-// How old the nightly catalog may be and still prove that an account is missing.
-export const DEFAULT_CATALOG_MAX_AGE_HOURS = 36;
+// How old a clean pass over an associate may be (counted from the pass start) and still prove that an account is missing.
+// A big associate takes several nights to read, so this is five days; the owner can lower it in the create config.
+export const DEFAULT_CATALOG_MAX_AGE_HOURS = 120;
+export const MAX_CATALOG_MAX_AGE_HOURS = 240;
 export function catalogMaxAgeMs(config: CreateConfig | undefined): number {
   const configured = Number(config?.catalogMaxAgeHours);
-  const hours = Number.isFinite(configured) && configured > 0 ? Math.min(configured, 72) : DEFAULT_CATALOG_MAX_AGE_HOURS;
+  const hours = Number.isFinite(configured) && configured > 0 ? Math.min(configured, MAX_CATALOG_MAX_AGE_HOURS) : DEFAULT_CATALOG_MAX_AGE_HOURS;
   return hours * 3_600_000;
 }
 
