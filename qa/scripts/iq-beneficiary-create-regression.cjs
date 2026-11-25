@@ -325,6 +325,13 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   eq([incidents.length, incidents[0]?.status, incidents[0]?.entityId], [1, "OPEN", "iq-group-rr"], "un incidente abierto por root y catálogo");
   ok(!/clientBeneficiaryMethods|\d{10,}/.test(incidents[0].cause), "el incidente no muestra identificadores ni cuentas");
 
+  // M. real clock: the safety spacing refuses the create right after the read; it must wait and still create once
+  await resetSafety(); resetIq(); await setFresh(1);
+  const mReal = await setup("mreal");
+  const realSafety = new SafetyRuntime(db);
+  const outM = (await linkOrCreateMethod({ methodId: mReal.methodId, ports, safety: realSafety }))[0];
+  eq([outM.status, accountPosts(), beneficiaryPosts()], ["NOT_CONCILIATED", 1, 1], "con reloj real: espera el espaciado y crea una sola vez");
+
   console.log(`PASS alta automática de beneficiarios en IQ: ${checks} verificaciones en emulador (IQ simulado por HTTP).`);
   process.exit(0);
 })().catch(error => { console.error(error); process.exit(1); });

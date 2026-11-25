@@ -152,6 +152,17 @@ async function releaseReservation(ctx: IqLinkContext, reservationId: string, now
 type Run = { ctx: IqLinkContext; ports: IqLinkPorts; safety: SafetyRuntime; nowMs: number; attempts: number; pendingSince?: unknown };
 
 const readPolicy = { ...CONSERVATIVE_POLICY, maxExternalRequests: 20 };
+
+// The safety runtime spaces its operations (policy.spacingMs after each one). The read, the proof read and the create of the same
+// account run back to back, so the next one is refused with CAPACITY for about a second. That is not a stop: wait it out a few times
+// instead of deferring, or every attempt would defer at the create and never reach IQ.
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+const SPACING_WAIT_MS = CONSERVATIVE_POLICY.spacingMs + 100, SPACING_RETRIES = 3;
+async function admitted<R extends { admitted: boolean; reason?: unknown }>(attempt: () => Promise<R>): Promise<R> {
+  let result = await attempt();
+  for (let retry = 0; retry < SPACING_RETRIES && !result.admitted && String(result.reason) === "CAPACITY"; retry += 1) { await sleep(SPACING_WAIT_MS); result = await attempt(); }
+  return result;
+}
 const bucketOf = (nowMs: number) => Math.floor(nowMs / 600_000);
 
 // After "ya existe" or a lost answer the create is never sent again: IQ is read at account level and the
@@ -235,8 +246,8 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
     if (priorStatus === "REJECTED") { outcomes.push(await review(ctx, text(prior?.reason) || "REJECTED")); continue; }
 
     // The catalog may lag behind IQ: a name search can still find the account and link it.
-    const lookup = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:${bucketOf(nowMs)}`, idempotencyKey: `${reservationId}:${input.methodId}:lookup:${bucketOf(nowMs)}`,
-      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.liveLookup(ctx));
+    const lookup = await admitted(() => safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:${bucketOf(nowMs)}`, idempotencyKey: `${reservationId}:${input.methodId}:lookup:${bucketOf(nowMs)}`,
+      origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.liveLookup(ctx)));
     if (!lookup.admitted) { outcomes.push(DEFERRABLE.has(String(lookup.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${lookup.reason}`, attempts, nowMs, pendingSince)); continue; }
     const live = (lookup as { value?: LiveLookupResult }).value;
     if (!live) { outcomes.push(await stop(ctx, "LOOKUP_FAILED", attempts, nowMs, pendingSince)); continue; }
@@ -251,8 +262,8 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
     let absent = proof.proven;
     const proofReason = proof.proven ? null : proof.reason;
     if (proofReason === "CATALOG_STALE" && Number(profile.partnerId) > 0) {
-      const liveRead = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`,
-        idempotencyKey: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`, origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.findExisting(ctx));
+      const liveRead = await admitted(() => safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`,
+        idempotencyKey: `${reservationId}:${input.methodId}:absence:${bucketOf(nowMs)}`, origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.findExisting(ctx)));
       if (!liveRead.admitted) { outcomes.push(DEFERRABLE.has(String(liveRead.reason)) ? deferred(ctx) : await stop(ctx, `SAFETY_${liveRead.reason}`, attempts, nowMs, pendingSince)); continue; }
       const seen = (liveRead as { value?: FindResult }).value;
       if (!seen) { outcomes.push(await stop(ctx, "LOOKUP_FAILED", attempts, nowMs, pendingSince)); continue; }
@@ -270,9 +281,9 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
       continue;
     }
 
-    const created = await safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_CREATE", operationId: `${reservation.reservationId}:${reservation.take}`, idempotencyKey: `${reservation.reservationId}:create:${reservation.take}`,
+    const created = await admitted(() => safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: profile.catalog, operationType: "IQ_BENEFICIARY_CREATE", operationId: `${reservation.reservationId}:${reservation.take}`, idempotencyKey: `${reservation.reservationId}:create:${reservation.take}`,
       origin: "AUTOMATIC", technicalOrigin: "TRIGGER", externalTarget: "IQ", policy: { ...CONSERVATIVE_POLICY, maxExternalRequests: 30 } },
-      () => input.ports.create({ ...ctx, reservationId: reservation.reservationId }), value => value.outcome === "OUTCOME_UNKNOWN" ? "OUTCOME_UNKNOWN" : "SUCCEEDED");
+      () => input.ports.create({ ...ctx, reservationId: reservation.reservationId }), value => value.outcome === "OUTCOME_UNKNOWN" ? "OUTCOME_UNKNOWN" : "SUCCEEDED"));
     const result = (created as { value?: CreateResult }).value;
     if (!created.admitted) {
       // Nothing reached IQ: give the day's slot back and let the reservation be taken again.
