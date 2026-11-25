@@ -583,6 +583,14 @@ export function AgentConnectorsPanel() {
 
   useEffect(() => { void load(); }, []);
 
+  // WhatsApp rotates its QR every ~20 seconds: while one is waiting to be scanned, keep the page in step with the connector.
+  const qrPending = connectors.some(c => c.state === "ACTIVE" && c.agentId !== "pay0" && c.status === "QR_REQUIRED");
+  useEffect(() => {
+    if (!qrPending) return;
+    const timer = setInterval(() => { if (!document.hidden) void load(); }, 5000);
+    return () => clearInterval(timer);
+  }, [qrPending]);
+
   async function enroll(agentId: string) {
     setBusy(agentId);
     setMessage("");
@@ -641,9 +649,11 @@ export function AgentConnectorsPanel() {
                       <span className="text-xs text-slate-400">{connector.status || "Sin señal"}</span>
                     </div>
                     {connector.qrDataUrl && <img src={connector.qrDataUrl} alt={`QR de ${agent.name}`} className="mt-2 h-40 w-40 rounded bg-white p-1" />}
+                    {connector.status === "QR_REQUIRED" && <p className="mt-1 text-xs text-amber-300">Escanee el QR desde WhatsApp &gt; Dispositivos vinculados. Se actualiza solo cada pocos segundos; si no conecta, escanee el más reciente.</p>}
                     {connector.error && <p className="mt-1 text-xs text-rose-300">{connector.error}</p>}
                     <p className="mt-1 text-xs text-slate-500">{connector.lastSeenAtMs ? `Última señal: ${new Date(connector.lastSeenAtMs).toLocaleString("es-MX")}` : "Sin señal todavía"}</p>
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <button type="button" onClick={() => void load()} className="rounded-lg border border-slate-600 px-2.5 py-1 text-xs text-slate-200">Actualizar</button>
                       <p className="text-xs text-slate-300">
                         Observando {observedCount(agent.id)} {observedCount(agent.id) === 1 ? "grupo" : "grupos"}
                         {" · "}
