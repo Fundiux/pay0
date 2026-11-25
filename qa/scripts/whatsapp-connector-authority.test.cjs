@@ -19,7 +19,7 @@ const endpoints=require('../../functions/lib/modules/documentDelivery/whatsappCo
 const policy=require('../../functions/lib/modules/documentDelivery/whatsappConnectorPolicy.js');
 const {createWorkerKey,createAuthorityTransport}=require('../../tools/whatsapp-qr-connector/connectorAuthority.cjs');
 const {runEnrolledConnector}=require('../../tools/whatsapp-qr-connector/enrolledConnector.cjs');
-const service=new WhatsAppConnectorAuthority(db),cases=[];
+const audits=[],service=new WhatsAppConnectorAuthority(db,{},async entry=>{audits.push(entry);}),cases=[];
 const user={role:'superadmin',rootId:'root-a',active:true};db.seed('users/owner-a',user);db.seed('users/owner-b',{...user,rootId:'root-b'});
 const req=(uid='owner-a',data={})=>({auth:{uid},data});
 const test=async(name,fn)=>{await fn();cases.push(name);};
@@ -54,6 +54,51 @@ const fakeFetch=async(url,options)=>{fetches++;const body=JSON.parse(options.bod
  let resetCommand;
  await test('new-qr-requires-own-claimed-command',async()=>{await rejection(()=>transport.operate('NEW_QR',{commandId:'invented'}));const r=await transport.operate('HEARTBEAT',{ready:false,poll:true});resetCommand=r.command.id;assert.equal(r.command.type,'NEW_QR');const done=await transport.operate('NEW_QR',{commandId:resetCommand});assert.equal(done.resetAuthorized,true);await rejection(()=>transport.operate('NEW_QR',{commandId:resetCommand}));});
  await test('command-sync-completes-through-same-server-scope',async()=>{const c=await service.enqueue(req(),'SYNC_CHATS');const h=await transport.operate('HEARTBEAT',{ready:true,poll:true});assert.equal(h.command.id,c.commandId);await transport.synchronize([{chatId:'new',name:'Updated'}],c.commandId);assert.equal(db.data('whatsappQrConnectorCommands/'+c.commandId).status,'DONE');});
+ await test('restart-is-superadmin-only-audited-and-one-per-press',async()=>{
+  await rejection(()=>service.enqueue(req('operator'),'RESTART'));
+  await rejection(()=>service.enqueue({data:{}},'RESTART'));
+  await rejection(()=>endpoints.requestWhatsAppConnectorRestart.run({data:{}}));
+  await rejection(()=>endpoints.requestWhatsAppConnectorRestart.run(req('operator')));
+  await rejection(()=>service.enqueue(req('owner-b'),'RESTART'));
+  assert.equal(audits.length,0,'a denied request leaves no restart behind');
+  const before=db.data('whatsappQrConnectorBindings/'+binding.id);
+  const first=await service.enqueue(req(),'RESTART');
+  assert.equal(first.type,'RESTART');assert.equal(first.status,'PENDING');assert.equal(first.binding,undefined,'the binding is not echoed to the browser');
+  const stored=db.data('whatsappQrConnectorCommands/'+first.commandId);
+  assert.equal(stored.bindingId,binding.id);assert.equal(stored.requestedByUid,'owner-a');assert.equal(stored.rootId,'root-a');assert.equal(stored.type,'RESTART');
+  assert.equal(audits.length,1);assert.equal(audits[0].event,'WHATSAPP_CONECTOR_REINICIO_SOLICITADO');assert.equal(audits[0].actorUid,'owner-a');assert.equal(audits[0].rootId,'root-a');assert.match(audits[0].description,/reiniciar el conector de WhatsApp/);
+  const again=await service.enqueue(req(),'RESTART');
+  assert.equal(again.commandId,first.commandId);assert.equal(again.duplicate,true,'a second press is the same restart');assert.equal(audits.length,1,'and is audited once');
+  const commands=[...db.rows.keys()].filter(path=>path.startsWith('whatsappQrConnectorCommands/')&&db.data(path).type==='RESTART'&&db.data(path).status==='PENDING');
+  assert.equal(commands.length,1);
+  // The connector gets it even when WhatsApp is not ready (a stuck connector is the reason to restart it), confirms once, and the session is kept.
+  const beat=await transport.operate('HEARTBEAT',{ready:false,poll:true});
+  assert.equal(beat.command.type,'RESTART');assert.equal(beat.command.id,first.commandId);
+  assert.equal(db.data('whatsappQrConnectorCommands/'+first.commandId).status,'PROCESSING');
+  await rejection(()=>transport.operate('RESTART_ACK',{commandId:'invented'}));
+  await rejection(()=>transport.operate('RESTART_ACK',{commandId:first.commandId,extra:true}));
+  const ack=await transport.operate('RESTART_ACK',{commandId:first.commandId});
+  assert.equal(ack.restartAcknowledged,true);assert.equal(ack.commandId,first.commandId);
+  assert.equal(db.data('whatsappQrConnectorCommands/'+first.commandId).status,'DONE');assert.match(db.data('whatsappQrConnectorCommands/'+first.commandId).outcome,/SESSION_KEPT/);
+  assert.equal(db.data('whatsappQrConnectors/'+binding.id).lastCommandType,'RESTART');assert.equal(db.data('whatsappQrConnectors/'+binding.id).lastCommandStatus,'DONE');
+  await rejection(()=>transport.operate('RESTART_ACK',{commandId:first.commandId}));
+  assert.equal(audits.at(-1).event,'WHATSAPP_CONECTOR_REINICIADO');assert.equal(audits.length,2);
+  assert.deepEqual(db.data('whatsappQrConnectorBindings/'+binding.id),before,'a restart never touches the binding or its generation');
+  const next=await service.enqueue(req(),'RESTART');assert.notEqual(next.commandId,first.commandId,'after it is done a new restart is a new command');
+  const beat2=await transport.operate('HEARTBEAT',{ready:true,poll:true});await transport.operate('RESTART_ACK',{commandId:beat2.command.id});
+ });
+ await test('restart-goes-before-other-pending-commands',async()=>{
+  const sync=await service.enqueue(req(),'SYNC_CHATS'),restart=await service.enqueue(req(),'RESTART');
+  const h1=await transport.operate('HEARTBEAT',{ready:true,poll:true});assert.equal(h1.command.id,restart.commandId,'a restart is not kept waiting behind a sync');
+  await transport.operate('RESTART_ACK',{commandId:restart.commandId});
+  const h2=await transport.operate('HEARTBEAT',{ready:true,poll:true});assert.equal(h2.command.id,sync.commandId);
+  await transport.synchronize([{chatId:'new',name:'Updated'}],sync.commandId);assert.equal(db.data('whatsappQrConnectorCommands/'+sync.commandId).status,'DONE');
+ });
+ await test('tampered-restart-command-is-rejected-before-claim',async()=>{
+  db.seed('whatsappQrConnectorCommands/tampered-restart',{bindingId:binding.id,generation:1,rootId:'root-b',requestedByUid:'owner-a',type:'RESTART',status:'PENDING'});
+  await rejection(()=>transport.operate('HEARTBEAT',{ready:true,poll:true}));
+  db.rows.delete('whatsappQrConnectorCommands/tampered-restart');
+ });
  await test('qr-ready-ack-does-not-claim-external-account',async()=>{await transport.operate('HEARTBEAT',{ready:false,poll:false,status:'QR_REQUIRED',qrText:'synthetic-qr',qrDataUrl:'data:image/png;base64,synthetic',resetCommandId:resetCommand});const command=db.data('whatsappQrConnectorCommands/'+resetCommand);assert.equal(command.status,'DONE');assert.equal(command.outcome,'LOCAL_QR_AVAILABLE_NOT_ACCOUNT_OWNERSHIP');});
  await test('owner-inactive-invalidates-live-binding',async()=>{db.seed('users/owner-a',{...user,active:false});await rejection(()=>transport.operate('HEARTBEAT',{ready:true,poll:false}));db.seed('users/owner-a',user);});
  await test('binding-revocation-blocks-every-following-operation',async()=>{await service.revoke(req('owner-a',{bindingId:binding.id}));for(const [action,data]of [['HEARTBEAT',{ready:true,poll:false}],['NEW_QR',{commandId:resetCommand}],['SYNC_CHATS',{phase:'BEGIN',syncId:crypto.randomUUID()}]])await rejection(()=>transport.operate(action,data));assert.equal(db.data('whatsappQrConnectorBindings/'+binding.id).generation,2);await rejection(()=>service.consume({enrollmentId:enrollment.id,signature:signing(key.privateKeyPem,policy.enrollmentSigningText(enrollment))}));});
@@ -61,6 +106,36 @@ const fakeFetch=async(url,options)=>{fetches++;const body=JSON.parse(options.bod
  await test('connector-import-has-no-startup-or-message-effects',async()=>{let initialized=0,destroyed=0,reset=0;const callbacks={},timers=[];const client={on:(name,cb)=>{callbacks[name]=cb;},initialize:async()=>{initialized++;},destroy:async()=>{destroyed++;},getChats:async()=>[]};const calls=[];const t={getBinding:()=>binding,operate:async(action,data)=>{calls.push([action,data]);return {command:null};},synchronize:async()=>({written:0,quarantined:0})};const running=await runEnrolledConnector({transport:t,client,encodeQr:async()=>'',resetLocalSession:async()=>reset++,setTimer:fn=>{timers.push(fn);return fn;},clearTimer:()=>{}});assert.equal(initialized,1);assert.equal(calls[0][0],'HEARTBEAT');assert.equal(calls[0][1].ready,false);await callbacks.message('hello');assert.equal(reset,0);await running.stop();assert.equal(destroyed,1);});
  await test('pending-qr-stays-visible-in-every-heartbeat',async()=>{const callbacks={},timers=[],calls=[];const client={on:(name,cb)=>{callbacks[name]=cb;},initialize:async()=>{},destroy:async()=>{},getChats:async()=>[]};const t={getBinding:()=>binding,operate:async(action,data)=>{calls.push([action,data]);return {command:null};},synchronize:async()=>({written:0,quarantined:0})};const running=await runEnrolledConnector({transport:t,client,encodeQr:async q=>'data:image/png;base64,'+q,resetLocalSession:async()=>{},setTimer:fn=>{timers.push(fn);return fn;},clearTimer:()=>{}});const beats=async()=>{calls.length=0;for(const fn of timers)await fn();return calls.filter(([a,d])=>a==='HEARTBEAT'&&d.poll===true).map(([,d])=>d);};assert.ok((await beats()).every(d=>d.status===undefined),'no QR before WhatsApp asks for one');await callbacks.qr('synthetic-qr');for(const d of await beats()){assert.equal(d.status,'QR_REQUIRED');assert.equal(d.qrText,'https://wa.me/settings/linked_devices#synthetic-qr','the QR is published as the linked-devices link phones accept');assert.equal(d.qrDataUrl,'data:image/png;base64,https://wa.me/settings/linked_devices#synthetic-qr');assert.equal(d.resetCommandId,undefined);}await callbacks.authenticated();assert.ok((await beats()).every(d=>d.status===undefined&&d.qrText===undefined),'scanned QR is no longer repeated');await running.stop();});
  await test('idle-qr-restarts-for-a-fresh-one',async()=>{const callbacks={},timers=[];let clock=1_000_000,stoppedWith=null;const client={on:(name,cb)=>{callbacks[name]=cb;},initialize:async()=>{},destroy:async()=>{},getChats:async()=>[]};const t={getBinding:()=>binding,operate:async()=>({command:null}),synchronize:async()=>({written:0,quarantined:0})};await runEnrolledConnector({transport:t,client,encodeQr:async q=>'data:'+q,resetLocalSession:async()=>{},setTimer:fn=>{timers.push(fn);return fn;},clearTimer:()=>{},now:()=>clock,onStopped:r=>{stoppedWith=r;}});const tick=async()=>{for(const fn of timers)await fn();};await callbacks.qr('https://wa.me/settings/linked_devices#q1');clock+=3*60*1000;await tick();assert.equal(stoppedWith,null,'a rotating QR keeps waiting');await callbacks.qr('q2');clock+=3*60*1000;await tick();assert.equal(stoppedWith,null,'each new QR restarts the idle clock');clock+=61*1000;await tick();assert.equal(stoppedWith,'QR_IDLE','four minutes without a new QR restarts the connector');});
+ await test('restart-command-confirms-then-closes-keeping-the-session',async()=>{
+  const callbacks={},timers=[],calls=[];let stoppedWith=null,destroyed=0,resets=0;
+  const client={on:(name,cb)=>{callbacks[name]=cb;},initialize:async()=>{},destroy:async()=>{destroyed++;},getChats:async()=>[]};
+  const t={getBinding:()=>binding,operate:async(action,data)=>{calls.push(action);if(action==='HEARTBEAT'&&data.poll===true)return {command:{id:'c1',type:'RESTART'}};if(action==='RESTART_ACK')return {restartAcknowledged:true,commandId:data.commandId};return {};},synchronize:async()=>({written:0,quarantined:0})};
+  await runEnrolledConnector({transport:t,client,encodeQr:async q=>q,resetLocalSession:async()=>{resets++;},setTimer:fn=>{timers.push(fn);return fn;},clearTimer:()=>{},onStopped:r=>{stoppedWith=r;}});
+  for(const fn of timers)await fn();
+  assert.ok(calls.includes('RESTART_ACK'),'it tells the server before closing');assert.equal(stoppedWith,'RESTART_REQUESTED');assert.equal(destroyed,1);assert.equal(resets,0,'the WhatsApp session is not reset');
+  // A receipt that does not match is not a restart: it fails like any other bad answer.
+  let stopped2=null;const bad={...t,operate:async(action,data)=>{if(action==='HEARTBEAT'&&data.poll===true)return {command:{id:'c2',type:'RESTART'}};if(action==='RESTART_ACK')return {restartAcknowledged:true,commandId:'other'};return {};}};
+  const timers2=[];await runEnrolledConnector({transport:bad,client:{...client,destroy:async()=>{}},encodeQr:async q=>q,resetLocalSession:async()=>{resets++;},setTimer:fn=>{timers2.push(fn);return fn;},clearTimer:()=>{},onStopped:r=>{stopped2=r;}});
+  for(const fn of timers2)await fn().catch(()=>undefined);assert.equal(stopped2,'HEARTBEAT_FAILED');assert.equal(resets,0);
+ });
+ await test('code-update-restarts-once-and-only-when-idle',async()=>{
+  const callbacks={},timers=[];let stoppedWith=[],gate=null,release=null,fingerprint='v1';
+  const client={on:(name,cb)=>{callbacks[name]=cb;},initialize:async()=>{},destroy:async()=>{},getChats:async()=>[]};
+  const t={getBinding:()=>binding,operate:async(action,data)=>{if(action==='HEARTBEAT'&&data.poll===true&&gate)await gate;return {command:null};},synchronize:async()=>({written:0,quarantined:0})};
+  const running=await runEnrolledConnector({transport:t,client,encodeQr:async q=>q,resetLocalSession:async()=>{},setTimer:fn=>{timers.push(fn);return fn;},clearTimer:()=>{},onStopped:r=>{stoppedWith.push(r);},codeFingerprint:()=>{if(fingerprint==='broken')throw Error('EBUSY');return fingerprint;}});
+  assert.equal(await running.checkCodeUpdate(),'UNCHANGED','same code, nothing to do');
+  fingerprint='v2';assert.equal(await running.checkCodeUpdate(),'CHANGE_SEEN','a change must be seen twice in a row (a file still being written is not a release)');
+  fingerprint='v1';assert.equal(await running.checkCodeUpdate(),'UNCHANGED');fingerprint='v2';assert.equal(await running.checkCodeUpdate(),'CHANGE_SEEN','a change that went back starts again');
+  fingerprint='broken';assert.equal(await running.checkCodeUpdate(),'UNREADABLE','an unreadable file never restarts it');fingerprint='v2';
+  gate=new Promise(resolve=>{release=resolve;});const beating=running.poll();await Promise.resolve();
+  assert.equal(await running.checkCodeUpdate(),'BUSY','not while it is working');assert.deepEqual(stoppedWith,[]);
+  release();await beating;gate=null;
+  assert.equal(await running.checkCodeUpdate(),'RESTARTING');assert.deepEqual(stoppedWith,['CODE_UPDATED']);
+  assert.equal(await running.checkCodeUpdate(),'SKIPPED','once per change');fingerprint='v3';assert.equal(await running.checkCodeUpdate(),'SKIPPED');assert.deepEqual(stoppedWith,['CODE_UPDATED'],'the restarted process takes the new code as its baseline; this one never loops');
+  // Without a fingerprint (the old call) there is no check at all.
+  const timers3=[];const plain=await runEnrolledConnector({transport:t,client:{...client},encodeQr:async q=>q,resetLocalSession:async()=>{},setTimer:fn=>{timers3.push(fn);return fn;},clearTimer:()=>{}});
+  assert.equal(await plain.checkCodeUpdate(),'SKIPPED');assert.equal(timers3.length,timers.length-1,'and no timer for it');
+ });
  await test('connector-does-not-initialize-after-server-revocation',async()=>{let initialized=0;await rejection(()=>runEnrolledConnector({transport:{getBinding:()=>binding,operate:async()=>{throw Error('REVOKED');}},client:{on:()=>{},initialize:async()=>initialized++,destroy:async()=>{}},encodeQr:async()=>'',resetLocalSession:async()=>{},setTimer:()=>0}));assert.equal(initialized,0);});
  assert(!db.log.some(p=>/^(pagos|solicitudes|paymentApplications|documentDeliveryJobs)\//.test(p)));
  console.log(JSON.stringify({status:'PASS',checks:cases.length,cases,realProviderRequests:0,mockFirestore:true,scope:'local-synthetic-only-real-crypto-and-canonical-authorization',fetches}));

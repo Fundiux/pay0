@@ -55,7 +55,7 @@ async function main(argv) {
   const { startExplicitly } = require("./enrolledConnector.cjs");
   const runtime = await loadWorkerRuntime(options);
   fs.mkdirSync(config.sessionRoot, { recursive: true });
-  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, webVersion: config.webVersion, webVersionCachePath: config.webVersionCachePath, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments,
+  await startExplicitly({ ...runtime, sessionRoot: config.sessionRoot, executablePath: config.executablePath, webVersion: config.webVersion, webVersionCachePath: config.webVersionCachePath, policyModule: config.policyModule, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments,
     // The connector stopped working: exit so the supervisor (run-pay0-whatsapp-enrolled.ps1) relaunches it.
     onStopped: reason => { console.error(JSON.stringify({ status: "STOPPED", code: reason })); process.exit(RESTART_EXIT_CODE); } });
   console.log(JSON.stringify({ status: "RUNNING", bindingId: runtime.binding.id, captureGroups: config.captureGroups, sendDocuments: config.sendDocuments }));

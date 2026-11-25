@@ -348,6 +348,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   requestClientDispersionIncident: { module: "./modules/financing/callables", export: "requestClientDispersionIncident" },
   requestPagoIqSync: { module: "./modules/iq/pagoDepositCallables", export: "requestPagoIqSync" },
   requestUserCommissionDispersion: { module: "./modules/commissionDistributions/requests", export: "requestUserCommissionDispersion" },
+  requestWhatsAppConnectorRestart: { module: "./modules/documentDelivery/whatsappConnectorCallables", export: "requestWhatsAppConnectorRestart" },
   reservePagoApplicationBatch: { module: "./modules/paymentApplications/callables", export: "reservePagoApplicationBatch" },
   resolveAgent007Recommendation: { module: "./modules/agent007/callables", export: "resolveAgent007Recommendation" },
   resolveAgentIncident: { module: "./modules/agentOperations/callables", export: "resolveAgentIncident" },
