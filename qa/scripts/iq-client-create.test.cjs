@@ -2,7 +2,7 @@
 // Pure test: when the daily sync creates a PAY0 client from IQ's own client record, and when it must not.
 //   npm --prefix functions run build && node qa/scripts/iq-client-create.test.cjs
 const assert = require('node:assert/strict');
-const { planClientCreates, clientRowForPlan, clientCreateDocId } = require('../../functions/lib/modules/iqDailySync/clientCreate.js');
+const { planClientCreates, clientRowForPlan, clientCreateDocId, catalogFromOperations, clientCreateCandidateStats } = require('../../functions/lib/modules/iqDailySync/clientCreate.js');
 const { resolveDispersionClient } = require('../../functions/lib/modules/iqDailySync/dispersionPlan.js');
 
 let checks = 0;
@@ -37,4 +37,20 @@ check('the created client is then found by the dispersion rules', () => {
   assert.equal(row.data.source, 'IQ_IMPORT'); assert.equal(row.data.importMode, 'DAILY_SYNC');
 });
 check('same inputs, same document id', () => assert.equal(plan(['A'], [iq('5', 'A', 'AAA190101AB1')])[0].docId, plan(['A'], [iq('5', 'A', 'AAA190101AB1')])[0].docId));
+const op = (kind, id, name, rfc, status = 'FOUND_EXACT') => ({ kind, raw: { __p4ClientResolution: { status, iqClientId: id, clientName: name, rfc } } });
+check('clients named by invoices, deposits and applications become catalog entries, once each', () => {
+  const catalog = catalogFromOperations([op('SOLICITUD', '5', 'FUTURITE', 'FUT190101AB1'), op('PAYMENT', '5', 'FUTURITE', 'FUT190101AB1'), op('APPLICATION', '6', 'TOCA CLEAN', ''), op('SOLICITUD', '7', 'OTRO', 'OTR190101AB1', 'NOT_FOUND'), { kind: 'SOLICITUD', raw: {} }]);
+  assert.deepEqual(catalog.map((row) => row.id), ['5', '6']);
+});
+check('only real unique RFCs are created and the counts say how many are not', () => {
+  const catalog = catalogFromOperations([op('SOLICITUD', '5', 'FUTURITE', 'FUT190101AB1'), op('SOLICITUD', '6', 'TOCA CLEAN', ''), op('SOLICITUD', '8', 'GENERICO', 'XAXX010101000')]);
+  const creates = plan(catalog.map((row) => row.name), catalog);
+  assert.deepEqual(clientCreateDocIds(creates), [clientCreateDocId(ROOT, 'iq-group-rr', '5')]);
+  assert.deepEqual(clientCreateCandidateStats(catalog, creates), { distinct: 3, withRealRfc: 1, withoutRealRfc: 2, creatable: 1 });
+});
+check('an existing PAY0 client with that RFC (merged or not) is never duplicated', () => {
+  const catalog = catalogFromOperations([op('SOLICITUD', '5', 'FUTURITE', 'FUT190101AB1')]);
+  assert.equal(plan(['FUTURITE'], catalog, [pay0('c1', { rfc: 'FUT190101AB1', adminId: BETELL })]).length, 0);
+});
+function clientCreateDocIds(creates) { return creates.map((create) => create.docId); }
 console.log(`${checks} checks passed`);

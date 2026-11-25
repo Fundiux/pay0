@@ -23,7 +23,7 @@ import { P4_PLAN_GROUPS, type Pay0PlanRow } from "../iqHistoricalImport/planner"
 const text = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").trim();
 const plain = (value: unknown) => text(value).toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const object = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
-export const MAX_CLIENT_CREATES_PER_GROUP = 20;
+export const MAX_CLIENT_CREATES_PER_GROUP = 100;
 export const CLIENT_CREATE_ACTOR_UID = "system:iq-daily-sync";
 export const CLIENT_CREATE_VERSION = 1;
 
@@ -73,6 +73,27 @@ const CLIENT_CREATE_ACTOR_UID_ALIAS = CLIENT_CREATE_ACTOR_UID;
 
 /** What the planner needs to see on the PAY0 row right after the creation (no server timestamps). */
 export const clientRowForPlan = (rootId: string, create: ClientCreate): Pay0PlanRow => ({ collection: "clients", id: create.docId, data: { ...clientFields(create, null), rootId } });
+
+/**
+ * The clients IQ operations name: each invoice, deposit or application the plan read carries the exact IQ client it belongs to
+ * (name, id and RFC). They are the catalog entries to create from when PAY0 lacks the client. Pure.
+ */
+export function catalogFromOperations(iqRows: Array<{ kind: string; raw: Record<string, unknown> }>): Record<string, unknown>[] {
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const row of iqRows) {
+    const resolution = object(object(row.raw).__p4ClientResolution);
+    if (text(resolution.status) !== "FOUND_EXACT") continue;
+    const id = text(resolution.iqClientId), name = text(resolution.clientName);
+    if (id && name && !byId.has(id)) byId.set(id, { id, name, rfc: text(resolution.rfc) });
+  }
+  return [...byId.values()];
+}
+
+/** How many of those clients can be created (a real, unique RFC) and how many cannot, for the owner's decision. Pure. */
+export function clientCreateCandidateStats(catalog: Record<string, unknown>[], creates: ClientCreate[]) {
+  const withRfc = catalog.filter((row) => requiresUniqueClientRfc(normalizeClientRfc(row.rfc))).length;
+  return { distinct: catalog.length, withRealRfc: withRfc, withoutRealRfc: catalog.length - withRfc, creatable: creates.length };
+}
 
 /** Creates each client in its own transaction, only when its document does not exist yet (replays are no-ops). */
 export async function applyClientCreates(db: admin.firestore.Firestore, rootId: string, creates: ClientCreate[]): Promise<ClientCreate[]> {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
@@ -15,7 +15,7 @@ import { attachDisplay, displayFromIqRow, type ReviewDisplay } from "./reviewDis
 import { applyClientLinks, linkPatchForPlan, planClientLinks } from "./clientLinks";
 import { importIqDispersion } from "./dispersionImport";
 import { parseIqDispersion, resolveDispersionClient } from "./dispersionPlan";
-import { applyClientCreates, clientRowForPlan, planClientCreates, readIqClientCatalog } from "./clientCreate";
+import { applyClientCreates, catalogFromOperations, clientCreateCandidateStats, clientRowForPlan, planClientCreates, readIqClientCatalog } from "./clientCreate";
 import { postRecoveredPagoToWallet } from "./pagoPosting";
 import { isIqDailySyncImport } from "../iq/historicalImportGuard";
 import { detectIqDispersions } from "./dispersions";
@@ -220,6 +220,26 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
       }
       if (linked.length) console.log("IQ_DAILY_SYNC_CLIENTS_LINKED", JSON.stringify({ groupId, linked: linked.length }));
     }
+    // The clients IQ names on invoices, deposits and applications are created from IQ's own record when PAY0 lacks them and the RFC
+    // is real and unique. Off until the owner approves (clientCreateFromOperationsEnabled); without it only the counts are logged.
+    if (!exhausted(tracker) && (await db().doc(`iqDailySyncState/${ctx.rootId}`).get()).get("clientAutoCreateEnabled") !== false) {
+      const catalog = catalogFromOperations(discovered.iqRows);
+      const creates = catalog.length ? planClientCreates({ rootId: ctx.rootId, groupId, names: catalog.map((row) => String(row.name)), catalog, pay0Rows: discovered.pay0Rows }) : [];
+      if (creates.length || catalog.length) {
+        const live = (await db().doc(`iqDailySyncState/${ctx.rootId}`).get()).get("clientCreateFromOperationsEnabled") === true;
+        console.log("IQ_DAILY_SYNC_CLIENT_CREATE_PLAN", JSON.stringify({ groupId, live, ...clientCreateCandidateStats(catalog, creates) }));
+        if (live && creates.length) {
+          try {
+            const made = await applyClientCreates(db(), ctx.rootId, creates);
+            tracker.writes += made.length; result.clientsCreated = (result.clientsCreated || 0) + made.length;
+            for (const create of made) discovered.pay0Rows.push(clientRowForPlan(ctx.rootId, create));
+            if (made.length) console.log("IQ_DAILY_SYNC_CLIENTS_CREATED", JSON.stringify({ groupId, created: made.length, from: "OPERATIONS" }));
+          } catch (error) {
+            console.error("IQ_DAILY_SYNC_CLIENT_CREATE_FAILED", JSON.stringify({ groupId, message: (error instanceof Error ? error.message : String(error)).slice(0, 160) }));
+          }
+        }
+      }
+    }
     for (const row of discovered.iqRows) if (row.kind === "PAYMENT" && !iqDeposits.has(row.id)) iqDeposits.set(row.id, row.raw);
     for (const row of discovered.iqRows) displayIndex.set(`${row.kind}:${row.id}`, displayFromIqRow(row.kind, row.raw));
     const { manifest, summary } = buildServerPlan({ rootId: ctx.rootId, range: window, groupIds: [groupId], iqRows: discovered.iqRows, pay0Rows: discovered.pay0Rows, tombstones: discovered.tombstones });
@@ -309,14 +329,14 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
 }
 
 async function publishIncident(rootId: string) {
-  const firestore = db(), open = await firestore.collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").select("code").limit(2000).get();
+  const firestore = db(), open = await firestore.collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").select("code").limit(10_000).get();
   const countsByCode: Counts = {};
   for (const doc of open.docs) { const code = text(doc.get("code")) || "UNKNOWN"; countsByCode[code] = (countsByCode[code] || 0) + 1; }
   const ref = firestore.collection("analyticsRoots").doc(rootId).collection("incidents").doc("iq-daily-sync-review");
   if (!open.size) { await ref.delete(); return { openCount: 0, countsByCode }; }
   const topCode = Object.entries(countsByCode).sort((a, b) => b[1] - a[1])[0][0];
   await ref.set({ source: "iqDailySyncReviews", entityId: "IQ_DAILY_SYNC", solicitudId: "", kind: "IQ_DAILY_SYNC_REVIEW", status: "NEEDS_REVIEW", lastErrorCode: topCode,
-    openCount: open.size, openCountTruncated: open.size >= 2000, countsByCode, title: "Sincronización diaria IQ: operaciones por revisar", updatedAt: FieldValue.serverTimestamp() });
+    openCount: open.size, openCountTruncated: open.size >= 10_000, countsByCode, title: "Sincronización diaria IQ: operaciones por revisar", updatedAt: FieldValue.serverTimestamp() });
   return { openCount: open.size, countsByCode };
 }
 
@@ -324,12 +344,19 @@ async function publishIncident(rootId: string) {
 async function oldestOpenReviewDate(rootId: string, now: Date = new Date()): Promise<string | null> {
   // A review older than the look-back belongs to the historical backfill or to a person; it must not widen every daily window.
   const recentFloor = addDays(mexicoDate(now), -DAILY_SYNC_MAX_REVIEW_LOOKBACK_DAYS);
-  const open = await db().collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").limit(2000).get();
-  let oldest: string | null = null;
-  for (const doc of open.docs) {
-    const candidates = [text(doc.get("evidence.display.date")), text(doc.get("evidence.date")), text(doc.get("lastSeenWindow.start"))].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
-    const date = candidates.sort()[0];
-    if (date && date >= recentFloor && (!oldest || date < oldest)) oldest = date;
+  // Every open review is read (dates only, in pages): sampling a fixed number would miss recent ones once there are thousands.
+  let oldest: string | null = null, last: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  for (let page = 0; page < 20; page++) {
+    let query = db().collection("iqDailySyncReviews").where("rootId", "==", rootId).where("status", "==", "OPEN").orderBy(FieldPath.documentId()).select("evidence.display.date", "evidence.date", "lastSeenWindow.start").limit(1000);
+    if (last) query = query.startAfter(last);
+    const open = await query.get();
+    for (const doc of open.docs) {
+      const candidates = [text(doc.get("evidence.display.date")), text(doc.get("evidence.date")), text(doc.get("lastSeenWindow.start"))].filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
+      const date = candidates.sort()[0];
+      if (date && date >= recentFloor && (!oldest || date < oldest)) oldest = date;
+    }
+    if (open.size < 1000) break;
+    last = open.docs[open.docs.length - 1];
   }
   return oldest;
 }
