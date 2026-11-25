@@ -8,14 +8,19 @@ const MENTION_TOKEN = "{{MENCION}}"; // same placeholder as functions/src/module
 const MAX_BATCH_MESSAGES = 25, MAX_BATCH_BYTES = 40000, MAX_BUFFERED_MESSAGES = 1000;
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const NOT_READY_LIMIT_MS = 5 * 60 * 1000, DESTROY_TIMEOUT_MS = 15000;
+// WhatsApp stops rotating an unscanned QR after a few minutes and goes idle: restart for a fresh one.
+const QR_IDLE_LIMIT_MS = 4 * 60 * 1000;
+// Since 2026-11 WhatsApp Web shows its QR as a link; phones no longer accept the bare payload whatsapp-web.js 1.34.8 emits.
+const LINKED_DEVICES_QR_PREFIX = "https://wa.me/settings/linked_devices#";
+const linkedDevicesQr = qr => /^https?:\/\//i.test(String(qr)) ? String(qr) : LINKED_DEVICES_QR_PREFIX + String(qr);
 async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval, captureGroups = false,
-  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS }) {
+  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS, qrIdleLimitMs = QR_IDLE_LIMIT_MS }) {
   if (!transport?.getBinding() || !client || typeof resetLocalSession !== "function") throw Error("ENROLLED_DEPENDENCIES_REQUIRED");
   if (sendDocuments && (typeof fetchFile !== "function" || typeof createMedia !== "function")) throw Error("SEND_DEPENDENCIES_REQUIRED");
   let ready = false, busy = false, stopped = false, pendingResetId = null, delivering = false;
   // Self-recovery: a connector that cannot keep working closes and reports why, so the
   // supervisor relaunches it. A pending QR waits for a person, so it never counts as stuck.
-  let awaitingQr = false, notReadySince = null;
+  let awaitingQr = false, notReadySince = null, lastQrAt = null;
   // The QR stays on the page while it waits: every heartbeat repeats it, so the 10 s heartbeat never hides it as DISCONNECTED.
   let pendingQr = null;
   // Solo se retienen mensajes de grupos que el servidor autorizó para este agente (observedChats del latido).
@@ -69,7 +74,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       throw error;
     } finally { busy = false; }
   }
-  client.on("qr", event(async qr => { awaitingQr = true; pendingQr = { qrText: qr, qrDataUrl: await encodeQr(qr) }; await status({ status: "QR_REQUIRED", ...pendingQr, error: null,
+  client.on("qr", event(async raw => { const qr = linkedDevicesQr(raw); awaitingQr = true; lastQrAt = now(); pendingQr = { qrText: qr, qrDataUrl: await encodeQr(qr) }; await status({ status: "QR_REQUIRED", ...pendingQr, error: null,
     ...(pendingResetId ? { resetCommandId: pendingResetId } : {}) }); pendingResetId = null; }));
   client.on("authenticated", event(async () => { awaitingQr = false; pendingQr = null; notReadySince = now(); return status({ status: "AUTHENTICATED", qrText: null, qrDataUrl: null, error: null }); }));
   client.on("ready", event(async () => { ownIds = null; ready = true; notReadySince = null; await status({ status: "CONNECTED", qrText: null, qrDataUrl: null, error: null }); if (!busy) { busy = true; try { await synchronize(); } finally { busy = false; } } }));
@@ -138,6 +143,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     if (stopped) return;
     if (!ready) {
       if (!awaitingQr && notReadySince !== null && now() - notReadySince >= notReadyLimitMs) await close("NOT_READY_TIMEOUT");
+      else if (awaitingQr && lastQrAt !== null && now() - lastQrAt >= qrIdleLimitMs) await close("QR_IDLE");
       return;
     }
     if (busy) return;
@@ -269,4 +275,4 @@ async function startExplicitly(config) {
     fetchFile, createMedia: (mimetype, data, filename) => new MessageMedia(mimetype, data, filename), encodeQr: qr => qrcode.toDataURL(qr, { margin: 1, width: 320 }),
     resetLocalSession: async id => { if (id !== binding.id) throw Error("SESSION_ID_MISMATCH"); await fs.rm(sessionDir, { recursive: true, force: true }); } });
 }
-module.exports = { runEnrolledConnector, startExplicitly };
+module.exports = { linkedDevicesQr, LINKED_DEVICES_QR_PREFIX, runEnrolledConnector, startExplicitly };
