@@ -42,12 +42,16 @@ async function test(name, fn) { await fn(); checks.push(name); }
     s.tick(299000); await running.watchdog(); assert.deepEqual(s.stops, []);
     s.tick(2000); await running.watchdog(); assert.deepEqual(s.stops, ["NOT_READY_TIMEOUT"]);
   });
-  await test("a pending QR waits for a person and is never restarted", async () => {
+  await test("a rotating QR waits for a person; an idle QR restarts with QR_IDLE", async () => {
     const s = setup(); const running = await s.start();
-    s.callbacks.qr("code"); await flushAsync();
-    s.tick(3600000); await running.watchdog(); assert.deepEqual(s.stops, []);
+    // WhatsApp rotates the QR while it waits: each new code keeps the connector waiting for a person.
+    for (let i = 0; i < 20; i++) { s.callbacks.qr(`code-${i}`); await flushAsync(); s.tick(180000); await running.watchdog(); }
+    assert.deepEqual(s.stops, [], "a rotating QR is never restarted");
     s.callbacks.authenticated(); await flushAsync();
     s.tick(301000); await running.watchdog(); assert.deepEqual(s.stops, ["NOT_READY_TIMEOUT"]);
+    const idle = setup(); const idleRun = await idle.start();
+    idle.callbacks.qr("code"); await flushAsync();
+    idle.tick(240000); await idleRun.watchdog(); assert.deepEqual(idle.stops, ["QR_IDLE"], "four minutes without a new QR restarts for a fresh one");
   });
   await test("a lost heartbeat stops with HEARTBEAT_FAILED", async () => {
     let calls = 0;
