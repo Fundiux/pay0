@@ -45,7 +45,7 @@ const LEASE_MS = 570_000;
 const MAX_DISPERSIONS_IMPORTED_PER_GROUP = 25;
 
 export type DailySyncBudget = { maxWrites: number; maxDurationMs: number; maxErrors: number; maxLayers: number; maxPlanningPages: number; maxPlanningRecords: number; maxFirestoreReads: number; maxDispersionPages: number; maxDispersionsImported?: number; maxPagosPosted?: number; onlyConcretized?: boolean };
-export const DEFAULT_DAILY_SYNC_BUDGET: DailySyncBudget = { maxWrites: 150, maxDurationMs: 420_000, maxErrors: 5, maxLayers: 3, maxPlanningPages: 1800, maxPlanningRecords: 10_000, maxFirestoreReads: 10_000, maxDispersionPages: 20 };
+export const DEFAULT_DAILY_SYNC_BUDGET: DailySyncBudget = { maxWrites: 150, maxDurationMs: 420_000, maxErrors: 5, maxLayers: 3, maxPlanningPages: 1800, maxPlanningRecords: 40_000, maxFirestoreReads: 10_000, maxDispersionPages: 20 };
 
 const text = (value: unknown) => String(value ?? "").trim();
 const db = () => getFirestore();
@@ -200,7 +200,11 @@ async function syncGroup(ctx: Context, groupId: string, window: { start: string;
     result.layers++;
     const planningBudget: DiscoveryBudget = { maxPages: tracker.budget.maxPlanningPages, maxRecords: tracker.budget.maxPlanningRecords, maxFirestoreReads: tracker.budget.maxFirestoreReads, maxDurationMs: remainingMs(tracker) };
     const discovered = await discoverServerPlan({ rootId: ctx.rootId, groupIds: [groupId], range: window, secret, budget: planningBudget });
-    if (discovered.partial) { result.status = "PARTIAL"; result.stopReason = "PLAN_BUDGET"; finalManifest = null; break; }
+    if (discovered.partial) {
+      // Counts only: which limit the IQ read hit (pages, records, time or Firestore reads).
+      console.log("IQ_SYNC_PLAN_BUDGET", JSON.stringify({ groupId, window, layer, limits: { pages: planningBudget.maxPages, records: planningBudget.maxRecords, reads: planningBudget.maxFirestoreReads, ms: planningBudget.maxDurationMs }, metrics: discovered.metrics }));
+      result.status = "PARTIAL"; result.stopReason = "PLAN_BUDGET"; finalManifest = null; break;
+    }
     // The historical backfill brings only what IQ concluded: cancelled, rejected or failed operations are left out.
     if (tracker.budget.onlyConcretized) discovered.iqRows = discovered.iqRows.filter(row => row.kind === "CLIENT" || !isDiscardedIqStatus(row.raw));
     // A PAY0 client with the same RFC and owner as an IQ client is the same company: link it so the plan finds it

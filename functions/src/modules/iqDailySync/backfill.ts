@@ -19,7 +19,7 @@ export const BACKFILL_DEFAULT_END_DATE = "2026-11-23";
 /** One invocation works on at most this many months and stops starting new ones after this time. */
 export const BACKFILL_MAX_MONTHS_PER_INVOCATION = 6;
 export const BACKFILL_NO_NEW_MONTH_AFTER_MS = 270_000;
-export const BACKFILL_BUDGET: Partial<DailySyncBudget> = { maxWrites: 1500, maxDurationMs: 240_000, maxErrors: 8, maxLayers: 3, maxDispersionsImported: 150, maxPagosPosted: 300, onlyConcretized: true };
+export const BACKFILL_BUDGET: Partial<DailySyncBudget> = { maxWrites: 1500, maxDurationMs: 450_000, maxErrors: 8, maxLayers: 3, maxDispersionsImported: 150, maxPagosPosted: 300, onlyConcretized: true };
 
 const text = (value: unknown) => String(value ?? "").trim();
 const db = () => getFirestore();
