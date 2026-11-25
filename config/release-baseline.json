@@ -788,6 +788,10 @@
     {
       "commit": "5aa92521",
       "capability": "Pasada del catalogo IQ de varias noches fechada por su inicio; prueba de ausencia hasta 120 h"
+    },
+    {
+      "commit": "33973aaf",
+      "capability": "Hugo publica el QR como enlace de dispositivos vinculados de WhatsApp y se reinicia si el QR queda inactivo"
     }
   ],
   "requiredText": [
