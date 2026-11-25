@@ -800,6 +800,14 @@
     {
       "commit": "dbd86184",
       "capability": "Facturas y comprobantes recuperados de IQ se descargan fuera de horario con cuota propia; lo propio de PAY0 sigue con ventana"
+    },
+    {
+      "commit": "e1008ab5",
+      "capability": "Sincronizacion IQ con presupuesto de lectura de 40000 registros, log IQ_SYNC_PLAN_BUDGET y respaldo que solo inicia un mes si cabe en el timeout"
+    },
+    {
+      "commit": "df4dd597",
+      "capability": "Recuperacion de envios de WhatsApp tras desconexion: reintento de fallos previos, reenrutado, alerta en /whatsapp y aviso al grupo interno"
     }
   ],
   "requiredText": [
