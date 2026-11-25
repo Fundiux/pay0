@@ -852,6 +852,10 @@
     {
       "commit": "7a62069d",
       "capability": "Catalogo de beneficiarios IQ se lee cada 30 minutos mientras una pasada este abierta; Pendiente IQ en naranja solido"
+    },
+    {
+      "commit": "6fe5c09b",
+      "capability": "Beneficiario nuevo no espera el catalogo: se consulta IQ al momento y se vincula o crea; renglon pendiente con texto naranja y etiqueta PENDIENTE"
     }
   ],
   "requiredText": [
