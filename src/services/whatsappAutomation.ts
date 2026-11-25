@@ -8,6 +8,8 @@ export type WhatsAppAutomationState = {
   configured: boolean;
   effectiveReady: boolean;
   withinSendingHours?: boolean;
+  /** Set while Hugo is not sending during his hours; null otherwise. */
+  deliveryAlert?: { heartbeatMissing: boolean; unclaimedCount: number; oldestUnclaimedMinutes: number } | null;
 
   connector: {
     id: string;

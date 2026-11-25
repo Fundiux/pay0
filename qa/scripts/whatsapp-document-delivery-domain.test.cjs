@@ -224,4 +224,76 @@ check('mexico-day-start-and-same-day-catch-up', () => {
   assert.equal(d.sameDayCatchUpSourceType(ready({ entityType: 'pagos', documentType: 'COMPROBANTE_PAGO', createdAt: at(start + 1) }), start), null, 'pago receipts are not sent');
 });
 
+// ---- recovery after Hugo was offline ----
+const mx = (y, m, day, h, min) => Date.UTC(y, m - 1, day, h + 6, min); // Mexico City is UTC-6 in winter
+const ts = (ms) => ({ toMillis: () => ms });
+const NOW = mx(2026, 11, 25, 10, 0); // Wednesday 10:00, inside Hugo's hours
+const recentJob = (over = {}) => ({ origin: 'AUTOMATIC', status: 'ERROR', createdAt: ts(NOW - 3 * 3600000), ...over });
+const failed = (over = {}) => ({ status: 'ERROR', lastError: 'PRE_SEND_FAILED', errorAt: ts(NOW - 20 * 60000), ...over });
+check('auto-retry-only-when-nothing-reached-whatsapp', () => {
+  assert.equal(d.decideAutoRetry({ delivery: failed(), job: recentJob(), nowMs: NOW }), 'RETRY');
+  for (const code of ['DOCUMENT_DOWNLOAD_FAILED', 'FILE_SIGNING_FAILED', 'SEND_FAILED_BEFORE_ATTEMPT']) assert.equal(d.decideAutoRetry({ delivery: failed({ lastError: code }), job: recentJob(), nowMs: NOW }), 'RETRY', code);
+  // Permanent failures and unknown codes are never retried by themselves.
+  for (const code of ['DESTINATION_INVALID', 'DOCUMENTS_MISSING', 'DOCUMENT_URL_INVALID', 'FILE_UNAVAILABLE', 'DOCUMENT_SCOPE_INVALID', '']) assert.equal(d.decideAutoRetry({ delivery: failed({ lastError: code }), job: recentJob(), nowMs: NOW }), 'SKIP', code || 'no code');
+  // A delivery whose send was uncertain, sent, pending or sending is not an auto-retry candidate: a person decides the first.
+  for (const status of ['SEND_UNCERTAIN', 'SENT', 'PENDING_SEND', 'SENDING', 'OMITTED']) assert.equal(d.decideAutoRetry({ delivery: failed({ status }), job: recentJob(), nowMs: NOW }), 'SKIP', status);
+  assert.equal(d.decideAutoRetry({ delivery: failed({ retryBlocked: true }), job: recentJob(), nowMs: NOW }), 'SKIP', 'blocked stays blocked');
+  assert.equal(d.decideAutoRetry({ delivery: failed({ attemptStartedAtMs: NOW - 60000 }), job: recentJob(), nowMs: NOW }), 'SKIP', 'an attempt may have reached the chat');
+});
+check('auto-retry-bounds', () => {
+  assert.equal(d.decideAutoRetry({ delivery: failed({ autoRetryCount: 2 }), job: recentJob(), nowMs: NOW }), 'RETRY');
+  assert.equal(d.decideAutoRetry({ delivery: failed({ autoRetryCount: d.AUTO_RETRY_MAX_ATTEMPTS }), job: recentJob(), nowMs: NOW }), 'SKIP', 'bounded number of retries');
+  assert.equal(d.decideAutoRetry({ delivery: failed({ errorAt: ts(NOW - 2 * 60000) }), job: recentJob(), nowMs: NOW }), 'SKIP', 'backoff after a failure');
+  assert.equal(d.decideAutoRetry({ delivery: failed({ errorAt: undefined }), job: recentJob(), nowMs: NOW }), 'RETRY', 'unknown failure time does not block');
+  assert.equal(d.decideAutoRetry({ delivery: failed(), job: recentJob({ createdAt: ts(NOW - 25 * 3600000) }), nowMs: NOW }), 'SKIP', 'older than 24 h is never resurrected');
+  assert.equal(d.decideAutoRetry({ delivery: failed(), job: recentJob({ origin: 'MANUAL' }), nowMs: NOW }), 'SKIP', 'manual jobs are a person\'s');
+  assert.equal(d.decideAutoRetry({ delivery: failed(), job: recentJob({ createdAt: undefined }), nowMs: NOW }), 'SKIP', 'a job with no creation date is not retried');
+});
+check('auto-retry-respects-backlog-cutoff', () => {
+  const justBefore = d.RECOVERED_BACKLOG_CUTOFF_MS - 3600000, justAfter = d.RECOVERED_BACKLOG_CUTOFF_MS + 3600000;
+  assert.equal(d.decideAutoRetry({ delivery: failed(), job: recentJob({ createdAt: ts(justBefore) }), nowMs: justBefore + 2 * 3600000 }), 'SKIP', 'a job created before 2026-11-24 is never retried');
+  assert.equal(d.decideAutoRetry({ delivery: failed({ errorAt: ts(justAfter) }), job: recentJob({ createdAt: ts(justAfter) }), nowMs: justAfter + 3600000 }), 'RETRY', 'from the cutoff on, it is current business');
+});
+check('reroute-only-group-not-visible', () => {
+  const waiting = (over = {}) => ({ origin: 'AUTOMATIC', status: 'READY_FOR_MANUAL_SEND', targetDestinationsCount: 0, targetResolutionStatus: 'CLIENT_GROUP_NOT_VISIBLE', createdAt: ts(NOW - 3 * 3600000), ...over });
+  assert.equal(d.shouldRerouteWaitingJob(waiting(), NOW), true);
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ targetResolutionStatus: 'CLIENT_GROUP_MISSING' }), NOW), false, 'no group assigned is a person\'s task');
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ targetResolutionStatus: 'INTERNAL_GROUP_MISSING' }), NOW), false, 'internal notices without a group are configuration');
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ targetResolutionStatus: 'INTERNAL_GROUP_NOT_VISIBLE' }), NOW), false);
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ targetDestinationsCount: 1 }), NOW), false);
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ origin: 'MANUAL' }), NOW), false);
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ status: 'READY_FOR_SEND' }), NOW), false);
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ createdAt: ts(NOW - 30 * 3600000) }), NOW), false, 'older than 24 h');
+  assert.equal(d.shouldRerouteWaitingJob(waiting({ createdAt: ts(d.RECOVERED_BACKLOG_CUTOFF_MS - 1000) }), d.RECOVERED_BACKLOG_CUTOFF_MS + 1000), false, 'before the backlog cutoff');
+});
+check('delivery-alert', () => {
+  const fresh = 30 * 1000, stale = 6 * 60000;
+  // Healthy: heartbeat fresh and nothing waiting more than 15 minutes.
+  assert.deepEqual(d.evaluateDeliveryAlert({ nowMs: NOW, heartbeatAgeMs: fresh, releasedAtMs: [NOW - 5 * 60000] }), { active: false, heartbeatMissing: false, unclaimedCount: 0, oldestUnclaimedMinutes: 0 });
+  // Heartbeat missing for more than 5 minutes, or never seen.
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: NOW, heartbeatAgeMs: stale, releasedAtMs: [] }).heartbeatMissing, true);
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: NOW, heartbeatAgeMs: null, releasedAtMs: [] }).active, true);
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: NOW, heartbeatAgeMs: 4 * 60000, releasedAtMs: [] }).active, false, 'under 5 minutes is fine');
+  // Alive but not claiming: documents waiting more than 15 minutes.
+  const stuck = d.evaluateDeliveryAlert({ nowMs: NOW, heartbeatAgeMs: fresh, releasedAtMs: [NOW - 40 * 60000, NOW - 20 * 60000, NOW - 2 * 60000] });
+  assert.deepEqual(stuck, { active: true, heartbeatMissing: false, unclaimedCount: 2, oldestUnclaimedMinutes: 40 });
+  // Outside Hugo's hours nothing is late: Wednesday 21:00 and Sunday.
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: mx(2026, 11, 25, 21, 0), heartbeatAgeMs: null, releasedAtMs: [mx(2026, 11, 25, 19, 31)] }).active, false);
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: mx(2026, 11, 29, 11, 0), heartbeatAgeMs: null, releasedAtMs: [] }).active, false);
+  // Just after opening, a document released the evening before is not "late" yet: the hours have not been open 15 minutes.
+  const opening = mx(2026, 11, 26, 7, 40);
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: opening, heartbeatAgeMs: fresh, releasedAtMs: [mx(2026, 11, 25, 19, 31)] }).unclaimedCount, 0);
+  assert.equal(d.evaluateDeliveryAlert({ nowMs: mx(2026, 11, 26, 7, 50), heartbeatAgeMs: fresh, releasedAtMs: [mx(2026, 11, 25, 19, 31)] }).unclaimedCount, 1, 'fifteen minutes into the day it is late');
+});
+
+check('internal-notice-text-has-only-counts', () => {
+  const one = d.deliveryAlertNoticeText({ unclaimedCount: 1, oldestUnclaimedMinutes: 22 });
+  assert.match(one, /^Aviso: 1 documento para un cliente lleva más de 15 minutos sin enviarse \(el más antiguo, 22 minutos\)\./);
+  const many = d.deliveryAlertNoticeText({ unclaimedCount: 7, oldestUnclaimedMinutes: 95.9 });
+  assert.match(many, /7 documentos para clientes llevan/);
+  assert.match(many, /95 minutos/);
+  assert.doesNotMatch(d.deliveryAlertNoticeText({ unclaimedCount: 2, oldestUnclaimedMinutes: 0 }), /el más antiguo/);
+  for (const text of [one, many]) assert.doesNotMatch(text, /pay\s*-?\s*0|despacho|folio|[0-9a-f]{20,}/i, 'no brand, folio or id');
+  assert.equal(d.DELIVERY_ALERT_NOTICE_EVERY_MS, 3600000);
+});
 console.log(`whatsapp-document-delivery-domain: ${checks} checks passed`);

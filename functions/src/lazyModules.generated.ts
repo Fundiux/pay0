@@ -327,6 +327,7 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   reconcileSolicitudIq: { module: "./modules/iq/solicitudReconciliationCallables", export: "reconcileSolicitudIq" },
   recordAgent007Observation: { module: "./modules/agent007/callables", export: "recordAgent007Observation" },
   recordAssetMovement: { module: "./modules/assets/callables", export: "recordAssetMovement" },
+  recoverWhatsAppDeliveries: { module: "./modules/documentDelivery/whatsappRecoverySweep", export: "recoverWhatsAppDeliveries" },
   redeemMySecurityUnlockCode: { module: "./modules/activityLog/callables", export: "redeemMySecurityUnlockCode" },
   redriveIqBeneficiaryLinks: { module: "./modules/beneficiaries/iqLinkRedrive", export: "redriveIqBeneficiaryLinks" },
   reevaluatePaymentsInReviewDaily: { module: "./modules/paymentApplications/automaticApplication", export: "reevaluatePaymentsInReviewDaily" },
