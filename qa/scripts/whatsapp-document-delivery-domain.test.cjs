@@ -286,4 +286,14 @@ check('delivery-alert', () => {
   assert.equal(d.evaluateDeliveryAlert({ nowMs: mx(2026, 11, 26, 7, 50), heartbeatAgeMs: fresh, releasedAtMs: [mx(2026, 11, 25, 19, 31)] }).unclaimedCount, 1, 'fifteen minutes into the day it is late');
 });
 
+check('internal-notice-text-has-only-counts', () => {
+  const one = d.deliveryAlertNoticeText({ unclaimedCount: 1, oldestUnclaimedMinutes: 22 });
+  assert.match(one, /^Aviso: 1 documento para un cliente lleva más de 15 minutos sin enviarse \(el más antiguo, 22 minutos\)\./);
+  const many = d.deliveryAlertNoticeText({ unclaimedCount: 7, oldestUnclaimedMinutes: 95.9 });
+  assert.match(many, /7 documentos para clientes llevan/);
+  assert.match(many, /95 minutos/);
+  assert.doesNotMatch(d.deliveryAlertNoticeText({ unclaimedCount: 2, oldestUnclaimedMinutes: 0 }), /el más antiguo/);
+  for (const text of [one, many]) assert.doesNotMatch(text, /pay\s*-?\s*0|despacho|folio|[0-9a-f]{20,}/i, 'no brand, folio or id');
+  assert.equal(d.DELIVERY_ALERT_NOTICE_EVERY_MS, 3600000);
+});
 console.log(`whatsapp-document-delivery-domain: ${checks} checks passed`);

@@ -6,10 +6,14 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 
 import { logActivity, logActivityTx } from "../../utils/logActivity";
 import { applyWhatsAppDestinationsToJob, findDocumentSenderBinding } from "./whatsappRoutes";
+import { readInternalGroup } from "./internalGroupOwner";
 import { releaseWhatsAppJobDeliveriesCore } from "./whatsappReleaseCallables";
 import {
   aggregateJobStatus,
+  chooseDeliveryDestination,
   decideAutoRetry,
+  DELIVERY_ALERT_NOTICE_EVERY_MS,
+  deliveryAlertNoticeText,
   evaluateDeliveryAlert,
   shouldRerouteWaitingJob,
   type DeliveryAlert,
@@ -80,6 +84,44 @@ async function rerouteWaitingJobs(rootId: string, nowMs: number): Promise<number
   return rerouted;
 }
 
+/**
+ * Tells the owner's internal group that documents are waiting while Hugo is connected. Never when Hugo is the one that is down:
+ * the notice goes out through him. At most one per hour, and only when Hugo's own connector sees the internal group.
+ * Returns what happened so it can be tested.
+ */
+export async function noticeUnclaimedToInternalGroup(rootId: string, alert: DeliveryAlert, nowMs: number, lastNoticeAtMs: number): Promise<"SENT" | "NOT_NEEDED" | "TOO_SOON" | "NO_INTERNAL_GROUP" | "GROUP_NOT_VISIBLE" | "ALREADY_QUEUED"> {
+  if (alert.heartbeatMissing || alert.unclaimedCount <= 0) return "NOT_NEEDED";
+  if (lastNoticeAtMs > 0 && nowMs - lastNoticeAtMs < DELIVERY_ALERT_NOTICE_EVERY_MS) return "TOO_SOON";
+  // In PAY0 the superadmin's user id is the root id; that owner's internal group is the one that is told.
+  const internal = await readInternalGroup(db, rootId, rootId);
+  if (!internal) return "NO_INTERNAL_GROUP";
+  const binding = await findDocumentSenderBinding(db, rootId);
+  const chat = binding ? await db.doc(`whatsappAgentChats/${binding.id}__${encodeURIComponent(internal.groupChatId)}`).get() : null;
+  const hugoGroup = binding && chat?.exists && clean(chat.get("bindingId")) === binding.id ? { ...(chat.data() || {}), bindingId: binding.id } : null;
+  const choice = chooseDeliveryDestination({ assignment: { groupChatId: internal.groupChatId, groupName: internal.groupName }, hugoGroup, rootId });
+  if (choice.source !== "CLIENT_GROUP") return "GROUP_NOT_VISIBLE";
+  const destination = choice.destinations[0];
+  const bucket = Math.floor(nowMs / DELIVERY_ALERT_NOTICE_EVERY_MS);
+  const jobRef = db.doc(`documentDeliveryJobs/hugo-no-envia-${rootId}-${bucket}`);
+  const deliveryId = encodeURIComponent(destination.safeDocId || destination.chatId);
+  const batch = db.batch();
+  batch.create(jobRef, {
+    rootId, channel: "WHATSAPP", sourceType: "AVISO_GRUPO_INTERNO", sourceId: `hugo-no-envia:${bucket}`, origin: "AUTOMATIC", status: "READY_FOR_SEND", releaseStatus: "RELEASED",
+    clienteId: null, clienteNombre: "Aviso interno", documents: [], caption: "", textBody: deliveryAlertNoticeText(alert), notes: "Aviso interno: documentos sin enviar.",
+    deliveryMode: "MULTI_TARGET", targetResolutionStatus: "ROUTE_RESOLVED", targetDestinations: [destination], targetDestinationsCount: 1, targetChatId: destination.chatId, targetChatName: destination.chatName,
+    createdByUid: "system", createdByName: "Sistema", createdAt: FieldValue.serverTimestamp(), releasedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  batch.set(jobRef.collection("deliveries").doc(deliveryId), {
+    channel: "WHATSAPP", rootId, status: "PENDING_SEND", connectorId: destination.connectorId, chatId: destination.chatId, chatName: destination.chatName, chatType: destination.chatType,
+    safeDocId: destination.safeDocId, destinationType: destination.destinationType, releasedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  try { await batch.commit(); } catch (error: any) {
+    if (Number(error?.code) === 6 || /already exists/i.test(String(error?.message || ""))) return "ALREADY_QUEUED";
+    throw error;
+  }
+  return "SENT";
+}
+
 /** Evaluates and stores the alert; the audit entry is written only when it turns on, once per episode. */
 export async function evaluateAndStoreDeliveryAlert(rootId: string, nowMs = Date.now()): Promise<DeliveryAlert> {
   const binding = await findDocumentSenderBinding(db, rootId);
@@ -89,10 +131,12 @@ export async function evaluateAndStoreDeliveryAlert(rootId: string, nowMs = Date
   const pending = await db.collection("documentDeliveryJobs").where("rootId", "==", rootId).where("status", "==", "READY_FOR_SEND").limit(PAGE).get();
   const releasedAtMs = pending.docs.map((doc) => millis(doc.get("releasedAt")) || millis(doc.get("createdAt")));
   const alert = evaluateDeliveryAlert({ nowMs, heartbeatAgeMs, releasedAtMs });
+  const priorNotice = Number(((await db.doc(`${DELIVERY_ALERTS}/${rootId}`).get()).data() || {}).lastNoticeAtMs || 0);
+  const noticed = await noticeUnclaimedToInternalGroup(rootId, alert, nowMs, priorNotice).catch((error: any) => { console.warn("[WHATSAPP RECOVERY] AVISO INTERNO NO ENVIADO", clean(error?.message, 120)); return "NOT_NEEDED" as const; });
 
   const ref = db.doc(`${DELIVERY_ALERTS}/${rootId}`);
   const before = (await ref.get()).data() || {};
-  await ref.set({ rootId, ...alert, evaluatedAt: FieldValue.serverTimestamp(),
+  await ref.set({ rootId, ...alert, evaluatedAt: FieldValue.serverTimestamp(), ...(noticed === "SENT" ? { lastNoticeAtMs: nowMs } : {}),
     ...(alert.active && before.active !== true ? { activeSince: FieldValue.serverTimestamp() } : {}) }, { merge: true });
   if (alert.active && before.active !== true) {
     const reason = alert.heartbeatMissing ? "Hugo no reporta conexión desde hace más de 5 minutos" : `hay ${alert.unclaimedCount} documento(s) sin enviar desde hace más de 15 minutos`;

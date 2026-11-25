@@ -12,7 +12,7 @@ if (!admin.apps.length) admin.initializeApp({ projectId: process.env.GCLOUD_PROJ
 const db = admin.firestore();
 const { Timestamp } = admin.firestore;
 const lib = '../../functions/lib/modules/documentDelivery/';
-const { recoverWhatsAppDeliveriesForRoot, evaluateAndStoreDeliveryAlert } = require(lib + 'whatsappRecoverySweep.js');
+const { recoverWhatsAppDeliveriesForRoot, evaluateAndStoreDeliveryAlert, noticeUnclaimedToInternalGroup } = require(lib + 'whatsappRecoverySweep.js');
 const { RECOVERED_BACKLOG_CUTOFF_MS } = require(lib + 'whatsappDeliveryDomain.js');
 
 const run = `wa-rec-${Date.now()}`;
@@ -125,6 +125,42 @@ const failed = (over = {}) => ({ status: 'ERROR', lastError: 'PRE_SEND_FAILED', 
     const night = await evaluateAndStoreDeliveryAlert(alertRoot, Date.UTC(2026, 10, 26, 3, 0));
     assert.equal(night.active, false);
     assert.equal((await db.doc(`whatsappDeliveryAlerts/${alertRoot}`).get()).get('active'), false);
+  });
+
+  await ok('hugo-alive-but-not-claiming-tells-the-internal-group-once-an-hour-and-never-when-hugo-is-down', async () => {
+    const noticeRoot = `${run}-notice`, noticeBinding = `${run}-notice-binding`, internalGroup = '120363555000000077@g.us';
+    await db.doc(`whatsappAutomationConfigs/${noticeRoot}`).set({ enabled: true, rootId: noticeRoot });
+    await db.doc(`whatsappQrConnectorBindings/${noticeBinding}`).set({ id: noticeBinding, rootId: noticeRoot, agentId: 'hugo', state: 'ACTIVE', generation: 1, ownerUid: 'o' });
+    await db.doc(`whatsappQrConnectors/${noticeBinding}`).set({ bindingId: noticeBinding, rootId: noticeRoot, status: 'CONNECTED', lastSeenAt: at(NOW - 30 * 1000) });
+    await db.doc('documentDeliveryJobs/waiting-too-long').set({ rootId: noticeRoot, channel: 'WHATSAPP', status: 'READY_FOR_SEND', createdAt: at(NOW - 3600000), releasedAt: at(NOW - 40 * 60000) });
+    const notices = async () => (await db.collection('documentDeliveryJobs').where('rootId', '==', noticeRoot).where('sourceType', '==', 'AVISO_GRUPO_INTERNO').get()).docs;
+    // No internal group configured: nothing is queued.
+    assert.equal((await evaluateAndStoreDeliveryAlert(noticeRoot, NOW)).unclaimedCount, 1);
+    assert.equal((await notices()).length, 0);
+    // The internal group exists but Hugo does not see it yet: nothing is queued.
+    await db.doc(`whatsappInternalGroups/${noticeRoot}__${encodeURIComponent(noticeRoot)}`).set({ rootId: noticeRoot, ownerAdminId: noticeRoot, groupChatId: internalGroup, groupName: 'Interno' });
+    await evaluateAndStoreDeliveryAlert(noticeRoot, NOW + 1000);
+    assert.equal((await notices()).length, 0);
+    // Hugo sees it: one notice, a ready TEXT delivery to that group with only counts in it.
+    await db.doc(`whatsappAgentChats/${noticeBinding}__${encodeURIComponent(internalGroup)}`).set({ rootId: noticeRoot, bindingId: noticeBinding, chatId: internalGroup, isGroup: true, active: true, name: 'Interno' });
+    await evaluateAndStoreDeliveryAlert(noticeRoot, NOW + 2000);
+    const queued = await notices();
+    assert.equal(queued.length, 1);
+    const job = queued[0].data();
+    assert.equal(job.status, 'READY_FOR_SEND');
+    assert.match(job.textBody, /^Aviso: 1 documento para un cliente lleva más de 15 minutos/);
+    const deliveries = await queued[0].ref.collection('deliveries').get();
+    assert.deepEqual(deliveries.docs.map((doc) => [doc.get('status'), doc.get('chatId')]), [['PENDING_SEND', internalGroup]]);
+    // Evaluating again within the hour does not queue another one.
+    await evaluateAndStoreDeliveryAlert(noticeRoot, NOW + 10 * 60000);
+    assert.equal((await notices()).length, 1);
+    // Direct calls: too soon, and the heartbeat-missing alert never sends (the notice would leave through Hugo).
+    assert.equal(await noticeUnclaimedToInternalGroup(noticeRoot, { active: true, heartbeatMissing: false, unclaimedCount: 1, oldestUnclaimedMinutes: 20 }, NOW + 20 * 60000, NOW + 2000), 'TOO_SOON');
+    assert.equal(await noticeUnclaimedToInternalGroup(noticeRoot, { active: true, heartbeatMissing: true, unclaimedCount: 3, oldestUnclaimedMinutes: 50 }, NOW + 2 * 3600000, 0), 'NOT_NEEDED');
+    assert.equal(await noticeUnclaimedToInternalGroup(noticeRoot, { active: false, heartbeatMissing: false, unclaimedCount: 0, oldestUnclaimedMinutes: 0 }, NOW + 2 * 3600000, 0), 'NOT_NEEDED');
+    // An hour later and still stuck: the next notice goes out.
+    assert.equal(await noticeUnclaimedToInternalGroup(noticeRoot, { active: true, heartbeatMissing: false, unclaimedCount: 2, oldestUnclaimedMinutes: 100 }, NOW + 61 * 60000, NOW + 2000), 'SENT');
+    assert.equal((await notices()).length, 2);
   });
 
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, cases: checks, emulator: true, realProviderRequests: 0 }));

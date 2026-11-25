@@ -427,6 +427,17 @@ export function shouldRerouteWaitingJob(job: Record<string, unknown>, nowMs: num
 export const DELIVERY_ALERT_UNCLAIMED_MS = 15 * 60 * 1000;
 export const DELIVERY_ALERT_HEARTBEAT_MS = 5 * 60 * 1000;
 
+/** At most one internal notice per hour while documents stay unclaimed. */
+export const DELIVERY_ALERT_NOTICE_EVERY_MS = 60 * 60 * 1000;
+
+/** Text of the internal notice. No client names, folios or ids: only how many and for how long. */
+export function deliveryAlertNoticeText(alert: { unclaimedCount: number; oldestUnclaimedMinutes: number }): string {
+  const count = Math.max(0, Math.floor(alert.unclaimedCount));
+  const documents = count === 1 ? "1 documento para un cliente lleva" : `${count} documentos para clientes llevan`;
+  const oldest = alert.oldestUnclaimedMinutes > 0 ? ` (el más antiguo, ${Math.floor(alert.oldestUnclaimedMinutes)} minutos)` : "";
+  return `Aviso: ${documents} más de 15 minutos sin enviarse${oldest}. Estoy conectado, pero no he podido tomarlos. Revisen la cola de envíos en WhatsApp.`;
+}
+
 export type DeliveryAlert = { active: boolean; heartbeatMissing: boolean; unclaimedCount: number; oldestUnclaimedMinutes: number };
 
 /**
